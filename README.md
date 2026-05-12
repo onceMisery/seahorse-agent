@@ -17,34 +17,34 @@ Seahorse Agent 是一个面向企业知识问答与智能体应用的 RAG（Retr
 
 ### 后端
 
-| 分类 | 技术 |
-| --- | --- |
-| 基础框架 | Java 17+、Spring Boot 3.5.7、Spring Scheduling |
-| 构建与模块 | Maven 多模块、微内核 + 可插拔适配器、Spring Boot Starter 自动装配 |
-| 数据访问 | MyBatis Plus 3.5.14、JDBC Adapter、PostgreSQL 脚本 |
-| 认证授权 | Sa-Token 1.43.0、Sa-Token Redis Template |
-| 缓存与协调 | Redisson 4.0.0、Redis、本地缓存、分布式锁/信号量端口 |
-| 消息队列 | Apache Pulsar 3.1.3、Direct MQ、Outbox Relay |
-| AI 模型 | OpenAI Compatible HTTP Adapter、OkHttp 4.12.0 |
-| 向量检索 | Milvus SDK 2.6.6、pgvector、noop vector |
-| 文档解析 | Apache Tika 3.2.3，支持 PDF、Word、Excel、PPT、HTML、Markdown、TXT 等常见格式 |
-| 对象存储 | 本地存储、AWS S3 SDK 2.40.2 / S3 兼容存储 |
-| 可观测性 | Micrometer Adapter、noop observation、RAG Trace |
-| 工具库 | Lombok、Jackson、Hutool、Transmittable Thread Local、Mockito、Surefire、Spotless |
+| 分类    | 技术                                                                         |
+| ----- | -------------------------------------------------------------------------- |
+| 基础框架  | Java 17+、Spring Boot 3.5.7、Spring Scheduling                               |
+| 构建与模块 | Maven 多模块、微内核 + 可插拔适配器、Spring Boot Starter 自动装配                            |
+| 数据访问  | MyBatis Plus 3.5.14、JDBC Adapter、PostgreSQL 脚本                             |
+| 认证授权  | Sa-Token 1.43.0、Sa-Token Redis Template                                    |
+| 缓存与协调 | Redisson 4.0.0、Redis、本地缓存、分布式锁/信号量端口                                       |
+| 消息队列  | Apache Pulsar 3.1.3、Direct MQ、Outbox Relay                                 |
+| AI 模型 | OpenAI Compatible HTTP Adapter、OkHttp 4.12.0                               |
+| 向量检索  | Milvus SDK 2.6.6、pgvector、noop vector                                      |
+| 文档解析  | Apache Tika 3.2.3，支持 PDF、Word、Excel、PPT、HTML、Markdown、TXT 等常见格式            |
+| 对象存储  | 本地存储、AWS S3 SDK 2.40.2 / S3 兼容存储                                           |
+| 可观测性  | Micrometer Adapter、noop observation、RAG Trace                              |
+| 工具库   | Lombok、Jackson、Hutool、Transmittable Thread Local、Mockito、Surefire、Spotless |
 
 ### 前端
 
-| 分类 | 技术 |
-| --- | --- |
-| 基础框架 | React 18.3.1、TypeScript 5.5.4、Vite 5.4.3 |
-| UI 与样式 | TailwindCSS 3.4.10、Radix UI、lucide-react、class-variance-authority、tailwind-merge |
-| 状态与路由 | Zustand、React Router DOM 6 |
-| 数据访问 | Axios、Fetch SSE、自定义流式响应 Hook |
-| 表单与校验 | React Hook Form、Zod、@hookform/resolvers |
-| Markdown 与代码 | react-markdown、remark-gfm、react-syntax-highlighter |
-| 表格与图表 | TanStack React Table、Recharts |
-| 体验组件 | Sonner、React Dropzone、React Virtuoso |
-| 工程化 | ESLint、Prettier、PostCSS、Autoprefixer |
+| 分类           | 技术                                                                               |
+| ------------ | -------------------------------------------------------------------------------- |
+| 基础框架         | React 18.3.1、TypeScript 5.5.4、Vite 5.4.3                                         |
+| UI 与样式       | TailwindCSS 3.4.10、Radix UI、lucide-react、class-variance-authority、tailwind-merge |
+| 状态与路由        | Zustand、React Router DOM 6                                                       |
+| 数据访问         | Axios、Fetch SSE、自定义流式响应 Hook                                                     |
+| 表单与校验        | React Hook Form、Zod、@hookform/resolvers                                          |
+| Markdown 与代码 | react-markdown、remark-gfm、react-syntax-highlighter                               |
+| 表格与图表        | TanStack React Table、Recharts                                                    |
+| 体验组件         | Sonner、React Dropzone、React Virtuoso                                             |
+| 工程化          | ESLint、Prettier、PostCSS、Autoprefixer                                             |
 
 ## AI 能力
 
@@ -271,13 +271,13 @@ flowchart LR
 
 当前代码已具备 `KernelMultiChannelRetrievalEngine` 多路检索编排、向量检索主链路、`SearchChannelFeature` 多通道扩展点、`SearchResultPostProcessorFeature` 后处理扩展点、`VectorSearchRequest.filters` 过滤字段和 `RerankModelPort` / OpenAI 兼容 rerank 模型端口；但 RRF、BM25、完整元数据过滤和 reranker 后处理器尚未作为完整链路落地。推荐后续按以下方向扩展：
 
-| 能力 | 当前状态 | 扩展方向 |
-| --- | --- | --- |
-| 向量检索 | 已支持。`IntentDirectedSearchFeature` 与 `VectorGlobalSearchFeature` 通过 `VectorSearchPort` 调用 Milvus/pgvector/noop 适配器。 | 保持作为默认召回通道，并补齐 embedding 生成与检索请求之间的统一向量化策略。 |
-| BM25 / 关键词检索 | 规划中。当前未发现独立 BM25 检索通道。 | 新增 `SearchChannelFeature` 实现，例如 `Bm25SearchFeature`，对接 PostgreSQL 全文索引、Lucene/OpenSearch/Elasticsearch 或轻量本地倒排索引。 |
-| RRF 结果融合 | 规划中。当前多通道结果会合并，但未实现 Reciprocal Rank Fusion。 | 新增 `SearchResultPostProcessorFeature`，按通道排名执行 `score = sum(1 / (k + rank_i))`，融合向量、BM25、意图定向等多路召回。 |
-| 元数据过滤 | 部分基础能力。`VectorSearchRequest` 已有 `filters` 字段，向量数据会写入 metadata；当前 Milvus/pgvector 搜索实现尚未消费通用 filters。 | 在 `MilvusVectorAdapter` 与 `PgVectorAdapter` 中把 `filters` 转换为 Milvus filter 表达式或 PostgreSQL JSONB 条件，支持部门、文档类型、权限、时间范围等过滤。 |
-| Reranker | 模型端口已支持。`OpenAiCompatibleModelAdapter` 实现 `/rerank`，但检索后处理链路中未发现默认 reranker processor。 | 新增 `RerankPostProcessorFeature`，在 RRF 或初排后调用 `RerankModelPort`，按 relevance score 重排并截断 topK。 |
+| 能力           | 当前状态                                                                                                               | 扩展方向                                                                                                                      |
+| ------------ | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| 向量检索         | 已支持。`IntentDirectedSearchFeature` 与 `VectorGlobalSearchFeature` 通过 `VectorSearchPort` 调用 Milvus/pgvector/noop 适配器。 | 保持作为默认召回通道，并补齐 embedding 生成与检索请求之间的统一向量化策略。                                                                               |
+| BM25 / 关键词检索 | 规划中。当前未发现独立 BM25 检索通道。                                                                                             | 新增 `SearchChannelFeature` 实现，例如 `Bm25SearchFeature`，对接 PostgreSQL 全文索引、Lucene/OpenSearch/Elasticsearch 或轻量本地倒排索引。         |
+| RRF 结果融合     | 规划中。当前多通道结果会合并，但未实现 Reciprocal Rank Fusion。                                                                        | 新增 `SearchResultPostProcessorFeature`，按通道排名执行 `score = sum(1 / (k + rank_i))`，融合向量、BM25、意图定向等多路召回。                        |
+| 元数据过滤        | 部分基础能力。`VectorSearchRequest` 已有 `filters` 字段，向量数据会写入 metadata；当前 Milvus/pgvector 搜索实现尚未消费通用 filters。               | 在 `MilvusVectorAdapter` 与 `PgVectorAdapter` 中把 `filters` 转换为 Milvus filter 表达式或 PostgreSQL JSONB 条件，支持部门、文档类型、权限、时间范围等过滤。 |
+| Reranker     | 模型端口已支持。`OpenAiCompatibleModelAdapter` 实现 `/rerank`，但检索后处理链路中未发现默认 reranker processor。                             | 新增 `RerankPostProcessorFeature`，在 RRF 或初排后调用 `RerankModelPort`，按 relevance score 重排并截断 topK。                              |
 
 目标形态：
 
