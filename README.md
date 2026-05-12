@@ -1,11 +1,12 @@
 # Seahorse Agent
 
-Seahorse Agent 是一个面向企业知识问答与智能体应用的 RAG（Retrieval-Augmented Generation，检索增强生成）系统。项目采用 Spring Boot 3 + Java 17 的后端多模块架构，并配套 React + TypeScript 前端，围绕知识库管理、文档入库、向量检索、意图解析、会话记忆、流式对话、MCP 工具扩展和可观测追踪构建完整的 AI 应用工程化链路。
+Seahorse Agent 是一个面向企业知识问答与智能体应用的 RAG（Retrieval-Augmented Generation，检索增强生成）系统。项目以后端微内核为核心，将领域模型、端口契约和核心编排收敛在 `seahorse-agent-kernel`，再通过可插拔适配器接入模型、向量库、缓存、消息队列、对象存储、文档解析、MCP 工具和可观测能力。整体采用 Spring Boot 3 + Java 17 的多模块架构，并配套 React + TypeScript 前端，围绕知识库管理、文档入库、向量检索、意图解析、会话记忆、流式对话和 RAG Trace 构建完整的 AI 应用工程化链路。
 
 ## 项目亮点
 
+- **微内核架构**：`seahorse-agent-kernel` 只保留稳定的领域模型、端口接口、应用服务、Feature 扩展点和主链路编排，把外部依赖全部隔离到适配器模块。
+- **可插拔适配器体系**：AI 模型、向量库、缓存、消息队列、对象存储、文档解析、可观测、MCP 等能力均通过端口契约接入，可在本地、noop、远程服务和生产级实现之间切换。
 - **完整 RAG 闭环**：覆盖文档上传、解析、分块、Embedding、向量索引、意图检索、上下文组装、Prompt 构造和大模型流式回答。
-- **端口适配器架构**：内核只依赖入站/出站端口，AI 模型、向量库、缓存、消息队列、对象存储、文档解析、可观测等能力通过适配器插拔。
 - **OpenAI 兼容模型接入**：`OpenAiCompatibleModelAdapter` 支持 Chat、Streaming Chat、Embedding、Rerank、模型发现和健康检查，可接入 OpenAI 兼容协议的模型服务。
 - **多向量后端**：提供 Milvus、pgvector 和 noop 向量适配器，`MilvusVectorAdapter` 实现基于 `id/content/metadata/embedding` 字段模型和 HNSW 索引。
 - **可配置文档入库 Pipeline**：`KernelIngestionEngine` 按节点定义串联执行入库任务，原生节点包括 fetcher、parser、chunker、embedder、indexer、enhancer、enricher 等。
@@ -19,7 +20,7 @@ Seahorse Agent 是一个面向企业知识问答与智能体应用的 RAG（Retr
 | 分类 | 技术 |
 | --- | --- |
 | 基础框架 | Java 17+、Spring Boot 3.5.7、Spring Scheduling |
-| 构建与模块 | Maven 多模块、Spring Boot Starter 自动装配 |
+| 构建与模块 | Maven 多模块、微内核 + 可插拔适配器、Spring Boot Starter 自动装配 |
 | 数据访问 | MyBatis Plus 3.5.14、JDBC Adapter、PostgreSQL 脚本 |
 | 认证授权 | Sa-Token 1.43.0、Sa-Token Redis Template |
 | 缓存与协调 | Redisson 4.0.0、Redis、本地缓存、分布式锁/信号量端口 |
@@ -60,7 +61,19 @@ Seahorse Agent 的 AI 能力由内核编排和出站端口共同组成：
 
 ## 系统架构
 
-项目后端以端口适配器模式组织，核心业务位于 `seahorse-agent-kernel`，外部系统对接位于 `seahorse-agent-adapter-*`，Web 入口位于 `seahorse-agent-adapter-web`，自动装配由 `seahorse-agent-spring-boot-starter` 提供，运行入口由 `seahorse-agent-bootstrap` 提供。
+项目后端以“微内核 + 端口适配器 + 插件扩展”组织。微内核位于 `seahorse-agent-kernel`，负责稳定的业务语义和主流程编排；外部系统对接位于 `seahorse-agent-adapter-*`，以独立模块实现端口；Web 入口位于 `seahorse-agent-adapter-web`，自动装配由 `seahorse-agent-spring-boot-starter` 提供，运行入口由 `seahorse-agent-bootstrap` 提供。
+
+### 微内核与可插拔设计
+
+Seahorse Agent 的微内核不是一个“大而全”的服务层，而是一组稳定边界：
+
+- **领域与流程内核**：`KernelChatPipeline`、`KernelIngestionEngine`、知识库服务、记忆服务、模型路由服务等保留在内核中，负责业务规则和流程编排。
+- **端口契约**：内核通过 `ChatModelPort`、`StreamingChatModelPort`、`EmbeddingModelPort`、`VectorSearchPort`、`DocumentParserPort`、`ObjectStoragePort`、`MessageQueuePort`、`ObservationPort` 等端口访问外部能力。
+- **适配器插件**：具体实现放在独立适配器模块，例如 `OpenAiCompatibleModelAdapter`、`MilvusVectorAdapter`、`TikaDocumentParserAdapter`、Redis/Pulsar/S3/Micrometer/MCP 适配器。
+- **Feature 扩展点**：检索通道、入库节点、MCP 工具等以 Feature 形式注册，支持在不侵入主链路的情况下扩展能力。
+- **PortWrapper 横切增强**：`PortWrapper` / `PortWrapperChain` 可为端口调用叠加观测、限流、重试、熔断、审计等治理能力。
+
+这种设计让开发环境可以使用 local/noop 适配器快速运行，生产环境再替换为 Redis、Pulsar、Milvus、S3、Micrometer 或 OpenAI 兼容模型服务，而内核编排逻辑保持不变。
 
 ```mermaid
 graph TB
@@ -77,7 +90,7 @@ graph TB
         Security["Sa-Token 鉴权 / 限流"]
     end
 
-    subgraph Kernel["内核 seahorse-agent-kernel"]
+    subgraph Kernel["微内核 seahorse-agent-kernel"]
         Inbound["Inbound Ports"]
         Services["应用服务与编排器"]
         Domain["领域模型"]
@@ -88,7 +101,7 @@ graph TB
         Plugins --> Services
     end
 
-    subgraph Adapters["出站适配器"]
+    subgraph Adapters["可插拔适配器"]
         AI["OpenAI Compatible"]
         Vector["Milvus / pgvector / noop"]
         Parser["Tika Parser"]
@@ -122,7 +135,7 @@ graph LR
     Root["seahorse-agent pom"]
     Bootstrap["seahorse-agent-bootstrap<br/>Spring Boot 启动入口"]
     Starter["seahorse-agent-spring-boot-starter<br/>自动装配"]
-    Kernel["seahorse-agent-kernel<br/>领域 / 端口 / 应用服务"]
+    Kernel["seahorse-agent-kernel<br/>微内核：领域 / 端口 / 应用服务 / Feature"]
     Web["seahorse-agent-adapter-web<br/>REST / SSE 入站"]
     Tests["seahorse-agent-tests"]
 
