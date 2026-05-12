@@ -251,19 +251,52 @@ flowchart TD
 flowchart LR
     Q["用户问题"] --> RW["查询改写/拆分"]
     RW --> Intent["意图解析"]
-    Intent --> Search["SearchChannelFeature"]
+    Intent --> Engine["KernelMultiChannelRetrievalEngine"]
+    Engine --> Search["SearchChannelFeature 多路检索通道"]
     Search --> V1["IntentDirectedSearchFeature"]
     Search --> V2["VectorGlobalSearchFeature"]
     V1 --> VP["VectorSearchPort"]
     V2 --> VP
     VP --> Milvus["Milvus / pgvector"]
     Milvus --> Chunks["RetrievedChunk"]
-    Chunks --> Format["RetrievalContextFormatPort"]
+    Chunks --> Post["SearchResultPostProcessorFeature 后处理链"]
+    Post --> Format["RetrievalContextFormatPort"]
     Format --> Prompt["RagPromptPort"]
     Prompt --> LLM["StreamingChatModelPort"]
 ```
 
-检索层通过 `SearchChannelFeature` 扩展不同检索通道：既可以根据意图定向检索，也可以执行全局向量搜索。召回结果进入 `RetrievalContext` 后再由 Prompt 端口构造成结构化消息，最终交给模型端口流式生成回答。
+检索层由 `KernelMultiChannelRetrievalEngine` 负责多路检索编排：它从扩展注册表中加载已激活的 `SearchChannelFeature`，并行执行多个检索通道，合并各通道召回结果，再按顺序执行 `SearchResultPostProcessorFeature` 后处理链。当前默认通道包括 `IntentDirectedSearchFeature`（意图定向检索）和 `VectorGlobalSearchFeature`（全局向量检索）；召回结果进入 `RetrievalContext` 后再由 Prompt 端口构造成结构化消息，最终交给模型端口流式生成回答。
+
+### 4. 混合检索规划/扩展方向
+
+当前代码已具备 `KernelMultiChannelRetrievalEngine` 多路检索编排、向量检索主链路、`SearchChannelFeature` 多通道扩展点、`SearchResultPostProcessorFeature` 后处理扩展点、`VectorSearchRequest.filters` 过滤字段和 `RerankModelPort` / OpenAI 兼容 rerank 模型端口；但 RRF、BM25、完整元数据过滤和 reranker 后处理器尚未作为完整链路落地。推荐后续按以下方向扩展：
+
+| 能力 | 当前状态 | 扩展方向 |
+| --- | --- | --- |
+| 向量检索 | 已支持。`IntentDirectedSearchFeature` 与 `VectorGlobalSearchFeature` 通过 `VectorSearchPort` 调用 Milvus/pgvector/noop 适配器。 | 保持作为默认召回通道，并补齐 embedding 生成与检索请求之间的统一向量化策略。 |
+| BM25 / 关键词检索 | 规划中。当前未发现独立 BM25 检索通道。 | 新增 `SearchChannelFeature` 实现，例如 `Bm25SearchFeature`，对接 PostgreSQL 全文索引、Lucene/OpenSearch/Elasticsearch 或轻量本地倒排索引。 |
+| RRF 结果融合 | 规划中。当前多通道结果会合并，但未实现 Reciprocal Rank Fusion。 | 新增 `SearchResultPostProcessorFeature`，按通道排名执行 `score = sum(1 / (k + rank_i))`，融合向量、BM25、意图定向等多路召回。 |
+| 元数据过滤 | 部分基础能力。`VectorSearchRequest` 已有 `filters` 字段，向量数据会写入 metadata；当前 Milvus/pgvector 搜索实现尚未消费通用 filters。 | 在 `MilvusVectorAdapter` 与 `PgVectorAdapter` 中把 `filters` 转换为 Milvus filter 表达式或 PostgreSQL JSONB 条件，支持部门、文档类型、权限、时间范围等过滤。 |
+| Reranker | 模型端口已支持。`OpenAiCompatibleModelAdapter` 实现 `/rerank`，但检索后处理链路中未发现默认 reranker processor。 | 新增 `RerankPostProcessorFeature`，在 RRF 或初排后调用 `RerankModelPort`，按 relevance score 重排并截断 topK。 |
+
+目标形态：
+
+```mermaid
+flowchart LR
+    Q["用户问题"] --> Rewrite["改写/拆分"]
+    Rewrite --> Meta["元数据过滤条件"]
+    Rewrite --> V["向量召回"]
+    Rewrite --> B["BM25/关键词召回"]
+    Rewrite --> I["意图定向召回"]
+    Meta --> V
+    Meta --> B
+    V --> RRF["RRF 融合"]
+    B --> RRF
+    I --> RRF
+    RRF --> RR["Reranker 重排"]
+    RR --> TopK["TopK 上下文"]
+    TopK --> Prompt["RAG Prompt"]
+```
 
 ### 4. 前后端交互链路
 
