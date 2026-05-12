@@ -18,7 +18,7 @@ Seahorse Agent 是一个面向企业知识问答与智能体应用的 RAG（Retr
 ### 后端
 
 | 分类    | 技术                                                                         |
-| ----- | -------------------------------------------------------------------------- |
+|-------|----------------------------------------------------------------------------|
 | 基础框架  | Java 17+、Spring Boot 3.5.7、Spring Scheduling                               |
 | 构建与模块 | Maven 多模块、微内核 + 可插拔适配器、Spring Boot Starter 自动装配                            |
 | 数据访问  | MyBatis Plus 3.5.14、JDBC Adapter、PostgreSQL 脚本                             |
@@ -35,7 +35,7 @@ Seahorse Agent 是一个面向企业知识问答与智能体应用的 RAG（Retr
 ### 前端
 
 | 分类           | 技术                                                                               |
-| ------------ | -------------------------------------------------------------------------------- |
+|--------------|----------------------------------------------------------------------------------|
 | 基础框架         | React 18.3.1、TypeScript 5.5.4、Vite 5.4.3                                         |
 | UI 与样式       | TailwindCSS 3.4.10、Radix UI、lucide-react、class-variance-authority、tailwind-merge |
 | 状态与路由        | Zustand、React Router DOM 6                                                       |
@@ -272,7 +272,7 @@ flowchart LR
 当前代码已具备 `KernelMultiChannelRetrievalEngine` 多路检索编排、向量检索主链路、`SearchChannelFeature` 多通道扩展点、`SearchResultPostProcessorFeature` 后处理扩展点、`VectorSearchRequest.filters` 过滤字段和 `RerankModelPort` / OpenAI 兼容 rerank 模型端口；但 RRF、BM25、完整元数据过滤和 reranker 后处理器尚未作为完整链路落地。推荐后续按以下方向扩展：
 
 | 能力           | 当前状态                                                                                                               | 扩展方向                                                                                                                      |
-| ------------ | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+|--------------|--------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
 | 向量检索         | 已支持。`IntentDirectedSearchFeature` 与 `VectorGlobalSearchFeature` 通过 `VectorSearchPort` 调用 Milvus/pgvector/noop 适配器。 | 保持作为默认召回通道，并补齐 embedding 生成与检索请求之间的统一向量化策略。                                                                               |
 | BM25 / 关键词检索 | 规划中。当前未发现独立 BM25 检索通道。                                                                                             | 新增 `SearchChannelFeature` 实现，例如 `Bm25SearchFeature`，对接 PostgreSQL 全文索引、Lucene/OpenSearch/Elasticsearch 或轻量本地倒排索引。         |
 | RRF 结果融合     | 规划中。当前多通道结果会合并，但未实现 Reciprocal Rank Fusion。                                                                        | 新增 `SearchResultPostProcessorFeature`，按通道排名执行 `score = sum(1 / (k + rank_i))`，融合向量、BM25、意图定向等多路召回。                        |
