@@ -1,0 +1,497 @@
+
+  混合检索与重排落地设计方案
+
+  ▎ 基于 seahorse-agent 现有微内核架构，不改动 KernelMultiChannelRetrievalEngine 主流程，所有新能力以插件形式接入。
+
+  ---
+  1. 现状确认
+
+  ┌───────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────┐
+  │               组件                │                                     现状                                     │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ SearchContext                     │ 有 originalQuestion/rewrittenQuestion/intents/topK/metadata，无              │
+  │                                   │ filter/options                                                               │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ RetrievedChunk                    │ 只有 id/text/score，无 kbId/docId/channelScores 等                           │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ VectorSearchRequest               │ 有 filters: Map<String,Object>，但适配器未消费                               │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ KernelMultiChannelRetrievalEngine │ 并行执行通道 → 合并 → 顺序执行后处理器，结构完整                             │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ RerankModelPort                   │ 已有，OpenAiCompatibleModelAdapter 已实现                                    │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ EmbeddingModelPort                │ 已有 embed(modelId, text)                                                    │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ SearchChannelType                 │ 已有 KEYWORD_ES、HYBRID                                                      │
+  └───────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────┘
+
+  ---
+  2. 分阶段落地计划
+
+  P1 — 过滤 + 向量闭环（基础，其余阶段依赖此阶段）
+
+  目标：向量检索真正支持 query embedding 生成和元数据过滤下推。
+
+  2.1 新增核心数据结构
+
+  RetrievalFilter — 位置：kernel/domain/retrieval/
+
+  @Builder
+  public record RetrievalFilter(
+          String tenantId,           // 生产必填，多租户硬隔离
+          String userId,
+          List<String> knowledgeBaseIds,
+          List<String> documentIds,
+          List<String> fileTypes,
+          List<String> aclSubjectIds,
+          boolean enabledOnly,       // 默认 true
+          Map<String, Object> extra
+  ) {}
+
+  RetrievalOptions — 位置：kernel/domain/retrieval/
+
+  @Builder
+  public record RetrievalOptions(
+          int finalTopK,      // 默认 5
+          int vectorTopK,     // 默认 finalTopK * 4
+          int keywordTopK,    // 默认 finalTopK * 4
+          int fusionTopK,     // 默认 finalTopK * 3
+          int rerankTopK,     // 默认 finalTopK
+          boolean enableVector,
+          boolean enableKeyword,
+          boolean enableRrf,
+          boolean enableRerank,
+          String embeddingModel,
+          String rerankModel
+  ) {
+      public static RetrievalOptions defaults(int finalTopK) {
+          return RetrievalOptions.builder()
+                  .finalTopK(finalTopK).vectorTopK(finalTopK * 4)
+                  .keywordTopK(finalTopK * 4).fusionTopK(finalTopK * 3)
+                  .rerankTopK(finalTopK).enableVector(true).enableKeyword(false)
+                  .enableRrf(true).enableRerank(false).build();
+      }
+  }
+
+  2.2 扩展 SearchContext
+
+  在现有 SearchContext 中追加两个字段（兼容，不破坏已有 Feature）：
+
+  // 新增字段，保留原有 metadata 字段不动
+  private RetrievalFilter filter;
+  private RetrievalOptions options;
+
+  KernelMultiChannelRetrievalEngine.buildSearchContext() 需同步接收这两个参数，或由调用方在构建 SearchContext 时注入。
+
+  2.3 扩展 RetrievedChunk
+
+  // 追加字段，原有 id/text/score 不动
+  private String kbId;
+  private String docId;
+  private String collectionName;
+  private Integer chunkIndex;
+  private Map<String, Object> metadata;
+  private Map<String, Float> channelScores;   // 各通道原始分，调试用
+  private Map<String, Integer> channelRanks;  // RRF 用
+  private Float fusionScore;
+  private Float rerankScore;
+
+  2.4 过滤表达式模型
+
+  位置：kernel/domain/retrieval/filter/
+
+  public sealed interface MetadataFilterExpr
+          permits MetadataFilterExpr.Eq, MetadataFilterExpr.In,
+                  MetadataFilterExpr.Range, MetadataFilterExpr.And {
+
+      record Eq(String field, Object value) implements MetadataFilterExpr {}
+      record In(String field, List<?> values) implements MetadataFilterExpr {}
+      record Range(String field, Object from, Object to) implements MetadataFilterExpr {}
+      record And(List<MetadataFilterExpr> children) implements MetadataFilterExpr {}
+  }
+
+  public interface MetadataFilterTranslator<T> {
+      T translate(MetadataFilterExpr expr);
+  }
+
+  RetrievalFilterMapper（kernel 内部工具类）负责将 RetrievalFilter → MetadataFilterExpr：
+
+  public class RetrievalFilterMapper {
+      public static MetadataFilterExpr toExpr(RetrievalFilter f) {
+          List<MetadataFilterExpr> clauses = new ArrayList<>();
+          if (f.tenantId() != null) clauses.add(new Eq("tenant_id", f.tenantId()));
+          if (!isEmpty(f.knowledgeBaseIds())) clauses.add(new In("kb_id", f.knowledgeBaseIds()));
+          if (!isEmpty(f.documentIds())) clauses.add(new In("doc_id", f.documentIds()));
+          if (!isEmpty(f.fileTypes())) clauses.add(new In("file_type", f.fileTypes()));
+          if (f.enabledOnly()) clauses.add(new Eq("enabled", true));
+          return clauses.size() == 1 ? clauses.get(0) : new And(clauses);
+      }
+  }
+
+  2.5 向量适配器改造
+
+  Milvus 适配器（seahorse-agent-adapter-vector-milvus）：
+
+  新增 MilvusMetadataFilterTranslator implements MetadataFilterTranslator<String>，输出 Milvus filter 字符串：
+
+  // 示例输出：metadata["tenant_id"] == "t1" and metadata["kb_id"] in ["kb1","kb2"]
+
+  安全要求：字段名白名单校验，字符串值转义，空表达式不设置 filter。
+
+  searchRequest() 改造点：
+
+  String filterStr = filter != null ? milvusTranslator.translate(filter) : "";
+  return SearchReq.builder()
+          ...
+          .filter(filterStr)
+          .outputFields(List.of(FIELD_ID, FIELD_CONTENT, FIELD_METADATA))
+          .build();
+
+  retrievedChunk() 改造：从 metadata JSON 字段读取 kb_id/doc_id/chunk_index 等并映射到 RetrievedChunk 扩展字段。
+
+  PGVector 适配器（seahorse-agent-adapter-vector-pgvector）：
+
+  新增 PgVectorFilterSqlBuilder，根据 MetadataFilterExpr 动态生成 WHERE 片段（参数化，禁止字符串拼接）。SQL 返回
+  metadata 列并映射到 RetrievedChunk。
+
+  2.6 向量通道注入 Embedding
+
+  VectorGlobalSearchFeature 和 IntentDirectedSearchFeature 注入 EmbeddingModelPort，在构造 VectorSearchRequest 前先生成
+  query embedding：
+
+  List<Float> queryVec = embeddingModelPort.embed(options.embeddingModel(), context.getMainQuestion());
+  // embedding 失败时该通道返回空结果，不影响其他通道
+
+  2.7 MetadataGuardPostProcessorFeature（order = 50）
+
+  兜底过滤，防止适配器异常导致越权数据穿透：
+
+  public class MetadataGuardPostProcessorFeature implements SearchResultPostProcessorFeature {
+      public int order() { return 50; }
+      public boolean enabled(SearchContext ctx) { return ctx.getFilter() != null; }
+
+      public List<RetrievedChunk> process(List<RetrievedChunk> chunks,
+                                          List<SearchChannelResult> results,
+                                          SearchContext ctx) {
+          RetrievalFilter f = ctx.getFilter();
+          return chunks.stream().filter(c -> passes(c, f)).toList();
+      }
+  }
+
+  ---
+  P2 — BM25 关键词通道 + RRF 融合
+
+  2.8 新增 KeywordSearchPort
+
+  位置：ports/outbound/search/
+
+  public interface KeywordSearchPort {
+      List<RetrievedChunk> search(KeywordSearchRequest request);
+  }
+
+  public record KeywordSearchRequest(
+          String query, int topK, RetrievalFilter filter, Map<String, Object> options) {}
+
+  2.9 KeywordSearchChannelFeature
+
+  public class KeywordSearchChannelFeature implements SearchChannelFeature {
+      public SearchChannelType channelType() { return SearchChannelType.KEYWORD_ES; }
+      public boolean enabled(SearchContext ctx) {
+          return ctx.getOptions() != null && ctx.getOptions().enableKeyword();
+      }
+      public SearchChannelResult search(SearchContext ctx) {
+          var req = new KeywordSearchRequest(ctx.getMainQuestion(),
+                  ctx.getOptions().keywordTopK(), ctx.getFilter(), Map.of());
+          return SearchChannelResult.builder()
+                  .channelType(channelType()).channelName(name())
+                  .chunks(keywordSearchPort.search(req)).build();
+      }
+  }
+
+  2.10 OpenSearch 适配器
+
+  模块：seahorse-agent-adapter-search-opensearch
+
+  索引 mapping 关键字段：
+
+  {
+    "content":  { "type": "text", "analyzer": "ik_max_word" },
+    "title":    { "type": "text", "analyzer": "ik_max_word", "boost": 2.0 },
+    "keywords": { "type": "keyword" },
+    "tenantId": { "type": "keyword" },
+    "kbId":     { "type": "keyword" },
+    "enabled":  { "type": "boolean" }
+  }
+
+  查询 DSL 结构：bool.must 放 multi_match，bool.filter 放 tenantId/kbId/enabled/aclSubjects 等条件（filter
+  不参与评分，走倒排索引优化）。
+
+  2.11 关键词索引同步
+
+  生产推荐 Outbox 异步写入，隔离 OpenSearch 抖动：
+
+  public interface KeywordIndexPort {
+      void upsertChunks(List<KeywordDocument> documents);
+      void deleteByDocument(String tenantId, String docId);
+  }
+
+  IndexerNodeFeature 入库后写 Outbox 事件，由 Relay 异步消费写入 OpenSearch。
+
+  2.12 RrfFusionPostProcessorFeature（order = 100）
+
+  public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorFeature {
+      private static final int K = 60;
+
+      public int order() { return 100; }
+      public boolean enabled(SearchContext ctx) {
+          return ctx.getOptions() != null && ctx.getOptions().enableRrf();
+      }
+
+      public List<RetrievedChunk> process(List<RetrievedChunk> chunks,
+                                          List<SearchChannelResult> results,
+                                          SearchContext ctx) {
+          Map<String, RetrievedChunk> merged = new LinkedHashMap<>();
+          Map<String, Float> fusionScores = new HashMap<>();
+
+          for (SearchChannelResult result : results) {
+              float weight = channelWeight(result.getChannelType());
+              List<RetrievedChunk> channelChunks = result.getChunks();
+              for (int rank = 0; rank < channelChunks.size(); rank++) {
+                  RetrievedChunk c = channelChunks.get(rank);
+                  String key = dedupeKey(c);
+                  merged.putIfAbsent(key, c);
+                  fusionScores.merge(key, weight / (K + rank + 1),
+  Float::sum);merged.get(key).getChannelRanks().put(result.getChannelName(), rank + 1);
+                  merged.get(key).getChannelScores().put(result.getChannelName(),
+                          c.getScore() != null ? c.getScore() : 0f);
+              }
+          }
+
+          int fusionTopK = ctx.getOptions().fusionTopK();
+          return merged.entrySet().stream()
+                  .peek(e -> e.getValue().setFusionScore(fusionScores.get(e.getKey())))
+                  .map(Map.Entry::getValue)
+                  .sorted(Comparator.comparingDouble(c -> -c.getFusionScore()))
+                  .limit(fusionTopK)
+                  .toList();
+      }
+
+      private String dedupeKey(RetrievedChunk c) {
+          if (c.getId() != null) return c.getId();
+          if (c.getDocId() != null && c.getChunkIndex() != null)
+              return c.getDocId() + ":" + c.getChunkIndex();
+          return Integer.toHexString(c.getText().strip().hashCode());
+      }
+  }
+
+  ---
+  P3 — Reranker 后处理
+
+  2.13 RerankPostProcessorFeature（order = 200）
+
+  public class RerankPostProcessorFeature implements SearchResultPostProcessorFeature {
+      private final RerankModelPort rerankModelPort;
+
+      public int order() { return 200; }
+      public boolean enabled(SearchContext ctx) {
+          RetrievalOptions opts = ctx.getOptions();
+          return opts != null && opts.enableRerank()
+                  && opts.rerankModel() != null && !opts.rerankModel().isBlank();
+      }
+
+      public List<RetrievedChunk> process(List<RetrievedChunk> chunks,
+                                          List<SearchChannelResult> results,
+                                          SearchContext ctx) {
+          RetrievalOptions opts = ctx.getOptions();
+          List<RetrievedChunk> candidates = chunks.stream()
+                  .limit(opts.fusionTopK()).toList();
+          try {
+              List<RetrievedChunk> reranked = rerankModelPort.rerank(
+                      opts.rerankModel(), ctx.getMainQuestion(), candidates);return reranked.stream()
+                      .peek(c -> c.setScore(c.getRerankScore()))
+                      .limit(opts.rerankTopK()).toList();
+          } catch (Exception ex) {
+              LOG.warn("Rerank 失败，降级返回 RRF 结果", ex);
+              return candidates.stream().limit(opts.rerankTopK()).toList();
+          }
+      }
+  }
+
+  ---
+  3. 后处理器执行顺序
+
+  ┌───────────────────────────────────┬───────┬──────────────────────┐
+  │              Feature              │ order │         说明         │
+  ├───────────────────────────────────┼───────┼──────────────────────┤
+  │ MetadataGuardPostProcessorFeature │ 50    │ 兜底权限过滤         │
+  ├───────────────────────────────────┼───────┼──────────────────────┤
+  │ RrfFusionPostProcessorFeature     │ 100   │ 多通道 RRF 融合      │
+  ├───────────────────────────────────┼───────┼──────────────────────┤
+  │ RerankPostProcessorFeature        │ 200   │ 模型重排（可选）     │
+  ├───────────────────────────────────┼───────┼──────────────────────┤
+  │ FinalTruncatePostProcessorFeature │ 1000  │ 最终截断到 finalTopK │
+  └───────────────────────────────────┴───────┴──────────────────────┘
+
+  SearchResultPostProcessorFeature 接口需补充 default int order() { return 0;
+  }，KernelMultiChannelRetrievalEngine.executePostProcessors() 在过滤后按 order 排序执行。
+
+  ---
+  4. 装配条件
+
+  // SeahorseAgentKernelAutoConfiguration 中
+  @Bean
+  @ConditionalOnBean(KeywordSearchPort.class)
+  KeywordSearchChannelFeature keywordSearchChannelFeature(KeywordSearchPort port) { ... }
+
+  @Bean
+  RrfFusionPostProcessorFeature rrfFusionPostProcessorFeature() { ... }
+
+  @Bean
+  @ConditionalOnBean(RerankModelPort.class)
+  RerankPostProcessorFeature rerankPostProcessorFeature(RerankModelPort port) { ... }
+
+  @Bean
+  MetadataGuardPostProcessorFeature metadataGuardPostProcessorFeature() { ... }
+
+  ---
+  5. 配置示例
+
+  seahorse-agent:
+    plugins:
+      enabled-features:
+        KeywordSearch: true
+        RrfFusion: true
+        Rerank: true
+      feature-settings:
+        RrfFusion:
+          k: 60
+          fusionTopK: 20channelWeights:
+            IntentDirectedSearch: 1.2
+            VectorGlobalSearch: 1.0
+            KeywordSearch: 1.0
+        Rerank:
+          model: bge-reranker-v2-m3
+          inputTopK: 20
+          outputTopK: 5
+          timeoutSeconds: 3
+          fallbackOnError: true
+
+  ---
+  6. 关键改造点汇总
+
+  ┌───────────────────────────────────┬──────────────┬───────────────────────────────────────────────────────────────┐
+  │               文件                │   改动类型   │                             说明                              │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ SearchContext                     │ 追加字段     │ filter, options                                               │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ RetrievedChunk                    │ 追加字段     │ kbId/docId/channelScores/fusionScore/rerankScore 等           │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ SearchResultPostProcessorFeature  │ 追加默认方法 │ default int order()                                           │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ KernelMultiChannelRetrievalEngine │ 微改         │ executePostProcessors 按 order 排序                           │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ Milvus 适配器                     │ 改造         │ 接入 MilvusMetadataFilterTranslator，返回 metadata            │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ PGVector 适配器                   │ 改造         │ 接入 PgVectorFilterSqlBuilder，返回 metadata                  │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 向量通道 Feature                  │ 改造         │ 注入 EmbeddingModelPort，生成 query embedding                 │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ RetrievalFilter, RetrievalOptions, MetadataFilterExpr,        │
+  │                                   │              │ MetadataFilterTranslator, RetrievalFilterMapper               │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ KeywordSearchPort, KeywordIndexPort,                          │
+  │                                   │              │ KeywordSearchChannelFeature                                   │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ MetadataGuardPostProcessorFeature,                            │
+  │                                   │              │ RrfFusionPostProcessorFeature, RerankPostProcessorFeature     │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增模块                          │ 新模块       │ seahorse-agent-adapter-search-opensearch                      │
+  └───────────────────────────────────┴──────────────┴───────────────────────────────────────────────────────────────┘
+
+  ---
+  7. 落地顺序建议
+
+  │ SearchResultPostProcessorFeature  │ 追加默认方法 │ default int order()                                           │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ KernelMultiChannelRetrievalEngine │ 微改         │ executePostProcessors 按 order 排序                           │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ Milvus 适配器                     │ 改造         │ 接入 MilvusMetadataFilterTranslator，返回 metadata            │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ PGVector 适配器                   │ 改造         │ 接入 PgVectorFilterSqlBuilder，返回 metadata                  │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 向量通道 Feature                  │ 改造         │ 注入 EmbeddingModelPort，生成 query embedding                 │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ RetrievalFilter, RetrievalOptions, MetadataFilterExpr,        │
+  │                                   │              │ MetadataFilterTranslator, RetrievalFilterMapper               │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ KeywordSearchPort, KeywordIndexPort,                          │
+  │                                   │              │ KeywordSearchChannelFeature                                   │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ MetadataGuardPostProcessorFeature,                            │
+  │                                   │              │ RrfFusionPostProcessorFeature, RerankPostProcessorFeature     │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增模块                          │ 新模块       │ seahorse-agent-adapter-search-opensearch                      │
+  └───────────────────────────────────┴──────────────┴───────────────────────────────────────────────────────────────┘
+
+  │ SearchContext                     │ 追加字段     │ filter, options                                               │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ RetrievedChunk                    │ 追加字段     │ kbId/docId/channelScores/fusionScore/rerankScore 等           │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ SearchResultPostProcessorFeature  │ 追加默认方法 │ default int order()                                           │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ KernelMultiChannelRetrievalEngine │ 微改         │ executePostProcessors 按 order 排序                           │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ Milvus 适配器                     │ 改造         │ 接入 MilvusMetadataFilterTranslator，返回 metadata            │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ PGVector 适配器                   │ 改造         │ 接入 PgVectorFilterSqlBuilder，返回 metadata                  │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 向量通道 Feature                  │ 改造         │ 注入 EmbeddingModelPort，生成 query embedding                 │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ RetrievalFilter, RetrievalOptions, MetadataFilterExpr,        │
+  │                                   │              │ MetadataFilterTranslator, RetrievalFilterMapper               │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ KeywordSearchPort, KeywordIndexPort,                          │
+  │                                   │              │ KeywordSearchChannelFeature                                   │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ MetadataGuardPostProcessorFeature,                            │
+  │                                   │              │ RrfFusionPostProcessorFeature, RerankPostProcessorFeature     │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增模块                          │ 新模块       │ seahorse-agent-adapter-search-opensearch                      │
+  └───────────────────────────────────┴──────────────┴───────────────────────────────────────────────────────────────┘
+
+  │ SearchContext                     │ 追加字段     │ filter, options                                               │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ RetrievedChunk                    │ 追加字段     │ kbId/docId/channelScores/fusionScore/rerankScore 等           │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ SearchResultPostProcessorFeature  │ 追加默认方法 │ default int order()                                           │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ KernelMultiChannelRetrievalEngine │ 微改         │ executePostProcessors 按 order 排序                           │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ Milvus 适配器                     │ 改造         │ 接入 MilvusMetadataFilterTranslator，返回 metadata            │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ PGVector 适配器                   │ 改造         │ 接入 PgVectorFilterSqlBuilder，返回 metadata                  │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 向量通道 Feature                  │ 改造         │ 注入 EmbeddingModelPort，生成 query embedding                 │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ RetrievalFilter, RetrievalOptions, MetadataFilterExpr,        │
+  │                                   │              │ MetadataFilterTranslator, RetrievalFilterMapper               │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ KeywordSearchPort, KeywordIndexPort,                          │
+  │                                   │              │ KeywordSearchChannelFeature                                   │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增                              │ 新文件       │ MetadataGuardPostProcessorFeature,                            │
+  │                                   │              │ RrfFusionPostProcessorFeature, RerankPostProcessorFeature     │
+  ├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────┤
+  │ 新增模块                          │ 新模块       │ seahorse-agent-adapter-search-opensearch                      │
+  └───────────────────────────────────┴──────────────┴───────────────────────────────────────────────────────────────┘
+
+  ---
+  7. 落地顺序建议
+
+  P1 先行（1-2 周）：RetrievalFilter + RetrievalOptions + SearchContext 扩展 + 向量通道 embedding 生成 + Milvus/PGVector
+   过滤下推 + MetadataGuardPostProcessorFeature。这是后续所有阶段的基础，且不引入新依赖。
+
+  P2 跟进（2-3 周）：KeywordSearchPort + OpenSearch 适配器 + KeywordSearchChannelFeature + RrfFusionPostProcessorFeature
+   + Outbox 异步索引同步。
+
+  P3 最后（1 周）：RerankPostProcessorFeature 接入现有 RerankModelPort，配置 bge-reranker-v2-m3，默认关闭，按需开启。
