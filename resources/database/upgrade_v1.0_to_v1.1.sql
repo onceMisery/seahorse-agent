@@ -1,4 +1,4 @@
--- ragent v1.0 -> v1.1 升级脚本
+-- Seahorse Agent v1.0 -> v1.1 升级脚本
 -- 分块日志表：拆分计时字段，修正语义
 
 -- 1. embedding_duration 改名为 embed_duration（原字段实际量的是持久化时间，现改为真正的嵌入 API 耗时）

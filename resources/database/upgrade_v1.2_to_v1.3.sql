@@ -1,4 +1,4 @@
--- ragent v1.2 -> v1.3 升级脚本
+-- Seahorse Agent v1.2 -> v1.3 升级脚本
 -- Pulsar Outbox 与四层 Memory 表
 
 CREATE TABLE IF NOT EXISTS t_outbox_event (

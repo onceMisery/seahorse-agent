@@ -57,8 +57,8 @@ services:
     entrypoint: >
       bash -c "
       bin/pulsar-admin clusters create standalone --url http://broker:8080 --broker-url pulsar://broker:6650 || true &&
-      bin/pulsar-admin tenants create ragent || true &&
-      bin/pulsar-admin namespaces create ragent/ai || true &&
-      bin/pulsar-admin topics create-partitioned-topic persistent://ragent/ai/knowledge-document-chunk -p 4 || true &&
-      bin/pulsar-admin topics create-partitioned-topic persistent://ragent/ai/message-feedback -p 2 || true
+      bin/pulsar-admin tenants create seahorse-agent || true &&
+      bin/pulsar-admin namespaces create seahorse-agent/ai || true &&
+      bin/pulsar-admin topics create-partitioned-topic persistent://seahorse-agent/ai/knowledge-document-chunk -p 4 || true &&
+      bin/pulsar-admin topics create-partitioned-topic persistent://seahorse-agent/ai/message-feedback -p 2 || true
       "

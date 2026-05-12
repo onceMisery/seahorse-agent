@@ -174,7 +174,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <Bot className="h-5 w-5 text-white" />
             </div>
             <div style={{ fontFamily: sessionTitleFont }}>
-              <p className="text-base font-semibold text-[#1A1A1A]">Ragent AI 智能体</p>
+              <p className="text-base font-semibold text-[#1A1A1A]">Seahorse Agent</p>
               <p className="text-xs text-[#999999]">Powered by AI</p>
             </div>
           </div>
@@ -413,7 +413,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <DropdownMenuContent align="start" side="top" sideOffset={8} className="w-48">
               <DropdownMenuItem asChild>
                 <a
-                  href="https://nageoffer.com/ragent"
+                  href="https://github.com/miracle-ai/seahorse-agent"
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center"

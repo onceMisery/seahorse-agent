@@ -1,4 +1,4 @@
--- PostgreSQL Schema for Ragent
+-- PostgreSQL Schema for Seahorse Agent
 -- Converted from MySQL schema_table.sql
 
 -- Enable pgvector extension

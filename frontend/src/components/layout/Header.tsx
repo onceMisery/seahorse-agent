@@ -18,7 +18,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
   React.useEffect(() => {
     let active = true;
-    fetch("https://api.github.com/repos/nageoffer/ragent")
+    fetch("https://api.github.com/repos/miracle-ai/seahorse-agent")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!active) return;
@@ -62,7 +62,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         </div>
         <div className="flex items-center gap-2">
           <a
-            href="https://github.com/nageoffer/ragent"
+            href="https://github.com/miracle-ai/seahorse-agent"
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"

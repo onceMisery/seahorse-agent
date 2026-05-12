@@ -22,7 +22,7 @@
 
 **请求**:
 ```bash
-curl -X POST "http://localhost:8080/api/ragent/ingestion/pipelines" \
+curl -X POST "http://localhost:8080/api/seahorse-agent/ingestion/pipelines" \
   -H "Content-Type: application/json" \
   -d @pdf-pipeline-request.json
 ```
@@ -53,7 +53,7 @@ curl -X POST "http://localhost:8080/api/ragent/ingestion/pipelines" \
 
 **请求**:
 ```bash
-curl -X POST "http://localhost:8080/api/ragent/ingestion/tasks/upload" \
+curl -X POST "http://localhost:8080/api/seahorse-agent/ingestion/tasks/upload" \
   -F "pipelineId=1" \
   -F "file=@/path/to/your/document.pdf" \
   -F "metadata={\"category\":\"manual\",\"department\":\"IT\"}"
@@ -82,7 +82,7 @@ curl -X POST "http://localhost:8080/api/ragent/ingestion/tasks/upload" \
 
 **请求**:
 ```bash
-curl "http://localhost:8080/api/ragent/ingestion/tasks/123"
+curl "http://localhost:8080/api/seahorse-agent/ingestion/tasks/123"
 ```
 
 **响应（执行中）**:
@@ -204,7 +204,7 @@ No start node found in pipeline
 ```bash
 #!/bin/bash
 
-API_BASE="http://localhost:8080/api/ragent"
+API_BASE="http://localhost:8080/api/seahorse-agent"
 
 # 1. 创建流水线
 echo "📝 Creating pipeline..."
@@ -257,7 +257,7 @@ echo "🎉 Test completed successfully!"
 
 **简化版（单行）**:
 ```bash
-curl -X POST "http://localhost:8080/api/ragent/ingestion/pipelines" \
+curl -X POST "http://localhost:8080/api/seahorse-agent/ingestion/pipelines" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "pdf-pipeline",
@@ -284,4 +284,4 @@ curl -X POST "http://localhost:8080/api/ragent/ingestion/pipelines" \
 
 **创建时间**: 2026-01-22
 **更新时间**: 2026-01-22
-**维护者**: RAGent Team
+**维护者**: Seahorse Agent Team
