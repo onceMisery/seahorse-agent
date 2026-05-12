@@ -1,0 +1,3 @@
+default=noop
+noop=com.miracle.ai.seahorse.agent.adapters.observation.noop.NoopObservationAdapter
+noop.order=0

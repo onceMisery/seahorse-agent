@@ -1,0 +1,10 @@
+default=primary
+primary=com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionLoaderTests$PrimaryExtension
+primary.order=20
+primary.capabilities=chat,memory
+secondary.class=com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionLoaderTests$SecondaryExtension
+secondary.order=10
+secondary.enabled-by-default=true
+managed=com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionLoaderTests$ManagedExtension
+managed.managed=true
+managed.order=30

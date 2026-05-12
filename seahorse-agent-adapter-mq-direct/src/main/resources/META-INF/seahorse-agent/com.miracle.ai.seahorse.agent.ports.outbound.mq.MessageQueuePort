@@ -1,0 +1,3 @@
+default=direct
+direct=com.miracle.ai.seahorse.agent.adapters.mq.direct.DirectMessageQueueAdapter
+direct.order=0

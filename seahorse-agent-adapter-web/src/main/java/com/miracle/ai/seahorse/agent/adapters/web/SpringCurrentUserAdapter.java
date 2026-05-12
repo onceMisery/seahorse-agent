@@ -1,0 +1,77 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.adapters.web;
+
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+import java.util.Objects;
+import java.util.Optional;
+
+public class SpringCurrentUserAdapter implements CurrentUserPort {
+
+    private static final String DEFAULT_AVATAR_URL = "https://avatars.githubusercontent.com/u/583231?v=4";
+    private static final String HEADER_USER_ID = "X-User-Id";
+
+    private final UserRepositoryPort userRepositoryPort;
+
+    public SpringCurrentUserAdapter(UserRepositoryPort userRepositoryPort) {
+        this.userRepositoryPort = Objects.requireNonNull(userRepositoryPort, "userRepositoryPort must not be null");
+    }
+
+    @Override
+    public Optional<CurrentUser> currentUser() {
+        ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attrs == null) {
+            return Optional.empty();
+        }
+        String userId = resolveUserId(attrs.getRequest());
+        if (userId == null) {
+            return Optional.empty();
+        }
+        return userRepositoryPort.findById(userId).map(this::toCurrentUser);
+    }
+
+    private String resolveUserId(HttpServletRequest request) {
+        String parameter = trimToNull(request.getParameter("userId"));
+        if (parameter != null) {
+            return parameter;
+        }
+        return trimToNull(request.getHeader(HEADER_USER_ID));
+    }
+
+    private CurrentUser toCurrentUser(UserRecord record) {
+        return new CurrentUser(record.id(), record.username(), record.role(), defaultAvatar(record.avatar()));
+    }
+
+    private String defaultAvatar(String avatar) {
+        return avatar == null || avatar.isBlank() ? DEFAULT_AVATAR_URL : avatar;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
+}

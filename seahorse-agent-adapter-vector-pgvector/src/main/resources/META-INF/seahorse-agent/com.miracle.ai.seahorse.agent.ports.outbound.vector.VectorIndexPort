@@ -1,0 +1,4 @@
+default=pgvector
+pgvector.class=com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorAdapter
+pgvector.managed=true
+pgvector.order=100

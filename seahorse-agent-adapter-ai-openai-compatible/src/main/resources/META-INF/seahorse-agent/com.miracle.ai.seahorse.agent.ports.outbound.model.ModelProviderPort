@@ -1,0 +1,4 @@
+default=openai-compatible
+openai-compatible.class=com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter
+openai-compatible.managed=true
+openai-compatible.order=100

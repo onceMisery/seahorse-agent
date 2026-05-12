@@ -1,0 +1,6 @@
+name=feishu-document-source
+port=com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentFetcherPort
+implementation=com.miracle.ai.seahorse.agent.adapters.source.feishu.FeishuDocumentFetcherAdapter
+layer=L3
+capabilities=document-source,feishu,lark
+enabledByDefault=false

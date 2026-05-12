@@ -1,0 +1,4 @@
+default=http
+http=com.miracle.ai.seahorse.agent.adapters.mcp.http.NativeMcpToolRegistry
+http.managed=true
+http.order=0

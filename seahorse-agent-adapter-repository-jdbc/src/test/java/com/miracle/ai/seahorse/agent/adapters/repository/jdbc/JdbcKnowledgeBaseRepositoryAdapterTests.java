@@ -1,0 +1,138 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
+
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeBaseValues;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBasePage;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseUpdateValues;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+
+import java.sql.Timestamp;
+import java.time.Instant;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class JdbcKnowledgeBaseRepositoryAdapterTests {
+
+    private JdbcTemplate jdbcTemplate;
+    private JdbcKnowledgeBaseRepositoryAdapter adapter;
+
+    @BeforeEach
+    void setUp() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:knowledge-base;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        jdbcTemplate = new JdbcTemplate(dataSource);
+        createSchema();
+        adapter = new JdbcKnowledgeBaseRepositoryAdapter(dataSource);
+    }
+
+    @Test
+    void shouldCreateQueryUpdateAndDeleteKnowledgeBase() {
+        String id = adapter.create(new CreateKnowledgeBaseValues("研发知识库", "embed-a", "kb_rnd", "tester"));
+
+        boolean exists = adapter.nameExists("研发知识库", null);
+        boolean updated = adapter.update(id, new KnowledgeBaseUpdateValues("研发知识库2", "embed-b", "tester"));
+        KnowledgeBaseRecord updatedRecord = adapter.findById(id).orElseThrow();
+        boolean deleted = adapter.delete(id, "tester");
+
+        assertThat(exists).isTrue();
+        assertThat(updated).isTrue();
+        assertThat(updatedRecord.getName()).isEqualTo("研发知识库2");
+        assertThat(updatedRecord.getEmbeddingModel()).isEqualTo("embed-b");
+        assertThat(deleted).isTrue();
+        assertThat(adapter.findById(id)).isEmpty();
+    }
+
+    @Test
+    void shouldPageKnowledgeBasesWithDocumentCount() {
+        insertKnowledgeBase("kb-1", "Alpha", "col-a", 3);
+        insertKnowledgeBase("kb-2", "Beta", "col-b", 2);
+        insertDeletedKnowledgeBase();
+        insertDocument("doc-1", "kb-1", 2);
+        insertDocument("doc-2", "kb-1", 0);
+        insertDocument("doc-3", "kb-2", 0);
+
+        KnowledgeBasePage page = adapter.page(1, 10, "a");
+
+        assertThat(page.total()).isEqualTo(2);
+        assertThat(page.records()).extracting(KnowledgeBaseRecord::getId).containsExactly("kb-2", "kb-1");
+        assertThat(page.records().get(1).getDocumentCount()).isEqualTo(2);
+        assertThat(adapter.hasDocuments("kb-1")).isTrue();
+        assertThat(adapter.hasVectorizedDocuments("kb-1")).isTrue();
+        assertThat(adapter.hasVectorizedDocuments("kb-2")).isFalse();
+    }
+
+    private void insertKnowledgeBase(String id, String name, String collectionName, int secondsAgo) {
+        Timestamp updateTime = Timestamp.from(Instant.now().minusSeconds(secondsAgo));
+        jdbcTemplate.update("""
+                INSERT INTO t_knowledge_base
+                (id, name, embedding_model, collection_name, created_by, updated_by,
+                 create_time, update_time, deleted)
+                VALUES (?, ?, 'embed', ?, 'tester', 'tester', ?, ?, 0)
+                """, id, name, collectionName, updateTime, updateTime);
+    }
+
+    private void insertDeletedKnowledgeBase() {
+        Timestamp now = Timestamp.from(Instant.now());
+        jdbcTemplate.update("""
+                INSERT INTO t_knowledge_base
+                (id, name, embedding_model, collection_name, created_by, updated_by,
+                 create_time, update_time, deleted)
+                VALUES ('kb-3', 'Gamma', 'embed', 'col-c', 'tester', 'tester', ?, ?, 1)
+                """, now, now);
+    }
+
+    private void insertDocument(String id, String kbId, int chunkCount) {
+        jdbcTemplate.update("""
+                INSERT INTO t_knowledge_document
+                (id, kb_id, doc_name, chunk_count, deleted)
+                VALUES (?, ?, ?, ?, 0)
+                """, id, kbId, id, chunkCount);
+    }
+
+    private void createSchema() {
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_knowledge_document");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_knowledge_base");
+        jdbcTemplate.execute("""
+                CREATE TABLE t_knowledge_base (
+                    id VARCHAR(32) PRIMARY KEY,
+                    name VARCHAR(128) NOT NULL,
+                    embedding_model VARCHAR(128),
+                    collection_name VARCHAR(128) NOT NULL,
+                    created_by VARCHAR(64),
+                    updated_by VARCHAR(64),
+                    create_time TIMESTAMP,
+                    update_time TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_knowledge_document (
+                    id VARCHAR(32) PRIMARY KEY,
+                    kb_id VARCHAR(32) NOT NULL,
+                    doc_name VARCHAR(128),
+                    chunk_count INTEGER DEFAULT 0,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+    }
+}

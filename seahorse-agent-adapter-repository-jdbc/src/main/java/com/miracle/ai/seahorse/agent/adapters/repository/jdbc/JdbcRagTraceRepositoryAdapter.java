@@ -1,0 +1,314 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
+
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNode;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNodeFinish;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePage;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePageRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRun;
+import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import javax.sql.DataSource;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
+
+/**
+ * 基于旧 RAG Trace 表的 JDBC adapter。
+ */
+public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
+
+    private static final String DEFAULT_STATUS_RUNNING = "RUNNING";
+    private static final String SQL_RUN_SELECT = """
+            SELECT id, trace_id, trace_name, entry_method, conversation_id, task_id, user_id,
+                   status, error_message, duration_ms, start_time, end_time, extra_data
+            FROM t_rag_trace_run r
+            """;
+    private static final String SQL_NODE_SELECT = """
+            SELECT id, trace_id, node_id, parent_node_id, depth, node_type, node_name,
+                   class_name, method_name, status, error_message, duration_ms, start_time, end_time
+            FROM t_rag_trace_node
+            WHERE trace_id = ? AND deleted = 0
+            ORDER BY start_time ASC, id ASC
+            """;
+    private static final String SQL_INSERT_RUN = """
+            INSERT INTO t_rag_trace_run
+            (id, trace_id, trace_name, entry_method, conversation_id, task_id, user_id, status,
+             error_message, start_time, end_time, duration_ms, extra_data, create_time, update_time, deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """;
+    private static final String SQL_FINISH_RUN = """
+            UPDATE t_rag_trace_run
+            SET status = ?, error_message = ?, end_time = ?, duration_ms = ?, update_time = ?
+            WHERE trace_id = ? AND deleted = 0
+            """;
+    private static final String SQL_INSERT_NODE = """
+            INSERT INTO t_rag_trace_node
+            (id, trace_id, node_id, parent_node_id, depth, node_type, node_name, class_name,
+             method_name, status, error_message, start_time, end_time, duration_ms, extra_data,
+             create_time, update_time, deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """;
+    private static final String SQL_FINISH_NODE = """
+            UPDATE t_rag_trace_node
+            SET status = ?, error_message = ?, end_time = ?, duration_ms = ?, update_time = ?
+            WHERE trace_id = ? AND node_id = ? AND deleted = 0
+            """;
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public JdbcRagTraceRepositoryAdapter(DataSource dataSource) {
+        this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
+    }
+
+    @Override
+    public RagTracePage<RagTraceRun> pageRuns(RagTracePageRequest request) {
+        RagTracePageRequest safeRequest = normalize(request);
+        QueryParts filter = buildRunFilter(safeRequest);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM t_rag_trace_run r " + filter.where(),
+                Long.class, filter.args());
+        List<Object> pageArgs = new ArrayList<>(filter.argList());
+        pageArgs.add(safeRequest.size());
+        pageArgs.add((safeRequest.current() - 1) * safeRequest.size());
+        List<RagTraceRun> runs = jdbcTemplate.query(
+                SQL_RUN_SELECT + filter.where() + " ORDER BY start_time DESC LIMIT ? OFFSET ?",
+                this::mapRun,
+                pageArgs.toArray());
+        return new RagTracePage<>(safeRequest.current(), safeRequest.size(), total == null ? 0 : total, runs);
+    }
+
+    @Override
+    public Optional<RagTraceRun> findRun(String traceId) {
+        if (!hasText(traceId)) {
+            return Optional.empty();
+        }
+        List<RagTraceRun> runs = jdbcTemplate.query(
+                SQL_RUN_SELECT + " WHERE r.trace_id = ? AND r.deleted = 0 LIMIT 1",
+                this::mapRun,
+                traceId);
+        if (runs.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(runs.get(0));
+    }
+
+    @Override
+    public List<RagTraceNode> listNodes(String traceId) {
+        if (!hasText(traceId)) {
+            return List.of();
+        }
+        return jdbcTemplate.query(SQL_NODE_SELECT, this::mapNode, traceId);
+    }
+
+    @Override
+    public void startRun(RagTraceRun run) {
+        RagTraceRun safeRun = Objects.requireNonNull(run, "run must not be null");
+        Instant now = Instant.now();
+        jdbcTemplate.update(SQL_INSERT_RUN,
+                resolveId(safeRun.getId()),
+                safeRun.getTraceId(),
+                safeRun.getTraceName(),
+                safeRun.getEntryMethod(),
+                safeRun.getConversationId(),
+                safeRun.getTaskId(),
+                safeRun.getUserId(),
+                statusOrRunning(safeRun.getStatus()),
+                safeRun.getErrorMessage(),
+                toTimestamp(nullToNow(safeRun.getStartTime())),
+                toTimestamp(safeRun.getEndTime()),
+                safeRun.getDurationMs(),
+                safeRun.getExtraData(),
+                toTimestamp(now),
+                toTimestamp(now));
+    }
+
+    @Override
+    public void finishRun(RagTraceRunFinish finish) {
+        if (finish == null || !hasText(finish.traceId())) {
+            return;
+        }
+        Instant endTime = nullToNow(finish.endTime());
+        jdbcTemplate.update(SQL_FINISH_RUN,
+                finish.status(),
+                finish.errorMessage(),
+                toTimestamp(endTime),
+                finish.durationMs(),
+                toTimestamp(Instant.now()),
+                finish.traceId());
+    }
+
+    @Override
+    public void startNode(RagTraceNode node) {
+        RagTraceNode safeNode = Objects.requireNonNull(node, "node must not be null");
+        Instant now = Instant.now();
+        jdbcTemplate.update(SQL_INSERT_NODE,
+                resolveId(safeNode.getId()),
+                safeNode.getTraceId(),
+                safeNode.getNodeId(),
+                safeNode.getParentNodeId(),
+                safeNode.getDepth(),
+                safeNode.getNodeType(),
+                safeNode.getNodeName(),
+                safeNode.getClassName(),
+                safeNode.getMethodName(),
+                statusOrRunning(safeNode.getStatus()),
+                safeNode.getErrorMessage(),
+                toTimestamp(nullToNow(safeNode.getStartTime())),
+                toTimestamp(safeNode.getEndTime()),
+                safeNode.getDurationMs(),
+                null,
+                toTimestamp(now),
+                toTimestamp(now));
+    }
+
+    @Override
+    public void finishNode(RagTraceNodeFinish finish) {
+        if (finish == null || !hasText(finish.traceId()) || !hasText(finish.nodeId())) {
+            return;
+        }
+        Instant endTime = nullToNow(finish.endTime());
+        jdbcTemplate.update(SQL_FINISH_NODE,
+                finish.status(),
+                finish.errorMessage(),
+                toTimestamp(endTime),
+                finish.durationMs(),
+                toTimestamp(Instant.now()),
+                finish.traceId(),
+                finish.nodeId());
+    }
+
+    private QueryParts buildRunFilter(RagTracePageRequest request) {
+        List<String> clauses = new ArrayList<>();
+        List<Object> args = new ArrayList<>();
+        clauses.add("r.deleted = 0");
+        appendEqual(clauses, args, "r.trace_id", request.traceId());
+        appendEqual(clauses, args, "r.conversation_id", request.conversationId());
+        appendEqual(clauses, args, "r.task_id", request.taskId());
+        appendEqual(clauses, args, "r.status", request.status());
+        return new QueryParts(" WHERE " + String.join(" AND ", clauses), args);
+    }
+
+    private void appendEqual(List<String> clauses, List<Object> args, String column, String value) {
+        if (!hasText(value)) {
+            return;
+        }
+        clauses.add(column + " = ?");
+        args.add(value);
+    }
+
+    private RagTracePageRequest normalize(RagTracePageRequest request) {
+        if (request == null) {
+            return new RagTracePageRequest(1, 10, null, null, null, null);
+        }
+        long current = request.current() <= 0 ? 1 : request.current();
+        long size = request.size() <= 0 ? 10 : request.size();
+        return new RagTracePageRequest(current, size, request.traceId(),
+                request.conversationId(), request.taskId(), request.status());
+    }
+
+    private RagTraceRun mapRun(ResultSet resultSet, int rowNum) throws SQLException {
+        RagTraceRun run = new RagTraceRun();
+        run.setId(resultSet.getString("id"));
+        run.setTraceId(resultSet.getString("trace_id"));
+        run.setTraceName(resultSet.getString("trace_name"));
+        run.setEntryMethod(resultSet.getString("entry_method"));
+        run.setConversationId(resultSet.getString("conversation_id"));
+        run.setTaskId(resultSet.getString("task_id"));
+        run.setUserId(resultSet.getString("user_id"));
+        run.setStatus(resultSet.getString("status"));
+        run.setErrorMessage(resultSet.getString("error_message"));
+        run.setDurationMs(resultSet.getObject("duration_ms", Long.class));
+        run.setStartTime(toInstant(resultSet.getTimestamp("start_time")));
+        run.setEndTime(toInstant(resultSet.getTimestamp("end_time")));
+        run.setExtraData(resultSet.getString("extra_data"));
+        return run;
+    }
+
+    private RagTraceNode mapNode(ResultSet resultSet, int rowNum) throws SQLException {
+        RagTraceNode node = new RagTraceNode();
+        node.setId(resultSet.getString("id"));
+        node.setTraceId(resultSet.getString("trace_id"));
+        node.setNodeId(resultSet.getString("node_id"));
+        node.setParentNodeId(resultSet.getString("parent_node_id"));
+        node.setDepth(resultSet.getObject("depth", Integer.class));
+        node.setNodeType(resultSet.getString("node_type"));
+        node.setNodeName(resultSet.getString("node_name"));
+        node.setClassName(resultSet.getString("class_name"));
+        node.setMethodName(resultSet.getString("method_name"));
+        node.setStatus(resultSet.getString("status"));
+        node.setErrorMessage(resultSet.getString("error_message"));
+        node.setDurationMs(resultSet.getObject("duration_ms", Long.class));
+        node.setStartTime(toInstant(resultSet.getTimestamp("start_time")));
+        node.setEndTime(toInstant(resultSet.getTimestamp("end_time")));
+        return node;
+    }
+
+    private Timestamp toTimestamp(Instant instant) {
+        if (instant == null) {
+            return null;
+        }
+        return Timestamp.from(instant);
+    }
+
+    private Instant toInstant(Timestamp timestamp) {
+        if (timestamp == null) {
+            return null;
+        }
+        return timestamp.toInstant();
+    }
+
+    private Instant nullToNow(Instant instant) {
+        return instant == null ? Instant.now() : instant;
+    }
+
+    private String statusOrRunning(String status) {
+        if (!hasText(status)) {
+            return DEFAULT_STATUS_RUNNING;
+        }
+        return status;
+    }
+
+    private String resolveId(String id) {
+        if (hasText(id)) {
+            return id;
+        }
+        long millis = System.currentTimeMillis();
+        int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
+        return Long.toString(millis, 36) + suffix;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private record QueryParts(String where, List<Object> argList) {
+
+        private Object[] args() {
+            return argList.toArray();
+        }
+    }
+}

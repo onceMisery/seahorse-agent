@@ -1,0 +1,3 @@
+default=local
+local=com.miracle.ai.seahorse.agent.adapters.storage.local.LocalObjectStorageAdapter
+local.order=0

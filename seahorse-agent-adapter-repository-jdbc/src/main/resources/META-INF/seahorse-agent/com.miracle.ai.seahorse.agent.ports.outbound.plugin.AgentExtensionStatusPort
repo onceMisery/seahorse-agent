@@ -1,0 +1,4 @@
+default=jdbc
+jdbc.class=com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentExtensionStatusAdapter
+jdbc.managed=true
+jdbc.order=100

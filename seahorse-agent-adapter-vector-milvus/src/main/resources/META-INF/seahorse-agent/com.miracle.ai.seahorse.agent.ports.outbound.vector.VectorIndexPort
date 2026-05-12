@@ -1,0 +1,4 @@
+default=milvus
+milvus.class=com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorAdapter
+milvus.managed=true
+milvus.order=100

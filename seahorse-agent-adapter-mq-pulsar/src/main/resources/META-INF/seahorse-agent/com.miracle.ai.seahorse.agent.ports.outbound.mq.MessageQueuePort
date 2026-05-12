@@ -1,0 +1,3 @@
+pulsar=com.miracle.ai.seahorse.agent.adapters.mq.pulsar.PulsarMessageQueueAdapter
+pulsar.managed=true
+pulsar.order=10

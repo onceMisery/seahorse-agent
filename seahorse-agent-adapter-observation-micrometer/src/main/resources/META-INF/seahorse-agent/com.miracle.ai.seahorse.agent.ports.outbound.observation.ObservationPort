@@ -1,0 +1,4 @@
+default=micrometer
+micrometer.class=com.miracle.ai.seahorse.agent.adapters.observation.micrometer.MicrometerObservationAdapter
+micrometer.managed=true
+micrometer.order=100

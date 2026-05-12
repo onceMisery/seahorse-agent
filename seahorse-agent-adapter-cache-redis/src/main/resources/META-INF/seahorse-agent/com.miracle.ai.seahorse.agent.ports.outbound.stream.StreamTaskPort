@@ -1,0 +1,4 @@
+default=redis
+redis.class=com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisStreamTaskPort
+redis.managed=true
+redis.order=100

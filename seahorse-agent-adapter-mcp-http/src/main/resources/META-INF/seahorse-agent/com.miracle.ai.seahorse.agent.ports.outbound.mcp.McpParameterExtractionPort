@@ -1,0 +1,4 @@
+default=llm
+llm=com.miracle.ai.seahorse.agent.adapters.mcp.http.LlmMcpParameterExtractionAdapter
+llm.managed=true
+llm.order=0
