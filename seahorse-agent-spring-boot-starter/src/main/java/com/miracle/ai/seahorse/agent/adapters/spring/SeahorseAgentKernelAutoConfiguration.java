@@ -716,10 +716,12 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnMissingBean
     public KnowledgeDocumentVectorPorts seahorseKnowledgeDocumentVectorPorts(
             ObjectProvider<EmbeddingModelPort> embeddingModelPort,
-            ObjectProvider<VectorIndexPort> vectorIndexPort) {
+            ObjectProvider<VectorIndexPort> vectorIndexPort,
+            ObjectProvider<KeywordIndexPort> keywordIndexPort) {
         return new KnowledgeDocumentVectorPorts(
                 embeddingModelPort.getIfAvailable(EmbeddingModelPort::noop),
-                vectorIndexPort.getIfAvailable(SeahorseAgentKernelAutoConfiguration::noopVectorIndexPort));
+                vectorIndexPort.getIfAvailable(SeahorseAgentKernelAutoConfiguration::noopVectorIndexPort),
+                keywordIndexPort.getIfAvailable(KeywordIndexPort::noop));
     }
 
     @Bean

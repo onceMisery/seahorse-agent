@@ -34,12 +34,15 @@ import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UploadProcessOption
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeDocumentCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkSummary;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentDetail;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentFileRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentProcessRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentSummary;
+import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.PipelineDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
@@ -116,12 +119,68 @@ class KernelKnowledgeDocumentServiceTests {
         assertThat(ports.repository.findById(document.id()).orElseThrow().process().status()).isEqualTo("success");
     }
 
+    @Test
+    void shouldSyncKeywordIndexWhenEnableOrDeleteDocument() {
+        Ports ports = new Ports();
+        KnowledgeDocumentRecord document = ports.repository.createPendingDocument(new CreateKnowledgeDocumentCommand(
+                "kb-1",
+                "policy.pdf",
+                new KnowledgeDocumentFileRef("local://policy.pdf", "pdf", 7L),
+                new KnowledgeDocumentProcessRef("success", "pipeline", "pipeline-1"),
+                "tester"));
+        ports.repository.detail = documentDetail(document.id(), true);
+        ports.repository.enabledChunks = List.of(chunkRecord(document.id(), "chunk-1", "content"));
+        RecordingVectorIndexPort vectorIndexPort = new RecordingVectorIndexPort();
+        RecordingKeywordIndexPort keywordIndexPort = new RecordingKeywordIndexPort();
+        KernelKnowledgeDocumentService service = newService(ports, vectorIndexPort, keywordIndexPort);
+
+        service.enable(document.id(), false, "tester");
+        service.enable(document.id(), true, "tester");
+        service.delete(document.id(), "tester");
+
+        assertThat(keywordIndexPort.deletedDocuments).containsExactly("kb-1/" + document.id(),
+                "kb-1/" + document.id());
+        assertThat(keywordIndexPort.indexedDocuments).containsExactly("kb-1/" + document.id() + "/chunk-1");
+        assertThat(vectorIndexPort.deletedDocuments).containsExactly("collection-a/" + document.id(),
+                "collection-a/" + document.id());
+        assertThat(vectorIndexPort.indexedDocuments).containsExactly("collection-a/" + document.id() + "/chunk-1");
+    }
+
     private KernelKnowledgeDocumentService newService(Ports ports) {
+        return newService(ports, new NoopVectorIndexPort(), KeywordIndexPort.noop());
+    }
+
+    private KernelKnowledgeDocumentService newService(Ports ports,
+                                                     VectorIndexPort vectorIndexPort,
+                                                     KeywordIndexPort keywordIndexPort) {
         KnowledgeDocumentServicePorts servicePorts = new KnowledgeDocumentServicePorts(
                 ports.knowledgeBaseQuery, ports.repository, ports.storage, ports.messageQueue, ingestionEngine());
         KnowledgeDocumentVectorPorts vectorPorts = new KnowledgeDocumentVectorPorts(
-                EmbeddingModelPort.noop(), new NoopVectorIndexPort());
+                EmbeddingModelPort.noop(), vectorIndexPort, keywordIndexPort);
         return new KernelKnowledgeDocumentService(servicePorts, vectorPorts, "topic");
+    }
+
+    private KnowledgeDocumentDetail documentDetail(String docId, boolean enabled) {
+        KnowledgeDocumentDetail detail = new KnowledgeDocumentDetail();
+        detail.setId(docId);
+        detail.setKbId("kb-1");
+        detail.setCollectionName("collection-a");
+        detail.setEmbeddingModel("embedding-a");
+        detail.setFileUrl("local://policy.pdf");
+        detail.setStatus("success");
+        detail.setEnabled(enabled);
+        return detail;
+    }
+
+    private KnowledgeChunkRecord chunkRecord(String docId, String chunkId, String content) {
+        KnowledgeChunkRecord record = new KnowledgeChunkRecord();
+        record.setId(chunkId);
+        record.setKbId("kb-1");
+        record.setDocId(docId);
+        record.setChunkIndex(0);
+        record.setContent(content);
+        record.setEnabled(1);
+        return record;
     }
 
     private KernelIngestionEngine ingestionEngine() {
@@ -192,6 +251,8 @@ class KernelKnowledgeDocumentServiceTests {
     private static class InMemoryDocumentRepository implements KnowledgeDocumentRepositoryPort {
 
         private final List<KnowledgeDocumentRecord> records = new ArrayList<>();
+        private KnowledgeDocumentDetail detail;
+        private List<KnowledgeChunkRecord> enabledChunks = List.of();
         private int successChunkCount;
 
         @Override
@@ -213,6 +274,11 @@ class KernelKnowledgeDocumentServiceTests {
         }
 
         @Override
+        public Optional<KnowledgeDocumentDetail> findDetailById(String docId) {
+            return detail != null && detail.getId().equals(docId) ? Optional.of(detail) : Optional.empty();
+        }
+
+        @Override
         public boolean markRunning(String docId, String operator) {
             return replaceStatus(docId, "running");
         }
@@ -228,6 +294,25 @@ class KernelKnowledgeDocumentServiceTests {
             replaceStatus(docId, "failed");
         }
 
+        @Override
+        public boolean updateEnabled(String docId, boolean enabled, String operator) {
+            if (detail == null || !detail.getId().equals(docId)) {
+                return false;
+            }
+            detail.setEnabled(enabled);
+            return true;
+        }
+
+        @Override
+        public boolean delete(String docId, String operator) {
+            return findById(docId).isPresent();
+        }
+
+        @Override
+        public List<KnowledgeChunkRecord> listEnabledChunks(String docId) {
+            return enabledChunks;
+        }
+
         private boolean replaceStatus(String docId, String status) {
             for (int index = 0; index < records.size(); index++) {
                 KnowledgeDocumentRecord record = records.get(index);
@@ -240,6 +325,50 @@ class KernelKnowledgeDocumentServiceTests {
                 return true;
             }
             return false;
+        }
+    }
+
+    private static class RecordingVectorIndexPort implements VectorIndexPort {
+
+        private final List<String> indexedDocuments = new ArrayList<>();
+        private final List<String> deletedDocuments = new ArrayList<>();
+
+        @Override
+        public void indexDocumentChunks(String collectionName, String docId, List<VectorChunk> chunks) {
+            indexedDocuments.add(collectionName + "/" + docId + "/" + chunks.get(0).getChunkId());
+        }
+
+        @Override
+        public void updateChunk(String collectionName, String docId, VectorChunk chunk) {
+        }
+
+        @Override
+        public void deleteDocumentVectors(String collectionName, String docId) {
+            deletedDocuments.add(collectionName + "/" + docId);
+        }
+
+        @Override
+        public void deleteChunkById(String collectionName, String chunkId) {
+        }
+
+        @Override
+        public void deleteChunksByIds(String collectionName, List<String> chunkIds) {
+        }
+    }
+
+    private static class RecordingKeywordIndexPort implements KeywordIndexPort {
+
+        private final List<String> indexedDocuments = new ArrayList<>();
+        private final List<String> deletedDocuments = new ArrayList<>();
+
+        @Override
+        public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
+            indexedDocuments.add(kbId + "/" + docId + "/" + chunks.get(0).getChunkId());
+        }
+
+        @Override
+        public void deleteDocumentChunks(String kbId, String docId) {
+            deletedDocuments.add(kbId + "/" + docId);
         }
     }
 

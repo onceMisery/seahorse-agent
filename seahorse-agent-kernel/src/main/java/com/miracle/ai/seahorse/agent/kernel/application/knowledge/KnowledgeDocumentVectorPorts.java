@@ -17,21 +17,31 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.knowledge;
 
+import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 
 import java.util.Objects;
 
 /**
- * 文档管理向量同步端口集合。
+ * 文档管理索引同步端口集合。
+ *
+ * <p>文档启用、禁用和删除需要同时维护向量索引与关键词索引，避免检索后端残留已禁用文档。
  */
 public record KnowledgeDocumentVectorPorts(
         EmbeddingModelPort embeddingModelPort,
-        VectorIndexPort vectorIndexPort
+        VectorIndexPort vectorIndexPort,
+        KeywordIndexPort keywordIndexPort
 ) {
+
+    public KnowledgeDocumentVectorPorts(EmbeddingModelPort embeddingModelPort,
+                                        VectorIndexPort vectorIndexPort) {
+        this(embeddingModelPort, vectorIndexPort, KeywordIndexPort.noop());
+    }
 
     public KnowledgeDocumentVectorPorts {
         embeddingModelPort = Objects.requireNonNull(embeddingModelPort, "embeddingModelPort must not be null");
         vectorIndexPort = Objects.requireNonNull(vectorIndexPort, "vectorIndexPort must not be null");
+        keywordIndexPort = Objects.requireNonNull(keywordIndexPort, "keywordIndexPort must not be null");
     }
 }

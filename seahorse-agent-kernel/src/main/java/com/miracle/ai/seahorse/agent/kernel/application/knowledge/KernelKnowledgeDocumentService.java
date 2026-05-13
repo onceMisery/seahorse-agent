@@ -189,6 +189,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
             reindexEnabledChunks(current);
         } else {
             vectorPorts.vectorIndexPort().deleteDocumentVectors(current.getCollectionName(), current.getId());
+            vectorPorts.keywordIndexPort().deleteDocumentChunks(current.getKbId(), current.getId());
         }
         if (!documentRepositoryPort.updateEnabled(current.getId(), enabled, operator)) {
             throw new IllegalArgumentException("文档不存在：" + docId);
@@ -202,6 +203,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
             throw new IllegalArgumentException("文档不存在：" + docId);
         }
         vectorPorts.vectorIndexPort().deleteDocumentVectors(current.getCollectionName(), current.getId());
+        vectorPorts.keywordIndexPort().deleteDocumentChunks(current.getKbId(), current.getId());
         if (hasText(current.getFileUrl())) {
             objectStoragePort.deleteByUrl(current.getFileUrl());
         }
@@ -303,8 +305,10 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
         if (chunks.isEmpty()) {
             return;
         }
-        vectorPorts.vectorIndexPort().indexDocumentChunks(document.getCollectionName(), document.getId(),
-                chunks.stream().map(chunk -> toVectorChunk(document, chunk)).toList());
+        List<VectorChunk> vectorChunks = chunks.stream().map(chunk -> toVectorChunk(document, chunk)).toList();
+        vectorPorts.vectorIndexPort().indexDocumentChunks(document.getCollectionName(), document.getId(), vectorChunks);
+        // 关键词索引复用同一批分片快照；具体是否使用 embedding 由 adapter 自行决定。
+        vectorPorts.keywordIndexPort().indexDocumentChunks(document.getKbId(), document.getId(), vectorChunks);
     }
 
     private VectorChunk toVectorChunk(KnowledgeDocumentDetail document, KnowledgeChunkRecord record) {

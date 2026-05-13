@@ -30,6 +30,7 @@
 - 新增 DDL 表和字段必须有注释。
 # 2026-05-13 本轮续做
 
+- [complete] M3 文档管理索引联动：文档禁用/删除会清理关键词索引，重新启用会把启用分片同步回关键词索引。
 - [complete] M3 Outbox 异步索引最小闭环：新增关键词索引 Outbox 发布器、消息事件和订阅器，支持通过配置切换到 outbox 模式。
 - [complete] M3 关键词索引维护入口：`KeywordIndexPort` 增加按文档/知识库重建的默认方法，JDBC fallback 已实现重算 `search_text`。
 - [complete] M3 JDBC/PostgreSQL `KeywordIndexPort` fallback：维护 `t_knowledge_chunk.search_text`，并在 starter 中注册默认 JDBC 索引适配器。

@@ -29,6 +29,8 @@
 - 入库 `IndexerNodeFeature` 现在同步调用 `KeywordIndexPort`，为 Elasticsearch 生产适配器和后续 Outbox 异步化预留统一写入点；默认 noop 保持原有向量入库行为兼容。
 # 2026-05-13 追加发现
 
+- 文档管理的启用/禁用/删除是索引一致性的关键入口；仅维护向量索引会导致关键词检索后端残留已禁用或已删除文档。
+- 重新启用文档时，向量索引和关键词索引可以共用 `listEnabledChunks` 生成的分片快照，避免两套索引看到不同的分片集合。
 - 关键词索引 Outbox 化放在 starter/spring adapter 层更合适：kernel 仍只依赖 `KeywordIndexPort`，消息可靠性、订阅生命周期和具体 delegate 选择留在外层装配。
 - 异步事件需要携带 `VectorChunk` 快照；JDBC fallback 只用 `chunkId`，但 Elasticsearch adapter 后续会需要正文和 metadata。
 - 关键词索引重建不应绑定具体后端实现；放在 `KeywordIndexPort` 默认方法上可以让 ES、PostgreSQL FTS 和后续 OpenSearch/Lucene adapter 共享同一补偿入口。

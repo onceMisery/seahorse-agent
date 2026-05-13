@@ -47,6 +47,9 @@
 - 运行 `git diff --check -- . ':!缺少的功能.md' ':!元数据过滤：RAG与Agentic Search.md'`，通过；仅有 Git 提示部分工作区文件下一次触碰时 LF 会替换为 CRLF。
 # 2026-05-13 追加进度
 
+- 补齐文档管理侧索引联动：`KnowledgeDocumentVectorPorts` 扩展 `KeywordIndexPort`，文档禁用/删除时清理关键词索引，重新启用时复用启用分片快照同步关键词索引。
+- `SeahorseAgentKernelAutoConfiguration` 为文档服务注入 `KeywordIndexPort`，未配置时继续使用 noop，保持本地和旧部署兼容。
+- 新增 `KernelKnowledgeDocumentServiceTests.shouldSyncKeywordIndexWhenEnableOrDeleteDocument`，运行 `mvn -pl seahorse-agent-tests -am "-Dtest=KernelKnowledgeDocumentServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过：4 个测试成功。
 - 新增 `KeywordIndexOutboxAdapter`、`KeywordIndexEvent`、`KeywordIndexMessageSubscriber`，在 `seahorse-agent.adapters.keyword-index.mode=outbox` 时把入库侧关键词索引写入可靠消息，再由订阅器调用实际索引 adapter。
 - starter 增加 outbox 模式装配：`KeywordIndexOutboxAdapter` 作为主 `KeywordIndexPort`，JDBC adapter 作为当前默认消费端 delegate，后续 ES adapter 可替换同一端口。
 - 新增 `KeywordIndexOutboxAdapterTests`，覆盖发布 Outbox、relay、订阅消费到实际 `KeywordIndexPort` 的最小闭环；运行 `mvn -pl seahorse-agent-tests -am "-Dtest=KeywordIndexOutboxAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过：1 个测试成功。
