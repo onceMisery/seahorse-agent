@@ -51,6 +51,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGover
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryGovernanceServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryManagementServicePorts;
+import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataBackfillService;
 import com.miracle.ai.seahorse.agent.kernel.application.model.KernelModelRoutingService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
@@ -105,6 +106,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenan
 import com.miracle.ai.seahorse.agent.ports.inbound.mapping.QueryTermMappingInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
@@ -153,6 +155,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
@@ -755,6 +758,27 @@ public class SeahorseAgentKernelAutoConfiguration {
         return new KernelKeywordIndexMaintenanceService(
                 documentRepositoryPort,
                 keywordIndexPort.getIfAvailable(KeywordIndexPort::noop),
+                observationPort.getIfAvailable());
+    }
+
+    @Bean
+    @ConditionalOnBean({KnowledgeDocumentRepositoryPort.class, ObjectStoragePort.class,
+            PipelineDefinitionRepositoryPort.class, KernelIngestionEngine.class,
+            MetadataBackfillJobRepositoryPort.class})
+    @ConditionalOnMissingBean(MetadataBackfillInboundPort.class)
+    public KernelMetadataBackfillService seahorseMetadataBackfillInboundPort(
+            KnowledgeDocumentRepositoryPort documentRepositoryPort,
+            ObjectStoragePort objectStoragePort,
+            PipelineDefinitionRepositoryPort pipelineRepositoryPort,
+            KernelIngestionEngine ingestionEngine,
+            MetadataBackfillJobRepositoryPort jobRepositoryPort,
+            ObjectProvider<ObservationPort> observationPort) {
+        return new KernelMetadataBackfillService(
+                documentRepositoryPort,
+                objectStoragePort,
+                pipelineRepositoryPort,
+                ingestionEngine,
+                jobRepositoryPort,
                 observationPort.getIfAvailable());
     }
 

@@ -65,6 +65,50 @@ COMMENT ON COLUMN t_metadata_field_schema.create_time IS '创建时间';
 COMMENT ON COLUMN t_metadata_field_schema.update_time IS '更新时间';
 COMMENT ON COLUMN t_metadata_field_schema.deleted IS '是否删除，0 表示正常，1 表示删除';
 
+CREATE TABLE IF NOT EXISTS t_metadata_extraction_job (
+    id                  VARCHAR(64) PRIMARY KEY,
+    tenant_id           VARCHAR(64) NOT NULL,
+    kb_id               VARCHAR(64) NOT NULL,
+    pipeline_id         VARCHAR(64),
+    status              VARCHAR(32) NOT NULL,
+    current_page        BIGINT NOT NULL DEFAULT 1,
+    checkpoint_json     JSONB,
+    batch_size          INTEGER NOT NULL DEFAULT 50,
+    processed_count     INTEGER NOT NULL DEFAULT 0,
+    success_count       INTEGER NOT NULL DEFAULT 0,
+    failed_count        INTEGER NOT NULL DEFAULT 0,
+    skipped_count       INTEGER NOT NULL DEFAULT 0,
+    review_count        INTEGER NOT NULL DEFAULT 0,
+    quarantine_count    INTEGER NOT NULL DEFAULT 0,
+    failure_summary     JSONB,
+    operator            VARCHAR(64),
+    create_time         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_metadata_extraction_job_scope
+ON t_metadata_extraction_job (tenant_id, kb_id, status, update_time);
+
+COMMENT ON TABLE t_metadata_extraction_job IS '元数据抽取与历史回填任务表';
+COMMENT ON COLUMN t_metadata_extraction_job.id IS '回填任务 ID';
+COMMENT ON COLUMN t_metadata_extraction_job.tenant_id IS '租户 ID';
+COMMENT ON COLUMN t_metadata_extraction_job.kb_id IS '知识库 ID';
+COMMENT ON COLUMN t_metadata_extraction_job.pipeline_id IS '回填使用的入库流水线 ID，为空时使用文档自身流水线';
+COMMENT ON COLUMN t_metadata_extraction_job.status IS '任务状态：PENDING/RUNNING/PAUSED/CANCELLED/COMPLETED/FAILED';
+COMMENT ON COLUMN t_metadata_extraction_job.current_page IS '当前分页游标，从 1 开始';
+COMMENT ON COLUMN t_metadata_extraction_job.checkpoint_json IS '断点续跑游标 JSON，记录当前页和最后处理文档 ID';
+COMMENT ON COLUMN t_metadata_extraction_job.batch_size IS '每批扫描的文档数量';
+COMMENT ON COLUMN t_metadata_extraction_job.processed_count IS '已扫描处理的文档数量';
+COMMENT ON COLUMN t_metadata_extraction_job.success_count IS '回填流水线执行成功的文档数量';
+COMMENT ON COLUMN t_metadata_extraction_job.failed_count IS '回填流水线执行失败的文档数量';
+COMMENT ON COLUMN t_metadata_extraction_job.skipped_count IS '因禁用、运行中或缺少必要信息而跳过的文档数量';
+COMMENT ON COLUMN t_metadata_extraction_job.review_count IS '进入人工复核的文档数量';
+COMMENT ON COLUMN t_metadata_extraction_job.quarantine_count IS '进入隔离区的文档数量';
+COMMENT ON COLUMN t_metadata_extraction_job.failure_summary IS '失败文档摘要 JSON';
+COMMENT ON COLUMN t_metadata_extraction_job.operator IS '最近一次操作人';
+COMMENT ON COLUMN t_metadata_extraction_job.create_time IS '创建时间';
+COMMENT ON COLUMN t_metadata_extraction_job.update_time IS '更新时间';
+
 CREATE TABLE IF NOT EXISTS t_metadata_extraction_result (
     id                    VARCHAR(64) PRIMARY KEY,
     tenant_id             VARCHAR(64) NOT NULL,

@@ -44,3 +44,11 @@
 - [complete] M3 Web 管理触发入口：新增按文档和按知识库触发关键词索引重建的 HTTP API。
 - [complete] M3 计划型 Job 触发入口：新增默认关闭的 `SeahorseKeywordIndexMaintenanceJob`，显式配置后可按 docId/kbId 定时调用 `KeywordIndexMaintenanceInboundPort`。
 - [complete] M3 索引失败观测与补偿：重建编排和 outbox 消费端已接入 `ObservationPort`，outbox 消费失败继续抛给 MQ/Outbox 重试链路，Web 管理 API 可按文档/知识库补偿。
+
+## 2026-05-13 M5 元数据回填与治理运维
+
+- [in_progress] M5 历史回填最小闭环：新增 kernel 级 `MetadataBackfillInboundPort` 与 `KernelMetadataBackfillService`，支持创建任务、分页推进、checkpoint、暂停/恢复/取消、单文档失败隔离和 Review/Quarantine 计数。
+- [complete] M5 回填任务持久化端口：新增 `MetadataBackfillJobRepositoryPort`，并由 JDBC 元数据治理适配器实现。
+- [complete] M5 DDL：新增 `t_metadata_extraction_job` 回填任务表，表与字段均补充 COMMENT。
+- [pending] M5 管理 API：任务创建、批次推进、暂停/恢复/取消、任务详情。
+- [pending] M5 质量报表：字段覆盖率、低置信度比例、待复核数量、隔离原因 TopN。

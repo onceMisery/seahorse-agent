@@ -70,3 +70,10 @@
 - 关键词索引定时重建必须默认关闭，否则生产环境可能在未明确配置目标时触发大范围重复写入。
 - 定时补偿入口适合配置少量明确 docId/kbId 目标；常规全量历史回填仍应优先通过管理端按需触发并观察结果。
 - Job 层只负责调度、锁和错误隔离，不持有重建细节，避免绕过 `KeywordIndexMaintenanceInboundPort` 的数据治理边界。
+
+## 2026-05-13 M5 元数据回填发现
+
+- 回填服务如果只调用 `KnowledgeDocumentInboundPort.executeChunk`，无法直接知道文档是否进入 Review 或 Quarantine；复用 `KernelIngestionEngine` 并检查 `IngestionContext.metadataValidationResult` 更适合作为 kernel 级治理回填编排。
+- 回填任务的 checkpoint 至少需要页游标和最后处理文档 ID。当前实现按批次页游标续跑，并在每个文档处理后刷新 checkpoint，后续如果要支持更细粒度断点，可在仓储查询中增加“从 lastDocumentId 之后继续”的能力。
+- 单文档失败不能把整个任务置为 FAILED；FAILED 更适合作为任务级不可恢复异常。普通文档处理失败保存在 `failure_summary`，批次继续推进，最终由 failed_count 暴露补偿范围。
+- Review/Quarantine 的计数应该来自治理节点的 `MetadataValidationDecision`，不能通过解析适配器异常或索引结果推断。

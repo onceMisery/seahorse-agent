@@ -26,6 +26,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataOperator;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
@@ -41,6 +44,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import javax.sql.DataSource;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -51,7 +56,7 @@ import java.util.stream.Collectors;
 
 public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRegistryPort,
         MetadataDictionaryPort, MetadataExtractionResultRepositoryPort, MetadataReviewQueuePort,
-        MetadataQuarantinePort, MetadataCanonicalWritePort {
+        MetadataQuarantinePort, MetadataCanonicalWritePort, MetadataBackfillJobRepositoryPort {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
@@ -174,6 +179,69 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
     }
 
+    @Override
+    public String create(MetadataBackfillJobRecord job) {
+        MetadataBackfillJobRecord safeJob = Objects.requireNonNull(job, "job must not be null");
+        jdbcTemplate.update("""
+                INSERT INTO t_metadata_extraction_job(
+                    id, tenant_id, kb_id, pipeline_id, status, current_page, checkpoint_json, batch_size,
+                    processed_count, success_count, failed_count, skipped_count, review_count,
+                    quarantine_count, failure_summary, operator, create_time, update_time
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, safeJob.jobId(), safeJob.tenantId(), safeJob.knowledgeBaseId(), safeJob.pipelineId(),
+                safeJob.status().name(), safeJob.currentPage(), json(safeJob.checkpoint()), safeJob.batchSize(),
+                safeJob.processedDocuments(), safeJob.succeededDocuments(), safeJob.failedDocuments(),
+                safeJob.skippedDocuments(), safeJob.reviewDocuments(), safeJob.quarantineDocuments(),
+                json(safeJob.failures()), safeJob.operator(), Timestamp.from(safeJob.createTime()),
+                Timestamp.from(safeJob.updateTime()));
+        return safeJob.jobId();
+    }
+
+    @Override
+    public Optional<MetadataBackfillJobRecord> findById(String jobId) {
+        if (blank(jobId)) {
+            return Optional.empty();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, kb_id, pipeline_id, status, checkpoint_json, batch_size,
+                           current_page,
+                           processed_count, success_count, failed_count, skipped_count, review_count,
+                           quarantine_count, failure_summary, operator, create_time, update_time
+                    FROM t_metadata_extraction_job
+                    WHERE id = ?
+                    """, this::toBackfillJobRecord, jobId).stream().findFirst();
+        } catch (DataAccessException ex) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public void save(MetadataBackfillJobRecord job) {
+        MetadataBackfillJobRecord safeJob = Objects.requireNonNull(job, "job must not be null");
+        jdbcTemplate.update("""
+                UPDATE t_metadata_extraction_job
+                SET status = ?,
+                    current_page = ?,
+                    checkpoint_json = ?,
+                    batch_size = ?,
+                    processed_count = ?,
+                    success_count = ?,
+                    failed_count = ?,
+                    skipped_count = ?,
+                    review_count = ?,
+                    quarantine_count = ?,
+                    failure_summary = ?,
+                    operator = ?,
+                    update_time = ?
+                WHERE id = ?
+                """, safeJob.status().name(), safeJob.currentPage(), json(safeJob.checkpoint()), safeJob.batchSize(),
+                safeJob.processedDocuments(), safeJob.succeededDocuments(), safeJob.failedDocuments(),
+                safeJob.skippedDocuments(), safeJob.reviewDocuments(), safeJob.quarantineDocuments(),
+                json(safeJob.failures()), safeJob.operator(), Timestamp.from(safeJob.updateTime()),
+                safeJob.jobId());
+    }
+
     private MetadataFieldDescriptor toFieldDescriptor(ResultSet rs, int rowNum) throws SQLException {
         int schemaVersion = rs.getInt("schema_version");
         Map<String, Object> hints = mutableMap(rs.getString("extraction_hints"));
@@ -209,6 +277,28 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 bool(values.get("pushdownToKeyword")),
                 bool(values.get("guardOnly")),
                 values);
+    }
+
+    private MetadataBackfillJobRecord toBackfillJobRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new MetadataBackfillJobRecord(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getString("kb_id"),
+                rs.getString("pipeline_id"),
+                enumValue(MetadataBackfillJobStatus.class, rs.getString("status"), MetadataBackfillJobStatus.PENDING),
+                Math.max(1L, rs.getLong("current_page")),
+                Math.max(1, rs.getInt("batch_size")),
+                rs.getInt("processed_count"),
+                rs.getInt("success_count"),
+                rs.getInt("failed_count"),
+                rs.getInt("skipped_count"),
+                rs.getInt("review_count"),
+                rs.getInt("quarantine_count"),
+                readMap(rs.getString("checkpoint_json")),
+                readList(rs.getString("failure_summary")),
+                rs.getString("operator"),
+                instant(rs.getTimestamp("create_time")),
+                instant(rs.getTimestamp("update_time")));
     }
 
     private Set<MetadataOperator> operators(String json) {
@@ -296,6 +386,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         } catch (RuntimeException ex) {
             return defaultValue;
         }
+    }
+
+    private Instant instant(Timestamp timestamp) {
+        return timestamp == null ? Instant.now() : timestamp.toInstant();
     }
 
     private boolean blank(String value) {

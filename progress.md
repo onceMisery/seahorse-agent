@@ -108,3 +108,13 @@
 - Job 使用 `DistributedLockPort` 防止多实例重复执行，单个目标失败只记录 warn 并继续处理后续目标。
 - 扩展 `SeahorseAgentKernelAutoConfigurationTests`，验证默认关闭和显式开启注册；新增 `SeahorseKeywordIndexMaintenanceJobTests` 覆盖目标去重与调用顺序。
 - 验证通过：`mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=SeahorseKeywordIndexMaintenanceJobTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，18 个测试成功。
+
+## 2026-05-13 继续推进 M5 元数据回填
+
+- 新增 `MetadataBackfillCommand`、`MetadataBackfillInboundPort`、`MetadataBackfillRunResult`，作为管理端和调度端触发历史治理回填的 kernel 入站契约。
+- 新增 `MetadataBackfillJobRecord`、`MetadataBackfillJobStatus`、`MetadataBackfillJobRepositoryPort`，用于保存回填任务状态、checkpoint、计数和失败摘要。
+- 新增 `KernelMetadataBackfillService`：按知识库分页扫描文档，复用 `KernelIngestionEngine` 重新执行入库治理流水线；每个文档失败只记录摘要并继续后续文档；每处理一个文档刷新 checkpoint，批次结束推进页游标。
+- 回填服务支持暂停、恢复、取消；禁用文档、运行中文档和缺少必要信息的文档会计入 skipped，不直接污染索引。
+- JDBC 元数据治理适配器实现回填任务仓储端口，并在 `metadata-governance-postgresql.sql` 新增 `t_metadata_extraction_job` 表和完整 COMMENT。
+- starter 自动装配 `MetadataBackfillInboundPort`，并在内核/原生适配器装配测试中覆盖。
+- 聚焦测试覆盖分页 checkpoint、Review/Quarantine 计数、单文档失败不中断、暂停恢复和自动装配。首次运行输出显示 23 个测试通过且 reactor `BUILD SUCCESS`，但外层命令超时返回 124，后续需用更长超时重跑作为提交凭据。

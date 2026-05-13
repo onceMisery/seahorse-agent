@@ -117,6 +117,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
@@ -624,6 +625,14 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
     @ConditionalOnMissingBean(MetadataCanonicalWritePort.class)
     public MetadataCanonicalWritePort seahorseMetadataCanonicalWritePort(
+            JdbcMetadataGovernanceRepositoryAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
+    @ConditionalOnMissingBean(MetadataBackfillJobRepositoryPort.class)
+    public MetadataBackfillJobRepositoryPort seahorseMetadataBackfillJobRepositoryPort(
             JdbcMetadataGovernanceRepositoryAdapter adapter) {
         return adapter;
     }
