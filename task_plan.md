@@ -28,3 +28,7 @@
 - 动态 metadata 进入检索前必须经过 Schema 与 Filter Compiler。
 - kernel 只放领域模型、端口、Feature 与编排；外部实现放 adapter。
 - 新增 DDL 表和字段必须有注释。
+# 2026-05-13 本轮续做
+
+- [complete] M3 JDBC/PostgreSQL `KeywordIndexPort` fallback：维护 `t_knowledge_chunk.search_text`，并在 starter 中注册默认 JDBC 索引适配器。
+- [pending] M3 生产级关键词索引：Elasticsearch adapter、Outbox 异步索引、索引重建任务仍待后续落地。
