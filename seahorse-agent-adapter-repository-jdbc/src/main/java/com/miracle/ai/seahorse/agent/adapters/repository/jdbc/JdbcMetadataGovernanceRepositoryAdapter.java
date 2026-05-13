@@ -33,8 +33,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWr
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataFieldCoverage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineReasonCount;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
@@ -46,6 +50,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -56,11 +61,14 @@ import java.util.stream.Collectors;
 
 public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRegistryPort,
         MetadataDictionaryPort, MetadataExtractionResultRepositoryPort, MetadataReviewQueuePort,
-        MetadataQuarantinePort, MetadataCanonicalWritePort, MetadataBackfillJobRepositoryPort {
+        MetadataQuarantinePort, MetadataCanonicalWritePort, MetadataBackfillJobRepositoryPort,
+        MetadataQualityReportRepositoryPort {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<Map<String, Object>>> MAP_LIST_TYPE = new TypeReference<>() {
     };
 
     private final JdbcTemplate jdbcTemplate;
@@ -130,7 +138,8 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     """, UUID.randomUUID().toString(), safeRecord.tenantId(), safeRecord.knowledgeBaseId(),
                     safeRecord.documentId(), safeRecord.taskId(), safeRecord.schemaVersion(),
                     safeRecord.extractorVersion(), safeRecord.status().name(), json(safeRecord.normalizedMetadata()),
-                    json(Map.of()), json(Map.of()), json(safeRecord.issues()), json(safeRecord.acceptedMetadata()));
+                    json(Map.of()), json(safeRecord.fieldQualities()), json(safeRecord.issues()),
+                    json(safeRecord.acceptedMetadata()));
         } catch (DataAccessException ignored) {
         }
     }
@@ -242,6 +251,175 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 safeJob.jobId());
     }
 
+    @Override
+    public MetadataQualityReport report(String tenantId, String knowledgeBaseId, int quarantineTopN) {
+        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
+        String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
+        int safeTopN = Math.max(1, Math.min(quarantineTopN, 50));
+        MetadataSchema schema = loadSchema(safeTenantId, safeKbId);
+        List<ExtractionSnapshot> snapshots = latestExtractionSnapshots(safeTenantId, safeKbId);
+        int totalDocuments = Math.max(countDocuments(safeKbId), snapshots.size());
+        List<MetadataFieldCoverage> fieldCoverages = fieldCoverages(schema, snapshots, totalDocuments);
+        LowConfidenceStats lowConfidenceStats = lowConfidenceStats(schema, snapshots);
+        int pendingReviewCount = countPendingReviews(safeTenantId, safeKbId);
+        int unresolvedQuarantineCount = countUnresolvedQuarantines(safeTenantId, safeKbId);
+        List<MetadataQuarantineReasonCount> reasonTopN = quarantineReasonTopN(safeTenantId, safeKbId, safeTopN);
+        return new MetadataQualityReport(
+                safeTenantId,
+                safeKbId,
+                totalDocuments,
+                snapshots.size(),
+                averageCoverage(fieldCoverages),
+                ratio(lowConfidenceStats.lowConfidenceFields(), lowConfidenceStats.evaluatedFields()),
+                pendingReviewCount,
+                unresolvedQuarantineCount,
+                fieldCoverages,
+                reasonTopN,
+                Instant.now());
+    }
+
+    private List<MetadataFieldCoverage> fieldCoverages(MetadataSchema schema,
+                                                       List<ExtractionSnapshot> snapshots,
+                                                       int totalDocuments) {
+        List<MetadataFieldCoverage> coverages = new ArrayList<>();
+        // 覆盖率以 Schema 字段为基准，避免动态 metadata 任意扩张影响治理报表口径。
+        for (MetadataFieldDescriptor field : schema.fields()) {
+            int covered = 0;
+            for (ExtractionSnapshot snapshot : snapshots) {
+                if (hasValue(snapshot.coveredMetadata().get(field.fieldKey()))) {
+                    covered++;
+                }
+            }
+            coverages.add(new MetadataFieldCoverage(
+                    field.fieldKey(),
+                    field.displayName(),
+                    field.required(),
+                    covered,
+                    totalDocuments,
+                    ratio(covered, totalDocuments)));
+        }
+        return List.copyOf(coverages);
+    }
+
+    private LowConfidenceStats lowConfidenceStats(MetadataSchema schema, List<ExtractionSnapshot> snapshots) {
+        Map<String, MetadataFieldDescriptor> fields = schema.fields().stream()
+                .collect(Collectors.toMap(MetadataFieldDescriptor::fieldKey, field -> field, (left, right) -> left));
+        int evaluated = 0;
+        int lowConfidence = 0;
+        for (ExtractionSnapshot snapshot : snapshots) {
+            Map<String, Object> covered = snapshot.coveredMetadata();
+            for (Map<String, Object> quality : snapshot.fieldQualities()) {
+                String fieldKey = text(quality.get("fieldKey"), "");
+                if (blank(fieldKey) || !hasValue(covered.get(fieldKey))) {
+                    continue;
+                }
+                evaluated++;
+                double confidence = doubleValue(quality.get("confidence"), 0D);
+                MetadataFieldDescriptor field = fields.get(fieldKey);
+                double minConfidence = field == null ? 0.8D : field.minConfidence();
+                if (confidence < minConfidence) {
+                    lowConfidence++;
+                }
+            }
+        }
+        return new LowConfidenceStats(lowConfidence, evaluated);
+    }
+
+    private List<ExtractionSnapshot> latestExtractionSnapshots(String tenantId, String knowledgeBaseId) {
+        try {
+            return jdbcTemplate.query("""
+                    SELECT doc_id, normalized_metadata, approved_metadata, field_quality
+                    FROM (
+                        SELECT doc_id, normalized_metadata, approved_metadata, field_quality,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY doc_id
+                                   ORDER BY update_time DESC, create_time DESC, id DESC
+                               ) AS rn
+                        FROM t_metadata_extraction_result
+                        WHERE tenant_id = ?
+                          AND (? = '' OR kb_id = ?)
+                    ) latest
+                    WHERE rn = 1
+                    """, this::toExtractionSnapshot, tenantId, knowledgeBaseId, knowledgeBaseId);
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
+    private int countDocuments(String knowledgeBaseId) {
+        try {
+            return count("""
+                    SELECT COUNT(1)
+                    FROM t_knowledge_document
+                    WHERE deleted = 0
+                      AND (? = '' OR kb_id = ?)
+                    """, knowledgeBaseId, knowledgeBaseId);
+        } catch (DataAccessException ex) {
+            return 0;
+        }
+    }
+
+    private int countPendingReviews(String tenantId, String knowledgeBaseId) {
+        try {
+            return count("""
+                    SELECT COUNT(1)
+                    FROM t_metadata_review_item
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ?)
+                      AND review_status = 'PENDING'
+                    """, tenantId, knowledgeBaseId, knowledgeBaseId);
+        } catch (DataAccessException ex) {
+            return 0;
+        }
+    }
+
+    private int countUnresolvedQuarantines(String tenantId, String knowledgeBaseId) {
+        try {
+            return count("""
+                    SELECT COUNT(1)
+                    FROM t_metadata_quarantine_item
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ?)
+                      AND resolved = 0
+                    """, tenantId, knowledgeBaseId, knowledgeBaseId);
+        } catch (DataAccessException ex) {
+            return 0;
+        }
+    }
+
+    private List<MetadataQuarantineReasonCount> quarantineReasonTopN(String tenantId,
+                                                                     String knowledgeBaseId,
+                                                                     int topN) {
+        try {
+            return jdbcTemplate.query("""
+                    SELECT COALESCE(NULLIF(reason_code, ''), 'UNKNOWN') AS reason_code,
+                           MAX(COALESCE(reason_message, '')) AS reason_message,
+                           COUNT(1) AS reason_count
+                    FROM t_metadata_quarantine_item
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ?)
+                      AND resolved = 0
+                    GROUP BY COALESCE(NULLIF(reason_code, ''), 'UNKNOWN')
+                    ORDER BY reason_count DESC, reason_code ASC
+                    LIMIT ?
+                    """, (rs, rowNum) -> new MetadataQuarantineReasonCount(
+                            rs.getString("reason_code"),
+                            rs.getString("reason_message"),
+                            rs.getInt("reason_count")),
+                    tenantId, knowledgeBaseId, knowledgeBaseId, topN);
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
+    private ExtractionSnapshot toExtractionSnapshot(ResultSet rs, int rowNum) throws SQLException {
+        return new ExtractionSnapshot(
+                rs.getString("doc_id"),
+                readMap(rs.getString("normalized_metadata")),
+                readMap(rs.getString("approved_metadata")),
+                readMapList(rs.getString("field_quality")));
+    }
+
     private MetadataFieldDescriptor toFieldDescriptor(ResultSet rs, int rowNum) throws SQLException {
         int schemaVersion = rs.getInt("schema_version");
         Map<String, Object> hints = mutableMap(rs.getString("extraction_hints"));
@@ -338,6 +516,17 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
     }
 
+    private List<Map<String, Object>> readMapList(String json) {
+        if (blank(json)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, MAP_LIST_TYPE);
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
     private Map<String, Object> mutableMap(String json) {
         return new java.util.LinkedHashMap<>(readMap(json));
     }
@@ -372,6 +561,46 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
     }
 
+    private double doubleValue(Object value, double defaultValue) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return Double.parseDouble(Objects.toString(value, ""));
+        } catch (RuntimeException ex) {
+            return defaultValue;
+        }
+    }
+
+    private int count(String sql, Object... args) {
+        Number value = jdbcTemplate.queryForObject(sql, Number.class, args);
+        return value == null ? 0 : value.intValue();
+    }
+
+    private boolean hasValue(Object value) {
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof String text) {
+            return !text.isBlank();
+        }
+        if (value instanceof java.util.Collection<?> collection) {
+            return !collection.isEmpty();
+        }
+        return true;
+    }
+
+    private double averageCoverage(List<MetadataFieldCoverage> coverages) {
+        return coverages.stream()
+                .mapToDouble(MetadataFieldCoverage::coverageRate)
+                .average()
+                .orElse(0D);
+    }
+
+    private double ratio(int numerator, int denominator) {
+        return denominator <= 0 ? 0D : (double) numerator / (double) denominator;
+    }
+
     private String text(Object value, String defaultValue) {
         String text = Objects.toString(value, "");
         return text.isBlank() ? defaultValue : text;
@@ -394,5 +623,27 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     private boolean blank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private record ExtractionSnapshot(
+            String documentId,
+            Map<String, Object> normalizedMetadata,
+            Map<String, Object> acceptedMetadata,
+            List<Map<String, Object>> fieldQualities
+    ) {
+
+        private ExtractionSnapshot {
+            documentId = Objects.requireNonNullElse(documentId, "");
+            normalizedMetadata = Map.copyOf(Objects.requireNonNullElse(normalizedMetadata, Map.of()));
+            acceptedMetadata = Map.copyOf(Objects.requireNonNullElse(acceptedMetadata, Map.of()));
+            fieldQualities = List.copyOf(Objects.requireNonNullElse(fieldQualities, List.of()));
+        }
+
+        private Map<String, Object> coveredMetadata() {
+            return normalizedMetadata.isEmpty() ? acceptedMetadata : normalizedMetadata;
+        }
+    }
+
+    private record LowConfidenceStats(int lowConfidenceFields, int evaluatedFields) {
     }
 }

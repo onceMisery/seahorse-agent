@@ -1,6 +1,7 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.metadata;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIssue;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldQuality;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationDecision;
 
 import java.util.List;
@@ -17,6 +18,7 @@ public record MetadataExtractionRecord(
         MetadataValidationDecision status,
         Map<String, Object> normalizedMetadata,
         Map<String, Object> acceptedMetadata,
+        List<MetadataFieldQuality> fieldQualities,
         List<MetadataIssue> issues
 ) {
 
@@ -30,6 +32,7 @@ public record MetadataExtractionRecord(
         status = Objects.requireNonNullElse(status, MetadataValidationDecision.ACCEPT);
         normalizedMetadata = Map.copyOf(Objects.requireNonNullElse(normalizedMetadata, Map.of()));
         acceptedMetadata = Map.copyOf(Objects.requireNonNullElse(acceptedMetadata, Map.of()));
+        fieldQualities = List.copyOf(Objects.requireNonNullElse(fieldQualities, List.of()));
         issues = List.copyOf(Objects.requireNonNullElse(issues, List.of()));
     }
 }

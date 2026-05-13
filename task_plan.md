@@ -10,7 +10,7 @@
 - [complete] M2 向量检索过滤闭环
 - [complete] M3 关键词检索
 - [complete] M4 RRF 与 Reranker
-- [in_progress] M5 回填与治理运维
+- [complete] M5 回填与治理运维
 
 ## 当前落地范围
 
@@ -51,4 +51,4 @@
 - [complete] M5 回填任务持久化端口：新增 `MetadataBackfillJobRepositoryPort`，并由 JDBC 元数据治理适配器实现。
 - [complete] M5 DDL：新增 `t_metadata_extraction_job` 回填任务表，表与字段均补充 COMMENT。
 - [complete] M5 管理 API：任务创建、批次推进、暂停/恢复/取消、任务详情。
-- [pending] M5 质量报表：字段覆盖率、低置信度比例、待复核数量、隔离原因 TopN。
+- [complete] M5 质量报表：字段覆盖率、低置信度比例、待复核数量、隔离原因 TopN。

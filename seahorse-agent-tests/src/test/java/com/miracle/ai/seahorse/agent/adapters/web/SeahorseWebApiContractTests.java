@@ -42,6 +42,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillRunResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
@@ -72,6 +73,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingPage
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataFieldCoverage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineReasonCount;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRecord;
@@ -582,6 +586,26 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"));
     }
 
+    @Test
+    void shouldKeepMetadataQualityReportContract() throws Exception {
+        MetadataQualityInboundPort qualityPort = mock(MetadataQualityInboundPort.class);
+        when(qualityPort.report("tenant-1", "kb-1", 3)).thenReturn(metadataQualityReport());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMetadataQualityController(qualityPort)).build();
+
+        mvc.perform(get("/knowledge-base/kb-1/metadata-quality/report")
+                        .param("tenantId", "tenant-1")
+                        .param("topN", "3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.averageFieldCoverage").value(0.75))
+                .andExpect(jsonPath("$.data.lowConfidenceRatio").value(0.25))
+                .andExpect(jsonPath("$.data.pendingReviewCount").value(2))
+                .andExpect(jsonPath("$.data.fieldCoverages[0].fieldKey").value("department"))
+                .andExpect(jsonPath("$.data.quarantineReasons[0].reasonCode").value("SCHEMA_MISSING"));
+    }
+
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
     }
@@ -700,6 +724,21 @@ class SeahorseWebApiContractTests {
                 List.of(),
                 "admin",
                 Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataQualityReport metadataQualityReport() {
+        return new MetadataQualityReport(
+                "tenant-1",
+                "kb-1",
+                4,
+                3,
+                0.75D,
+                0.25D,
+                2,
+                1,
+                List.of(new MetadataFieldCoverage("department", "部门", true, 3, 4, 0.75D)),
+                List.of(new MetadataQuarantineReasonCount("SCHEMA_MISSING", "缺少 Schema", 1)),
                 Instant.EPOCH);
     }
 

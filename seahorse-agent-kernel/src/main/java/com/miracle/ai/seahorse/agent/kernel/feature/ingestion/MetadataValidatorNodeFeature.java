@@ -151,7 +151,8 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
                          MetadataValidationResult result) {
         resultRepositoryPort.save(new MetadataExtractionRecord(identity.tenantId(), identity.kbId(), identity.docId(),
                 context.getTaskId(), schema.schemaVersion(), extractorVersion(context), result.decision(),
-                context.getNormalizedMetadata(), result.acceptedMetadata(), result.issues()));
+                context.getNormalizedMetadata(), result.acceptedMetadata(), context.getMetadataFieldQualities(),
+                result.issues()));
     }
 
     private String extractorVersion(IngestionContext context) {

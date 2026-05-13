@@ -127,3 +127,15 @@
 - 扩展 `SeahorseWebApiContractTests.shouldKeepMetadataBackfillManagementContracts`，覆盖 `{code,data}` 响应结构和状态流转契约。
 - 验证通过：`git diff --check -- . ':!缺少的功能.md' ':!元数据过滤：RAG与Agentic Search.md'` 无输出。
 - 验证通过：`mvn -pl seahorse-agent-adapter-web,seahorse-agent-tests -am "-Dtest=SeahorseWebApiContractTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，8 个测试成功且 reactor `BUILD SUCCESS`。
+
+## 2026-05-13 继续推进 M5 质量报表
+
+- 新增 `MetadataQualityInboundPort`、`KernelMetadataQualityService`、`MetadataQualityReportRepositoryPort` 以及字段覆盖率、隔离原因 TopN 等报表记录。
+- `JdbcMetadataGovernanceRepositoryAdapter` 实现质量报表查询：基于最新抽取结果计算字段覆盖率和低置信度比例，基于复核/隔离表统计待复核数量、未处理隔离数量和隔离原因 TopN。
+- `MetadataExtractionRecord` 增加字段级质量列表，`MetadataValidatorNodeFeature` 将 normalizer 产生的 `MetadataFieldQuality` 持久化到 `field_quality`，支撑低置信度报表口径。
+- 新增 `SeahorseMetadataQualityController`，暴露 `GET /knowledge-base/{kb-id}/metadata-quality/report`，Web 层只调用 `MetadataQualityInboundPort`。
+- starter 自动装配新增 `MetadataQualityReportRepositoryPort` 和 `MetadataQualityInboundPort`。
+- 验证通过：`mvn -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcMetadataQualityReportAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，2 个测试成功。
+- 验证通过：`mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-adapter-web,seahorse-agent-tests -am "-Dtest=SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，29 个测试成功。
+- 验证通过：`mvn -pl seahorse-agent-tests -am "-Dtest=MetadataGovernanceNodeFeatureTests,KernelMetadataBackfillServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，5 个测试成功。
+- 验证通过：`git diff --check -- . ':!缺少的功能.md' ':!元数据过滤：RAG与Agentic Search.md'` 无输出。

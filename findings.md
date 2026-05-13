@@ -83,3 +83,10 @@
 - 元数据回填管理 API 应保持“触发/查询”职责，不在 Web 层重建治理上下文；创建、运行、暂停、恢复、取消都只转发给 `MetadataBackfillInboundPort`。
 - `X-User-Id` 只作为 operator 传入 kernel；缺省时使用稳定的系统操作者，避免 API 调用方未传 header 时产生空操作人。
 - 批次推进接口返回 `MetadataBackfillRunResult` 比只返回任务记录更适合管理端展示本次处理数、失败数和 Review/Quarantine 变化。
+
+## 2026-05-13 M5 质量报表发现
+
+- 字段覆盖率应以 Metadata Schema 字段为基准，而不是遍历任意动态 metadata key；这样能避免非治理字段污染报表口径。
+- 低置信度比例需要依赖 normalizer 产生的字段级质量数据，不能只看最终 `accepted_metadata`，否则无法区分字段是高置信自动通过还是低置信进入复核。
+- 报表查询应使用每个文档最新一条抽取结果作为统计样本，避免历史回填多次运行导致同一文档被重复计入覆盖率。
+- 待复核数量和隔离原因 TopN 应分别来自 `t_metadata_review_item` 与 `t_metadata_quarantine_item`，只统计待处理状态，避免已处理历史问题继续影响运维看板。
