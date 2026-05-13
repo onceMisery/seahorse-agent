@@ -3,8 +3,11 @@ package com.miracle.ai.seahorse.agent.kernel.feature.retrieval;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 最终截断后处理器。
@@ -15,6 +18,17 @@ public class FinalTruncatePostProcessorFeature implements SearchResultPostProces
 
     private static final String NAME = "FinalTruncate";
     private static final int ORDER = 1000;
+    private static final String EVENT_FINAL = "retrieval.final";
+
+    private final ObservationPort observationPort;
+
+    public FinalTruncatePostProcessorFeature() {
+        this(null);
+    }
+
+    public FinalTruncatePostProcessorFeature(ObservationPort observationPort) {
+        this.observationPort = observationPort;
+    }
 
     @Override
     public String name() {
@@ -36,10 +50,39 @@ public class FinalTruncatePostProcessorFeature implements SearchResultPostProces
                                         List<SearchChannelResult> results,
                                         SearchContext context) {
         if (chunks == null || chunks.isEmpty()) {
+            recordFinalEvent(context, 0, 0, 0);
             return List.of();
         }
-        return chunks.stream()
-                .limit(context.effectiveOptions().finalTopK())
+        int finalTopK = context.effectiveOptions().finalTopK();
+        List<RetrievedChunk> truncated = chunks.stream()
+                .limit(finalTopK)
                 .toList();
+        recordFinalEvent(context, chunks.size(), truncated.size(), finalTopK);
+        return truncated;
+    }
+
+    private void recordFinalEvent(SearchContext context, int inputCount, int outputCount, int finalTopK) {
+        if (observationPort == null) {
+            return;
+        }
+        try {
+            // 最终截断只记录规模类低基数字段，避免 chunkId/docId 进入指标标签。
+            observationPort.recordEvent(new ObservationEvent(EVENT_FINAL, null, Map.of(
+                    "tenant", tenantId(context),
+                    "inputCount", String.valueOf(inputCount),
+                    "outputCount", String.valueOf(outputCount),
+                    "finalTopK", String.valueOf(finalTopK),
+                    "truncated", String.valueOf(inputCount > outputCount))));
+        } catch (RuntimeException ex) {
+            // 观测失败不能影响最终候选返回。
+        }
+    }
+
+    private String tenantId(SearchContext context) {
+        if (context == null || context.getFilter() == null || context.getFilter().system() == null) {
+            return "";
+        }
+        String tenantId = context.getFilter().system().tenantId();
+        return tenantId == null ? "" : tenantId;
     }
 }

@@ -60,6 +60,7 @@
 - [complete] RRF 通道权重配置化：从 `RetrievalOptions.channelSettings` 读取 RRF k 值和通道权重。
 - [complete] Rerank 超时隔离：按 `RetrievalOptions.rerankTimeout` 控制模型精排耗时，超时回退原候选。
 - [complete] 检索后处理观测：通过 `ObservationPort` 记录 RRF/Rerank 成功、降级和候选规模等低基数字段。
+- [complete] FinalTruncate 最终截断观测：记录 `retrieval.final`，只包含租户、输入/输出规模、`finalTopK` 与是否截断等低基数字段。
 
 ## 2026-05-13 M5 Metadata Schema 管理 API
 

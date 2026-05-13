@@ -460,8 +460,10 @@ public class SeahorseAgentKernelAutoConfiguration {
     @Bean
     @ConditionalOnBean(ExtensionRegistry.class)
     public FinalTruncatePostProcessorFeature seahorseFinalTruncatePostProcessorFeature(
-            ExtensionRegistry extensionRegistry) {
-        FinalTruncatePostProcessorFeature feature = new FinalTruncatePostProcessorFeature();
+            ExtensionRegistry extensionRegistry,
+            ObjectProvider<ObservationPort> observationPort) {
+        FinalTruncatePostProcessorFeature feature = new FinalTruncatePostProcessorFeature(
+                observationPort.getIfAvailable());
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchResultPostProcessorFeature.class,
                 FeatureType.SEARCH_RESULT_POST_PROCESSOR, feature.order(), false), feature);
         return feature;

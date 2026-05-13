@@ -220,3 +220,11 @@
 - `JdbcMetadataGovernanceRepositoryAdapter` 统计已处理复核项中的通过率：`APPROVED/CORRECTED` 作为通过，`REJECTED/QUARANTINED` 作为未通过，`PENDING` 不进入分母。
 - `JdbcMetadataQualityReportAdapterTests` 增加 APPROVED、CORRECTED、REJECTED 样本，验证 `reviewPassRate = 2/3`；`SeahorseWebApiContractTests` 验证 Web 响应包含 `reviewPassRate`。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web -am "-Dtest=JdbcMetadataQualityReportAdapterTests,SeahorseWebApiContractTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，JDBC 3 个和 Web 11 个用例成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-13 继续推进 M6 FinalTruncate 观测收口
+
+- `FinalTruncatePostProcessorFeature` 接入可选 `ObservationPort`，在最终截断后记录 `retrieval.final` 事件；保留无参构造，兼容旧调用路径。
+- 观测属性只记录 `tenant`、`inputCount`、`outputCount`、`finalTopK` 和 `truncated`，不记录 `chunkId/docId/question` 等高基数字段。
+- starter 自动装配把可用 `ObservationPort` 注入 FinalTruncate 后处理器；没有观测适配器时保持原行为。
+- 新增 `FinalTruncatePostProcessorFeatureTests`，覆盖截断事件与缺省租户上下文下的稳定观测记录。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-spring-boot-starter -am "-Dtest=FinalTruncatePostProcessorFeatureTests,RrfFusionPostProcessorFeatureTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，21 个测试成功，reactor `BUILD SUCCESS`。
