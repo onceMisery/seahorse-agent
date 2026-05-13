@@ -72,3 +72,8 @@
 - [complete] LLM 抽取候选源：`MetadataExtractorNodeFeature` 可选复用 `ChatModelPort`，按 Schema 生成抽取提示并解析 JSON 候选。
 - [complete] LLM 安全边界：默认关闭；启用后仍只接受已注册业务字段，系统/权限字段和未注册字段只记录治理问题，不进入候选集。
 - [complete] starter 接入：元数据抽取节点可注入 `ChatModelPort`，未配置模型时保持 noop 兼容。
+
+## 2026-05-13 M5 Review 审计闭环
+
+- [complete] 复核决策审计：新增 `t_metadata_review_audit`，记录人工通过、修正、拒绝、转隔离的前后状态、操作人、备注和决策元数据。
+- [complete] JDBC 适配器写审计：`applyReviewDecision` 在更新复核项时同步写入审计记录，并兼容旧库未迁移审计表的场景。

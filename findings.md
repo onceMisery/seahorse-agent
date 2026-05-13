@@ -115,3 +115,9 @@
 - LLM 抽取不应成为新的可信写入口；它只能补充 `MetadataFieldCandidate`，最终是否进入 canonical metadata 仍由 Normalizer 和 Validator 决定。
 - Schema 白名单不足以保护系统字段，因为用户可能误把权限字段注册为业务字段；LLM 路径需要硬拒绝 `tenantId/kbId/docId/aclSubjects/securityLevel` 等系统和权限字段。
 - LLM 抽取默认必须关闭，避免未配置模型或提示词不稳定时改变现有确定性抽取链路；启用应由节点配置显式控制。
+
+## 2026-05-13 M5 Review 审计闭环发现
+
+- 复核项上的 `review_status/reviewer_id/review_comment` 只能表达当前态，无法满足“人工修正保留审计记录”的验收要求；需要独立审计表保存每次决策。
+- 审计写入不能替代 canonical metadata 写回；APPROVED/CORRECTED 仍需同步抽取结果和文档 metadata，审计表只承担追溯职责。
+- 旧库兼容需要谨慎处理：审计表缺失时不应阻断人工复核主流程，但新 DDL 必须包含完整 COMMENT，方便生产迁移后开启审计查询。

@@ -83,6 +83,18 @@ class JdbcMetadataReviewQuarantineAdapterTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT approved_by FROM t_metadata_extraction_result WHERE id = 'result-1'", String.class))
                 .isEqualTo("auditor");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM t_metadata_review_audit WHERE review_item_id = 'review-1'", Long.class))
+                .isEqualTo(1L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT from_status FROM t_metadata_review_audit WHERE review_item_id = 'review-1'", String.class))
+                .isEqualTo("PENDING");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT to_status FROM t_metadata_review_audit WHERE review_item_id = 'review-1'", String.class))
+                .isEqualTo("CORRECTED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT decision_metadata FROM t_metadata_review_audit WHERE review_item_id = 'review-1'",
+                String.class)).contains("legal");
     }
 
     @Test
@@ -113,6 +125,7 @@ class JdbcMetadataReviewQuarantineAdapterTests {
 
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_metadata_quarantine_item");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_metadata_review_audit");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_metadata_review_item");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_metadata_extraction_result");
         jdbcTemplate.execute("""
@@ -142,6 +155,22 @@ class JdbcMetadataReviewQuarantineAdapterTests {
                     review_comment VARCHAR(1024),
                     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_metadata_review_audit (
+                    id VARCHAR(64) PRIMARY KEY,
+                    review_item_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL,
+                    kb_id VARCHAR(64),
+                    doc_id VARCHAR(64) NOT NULL,
+                    result_id VARCHAR(64),
+                    from_status VARCHAR(32),
+                    to_status VARCHAR(32) NOT NULL,
+                    reviewer_id VARCHAR(64),
+                    review_comment VARCHAR(1024),
+                    decision_metadata VARCHAR(4096),
+                    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """);
         jdbcTemplate.execute("""

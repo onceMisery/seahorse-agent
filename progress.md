@@ -175,3 +175,10 @@
 - LLM 输出不会直接写入 canonical metadata，只作为候选进入后续 Normalizer/Validator；未注册字段、系统字段和权限字段会记录治理问题并被忽略。
 - starter 自动装配为 `MetadataExtractorNodeFeature` 注入可用 `ChatModelPort`，未配置模型时使用 noop，默认不开启 LLM 抽取。
 - 验证通过：`mvn -pl seahorse-agent-tests -am "-Dtest=MetadataGovernanceNodeFeatureTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，20 个测试成功。
+
+## 2026-05-13 继续推进 M5 Review 审计闭环
+
+- DDL 新增 `t_metadata_review_audit` 复核决策审计表，表和字段均补充 COMMENT，并按复核项、租户/知识库/文档维度建立查询索引。
+- `JdbcMetadataGovernanceRepositoryAdapter.applyReviewDecision` 在更新复核项后写入审计记录，记录 from/to 状态、复核人、备注和本次采纳/修正 metadata。
+- 审计写入对旧库兼容：如果审计表尚未迁移，主复核决策仍可继续执行，避免管理端操作被迁移窗口阻断。
+- 验证通过：`mvn -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcMetadataReviewQuarantineAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，2 个测试成功。

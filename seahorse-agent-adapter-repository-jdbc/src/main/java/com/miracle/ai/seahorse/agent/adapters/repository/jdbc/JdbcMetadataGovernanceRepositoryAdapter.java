@@ -369,6 +369,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         if (updated <= 0) {
             throw new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId());
         }
+        insertReviewAudit(current, safeDecision, approvedMetadata);
         // 复核通过或修正后，抽取结果也同步写入 approved_metadata，保留审核人和审核时间。
         if (MetadataReviewStatus.APPROVED.equals(safeDecision.reviewStatus())
                 || MetadataReviewStatus.CORRECTED.equals(safeDecision.reviewStatus())) {
@@ -378,6 +379,33 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
         return findReviewItem(safeDecision.itemId())
                 .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId()));
+    }
+
+    private void insertReviewAudit(MetadataReviewRecord current,
+                                   MetadataReviewDecision decision,
+                                   Map<String, Object> decisionMetadata) {
+        try {
+            jdbcTemplate.update("""
+                    INSERT INTO t_metadata_review_audit(
+                        id, review_item_id, tenant_id, kb_id, doc_id, result_id,
+                        from_status, to_status, reviewer_id, review_comment,
+                        decision_metadata, create_time
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    UUID.randomUUID().toString(),
+                    current.id(),
+                    current.tenantId(),
+                    current.knowledgeBaseId(),
+                    current.documentId(),
+                    current.resultId(),
+                    current.reviewStatus().name(),
+                    decision.reviewStatus().name(),
+                    decision.reviewerId(),
+                    decision.reviewComment(),
+                    json(decisionMetadata));
+        } catch (DataAccessException ignored) {
+            // 兼容尚未执行审计表迁移的旧库，复核主流程不能因此中断。
+        }
     }
 
     @Override

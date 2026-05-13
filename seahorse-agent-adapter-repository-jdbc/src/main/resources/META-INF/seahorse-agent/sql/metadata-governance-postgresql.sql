@@ -189,6 +189,41 @@ ON t_metadata_review_item (tenant_id, kb_id, review_status, priority, update_tim
 CREATE INDEX IF NOT EXISTS idx_metadata_review_doc
 ON t_metadata_review_item (doc_id);
 
+CREATE TABLE IF NOT EXISTS t_metadata_review_audit (
+    id                   VARCHAR(64) PRIMARY KEY,
+    review_item_id       VARCHAR(64) NOT NULL,
+    tenant_id            VARCHAR(64) NOT NULL,
+    kb_id                VARCHAR(64),
+    doc_id               VARCHAR(64) NOT NULL,
+    result_id            VARCHAR(64),
+    from_status          VARCHAR(32),
+    to_status            VARCHAR(32) NOT NULL,
+    reviewer_id          VARCHAR(64),
+    review_comment       VARCHAR(1024),
+    decision_metadata    JSONB,
+    create_time          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE t_metadata_review_audit IS '元数据人工复核决策审计表';
+COMMENT ON COLUMN t_metadata_review_audit.id IS '审计记录 ID';
+COMMENT ON COLUMN t_metadata_review_audit.review_item_id IS '关联的复核项 ID';
+COMMENT ON COLUMN t_metadata_review_audit.tenant_id IS '租户 ID';
+COMMENT ON COLUMN t_metadata_review_audit.kb_id IS '知识库 ID';
+COMMENT ON COLUMN t_metadata_review_audit.doc_id IS '文档 ID';
+COMMENT ON COLUMN t_metadata_review_audit.result_id IS '关联的抽取结果 ID';
+COMMENT ON COLUMN t_metadata_review_audit.from_status IS '决策前复核状态';
+COMMENT ON COLUMN t_metadata_review_audit.to_status IS '决策后复核状态';
+COMMENT ON COLUMN t_metadata_review_audit.reviewer_id IS '复核人 ID';
+COMMENT ON COLUMN t_metadata_review_audit.review_comment IS '复核备注';
+COMMENT ON COLUMN t_metadata_review_audit.decision_metadata IS '本次决策采纳或修正的元数据 JSON';
+COMMENT ON COLUMN t_metadata_review_audit.create_time IS '审计记录创建时间';
+
+CREATE INDEX IF NOT EXISTS idx_metadata_review_audit_item
+ON t_metadata_review_audit (review_item_id, create_time);
+
+CREATE INDEX IF NOT EXISTS idx_metadata_review_audit_doc
+ON t_metadata_review_audit (tenant_id, kb_id, doc_id, create_time);
+
 CREATE TABLE IF NOT EXISTS t_metadata_quarantine_item (
     id                VARCHAR(64) PRIMARY KEY,
     tenant_id         VARCHAR(64) NOT NULL,
