@@ -36,11 +36,23 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataFieldCoverage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineReasonCount;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineResolution;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRetry;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -62,7 +74,8 @@ import java.util.stream.Collectors;
 public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRegistryPort,
         MetadataDictionaryPort, MetadataExtractionResultRepositoryPort, MetadataReviewQueuePort,
         MetadataQuarantinePort, MetadataCanonicalWritePort, MetadataBackfillJobRepositoryPort,
-        MetadataQualityReportRepositoryPort {
+        MetadataQualityReportRepositoryPort, MetadataReviewManagementRepositoryPort,
+        MetadataQuarantineManagementRepositoryPort {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
@@ -174,6 +187,162 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     safeItem.reasonMessage(), json(safeItem.sourceSnapshot()));
         } catch (DataAccessException ignored) {
         }
+    }
+
+    @Override
+    public MetadataReviewPage pageReviewItems(MetadataReviewQuery query) {
+        MetadataReviewQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
+        SqlWhere where = reviewWhere(safeQuery);
+        long total = countLong("SELECT COUNT(1) FROM t_metadata_review_item " + where.sql(), where.args());
+        if (total <= 0) {
+            return MetadataReviewPage.empty(safeQuery.current(), safeQuery.size());
+        }
+        List<Object> args = new ArrayList<>(where.args());
+        args.add(safeQuery.size());
+        args.add(safeQuery.offset());
+        List<MetadataReviewRecord> records = jdbcTemplate.query("""
+                SELECT id, tenant_id, kb_id, doc_id, result_id, review_status, priority,
+                       reason_code, reason_message, suggested_metadata, corrected_metadata,
+                       reviewer_id, review_comment, create_time, update_time
+                FROM t_metadata_review_item
+                """ + where.sql() + """
+                ORDER BY priority DESC, update_time DESC, create_time DESC, id DESC
+                LIMIT ? OFFSET ?
+                """, this::toReviewRecord, args.toArray());
+        return new MetadataReviewPage(records, total, safeQuery.size(), safeQuery.current(),
+                pages(total, safeQuery.size()));
+    }
+
+    @Override
+    public Optional<MetadataReviewRecord> findReviewItem(String itemId) {
+        if (blank(itemId)) {
+            return Optional.empty();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, kb_id, doc_id, result_id, review_status, priority,
+                           reason_code, reason_message, suggested_metadata, corrected_metadata,
+                           reviewer_id, review_comment, create_time, update_time
+                    FROM t_metadata_review_item
+                    WHERE id = ?
+                    """, this::toReviewRecord, itemId).stream().findFirst();
+        } catch (DataAccessException ex) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public MetadataReviewRecord applyReviewDecision(MetadataReviewDecision decision) {
+        MetadataReviewDecision safeDecision = Objects.requireNonNull(decision, "decision must not be null");
+        MetadataReviewRecord current = findReviewItem(safeDecision.itemId())
+                .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId()));
+        Map<String, Object> approvedMetadata = approvedMetadata(current, safeDecision);
+        String correctedJson = MetadataReviewStatus.CORRECTED.equals(safeDecision.reviewStatus())
+                ? json(approvedMetadata)
+                : null;
+        int updated = jdbcTemplate.update("""
+                UPDATE t_metadata_review_item
+                SET review_status = ?,
+                    corrected_metadata = ?,
+                    reviewer_id = ?,
+                    review_comment = ?,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """, safeDecision.reviewStatus().name(), correctedJson, safeDecision.reviewerId(),
+                safeDecision.reviewComment(), safeDecision.itemId());
+        if (updated <= 0) {
+            throw new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId());
+        }
+        // 复核通过或修正后，抽取结果也同步写入 approved_metadata，保留审核人和审核时间。
+        if (MetadataReviewStatus.APPROVED.equals(safeDecision.reviewStatus())
+                || MetadataReviewStatus.CORRECTED.equals(safeDecision.reviewStatus())) {
+            updateExtractionApproval(current.resultId(), approvedMetadata, safeDecision.reviewerId());
+        } else if (MetadataReviewStatus.QUARANTINED.equals(safeDecision.reviewStatus())) {
+            updateExtractionStatus(current.resultId(), "QUARANTINE");
+        }
+        return findReviewItem(safeDecision.itemId())
+                .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId()));
+    }
+
+    @Override
+    public MetadataQuarantinePage pageQuarantineItems(MetadataQuarantineQuery query) {
+        MetadataQuarantineQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
+        SqlWhere where = quarantineWhere(safeQuery);
+        long total = countLong("SELECT COUNT(1) FROM t_metadata_quarantine_item " + where.sql(), where.args());
+        if (total <= 0) {
+            return MetadataQuarantinePage.empty(safeQuery.current(), safeQuery.size());
+        }
+        List<Object> args = new ArrayList<>(where.args());
+        args.add(safeQuery.size());
+        args.add(safeQuery.offset());
+        List<MetadataQuarantineRecord> records = jdbcTemplate.query("""
+                SELECT id, tenant_id, kb_id, doc_id, job_id, stage, reason_code, reason_message,
+                       source_snapshot, retry_count, next_retry_time, resolved, resolved_by,
+                       resolved_time, create_time, update_time
+                FROM t_metadata_quarantine_item
+                """ + where.sql() + """
+                ORDER BY resolved ASC, update_time DESC, create_time DESC, id DESC
+                LIMIT ? OFFSET ?
+                """, this::toQuarantineRecord, args.toArray());
+        return new MetadataQuarantinePage(records, total, safeQuery.size(), safeQuery.current(),
+                pages(total, safeQuery.size()));
+    }
+
+    @Override
+    public Optional<MetadataQuarantineRecord> findQuarantineItem(String itemId) {
+        if (blank(itemId)) {
+            return Optional.empty();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, kb_id, doc_id, job_id, stage, reason_code, reason_message,
+                           source_snapshot, retry_count, next_retry_time, resolved, resolved_by,
+                           resolved_time, create_time, update_time
+                    FROM t_metadata_quarantine_item
+                    WHERE id = ?
+                    """, this::toQuarantineRecord, itemId).stream().findFirst();
+        } catch (DataAccessException ex) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public MetadataQuarantineRecord resolveQuarantineItem(MetadataQuarantineResolution resolution) {
+        MetadataQuarantineResolution safeResolution = Objects.requireNonNull(resolution,
+                "resolution must not be null");
+        int updated = jdbcTemplate.update("""
+                UPDATE t_metadata_quarantine_item
+                SET resolved = 1,
+                    resolved_by = ?,
+                    resolved_time = CURRENT_TIMESTAMP,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """, safeResolution.operator(), safeResolution.itemId());
+        if (updated <= 0) {
+            throw new IllegalArgumentException("元数据隔离项不存在: " + safeResolution.itemId());
+        }
+        return findQuarantineItem(safeResolution.itemId())
+                .orElseThrow(() -> new IllegalArgumentException("元数据隔离项不存在: " + safeResolution.itemId()));
+    }
+
+    @Override
+    public MetadataQuarantineRecord scheduleQuarantineRetry(MetadataQuarantineRetry retry) {
+        MetadataQuarantineRetry safeRetry = Objects.requireNonNull(retry, "retry must not be null");
+        int updated = jdbcTemplate.update("""
+                UPDATE t_metadata_quarantine_item
+                SET retry_count = retry_count + 1,
+                    next_retry_time = ?,
+                    resolved = 0,
+                    resolved_by = NULL,
+                    resolved_time = NULL,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """, Timestamp.from(safeRetry.nextRetryTime()), safeRetry.itemId());
+        if (updated <= 0) {
+            throw new IllegalArgumentException("元数据隔离项不存在: " + safeRetry.itemId());
+        }
+        return findQuarantineItem(safeRetry.itemId())
+                .orElseThrow(() -> new IllegalArgumentException("元数据隔离项不存在: " + safeRetry.itemId()));
     }
 
     @Override
@@ -420,6 +589,124 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 readMapList(rs.getString("field_quality")));
     }
 
+    private MetadataReviewRecord toReviewRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new MetadataReviewRecord(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getString("kb_id"),
+                rs.getString("doc_id"),
+                rs.getString("result_id"),
+                enumValue(MetadataReviewStatus.class, rs.getString("review_status"), MetadataReviewStatus.PENDING),
+                rs.getInt("priority"),
+                rs.getString("reason_code"),
+                rs.getString("reason_message"),
+                readMap(rs.getString("suggested_metadata")),
+                readMap(rs.getString("corrected_metadata")),
+                rs.getString("reviewer_id"),
+                rs.getString("review_comment"),
+                instant(rs.getTimestamp("create_time")),
+                instant(rs.getTimestamp("update_time")));
+    }
+
+    private MetadataQuarantineRecord toQuarantineRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new MetadataQuarantineRecord(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getString("kb_id"),
+                rs.getString("doc_id"),
+                rs.getString("job_id"),
+                rs.getString("stage"),
+                rs.getString("reason_code"),
+                rs.getString("reason_message"),
+                readMap(rs.getString("source_snapshot")),
+                rs.getInt("retry_count"),
+                nullableInstant(rs.getTimestamp("next_retry_time")),
+                bool(rs, "resolved"),
+                rs.getString("resolved_by"),
+                nullableInstant(rs.getTimestamp("resolved_time")),
+                instant(rs.getTimestamp("create_time")),
+                instant(rs.getTimestamp("update_time")));
+    }
+
+    private SqlWhere reviewWhere(MetadataReviewQuery query) {
+        StringBuilder sql = new StringBuilder(" WHERE 1 = 1");
+        List<Object> args = new ArrayList<>();
+        if (!blank(query.tenantId())) {
+            sql.append(" AND tenant_id = ?");
+            args.add(query.tenantId());
+        }
+        if (!blank(query.knowledgeBaseId())) {
+            sql.append(" AND kb_id = ?");
+            args.add(query.knowledgeBaseId());
+        }
+        if (query.reviewStatus() != null) {
+            sql.append(" AND review_status = ?");
+            args.add(query.reviewStatus().name());
+        }
+        return new SqlWhere(sql.toString(), args);
+    }
+
+    private SqlWhere quarantineWhere(MetadataQuarantineQuery query) {
+        StringBuilder sql = new StringBuilder(" WHERE 1 = 1");
+        List<Object> args = new ArrayList<>();
+        if (!blank(query.tenantId())) {
+            sql.append(" AND tenant_id = ?");
+            args.add(query.tenantId());
+        }
+        if (!blank(query.knowledgeBaseId())) {
+            sql.append(" AND kb_id = ?");
+            args.add(query.knowledgeBaseId());
+        }
+        if (query.resolved() != null) {
+            sql.append(" AND resolved = ?");
+            args.add(Boolean.TRUE.equals(query.resolved()) ? 1 : 0);
+        }
+        return new SqlWhere(sql.toString(), args);
+    }
+
+    private Map<String, Object> approvedMetadata(MetadataReviewRecord current, MetadataReviewDecision decision) {
+        if (MetadataReviewStatus.APPROVED.equals(decision.reviewStatus())) {
+            return current.suggestedMetadata();
+        }
+        if (MetadataReviewStatus.CORRECTED.equals(decision.reviewStatus())) {
+            return decision.correctedMetadata();
+        }
+        return Map.of();
+    }
+
+    private void updateExtractionApproval(String resultId, Map<String, Object> approvedMetadata, String reviewerId) {
+        if (blank(resultId) || approvedMetadata == null || approvedMetadata.isEmpty()) {
+            return;
+        }
+        try {
+            jdbcTemplate.update("""
+                    UPDATE t_metadata_extraction_result
+                    SET status = 'ACCEPT',
+                        approved_metadata = ?,
+                        approved_by = ?,
+                        approved_time = CURRENT_TIMESTAMP,
+                        update_time = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """, json(approvedMetadata), reviewerId, resultId);
+        } catch (DataAccessException ignored) {
+        }
+    }
+
+    private void updateExtractionStatus(String resultId, String status) {
+        if (blank(resultId) || blank(status)) {
+            return;
+        }
+        try {
+            jdbcTemplate.update("""
+                    UPDATE t_metadata_extraction_result
+                    SET status = ?,
+                        update_time = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """, status, resultId);
+        } catch (DataAccessException ignored) {
+        }
+    }
+
     private MetadataFieldDescriptor toFieldDescriptor(ResultSet rs, int rowNum) throws SQLException {
         int schemaVersion = rs.getInt("schema_version");
         Map<String, Object> hints = mutableMap(rs.getString("extraction_hints"));
@@ -577,6 +864,11 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         return value == null ? 0 : value.intValue();
     }
 
+    private long countLong(String sql, List<Object> args) {
+        Number value = jdbcTemplate.queryForObject(sql, Number.class, args.toArray());
+        return value == null ? 0L : value.longValue();
+    }
+
     private boolean hasValue(Object value) {
         if (value == null) {
             return false;
@@ -621,6 +913,14 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         return timestamp == null ? Instant.now() : timestamp.toInstant();
     }
 
+    private Instant nullableInstant(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toInstant();
+    }
+
+    private long pages(long total, long size) {
+        return total <= 0L ? 0L : (total + Math.max(1L, size) - 1L) / Math.max(1L, size);
+    }
+
     private boolean blank(String value) {
         return value == null || value.isBlank();
     }
@@ -645,5 +945,13 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     private record LowConfidenceStats(int lowConfidenceFields, int evaluatedFields) {
+    }
+
+    private record SqlWhere(String sql, List<Object> args) {
+
+        private SqlWhere {
+            sql = Objects.requireNonNullElse(sql, "");
+            args = List.copyOf(Objects.requireNonNullElse(args, List.of()));
+        }
     }
 }

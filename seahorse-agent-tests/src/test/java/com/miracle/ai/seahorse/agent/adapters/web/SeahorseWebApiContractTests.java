@@ -43,6 +43,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillRunResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
@@ -75,7 +77,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataFieldCoverage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineReasonCount;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRecord;
@@ -606,6 +613,96 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.quarantineReasons[0].reasonCode").value("SCHEMA_MISSING"));
     }
 
+    @Test
+    void shouldKeepMetadataReviewAndQuarantineManagementContracts() throws Exception {
+        MetadataReviewInboundPort reviewPort = mock(MetadataReviewInboundPort.class);
+        when(reviewPort.page("tenant-1", "kb-1", MetadataReviewStatus.PENDING, 1, 10))
+                .thenReturn(new MetadataReviewPage(List.of(metadataReview("review-1", MetadataReviewStatus.PENDING)),
+                        1, 10, 1, 1));
+        when(reviewPort.queryById("review-1"))
+                .thenReturn(metadataReview("review-1", MetadataReviewStatus.PENDING));
+        when(reviewPort.approve(eq("review-1"), any()))
+                .thenReturn(metadataReview("review-1", MetadataReviewStatus.APPROVED));
+        when(reviewPort.correct(eq("review-1"), any()))
+                .thenReturn(metadataReview("review-1", MetadataReviewStatus.CORRECTED));
+        when(reviewPort.reject(eq("review-1"), any()))
+                .thenReturn(metadataReview("review-1", MetadataReviewStatus.REJECTED));
+        when(reviewPort.quarantine(eq("review-1"), any()))
+                .thenReturn(metadataReview("review-1", MetadataReviewStatus.QUARANTINED));
+
+        MetadataQuarantineInboundPort quarantinePort = mock(MetadataQuarantineInboundPort.class);
+        when(quarantinePort.page("tenant-1", "kb-1", Boolean.FALSE, 1, 10))
+                .thenReturn(new MetadataQuarantinePage(List.of(metadataQuarantine("q-1", false, 1)), 1, 10, 1, 1));
+        when(quarantinePort.queryById("q-1"))
+                .thenReturn(metadataQuarantine("q-1", false, 1));
+        when(quarantinePort.resolve(eq("q-1"), any()))
+                .thenReturn(metadataQuarantine("q-1", true, 1));
+        when(quarantinePort.retry(eq("q-1"), any()))
+                .thenReturn(metadataQuarantine("q-1", false, 2));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMetadataReviewController(reviewPort),
+                new SeahorseMetadataQuarantineController(quarantinePort)).build();
+
+        mvc.perform(get("/metadata-review/items")
+                        .param("tenantId", "tenant-1")
+                        .param("kbId", "kb-1")
+                        .param("status", "PENDING"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.records[0].id").value("review-1"))
+                .andExpect(jsonPath("$.data.records[0].reviewStatus").value("PENDING"));
+        mvc.perform(get("/metadata-review/items/review-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.documentId").value("doc-1"));
+        mvc.perform(post("/metadata-review/items/review-1/approve")
+                        .header("X-User-Id", "auditor")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("comment", "通过"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("APPROVED"));
+        mvc.perform(post("/metadata-review/items/review-1/correct")
+                        .header("X-User-Id", "auditor")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "comment", "修正部门",
+                                "correctedMetadata", Map.of("department", "legal")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("CORRECTED"));
+        mvc.perform(post("/metadata-review/items/review-1/reject")
+                        .header("X-User-Id", "auditor")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("comment", "拒绝"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("REJECTED"));
+        mvc.perform(post("/metadata-review/items/review-1/quarantine")
+                        .header("X-User-Id", "auditor")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("comment", "转隔离"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("QUARANTINED"));
+
+        mvc.perform(get("/metadata-quarantine/items")
+                        .param("tenantId", "tenant-1")
+                        .param("kbId", "kb-1")
+                        .param("resolved", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].id").value("q-1"))
+                .andExpect(jsonPath("$.data.records[0].resolved").value(false));
+        mvc.perform(get("/metadata-quarantine/items/q-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reasonCode").value("SCHEMA_MISSING"));
+        mvc.perform(post("/metadata-quarantine/items/q-1/resolve").header("X-User-Id", "auditor"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.resolved").value(true));
+        mvc.perform(post("/metadata-quarantine/items/q-1/retry")
+                        .header("X-User-Id", "auditor")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("nextRetryTime", "2026-05-13T10:00:00Z"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.retryCount").value(2));
+    }
+
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
     }
@@ -739,6 +836,45 @@ class SeahorseWebApiContractTests {
                 1,
                 List.of(new MetadataFieldCoverage("department", "部门", true, 3, 4, 0.75D)),
                 List.of(new MetadataQuarantineReasonCount("SCHEMA_MISSING", "缺少 Schema", 1)),
+                Instant.EPOCH);
+    }
+
+    private static MetadataReviewRecord metadataReview(String id, MetadataReviewStatus status) {
+        return new MetadataReviewRecord(
+                id,
+                "tenant-1",
+                "kb-1",
+                "doc-1",
+                "result-1",
+                status,
+                10,
+                "LOW_CONFIDENCE",
+                "字段置信度低",
+                Map.of("department", "hr"),
+                MetadataReviewStatus.CORRECTED.equals(status) ? Map.of("department", "legal") : Map.of(),
+                "auditor",
+                "ok",
+                Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataQuarantineRecord metadataQuarantine(String id, boolean resolved, int retryCount) {
+        return new MetadataQuarantineRecord(
+                id,
+                "tenant-1",
+                "kb-1",
+                "doc-1",
+                "job-1",
+                "VALIDATE",
+                "SCHEMA_MISSING",
+                "缺少 Schema",
+                Map.of("source", "test"),
+                retryCount,
+                Instant.EPOCH,
+                resolved,
+                resolved ? "auditor" : "",
+                resolved ? Instant.EPOCH : null,
+                Instant.EPOCH,
                 Instant.EPOCH);
     }
 

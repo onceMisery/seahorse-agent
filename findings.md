@@ -96,3 +96,10 @@
 - RRF 权重适合先复用 `RetrievalOptions.channelSettings`，避免新增全局配置类；后续若要按知识库模板化，可再把该设置上移到策略模板。
 - Rerank 超时只能保证检索链路按时降级，不能强制所有底层 HTTP/SDK 调用立即停止；生产适配器仍应设置自身请求超时。
 - 检索观测事件不要包含 chunkId/docId/question 等高基数字段，RRF/Rerank 当前只记录 status、候选数、输出数、耗时和异常类型。
+
+## 2026-05-13 M5 Review/Quarantine 管理 API 发现
+
+- Review API 不能只改 `review_status`；通过和修正还需要把可信结果写回文档 canonical metadata，否则后续过滤、索引重建和质量报表会看到旧值。
+- 转隔离动作应保留 review 快照并写入 Quarantine，而不是把修正值写回文档；这是防止低质量元数据污染检索后端的最后一道治理边界。
+- Quarantine 的“重试”本轮先落为调度字段更新，不直接在 Web 层重跑入库；具体重放仍应由回填/调度编排读取 `next_retry_time` 后执行。
+- `t_metadata_review_item.result_id` 当前写入链路仍可能保存 taskId 而非抽取结果 id；管理仓储会在能匹配到抽取结果时同步 `approved_metadata`，文档 canonical metadata 写回由 kernel 服务保证。

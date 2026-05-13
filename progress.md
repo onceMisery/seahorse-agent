@@ -148,3 +148,14 @@
 - starter 自动装配把可用 `ObservationPort` 注入 RRF/Rerank 后处理器；无观测适配器时保持原行为。
 - 扩展 `RrfFusionPostProcessorFeatureTests` 覆盖配置权重和观测事件；扩展 `RerankPostProcessorFeatureTests` 覆盖超时降级和观测事件。
 - 验证通过：`mvn -pl seahorse-agent-tests -am "-Dtest=RrfFusionPostProcessorFeatureTests,RerankPostProcessorFeatureTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，24 个测试成功。
+
+## 2026-05-13 继续推进 M5 Review/Quarantine 管理 API
+
+- 新增 `MetadataReviewInboundPort`、`MetadataQuarantineInboundPort`、复核/隔离分页与记录模型，以及 `KernelMetadataReviewService`、`KernelMetadataQuarantineService`。
+- Review 管理支持列表、详情、通过、修正、拒绝和转隔离；通过/修正会写回文档 canonical metadata，转隔离只写隔离项，避免未通过复核的数据进入索引。
+- Quarantine 管理支持列表、详情、标记已处理和重试调度；重试会增加 `retry_count`、刷新 `next_retry_time` 并重新标记为未处理。
+- `JdbcMetadataGovernanceRepositoryAdapter` 实现复核/隔离管理仓储端口，并同步复核通过/修正后的 `t_metadata_extraction_result.approved_metadata/approved_by/approved_time`。
+- DDL 为复核队列和隔离区补充按租户、知识库、状态与文档维度查询的索引，支撑管理端分页筛选。
+- 新增 `SeahorseMetadataReviewController` 和 `SeahorseMetadataQuarantineController`，Web 层只调用入站端口，不直接访问 JDBC。
+- starter 自动装配新增 `MetadataReviewManagementRepositoryPort`、`MetadataQuarantineManagementRepositoryPort`、`MetadataReviewInboundPort` 和 `MetadataQuarantineInboundPort`。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc -am "-Dtest=SeahorseWebApiContractTests,KernelMetadataReviewServiceTests,KernelMetadataQuarantineServiceTests,JdbcMetadataReviewQuarantineAdapterTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，33 个测试成功。

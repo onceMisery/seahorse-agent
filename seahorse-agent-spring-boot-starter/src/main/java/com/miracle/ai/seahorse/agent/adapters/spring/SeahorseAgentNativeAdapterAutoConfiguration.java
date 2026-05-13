@@ -122,7 +122,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWr
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
@@ -642,6 +644,22 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
     @ConditionalOnMissingBean(MetadataQualityReportRepositoryPort.class)
     public MetadataQualityReportRepositoryPort seahorseMetadataQualityReportRepositoryPort(
+            JdbcMetadataGovernanceRepositoryAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
+    @ConditionalOnMissingBean(MetadataReviewManagementRepositoryPort.class)
+    public MetadataReviewManagementRepositoryPort seahorseMetadataReviewManagementRepositoryPort(
+            JdbcMetadataGovernanceRepositoryAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
+    @ConditionalOnMissingBean(MetadataQuarantineManagementRepositoryPort.class)
+    public MetadataQuarantineManagementRepositoryPort seahorseMetadataQuarantineManagementRepositoryPort(
             JdbcMetadataGovernanceRepositoryAdapter adapter) {
         return adapter;
     }

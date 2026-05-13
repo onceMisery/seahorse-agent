@@ -183,6 +183,12 @@ COMMENT ON COLUMN t_metadata_review_item.review_comment IS '复核备注';
 COMMENT ON COLUMN t_metadata_review_item.create_time IS '创建时间';
 COMMENT ON COLUMN t_metadata_review_item.update_time IS '更新时间';
 
+CREATE INDEX IF NOT EXISTS idx_metadata_review_status
+ON t_metadata_review_item (tenant_id, kb_id, review_status, priority, update_time);
+
+CREATE INDEX IF NOT EXISTS idx_metadata_review_doc
+ON t_metadata_review_item (doc_id);
+
 CREATE TABLE IF NOT EXISTS t_metadata_quarantine_item (
     id                VARCHAR(64) PRIMARY KEY,
     tenant_id         VARCHAR(64) NOT NULL,
@@ -219,6 +225,12 @@ COMMENT ON COLUMN t_metadata_quarantine_item.resolved_by IS '处理人 ID';
 COMMENT ON COLUMN t_metadata_quarantine_item.resolved_time IS '处理时间';
 COMMENT ON COLUMN t_metadata_quarantine_item.create_time IS '创建时间';
 COMMENT ON COLUMN t_metadata_quarantine_item.update_time IS '更新时间';
+
+CREATE INDEX IF NOT EXISTS idx_metadata_quarantine_status
+ON t_metadata_quarantine_item (tenant_id, kb_id, resolved, next_retry_time);
+
+CREATE INDEX IF NOT EXISTS idx_metadata_quarantine_doc
+ON t_metadata_quarantine_item (doc_id);
 
 CREATE TABLE IF NOT EXISTS t_metadata_dictionary_item (
     id                VARCHAR(64) PRIMARY KEY,

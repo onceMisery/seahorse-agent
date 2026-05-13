@@ -89,6 +89,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
@@ -226,6 +228,8 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryConflictLogRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataBackfillJobRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataQualityReportRepositoryPort.class);
+                    assertThat(context).hasSingleBean(MetadataReviewManagementRepositoryPort.class);
+                    assertThat(context).hasSingleBean(MetadataQuarantineManagementRepositoryPort.class);
                 });
     }
 

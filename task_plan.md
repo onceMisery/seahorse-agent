@@ -53,6 +53,7 @@
 - [complete] M5 DDL：新增 `t_metadata_extraction_job` 回填任务表，表与字段均补充 COMMENT。
 - [complete] M5 管理 API：任务创建、批次推进、暂停/恢复/取消、任务详情。
 - [complete] M5 质量报表：字段覆盖率、低置信度比例、待复核数量、隔离原因 TopN。
+- [complete] M5 Review/Quarantine 管理 API：复核列表/详情/通过/修正/拒绝/转隔离，隔离列表/详情/标记处理/重试调度。
 
 ## 2026-05-13 M6 检索后处理增强收口
 
