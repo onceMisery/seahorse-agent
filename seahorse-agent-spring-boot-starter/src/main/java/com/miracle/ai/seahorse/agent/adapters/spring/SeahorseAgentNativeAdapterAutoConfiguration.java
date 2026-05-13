@@ -68,6 +68,8 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcShortTermMemor
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcWorkingMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.SeahorseOutboxRelayJob;
+import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexMessageSubscriber;
+import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexOutboxAdapter;
 import com.miracle.ai.seahorse.agent.adapters.storage.local.LocalObjectStorageAdapter;
 import com.miracle.ai.seahorse.agent.adapters.storage.s3.S3ObjectStorageAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SaTokenCurrentUserAdapter;
@@ -126,6 +128,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
@@ -398,9 +401,35 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @Bean
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(KeywordIndexPort.class)
+    @ConditionalOnMissingBean(value = KeywordIndexPort.class, ignored = KeywordIndexOutboxAdapter.class)
     public JdbcKeywordIndexAdapter seahorseJdbcKeywordIndexAdapter(DataSource dataSource) {
         return new JdbcKeywordIndexAdapter(dataSource);
+    }
+
+    @Bean
+    @Primary
+    @ConditionalOnBean(MessageQueuePort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "mode", havingValue = "outbox")
+    @ConditionalOnMissingBean(KeywordIndexOutboxAdapter.class)
+    public KeywordIndexOutboxAdapter seahorseKeywordIndexOutboxAdapter(
+            MessageQueuePort messageQueuePort,
+            @Value("${seahorse-agent.adapters.keyword-index.topic:" + KeywordIndexOutboxAdapter.DEFAULT_TOPIC + "}")
+            String topic) {
+        return new KeywordIndexOutboxAdapter(messageQueuePort, topic);
+    }
+
+    @Bean
+    @ConditionalOnBean({MessageSubscriptionPort.class, JdbcKeywordIndexAdapter.class})
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "mode", havingValue = "outbox")
+    @ConditionalOnMissingBean(KeywordIndexMessageSubscriber.class)
+    public KeywordIndexMessageSubscriber seahorseKeywordIndexMessageSubscriber(
+            MessageSubscriptionPort subscriptionPort,
+            JdbcKeywordIndexAdapter keywordIndexAdapter,
+            @Value("${seahorse-agent.adapters.keyword-index.topic:" + KeywordIndexOutboxAdapter.DEFAULT_TOPIC + "}")
+            String topic,
+            @Value("${seahorse-agent.adapters.keyword-index.subscription:seahorse-keyword-index}")
+            String subscriptionName) {
+        return new KeywordIndexMessageSubscriber(subscriptionPort, topic, subscriptionName, keywordIndexAdapter);
     }
 
     @Bean
