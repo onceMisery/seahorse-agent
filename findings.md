@@ -77,3 +77,9 @@
 - 回填任务的 checkpoint 至少需要页游标和最后处理文档 ID。当前实现按批次页游标续跑，并在每个文档处理后刷新 checkpoint，后续如果要支持更细粒度断点，可在仓储查询中增加“从 lastDocumentId 之后继续”的能力。
 - 单文档失败不能把整个任务置为 FAILED；FAILED 更适合作为任务级不可恢复异常。普通文档处理失败保存在 `failure_summary`，批次继续推进，最终由 failed_count 暴露补偿范围。
 - Review/Quarantine 的计数应该来自治理节点的 `MetadataValidationDecision`，不能通过解析适配器异常或索引结果推断。
+
+## 2026-05-13 M5 管理 API 发现
+
+- 元数据回填管理 API 应保持“触发/查询”职责，不在 Web 层重建治理上下文；创建、运行、暂停、恢复、取消都只转发给 `MetadataBackfillInboundPort`。
+- `X-User-Id` 只作为 operator 传入 kernel；缺省时使用稳定的系统操作者，避免 API 调用方未传 header 时产生空操作人。
+- 批次推进接口返回 `MetadataBackfillRunResult` 比只返回任务记录更适合管理端展示本次处理数、失败数和 Review/Quarantine 变化。

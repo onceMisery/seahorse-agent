@@ -118,3 +118,12 @@
 - JDBC 元数据治理适配器实现回填任务仓储端口，并在 `metadata-governance-postgresql.sql` 新增 `t_metadata_extraction_job` 表和完整 COMMENT。
 - starter 自动装配 `MetadataBackfillInboundPort`，并在内核/原生适配器装配测试中覆盖。
 - 聚焦测试覆盖分页 checkpoint、Review/Quarantine 计数、单文档失败不中断、暂停恢复和自动装配。首次运行输出显示 23 个测试通过且 reactor `BUILD SUCCESS`，但外层命令超时返回 124，后续需用更长超时重跑作为提交凭据。
+
+## 2026-05-13 继续推进 M5 管理 API
+
+- 新增 `MetadataBackfillCreateRequest`，承接创建回填任务时的租户、pipeline、批次大小和附加 metadata。
+- 新增 `SeahorseMetadataBackfillController`，暴露任务创建、任务详情、批次推进、暂停、恢复和取消接口。
+- Web 控制器只调用 `MetadataBackfillInboundPort`，不直接访问文档仓储、JDBC 或治理节点，保持回填编排由 kernel 统一处理。
+- 扩展 `SeahorseWebApiContractTests.shouldKeepMetadataBackfillManagementContracts`，覆盖 `{code,data}` 响应结构和状态流转契约。
+- 验证通过：`git diff --check -- . ':!缺少的功能.md' ':!元数据过滤：RAG与Agentic Search.md'` 无输出。
+- 验证通过：`mvn -pl seahorse-agent-adapter-web,seahorse-agent-tests -am "-Dtest=SeahorseWebApiContractTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，8 个测试成功且 reactor `BUILD SUCCESS`。

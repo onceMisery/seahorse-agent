@@ -40,6 +40,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceRunResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillRunResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
@@ -68,6 +70,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentR
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRecord;
@@ -528,6 +532,56 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.processedDocuments").value(3));
     }
 
+    @Test
+    void shouldKeepMetadataBackfillManagementContracts() throws Exception {
+        MetadataBackfillInboundPort backfillPort = mock(MetadataBackfillInboundPort.class);
+        when(backfillPort.createJob(any()))
+                .thenReturn(metadataBackfillJob(MetadataBackfillJobStatus.PENDING));
+        when(backfillPort.getJob("job-1"))
+                .thenReturn(metadataBackfillJob(MetadataBackfillJobStatus.PENDING));
+        when(backfillPort.runNextBatch("job-1"))
+                .thenReturn(new MetadataBackfillRunResult(
+                        "job-1", MetadataBackfillJobStatus.COMPLETED, 1, 50,
+                        3, 2, 1, 0, 1, 0, Map.of("currentPage", 1), List.of("doc-2: boom")));
+        when(backfillPort.pause(eq("job-1"), any()))
+                .thenReturn(metadataBackfillJob(MetadataBackfillJobStatus.PAUSED));
+        when(backfillPort.resume(eq("job-1"), any()))
+                .thenReturn(metadataBackfillJob(MetadataBackfillJobStatus.PENDING));
+        when(backfillPort.cancel(eq("job-1"), any()))
+                .thenReturn(metadataBackfillJob(MetadataBackfillJobStatus.CANCELLED));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMetadataBackfillController(backfillPort)).build();
+
+        mvc.perform(post("/knowledge-base/kb-1/metadata-backfill/jobs")
+                        .header("X-User-Id", "admin")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("tenantId", "tenant-1", "pipelineId", "pipe-1", "batchSize", 50))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.jobId").value("job-1"))
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+
+        mvc.perform(get("/metadata-backfill/jobs/job-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.jobId").value("job-1"));
+
+        mvc.perform(post("/metadata-backfill/jobs/job-1/run-next"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.failedDocuments").value(1));
+
+        mvc.perform(post("/metadata-backfill/jobs/job-1/pause").header("X-User-Id", "admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PAUSED"));
+        mvc.perform(post("/metadata-backfill/jobs/job-1/resume").header("X-User-Id", "admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+        mvc.perform(post("/metadata-backfill/jobs/job-1/cancel").header("X-User-Id", "admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+    }
+
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
     }
@@ -625,6 +679,28 @@ class SeahorseWebApiContractTests {
         record.setContent("hello");
         record.setEnabled(1);
         return record;
+    }
+
+    private static MetadataBackfillJobRecord metadataBackfillJob(MetadataBackfillJobStatus status) {
+        return new MetadataBackfillJobRecord(
+                "job-1",
+                "tenant-1",
+                "kb-1",
+                "pipe-1",
+                status,
+                1,
+                50,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                Map.of("currentPage", 1),
+                List.of(),
+                "admin",
+                Instant.EPOCH,
+                Instant.EPOCH);
     }
 
     private static MemoryGovernanceRunResult governanceResult(String userId) {
