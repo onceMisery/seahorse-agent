@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.metadata;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
 
 /**
  * 元数据治理回填入站端口。
@@ -32,6 +34,8 @@ public interface MetadataBackfillInboundPort {
     MetadataBackfillRunResult runNextBatch(String jobId);
 
     MetadataBackfillJobRecord getJob(String jobId);
+
+    MetadataBackfillJobPage pageJobs(MetadataBackfillJobQuery query);
 
     MetadataBackfillJobRecord pause(String jobId, String operator);
 

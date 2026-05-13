@@ -28,6 +28,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.PipelineDefinition
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentDetail;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
@@ -158,6 +160,14 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     @Override
     public MetadataBackfillJobRecord getJob(String jobId) {
         return requireJob(jobId);
+    }
+
+    @Override
+    public MetadataBackfillJobPage pageJobs(MetadataBackfillJobQuery query) {
+        MetadataBackfillJobQuery safeQuery = query == null
+                ? new MetadataBackfillJobQuery("", "", null, 1, 20)
+                : query;
+        return jobRepositoryPort.page(safeQuery);
     }
 
     @Override

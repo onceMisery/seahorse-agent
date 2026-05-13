@@ -31,6 +31,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentD
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
@@ -131,6 +133,21 @@ class KernelMetadataBackfillServiceTests {
         assertThat(resumed.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
         assertThat(resumed.succeededDocuments()).isEqualTo(1);
         assertThat(documents.runningDocuments).containsExactly("doc-1");
+    }
+
+    @Test
+    void shouldPageBackfillJobsForManagement() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        KernelMetadataBackfillService service = service(documents, jobs, Map.of());
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+        MetadataBackfillJobPage page = service.pageJobs(new MetadataBackfillJobQuery(
+                "tenant-1", "kb-1", MetadataBackfillJobStatus.PENDING, 1, 10));
+
+        assertThat(page.total()).isEqualTo(1);
+        assertThat(page.records()).extracting(MetadataBackfillJobRecord::jobId).containsExactly(job.jobId());
     }
 
     @Test
@@ -259,6 +276,21 @@ class KernelMetadataBackfillServiceTests {
         @Override
         public Optional<MetadataBackfillJobRecord> findById(String jobId) {
             return Optional.ofNullable(records.get(jobId));
+        }
+
+        @Override
+        public MetadataBackfillJobPage page(MetadataBackfillJobQuery query) {
+            List<MetadataBackfillJobRecord> matched = records.values().stream()
+                    .filter(record -> query.tenantId().isBlank() || query.tenantId().equals(record.tenantId()))
+                    .filter(record -> query.knowledgeBaseId().isBlank()
+                            || query.knowledgeBaseId().equals(record.knowledgeBaseId()))
+                    .filter(record -> query.status() == null || query.status().equals(record.status()))
+                    .toList();
+            int from = (int) Math.min(query.offset(), matched.size());
+            int to = (int) Math.min(from + query.size(), matched.size());
+            long pages = matched.isEmpty() ? 0 : (matched.size() + query.size() - 1) / query.size();
+            return new MetadataBackfillJobPage(matched.subList(from, to), matched.size(), query.size(),
+                    query.current(), pages);
         }
 
         @Override

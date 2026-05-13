@@ -88,4 +88,10 @@
 
 - [complete] 回填幂等：按 `schemaVersion/extractorVersion` 查询已 ACCEPT 抽取结果，命中时跳过对应文档。
 - [complete] 回填幂等验证：覆盖同版本跳过、Schema 版本变化重跑、starter 自动装配和 JDBC 查询路径。
-- [pending] 提交回填幂等改动后继续推进下一项设计文档待办。
+- [complete] 提交回填幂等改动，提交号 `1141169`，并继续推进下一项设计文档待办。
+
+## 2026-05-13 M5 回填任务列表查询
+
+- [complete] kernel 新增回填任务分页查询契约，管理端可按租户、知识库和状态查看任务。
+- [complete] JDBC 治理适配器实现 `t_metadata_extraction_job` 分页查询，Web 管理 API 暴露知识库维度任务列表。
+- [complete] 补充 kernel、JDBC 和 Web 契约测试，并完成受影响模块验证。

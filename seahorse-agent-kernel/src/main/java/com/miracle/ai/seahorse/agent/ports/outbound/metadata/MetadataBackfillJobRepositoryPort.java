@@ -28,5 +28,12 @@ public interface MetadataBackfillJobRepositoryPort {
 
     Optional<MetadataBackfillJobRecord> findById(String jobId);
 
+    default MetadataBackfillJobPage page(MetadataBackfillJobQuery query) {
+        MetadataBackfillJobQuery safeQuery = query == null
+                ? new MetadataBackfillJobQuery("", "", null, 1, 20)
+                : query;
+        return MetadataBackfillJobPage.empty(safeQuery.current(), safeQuery.size());
+    }
+
     void save(MetadataBackfillJobRecord job);
 }

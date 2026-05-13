@@ -78,7 +78,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentR
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataFieldCoverage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReport;
@@ -556,6 +558,9 @@ class SeahorseWebApiContractTests {
                 .thenReturn(metadataBackfillJob(MetadataBackfillJobStatus.PENDING));
         when(backfillPort.getJob("job-1"))
                 .thenReturn(metadataBackfillJob(MetadataBackfillJobStatus.PENDING));
+        when(backfillPort.pageJobs(any(MetadataBackfillJobQuery.class)))
+                .thenReturn(new MetadataBackfillJobPage(
+                        List.of(metadataBackfillJob(MetadataBackfillJobStatus.PENDING)), 1, 10, 1, 1));
         when(backfillPort.runNextBatch("job-1"))
                 .thenReturn(new MetadataBackfillRunResult(
                         "job-1", MetadataBackfillJobStatus.COMPLETED, 1, 50,
@@ -578,6 +583,16 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.jobId").value("job-1"))
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
+
+        mvc.perform(get("/knowledge-base/kb-1/metadata-backfill/jobs")
+                        .param("tenantId", "tenant-1")
+                        .param("status", "PENDING")
+                        .param("current", "1")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.records[0].jobId").value("job-1"));
 
         mvc.perform(get("/metadata-backfill/jobs/job-1"))
                 .andExpect(status().isOk())

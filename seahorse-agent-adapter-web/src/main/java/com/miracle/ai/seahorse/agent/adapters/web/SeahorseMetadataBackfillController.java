@@ -19,14 +19,18 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -58,6 +62,18 @@ public class SeahorseMetadataBackfillController {
                                          @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
                 backfillPort.createJob(toCommand(kbId, request, operator(userId))));
+    }
+
+    @GetMapping("/knowledge-base/{kb-id}/metadata-backfill/jobs")
+    public Map<String, Object> pageJobs(@PathVariable("kb-id") String kbId,
+                                        @RequestParam(value = "tenantId", required = false) String tenantId,
+                                        @RequestParam(value = "status", required = false) String status,
+                                        @RequestParam(value = "current", defaultValue = "1") long current,
+                                        @RequestParam(value = "size", defaultValue = "10") long size) {
+        // 列表查询只拼装筛选条件，具体分页和状态口径由 kernel 统一处理。
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                backfillPort.pageJobs(new MetadataBackfillJobQuery(
+                        tenantId, kbId, status(status), current, size)));
     }
 
     @GetMapping("/metadata-backfill/jobs/{job-id}")
@@ -103,5 +119,12 @@ public class SeahorseMetadataBackfillController {
 
     private String operator(String userId) {
         return userId == null || userId.isBlank() ? DEFAULT_OPERATOR : userId.trim();
+    }
+
+    private MetadataBackfillJobStatus status(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        return MetadataBackfillJobStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
     }
 }

@@ -27,6 +27,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataOperator;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
@@ -568,6 +570,31 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     @Override
+    public MetadataBackfillJobPage page(MetadataBackfillJobQuery query) {
+        MetadataBackfillJobQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
+        SqlWhere where = backfillJobWhere(safeQuery);
+        long total = countLong("SELECT COUNT(1) FROM t_metadata_extraction_job " + where.sql(), where.args());
+        if (total <= 0) {
+            return MetadataBackfillJobPage.empty(safeQuery.current(), safeQuery.size());
+        }
+        List<Object> args = new ArrayList<>(where.args());
+        args.add(safeQuery.size());
+        args.add(safeQuery.offset());
+        List<MetadataBackfillJobRecord> records = jdbcTemplate.query("""
+                SELECT id, tenant_id, kb_id, pipeline_id, status, checkpoint_json, batch_size,
+                       current_page,
+                       processed_count, success_count, failed_count, skipped_count, review_count,
+                       quarantine_count, failure_summary, operator, create_time, update_time
+                FROM t_metadata_extraction_job
+                """ + where.sql() + """
+                ORDER BY update_time DESC, create_time DESC, id DESC
+                LIMIT ? OFFSET ?
+                """, this::toBackfillJobRecord, args.toArray());
+        return new MetadataBackfillJobPage(records, total, safeQuery.size(), safeQuery.current(),
+                pages(total, safeQuery.size()));
+    }
+
+    @Override
     public void save(MetadataBackfillJobRecord job) {
         MetadataBackfillJobRecord safeJob = Objects.requireNonNull(job, "job must not be null");
         jdbcTemplate.update("""
@@ -833,6 +860,24 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         if (query.resolved() != null) {
             sql.append(" AND resolved = ?");
             args.add(Boolean.TRUE.equals(query.resolved()) ? 1 : 0);
+        }
+        return new SqlWhere(sql.toString(), args);
+    }
+
+    private SqlWhere backfillJobWhere(MetadataBackfillJobQuery query) {
+        StringBuilder sql = new StringBuilder(" WHERE 1 = 1");
+        List<Object> args = new ArrayList<>();
+        if (!blank(query.tenantId())) {
+            sql.append(" AND tenant_id = ?");
+            args.add(query.tenantId());
+        }
+        if (!blank(query.knowledgeBaseId())) {
+            sql.append(" AND kb_id = ?");
+            args.add(query.knowledgeBaseId());
+        }
+        if (query.status() != null) {
+            sql.append(" AND status = ?");
+            args.add(query.status().name());
         }
         return new SqlWhere(sql.toString(), args);
     }
