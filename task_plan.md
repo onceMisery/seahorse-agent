@@ -9,7 +9,7 @@
 - [complete] M1 元数据治理最小闭环
 - [complete] M2 向量检索过滤闭环
 - [in_progress] M3 关键词检索
-- [pending] M4 RRF 与 Reranker
+- [in_progress] M4 RRF 与 Reranker
 - [pending] M5 回填与治理运维
 
 ## 当前落地范围
@@ -18,6 +18,8 @@
 - M2 已完成：`RetrievalFilter`、`RetrievalOptions`、Filter AST、`MetadataFilterCompiler`、`MetadataGuardPostProcessorFeature`、query embedding、向量适配器 metadata 返回和基础过滤下推，并接入多通道检索入口与 starter 自动装配。
 - M3 已完成第一段：新增 `KeywordSearchPort`、`KeywordIndexPort`、`KeywordSearchRequest` 和 `KeywordSearchChannelFeature`，starter 在存在 `KeywordSearchPort` 时注册关键词通道，并提供 JDBC 轻量关键词 fallback。
 - M3 尚未完成：Elasticsearch 生产适配器、真正 PostgreSQL FTS 排序表达式、关键词索引 Outbox 同步、索引重建任务。
+- M4 已完成第一段：新增 `RrfFusionPostProcessorFeature` 和 `FinalTruncatePostProcessorFeature`，支持通道排名融合、重复 chunk 去重、融合分记录和 finalTopK 截断。
+- M4 尚未完成：`RerankPostProcessorFeature`、Rerank 输入截断/超时降级、通道权重配置化和观测指标。
 
 ## 硬约束
 

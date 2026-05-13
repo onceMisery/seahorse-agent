@@ -27,3 +27,8 @@
 - starter 在 JDBC repository 类型下自动装配 `JdbcKeywordSearchAdapter` 为 `KeywordSearchPort`，关键词通道仍受 `RetrievalOptions.enableKeyword` 控制。
 - DDL 为 `t_knowledge_chunk` 补充 `search_text TSVECTOR`、GIN 索引和字段注释，给后续 PostgreSQL FTS 排序优化留位。
 - 运行 `mvn -pl seahorse-agent-adapter-repository-jdbc,seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=KeywordSearchChannelFeatureTests,MetadataRetrievalFilterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，6 个测试成功。
+- 开始 M4 RRF：新增 `RrfFusionPostProcessorFeature`，按通道内排名融合分数，按 id/docId+chunkIndex/text hash 去重，并写入 `channelRanks`、`channelScores`、`fusionScore`。
+- 新增 `FinalTruncatePostProcessorFeature`，在后处理链末尾按 `RetrievalOptions.finalTopK` 截断。
+- starter 注册 RRF 与 FinalTruncate 后处理器；二者只在显式传入 `RetrievalOptions` 时启用，避免改变旧检索入口默认行为。
+- 新增 `RrfFusionPostProcessorFeatureTests`，覆盖重复 chunk 融合、通道排名记录和 finalTopK 截断。
+- 运行 `mvn -pl seahorse-agent-tests -am "-Dtest=RrfFusionPostProcessorFeatureTests,KeywordSearchChannelFeatureTests,MetadataRetrievalFilterTests,KernelRetrievalEngineTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，10 个测试成功。
