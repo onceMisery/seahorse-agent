@@ -32,3 +32,16 @@
 - starter 注册 RRF 与 FinalTruncate 后处理器；二者只在显式传入 `RetrievalOptions` 时启用，避免改变旧检索入口默认行为。
 - 新增 `RrfFusionPostProcessorFeatureTests`，覆盖重复 chunk 融合、通道排名记录和 finalTopK 截断。
 - 运行 `mvn -pl seahorse-agent-tests -am "-Dtest=RrfFusionPostProcessorFeatureTests,KeywordSearchChannelFeatureTests,MetadataRetrievalFilterTests,KernelRetrievalEngineTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，10 个测试成功。
+- 新增 `RerankPostProcessorFeatureTests`，先验证缺少 `RerankPostProcessorFeature` 的失败，再实现后处理器。
+- 新增 `RerankPostProcessorFeature`：仅在显式 `RetrievalOptions.enableRerank=true` 且配置 `rerankModel` 时启用，按 `fusionTopK/rerankTopK` 收窄候选，模型异常或空结果时原样降级，并把 rerank 得分写入 `rerankScore` 与 `score`。
+- starter 在同时存在 `ExtensionRegistry` 与 `RerankModelPort` 时注册 Rerank 后处理器，执行顺序位于 RRF 之后、FinalTruncate 之前。
+- 运行 `mvn -pl seahorse-agent-tests -am "-Dtest=RerankPostProcessorFeatureTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，4 个测试成功。
+- 运行 `mvn -pl seahorse-agent-tests -am "-Dtest=RrfFusionPostProcessorFeatureTests,RerankPostProcessorFeatureTests,KeywordSearchChannelFeatureTests,MetadataRetrievalFilterTests,KernelRetrievalEngineTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，14 个测试成功；既有故障降级测试会输出通道失败 ERROR 堆栈。
+- 新增 `JdbcKeywordSearchAdapterTests`，先验证当前 `content LIKE` 查询不满足 PostgreSQL FTS 预期，再将 JDBC 关键词 fallback 改为 `websearch_to_tsquery`、`@@` 命中和 `ts_rank_cd` 排序。
+- 运行 `mvn -pl seahorse-agent-adapter-repository-jdbc -am -Dtest=JdbcKeywordSearchAdapterTests "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，1 个测试成功。
+- 新增 `IndexerNodeFeatureTests.shouldWriteKeywordIndexThroughPort`，先验证缺少四参构造器失败，再让 `IndexerNodeFeature` 在写入 chunk repository 与 vector index 后调用 `KeywordIndexPort`。
+- starter 的 indexer 自动装配新增 `ObjectProvider<KeywordIndexPort>`，未配置时继续使用 noop，避免影响现有部署。
+- 运行 `mvn -pl seahorse-agent-tests -am "-Dtest=IndexerNodeFeatureTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，5 个测试成功。
+- 回归 `SeahorseAgentKernelAutoConfigurationTests` 时发现既有断言仍只期望 7 个入库节点，未包含 M1 已注册的 metadata extractor/normalizer/validator；已同步测试期望。
+- 运行 `mvn -pl seahorse-agent-adapter-repository-jdbc,seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=JdbcKeywordSearchAdapterTests,IndexerNodeFeatureTests,SeahorseAgentKernelAutoConfigurationTests,RrfFusionPostProcessorFeatureTests,RerankPostProcessorFeatureTests,KeywordSearchChannelFeatureTests,MetadataRetrievalFilterTests,KernelRetrievalEngineTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，35 个测试成功；既有通道故障降级测试仍会输出 ERROR 堆栈。
+- 运行 `git diff --check -- . ':!缺少的功能.md' ':!元数据过滤：RAG与Agentic Search.md'`，通过；仅有 Git 提示部分工作区文件下一次触碰时 LF 会替换为 CRLF。

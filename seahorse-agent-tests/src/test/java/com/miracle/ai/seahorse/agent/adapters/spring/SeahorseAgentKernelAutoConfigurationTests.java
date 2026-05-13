@@ -45,6 +45,9 @@ import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.EnricherNodeFeatur
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.FetcherNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.IndexerNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.IngestionNodeFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataExtractorNodeFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataNormalizerNodeFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataValidatorNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ParserNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.IntentDirectedSearchFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchChannelFeature;
@@ -191,7 +194,9 @@ class SeahorseAgentKernelAutoConfigurationTests {
                             context.getBean(FeatureActivationContext.class)))
                             .hasExactlyElementsOfTypes(FetcherNodeFeature.class, ParserNodeFeature.class,
                                     EnhancerNodeFeature.class, EnricherNodeFeature.class, ChunkerNodeFeature.class,
-                                    EmbedderNodeFeature.class, IndexerNodeFeature.class);
+                                    EmbedderNodeFeature.class, IndexerNodeFeature.class,
+                                    MetadataExtractorNodeFeature.class, MetadataNormalizerNodeFeature.class,
+                                    MetadataValidatorNodeFeature.class);
                 });
     }
 

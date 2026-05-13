@@ -53,6 +53,23 @@ class IndexerNodeFeatureTests {
     }
 
     @Test
+    void shouldWriteKeywordIndexThroughPort() {
+        RecordingPorts ports = new RecordingPorts();
+        RecordingKeywordIndexPort keywordIndexPort = new RecordingKeywordIndexPort();
+        IndexerNodeFeature feature = new IndexerNodeFeature(ports, ports, ports, keywordIndexPort);
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-1")
+                .chunks(List.of(chunk("chunk-1", 0), chunk("chunk-2", 1)))
+                .metadata(Map.of("kbId", "kb-1", "collectionName", "collection-a"))
+                .build();
+
+        NodeResult result = feature.execute(context, NodeConfig.builder().nodeType("indexer").build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(keywordIndexPort.keywordWrites).containsExactly("kb-1/doc-1/2");
+    }
+
+    @Test
     void shouldValidateOnlyWhenSkipIndexerWriteEnabled() {
         RecordingPorts ports = new RecordingPorts();
         IndexerNodeFeature feature = new IndexerNodeFeature(ports, ports, ports);
@@ -167,6 +184,22 @@ class IndexerNodeFeatureTests {
         @Override
         public void replaceDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
             repositoryWrites.add(kbId + "/" + docId + "/" + chunks.size());
+        }
+    }
+
+    private static class RecordingKeywordIndexPort
+            implements com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort {
+
+        private final List<String> keywordWrites = new ArrayList<>();
+
+        @Override
+        public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
+            keywordWrites.add(kbId + "/" + docId + "/" + chunks.size());
+        }
+
+        @Override
+        public void deleteDocumentChunks(String kbId, String docId) {
+            throw new UnsupportedOperationException("not used");
         }
     }
 }

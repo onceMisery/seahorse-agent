@@ -23,3 +23,7 @@
 - 关键词检索通道应默认关闭，只有上层显式设置 `RetrievalOptions.enableKeyword=true` 时才执行，避免未配置关键词适配器时改变现有召回行为。
 - JDBC 关键词 fallback 先采用 content `LIKE` 兼容实现；DDL 已预留 `search_text TSVECTOR`，后续可升级为 PostgreSQL FTS 排序。
 - RRF/FinalTruncate 后处理器虽然已注册，但通过 `context.getOptions() != null` 控制启用，旧入口不传 options 时保持原有合并行为。
+- Rerank 后处理器应同样保持显式启用语义：旧入口不传 options 时不启用；即使存在 `RerankModelPort`，也需要 `enableRerank=true` 且 `rerankModel` 非空才会调用模型。
+- Rerank 模型返回结果必须归一化到已检索候选集，避免模型端口返回候选集外内容进入最终上下文。
+- JDBC 关键词 fallback 已从 `content LIKE` 升级到 PostgreSQL FTS：通过 `websearch_to_tsquery('simple', ?)` 构造查询、`@@` 过滤命中、`ts_rank_cd` 作为关键词分；有 `search_text` 列时优先使用预计算向量，兼容历史空值时退回 `content` 动态向量。
+- 入库 `IndexerNodeFeature` 现在同步调用 `KeywordIndexPort`，为 Elasticsearch 生产适配器和后续 Outbox 异步化预留统一写入点；默认 noop 保持原有向量入库行为兼容。

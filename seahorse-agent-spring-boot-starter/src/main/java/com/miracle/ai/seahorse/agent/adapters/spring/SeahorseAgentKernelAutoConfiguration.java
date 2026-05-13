@@ -76,6 +76,7 @@ import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.IntentDirectedSear
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.KeywordSearchChannelFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataGuardPostProcessorFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.RerankPostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.RrfFusionPostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchChannelFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchResultPostProcessorFeature;
@@ -137,6 +138,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSchedulePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshStateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpParameterExtractionPort;
@@ -354,8 +356,10 @@ public class SeahorseAgentKernelAutoConfiguration {
     public IndexerNodeFeature seahorseIndexerNodeFeature(ExtensionRegistry extensionRegistry,
                                                          VectorCollectionAdminPort collectionAdminPort,
                                                          VectorIndexPort vectorIndexPort,
-                                                         KnowledgeChunkRepositoryPort chunkRepositoryPort) {
-        IndexerNodeFeature feature = new IndexerNodeFeature(collectionAdminPort, vectorIndexPort, chunkRepositoryPort);
+                                                         KnowledgeChunkRepositoryPort chunkRepositoryPort,
+                                                         ObjectProvider<KeywordIndexPort> keywordIndexPort) {
+        IndexerNodeFeature feature = new IndexerNodeFeature(collectionAdminPort, vectorIndexPort, chunkRepositoryPort,
+                keywordIndexPort.getIfAvailable(KeywordIndexPort::noop));
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
                 FeatureType.INGESTION_NODE, feature.order(), true), feature);
         return feature;
@@ -413,6 +417,16 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnBean(ExtensionRegistry.class)
     public RrfFusionPostProcessorFeature seahorseRrfFusionPostProcessorFeature(ExtensionRegistry extensionRegistry) {
         RrfFusionPostProcessorFeature feature = new RrfFusionPostProcessorFeature();
+        extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchResultPostProcessorFeature.class,
+                FeatureType.SEARCH_RESULT_POST_PROCESSOR, feature.order(), false), feature);
+        return feature;
+    }
+
+    @Bean
+    @ConditionalOnBean({ExtensionRegistry.class, RerankModelPort.class})
+    public RerankPostProcessorFeature seahorseRerankPostProcessorFeature(ExtensionRegistry extensionRegistry,
+                                                                         RerankModelPort rerankModelPort) {
+        RerankPostProcessorFeature feature = new RerankPostProcessorFeature(rerankModelPort);
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchResultPostProcessorFeature.class,
                 FeatureType.SEARCH_RESULT_POST_PROCESSOR, feature.order(), false), feature);
         return feature;

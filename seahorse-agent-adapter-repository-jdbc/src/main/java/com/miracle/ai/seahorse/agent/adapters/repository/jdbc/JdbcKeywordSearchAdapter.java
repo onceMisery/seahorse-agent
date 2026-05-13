@@ -51,6 +51,7 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private Boolean metadataJsonColumnExists;
+    private Boolean searchTextColumnExists;
 
     public JdbcKeywordSearchAdapter(DataSource dataSource, ObjectMapper objectMapper) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
@@ -71,16 +72,19 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
     private String searchSql(KeywordSearchRequest request, List<Object> args) {
         boolean hasMetadata = metadataJsonColumnExists();
         String metadataSelect = hasMetadata ? "metadata_json" : "'{}' AS metadata_json";
+        String searchVector = searchVectorExpression();
         StringBuilder sql = new StringBuilder("""
-                SELECT id, kb_id, doc_id, chunk_index, content, enabled, %s
-                FROM t_knowledge_chunk
+                WITH keyword_query AS (SELECT websearch_to_tsquery('simple', ?) AS q)
+                SELECT id, kb_id, doc_id, chunk_index, content, enabled, %s,
+                       ts_rank_cd(%s, keyword_query.q) AS rank_score
+                FROM t_knowledge_chunk, keyword_query
                 WHERE deleted = 0 AND enabled = ?
-                  AND content LIKE ?
-                """.formatted(metadataSelect));
+                  AND %s @@ keyword_query.q
+                """.formatted(metadataSelect, searchVector, searchVector));
+        args.add(request.query().trim());
         args.add(ENABLED_VALUE);
-        args.add("%" + request.query().trim() + "%");
         appendSystemFilter(sql, args, request.compiledFilter().sourceFilter().system());
-        sql.append(" ORDER BY update_time DESC LIMIT ?");
+        sql.append(" ORDER BY rank_score DESC, update_time DESC LIMIT ?");
         args.add(request.topK());
         return sql.toString();
     }
@@ -115,7 +119,7 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
                 .docId(docId)
                 .chunkIndex(chunkIndex)
                 .text(resultSet.getString("content"))
-                .score(score(rowNumber))
+                .score(score(resultSet, rowNumber))
                 .tenantId(string(metadata, META_TENANT_ID))
                 .metadata(metadata)
                 .build();
@@ -164,7 +168,41 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
         return metadataJsonColumnExists;
     }
 
-    private Float score(int rowNumber) {
+    private String searchVectorExpression() {
+        if (searchTextColumnExists()) {
+            // 优先使用预计算 tsvector；历史数据为空时退回 content 动态向量，避免漏召回。
+            return "COALESCE(search_text, to_tsvector('simple', COALESCE(content, '')))";
+        }
+        return "to_tsvector('simple', COALESCE(content, ''))";
+    }
+
+    private boolean searchTextColumnExists() {
+        if (searchTextColumnExists != null) {
+            return searchTextColumnExists;
+        }
+        try {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(1)
+                    FROM information_schema.columns
+                    WHERE lower(table_name) = 't_knowledge_chunk'
+                      AND lower(column_name) = 'search_text'
+                    """, Integer.class);
+            searchTextColumnExists = count != null && count > 0;
+        } catch (RuntimeException ex) {
+            searchTextColumnExists = false;
+        }
+        return searchTextColumnExists;
+    }
+
+    private Float score(ResultSet resultSet, int rowNumber) {
+        try {
+            float rankScore = resultSet.getFloat("rank_score");
+            if (!resultSet.wasNull()) {
+                return rankScore;
+            }
+        } catch (SQLException ex) {
+            // 兼容旧 SQL 或测试替身结果集，无法读取 rank_score 时才退回稳定衰减分。
+        }
         return Math.max(0.1F, 1.0F - rowNumber * 0.01F);
     }
 

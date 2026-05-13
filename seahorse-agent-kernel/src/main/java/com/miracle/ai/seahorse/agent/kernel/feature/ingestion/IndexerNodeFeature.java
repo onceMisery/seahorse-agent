@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 
@@ -45,13 +46,22 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
     private final VectorCollectionAdminPort collectionAdminPort;
     private final VectorIndexPort vectorIndexPort;
     private final KnowledgeChunkRepositoryPort chunkRepositoryPort;
+    private final KeywordIndexPort keywordIndexPort;
 
     public IndexerNodeFeature(VectorCollectionAdminPort collectionAdminPort,
                               VectorIndexPort vectorIndexPort,
                               KnowledgeChunkRepositoryPort chunkRepositoryPort) {
+        this(collectionAdminPort, vectorIndexPort, chunkRepositoryPort, KeywordIndexPort.noop());
+    }
+
+    public IndexerNodeFeature(VectorCollectionAdminPort collectionAdminPort,
+                              VectorIndexPort vectorIndexPort,
+                              KnowledgeChunkRepositoryPort chunkRepositoryPort,
+                              KeywordIndexPort keywordIndexPort) {
         this.collectionAdminPort = Objects.requireNonNull(collectionAdminPort, "collectionAdminPort must not be null");
         this.vectorIndexPort = Objects.requireNonNull(vectorIndexPort, "vectorIndexPort must not be null");
         this.chunkRepositoryPort = Objects.requireNonNull(chunkRepositoryPort, "chunkRepositoryPort must not be null");
+        this.keywordIndexPort = Objects.requireNonNullElse(keywordIndexPort, KeywordIndexPort.noop());
     }
 
     @Override
@@ -78,6 +88,8 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
             if (!safeContext.isSkipIndexerWrite()) {
                 chunkRepositoryPort.replaceDocumentChunks(request.kbId(), request.docId(), chunks);
                 vectorIndexPort.indexDocumentChunks(request.collectionName(), request.docId(), chunks);
+                // 关键词索引与向量索引共享同一批治理后的 Chunk，后续可替换为 Outbox 异步投递。
+                keywordIndexPort.indexDocumentChunks(request.kbId(), request.docId(), chunks);
             }
             return NodeResult.ok("已准备 " + chunks.size() + " 个分块索引");
         } catch (Exception ex) {
