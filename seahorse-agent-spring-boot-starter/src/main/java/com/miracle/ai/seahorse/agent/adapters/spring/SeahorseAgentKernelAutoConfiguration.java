@@ -270,9 +270,11 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnBean(ExtensionRegistry.class)
     public MetadataExtractorNodeFeature seahorseMetadataExtractorNodeFeature(
             ExtensionRegistry extensionRegistry,
-            ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort) {
+            ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
+            ObjectProvider<ChatModelPort> chatModelPort) {
         MetadataExtractorNodeFeature feature = new MetadataExtractorNodeFeature(
-                schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty));
+                schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
+                chatModelPort.getIfAvailable(ChatModelPort::noop));
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
                 FeatureType.INGESTION_NODE, feature.order(), true), feature);
         return feature;

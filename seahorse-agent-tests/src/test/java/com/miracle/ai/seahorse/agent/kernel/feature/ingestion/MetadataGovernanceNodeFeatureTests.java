@@ -17,9 +17,12 @@
 
 package com.miracle.ai.seahorse.agent.kernel.feature.ingestion;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldCandidate;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.BackendFieldMapping;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
@@ -34,6 +37,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -46,6 +50,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class MetadataGovernanceNodeFeatureTests {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
     void shouldExtractNormalizeValidateAndAttachAcceptedMetadataToChunks() {
@@ -109,6 +115,57 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(context.isSkipIndexerWrite()).isTrue();
         assertThat(context.getMetadataValidationResult().decision()).isEqualTo(MetadataValidationDecision.QUARANTINE);
         assertThat(quarantineReasons).containsExactly("METADATA_QUARANTINE");
+    }
+
+    @Test
+    void shouldExtractOnlyRegisteredSchemaFieldsFromLlm() throws Exception {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of("description", "所属部门"))));
+        AtomicReference<String> modelIdRef = new AtomicReference<>();
+        AtomicReference<List<ChatMessage>> messagesRef = new AtomicReference<>();
+        ChatModelPort modelPort = (request, modelId) -> {
+            modelIdRef.set(modelId);
+            messagesRef.set(request.getMessages());
+            return """
+                    {
+                      "department": {"value": "Finance", "confidence": 0.73, "evidence": "财务部预算说明"},
+                      "tenant_id": "evil"
+                    }
+                    """;
+        };
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .rawText("财务部预算说明，面向内部员工。")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .build();
+        NodeConfig config = NodeConfig.builder()
+                .nodeType("metadata_extractor")
+                .settings(objectMapper.readTree("""
+                        {
+                          "tenantId": "tenant-a",
+                          "kbId": "kb-a",
+                          "llmEnabled": true,
+                          "llmModel": "metadata-model",
+                          "llmConfidence": 0.7
+                        }
+                        """))
+                .build();
+
+        NodeResult result = new MetadataExtractorNodeFeature((tenantId, knowledgeBaseId) -> schema, modelPort)
+                .execute(context, config);
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(modelIdRef.get()).isEqualTo("metadata-model");
+        assertThat(messagesRef.get())
+                .extracting(ChatMessage::getContent)
+                .anySatisfy(content -> assertThat(content).contains("department").contains("只返回 JSON"));
+        assertThat(context.getMetadataCandidates())
+                .extracting(MetadataFieldCandidate::fieldKey)
+                .containsExactly("department");
+        assertThat(context.getMetadataCandidates().get(0).sourceType()).isEqualTo("llm");
+        assertThat(context.getMetadataCandidates().get(0).confidence()).isEqualTo(0.73D);
+        assertThat(context.getMetadataIssues())
+                .anySatisfy(issue -> assertThat(issue.code()).isEqualTo("LLM_FORBIDDEN_FIELD"));
     }
 
     private MetadataFieldDescriptor field(String fieldKey,

@@ -167,3 +167,11 @@
 - 新增 `MetadataSchemaFieldRequest` 和 `SeahorseMetadataSchemaController`，暴露 `GET/POST /knowledge-base/{kb-id}/metadata-schema/fields`、`PUT/DELETE /metadata-schema/fields/{field-id}`。
 - starter 自动装配新增 `MetadataSchemaManagementRepositoryPort` 暴露和 `MetadataSchemaInboundPort` 注册，保证 JDBC 治理仓储可同时供 Schema Registry 与管理 API 使用。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc -am "-Dtest=SeahorseWebApiContractTests,JdbcMetadataSchemaManagementAdapterTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，31 个测试成功。
+
+## 2026-05-13 继续推进 P2 LLM 元数据抽取增强
+
+- `MetadataExtractorNodeFeature` 新增可选 LLM 抽取路径，复用 kernel 已有 `ChatModelPort`，通过 `llmEnabled/llmModel/llmConfidence/llmMaxTextChars` 节点配置控制。
+- LLM Prompt 明确只返回 JSON，并包含 Schema 字段清单、解析元数据、来源元数据和截断后的文档文本；返回值支持 `{"field":{"value":...,"confidence":...,"evidence":...}}` 结构。
+- LLM 输出不会直接写入 canonical metadata，只作为候选进入后续 Normalizer/Validator；未注册字段、系统字段和权限字段会记录治理问题并被忽略。
+- starter 自动装配为 `MetadataExtractorNodeFeature` 注入可用 `ChatModelPort`，未配置模型时使用 noop，默认不开启 LLM 抽取。
+- 验证通过：`mvn -pl seahorse-agent-tests -am "-Dtest=MetadataGovernanceNodeFeatureTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，20 个测试成功。

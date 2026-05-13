@@ -66,3 +66,9 @@
 - [complete] M5 Schema 字段管理 API：新增字段列表、创建、更新、删除入站端口与 Web 契约。
 - [complete] M5 Schema 管理仓储：JDBC 治理仓储支持字段 CRUD，并保证 `loadSchema()` 可读取新注册字段。
 - [complete] M5 Schema 自动装配：starter 暴露 `MetadataSchemaManagementRepositoryPort` 和 `MetadataSchemaInboundPort`，供管理端和后续 Filter Compiler 入口复用。
+
+## 2026-05-13 P2 LLM 元数据抽取增强
+
+- [complete] LLM 抽取候选源：`MetadataExtractorNodeFeature` 可选复用 `ChatModelPort`，按 Schema 生成抽取提示并解析 JSON 候选。
+- [complete] LLM 安全边界：默认关闭；启用后仍只接受已注册业务字段，系统/权限字段和未注册字段只记录治理问题，不进入候选集。
+- [complete] starter 接入：元数据抽取节点可注入 `ChatModelPort`，未配置模型时保持 noop 兼容。

@@ -109,3 +109,9 @@
 - Schema 管理 API 是动态 metadata 进入过滤编译与索引映射前的注册入口；字段必须先落到 `t_metadata_field_schema`，后续 `MetadataSchemaRegistryPort.loadSchema()` 才能让 Filter Compiler 和后端 adapter 消费。
 - 本轮先实现字段 CRUD 与自动装配，不做索引模板自动生成；Elasticsearch/OpenSearch/Milvus 等后端的物理字段模板仍应放在 adapter 或运维迁移层处理，避免 kernel 依赖外部 SDK。
 - 更新字段采用完整载荷覆盖语义，避免局部更新时在 Web 层重新拼装旧值；管理端调用 PUT 时需要携带 `tenantId`、`fieldKey` 等 Schema 必填信息。
+
+## 2026-05-13 P2 LLM 元数据抽取增强发现
+
+- LLM 抽取不应成为新的可信写入口；它只能补充 `MetadataFieldCandidate`，最终是否进入 canonical metadata 仍由 Normalizer 和 Validator 决定。
+- Schema 白名单不足以保护系统字段，因为用户可能误把权限字段注册为业务字段；LLM 路径需要硬拒绝 `tenantId/kbId/docId/aclSubjects/securityLevel` 等系统和权限字段。
+- LLM 抽取默认必须关闭，避免未配置模型或提示词不稳定时改变现有确定性抽取链路；启用应由节点配置显式控制。
