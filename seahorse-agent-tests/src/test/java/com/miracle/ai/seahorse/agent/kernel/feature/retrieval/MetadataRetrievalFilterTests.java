@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.feature.retrieval;
 
+import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
+import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.BackendFieldMapping;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
@@ -27,9 +29,16 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.MetadataCondition;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
+import com.miracle.ai.seahorse.agent.kernel.plugin.AgentFeatureProperties;
+import com.miracle.ai.seahorse.agent.kernel.plugin.DefaultExtensionRegistry;
+import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionDescriptor;
+import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
+import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureType;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkSummary;
@@ -104,6 +113,34 @@ class MetadataRetrievalFilterTests {
         assertThat(vectorSearchPort.requests.get(0).vector()).containsExactly(0.1F, 0.2F, 0.3F);
     }
 
+    @Test
+    void shouldCompileFilterBeforeExecutingSearchChannels() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        RecordingSearchChannelFeature channel = new RecordingSearchChannelFeature();
+        MetadataGuardPostProcessorFeature guard = new MetadataGuardPostProcessorFeature();
+        registry.register(new ExtensionDescriptor(channel.name(), SearchChannelFeature.class,
+                FeatureType.SEARCH_CHANNEL, 1, true), channel);
+        registry.register(new ExtensionDescriptor(guard.name(), SearchResultPostProcessorFeature.class,
+                FeatureType.SEARCH_RESULT_POST_PROCESSOR, guard.order(), true), guard);
+        KernelMultiChannelRetrievalEngine engine = new KernelMultiChannelRetrievalEngine(
+                registry,
+                Runnable::run,
+                new FeatureActivationContext("tenant-a", "user-a", Map.of(), AgentFeatureProperties.empty()),
+                (tenantId, knowledgeBaseId) -> schema(false),
+                new DefaultMetadataFilterCompiler());
+        RetrievalFilter filter = RetrievalFilter.builder()
+                .system(SystemRetrievalFilter.builder().tenantId("tenant-a").knowledgeBaseIds(List.of("kb-a")).build())
+                .metadataConditions(List.of(new MetadataCondition("department", MetadataOperator.EQ, "HR")))
+                .build();
+
+        List<RetrievedChunk> chunks = engine.retrieveKnowledgeChannels(
+                List.of(new SubQuestionIntent("入职流程", List.of())), 5, filter, RetrievalOptions.defaults(5));
+
+        assertThat(channel.observedCompiledFilter).isNotNull();
+        assertThat(channel.observedCompiledFilter.guardOnlyConditions()).hasSize(1);
+        assertThat(chunks).extracting(RetrievedChunk::getId).containsExactly("1");
+    }
+
     private MetadataSchema schema(boolean pushdownToVector) {
         return new MetadataSchema("tenant-a", "kb-a", 1, List.of(new MetadataFieldDescriptor(
                 "department",
@@ -162,6 +199,50 @@ class MetadataRetrievalFilterTests {
         public List<RetrievedChunk> search(VectorSearchRequest request) {
             requests.add(request);
             return List.of();
+        }
+    }
+
+    private static class RecordingSearchChannelFeature implements SearchChannelFeature {
+
+        private CompiledMetadataFilter observedCompiledFilter;
+
+        @Override
+        public String name() {
+            return "recording-search";
+        }
+
+        @Override
+        public SearchChannelType channelType() {
+            return SearchChannelType.VECTOR_GLOBAL;
+        }
+
+        @Override
+        public boolean enabled(SearchContext context) {
+            return true;
+        }
+
+        @Override
+        public SearchChannelResult search(SearchContext context) {
+            observedCompiledFilter = context.getCompiledFilter();
+            return SearchChannelResult.builder()
+                    .channelType(channelType())
+                    .channelName(name())
+                    .chunks(List.of(
+                            RetrievedChunk.builder()
+                                    .id("1")
+                                    .tenantId("tenant-a")
+                                    .kbId("kb-a")
+                                    .metadata(Map.of("tenant_id", "tenant-a", "kb_id", "kb-a",
+                                            "department", "HR"))
+                                    .build(),
+                            RetrievedChunk.builder()
+                                    .id("2")
+                                    .tenantId("tenant-a")
+                                    .kbId("kb-a")
+                                    .metadata(Map.of("tenant_id", "tenant-a", "kb_id", "kb-a",
+                                            "department", "FIN"))
+                                    .build()))
+                    .build();
         }
     }
 }

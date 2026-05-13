@@ -18,21 +18,28 @@
 package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
+import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.DefaultMetadataFilterCompiler;
+import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchChannelFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchResultPostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.Comparator;
 import java.util.stream.Collectors;
 
 /**
@@ -50,6 +57,8 @@ public class KernelMultiChannelRetrievalEngine {
     private final ExtensionRegistry extensionRegistry;
     private final Executor retrievalExecutor;
     private final FeatureActivationContext activationContext;
+    private final MetadataSchemaRegistryPort schemaRegistryPort;
+    private final MetadataFilterCompiler metadataFilterCompiler;
 
     public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
                                              Executor retrievalExecutor,
@@ -57,6 +66,21 @@ public class KernelMultiChannelRetrievalEngine {
         this.extensionRegistry = Objects.requireNonNull(extensionRegistry, "扩展注册表不能为空");
         this.retrievalExecutor = Objects.requireNonNull(retrievalExecutor, "检索线程池不能为空");
         this.activationContext = Objects.requireNonNullElse(activationContext, FeatureActivationContext.empty());
+        this.schemaRegistryPort = MetadataSchemaRegistryPort.empty();
+        this.metadataFilterCompiler = new DefaultMetadataFilterCompiler();
+    }
+
+    public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
+                                             Executor retrievalExecutor,
+                                             FeatureActivationContext activationContext,
+                                             MetadataSchemaRegistryPort schemaRegistryPort,
+                                             MetadataFilterCompiler metadataFilterCompiler) {
+        this.extensionRegistry = Objects.requireNonNull(extensionRegistry, "extensionRegistry must not be null");
+        this.retrievalExecutor = Objects.requireNonNull(retrievalExecutor, "retrievalExecutor must not be null");
+        this.activationContext = Objects.requireNonNullElse(activationContext, FeatureActivationContext.empty());
+        this.schemaRegistryPort = Objects.requireNonNullElseGet(schemaRegistryPort, MetadataSchemaRegistryPort::empty);
+        this.metadataFilterCompiler = Objects.requireNonNullElseGet(metadataFilterCompiler,
+                DefaultMetadataFilterCompiler::new);
     }
 
     /**
@@ -67,7 +91,25 @@ public class KernelMultiChannelRetrievalEngine {
      * @return 检索结果 Chunk 列表
      */
     public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents, int topK) {
-        SearchContext context = buildSearchContext(subIntents, topK);
+        return retrieveKnowledgeChannels(subIntents, topK, null, null);
+    }
+
+    /**
+     * 执行带治理过滤条件的知识库多通道检索。
+     * <p>
+     * 动态 metadata 过滤会先按 Schema 编译成后端无关 AST，再传递给检索通道和兜底后处理器。
+     *
+     * @param subIntents 子问题意图列表
+     * @param topK       期望返回数量
+     * @param filter     已解析的检索过滤条件
+     * @param options    检索策略参数
+     * @return 检索结果 Chunk 列表
+     */
+    public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents,
+                                                          int topK,
+                                                          RetrievalFilter filter,
+                                                          RetrievalOptions options) {
+        SearchContext context = buildSearchContext(subIntents, topK, filter, options);
         List<SearchChannelResult> channelResults = executeSearchChannels(context);
         if (channelResults.isEmpty()) {
             return List.of();
@@ -154,7 +196,10 @@ public class KernelMultiChannelRetrievalEngine {
         return Objects.requireNonNullElse(result.getChunks(), List.of());
     }
 
-    private SearchContext buildSearchContext(List<SubQuestionIntent> subIntents, int topK) {
+    private SearchContext buildSearchContext(List<SubQuestionIntent> subIntents,
+                                             int topK,
+                                             RetrievalFilter filter,
+                                             RetrievalOptions options) {
         List<SubQuestionIntent> safeSubIntents = Objects.requireNonNullElse(subIntents, List.of());
         String question = safeSubIntents.isEmpty() ? "" : safeSubIntents.get(0).subQuestion();
         return SearchContext.builder()
@@ -162,6 +207,22 @@ public class KernelMultiChannelRetrievalEngine {
                 .rewrittenQuestion(question)
                 .intents(safeSubIntents)
                 .topK(topK)
+                .filter(filter)
+                .options(options)
+                .compiledFilter(compileFilter(filter))
                 .build();
+    }
+
+    private CompiledMetadataFilter compileFilter(RetrievalFilter filter) {
+        if (filter == null) {
+            return null;
+        }
+        String knowledgeBaseId = filter.system().knowledgeBaseIds().isEmpty()
+                ? ""
+                : filter.system().knowledgeBaseIds().get(0);
+        String tenantId = !filter.system().tenantId().isBlank() ? filter.system().tenantId() : activationContext.tenantId();
+        MetadataSchema schema = schemaRegistryPort.loadSchema(tenantId, knowledgeBaseId);
+        // 只有通过 Schema 编译后的表达式才能进入向量库或关键词后端，避免原始 Map 直通外部查询。
+        return metadataFilterCompiler.compile(filter, schema);
     }
 }

@@ -24,6 +24,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScoreFilters;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.KbResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
@@ -115,6 +117,18 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
      */
     public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents, int topK) {
         return multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK);
+    }
+
+    /**
+     * 执行带 Schema 治理过滤条件的知识库检索。
+     * <p>
+     * 该入口面向后续 API 层传入强类型过滤条件，内部会由多通道引擎完成 Schema 编译。
+     */
+    public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents,
+                                                          int topK,
+                                                          RetrievalFilter filter,
+                                                          RetrievalOptions options) {
+        return multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK, filter, options);
     }
 
     private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent, int topK) {

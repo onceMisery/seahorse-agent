@@ -70,8 +70,13 @@ import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataExtractorN
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataNormalizerNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataValidatorNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ParserNodeFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.DefaultMetadataFilterCompiler;
+import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.FinalTruncatePostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.IntentDirectedSearchFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.KeywordSearchChannelFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataGuardPostProcessorFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.RrfFusionPostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchChannelFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchResultPostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.VectorGlobalSearchFeature;
@@ -132,6 +137,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSchedulePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshStateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpParameterExtractionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
@@ -384,6 +390,16 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({ExtensionRegistry.class, KeywordSearchPort.class})
+    public KeywordSearchChannelFeature seahorseKeywordSearchChannelFeature(ExtensionRegistry extensionRegistry,
+                                                                          KeywordSearchPort keywordSearchPort) {
+        KeywordSearchChannelFeature feature = new KeywordSearchChannelFeature(keywordSearchPort);
+        extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchChannelFeature.class,
+                FeatureType.SEARCH_CHANNEL, feature.order(), false), feature);
+        return feature;
+    }
+
+    @Bean
     @ConditionalOnBean(ExtensionRegistry.class)
     public MetadataGuardPostProcessorFeature seahorseMetadataGuardPostProcessorFeature(
             ExtensionRegistry extensionRegistry) {
@@ -391,6 +407,31 @@ public class SeahorseAgentKernelAutoConfiguration {
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchResultPostProcessorFeature.class,
                 FeatureType.SEARCH_RESULT_POST_PROCESSOR, feature.order(), true), feature);
         return feature;
+    }
+
+    @Bean
+    @ConditionalOnBean(ExtensionRegistry.class)
+    public RrfFusionPostProcessorFeature seahorseRrfFusionPostProcessorFeature(ExtensionRegistry extensionRegistry) {
+        RrfFusionPostProcessorFeature feature = new RrfFusionPostProcessorFeature();
+        extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchResultPostProcessorFeature.class,
+                FeatureType.SEARCH_RESULT_POST_PROCESSOR, feature.order(), false), feature);
+        return feature;
+    }
+
+    @Bean
+    @ConditionalOnBean(ExtensionRegistry.class)
+    public FinalTruncatePostProcessorFeature seahorseFinalTruncatePostProcessorFeature(
+            ExtensionRegistry extensionRegistry) {
+        FinalTruncatePostProcessorFeature feature = new FinalTruncatePostProcessorFeature();
+        extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchResultPostProcessorFeature.class,
+                FeatureType.SEARCH_RESULT_POST_PROCESSOR, feature.order(), false), feature);
+        return feature;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public MetadataFilterCompiler seahorseMetadataFilterCompiler() {
+        return new DefaultMetadataFilterCompiler();
     }
 
     @Bean
@@ -413,9 +454,13 @@ public class SeahorseAgentKernelAutoConfiguration {
     public KernelMultiChannelRetrievalEngine seahorseKernelMultiChannelRetrievalEngine(
             ExtensionRegistry extensionRegistry,
             @Qualifier("ragRetrievalThreadPoolExecutor") ObjectProvider<Executor> retrievalExecutor,
-            FeatureActivationContext activationContext) {
+            FeatureActivationContext activationContext,
+            ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
+            ObjectProvider<MetadataFilterCompiler> metadataFilterCompiler) {
         return new KernelMultiChannelRetrievalEngine(extensionRegistry,
-                retrievalExecutor.getIfAvailable(() -> Runnable::run), activationContext);
+                retrievalExecutor.getIfAvailable(() -> Runnable::run), activationContext,
+                schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
+                metadataFilterCompiler.getIfAvailable(DefaultMetadataFilterCompiler::new));
     }
 
     @Bean

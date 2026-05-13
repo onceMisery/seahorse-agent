@@ -51,6 +51,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeBaseR
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeChunkRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeBaseQueryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeDocumentRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKeywordSearchAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLongTermMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflictLogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryQualitySnapshotRepositoryAdapter;
@@ -101,6 +102,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSchedulePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshStateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
@@ -380,6 +382,15 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @ConditionalOnMissingBean(KnowledgeBaseQueryPort.class)
     public JdbcKnowledgeBaseQueryAdapter seahorseJdbcKnowledgeBaseQueryAdapter(DataSource dataSource) {
         return new JdbcKnowledgeBaseQueryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(KeywordSearchPort.class)
+    public JdbcKeywordSearchAdapter seahorseJdbcKeywordSearchAdapter(
+            DataSource dataSource, ObjectMapper objectMapper) {
+        return new JdbcKeywordSearchAdapter(dataSource, objectMapper);
     }
 
     @Bean

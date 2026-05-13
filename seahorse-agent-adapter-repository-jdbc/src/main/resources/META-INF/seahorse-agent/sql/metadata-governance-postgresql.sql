@@ -4,8 +4,15 @@ ADD COLUMN IF NOT EXISTS metadata_json JSONB;
 ALTER TABLE t_knowledge_chunk
 ADD COLUMN IF NOT EXISTS metadata_json JSONB;
 
+ALTER TABLE t_knowledge_chunk
+ADD COLUMN IF NOT EXISTS search_text TSVECTOR;
+
 COMMENT ON COLUMN t_knowledge_document.metadata_json IS '文档业务元数据 JSON，由 Metadata Schema 管理可过滤字段';
 COMMENT ON COLUMN t_knowledge_chunk.metadata_json IS '分块业务元数据 JSON，由 Metadata Schema 管理可过滤字段';
+COMMENT ON COLUMN t_knowledge_chunk.search_text IS 'PostgreSQL 全文检索向量，用于轻量关键词检索 fallback';
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_search_text
+ON t_knowledge_chunk USING GIN (search_text);
 
 CREATE TABLE IF NOT EXISTS t_metadata_field_schema (
     id                VARCHAR(32) PRIMARY KEY,

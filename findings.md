@@ -19,3 +19,6 @@
 - 向量通道已有 `EmbeddingModelPort` 可直接复用，不需要新增 QueryEmbeddingPort；未配置模型时 noop 仍返回空向量，保持降级兼容。
 - PGVector/Milvus 均已在写入 metadata 时保留 `collection_name/doc_id/chunk_index`，适配器检索返回时可以从 metadata 反填 `RetrievedChunk` 的结构化字段。
 - PowerShell 下 Maven `-Dtest=A,B` 必须整体加引号，否则逗号会触发参数解析错误。
+- 多通道检索入口原先只能由意图和 topK 构造 `SearchContext`，没有过滤编译入口；已通过重载方法接入 `RetrievalFilter/RetrievalOptions`。
+- 关键词检索通道应默认关闭，只有上层显式设置 `RetrievalOptions.enableKeyword=true` 时才执行，避免未配置关键词适配器时改变现有召回行为。
+- JDBC 关键词 fallback 先采用 content `LIKE` 兼容实现；DDL 已预留 `search_text TSVECTOR`，后续可升级为 PostgreSQL FTS 排序。

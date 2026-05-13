@@ -15,3 +15,15 @@
 - 运行 `mvn -pl seahorse-agent-kernel,seahorse-agent-adapter-vector-pgvector,seahorse-agent-adapter-vector-milvus,seahorse-agent-spring-boot-starter -am -DskipTests compile`，通过。
 - 运行 `mvn -pl seahorse-agent-tests -am "-Dtest=MetadataRetrievalFilterTests,VectorGlobalSearchFeatureTests,IntentDirectedSearchFeatureTests,KernelRetrievalEngineTests,MetadataGovernanceNodeFeatureTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，13 个测试成功。
 - 补充 PGVector/Milvus 过滤翻译安全注释后，运行 `mvn -pl seahorse-agent-adapter-vector-milvus,seahorse-agent-adapter-vector-pgvector -am -DskipTests compile`，通过。
+- 继续推进 M2 收口：`KernelMultiChannelRetrievalEngine` 新增带 `RetrievalFilter/RetrievalOptions` 的检索入口，内部加载 Schema 并调用 `MetadataFilterCompiler`，`KernelRetrievalEngine` 增加对应透传方法。
+- 在 starter 中注册 `MetadataFilterCompiler`，并把 `MetadataSchemaRegistryPort` 与 compiler 注入多通道检索引擎。
+- 新增编排级测试，验证通道执行前已完成过滤编译，guard-only 条件由 `MetadataGuardPostProcessorFeature` 兜底过滤。
+- 运行 `mvn -pl seahorse-agent-tests -am "-Dtest=MetadataRetrievalFilterTests,KernelRetrievalEngineTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，7 个测试成功。
+- 开始 M3 关键词检索：新增 `KeywordSearchPort`、`KeywordIndexPort`、`KeywordSearchRequest`、`KeywordSearchChannelFeature`，starter 在存在 `KeywordSearchPort` 时注册关键词通道，默认仍由 `RetrievalOptions.enableKeyword=false` 关闭。
+- 首次运行关键词测试时，`KeywordSearchRequest` compact constructor 中 lambda 捕获重写后的 `topK` 导致编译失败；改为普通 `if` 分支后修复。
+- 运行 `mvn -pl seahorse-agent-tests -am "-Dtest=KeywordSearchChannelFeatureTests,MetadataRetrievalFilterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，6 个测试成功。
+- 运行 `git diff --check` 时发现任务外重命名文档 `缺少的功能.md` 第 3 行存在 trailing whitespace，未擅自修改该用户工作树改动。
+- 新增 `JdbcKeywordSearchAdapter` 作为 PostgreSQL/JDBC 轻量关键词检索 fallback，基础按 chunk content 匹配，系统字段 `kb_id/doc_id` 可下推，`metadata_json` 返回后交由 Guard 兜底。
+- starter 在 JDBC repository 类型下自动装配 `JdbcKeywordSearchAdapter` 为 `KeywordSearchPort`，关键词通道仍受 `RetrievalOptions.enableKeyword` 控制。
+- DDL 为 `t_knowledge_chunk` 补充 `search_text TSVECTOR`、GIN 索引和字段注释，给后续 PostgreSQL FTS 排序优化留位。
+- 运行 `mvn -pl seahorse-agent-adapter-repository-jdbc,seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=KeywordSearchChannelFeatureTests,MetadataRetrievalFilterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过，6 个测试成功。

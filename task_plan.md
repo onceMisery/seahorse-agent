@@ -7,16 +7,17 @@
 ## 阶段
 
 - [complete] M1 元数据治理最小闭环
-- [in_progress] M2 向量检索过滤闭环
-- [pending] M3 关键词检索
+- [complete] M2 向量检索过滤闭环
+- [in_progress] M3 关键词检索
 - [pending] M4 RRF 与 Reranker
 - [pending] M5 回填与治理运维
 
 ## 当前落地范围
 
 - M1 已完成：元数据治理领域模型、入库节点、Tika parser metadata、JDBC 治理仓储、chunk metadata 写入、starter 自动装配和基础测试。
-- M2 已完成第一段：`RetrievalFilter`、`RetrievalOptions`、Filter AST、`MetadataFilterCompiler`、`MetadataGuardPostProcessorFeature`、query embedding、向量适配器 metadata 返回和基础过滤下推。
-- M2 尚未完成：完整后端能力声明、复杂 ACL/时间范围语义、关键词检索、RRF、Rerank、检索配置属性和更多适配器级集成测试。
+- M2 已完成：`RetrievalFilter`、`RetrievalOptions`、Filter AST、`MetadataFilterCompiler`、`MetadataGuardPostProcessorFeature`、query embedding、向量适配器 metadata 返回和基础过滤下推，并接入多通道检索入口与 starter 自动装配。
+- M3 已完成第一段：新增 `KeywordSearchPort`、`KeywordIndexPort`、`KeywordSearchRequest` 和 `KeywordSearchChannelFeature`，starter 在存在 `KeywordSearchPort` 时注册关键词通道，并提供 JDBC 轻量关键词 fallback。
+- M3 尚未完成：Elasticsearch 生产适配器、真正 PostgreSQL FTS 排序表达式、关键词索引 Outbox 同步、索引重建任务。
 
 ## 硬约束
 
