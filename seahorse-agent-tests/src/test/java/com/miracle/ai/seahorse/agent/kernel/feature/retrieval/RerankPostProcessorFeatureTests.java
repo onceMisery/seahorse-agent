@@ -17,12 +17,20 @@
 
 package com.miracle.ai.seahorse.agent.kernel.feature.retrieval;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -103,6 +111,42 @@ class RerankPostProcessorFeatureTests {
         assertThat(reranked).isSameAs(chunks);
     }
 
+    @Test
+    void shouldTimeoutRerankAndRecordObservation() {
+        RecordingObservationPort observation = new RecordingObservationPort();
+        RerankPostProcessorFeature feature = new RerankPostProcessorFeature((modelId, query, chunks) -> {
+            try {
+                Thread.sleep(250L);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+            return List.of(chunk("c2", 0.95F));
+        }, observation);
+        List<RetrievedChunk> chunks = List.of(chunk("c1", 0.1F), chunk("c2", 0.2F));
+        SearchContext context = SearchContext.builder()
+                .filter(RetrievalFilter.builder()
+                        .system(SystemRetrievalFilter.builder().tenantId("tenant-1").build())
+                        .build())
+                .originalQuestion("问题")
+                .options(RetrievalOptions.builder()
+                        .enableRerank(true)
+                        .rerankModel("rerank-a")
+                        .rerankTopK(2)
+                        .rerankTimeout(Duration.ofMillis(20L))
+                        .build())
+                .build();
+
+        List<RetrievedChunk> reranked = feature.process(chunks, List.of(), context);
+
+        assertThat(reranked).isSameAs(chunks);
+        assertThat(observation.events).anySatisfy(event -> {
+            assertThat(event.name()).isEqualTo("retrieval.rerank");
+            assertThat(event.attributes()).containsEntry("tenant", "tenant-1");
+            assertThat(event.attributes()).containsEntry("status", "timeout");
+            assertThat(event.attributes()).containsEntry("timeoutMs", "20");
+        });
+    }
+
     private SearchContext enabledContext() {
         return SearchContext.builder()
                 .originalQuestion("问题")
@@ -139,6 +183,30 @@ class RerankPostProcessorFeatureTests {
             this.query = query;
             this.candidates = chunks;
             return response;
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 }

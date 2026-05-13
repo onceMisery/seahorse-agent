@@ -90,3 +90,9 @@
 - 低置信度比例需要依赖 normalizer 产生的字段级质量数据，不能只看最终 `accepted_metadata`，否则无法区分字段是高置信自动通过还是低置信进入复核。
 - 报表查询应使用每个文档最新一条抽取结果作为统计样本，避免历史回填多次运行导致同一文档被重复计入覆盖率。
 - 待复核数量和隔离原因 TopN 应分别来自 `t_metadata_review_item` 与 `t_metadata_quarantine_item`，只统计待处理状态，避免已处理历史问题继续影响运维看板。
+
+## 2026-05-13 M6 检索后处理增强发现
+
+- RRF 权重适合先复用 `RetrievalOptions.channelSettings`，避免新增全局配置类；后续若要按知识库模板化，可再把该设置上移到策略模板。
+- Rerank 超时只能保证检索链路按时降级，不能强制所有底层 HTTP/SDK 调用立即停止；生产适配器仍应设置自身请求超时。
+- 检索观测事件不要包含 chunkId/docId/question 等高基数字段，RRF/Rerank 当前只记录 status、候选数、输出数、耗时和异常类型。

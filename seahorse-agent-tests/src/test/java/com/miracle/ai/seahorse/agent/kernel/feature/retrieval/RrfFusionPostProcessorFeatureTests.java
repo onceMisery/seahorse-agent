@@ -18,13 +18,21 @@
 package com.miracle.ai.seahorse.agent.kernel.feature.retrieval;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -56,6 +64,39 @@ class RrfFusionPostProcessorFeatureTests {
         assertThat(finalChunks).extracting(RetrievedChunk::getId).containsExactly("b", "a");
     }
 
+    @Test
+    void shouldUseConfiguredRrfWeightsAndRecordObservation() {
+        RecordingObservationPort observation = new RecordingObservationPort();
+        RrfFusionPostProcessorFeature rrf = new RrfFusionPostProcessorFeature(observation);
+        SearchContext context = SearchContext.builder()
+                .filter(RetrievalFilter.builder()
+                        .system(SystemRetrievalFilter.builder().tenantId("tenant-1").build())
+                        .build())
+                .options(RetrievalOptions.builder()
+                        .enableRrf(true)
+                        .fusionTopK(2)
+                        .channelSettings(Map.of(
+                                "rrfK", 1,
+                                "channelWeights", Map.of("KeywordSearch", 10.0D)))
+                        .build())
+                .build();
+        List<SearchChannelResult> results = List.of(
+                result(IntentDirectedSearchFeature.NAME, SearchChannelType.INTENT_DIRECTED,
+                        List.of(chunk("a", 0.9F))),
+                result("KeywordSearch", SearchChannelType.KEYWORD_ES,
+                        List.of(chunk("b", 0.7F))));
+
+        List<RetrievedChunk> fused = rrf.process(List.of(), results, context);
+
+        assertThat(fused).extracting(RetrievedChunk::getId).containsExactly("b", "a");
+        assertThat(observation.events).anySatisfy(event -> {
+            assertThat(event.name()).isEqualTo("retrieval.rrf");
+            assertThat(event.attributes()).containsEntry("tenant", "tenant-1");
+            assertThat(event.attributes()).containsEntry("status", "success");
+            assertThat(event.attributes()).containsEntry("rrfK", "1");
+        });
+    }
+
     private SearchChannelResult result(String name, SearchChannelType type, List<RetrievedChunk> chunks) {
         return SearchChannelResult.builder()
                 .channelName(name)
@@ -70,5 +111,29 @@ class RrfFusionPostProcessorFeatureTests {
                 .text("chunk-" + id)
                 .score(score)
                 .build();
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
+        }
     }
 }

@@ -5,13 +5,20 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Rerank 检索后处理器。
@@ -23,11 +30,18 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
     private static final Logger LOG = LoggerFactory.getLogger(RerankPostProcessorFeature.class);
     private static final String NAME = "Rerank";
     private static final int ORDER = 200;
+    private static final String EVENT_RERANK = "retrieval.rerank";
 
     private final RerankModelPort rerankModelPort;
+    private final ObservationPort observationPort;
 
     public RerankPostProcessorFeature(RerankModelPort rerankModelPort) {
+        this(rerankModelPort, null);
+    }
+
+    public RerankPostProcessorFeature(RerankModelPort rerankModelPort, ObservationPort observationPort) {
         this.rerankModelPort = Objects.requireNonNullElse(rerankModelPort, RerankModelPort.noop());
+        this.observationPort = observationPort;
     }
 
     @Override
@@ -62,20 +76,65 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
                 .limit(candidateLimit(options))
                 .toList();
         if (candidates.isEmpty()) {
+            recordRerankEvent(context, "skipped", 0, 0, 0L, timeoutMs(options), "");
             return chunks;
         }
+        long started = System.nanoTime();
         List<RetrievedChunk> reranked;
         try {
-            reranked = rerankModelPort.rerank(options.rerankModel(), context.getMainQuestion(), candidates);
+            reranked = invokeRerank(options, context, candidates);
+        } catch (RerankTimeoutException ex) {
+            LOG.debug("Rerank post processor timed out, fallback to original chunks", ex);
+            recordRerankEvent(context, "timeout", candidates.size(), chunks.size(), elapsedMs(started),
+                    timeoutMs(options), ex.getClass().getSimpleName());
+            return chunks;
         } catch (RuntimeException ex) {
             LOG.debug("Rerank post processor failed, fallback to original chunks", ex);
+            recordRerankEvent(context, "fallback", candidates.size(), chunks.size(), elapsedMs(started),
+                    timeoutMs(options), ex.getClass().getSimpleName());
             return chunks;
         }
         if (reranked == null || reranked.isEmpty()) {
+            recordRerankEvent(context, "empty", candidates.size(), chunks.size(), elapsedMs(started),
+                    timeoutMs(options), "");
             return chunks;
         }
         List<RetrievedChunk> normalized = normalizeRerankedChunks(candidates, reranked);
-        return normalized.isEmpty() ? chunks : normalized;
+        if (normalized.isEmpty()) {
+            recordRerankEvent(context, "unmatched", candidates.size(), chunks.size(), elapsedMs(started),
+                    timeoutMs(options), "");
+            return chunks;
+        }
+        recordRerankEvent(context, "success", candidates.size(), normalized.size(), elapsedMs(started),
+                timeoutMs(options), "");
+        return normalized;
+    }
+
+    private List<RetrievedChunk> invokeRerank(RetrievalOptions options,
+                                              SearchContext context,
+                                              List<RetrievedChunk> candidates) {
+        long timeoutMs = timeoutMs(options);
+        if (timeoutMs <= 0) {
+            return rerankModelPort.rerank(options.rerankModel(), context.getMainQuestion(), candidates);
+        }
+        CompletableFuture<List<RetrievedChunk>> future = CompletableFuture.supplyAsync(
+                () -> rerankModelPort.rerank(options.rerankModel(), context.getMainQuestion(), candidates));
+        try {
+            return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException ex) {
+            future.cancel(true);
+            throw new RerankTimeoutException("rerank timed out after " + timeoutMs + "ms", ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            future.cancel(true);
+            throw new IllegalStateException("rerank interrupted", ex);
+        } catch (ExecutionException ex) {
+            Throwable cause = ex.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("rerank failed", cause);
+        }
     }
 
     private long candidateLimit(RetrievalOptions options) {
@@ -153,7 +212,58 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
         return third != null ? third : fourth;
     }
 
+    private long timeoutMs(RetrievalOptions options) {
+        Duration timeout = options == null ? null : options.rerankTimeout();
+        if (timeout == null || timeout.isZero() || timeout.isNegative()) {
+            return 0L;
+        }
+        return Math.max(1L, timeout.toMillis());
+    }
+
+    private long elapsedMs(long startedNanos) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
+    }
+
+    private void recordRerankEvent(SearchContext context,
+                                   String status,
+                                   int inputCount,
+                                   int outputCount,
+                                   long durationMs,
+                                   long timeoutMs,
+                                   String exception) {
+        if (observationPort == null) {
+            return;
+        }
+        try {
+            // 只记录低基数运维字段，避免把候选 chunk 明细写入指标标签。
+            observationPort.recordEvent(new ObservationEvent(EVENT_RERANK, null, Map.of(
+                    "tenant", tenantId(context),
+                    "status", status,
+                    "inputCount", String.valueOf(inputCount),
+                    "outputCount", String.valueOf(outputCount),
+                    "durationMs", String.valueOf(durationMs),
+                    "timeoutMs", String.valueOf(timeoutMs),
+                    "exception", Objects.requireNonNullElse(exception, ""))));
+        } catch (RuntimeException ex) {
+            // 观测失败不能影响检索结果。
+        }
+    }
+
+    private String tenantId(SearchContext context) {
+        if (context == null || context.getFilter() == null || context.getFilter().system() == null) {
+            return "";
+        }
+        return context.getFilter().system().tenantId();
+    }
+
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static final class RerankTimeoutException extends RuntimeException {
+
+        private RerankTimeoutException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 }

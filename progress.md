@@ -139,3 +139,12 @@
 - 验证通过：`mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-adapter-web,seahorse-agent-tests -am "-Dtest=SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，29 个测试成功。
 - 验证通过：`mvn -pl seahorse-agent-tests -am "-Dtest=MetadataGovernanceNodeFeatureTests,KernelMetadataBackfillServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，5 个测试成功。
 - 验证通过：`git diff --check -- . ':!缺少的功能.md' ':!元数据过滤：RAG与Agentic Search.md'` 无输出。
+
+## 2026-05-13 继续推进 M6 检索后处理增强
+
+- `RrfFusionPostProcessorFeature` 支持从 `RetrievalOptions.channelSettings` 读取 `rrfK` 和 `channelWeights`，保留意图通道默认 1.2 权重作为未配置 fallback。
+- `RerankPostProcessorFeature` 支持 `RetrievalOptions.rerankTimeout`，超时后取消 future 并返回原候选，避免精排模型拖慢整条检索链路。
+- RRF/Rerank 后处理器接入 `ObservationPort`，记录 `retrieval.rrf` 与 `retrieval.rerank` 事件，只包含 status、候选规模、输出规模、耗时和超时等低基数字段。
+- starter 自动装配把可用 `ObservationPort` 注入 RRF/Rerank 后处理器；无观测适配器时保持原行为。
+- 扩展 `RrfFusionPostProcessorFeatureTests` 覆盖配置权重和观测事件；扩展 `RerankPostProcessorFeatureTests` 覆盖超时降级和观测事件。
+- 验证通过：`mvn -pl seahorse-agent-tests -am "-Dtest=RrfFusionPostProcessorFeatureTests,RerankPostProcessorFeatureTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，24 个测试成功。

@@ -11,6 +11,7 @@
 - [complete] M3 关键词检索
 - [complete] M4 RRF 与 Reranker
 - [complete] M5 回填与治理运维
+- [complete] M6 检索后处理增强收口
 
 ## 当前落地范围
 
@@ -19,7 +20,7 @@
 - M3 已完成：新增 `KeywordSearchPort`、`KeywordIndexPort`、`KeywordSearchRequest` 和 `KeywordSearchChannelFeature`，starter 在存在 `KeywordSearchPort` 时注册关键词通道；已提供 JDBC/PostgreSQL FTS 轻量关键词 fallback、关键词索引 Outbox 异步化、Elasticsearch 生产适配器、kernel 级重建编排入口、Web 管理触发入口、索引失败观测和计划型 Job 触发入口。
 - M3 尚未完成：无。
 - M4 已完成最小闭环：新增 `RrfFusionPostProcessorFeature`、`RerankPostProcessorFeature` 和 `FinalTruncatePostProcessorFeature`，支持通道排名融合、重复 chunk 去重、融合分记录、Rerank 候选截断、异常/空结果降级、`rerankScore` 回写和 finalTopK 截断。
-- M4 后续增强：Rerank 超时隔离、通道权重配置化和观测指标。
+- M4 后续增强进入 M6 收口：Rerank 超时隔离、通道权重配置化和观测指标。
 
 ## 硬约束
 
@@ -52,3 +53,9 @@
 - [complete] M5 DDL：新增 `t_metadata_extraction_job` 回填任务表，表与字段均补充 COMMENT。
 - [complete] M5 管理 API：任务创建、批次推进、暂停/恢复/取消、任务详情。
 - [complete] M5 质量报表：字段覆盖率、低置信度比例、待复核数量、隔离原因 TopN。
+
+## 2026-05-13 M6 检索后处理增强收口
+
+- [complete] RRF 通道权重配置化：从 `RetrievalOptions.channelSettings` 读取 RRF k 值和通道权重。
+- [complete] Rerank 超时隔离：按 `RetrievalOptions.rerankTimeout` 控制模型精排耗时，超时回退原候选。
+- [complete] 检索后处理观测：通过 `ObservationPort` 记录 RRF/Rerank 成功、降级和候选规模等低基数字段。

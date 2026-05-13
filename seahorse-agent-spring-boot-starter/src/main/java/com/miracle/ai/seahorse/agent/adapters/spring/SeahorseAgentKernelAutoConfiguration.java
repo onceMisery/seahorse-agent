@@ -424,8 +424,10 @@ public class SeahorseAgentKernelAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(ExtensionRegistry.class)
-    public RrfFusionPostProcessorFeature seahorseRrfFusionPostProcessorFeature(ExtensionRegistry extensionRegistry) {
-        RrfFusionPostProcessorFeature feature = new RrfFusionPostProcessorFeature();
+    public RrfFusionPostProcessorFeature seahorseRrfFusionPostProcessorFeature(
+            ExtensionRegistry extensionRegistry,
+            ObjectProvider<ObservationPort> observationPort) {
+        RrfFusionPostProcessorFeature feature = new RrfFusionPostProcessorFeature(observationPort.getIfAvailable());
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchResultPostProcessorFeature.class,
                 FeatureType.SEARCH_RESULT_POST_PROCESSOR, feature.order(), false), feature);
         return feature;
@@ -434,8 +436,10 @@ public class SeahorseAgentKernelAutoConfiguration {
     @Bean
     @ConditionalOnBean({ExtensionRegistry.class, RerankModelPort.class})
     public RerankPostProcessorFeature seahorseRerankPostProcessorFeature(ExtensionRegistry extensionRegistry,
-                                                                         RerankModelPort rerankModelPort) {
-        RerankPostProcessorFeature feature = new RerankPostProcessorFeature(rerankModelPort);
+                                                                         RerankModelPort rerankModelPort,
+                                                                         ObjectProvider<ObservationPort> observationPort) {
+        RerankPostProcessorFeature feature = new RerankPostProcessorFeature(rerankModelPort,
+                observationPort.getIfAvailable());
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchResultPostProcessorFeature.class,
                 FeatureType.SEARCH_RESULT_POST_PROCESSOR, feature.order(), false), feature);
         return feature;
