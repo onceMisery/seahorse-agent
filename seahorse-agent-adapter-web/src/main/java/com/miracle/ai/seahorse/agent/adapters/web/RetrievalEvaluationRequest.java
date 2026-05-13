@@ -62,7 +62,7 @@ public record RetrievalEvaluationRequest(
             RetrievalOptions options
     ) {
 
-        private RetrievalEvaluationCase toCase(String kbId, String requestTenantId) {
+        RetrievalEvaluationCase toCase(String kbId, String requestTenantId) {
             return new RetrievalEvaluationCase(
                     caseId,
                     question,

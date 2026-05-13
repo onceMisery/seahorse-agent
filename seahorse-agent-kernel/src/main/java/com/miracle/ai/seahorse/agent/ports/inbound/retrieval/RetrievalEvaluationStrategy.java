@@ -17,14 +17,25 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.retrieval;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
+
+import java.util.Objects;
+
 /**
- * 检索评测入站端口。
+ * 检索评测中的单个候选策略。
  *
- * <p>用于离线评测集运行，输出 Recall@K、MRR、nDCG 等检索质量指标。
+ * @param strategyName 策略名称，用于报表展示和 winner 判定
+ * @param topK         策略级截断深度，0 表示继承比较命令的 topK
+ * @param options      策略级检索参数，样本级 options 仍可覆盖该默认值
  */
-public interface RetrievalEvaluationInboundPort {
+public record RetrievalEvaluationStrategy(
+        String strategyName,
+        int topK,
+        RetrievalOptions options
+) {
 
-    RetrievalEvaluationReport evaluate(RetrievalEvaluationCommand command);
-
-    RetrievalEvaluationComparisonReport compare(RetrievalEvaluationComparisonCommand command);
+    public RetrievalEvaluationStrategy {
+        strategyName = Objects.requireNonNullElse(strategyName, "");
+        topK = Math.max(0, topK);
+    }
 }

@@ -110,3 +110,9 @@
 - [complete] 新增 `RetrievalEvaluationInboundPort`、评测命令/样本/结果/报表模型和 `KernelRetrievalEvaluationService`。
 - [complete] 支持按评测样本运行现有检索编排，并计算 Recall@K、MRR、nDCG@K、空召回率、平均耗时和 P95 耗时。
 - [complete] Web 新增 `POST /knowledge-base/{kb-id}/retrieval-quality/evaluate`，请求会构造强类型 `RetrievalFilter`，动态 metadata 仍交给 Filter Compiler。
+
+## 2026-05-13 P5 检索策略 A/B 对比
+
+- [complete] 基于现有检索质量评测端口扩展多策略对比命令与报表，不新增 DDL，不引入外部评测 SDK。
+- [complete] 支持多个策略复用同一评测集，输出每个策略的 Recall@K、MRR、nDCG@K、空召回率与延迟指标，并给出相对 baseline 的差值。
+- [complete] Web 新增 `POST /knowledge-base/{kb-id}/retrieval-quality/compare`，请求只构造强类型 `RetrievalFilter` 与 `RetrievalOptions`，动态 metadata 仍由内核 Filter Compiler 校验。

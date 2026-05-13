@@ -24,8 +24,11 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.plugin.DefaultExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategy;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -73,6 +76,38 @@ class KernelRetrievalEvaluationServiceTests {
         assertThat(report.cases().get(1).status()).isEqualTo("EMPTY");
     }
 
+    @Test
+    void shouldCompareRetrievalStrategiesAndPickWinner() {
+        FixedRetrievalEngine retrievalEngine = new FixedRetrievalEngine(
+                Map.of("question-a", List.of(chunk("miss", "doc-miss", "kb-1"))),
+                Map.of("question-a", List.of(chunk("hit", "doc-hit", "kb-1"))));
+        KernelRetrievalEvaluationService service = new KernelRetrievalEvaluationService(retrievalEngine);
+
+        RetrievalEvaluationComparisonReport report = service.compare(new RetrievalEvaluationComparisonCommand(
+                "baseline",
+                1,
+                List.of(
+                        new RetrievalEvaluationStrategy("baseline", 1, RetrievalOptions.defaults(1)),
+                        new RetrievalEvaluationStrategy("keyword", 1, RetrievalOptions.builder()
+                                .finalTopK(1)
+                                .enableVector(true)
+                                .enableIntentDirected(true)
+                                .enableKeyword(true)
+                                .enableRrf(true)
+                                .build())),
+                List.of(new RetrievalEvaluationCase("case-1", "question-a",
+                        List.of(), List.of("doc-hit"), List.of(), null, null))));
+
+        assertThat(report.baselineStrategyName()).isEqualTo("baseline");
+        assertThat(report.winnerStrategyName()).isEqualTo("keyword");
+        assertThat(report.reports()).extracting(RetrievalEvaluationReport::strategyName)
+                .containsExactly("baseline", "keyword");
+        assertThat(report.deltas()).hasSize(2);
+        assertThat(report.deltas().get(0).recallAtKDelta()).isCloseTo(0D, within(0.0001D));
+        assertThat(report.deltas().get(1).recallAtKDelta()).isCloseTo(1D, within(0.0001D));
+        assertThat(report.deltas().get(1).ndcgAtKDelta()).isCloseTo(1D, within(0.0001D));
+    }
+
     private static RetrievedChunk chunk(String chunkId, String docId, String kbId) {
         return RetrievedChunk.builder()
                 .id(chunkId)
@@ -86,12 +121,19 @@ class KernelRetrievalEvaluationServiceTests {
     private static final class FixedRetrievalEngine extends KernelRetrievalEngine {
 
         private final Map<String, List<RetrievedChunk>> chunksByQuestion;
+        private final Map<String, List<RetrievedChunk>> keywordChunksByQuestion;
         private final Map<String, Integer> topKByQuestion = new HashMap<>();
 
         private FixedRetrievalEngine(Map<String, List<RetrievedChunk>> chunksByQuestion) {
+            this(chunksByQuestion, Map.of());
+        }
+
+        private FixedRetrievalEngine(Map<String, List<RetrievedChunk>> chunksByQuestion,
+                                     Map<String, List<RetrievedChunk>> keywordChunksByQuestion) {
             super(new KernelMultiChannelRetrievalEngine(
                     new DefaultExtensionRegistry(), Runnable::run, FeatureActivationContext.empty()));
             this.chunksByQuestion = chunksByQuestion;
+            this.keywordChunksByQuestion = keywordChunksByQuestion;
         }
 
         @Override
@@ -101,7 +143,10 @@ class KernelRetrievalEvaluationServiceTests {
                                                               RetrievalOptions options) {
             String question = subIntents == null || subIntents.isEmpty() ? "" : subIntents.get(0).subQuestion();
             topKByQuestion.put(question, topK);
-            return chunksByQuestion.getOrDefault(question, List.of()).stream()
+            Map<String, List<RetrievedChunk>> source = options != null && options.enableKeyword()
+                    ? keywordChunksByQuestion
+                    : chunksByQuestion;
+            return source.getOrDefault(question, List.of()).stream()
                     .limit(topK)
                     .toList();
         }

@@ -237,3 +237,12 @@
 - 新增 `RetrievalEvaluationRequest` 和 `SeahorseRetrievalEvaluationController`，暴露 `POST /knowledge-base/{kb-id}/retrieval-quality/evaluate`；Web 层只把租户、知识库和 ACL 转为强类型 `RetrievalFilter`，不绕过 Filter Compiler。
 - starter 自动装配 `KernelRetrievalEvaluationService` 并暴露 `RetrievalEvaluationInboundPort`，只依赖内核检索引擎，不新增外部 SDK 或 DDL。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationServiceTests,SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，30 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-13 继续推进 P5 检索策略 A/B 对比
+
+- 按用户要求，本轮不采用 TDD 红绿流程；直接实现后补充定向回归测试。
+- 新增 `RetrievalEvaluationComparisonCommand`、`RetrievalEvaluationStrategy`、`RetrievalEvaluationComparisonReport` 和 `RetrievalEvaluationStrategyDelta`，复用单策略评测逻辑运行多套策略。
+- `KernelRetrievalEvaluationService.compare` 支持按 baseline 输出指标差值，并按 nDCG、Recall、MRR、空召回率和平均延迟的优先级选择 winner。
+- 新增 `RetrievalEvaluationComparisonRequest` 和 `POST /knowledge-base/{kb-id}/retrieval-quality/compare`；Web 层仍只构造强类型过滤与策略参数，不直接接触检索后端。
+- 补充 `KernelRetrievalEvaluationServiceTests` 和 `SeahorseWebApiContractTests`，覆盖 winner/delta 与 compare API 契约。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationServiceTests,SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，32 个测试成功，reactor `BUILD SUCCESS`。

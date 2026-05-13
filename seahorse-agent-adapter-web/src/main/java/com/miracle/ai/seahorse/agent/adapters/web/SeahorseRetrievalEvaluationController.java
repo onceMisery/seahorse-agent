@@ -54,4 +54,13 @@ public class SeahorseRetrievalEvaluationController {
                 : request;
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, evaluationPort.evaluate(safeRequest.toCommand(kbId)));
     }
+
+    @PostMapping("/knowledge-base/{kb-id}/retrieval-quality/compare")
+    public Map<String, Object> compare(@PathVariable("kb-id") String kbId,
+                                       @RequestBody RetrievalEvaluationComparisonRequest request) {
+        RetrievalEvaluationComparisonRequest safeRequest = request == null
+                ? new RetrievalEvaluationComparisonRequest("", "", 5, java.util.List.of(), java.util.List.of())
+                : request;
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, evaluationPort.compare(safeRequest.toCommand(kbId)));
+    }
 }

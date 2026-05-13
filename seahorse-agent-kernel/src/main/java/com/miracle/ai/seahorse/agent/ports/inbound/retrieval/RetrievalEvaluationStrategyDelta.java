@@ -17,14 +17,21 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.retrieval;
 
+import java.util.Objects;
+
 /**
- * 检索评测入站端口。
- *
- * <p>用于离线评测集运行，输出 Recall@K、MRR、nDCG 等检索质量指标。
+ * 策略相对基线的评测指标差值。
  */
-public interface RetrievalEvaluationInboundPort {
+public record RetrievalEvaluationStrategyDelta(
+        String strategyName,
+        double recallAtKDelta,
+        double mrrDelta,
+        double ndcgAtKDelta,
+        double emptyRecallRateDelta,
+        double averageLatencyMsDelta
+) {
 
-    RetrievalEvaluationReport evaluate(RetrievalEvaluationCommand command);
-
-    RetrievalEvaluationComparisonReport compare(RetrievalEvaluationComparisonCommand command);
+    public RetrievalEvaluationStrategyDelta {
+        strategyName = Objects.requireNonNullElse(strategyName, "");
+    }
 }

@@ -22,9 +22,13 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategy;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategyDelta;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -81,6 +85,88 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
                 averageLatency(results),
                 p95Latency(results),
                 results);
+    }
+
+    @Override
+    public RetrievalEvaluationComparisonReport compare(RetrievalEvaluationComparisonCommand command) {
+        RetrievalEvaluationComparisonCommand safeCommand = command == null
+                ? new RetrievalEvaluationComparisonCommand("", 5, List.of(), List.of())
+                : command;
+        List<RetrievalEvaluationReport> reports = safeCommand.strategies().stream()
+                .map(strategy -> evaluate(strategyCommand(strategy, safeCommand)))
+                .toList();
+        if (reports.isEmpty()) {
+            return new RetrievalEvaluationComparisonReport("", "", List.of(), List.of());
+        }
+        RetrievalEvaluationReport baseline = baselineReport(safeCommand.baselineStrategyName(), reports);
+        RetrievalEvaluationReport winner = reports.stream()
+                .max(this::compareReportQuality)
+                .orElse(baseline);
+        List<RetrievalEvaluationStrategyDelta> deltas = reports.stream()
+                .map(report -> deltaFromBaseline(report, baseline))
+                .toList();
+        return new RetrievalEvaluationComparisonReport(
+                baseline.strategyName(),
+                winner.strategyName(),
+                reports,
+                deltas);
+    }
+
+    private RetrievalEvaluationCommand strategyCommand(RetrievalEvaluationStrategy strategy,
+                                                       RetrievalEvaluationComparisonCommand command) {
+        RetrievalEvaluationStrategy safeStrategy = strategy == null
+                ? new RetrievalEvaluationStrategy("", 0, null)
+                : strategy;
+        int strategyTopK = safeStrategy.topK() > 0 ? safeStrategy.topK() : command.topK();
+        return new RetrievalEvaluationCommand(
+                safeStrategy.strategyName(),
+                strategyTopK,
+                safeStrategy.options(),
+                command.cases());
+    }
+
+    private RetrievalEvaluationReport baselineReport(String baselineStrategyName,
+                                                     List<RetrievalEvaluationReport> reports) {
+        if (hasText(baselineStrategyName)) {
+            return reports.stream()
+                    .filter(report -> baselineStrategyName.equals(report.strategyName()))
+                    .findFirst()
+                    .orElse(reports.get(0));
+        }
+        return reports.get(0);
+    }
+
+    private RetrievalEvaluationStrategyDelta deltaFromBaseline(RetrievalEvaluationReport report,
+                                                               RetrievalEvaluationReport baseline) {
+        return new RetrievalEvaluationStrategyDelta(
+                report.strategyName(),
+                report.recallAtK() - baseline.recallAtK(),
+                report.mrr() - baseline.mrr(),
+                report.ndcgAtK() - baseline.ndcgAtK(),
+                report.emptyRecallRate() - baseline.emptyRecallRate(),
+                report.averageLatencyMs() - baseline.averageLatencyMs());
+    }
+
+    private int compareReportQuality(RetrievalEvaluationReport left,
+                                     RetrievalEvaluationReport right) {
+        // winner 判定优先看排序质量，再看召回与延迟，避免只因耗时更低选中低质量策略。
+        int byNdcg = Double.compare(left.ndcgAtK(), right.ndcgAtK());
+        if (byNdcg != 0) {
+            return byNdcg;
+        }
+        int byRecall = Double.compare(left.recallAtK(), right.recallAtK());
+        if (byRecall != 0) {
+            return byRecall;
+        }
+        int byMrr = Double.compare(left.mrr(), right.mrr());
+        if (byMrr != 0) {
+            return byMrr;
+        }
+        int byEmptyRecall = Double.compare(right.emptyRecallRate(), left.emptyRecallRate());
+        if (byEmptyRecall != 0) {
+            return byEmptyRecall;
+        }
+        return Double.compare(right.averageLatencyMs(), left.averageLatencyMs());
     }
 
     private RetrievalEvaluationCaseResult evaluateCase(RetrievalEvaluationCase evaluationCase,

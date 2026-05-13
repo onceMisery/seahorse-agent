@@ -51,8 +51,11 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineIn
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategyDelta;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
@@ -677,6 +680,67 @@ class SeahorseWebApiContractTests {
                 ArgumentCaptor.forClass(
                         com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand.class);
         verify(evaluationPort).evaluate(captor.capture());
+        assertThat(captor.getValue().cases().get(0).filter().system().tenantId()).isEqualTo("tenant-1");
+        assertThat(captor.getValue().cases().get(0).filter().system().knowledgeBaseIds()).containsExactly("kb-1");
+        assertThat(captor.getValue().cases().get(0).filter().system().aclSubjectIds()).containsExactly("dept-a");
+    }
+
+    @Test
+    void shouldKeepRetrievalEvaluationComparisonContract() throws Exception {
+        RetrievalEvaluationInboundPort evaluationPort = mock(RetrievalEvaluationInboundPort.class);
+        when(evaluationPort.compare(any())).thenReturn(new RetrievalEvaluationComparisonReport(
+                "baseline",
+                "keyword",
+                List.of(
+                        new RetrievalEvaluationReport("baseline", 2, 1, 1,
+                                0.0D, 0.0D, 0.0D, 1.0D,
+                                20.0D, 20.0D, List.of()),
+                        new RetrievalEvaluationReport("keyword", 2, 1, 1,
+                                1.0D, 1.0D, 1.0D, 0.0D,
+                                15.0D, 15.0D, List.of())),
+                List.of(
+                        new RetrievalEvaluationStrategyDelta("baseline", 0D, 0D, 0D, 0D, 0D),
+                        new RetrievalEvaluationStrategyDelta("keyword", 1D, 1D, 1D, -1D, -5D))));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseRetrievalEvaluationController(evaluationPort)).build();
+
+        mvc.perform(post("/knowledge-base/kb-1/retrieval-quality/compare")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-1",
+                                "baselineStrategyName", "baseline",
+                                "topK", 2,
+                                "strategies", List.of(
+                                        Map.of(
+                                                "strategyName", "baseline",
+                                                "topK", 2,
+                                                "options", Map.of("finalTopK", 2)),
+                                        Map.of(
+                                                "strategyName", "keyword",
+                                                "topK", 2,
+                                                "options", Map.of(
+                                                        "finalTopK", 2,
+                                                        "enableKeyword", true))),
+                                "cases", List.of(Map.of(
+                                        "caseId", "case-1",
+                                        "question", "question-a",
+                                        "expectedDocIds", List.of("doc-1"),
+                                        "aclSubjectIds", List.of("dept-a")))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.baselineStrategyName").value("baseline"))
+                .andExpect(jsonPath("$.data.winnerStrategyName").value("keyword"))
+                .andExpect(jsonPath("$.data.reports[1].strategyName").value("keyword"))
+                .andExpect(jsonPath("$.data.deltas[1].recallAtKDelta").value(1.0D));
+
+        ArgumentCaptor<RetrievalEvaluationComparisonCommand> captor =
+                ArgumentCaptor.forClass(RetrievalEvaluationComparisonCommand.class);
+        verify(evaluationPort).compare(captor.capture());
+        assertThat(captor.getValue().baselineStrategyName()).isEqualTo("baseline");
+        assertThat(captor.getValue().strategies().stream()
+                .map(strategy -> strategy.strategyName())
+                .toList())
+                .containsExactly("baseline", "keyword");
         assertThat(captor.getValue().cases().get(0).filter().system().tenantId()).isEqualTo("tenant-1");
         assertThat(captor.getValue().cases().get(0).filter().system().knowledgeBaseIds()).containsExactly("kb-1");
         assertThat(captor.getValue().cases().get(0).filter().system().aclSubjectIds()).containsExactly("dept-a");
