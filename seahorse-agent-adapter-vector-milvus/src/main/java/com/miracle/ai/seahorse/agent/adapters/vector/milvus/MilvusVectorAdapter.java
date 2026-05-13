@@ -343,6 +343,7 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
 
     private String metadataFilter(VectorSearchRequest request) {
         List<String> clauses = new ArrayList<>();
+        // 字段路径只允许来自系统字段或 Schema 编译后的 AST，避免用户输入直接拼接 Milvus 表达式。
         SystemRetrievalFilter system = request.compiledFilter().sourceFilter().system();
         appendEq(clauses, META_TENANT_ID, system.tenantId());
         appendIn(clauses, META_KB_ID, system.knowledgeBaseIds());

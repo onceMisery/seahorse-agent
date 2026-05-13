@@ -358,6 +358,7 @@ public class PgVectorAdapter implements VectorSearchPort, VectorIndexPort, Vecto
     private SqlFilter sqlFilter(VectorSearchRequest request) {
         List<String> clauses = new ArrayList<>();
         List<Object> args = new ArrayList<>();
+        // 系统字段来自 RetrievalFilter，动态字段只消费编译后的 AST，避免原始 Map 直通 SQL。
         SystemRetrievalFilter system = request.compiledFilter().sourceFilter().system();
         appendEq(clauses, args, META_TENANT_ID, system.tenantId());
         appendIn(clauses, args, META_KB_ID, system.knowledgeBaseIds());

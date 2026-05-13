@@ -15,4 +15,7 @@
 - 先实现 M1：Schema、抽取、标准化、校验、节点注册、JDBC 仓储基础。
 - Review/Quarantine 首轮以端口和 repository 形式落地，不做前端页面。
 - M2+ 后续在 M1 编译和测试通过后继续推进。
-
+- `SearchResultPostProcessorFeature` 原先没有顺序方法，M2 后处理链需要新增默认 `order()` 并在 `KernelMultiChannelRetrievalEngine` 中排序。
+- 向量通道已有 `EmbeddingModelPort` 可直接复用，不需要新增 QueryEmbeddingPort；未配置模型时 noop 仍返回空向量，保持降级兼容。
+- PGVector/Milvus 均已在写入 metadata 时保留 `collection_name/doc_id/chunk_index`，适配器检索返回时可以从 metadata 反填 `RetrievedChunk` 的结构化字段。
+- PowerShell 下 Maven `-Dtest=A,B` 必须整体加引号，否则逗号会触发参数解析错误。
