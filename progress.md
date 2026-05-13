@@ -182,3 +182,14 @@
 - `JdbcMetadataGovernanceRepositoryAdapter.applyReviewDecision` 在更新复核项后写入审计记录，记录 from/to 状态、复核人、备注和本次采纳/修正 metadata。
 - 审计写入对旧库兼容：如果审计表尚未迁移，主复核决策仍可继续执行，避免管理端操作被迁移窗口阻断。
 - 验证通过：`mvn -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcMetadataReviewQuarantineAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，2 个测试成功。
+
+## 2026-05-13 继续推进 P3 Schema 驱动 Elasticsearch Mapping
+
+- 新增 `MetadataSchemaIndexSyncPort`，保持 kernel 只依赖端口，不直接感知 Elasticsearch/OpenSearch/PostgreSQL 的索引实现。
+- `KernelMetadataSchemaService` 在 Schema 字段创建和更新后调用索引结构同步端口；未配置同步端口时走 noop，保持现有部署兼容。
+- 新增 `ElasticsearchMetadataSchemaIndexAdapter`，仅同步 `indexed=true` 且 `SEARCH_KEYWORD/SEARCH_TEXT` 的字段，通过 `PUT /{index}/_mapping` 生成 `dynamic=strict` 的动态 metadata 字段 mapping。
+- starter 支持显式开启 `seahorse-agent.adapters.metadata-schema-index.type=elasticsearch`，避免未声明时 Schema 管理 API 产生额外 Elasticsearch 调用。
+- 修正 Elasticsearch 关键词过滤默认字段路径：当 Schema 使用默认 `BackendFieldMapping` 时，查询下推使用 `metadata.<fieldKey>`，与写入文档和 mapping 结构保持一致。
+- 验证通过：`mvn -pl seahorse-agent-adapter-search-elasticsearch -am "-Dtest=ElasticsearchKeywordSearchAdapterTests,ElasticsearchMetadataSchemaIndexAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，4 个测试成功。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-search-elasticsearch -am "-Dtest=KernelMetadataSchemaServiceTests,ElasticsearchMetadataSchemaIndexAdapterTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，5 个测试成功。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-search-elasticsearch -am "-Dtest=KernelMetadataSchemaServiceTests,ElasticsearchMetadataSchemaIndexAdapterTests,ElasticsearchKeywordSearchAdapterTests,SeahorseAgentNativeAdapterAutoConfigurationTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，22 个测试成功。

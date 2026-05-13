@@ -77,3 +77,9 @@
 
 - [complete] 复核决策审计：新增 `t_metadata_review_audit`，记录人工通过、修正、拒绝、转隔离的前后状态、操作人、备注和决策元数据。
 - [complete] JDBC 适配器写审计：`applyReviewDecision` 在更新复核项时同步写入审计记录，并兼容旧库未迁移审计表的场景。
+
+## 2026-05-13 P3 Schema 驱动 Elasticsearch Mapping
+
+- [complete] Schema 索引同步端口：新增 `MetadataSchemaIndexSyncPort`，由 `KernelMetadataSchemaService` 在字段创建/更新后触发。
+- [complete] Elasticsearch mapping 适配器：新增 `ElasticsearchMetadataSchemaIndexAdapter`，通过 REST `_mapping` 为已注册且可搜索索引的动态字段生成严格 mapping。
+- [complete] 查询字段路径对齐：默认 `BackendFieldMapping` 下，Elasticsearch 关键词过滤统一查询 `metadata.<fieldKey>`，避免 mapping 与查询错位。

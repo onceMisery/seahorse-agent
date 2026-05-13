@@ -166,9 +166,10 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
 
     private String searchField(MetadataFieldDescriptor field) {
         String mapped = field.backendMapping().searchFieldName();
-        if (mapped != null && !mapped.isBlank()) {
+        if (mapped != null && !mapped.isBlank() && !mapped.equals(field.fieldKey())) {
             return mapped;
         }
+        // 默认 BackendFieldMapping 只保存逻辑字段名；ES 文档里的动态业务字段统一放在 metadata 对象下。
         return "metadata." + field.fieldKey();
     }
 

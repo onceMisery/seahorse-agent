@@ -3,6 +3,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldPayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 
 import java.util.List;
@@ -16,10 +17,17 @@ import java.util.Objects;
 public class KernelMetadataSchemaService implements MetadataSchemaInboundPort {
 
     private final MetadataSchemaManagementRepositoryPort repositoryPort;
+    private final MetadataSchemaIndexSyncPort indexSyncPort;
 
     public KernelMetadataSchemaService(MetadataSchemaManagementRepositoryPort repositoryPort) {
+        this(repositoryPort, MetadataSchemaIndexSyncPort.noop());
+    }
+
+    public KernelMetadataSchemaService(MetadataSchemaManagementRepositoryPort repositoryPort,
+                                       MetadataSchemaIndexSyncPort indexSyncPort) {
         this.repositoryPort = Objects.requireNonNullElse(repositoryPort,
                 MetadataSchemaManagementRepositoryPort.empty());
+        this.indexSyncPort = Objects.requireNonNullElseGet(indexSyncPort, MetadataSchemaIndexSyncPort::noop);
     }
 
     @Override
@@ -32,14 +40,18 @@ public class KernelMetadataSchemaService implements MetadataSchemaInboundPort {
     public MetadataSchemaFieldRecord createField(String knowledgeBaseId, MetadataSchemaFieldPayload payload) {
         MetadataSchemaFieldPayload safePayload = validate(payload).withKnowledgeBaseId(knowledgeBaseId);
         String fieldId = repositoryPort.createSchemaField(safePayload);
-        return repositoryPort.findSchemaField(fieldId)
+        MetadataSchemaFieldRecord created = repositoryPort.findSchemaField(fieldId)
                 .orElseThrow(() -> new IllegalStateException("Metadata Schema 字段创建后无法读取: " + fieldId));
+        syncIndexMapping(created);
+        return created;
     }
 
     @Override
     public MetadataSchemaFieldRecord updateField(String fieldId, MetadataSchemaFieldPayload payload) {
         requireText(fieldId, "fieldId must not be blank");
-        return repositoryPort.updateSchemaField(fieldId, validate(payload));
+        MetadataSchemaFieldRecord updated = repositoryPort.updateSchemaField(fieldId, validate(payload));
+        syncIndexMapping(updated);
+        return updated;
     }
 
     @Override
@@ -59,5 +71,10 @@ public class KernelMetadataSchemaService implements MetadataSchemaInboundPort {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(message);
         }
+    }
+
+    private void syncIndexMapping(MetadataSchemaFieldRecord field) {
+        // Schema 注册是动态 metadata 进入检索索引的唯一入口，索引结构同步不能绕过这里。
+        indexSyncPort.syncField(field);
     }
 }

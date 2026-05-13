@@ -59,6 +59,14 @@ final class ElasticsearchKeywordHttpClient {
         return execute(post(pathSuffix, body, NDJSON));
     }
 
+    String putJson(String pathSuffix, String body) {
+        Request.Builder builder = new Request.Builder()
+                .url(url(pathSuffix))
+                .put(RequestBody.create(Objects.requireNonNullElse(body, ""), JSON));
+        addAuth(builder);
+        return execute(builder.build());
+    }
+
     Request post(String pathSuffix, String body, MediaType mediaType) {
         Request.Builder builder = new Request.Builder()
                 .url(url(pathSuffix))

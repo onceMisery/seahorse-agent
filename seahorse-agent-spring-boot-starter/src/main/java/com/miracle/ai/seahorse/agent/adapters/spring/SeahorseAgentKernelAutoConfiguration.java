@@ -171,6 +171,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineM
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
@@ -833,8 +834,10 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnBean(MetadataSchemaManagementRepositoryPort.class)
     @ConditionalOnMissingBean(MetadataSchemaInboundPort.class)
     public KernelMetadataSchemaService seahorseMetadataSchemaInboundPort(
-            MetadataSchemaManagementRepositoryPort repositoryPort) {
-        return new KernelMetadataSchemaService(repositoryPort);
+            MetadataSchemaManagementRepositoryPort repositoryPort,
+            ObjectProvider<MetadataSchemaIndexSyncPort> indexSyncPort) {
+        return new KernelMetadataSchemaService(repositoryPort,
+                indexSyncPort.getIfAvailable(MetadataSchemaIndexSyncPort::noop));
     }
 
     @Bean

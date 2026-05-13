@@ -121,3 +121,10 @@
 - 复核项上的 `review_status/reviewer_id/review_comment` 只能表达当前态，无法满足“人工修正保留审计记录”的验收要求；需要独立审计表保存每次决策。
 - 审计写入不能替代 canonical metadata 写回；APPROVED/CORRECTED 仍需同步抽取结果和文档 metadata，审计表只承担追溯职责。
 - 旧库兼容需要谨慎处理：审计表缺失时不应阻断人工复核主流程，但新 DDL 必须包含完整 COMMENT，方便生产迁移后开启审计查询。
+
+## 2026-05-13 P3 Schema 驱动 Elasticsearch Mapping 发现
+
+- Schema 管理服务是动态字段进入检索后端的自然收口点；在这里触发索引结构同步，可以避免 Web/API 或具体 adapter 绕过 Schema 边界。
+- Elasticsearch mapping 同步需要显式开启，否则企业环境在尚未配置 ES 或迁移窗口中调用 Schema API 可能被外部搜索集群阻断。
+- 默认 `BackendFieldMapping.searchFieldName=fieldKey` 与当前 ES 文档结构不完全一致；ES adapter 需要把这种默认值解释为 `metadata.<fieldKey>`，显式配置的 `metadata.xxx.keyword` 则按配置透传。
+- `metadata.xxx.keyword` 查询路径要求 mapping 建立 `text + keyword sub-field`，而不是把 `keyword` 当作普通对象层级；否则 term 查询会找不到子字段。

@@ -81,6 +81,27 @@ class ElasticsearchKeywordSearchAdapterTests {
         assertThat(interceptor.body()).contains("\"term\":{\"metadata.category.keyword\":\"policy\"}");
     }
 
+    @Test
+    void shouldUseMetadataObjectPathWhenSchemaUsesDefaultSearchField() {
+        CapturingInterceptor interceptor = new CapturingInterceptor("{\"hits\":{\"hits\":[]}}");
+        ElasticsearchKeywordSearchAdapter adapter = new ElasticsearchKeywordSearchAdapter(
+                new OkHttpClient.Builder().addInterceptor(interceptor).build(),
+                objectMapper,
+                new ElasticsearchKeywordProperties("http://localhost:9200", "chunks",
+                        List.of("content"), "", "", "", Duration.ofSeconds(3)));
+
+        MetadataFieldDescriptor category = new MetadataFieldDescriptor(
+                "category", "分类", MetadataValueType.STRING, Set.of(MetadataOperator.EQ),
+                false, true, false, false, true, MetadataIndexPolicy.SEARCH_KEYWORD, 0.8D,
+                Set.of(), Map.of(), BackendFieldMapping.defaults("category"));
+
+        adapter.search(new KeywordSearchRequest("metadata search", 3, null, null,
+                new CompiledMetadataFilter(RetrievalFilter.builder().build(),
+                        new FieldEq(category, "policy"), List.of(), List.of())));
+
+        assertThat(interceptor.body()).contains("\"term\":{\"metadata.category\":\"policy\"}");
+    }
+
     private CompiledMetadataFilter compiledFilter() {
         MetadataFieldDescriptor category = new MetadataFieldDescriptor(
                 "category", "分类", MetadataValueType.STRING, Set.of(MetadataOperator.EQ),

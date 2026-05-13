@@ -66,6 +66,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSampleQuestion
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSemanticMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcShortTermMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcWorkingMemoryRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchMetadataSchemaIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordProperties;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordSearchAdapter;
@@ -126,6 +127,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineM
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
@@ -474,6 +476,41 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @ConditionalOnBean(ElasticsearchKeywordIndexAdapter.class)
     @ConditionalOnMissingBean(value = KeywordIndexPort.class, ignored = KeywordIndexOutboxAdapter.class)
     public KeywordIndexPort seahorseElasticsearchKeywordIndexPort(ElasticsearchKeywordIndexAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.metadata-schema-index", name = "type",
+            havingValue = "elasticsearch")
+    @ConditionalOnMissingBean(ElasticsearchMetadataSchemaIndexAdapter.class)
+    public ElasticsearchMetadataSchemaIndexAdapter seahorseElasticsearchMetadataSchemaIndexAdapter(
+            OkHttpClient httpClient,
+            ObjectMapper objectMapper,
+            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.base-url:http://localhost:9200}")
+            String baseUrl,
+            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.index-name:seahorse_keyword_chunk}")
+            String indexName,
+            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.search-fields:content^3}")
+            String searchFields,
+            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.api-key:}")
+            String apiKey,
+            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.username:}")
+            String username,
+            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.password:}")
+            String password,
+            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.timeout:10s}")
+            String timeout) {
+        return new ElasticsearchMetadataSchemaIndexAdapter(httpClient, objectMapper,
+                new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields), apiKey, username, password,
+                        duration(timeout)));
+    }
+
+    @Bean
+    @ConditionalOnBean(ElasticsearchMetadataSchemaIndexAdapter.class)
+    @ConditionalOnMissingBean(MetadataSchemaIndexSyncPort.class)
+    public MetadataSchemaIndexSyncPort seahorseElasticsearchMetadataSchemaIndexSyncPort(
+            ElasticsearchMetadataSchemaIndexAdapter adapter) {
         return adapter;
     }
 

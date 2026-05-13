@@ -52,6 +52,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSemanticMemory
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcShortTermMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcUserRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcWorkingMemoryRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchMetadataSchemaIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordSearchAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdapter;
@@ -91,6 +92,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
@@ -252,6 +254,21 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                             .isInstanceOf(ElasticsearchKeywordSearchAdapter.class);
                     assertThat(context.getBean(KeywordIndexPort.class))
                             .isInstanceOf(ElasticsearchKeywordIndexAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterElasticsearchMetadataSchemaIndexAdapterWhenSelected() {
+        contextRunner.withBean(OkHttpClient.class, OkHttpClient::new)
+                .withBean(ObjectMapper.class, ObjectMapper::new)
+                .withPropertyValues(
+                        "seahorse-agent.adapters.metadata-schema-index.type=elasticsearch",
+                        "seahorse-agent.adapters.metadata-schema-index.elasticsearch.index-name=test_chunks")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(ElasticsearchMetadataSchemaIndexAdapter.class);
+                    assertThat(context.getBean(MetadataSchemaIndexSyncPort.class))
+                            .isInstanceOf(ElasticsearchMetadataSchemaIndexAdapter.class);
                 });
     }
 }
