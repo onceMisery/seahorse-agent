@@ -640,6 +640,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 snapshots.size(),
                 averageCoverage(fieldCoverages),
                 ratio(lowConfidenceStats.lowConfidenceFields(), lowConfidenceStats.evaluatedFields()),
+                reviewPassRate(safeTenantId, safeKbId),
                 pendingReviewCount,
                 unresolvedQuarantineCount,
                 fieldCoverages,
@@ -739,6 +740,28 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     """, tenantId, knowledgeBaseId, knowledgeBaseId);
         } catch (DataAccessException ex) {
             return 0;
+        }
+    }
+
+    private double reviewPassRate(String tenantId, String knowledgeBaseId) {
+        try {
+            int passed = count("""
+                    SELECT COUNT(1)
+                    FROM t_metadata_review_item
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ?)
+                      AND review_status IN ('APPROVED', 'CORRECTED')
+                    """, tenantId, knowledgeBaseId, knowledgeBaseId);
+            int completed = count("""
+                    SELECT COUNT(1)
+                    FROM t_metadata_review_item
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ?)
+                      AND review_status IN ('APPROVED', 'CORRECTED', 'REJECTED', 'QUARANTINED')
+                    """, tenantId, knowledgeBaseId, knowledgeBaseId);
+            return ratio(passed, completed);
+        } catch (DataAccessException ex) {
+            return 0D;
         }
     }
 

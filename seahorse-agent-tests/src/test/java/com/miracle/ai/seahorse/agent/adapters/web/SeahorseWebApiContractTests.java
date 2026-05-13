@@ -629,6 +629,7 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.averageFieldCoverage").value(0.75))
                 .andExpect(jsonPath("$.data.lowConfidenceRatio").value(0.25))
+                .andExpect(jsonPath("$.data.reviewPassRate").value(0.8))
                 .andExpect(jsonPath("$.data.pendingReviewCount").value(2))
                 .andExpect(jsonPath("$.data.fieldCoverages[0].fieldKey").value("department"))
                 .andExpect(jsonPath("$.data.quarantineReasons[0].reasonCode").value("SCHEMA_MISSING"));
@@ -904,6 +905,7 @@ class SeahorseWebApiContractTests {
                 3,
                 0.75D,
                 0.25D,
+                0.8D,
                 2,
                 1,
                 List.of(new MetadataFieldCoverage("department", "部门", true, 3, 4, 0.75D)),

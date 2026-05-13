@@ -14,6 +14,7 @@ public record MetadataQualityReport(
         int extractedDocuments,
         double averageFieldCoverage,
         double lowConfidenceRatio,
+        double reviewPassRate,
         int pendingReviewCount,
         int unresolvedQuarantineCount,
         List<MetadataFieldCoverage> fieldCoverages,
@@ -28,6 +29,7 @@ public record MetadataQualityReport(
         extractedDocuments = Math.max(0, extractedDocuments);
         averageFieldCoverage = clamp(averageFieldCoverage);
         lowConfidenceRatio = clamp(lowConfidenceRatio);
+        reviewPassRate = clamp(reviewPassRate);
         pendingReviewCount = Math.max(0, pendingReviewCount);
         unresolvedQuarantineCount = Math.max(0, unresolvedQuarantineCount);
         fieldCoverages = List.copyOf(Objects.requireNonNullElse(fieldCoverages, List.of()));
@@ -36,7 +38,7 @@ public record MetadataQualityReport(
     }
 
     public static MetadataQualityReport empty(String tenantId, String knowledgeBaseId) {
-        return new MetadataQualityReport(tenantId, knowledgeBaseId, 0, 0, 0D, 0D, 0, 0,
+        return new MetadataQualityReport(tenantId, knowledgeBaseId, 0, 0, 0D, 0D, 0D, 0, 0,
                 List.of(), List.of(), Instant.now());
     }
 

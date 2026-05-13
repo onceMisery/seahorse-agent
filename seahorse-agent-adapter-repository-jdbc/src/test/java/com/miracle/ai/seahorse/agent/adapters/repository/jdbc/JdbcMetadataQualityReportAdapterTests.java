@@ -63,6 +63,7 @@ class JdbcMetadataQualityReportAdapterTests {
         assertThat(report.extractedDocuments()).isEqualTo(2);
         assertThat(report.averageFieldCoverage()).isCloseTo(4D / 9D, offset(0.0001D));
         assertThat(report.lowConfidenceRatio()).isCloseTo(0.25D, offset(0.0001D));
+        assertThat(report.reviewPassRate()).isCloseTo(2D / 3D, offset(0.0001D));
         assertThat(report.pendingReviewCount()).isEqualTo(2);
         assertThat(report.unresolvedQuarantineCount()).isEqualTo(3);
         assertThat(coverage(report, "department").coverageRate()).isCloseTo(2D / 3D, offset(0.0001D));
@@ -231,6 +232,10 @@ class JdbcMetadataQualityReportAdapterTests {
                 + "VALUES ('review-2', 'tenant-1', 'kb-1', 'PENDING')");
         jdbcTemplate.update("INSERT INTO t_metadata_review_item(id, tenant_id, kb_id, review_status) "
                 + "VALUES ('review-3', 'tenant-1', 'kb-1', 'APPROVED')");
+        jdbcTemplate.update("INSERT INTO t_metadata_review_item(id, tenant_id, kb_id, review_status) "
+                + "VALUES ('review-4', 'tenant-1', 'kb-1', 'CORRECTED')");
+        jdbcTemplate.update("INSERT INTO t_metadata_review_item(id, tenant_id, kb_id, review_status) "
+                + "VALUES ('review-5', 'tenant-1', 'kb-1', 'REJECTED')");
         insertQuarantine("q-1", "SCHEMA_MISSING", "缺少 Schema", 0);
         insertQuarantine("q-2", "SCHEMA_MISSING", "缺少 Schema", 0);
         insertQuarantine("q-3", "PARSE_FAILED", "解析失败", 0);

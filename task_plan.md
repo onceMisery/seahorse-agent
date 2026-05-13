@@ -95,3 +95,9 @@
 - [complete] kernel 新增回填任务分页查询契约，管理端可按租户、知识库和状态查看任务。
 - [complete] JDBC 治理适配器实现 `t_metadata_extraction_job` 分页查询，Web 管理 API 暴露知识库维度任务列表。
 - [complete] 补充 kernel、JDBC 和 Web 契约测试，并完成受影响模块验证。
+
+## 2026-05-13 M5 质量报表复核通过率
+
+- [complete] 质量报表模型新增 `reviewPassRate`，补齐设计文档“复核通过率可查询”的质量验收项。
+- [complete] JDBC 治理适配器按已处理复核项统计通过率，待处理项不进入分母。
+- [complete] Web 契约与 JDBC 报表测试覆盖复核通过率字段。

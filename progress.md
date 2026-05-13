@@ -213,3 +213,10 @@
 - `SeahorseMetadataBackfillController` 新增 `GET /knowledge-base/{kb-id}/metadata-backfill/jobs`，支持 `tenantId/status/current/size` 参数。
 - 新增 `JdbcMetadataBackfillJobAdapterTests`，扩展 `KernelMetadataBackfillServiceTests` 与 `SeahorseWebApiContractTests` 覆盖任务列表查询。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web -am "-Dtest=KernelMetadataBackfillServiceTests,JdbcMetadataBackfillJobAdapterTests,SeahorseWebApiContractTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，JDBC 1 个、Web 11 个、kernel 6 个用例成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-13 继续推进 M5 质量报表复核通过率
+
+- `MetadataQualityReport` 新增 `reviewPassRate` 字段，使用与覆盖率、低置信度一致的 0 到 1 比率口径。
+- `JdbcMetadataGovernanceRepositoryAdapter` 统计已处理复核项中的通过率：`APPROVED/CORRECTED` 作为通过，`REJECTED/QUARANTINED` 作为未通过，`PENDING` 不进入分母。
+- `JdbcMetadataQualityReportAdapterTests` 增加 APPROVED、CORRECTED、REJECTED 样本，验证 `reviewPassRate = 2/3`；`SeahorseWebApiContractTests` 验证 Web 响应包含 `reviewPassRate`。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web -am "-Dtest=JdbcMetadataQualityReportAdapterTests,SeahorseWebApiContractTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，JDBC 3 个和 Web 11 个用例成功，reactor `BUILD SUCCESS`。
