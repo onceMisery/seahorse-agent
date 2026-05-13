@@ -19,8 +19,17 @@ package com.miracle.ai.seahorse.agent.adapters.vector.milvus;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContains;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldExists;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldIn;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldRange;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
@@ -41,6 +50,8 @@ import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.SearchResp;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -61,8 +72,11 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
     private static final String FIELD_METADATA = "metadata";
     private static final String FIELD_EMBEDDING = "embedding";
     private static final String META_COLLECTION_NAME = "collection_name";
+    private static final String META_TENANT_ID = "tenant_id";
+    private static final String META_KB_ID = "kb_id";
     private static final String META_DOC_ID = "doc_id";
     private static final String META_CHUNK_INDEX = "chunk_index";
+    private static final String META_ENABLED = "enabled";
     private static final int CONTENT_MAX_LENGTH = 65535;
 
     private final MilvusClientV2 milvusClient;
@@ -170,22 +184,33 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
     }
 
     private SearchReq searchRequest(VectorSearchRequest request) {
-        return SearchReq.builder()
+        SearchReq.SearchReqBuilder<?, ?> builder = SearchReq.builder()
                 .collectionName(resolveCollection(request.collectionName()))
                 .annsField(FIELD_EMBEDDING)
                 .data(List.of(new FloatVec(vectorArray(request.vector()))))
                 .topK(topK(request.topK()))
                 .searchParams(Map.of("metric_type", properties.metricType(), "ef", 128))
-                .outputFields(List.of(FIELD_ID, FIELD_CONTENT, FIELD_METADATA))
-                .build();
+                .outputFields(List.of(FIELD_ID, FIELD_CONTENT, FIELD_METADATA));
+        String filter = metadataFilter(request);
+        if (!filter.isBlank()) {
+            builder.filter(filter);
+        }
+        return builder.build();
     }
 
     private RetrievedChunk retrievedChunk(SearchResp.SearchResult result) {
         Map<String, Object> entity = result.getEntity();
+        Map<String, Object> metadata = metadata(entity.get(FIELD_METADATA));
         return RetrievedChunk.builder()
                 .id(Objects.toString(entity.get(FIELD_ID), ""))
                 .text(Objects.toString(entity.get(FIELD_CONTENT), ""))
                 .score(result.getScore())
+                .tenantId(string(metadata, META_TENANT_ID))
+                .kbId(string(metadata, META_KB_ID))
+                .docId(string(metadata, META_DOC_ID))
+                .collectionName(string(metadata, META_COLLECTION_NAME))
+                .chunkIndex(integer(metadata, META_CHUNK_INDEX))
+                .metadata(metadata)
                 .build();
     }
 
@@ -314,5 +339,112 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value;
+    }
+
+    private String metadataFilter(VectorSearchRequest request) {
+        List<String> clauses = new ArrayList<>();
+        SystemRetrievalFilter system = request.compiledFilter().sourceFilter().system();
+        appendEq(clauses, META_TENANT_ID, system.tenantId());
+        appendIn(clauses, META_KB_ID, system.knowledgeBaseIds());
+        appendIn(clauses, META_DOC_ID, system.documentIds());
+        appendIn(clauses, "file_type", system.fileTypes());
+        appendIn(clauses, "source_type", system.sourceTypes());
+        if (system.enabledOnly()) {
+            clauses.add("(" + metadataPath(META_ENABLED) + " == true || " + metadataPath(META_ENABLED) + " == \"true\")");
+        }
+        appendExpression(clauses, request.compiledFilter().expression());
+        return String.join(" && ", clauses);
+    }
+
+    private void appendExpression(List<String> clauses, MetadataFilterExpr expression) {
+        if (expression == null) {
+            return;
+        }
+        if (expression instanceof FilterAnd filterAnd) {
+            filterAnd.children().forEach(child -> appendExpression(clauses, child));
+        } else if (expression instanceof FieldEq fieldEq) {
+            appendEq(clauses, fieldKey(fieldEq.field().backendMapping().canonicalName()), fieldEq.value());
+        } else if (expression instanceof FieldIn fieldIn) {
+            appendIn(clauses, fieldKey(fieldIn.field().backendMapping().canonicalName()), fieldIn.values());
+        } else if (expression instanceof FieldRange fieldRange) {
+            String key = fieldKey(fieldRange.field().backendMapping().canonicalName());
+            if (fieldRange.from() != null) {
+                clauses.add(metadataPath(key) + " >= " + literal(fieldRange.from()));
+            }
+            if (fieldRange.to() != null) {
+                clauses.add(metadataPath(key) + " <= " + literal(fieldRange.to()));
+            }
+        } else if (expression instanceof FieldContains fieldContains) {
+            appendEq(clauses, fieldKey(fieldContains.field().backendMapping().canonicalName()), fieldContains.value());
+        } else if (expression instanceof FieldExists fieldExists) {
+            clauses.add(metadataPath(fieldKey(fieldExists.field().backendMapping().canonicalName())) + " != null");
+        }
+    }
+
+    private void appendEq(List<String> clauses, String key, Object value) {
+        if (value == null || Objects.toString(value, "").isBlank()) {
+            return;
+        }
+        clauses.add(metadataPath(fieldKey(key)) + " == " + literal(value));
+    }
+
+    private void appendIn(List<String> clauses, String key, Collection<?> values) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        String valueList = values.stream().map(this::literal).collect(Collectors.joining(", "));
+        clauses.add(metadataPath(fieldKey(key)) + " in [" + valueList + "]");
+    }
+
+    private String metadataPath(String key) {
+        return FIELD_METADATA + "[\"" + fieldKey(key) + "\"]";
+    }
+
+    private String fieldKey(String key) {
+        String safeKey = Objects.requireNonNullElse(key, "").trim();
+        if (!safeKey.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+            throw new IllegalArgumentException("invalid metadata field key: " + key);
+        }
+        return safeKey;
+    }
+
+    private String literal(Object value) {
+        if (value instanceof Number || value instanceof Boolean) {
+            return Objects.toString(value);
+        }
+        return "\"" + Objects.toString(value, "").replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> metadata(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            map.forEach((key, item) -> metadata.put(Objects.toString(key), item));
+            return metadata;
+        }
+        if (value instanceof JsonObject jsonObject) {
+            return GSON.fromJson(jsonObject, Map.class);
+        }
+        if (value instanceof JsonElement jsonElement) {
+            return GSON.fromJson(jsonElement, Map.class);
+        }
+        return Map.of();
+    }
+
+    private String string(Map<String, Object> metadata, String key) {
+        Object value = metadata.get(key);
+        return value == null ? null : Objects.toString(value);
+    }
+
+    private Integer integer(Map<String, Object> metadata, String key) {
+        Object value = metadata.get(key);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return value == null ? null : Integer.valueOf(Objects.toString(value));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 }

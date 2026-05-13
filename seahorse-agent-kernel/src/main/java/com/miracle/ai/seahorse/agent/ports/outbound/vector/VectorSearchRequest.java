@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.vector;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -37,8 +39,17 @@ public record VectorSearchRequest(
         String query,
         List<Float> vector,
         int topK,
-        Map<String, Object> filters
+        Map<String, Object> filters,
+        CompiledMetadataFilter compiledFilter
 ) {
+
+    public VectorSearchRequest(String collectionName,
+                               String query,
+                               List<Float> vector,
+                               int topK,
+                               Map<String, Object> filters) {
+        this(collectionName, query, vector, topK, filters, CompiledMetadataFilter.empty());
+    }
 
     /**
      * 构造不可变请求。
@@ -48,5 +59,6 @@ public record VectorSearchRequest(
         query = Objects.requireNonNullElse(query, "");
         vector = List.copyOf(Objects.requireNonNullElse(vector, List.of()));
         filters = Map.copyOf(Objects.requireNonNullElse(filters, Map.of()));
+        compiledFilter = Objects.requireNonNullElseGet(compiledFilter, CompiledMetadataFilter::empty);
     }
 }

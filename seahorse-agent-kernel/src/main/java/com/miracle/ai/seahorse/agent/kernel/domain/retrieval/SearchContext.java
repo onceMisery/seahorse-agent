@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.domain.retrieval;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
 import lombok.Builder;
 import lombok.Data;
 
@@ -44,10 +45,23 @@ public class SearchContext {
 
     private int topK;
 
+    private RetrievalFilter filter;
+
+    private RetrievalOptions options;
+
+    private CompiledMetadataFilter compiledFilter;
+
     @Builder.Default
     private Map<String, Object> metadata = new HashMap<>();
 
     public String getMainQuestion() {
         return rewrittenQuestion != null ? rewrittenQuestion : originalQuestion;
+    }
+
+    public RetrievalOptions effectiveOptions() {
+        if (options != null) {
+            return options;
+        }
+        return RetrievalOptions.defaults(topK);
     }
 }

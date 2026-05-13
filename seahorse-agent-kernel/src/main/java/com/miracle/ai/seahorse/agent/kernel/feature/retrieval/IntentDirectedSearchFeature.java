@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchRequest;
 import org.slf4j.Logger;
@@ -56,19 +57,29 @@ public class IntentDirectedSearchFeature implements SearchChannelFeature {
     private final VectorSearchPort vectorSearchPort;
     private final Executor retrievalExecutor;
     private final SearchSettings settings;
+    private final EmbeddingModelPort embeddingModelPort;
 
     public IntentDirectedSearchFeature(VectorSearchPort vectorSearchPort, Executor retrievalExecutor) {
         this(vectorSearchPort, retrievalExecutor,
-                new SearchSettings(DEFAULT_MIN_INTENT_SCORE, DEFAULT_TOP_K_MULTIPLIER));
+                new SearchSettings(DEFAULT_MIN_INTENT_SCORE, DEFAULT_TOP_K_MULTIPLIER),
+                EmbeddingModelPort.noop());
     }
 
     public IntentDirectedSearchFeature(VectorSearchPort vectorSearchPort,
                                        Executor retrievalExecutor,
                                        SearchSettings settings) {
+        this(vectorSearchPort, retrievalExecutor, settings, EmbeddingModelPort.noop());
+    }
+
+    public IntentDirectedSearchFeature(VectorSearchPort vectorSearchPort,
+                                       Executor retrievalExecutor,
+                                       SearchSettings settings,
+                                       EmbeddingModelPort embeddingModelPort) {
         this.vectorSearchPort = Objects.requireNonNull(vectorSearchPort, "vectorSearchPort must not be null");
         this.retrievalExecutor = Objects.requireNonNull(retrievalExecutor, "retrievalExecutor must not be null");
         this.settings = Objects.requireNonNullElse(settings,
                 new SearchSettings(DEFAULT_MIN_INTENT_SCORE, DEFAULT_TOP_K_MULTIPLIER));
+        this.embeddingModelPort = Objects.requireNonNullElseGet(embeddingModelPort, EmbeddingModelPort::noop);
     }
 
     @Override
@@ -129,9 +140,10 @@ public class IntentDirectedSearchFeature implements SearchChannelFeature {
             VectorSearchRequest request = new VectorSearchRequest(
                     node.getCollectionName(),
                     resolveQuestion(context),
-                    List.of(),
+                    queryVector(context),
                     resolveTopK(context, node),
-                    Map.of("intentId", Objects.requireNonNullElse(node.getId(), "")));
+                    Map.of("intentId", Objects.requireNonNullElse(node.getId(), "")),
+                    context == null ? null : context.getCompiledFilter());
             return Objects.requireNonNullElse(vectorSearchPort.search(request), List.of());
         } catch (Exception ex) {
             LOG.error(LOG_MSG_INTENT_FAILED, node.getId(), node.getCollectionName(), ex);
@@ -178,6 +190,15 @@ public class IntentDirectedSearchFeature implements SearchChannelFeature {
             return "";
         }
         return Objects.requireNonNullElse(intents.get(0).subQuestion(), "");
+    }
+
+    private List<Float> queryVector(SearchContext context) {
+        String question = resolveQuestion(context);
+        if (!hasText(question)) {
+            return List.of();
+        }
+        String modelId = context == null ? "" : context.effectiveOptions().embeddingModel();
+        return Objects.requireNonNullElse(embeddingModelPort.embed(modelId, question), List.of());
     }
 
     private int resolveTopK(SearchContext context, IntentNode node) {

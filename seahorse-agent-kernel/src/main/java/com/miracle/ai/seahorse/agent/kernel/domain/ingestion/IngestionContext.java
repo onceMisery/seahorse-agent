@@ -18,6 +18,11 @@
 package com.miracle.ai.seahorse.agent.kernel.domain.ingestion;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldCandidate;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldQuality;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIssue;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationResult;
 import lombok.Builder;
 import lombok.Data;
 
@@ -43,6 +48,12 @@ public class IngestionContext {
     private List<String> keywords;
     private List<String> questions;
     private Map<String, Object> metadata;
+    private MetadataSchema metadataSchema;
+    private List<MetadataFieldCandidate> metadataCandidates;
+    private Map<String, Object> normalizedMetadata;
+    private List<MetadataFieldQuality> metadataFieldQualities;
+    private List<MetadataIssue> metadataIssues;
+    private MetadataValidationResult metadataValidationResult;
     private Object vectorSpaceId;
     private IngestionStatus status;
     private List<NodeLog> logs;

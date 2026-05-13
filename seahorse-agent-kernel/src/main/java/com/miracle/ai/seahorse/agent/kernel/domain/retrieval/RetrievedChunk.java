@@ -22,6 +22,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * seahorse-agent 自有检索命中分片契约。
  * <p>
@@ -47,4 +50,27 @@ public class RetrievedChunk {
      * 检索或重排得分。
      */
     private Float score;
+
+    private String tenantId;
+
+    private String kbId;
+
+    private String docId;
+
+    private String collectionName;
+
+    private Integer chunkIndex;
+
+    @Builder.Default
+    private Map<String, Object> metadata = new LinkedHashMap<>();
+
+    @Builder.Default
+    private Map<String, Float> channelScores = new LinkedHashMap<>();
+
+    @Builder.Default
+    private Map<String, Integer> channelRanks = new LinkedHashMap<>();
+
+    private Float fusionScore;
+
+    private Float rerankScore;
 }

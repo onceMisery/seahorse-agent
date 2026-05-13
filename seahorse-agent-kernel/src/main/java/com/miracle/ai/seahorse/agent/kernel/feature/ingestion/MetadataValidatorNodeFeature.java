@@ -1,0 +1,216 @@
+package com.miracle.ai.seahorse.agent.kernel.feature.ingestion;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
+import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldQuality;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIssue;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIssueSeverity;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
+
+    public static final String NODE_TYPE = "metadata_validator";
+    private static final String KEY_TENANT_ID = "tenantId";
+    private static final String KEY_KB_ID = "kbId";
+    private static final String KEY_DOC_ID = "docId";
+
+    private final MetadataSchemaRegistryPort schemaRegistryPort;
+    private final MetadataExtractionResultRepositoryPort resultRepositoryPort;
+    private final MetadataReviewQueuePort reviewQueuePort;
+    private final MetadataQuarantinePort quarantinePort;
+    private final MetadataCanonicalWritePort canonicalWritePort;
+
+    public MetadataValidatorNodeFeature(MetadataSchemaRegistryPort schemaRegistryPort,
+                                        MetadataExtractionResultRepositoryPort resultRepositoryPort,
+                                        MetadataReviewQueuePort reviewQueuePort,
+                                        MetadataQuarantinePort quarantinePort,
+                                        MetadataCanonicalWritePort canonicalWritePort) {
+        this.schemaRegistryPort = Objects.requireNonNullElse(schemaRegistryPort, MetadataSchemaRegistryPort.empty());
+        this.resultRepositoryPort = Objects.requireNonNullElse(resultRepositoryPort,
+                MetadataExtractionResultRepositoryPort.noop());
+        this.reviewQueuePort = Objects.requireNonNullElse(reviewQueuePort, MetadataReviewQueuePort.noop());
+        this.quarantinePort = Objects.requireNonNullElse(quarantinePort, MetadataQuarantinePort.noop());
+        this.canonicalWritePort = Objects.requireNonNullElse(canonicalWritePort, MetadataCanonicalWritePort.noop());
+    }
+
+    @Override
+    public String name() {
+        return NODE_TYPE;
+    }
+
+    @Override
+    public String nodeType() {
+        return NODE_TYPE;
+    }
+
+    @Override
+    public int order() {
+        return 50;
+    }
+
+    @Override
+    public NodeResult execute(IngestionContext context, NodeConfig config) {
+        IngestionContext safeContext = Objects.requireNonNull(context, "context must not be null");
+        try {
+            MetadataSchema schema = resolveSchema(safeContext, config);
+            ValidationIdentity identity = identity(safeContext, config, schema);
+            MetadataValidationResult result = validate(schema, safeContext);
+            safeContext.setMetadataValidationResult(result);
+            safeContext.setMetadataIssues(result.issues());
+            persist(identity, schema, safeContext, result);
+            if (MetadataValidationDecision.QUARANTINE.equals(result.decision())) {
+                safeContext.setSkipIndexerWrite(true);
+                quarantinePort.quarantine(new MetadataQuarantineItem(identity.tenantId(), identity.kbId(),
+                        identity.docId(), safeContext.getTaskId(), NODE_TYPE, "METADATA_QUARANTINE",
+                        firstIssue(result.issues()), snapshot(safeContext)));
+                return NodeResult.terminate("metadata quarantined");
+            }
+            if (MetadataValidationDecision.REVIEW_REQUIRED.equals(result.decision())) {
+                reviewQueuePort.enqueue(new MetadataReviewItem(identity.tenantId(), identity.kbId(), identity.docId(),
+                        safeContext.getTaskId(), "METADATA_REVIEW_REQUIRED", firstIssue(result.issues()),
+                        result.acceptedMetadata()));
+            }
+            mergeAcceptedMetadata(safeContext, result.acceptedMetadata());
+            canonicalWritePort.writeDocumentMetadata(identity.docId(), result.acceptedMetadata());
+            return NodeResult.ok("metadata decision=" + result.decision());
+        } catch (Exception ex) {
+            return NodeResult.fail(ex);
+        }
+    }
+
+    private MetadataValidationResult validate(MetadataSchema schema, IngestionContext context) {
+        Map<String, Object> normalized = new LinkedHashMap<>(Objects.requireNonNullElse(
+                context.getNormalizedMetadata(), Map.of()));
+        Map<String, Object> accepted = new LinkedHashMap<>();
+        Map<String, Object> rejected = new LinkedHashMap<>();
+        List<MetadataIssue> issues = new ArrayList<>(Objects.requireNonNullElse(context.getMetadataIssues(),
+                List.of()));
+        for (Map.Entry<String, Object> entry : normalized.entrySet()) {
+            MetadataFieldDescriptor field = schema.find(entry.getKey()).orElse(null);
+            if (field == null) {
+                rejected.put(entry.getKey(), entry.getValue());
+                issues.add(MetadataIssue.warn(entry.getKey(), NODE_TYPE, "UNREGISTERED_FIELD", "字段未注册"));
+                continue;
+            }
+            accepted.put(field.fieldKey(), entry.getValue());
+        }
+        for (MetadataFieldDescriptor field : schema.fields()) {
+            if (field.required() && !accepted.containsKey(field.fieldKey())) {
+                issues.add(MetadataIssue.error(field.fieldKey(), NODE_TYPE, "REQUIRED_FIELD_MISSING", "必填字段缺失"));
+            }
+        }
+        for (MetadataFieldQuality quality : Objects.requireNonNullElse(context.getMetadataFieldQualities(),
+                List.<MetadataFieldQuality>of())) {
+            MetadataFieldDescriptor field = schema.find(quality.fieldKey()).orElse(null);
+            if (field != null && accepted.containsKey(field.fieldKey()) && quality.confidence() < field.minConfidence()) {
+                issues.add(MetadataIssue.warn(field.fieldKey(), NODE_TYPE, "LOW_CONFIDENCE", "字段置信度低于阈值"));
+            }
+        }
+        MetadataValidationDecision decision = decision(issues);
+        return new MetadataValidationResult(decision, issues, accepted, rejected);
+    }
+
+    private MetadataValidationDecision decision(List<MetadataIssue> issues) {
+        boolean hasError = issues.stream().anyMatch(issue -> MetadataIssueSeverity.ERROR.equals(issue.severity()));
+        if (hasError) {
+            return MetadataValidationDecision.QUARANTINE;
+        }
+        boolean hasWarn = issues.stream().anyMatch(issue -> MetadataIssueSeverity.WARN.equals(issue.severity()));
+        return hasWarn ? MetadataValidationDecision.REVIEW_REQUIRED : MetadataValidationDecision.ACCEPT;
+    }
+
+    private void mergeAcceptedMetadata(IngestionContext context, Map<String, Object> acceptedMetadata) {
+        Map<String, Object> metadata = new LinkedHashMap<>(Objects.requireNonNullElse(context.getMetadata(), Map.of()));
+        metadata.putAll(acceptedMetadata);
+        metadata.put("acceptedMetadata", acceptedMetadata);
+        context.setMetadata(metadata);
+    }
+
+    private void persist(ValidationIdentity identity,
+                         MetadataSchema schema,
+                         IngestionContext context,
+                         MetadataValidationResult result) {
+        resultRepositoryPort.save(new MetadataExtractionRecord(identity.tenantId(), identity.kbId(), identity.docId(),
+                context.getTaskId(), schema.schemaVersion(), extractorVersion(context), result.decision(),
+                context.getNormalizedMetadata(), result.acceptedMetadata(), result.issues()));
+    }
+
+    private String extractorVersion(IngestionContext context) {
+        return Objects.requireNonNullElse(context.getMetadataCandidates(), List.<com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldCandidate>of())
+                .stream()
+                .findFirst()
+                .map(com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldCandidate::extractorVersion)
+                .orElse("");
+    }
+
+    private Map<String, Object> snapshot(IngestionContext context) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("metadata", Objects.requireNonNullElse(context.getMetadata(), Map.of()));
+        snapshot.put("normalizedMetadata", Objects.requireNonNullElse(context.getNormalizedMetadata(), Map.of()));
+        snapshot.put("issues", Objects.requireNonNullElse(context.getMetadataIssues(), List.of()));
+        return snapshot;
+    }
+
+    private MetadataSchema resolveSchema(IngestionContext context, NodeConfig config) {
+        if (context.getMetadataSchema() != null) {
+            return context.getMetadataSchema();
+        }
+        MetadataSchema schema = schemaRegistryPort.loadSchema(
+                firstText(setting(config, KEY_TENANT_ID), metadataText(context, KEY_TENANT_ID)),
+                firstText(setting(config, KEY_KB_ID), metadataText(context, KEY_KB_ID)));
+        context.setMetadataSchema(schema);
+        return schema;
+    }
+
+    private ValidationIdentity identity(IngestionContext context, NodeConfig config, MetadataSchema schema) {
+        return new ValidationIdentity(
+                firstText(schema.tenantId(), firstText(setting(config, KEY_TENANT_ID), metadataText(context, KEY_TENANT_ID))),
+                firstText(schema.knowledgeBaseId(), firstText(setting(config, KEY_KB_ID), metadataText(context, KEY_KB_ID))),
+                firstText(setting(config, KEY_DOC_ID), firstText(metadataText(context, KEY_DOC_ID), context.getTaskId())));
+    }
+
+    private String setting(NodeConfig config, String key) {
+        JsonNode settings = config == null ? null : config.getSettings();
+        JsonNode value = settings == null ? null : settings.get(key);
+        return value == null || value.isNull() ? "" : value.asText("");
+    }
+
+    private String metadataText(IngestionContext context, String key) {
+        Object value = context.getMetadata() == null ? null : context.getMetadata().get(key);
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private String firstText(String first, String second) {
+        return hasText(first) ? first.trim() : Objects.requireNonNullElse(second, "").trim();
+    }
+
+    private String firstIssue(List<MetadataIssue> issues) {
+        return issues.stream().findFirst().map(MetadataIssue::message).orElse("");
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private record ValidationIdentity(String tenantId, String kbId, String docId) {
+    }
+}

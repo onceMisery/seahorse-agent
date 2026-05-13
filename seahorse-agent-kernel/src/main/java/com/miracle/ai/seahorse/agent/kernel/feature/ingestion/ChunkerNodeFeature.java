@@ -25,8 +25,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -74,7 +76,7 @@ public class ChunkerNodeFeature implements IngestionNodeFeature {
         }
         try {
             ChunkerSettings settings = parseSettings(config);
-            List<VectorChunk> chunks = chunk(text, settings);
+            List<VectorChunk> chunks = applyMetadata(chunk(text, settings), safeContext);
             safeContext.setChunks(chunks);
             if (settings.embed()) {
                 embedderNodeFeature.embedChunks(chunks, settings.modelId());
@@ -190,6 +192,34 @@ public class ChunkerNodeFeature implements IngestionNodeFeature {
                 .index(index)
                 .content(content)
                 .build();
+    }
+
+    private List<VectorChunk> applyMetadata(List<VectorChunk> chunks, IngestionContext context) {
+        Map<String, Object> acceptedMetadata = acceptedMetadata(context);
+        if (acceptedMetadata.isEmpty()) {
+            return chunks;
+        }
+        for (VectorChunk chunk : chunks) {
+            Map<String, Object> metadata = new LinkedHashMap<>(Objects.requireNonNullElse(chunk.getMetadata(), Map.of()));
+            metadata.putAll(acceptedMetadata);
+            chunk.setMetadata(metadata);
+        }
+        return chunks;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> acceptedMetadata(IngestionContext context) {
+        if (context.getMetadataValidationResult() != null
+                && !context.getMetadataValidationResult().acceptedMetadata().isEmpty()) {
+            return context.getMetadataValidationResult().acceptedMetadata();
+        }
+        Object value = context.getMetadata() == null ? null : context.getMetadata().get("acceptedMetadata");
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> accepted = new LinkedHashMap<>();
+            map.forEach((key, item) -> accepted.put(String.valueOf(key), item));
+            return accepted;
+        }
+        return Map.of();
     }
 
     private ChunkerSettings parseSettings(NodeConfig config) {

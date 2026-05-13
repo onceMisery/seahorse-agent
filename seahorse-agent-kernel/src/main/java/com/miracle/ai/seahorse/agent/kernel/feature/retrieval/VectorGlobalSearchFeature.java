@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchRequest;
 
@@ -49,12 +50,20 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
 
     private final KnowledgeBaseQueryPort knowledgeBaseQueryPort;
     private final VectorSearchPort vectorSearchPort;
+    private final EmbeddingModelPort embeddingModelPort;
 
     public VectorGlobalSearchFeature(KnowledgeBaseQueryPort knowledgeBaseQueryPort,
                                      VectorSearchPort vectorSearchPort) {
+        this(knowledgeBaseQueryPort, vectorSearchPort, EmbeddingModelPort.noop());
+    }
+
+    public VectorGlobalSearchFeature(KnowledgeBaseQueryPort knowledgeBaseQueryPort,
+                                     VectorSearchPort vectorSearchPort,
+                                     EmbeddingModelPort embeddingModelPort) {
         this.knowledgeBaseQueryPort = Objects.requireNonNull(knowledgeBaseQueryPort,
                 "knowledgeBaseQueryPort must not be null");
         this.vectorSearchPort = Objects.requireNonNull(vectorSearchPort, "vectorSearchPort must not be null");
+        this.embeddingModelPort = Objects.requireNonNullElseGet(embeddingModelPort, EmbeddingModelPort::noop);
     }
 
     @Override
@@ -117,10 +126,23 @@ public class VectorGlobalSearchFeature implements SearchChannelFeature {
         VectorSearchRequest request = new VectorSearchRequest(
                 collectionName,
                 context == null ? "" : context.getMainQuestion(),
-                List.of(),
+                queryVector(context),
                 topK(context),
-                Map.of());
+                Map.of(),
+                context == null ? null : context.getCompiledFilter());
         return Objects.requireNonNullElse(vectorSearchPort.search(request), List.of());
+    }
+
+    private List<Float> queryVector(SearchContext context) {
+        if (context == null) {
+            return List.of();
+        }
+        String question = context.getMainQuestion();
+        if (!hasText(question)) {
+            return List.of();
+        }
+        return Objects.requireNonNullElse(
+                embeddingModelPort.embed(context.effectiveOptions().embeddingModel(), question), List.of());
     }
 
     private List<String> collectionNames() {

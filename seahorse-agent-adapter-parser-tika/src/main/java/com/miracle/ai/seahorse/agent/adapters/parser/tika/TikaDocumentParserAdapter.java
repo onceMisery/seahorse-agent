@@ -20,9 +20,12 @@ package com.miracle.ai.seahorse.agent.adapters.parser.tika;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParseResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
 import org.apache.tika.Tika;
+import org.apache.tika.metadata.Metadata;
+import org.apache.tika.metadata.TikaCoreProperties;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -45,17 +48,48 @@ public class TikaDocumentParserAdapter implements DocumentParserPort {
             return DocumentParseResult.ofText("");
         }
         if (isPlainText(mimeType, fileName)) {
-            return DocumentParseResult.ofText(cleanup(new String(safeContent, StandardCharsets.UTF_8)));
+            return new DocumentParseResult(cleanup(new String(safeContent, StandardCharsets.UTF_8)),
+                    baseMetadata(mimeType, fileName));
         }
-        return DocumentParseResult.ofText(parseWithTika(safeContent));
+        return parseWithTika(safeContent, mimeType, fileName);
     }
 
-    private String parseWithTika(byte[] content) {
+    private DocumentParseResult parseWithTika(byte[] content, String mimeType, String fileName) {
+        Metadata metadata = new Metadata();
+        if (mimeType != null && !mimeType.isBlank()) {
+            metadata.set(Metadata.CONTENT_TYPE, mimeType);
+        }
+        if (fileName != null && !fileName.isBlank()) {
+            metadata.set(TikaCoreProperties.RESOURCE_NAME_KEY, fileName);
+        }
         try (ByteArrayInputStream inputStream = new ByteArrayInputStream(content)) {
-            return cleanup(TIKA.parseToString(inputStream));
+            return new DocumentParseResult(cleanup(TIKA.parseToString(inputStream, metadata)), metadata(metadata));
         } catch (Exception ex) {
             throw new IllegalStateException("Tika document parse failed", ex);
         }
+    }
+
+    private Map<String, Object> metadata(Metadata metadata) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (String name : metadata.names()) {
+            String[] items = metadata.getValues(name);
+            if (items == null || items.length == 0) {
+                continue;
+            }
+            values.put(name, items.length == 1 ? items[0] : java.util.List.of(items));
+        }
+        return values;
+    }
+
+    private Map<String, Object> baseMetadata(String mimeType, String fileName) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (mimeType != null && !mimeType.isBlank()) {
+            metadata.put("Content-Type", mimeType);
+        }
+        if (fileName != null && !fileName.isBlank()) {
+            metadata.put("resourceName", fileName);
+        }
+        return metadata;
     }
 
     private boolean isPlainText(String mimeType, String fileName) {

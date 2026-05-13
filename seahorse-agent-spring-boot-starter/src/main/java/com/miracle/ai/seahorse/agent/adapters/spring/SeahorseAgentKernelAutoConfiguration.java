@@ -66,9 +66,14 @@ import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.EnricherNodeFeatur
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.FetcherNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.IngestionNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.IndexerNodeFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataExtractorNodeFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataNormalizerNodeFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataValidatorNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ParserNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.IntentDirectedSearchFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataGuardPostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchChannelFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchResultPostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.VectorGlobalSearchFeature;
 import com.miracle.ai.seahorse.agent.kernel.plugin.DefaultExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionDescriptor;
@@ -137,6 +142,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelHealthPort;
@@ -230,6 +241,52 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(ExtensionRegistry.class)
+    public MetadataExtractorNodeFeature seahorseMetadataExtractorNodeFeature(
+            ExtensionRegistry extensionRegistry,
+            ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort) {
+        MetadataExtractorNodeFeature feature = new MetadataExtractorNodeFeature(
+                schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty));
+        extensionRegistry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
+                FeatureType.INGESTION_NODE, feature.order(), true), feature);
+        return feature;
+    }
+
+    @Bean
+    @ConditionalOnBean(ExtensionRegistry.class)
+    public MetadataNormalizerNodeFeature seahorseMetadataNormalizerNodeFeature(
+            ExtensionRegistry extensionRegistry,
+            ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
+            ObjectProvider<MetadataDictionaryPort> dictionaryPort) {
+        MetadataNormalizerNodeFeature feature = new MetadataNormalizerNodeFeature(
+                schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
+                dictionaryPort.getIfAvailable(MetadataDictionaryPort::noop));
+        extensionRegistry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
+                FeatureType.INGESTION_NODE, feature.order(), true), feature);
+        return feature;
+    }
+
+    @Bean
+    @ConditionalOnBean(ExtensionRegistry.class)
+    public MetadataValidatorNodeFeature seahorseMetadataValidatorNodeFeature(
+            ExtensionRegistry extensionRegistry,
+            ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
+            ObjectProvider<MetadataExtractionResultRepositoryPort> resultRepositoryPort,
+            ObjectProvider<MetadataReviewQueuePort> reviewQueuePort,
+            ObjectProvider<MetadataQuarantinePort> quarantinePort,
+            ObjectProvider<MetadataCanonicalWritePort> canonicalWritePort) {
+        MetadataValidatorNodeFeature feature = new MetadataValidatorNodeFeature(
+                schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
+                resultRepositoryPort.getIfAvailable(MetadataExtractionResultRepositoryPort::noop),
+                reviewQueuePort.getIfAvailable(MetadataReviewQueuePort::noop),
+                quarantinePort.getIfAvailable(MetadataQuarantinePort::noop),
+                canonicalWritePort.getIfAvailable(MetadataCanonicalWritePort::noop));
+        extensionRegistry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
+                FeatureType.INGESTION_NODE, feature.order(), true), feature);
+        return feature;
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     public EnhancementPromptPort seahorseEnhancementPromptPort() {
         return EnhancementPromptPort.defaults();
@@ -303,9 +360,11 @@ public class SeahorseAgentKernelAutoConfiguration {
     public IntentDirectedSearchFeature seahorseIntentDirectedSearchFeature(
             ExtensionRegistry extensionRegistry,
             VectorSearchPort vectorSearchPort,
+            ObjectProvider<EmbeddingModelPort> embeddingModelPort,
             @Qualifier("ragInnerRetrievalThreadPoolExecutor") ObjectProvider<Executor> innerRetrievalExecutor) {
         IntentDirectedSearchFeature feature = new IntentDirectedSearchFeature(
-                vectorSearchPort, innerRetrievalExecutor.getIfAvailable(() -> Runnable::run));
+                vectorSearchPort, innerRetrievalExecutor.getIfAvailable(() -> Runnable::run),
+                null, embeddingModelPort.getIfAvailable(EmbeddingModelPort::noop));
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchChannelFeature.class,
                 FeatureType.SEARCH_CHANNEL, feature.order(), true), feature);
         return feature;
@@ -315,10 +374,22 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnBean({ExtensionRegistry.class, KnowledgeBaseQueryPort.class, VectorSearchPort.class})
     public VectorGlobalSearchFeature seahorseVectorGlobalSearchFeature(ExtensionRegistry extensionRegistry,
                                                                        KnowledgeBaseQueryPort knowledgeBaseQueryPort,
-                                                                       VectorSearchPort vectorSearchPort) {
-        VectorGlobalSearchFeature feature = new VectorGlobalSearchFeature(knowledgeBaseQueryPort, vectorSearchPort);
+                                                                       VectorSearchPort vectorSearchPort,
+                                                                       ObjectProvider<EmbeddingModelPort> embeddingModelPort) {
+        VectorGlobalSearchFeature feature = new VectorGlobalSearchFeature(knowledgeBaseQueryPort, vectorSearchPort,
+                embeddingModelPort.getIfAvailable(EmbeddingModelPort::noop));
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchChannelFeature.class,
                 FeatureType.SEARCH_CHANNEL, feature.order(), false), feature);
+        return feature;
+    }
+
+    @Bean
+    @ConditionalOnBean(ExtensionRegistry.class)
+    public MetadataGuardPostProcessorFeature seahorseMetadataGuardPostProcessorFeature(
+            ExtensionRegistry extensionRegistry) {
+        MetadataGuardPostProcessorFeature feature = new MetadataGuardPostProcessorFeature();
+        extensionRegistry.register(new ExtensionDescriptor(feature.name(), SearchResultPostProcessorFeature.class,
+                FeatureType.SEARCH_RESULT_POST_PROCESSOR, feature.order(), true), feature);
         return feature;
     }
 

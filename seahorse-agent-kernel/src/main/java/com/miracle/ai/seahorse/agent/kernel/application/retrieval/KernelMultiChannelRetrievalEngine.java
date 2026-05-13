@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.Comparator;
 import java.util.stream.Collectors;
 
 /**
@@ -118,6 +119,7 @@ public class KernelMultiChannelRetrievalEngine {
                 .getActivatedExtensions(SearchResultPostProcessorFeature.class, activationContext)
                 .stream()
                 .filter(processor -> processor.enabled(context))
+                .sorted(Comparator.comparingInt(SearchResultPostProcessorFeature::order))
                 .toList();
 
         List<RetrievedChunk> chunks = mergeChunks(results);

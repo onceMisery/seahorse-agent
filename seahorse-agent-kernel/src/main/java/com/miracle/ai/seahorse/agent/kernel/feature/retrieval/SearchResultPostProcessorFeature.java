@@ -46,6 +46,10 @@ public interface SearchResultPostProcessorFeature extends AgentFeature {
      */
     boolean enabled(SearchContext context);
 
+    default int order() {
+        return 0;
+    }
+
     /**
      * 处理检索结果。
      *

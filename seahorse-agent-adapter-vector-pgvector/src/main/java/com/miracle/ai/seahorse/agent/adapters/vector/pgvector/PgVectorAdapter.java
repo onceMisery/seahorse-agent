@@ -18,8 +18,18 @@
 package com.miracle.ai.seahorse.agent.adapters.vector.pgvector;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContains;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldExists;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldIn;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldRange;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
@@ -33,6 +43,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,8 +59,11 @@ import java.util.stream.Collectors;
 public class PgVectorAdapter implements VectorSearchPort, VectorIndexPort, VectorCollectionAdminPort {
 
     private static final String META_COLLECTION_NAME = "collection_name";
+    private static final String META_TENANT_ID = "tenant_id";
+    private static final String META_KB_ID = "kb_id";
     private static final String META_DOC_ID = "doc_id";
     private static final String META_CHUNK_INDEX = "chunk_index";
+    private static final String META_ENABLED = "enabled";
     private static final String INDEX_NAME = "idx_seahorse_knowledge_vector_hnsw";
     private static final String SQL_EXTENSION_EXISTS = "SELECT COUNT(*) FROM pg_extension WHERE extname = 'vector'";
     private static final String SQL_SET_EF_SEARCH = "SET hnsw.ef_search = 200";
@@ -163,11 +177,16 @@ public class PgVectorAdapter implements VectorSearchPort, VectorIndexPort, Vecto
     private List<RetrievedChunk> query(Connection connection, VectorSearchRequest request, String vectorLiteral)
             throws SQLException {
         List<RetrievedChunk> chunks = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(searchSql())) {
+        SqlFilter sqlFilter = sqlFilter(request);
+        try (PreparedStatement statement = connection.prepareStatement(searchSql(sqlFilter))) {
             statement.setString(1, vectorLiteral);
             statement.setString(2, requireText(request.collectionName(), "collectionName"));
-            statement.setString(3, vectorLiteral);
-            statement.setInt(4, topK(request.topK()));
+            int index = 3;
+            for (Object arg : sqlFilter.args()) {
+                statement.setObject(index++, arg);
+            }
+            statement.setString(index++, vectorLiteral);
+            statement.setInt(index, topK(request.topK()));
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     chunks.add(retrievedChunk(resultSet));
@@ -178,10 +197,17 @@ public class PgVectorAdapter implements VectorSearchPort, VectorIndexPort, Vecto
     }
 
     private RetrievedChunk retrievedChunk(ResultSet resultSet) throws SQLException {
+        Map<String, Object> metadata = metadata(resultSet.getString("metadata"));
         return RetrievedChunk.builder()
                 .id(resultSet.getString("id"))
                 .text(resultSet.getString("content"))
                 .score(resultSet.getFloat("score"))
+                .tenantId(string(metadata, META_TENANT_ID))
+                .kbId(string(metadata, META_KB_ID))
+                .docId(string(metadata, META_DOC_ID))
+                .collectionName(string(metadata, META_COLLECTION_NAME))
+                .chunkIndex(integer(metadata, META_CHUNK_INDEX))
+                .metadata(metadata)
                 .build();
     }
 
@@ -260,9 +286,10 @@ public class PgVectorAdapter implements VectorSearchPort, VectorIndexPort, Vecto
                 + "metadata = EXCLUDED.metadata, embedding = EXCLUDED.embedding";
     }
 
-    private String searchSql() {
-        return "SELECT id, content, 1 - (embedding <=> ?::vector) AS score FROM " + tableName()
-                + " WHERE metadata->>'collection_name' = ? ORDER BY embedding <=> ?::vector LIMIT ?";
+    private String searchSql(SqlFilter sqlFilter) {
+        return "SELECT id, content, metadata, 1 - (embedding <=> ?::vector) AS score FROM " + tableName()
+                + " WHERE metadata->>'collection_name' = ?" + sqlFilter.whereSql()
+                + " ORDER BY embedding <=> ?::vector LIMIT ?";
     }
 
     private String createTableSql() {
@@ -326,5 +353,114 @@ public class PgVectorAdapter implements VectorSearchPort, VectorIndexPort, Vecto
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value;
+    }
+
+    private SqlFilter sqlFilter(VectorSearchRequest request) {
+        List<String> clauses = new ArrayList<>();
+        List<Object> args = new ArrayList<>();
+        SystemRetrievalFilter system = request.compiledFilter().sourceFilter().system();
+        appendEq(clauses, args, META_TENANT_ID, system.tenantId());
+        appendIn(clauses, args, META_KB_ID, system.knowledgeBaseIds());
+        appendIn(clauses, args, META_DOC_ID, system.documentIds());
+        appendIn(clauses, args, "file_type", system.fileTypes());
+        appendIn(clauses, args, "source_type", system.sourceTypes());
+        if (system.enabledOnly()) {
+            clauses.add("(metadata->>'" + META_ENABLED + "' IS NULL OR metadata->>'" + META_ENABLED + "' = 'true')");
+        }
+        appendExpression(clauses, args, request.compiledFilter(), request.compiledFilter().expression());
+        String whereSql = clauses.isEmpty() ? "" : " AND " + String.join(" AND ", clauses);
+        return new SqlFilter(whereSql, args);
+    }
+
+    private void appendExpression(List<String> clauses,
+                                  List<Object> args,
+                                  CompiledMetadataFilter filter,
+                                  MetadataFilterExpr expression) {
+        if (filter == null || expression == null) {
+            return;
+        }
+        if (expression instanceof FilterAnd filterAnd) {
+            filterAnd.children().forEach(child -> appendExpression(clauses, args, filter, child));
+            return;
+        }
+        if (expression instanceof FieldEq fieldEq) {
+            appendEq(clauses, args, fieldKey(fieldEq.field().backendMapping().canonicalName()), fieldEq.value());
+        } else if (expression instanceof FieldIn fieldIn) {
+            appendIn(clauses, args, fieldKey(fieldIn.field().backendMapping().canonicalName()), fieldIn.values());
+        } else if (expression instanceof FieldRange fieldRange) {
+            String key = fieldKey(fieldRange.field().backendMapping().canonicalName());
+            if (fieldRange.from() != null) {
+                clauses.add("metadata->>'" + key + "' >= ?");
+                args.add(fieldRange.from());
+            }
+            if (fieldRange.to() != null) {
+                clauses.add("metadata->>'" + key + "' <= ?");
+                args.add(fieldRange.to());
+            }
+        } else if (expression instanceof FieldContains fieldContains) {
+            String key = fieldKey(fieldContains.field().backendMapping().canonicalName());
+            clauses.add("metadata->>'" + key + "' LIKE ?");
+            args.add("%" + fieldContains.value() + "%");
+        } else if (expression instanceof FieldExists fieldExists) {
+            String key = fieldKey(fieldExists.field().backendMapping().canonicalName());
+            clauses.add("metadata ? '" + key + "'");
+        }
+    }
+
+    private void appendEq(List<String> clauses, List<Object> args, String key, Object value) {
+        if (value == null || Objects.toString(value, "").isBlank()) {
+            return;
+        }
+        clauses.add("metadata->>'" + fieldKey(key) + "' = ?");
+        args.add(value);
+    }
+
+    private void appendIn(List<String> clauses, List<Object> args, String key, Collection<?> values) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        String placeholders = values.stream().map(ignored -> "?").collect(Collectors.joining(", "));
+        clauses.add("metadata->>'" + fieldKey(key) + "' IN (" + placeholders + ")");
+        args.addAll(values);
+    }
+
+    private String fieldKey(String key) {
+        String safeKey = Objects.requireNonNullElse(key, "").trim();
+        if (!safeKey.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+            throw new IllegalArgumentException("invalid metadata field key: " + key);
+        }
+        return safeKey;
+    }
+
+    private Map<String, Object> metadata(String metadataJson) {
+        if (metadataJson == null || metadataJson.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(metadataJson, new TypeReference<Map<String, Object>>() {
+            });
+        } catch (JsonProcessingException ex) {
+            return Map.of();
+        }
+    }
+
+    private String string(Map<String, Object> metadata, String key) {
+        Object value = metadata.get(key);
+        return value == null ? null : Objects.toString(value);
+    }
+
+    private Integer integer(Map<String, Object> metadata, String key) {
+        Object value = metadata.get(key);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return value == null ? null : Integer.valueOf(Objects.toString(value));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private record SqlFilter(String whereSql, List<Object> args) {
     }
 }

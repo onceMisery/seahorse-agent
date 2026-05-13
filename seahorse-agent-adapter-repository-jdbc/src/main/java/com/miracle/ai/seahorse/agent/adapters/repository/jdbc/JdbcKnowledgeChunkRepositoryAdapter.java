@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeChunkValues;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkPage;
@@ -36,6 +38,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
@@ -54,6 +57,11 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
             INSERT INTO t_knowledge_chunk
             (id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+    private static final String SQL_INSERT_CHUNK_WITH_METADATA = """
+            INSERT INTO t_knowledge_chunk
+            (id, kb_id, doc_id, chunk_index, content, content_hash, char_count, metadata_json, enabled, deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_FIND_DOCUMENT_CONTEXT = """
             SELECT doc.id AS doc_id, doc.kb_id, doc.status, doc.enabled,
@@ -124,6 +132,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
             """;
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private Boolean metadataJsonColumnExists;
 
     public JdbcKnowledgeChunkRepositoryAdapter(DataSource dataSource) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
@@ -136,8 +146,10 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         List<VectorChunk> safeChunks = Objects.requireNonNullElse(chunks, List.of());
         jdbcTemplate.update(SQL_DELETE_BY_DOC_ID, safeDocId);
         if (!safeChunks.isEmpty()) {
-            jdbcTemplate.batchUpdate(SQL_INSERT_CHUNK, safeChunks, safeChunks.size(),
-                    (statement, chunk) -> bindChunk(statement, safeKbId, safeDocId, chunk));
+            boolean writeMetadata = metadataJsonColumnExists();
+            jdbcTemplate.batchUpdate(writeMetadata ? SQL_INSERT_CHUNK_WITH_METADATA : SQL_INSERT_CHUNK,
+                    safeChunks, safeChunks.size(),
+                    (statement, chunk) -> bindChunk(statement, safeKbId, safeDocId, chunk, writeMetadata));
         }
         jdbcTemplate.update(SQL_UPDATE_DOCUMENT_COUNT, safeChunks.size(), safeDocId);
     }
@@ -262,7 +274,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         return jdbcTemplate.update(SQL_UPDATE_ENABLED_BY_IDS.formatted(placeholders), args) > 0;
     }
 
-    private void bindChunk(java.sql.PreparedStatement statement, String kbId, String docId, VectorChunk chunk)
+    private void bindChunk(java.sql.PreparedStatement statement, String kbId, String docId, VectorChunk chunk,
+                           boolean writeMetadata)
             throws java.sql.SQLException {
         VectorChunk safeChunk = Objects.requireNonNull(chunk, "chunk must not be null");
         String content = Objects.requireNonNullElse(safeChunk.getContent(), "");
@@ -273,8 +286,39 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         statement.setString(5, content);
         statement.setString(6, sha256(content));
         statement.setInt(7, content.length());
-        statement.setInt(8, ENABLED_VALUE);
-        statement.setInt(9, DEFAULT_DELETED_VALUE);
+        int offset = 8;
+        if (writeMetadata) {
+            statement.setString(offset, metadataJson(safeChunk));
+            offset++;
+        }
+        statement.setInt(offset, ENABLED_VALUE);
+        statement.setInt(offset + 1, DEFAULT_DELETED_VALUE);
+    }
+
+    private String metadataJson(VectorChunk chunk) {
+        try {
+            return objectMapper.writeValueAsString(Objects.requireNonNullElse(chunk.getMetadata(), Map.of()));
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("serialize chunk metadata failed", ex);
+        }
+    }
+
+    private boolean metadataJsonColumnExists() {
+        if (metadataJsonColumnExists != null) {
+            return metadataJsonColumnExists;
+        }
+        try {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(1)
+                    FROM information_schema.columns
+                    WHERE lower(table_name) = 't_knowledge_chunk'
+                      AND lower(column_name) = 'metadata_json'
+                    """, Integer.class);
+            metadataJsonColumnExists = count != null && count > 0;
+        } catch (RuntimeException ex) {
+            metadataJsonColumnExists = false;
+        }
+        return metadataJsonColumnExists;
     }
 
     private KnowledgeDocumentChunkContext toDocumentContext(ResultSet resultSet, int rowNumber) throws SQLException {
