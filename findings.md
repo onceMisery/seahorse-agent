@@ -64,3 +64,9 @@
 - Outbox relay 已具备失败状态、重试次数和下一次重试时间；关键词索引消费端应在失败时继续抛出异常，避免观测代码吞掉异常导致 MQ/Outbox 误判为成功。
 - `ObservationPort` 的属性会落到 Micrometer tag，关键词索引观测只记录 operation、scope、status、exception 这类低基数字段，避免把 docId/kbId 放进指标标签。
 - Web 重建 API 与 outbox retry 形成两类补偿路径：自动重试处理短暂后端波动，管理端按文档/知识库重建处理历史回填和人工补偿。
+
+## 2026-05-13 计划型 Job 触发入口发现
+
+- 关键词索引定时重建必须默认关闭，否则生产环境可能在未明确配置目标时触发大范围重复写入。
+- 定时补偿入口适合配置少量明确 docId/kbId 目标；常规全量历史回填仍应优先通过管理端按需触发并观察结果。
+- Job 层只负责调度、锁和错误隔离，不持有重建细节，避免绕过 `KeywordIndexMaintenanceInboundPort` 的数据治理边界。

@@ -100,3 +100,11 @@
 - starter 自动装配将可用的 `ObservationPort` 注入关键词索引重建服务与 outbox 消费端，未配置观测端口时保持无副作用。
 - 扩展 `KernelKeywordIndexMaintenanceServiceTests` 与 `KeywordIndexOutboxAdapterTests`，覆盖重建部分失败观测、delegate 写入失败观测和 outbox retry 状态保留。
 - 验证通过：`mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=KernelKeywordIndexMaintenanceServiceTests,KeywordIndexOutboxAdapterTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，24 个测试成功；失败补偿测试会输出预期的 outbox relay ERROR 堆栈。
+
+## 2026-05-13 继续推进 M3 计划型 Job 触发入口
+
+- 新增 `SeahorseKeywordIndexMaintenanceJob`，默认不注册，只有 `seahorse-agent.keyword-index.maintenance.scheduler-enabled=true` 时启用。
+- Job 支持通过 `seahorse-agent.keyword-index.maintenance.doc-ids` 与 `kb-ids` 配置补偿目标，按固定延迟调用 `KeywordIndexMaintenanceInboundPort`；知识库级重建使用可配置 `batch-size`。
+- Job 使用 `DistributedLockPort` 防止多实例重复执行，单个目标失败只记录 warn 并继续处理后续目标。
+- 扩展 `SeahorseAgentKernelAutoConfigurationTests`，验证默认关闭和显式开启注册；新增 `SeahorseKeywordIndexMaintenanceJobTests` 覆盖目标去重与调用顺序。
+- 验证通过：`mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=SeahorseKeywordIndexMaintenanceJobTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，18 个测试成功。

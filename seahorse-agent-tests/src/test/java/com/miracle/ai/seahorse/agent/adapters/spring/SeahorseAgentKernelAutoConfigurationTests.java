@@ -302,6 +302,20 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(KernelKeywordIndexMaintenanceService.class);
                     assertThat(context).hasSingleBean(KeywordIndexMaintenanceInboundPort.class);
                     assertThat(context).hasSingleBean(SeahorseDocumentRefreshJob.class);
+                    assertThat(context).doesNotHaveBean(SeahorseKeywordIndexMaintenanceJob.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterKeywordIndexMaintenanceJobWhenEnabled() {
+        contextRunner.withUserConfiguration(DocumentRefreshPortsConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.keyword-index.maintenance.scheduler-enabled=true",
+                        "seahorse-agent.keyword-index.maintenance.kb-ids=kb-1")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(KeywordIndexMaintenanceInboundPort.class);
+                    assertThat(context).hasSingleBean(SeahorseKeywordIndexMaintenanceJob.class);
                 });
     }
 

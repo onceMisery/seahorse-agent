@@ -759,6 +759,25 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(KeywordIndexMaintenanceInboundPort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.keyword-index.maintenance", name = "scheduler-enabled",
+            havingValue = "true")
+    @ConditionalOnMissingBean
+    public SeahorseKeywordIndexMaintenanceJob seahorseKeywordIndexMaintenanceJob(
+            KeywordIndexMaintenanceInboundPort maintenanceInboundPort,
+            ObjectProvider<DistributedLockPort> lockPort,
+            @Value("${seahorse-agent.keyword-index.maintenance.doc-ids:}") String docIds,
+            @Value("${seahorse-agent.keyword-index.maintenance.kb-ids:}") String kbIds,
+            @Value("${seahorse-agent.keyword-index.maintenance.batch-size:50}") int batchSize) {
+        return new SeahorseKeywordIndexMaintenanceJob(
+                maintenanceInboundPort,
+                lockPort.getIfAvailable(DistributedLockPort::noop),
+                docIds,
+                kbIds,
+                batchSize);
+    }
+
+    @Bean
     @ConditionalOnBean({DocumentRefreshSchedulePort.class, DocumentRefreshStateRepositoryPort.class,
             KnowledgeDocumentRepositoryPort.class, DocumentFetcherPort.class, ObjectStoragePort.class,
             KnowledgeDocumentInboundPort.class, PipelineDefinitionRepositoryPort.class, SchedulerPort.class})
