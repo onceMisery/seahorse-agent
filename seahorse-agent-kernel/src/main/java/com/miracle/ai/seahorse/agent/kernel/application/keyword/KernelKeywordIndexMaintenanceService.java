@@ -25,6 +25,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkReco
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentDetail;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -44,22 +48,40 @@ public class KernelKeywordIndexMaintenanceService implements KeywordIndexMainten
     private static final int MAX_BATCH_SIZE = 500;
     private static final String SCOPE_DOCUMENT = "document";
     private static final String SCOPE_KNOWLEDGE_BASE = "knowledge_base";
+    private static final String OBSERVATION_REBUILD = "keyword.index.rebuild";
+    private static final String EVENT_REBUILD_SUCCESS = "keyword.index.rebuild.success";
+    private static final String EVENT_REBUILD_FAILURE = "keyword.index.rebuild.failure";
 
     private final KnowledgeDocumentRepositoryPort documentRepositoryPort;
     private final KeywordIndexPort keywordIndexPort;
+    private final ObservationPort observationPort;
 
     public KernelKeywordIndexMaintenanceService(KnowledgeDocumentRepositoryPort documentRepositoryPort,
                                                 KeywordIndexPort keywordIndexPort) {
+        this(documentRepositoryPort, keywordIndexPort, null);
+    }
+
+    public KernelKeywordIndexMaintenanceService(KnowledgeDocumentRepositoryPort documentRepositoryPort,
+                                                KeywordIndexPort keywordIndexPort,
+                                                ObservationPort observationPort) {
         this.documentRepositoryPort = Objects.requireNonNull(documentRepositoryPort,
                 "documentRepositoryPort must not be null");
         this.keywordIndexPort = Objects.requireNonNullElse(keywordIndexPort, KeywordIndexPort.noop());
+        this.observationPort = observationPort;
     }
 
     @Override
     public KeywordIndexRebuildResult rebuildDocument(String docId) {
         RebuildAccumulator accumulator = new RebuildAccumulator(SCOPE_DOCUMENT, requireText(docId, "docId"));
-        rebuildOneDocument(requireDocument(docId), accumulator);
-        return accumulator.toResult();
+        ObservationScope observationScope = startObservation(SCOPE_DOCUMENT);
+        try {
+            rebuildOneDocument(requireDocument(docId), accumulator);
+            KeywordIndexRebuildResult result = accumulator.toResult();
+            recordRebuildResult(observationScope, result);
+            return result;
+        } finally {
+            closeObservation(observationScope);
+        }
     }
 
     @Override
@@ -67,21 +89,28 @@ public class KernelKeywordIndexMaintenanceService implements KeywordIndexMainten
         String safeKbId = requireText(kbId, "kbId");
         int safeBatchSize = normalizeBatchSize(batchSize);
         RebuildAccumulator accumulator = new RebuildAccumulator(SCOPE_KNOWLEDGE_BASE, safeKbId);
-        long current = 1;
-        while (true) {
-            KnowledgeDocumentPage page = documentRepositoryPort.page(safeKbId, current, safeBatchSize, null, null);
-            if (page.records().isEmpty()) {
-                break;
+        ObservationScope observationScope = startObservation(SCOPE_KNOWLEDGE_BASE);
+        try {
+            long current = 1;
+            while (true) {
+                KnowledgeDocumentPage page = documentRepositoryPort.page(safeKbId, current, safeBatchSize, null, null);
+                if (page.records().isEmpty()) {
+                    break;
+                }
+                for (KnowledgeDocumentDetail document : page.records()) {
+                    rebuildOneDocument(document, accumulator);
+                }
+                if (page.pages() > 0 && current >= page.pages()) {
+                    break;
+                }
+                current++;
             }
-            for (KnowledgeDocumentDetail document : page.records()) {
-                rebuildOneDocument(document, accumulator);
-            }
-            if (page.pages() > 0 && current >= page.pages()) {
-                break;
-            }
-            current++;
+            KeywordIndexRebuildResult result = accumulator.toResult();
+            recordRebuildResult(observationScope, result);
+            return result;
+        } finally {
+            closeObservation(observationScope);
         }
-        return accumulator.toResult();
     }
 
     private void rebuildOneDocument(KnowledgeDocumentDetail document, RebuildAccumulator accumulator) {
@@ -158,6 +187,48 @@ public class KernelKeywordIndexMaintenanceService implements KeywordIndexMainten
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private ObservationScope startObservation(String scope) {
+        if (observationPort == null) {
+            return null;
+        }
+        try {
+            return observationPort.start(new ObservationCommand(
+                    OBSERVATION_REBUILD, "", Map.of("scope", scope)));
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private void recordRebuildResult(ObservationScope scope, KeywordIndexRebuildResult result) {
+        String eventName = result.success() ? EVENT_REBUILD_SUCCESS : EVENT_REBUILD_FAILURE;
+        Map<String, String> attributes = Map.of(
+                "scope", result.scope(),
+                "status", result.success() ? "success" : "failure");
+        recordObservationEvent(scope, eventName, attributes);
+    }
+
+    private void recordObservationEvent(ObservationScope scope, String name, Map<String, String> attributes) {
+        if (scope == null) {
+            return;
+        }
+        try {
+            scope.recordEvent(new ObservationEvent(name, null, attributes));
+        } catch (RuntimeException ex) {
+            // 观测失败不能影响索引补偿主流程。
+        }
+    }
+
+    private void closeObservation(ObservationScope scope) {
+        if (scope == null) {
+            return;
+        }
+        try {
+            scope.close();
+        } catch (RuntimeException ex) {
+            // 观测资源关闭失败不应覆盖重建结果。
+        }
     }
 
     private static final class RebuildAccumulator {

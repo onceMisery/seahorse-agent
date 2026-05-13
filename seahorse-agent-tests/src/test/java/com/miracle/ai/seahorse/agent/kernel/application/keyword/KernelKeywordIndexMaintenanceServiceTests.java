@@ -24,6 +24,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkReco
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentDetail;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -81,7 +85,9 @@ class KernelKeywordIndexMaintenanceServiceTests {
         repository.addChunks("doc-2", List.of(chunk("chunk-2", 0, "失败文档")));
         RecordingKeywordIndexPort keywordIndex = new RecordingKeywordIndexPort();
         keywordIndex.failOnDocId = "doc-2";
-        KernelKeywordIndexMaintenanceService service = new KernelKeywordIndexMaintenanceService(repository, keywordIndex);
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        KernelKeywordIndexMaintenanceService service = new KernelKeywordIndexMaintenanceService(
+                repository, keywordIndex, observationPort);
 
         KeywordIndexRebuildResult result = service.rebuildKnowledgeBase("kb-1", 1);
 
@@ -90,6 +96,9 @@ class KernelKeywordIndexMaintenanceServiceTests {
         assertThat(result.indexedChunks()).isEqualTo(1);
         assertThat(result.failedDocuments()).isEqualTo(1);
         assertThat(result.failures()).singleElement().asString().contains("doc-2");
+        assertThat(observationPort.events)
+                .extracting(ObservationEvent::name)
+                .contains("keyword.index.rebuild.failure");
     }
 
     private static KnowledgeDocumentDetail document(String docId, String kbId, boolean enabled) {
@@ -191,6 +200,33 @@ class KernelKeywordIndexMaintenanceServiceTests {
         @Override
         public void deleteDocumentChunks(String kbId, String docId) {
             operations.add("delete:" + kbId + ":" + docId);
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new RecordingObservationScope(events);
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
+        }
+    }
+
+    private record RecordingObservationScope(List<ObservationEvent> events) implements ObservationScope {
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public void close() {
         }
     }
 }

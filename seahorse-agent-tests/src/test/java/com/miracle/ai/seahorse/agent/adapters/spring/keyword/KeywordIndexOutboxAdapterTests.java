@@ -26,6 +26,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -59,6 +63,31 @@ class KeywordIndexOutboxAdapterTests {
         assertThat(keywordIndex.indexed).containsExactly("kb-1/doc-1/chunk-1");
     }
 
+    @Test
+    void shouldRecordObservationAndKeepOutboxRetryWhenDelegateFails() {
+        InMemoryOutboxRepository repository = new InMemoryOutboxRepository();
+        DirectMessageQueueAdapter delegateQueue = new DirectMessageQueueAdapter();
+        ReliableMessageQueueAdapter reliableQueue = new ReliableMessageQueueAdapter(
+                delegateQueue, delegateQueue, () -> repository, () -> OBJECT_MAPPER);
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        KeywordIndexMessageSubscriber subscriber = new KeywordIndexMessageSubscriber(
+                reliableQueue, KeywordIndexOutboxAdapter.DEFAULT_TOPIC, "keyword-index-test",
+                new FailingKeywordIndexPort(), observationPort);
+        KeywordIndexOutboxAdapter adapter = new KeywordIndexOutboxAdapter(
+                reliableQueue, KeywordIndexOutboxAdapter.DEFAULT_TOPIC);
+        SeahorseOutboxRelayJob relayJob = new SeahorseOutboxRelayJob(repository, reliableQueue, OBJECT_MAPPER, 10);
+        subscriber.start();
+
+        adapter.indexDocumentChunks("kb-1", "doc-1", List.of(VectorChunk.builder().chunkId("chunk-1").build()));
+        relayJob.relay();
+
+        assertThat(repository.events).extracting(event -> event.delivery().status()).containsExactly(OutboxEventStatus.FAILED);
+        assertThat(repository.events.get(0).delivery().retryCount()).isEqualTo(1);
+        assertThat(observationPort.events)
+                .extracting(ObservationEvent::name)
+                .contains("keyword.index.outbox.consume.failure");
+    }
+
     private static final class RecordingKeywordIndexPort implements KeywordIndexPort {
 
         private final List<String> indexed = new ArrayList<>();
@@ -70,6 +99,45 @@ class KeywordIndexOutboxAdapterTests {
 
         @Override
         public void deleteDocumentChunks(String kbId, String docId) {
+        }
+    }
+
+    private static final class FailingKeywordIndexPort implements KeywordIndexPort {
+
+        @Override
+        public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
+            throw new IllegalStateException("index failed");
+        }
+
+        @Override
+        public void deleteDocumentChunks(String kbId, String docId) {
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new RecordingObservationScope(events);
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
+        }
+    }
+
+    private record RecordingObservationScope(List<ObservationEvent> events) implements ObservationScope {
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public void close() {
         }
     }
 

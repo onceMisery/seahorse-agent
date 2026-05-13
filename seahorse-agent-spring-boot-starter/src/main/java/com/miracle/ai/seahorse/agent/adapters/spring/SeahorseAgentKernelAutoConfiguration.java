@@ -168,6 +168,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort
 import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AdapterHealthIndicatorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
@@ -749,10 +750,12 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnMissingBean(KeywordIndexMaintenanceInboundPort.class)
     public KernelKeywordIndexMaintenanceService seahorseKeywordIndexMaintenanceInboundPort(
             KnowledgeDocumentRepositoryPort documentRepositoryPort,
-            ObjectProvider<KeywordIndexPort> keywordIndexPort) {
+            ObjectProvider<KeywordIndexPort> keywordIndexPort,
+            ObjectProvider<ObservationPort> observationPort) {
         return new KernelKeywordIndexMaintenanceService(
                 documentRepositoryPort,
-                keywordIndexPort.getIfAvailable(KeywordIndexPort::noop));
+                keywordIndexPort.getIfAvailable(KeywordIndexPort::noop),
+                observationPort.getIfAvailable());
     }
 
     @Bean

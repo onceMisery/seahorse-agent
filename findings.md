@@ -58,3 +58,9 @@
 
 - 关键词索引重建 HTTP 接口应复用现有知识库 URL 前缀，便于前端管理页按文档详情或知识库批量操作接入。
 - Web adapter 只负责触发与响应包装，不应在控制器里重新拼装分片或解析具体搜索后端，避免绕过 kernel 重建编排。
+
+## 2026-05-13 索引失败观测与补偿发现
+
+- Outbox relay 已具备失败状态、重试次数和下一次重试时间；关键词索引消费端应在失败时继续抛出异常，避免观测代码吞掉异常导致 MQ/Outbox 误判为成功。
+- `ObservationPort` 的属性会落到 Micrometer tag，关键词索引观测只记录 operation、scope、status、exception 这类低基数字段，避免把 docId/kbId 放进指标标签。
+- Web 重建 API 与 outbox retry 形成两类补偿路径：自动重试处理短暂后端波动，管理端按文档/知识库重建处理历史回填和人工补偿。

@@ -500,6 +500,7 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
             MessageSubscriptionPort subscriptionPort,
             ObjectProvider<ElasticsearchKeywordIndexAdapter> elasticsearchKeywordIndexAdapter,
             ObjectProvider<JdbcKeywordIndexAdapter> jdbcKeywordIndexAdapter,
+            ObjectProvider<ObservationPort> observationPort,
             @Value("${seahorse-agent.adapters.keyword-index.topic:" + KeywordIndexOutboxAdapter.DEFAULT_TOPIC + "}")
             String topic,
             @Value("${seahorse-agent.adapters.keyword-index.subscription:seahorse-keyword-index}")
@@ -511,7 +512,8 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
         if (delegate == null) {
             delegate = KeywordIndexPort.noop();
         }
-        return new KeywordIndexMessageSubscriber(subscriptionPort, topic, subscriptionName, delegate);
+        return new KeywordIndexMessageSubscriber(subscriptionPort, topic, subscriptionName, delegate,
+                observationPort.getIfAvailable());
     }
 
     @Bean

@@ -92,3 +92,11 @@
 - Web 层只调用 `KeywordIndexMaintenanceInboundPort`，不直接访问 chunk repository 或 Elasticsearch，保持重建数据来源仍由 kernel 编排。
 - 扩展 `SeahorseWebApiContractTests`，覆盖两个重建触发接口的 `{code,data}` 响应契约。
 - 验证通过：`mvn -pl seahorse-agent-adapter-web,seahorse-agent-tests -am "-Dtest=SeahorseWebApiContractTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，7 个测试成功。
+
+## 2026-05-13 继续推进 M3 索引失败观测与补偿
+
+- `KernelKeywordIndexMaintenanceService` 接入 `ObservationPort`，按文档/知识库重建会记录 `keyword.index.rebuild.success/failure` 事件。
+- `KeywordIndexMessageSubscriber` 接入 `ObservationPort`，outbox 消费成功、失败和未知事件跳过分别记录观测事件；失败仍继续抛出，交给 MQ negative ack 或 Outbox relay 标记失败并重试。
+- starter 自动装配将可用的 `ObservationPort` 注入关键词索引重建服务与 outbox 消费端，未配置观测端口时保持无副作用。
+- 扩展 `KernelKeywordIndexMaintenanceServiceTests` 与 `KeywordIndexOutboxAdapterTests`，覆盖重建部分失败观测、delegate 写入失败观测和 outbox retry 状态保留。
+- 验证通过：`mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=KernelKeywordIndexMaintenanceServiceTests,KeywordIndexOutboxAdapterTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，24 个测试成功；失败补偿测试会输出预期的 outbox relay ERROR 堆栈。
