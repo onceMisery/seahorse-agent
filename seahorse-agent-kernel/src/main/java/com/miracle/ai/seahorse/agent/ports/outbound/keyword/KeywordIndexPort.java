@@ -15,6 +15,22 @@ public interface KeywordIndexPort {
 
     void deleteDocumentChunks(String kbId, String docId);
 
+    /**
+     * 按文档重建关键词索引。
+     *
+     * <p>默认 no-op，避免现有生产适配器在未实现重建能力时被强制破坏；需要重建任务的 adapter 可覆盖。
+     */
+    default void rebuildDocument(String kbId, String docId) {
+    }
+
+    /**
+     * 按知识库重建关键词索引。
+     *
+     * <p>用于历史数据回填、Schema/mapping 变更后的批量修复，以及异步索引失败后的管理端补偿。
+     */
+    default void rebuildKnowledgeBase(String kbId) {
+    }
+
     static KeywordIndexPort noop() {
         return new KeywordIndexPort() {
             @Override

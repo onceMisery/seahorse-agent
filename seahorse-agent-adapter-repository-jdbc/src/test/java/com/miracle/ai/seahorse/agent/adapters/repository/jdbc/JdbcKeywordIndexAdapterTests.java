@@ -45,6 +45,18 @@ class JdbcKeywordIndexAdapterTests {
     }
 
     @Test
+    void shouldBuildRebuildSqlForDocumentAndKnowledgeBase() {
+        JdbcKeywordIndexAdapter adapter = new JdbcKeywordIndexAdapter(dataSource());
+
+        assertThat(adapter.rebuildDocumentSql())
+                .contains("SET search_text = to_tsvector('simple', COALESCE(content, ''))")
+                .contains("WHERE kb_id = ? AND doc_id = ?");
+        assertThat(adapter.rebuildKnowledgeBaseSql())
+                .contains("SET search_text = to_tsvector('simple', COALESCE(content, ''))")
+                .contains("WHERE kb_id = ?");
+    }
+
+    @Test
     void shouldSkipWhenSearchTextColumnMissing() {
         DriverManagerDataSource dataSource = dataSource();
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
@@ -60,6 +72,8 @@ class JdbcKeywordIndexAdapterTests {
 
         adapter.indexDocumentChunks("kb-1", "doc-1", java.util.List.of());
         adapter.deleteDocumentChunks("kb-1", "doc-1");
+        adapter.rebuildDocument("kb-1", "doc-1");
+        adapter.rebuildKnowledgeBase("kb-1");
     }
 
     private DriverManagerDataSource dataSource() {

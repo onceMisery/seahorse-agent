@@ -47,6 +47,9 @@
 - 运行 `git diff --check -- . ':!缺少的功能.md' ':!元数据过滤：RAG与Agentic Search.md'`，通过；仅有 Git 提示部分工作区文件下一次触碰时 LF 会替换为 CRLF。
 # 2026-05-13 追加进度
 
+- 扩展 `KeywordIndexPort`，新增 `rebuildDocument` 与 `rebuildKnowledgeBase` 默认方法，作为历史回填、索引失败补偿和后续管理任务的统一入口。
+- `JdbcKeywordIndexAdapter` 实现按文档/知识库重算 `search_text`，继续保留列不存在时安全跳过的兼容策略。
+- 扩展 `JdbcKeywordIndexAdapterTests`，覆盖文档/知识库重建 SQL 和老库跳过行为；运行 `mvn -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcKeywordIndexAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过：4 个测试成功。
 - 继续推进 M3 关键词检索索引维护：新增 `JdbcKeywordIndexAdapter`，实现 `KeywordIndexPort`，在 JDBC/PostgreSQL fallback 下同步维护 `t_knowledge_chunk.search_text`。
 - `JdbcKeywordIndexAdapter` 会先探测 `search_text` 列是否存在；老库未迁移或测试替身不支持 `information_schema` 时安全跳过，避免关键词索引维护影响主入库链路。
 - starter 在 JDBC repository 类型且存在 `DataSource` 时默认注册 `JdbcKeywordIndexAdapter`，同时保留 `@ConditionalOnMissingBean(KeywordIndexPort.class)` 方便生产环境替换 Elasticsearch 实现。

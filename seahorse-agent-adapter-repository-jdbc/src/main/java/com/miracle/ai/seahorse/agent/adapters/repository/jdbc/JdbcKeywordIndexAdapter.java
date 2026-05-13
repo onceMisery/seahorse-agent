@@ -64,6 +64,22 @@ public class JdbcKeywordIndexAdapter implements KeywordIndexPort {
         jdbcTemplate.update(deleteSql(), kbId, docId);
     }
 
+    @Override
+    public void rebuildDocument(String kbId, String docId) {
+        if (!hasText(kbId) || !hasText(docId) || !searchTextColumnExists()) {
+            return;
+        }
+        jdbcTemplate.update(rebuildDocumentSql(), kbId, docId);
+    }
+
+    @Override
+    public void rebuildKnowledgeBase(String kbId) {
+        if (!hasText(kbId) || !searchTextColumnExists()) {
+            return;
+        }
+        jdbcTemplate.update(rebuildKnowledgeBaseSql(), kbId);
+    }
+
     String indexSql(int chunkCount) {
         String placeholders = java.util.stream.IntStream.range(0, chunkCount)
                 .mapToObj(ignored -> "?")
@@ -83,6 +99,22 @@ public class JdbcKeywordIndexAdapter implements KeywordIndexPort {
                 """;
     }
 
+    String rebuildDocumentSql() {
+        return """
+                UPDATE t_knowledge_chunk
+                   SET search_text = to_tsvector('simple', COALESCE(content, ''))
+                 WHERE kb_id = ? AND doc_id = ? AND deleted = 0
+                """;
+    }
+
+    String rebuildKnowledgeBaseSql() {
+        return """
+                UPDATE t_knowledge_chunk
+                   SET search_text = to_tsvector('simple', COALESCE(content, ''))
+                 WHERE kb_id = ? AND deleted = 0
+                """;
+    }
+
     private List<String> chunkIds(List<VectorChunk> chunks) {
         if (chunks == null || chunks.isEmpty()) {
             return List.of();
@@ -92,6 +124,10 @@ public class JdbcKeywordIndexAdapter implements KeywordIndexPort {
                 .map(VectorChunk::getChunkId)
                 .filter(chunkId -> chunkId != null && !chunkId.isBlank())
                 .toList();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private boolean searchTextColumnExists() {

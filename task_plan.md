@@ -30,5 +30,6 @@
 - 新增 DDL 表和字段必须有注释。
 # 2026-05-13 本轮续做
 
+- [complete] M3 关键词索引维护入口：`KeywordIndexPort` 增加按文档/知识库重建的默认方法，JDBC fallback 已实现重算 `search_text`。
 - [complete] M3 JDBC/PostgreSQL `KeywordIndexPort` fallback：维护 `t_knowledge_chunk.search_text`，并在 starter 中注册默认 JDBC 索引适配器。
-- [pending] M3 生产级关键词索引：Elasticsearch adapter、Outbox 异步索引、索引重建任务仍待后续落地。
+- [pending] M3 生产级关键词索引：Elasticsearch adapter、Outbox 异步索引、管理端重建任务编排仍待后续落地。
