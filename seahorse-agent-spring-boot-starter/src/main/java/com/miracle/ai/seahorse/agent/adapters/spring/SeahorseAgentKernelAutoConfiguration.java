@@ -58,6 +58,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataR
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataSchemaService;
 import com.miracle.ai.seahorse.agent.kernel.application.model.KernelModelRoutingService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
+import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine.KernelRetrievalEnginePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.sample.KernelSampleQuestionService;
@@ -115,6 +116,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
@@ -535,6 +537,14 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnBean(KernelRetrievalEngine.class)
     public RetrievalContextPort seahorseKernelRetrievalContextPort(KernelRetrievalEngine retrievalEngine) {
         return retrievalEngine;
+    }
+
+    @Bean
+    @ConditionalOnBean(KernelRetrievalEngine.class)
+    @ConditionalOnMissingBean(RetrievalEvaluationInboundPort.class)
+    public KernelRetrievalEvaluationService seahorseRetrievalEvaluationInboundPort(
+            KernelRetrievalEngine retrievalEngine) {
+        return new KernelRetrievalEvaluationService(retrievalEngine);
     }
 
     @Bean

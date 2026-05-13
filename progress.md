@@ -228,3 +228,12 @@
 - starter 自动装配把可用 `ObservationPort` 注入 FinalTruncate 后处理器；没有观测适配器时保持原行为。
 - 新增 `FinalTruncatePostProcessorFeatureTests`，覆盖截断事件与缺省租户上下文下的稳定观测记录。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-spring-boot-starter -am "-Dtest=FinalTruncatePostProcessorFeatureTests,RrfFusionPostProcessorFeatureTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，21 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-13 继续推进 P5 检索质量评测最小闭环
+
+- 采用 TDD 补齐检索质量评测：先新增内核指标测试、Web 契约测试和 starter 自动装配断言，确认缺少 `RetrievalEvaluation` 端口/服务时编译失败。
+- 新增 `RetrievalEvaluationInboundPort` 以及评测命令、样本、样本结果和汇总报表模型，保留 `strategyName` 用于后续 A/B 或基线对比。
+- 新增 `KernelRetrievalEvaluationService`，逐条评测样本调用现有 `KernelRetrievalEngine.retrieveKnowledgeChannels`，计算 Recall@K、MRR、nDCG@K、空召回率、平均耗时和 P95 耗时。
+- 新增 `RetrievalEvaluationRequest` 和 `SeahorseRetrievalEvaluationController`，暴露 `POST /knowledge-base/{kb-id}/retrieval-quality/evaluate`；Web 层只把租户、知识库和 ACL 转为强类型 `RetrievalFilter`，不绕过 Filter Compiler。
+- starter 自动装配 `KernelRetrievalEvaluationService` 并暴露 `RetrievalEvaluationInboundPort`，只依赖内核检索引擎，不新增外部 SDK 或 DDL。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationServiceTests,SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，30 个测试成功，reactor `BUILD SUCCESS`。

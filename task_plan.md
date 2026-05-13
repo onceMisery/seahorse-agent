@@ -12,6 +12,7 @@
 - [complete] M4 RRF 与 Reranker
 - [complete] M5 回填与治理运维
 - [complete] M6 检索后处理增强收口
+- [complete] P5 检索质量评测最小闭环
 
 ## 当前落地范围
 
@@ -21,6 +22,7 @@
 - M3 尚未完成：无。
 - M4 已完成最小闭环：新增 `RrfFusionPostProcessorFeature`、`RerankPostProcessorFeature` 和 `FinalTruncatePostProcessorFeature`，支持通道排名融合、重复 chunk 去重、融合分记录、Rerank 候选截断、异常/空结果降级、`rerankScore` 回写和 finalTopK 截断。
 - M4 后续增强进入 M6 收口：Rerank 超时隔离、通道权重配置化和观测指标。
+- P5 已完成最小闭环：新增检索评测入站端口、内核评测服务和 Web 触发接口，支持临时评测集计算 Recall@K、MRR、nDCG@K、空召回率和延迟指标。
 
 ## 硬约束
 
@@ -102,3 +104,9 @@
 - [complete] 质量报表模型新增 `reviewPassRate`，补齐设计文档“复核通过率可查询”的质量验收项。
 - [complete] JDBC 治理适配器按已处理复核项统计通过率，待处理项不进入分母。
 - [complete] Web 契约与 JDBC 报表测试覆盖复核通过率字段。
+
+## 2026-05-13 P5 检索质量评测最小闭环
+
+- [complete] 新增 `RetrievalEvaluationInboundPort`、评测命令/样本/结果/报表模型和 `KernelRetrievalEvaluationService`。
+- [complete] 支持按评测样本运行现有检索编排，并计算 Recall@K、MRR、nDCG@K、空召回率、平均耗时和 P95 耗时。
+- [complete] Web 新增 `POST /knowledge-base/{kb-id}/retrieval-quality/evaluate`，请求会构造强类型 `RetrievalFilter`，动态 metadata 仍交给 Filter Compiler。

@@ -153,3 +153,10 @@
 - FinalTruncate 是检索后处理链路的最终收口点，单独记录 `retrieval.final` 能让运维侧区分“融合/精排输出规模”和“最终进入上下文规模”。
 - 最终截断观测仍需遵守低基数原则，只记录规模、阈值和是否截断；`chunkId/docId/question` 等明细应留在日志或追踪上下文，不进入指标标签。
 - 租户上下文可能为空，观测属性需要稳定降级为空字符串，避免 `Map.of` 因空值失败后丢失事件。
+
+## 2026-05-13 P5 检索质量评测发现
+
+- P5 最小闭环不需要先落持久化评测集；内核先提供“临时评测集运行 + 指标计算”端口，可以让管理端或离线任务复用同一指标口径。
+- Recall@K、MRR 和 nDCG@K 应基于 expectedChunkIds/expectedDocIds/expectedKbIds 三类目标匹配，允许评测集按不同粒度标注答案来源。
+- Web 评测接口不能把原始 metadata Map 直接送入检索后端；请求层只构造 `RetrievalFilter`/`MetadataCondition`，后续仍由内核 Filter Compiler 做 Schema 校验。
+- 评测服务只依赖 `KernelRetrievalEngine`，不引入外部评测框架或搜索 SDK，后续持久化评测集、策略 A/B 和知识库策略模板可在该端口之上扩展。

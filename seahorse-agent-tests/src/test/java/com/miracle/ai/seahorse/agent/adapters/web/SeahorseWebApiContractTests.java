@@ -50,6 +50,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
@@ -98,6 +101,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceDetail;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePage;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.http.MediaType;
@@ -110,11 +114,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -633,6 +639,47 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.pendingReviewCount").value(2))
                 .andExpect(jsonPath("$.data.fieldCoverages[0].fieldKey").value("department"))
                 .andExpect(jsonPath("$.data.quarantineReasons[0].reasonCode").value("SCHEMA_MISSING"));
+    }
+
+    @Test
+    void shouldKeepRetrievalEvaluationContract() throws Exception {
+        RetrievalEvaluationInboundPort evaluationPort = mock(RetrievalEvaluationInboundPort.class);
+        when(evaluationPort.evaluate(any())).thenReturn(new RetrievalEvaluationReport(
+                "baseline", 2, 1, 1,
+                1.0D, 0.5D, 0.63D, 0.0D,
+                12.0D, 12.0D,
+                List.of(new RetrievalEvaluationCaseResult(
+                        "case-1", "question-a", List.of("chunk-1"), List.of("doc-1"),
+                        1, 1, 1.0D, 0.5D, 0.63D, 12L, "SUCCESS", ""))));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseRetrievalEvaluationController(evaluationPort)).build();
+
+        mvc.perform(post("/knowledge-base/kb-1/retrieval-quality/evaluate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-1",
+                                "strategyName", "baseline",
+                                "topK", 2,
+                                "cases", List.of(Map.of(
+                                        "caseId", "case-1",
+                                        "question", "question-a",
+                                        "expectedChunkIds", List.of("chunk-1"),
+                                        "aclSubjectIds", List.of("dept-a")))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.strategyName").value("baseline"))
+                .andExpect(jsonPath("$.data.recallAtK").value(1.0D))
+                .andExpect(jsonPath("$.data.mrr").value(0.5D))
+                .andExpect(jsonPath("$.data.ndcgAtK").value(0.63D))
+                .andExpect(jsonPath("$.data.cases[0].retrievedChunkIds[0]").value("chunk-1"));
+
+        ArgumentCaptor<com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand> captor =
+                ArgumentCaptor.forClass(
+                        com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand.class);
+        verify(evaluationPort).evaluate(captor.capture());
+        assertThat(captor.getValue().cases().get(0).filter().system().tenantId()).isEqualTo("tenant-1");
+        assertThat(captor.getValue().cases().get(0).filter().system().knowledgeBaseIds()).containsExactly("kb-1");
+        assertThat(captor.getValue().cases().get(0).filter().system().aclSubjectIds()).containsExactly("dept-a");
     }
 
     @Test

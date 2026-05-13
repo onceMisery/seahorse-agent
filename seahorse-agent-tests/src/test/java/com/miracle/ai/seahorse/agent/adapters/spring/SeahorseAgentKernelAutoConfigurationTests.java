@@ -40,6 +40,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQ
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataReviewService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataSchemaService;
 import com.miracle.ai.seahorse.agent.kernel.application.model.KernelModelRoutingService;
+import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.sample.KernelSampleQuestionService;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
@@ -73,6 +74,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -161,6 +163,8 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(KernelIngestionEngine.class);
                     assertThat(context).hasSingleBean(KernelMemoryEngine.class);
                     assertThat(context).hasSingleBean(KernelModelRoutingService.class);
+                    assertThat(context).hasSingleBean(KernelRetrievalEvaluationService.class);
+                    assertThat(context).hasSingleBean(RetrievalEvaluationInboundPort.class);
                     assertThat(context).hasSingleBean(ChatInboundPort.class);
                     assertThat(context).hasSingleBean(LocalStreamTaskPort.class);
                 });
