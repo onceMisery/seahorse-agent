@@ -43,6 +43,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelDocument
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeDocumentService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentVectorPorts;
+import com.miracle.ai.seahorse.agent.kernel.application.keyword.KernelKeywordIndexMaintenanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.mapping.KernelQueryTermMappingService;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
@@ -100,6 +101,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeBaseInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeChunkInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.DocumentRefreshInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeDocumentInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.mapping.QueryTermMappingInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
@@ -740,6 +742,17 @@ public class SeahorseAgentKernelAutoConfiguration {
                 chunkTopic,
                 refreshSchedulePort.getIfAvailable(DocumentRefreshSchedulePort::noop),
                 schedulerPort.getIfAvailable(SchedulerPort::none));
+    }
+
+    @Bean
+    @ConditionalOnBean(KnowledgeDocumentRepositoryPort.class)
+    @ConditionalOnMissingBean(KeywordIndexMaintenanceInboundPort.class)
+    public KernelKeywordIndexMaintenanceService seahorseKeywordIndexMaintenanceInboundPort(
+            KnowledgeDocumentRepositoryPort documentRepositoryPort,
+            ObjectProvider<KeywordIndexPort> keywordIndexPort) {
+        return new KernelKeywordIndexMaintenanceService(
+                documentRepositoryPort,
+                keywordIndexPort.getIfAvailable(KeywordIndexPort::noop));
     }
 
     @Bean

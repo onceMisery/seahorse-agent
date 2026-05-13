@@ -30,6 +30,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.intent.KernelIntentTreeS
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeBaseService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeChunkService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelDocumentRefreshService;
+import com.miracle.ai.seahorse.agent.kernel.application.keyword.KernelKeywordIndexMaintenanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService;
@@ -59,6 +60,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelinePayload;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.DocumentRefreshInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeDocumentInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
@@ -297,6 +299,8 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(KernelDocumentRefreshService.class);
                     assertThat(context).hasSingleBean(DocumentRefreshInboundPort.class);
+                    assertThat(context).hasSingleBean(KernelKeywordIndexMaintenanceService.class);
+                    assertThat(context).hasSingleBean(KeywordIndexMaintenanceInboundPort.class);
                     assertThat(context).hasSingleBean(SeahorseDocumentRefreshJob.class);
                 });
     }

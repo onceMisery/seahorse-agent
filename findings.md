@@ -46,3 +46,10 @@
 - 系统过滤与动态 metadata 过滤要分层处理：`enabled/tenant_id/kb_id/doc_id/collection_name` 等系统边界由 adapter 固定字段下推，动态字段使用 `MetadataFieldDescriptor.backendMapping().searchFieldName()`。
 - `KeywordIndexPort.rebuildDocument/rebuildKnowledgeBase` 只有 kb/doc 参数，ES adapter 无法凭空重建正文索引；后续重建任务应由管理端或应用服务从 chunk repository 拉取分片快照，再调用 `indexDocumentChunks`。
 - Spring `ApplicationContextRunner` 不一定提供 Boot Binder 的 `Duration` 转换能力；自动装配中简单配置值更稳妥的做法是接收字符串并在配置类本地解析。
+
+## 2026-05-13 关键词索引重建编排发现
+
+- 生产级 ES/OpenSearch 后端不能根据 `kbId/docId` 自行恢复正文与 metadata，重建的数据来源必须留在 kernel 编排层，从文档仓储拉取已经治理过的启用分片快照。
+- 重建前先调用 `deleteDocumentChunks` 可以清理历史残留，避免被禁用、删除或分片变化后的旧 chunk 继续参与关键词召回。
+- `KeywordIndexMaintenanceInboundPort` 只暴露编排能力，不绑定 web、调度或具体后端；管理端/API/Job 后续只需要调用该入站端口即可。
+- 重建结果需要保留跳过与失败摘要。对于知识库级批量重建，单文档失败不应中断整个批次，后续补偿可以根据失败列表继续处理。

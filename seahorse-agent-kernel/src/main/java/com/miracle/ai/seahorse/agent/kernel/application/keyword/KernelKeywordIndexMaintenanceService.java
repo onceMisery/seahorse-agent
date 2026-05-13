@@ -1,0 +1,185 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.kernel.application.keyword;
+
+import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
+import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexRebuildResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentDetail;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * 默认关键词索引运维服务。
+ *
+ * <p>ES 等独立搜索后端不能只凭 kbId/docId 自行重建正文索引；这里统一从文档仓储拉取启用分片快照，
+ * 再交给 {@link KeywordIndexPort} 写入，确保所有后端看到同一份受治理的数据。
+ */
+public class KernelKeywordIndexMaintenanceService implements KeywordIndexMaintenanceInboundPort {
+
+    private static final int DEFAULT_BATCH_SIZE = 50;
+    private static final int MAX_BATCH_SIZE = 500;
+    private static final String SCOPE_DOCUMENT = "document";
+    private static final String SCOPE_KNOWLEDGE_BASE = "knowledge_base";
+
+    private final KnowledgeDocumentRepositoryPort documentRepositoryPort;
+    private final KeywordIndexPort keywordIndexPort;
+
+    public KernelKeywordIndexMaintenanceService(KnowledgeDocumentRepositoryPort documentRepositoryPort,
+                                                KeywordIndexPort keywordIndexPort) {
+        this.documentRepositoryPort = Objects.requireNonNull(documentRepositoryPort,
+                "documentRepositoryPort must not be null");
+        this.keywordIndexPort = Objects.requireNonNullElse(keywordIndexPort, KeywordIndexPort.noop());
+    }
+
+    @Override
+    public KeywordIndexRebuildResult rebuildDocument(String docId) {
+        RebuildAccumulator accumulator = new RebuildAccumulator(SCOPE_DOCUMENT, requireText(docId, "docId"));
+        rebuildOneDocument(requireDocument(docId), accumulator);
+        return accumulator.toResult();
+    }
+
+    @Override
+    public KeywordIndexRebuildResult rebuildKnowledgeBase(String kbId, int batchSize) {
+        String safeKbId = requireText(kbId, "kbId");
+        int safeBatchSize = normalizeBatchSize(batchSize);
+        RebuildAccumulator accumulator = new RebuildAccumulator(SCOPE_KNOWLEDGE_BASE, safeKbId);
+        long current = 1;
+        while (true) {
+            KnowledgeDocumentPage page = documentRepositoryPort.page(safeKbId, current, safeBatchSize, null, null);
+            if (page.records().isEmpty()) {
+                break;
+            }
+            for (KnowledgeDocumentDetail document : page.records()) {
+                rebuildOneDocument(document, accumulator);
+            }
+            if (page.pages() > 0 && current >= page.pages()) {
+                break;
+            }
+            current++;
+        }
+        return accumulator.toResult();
+    }
+
+    private void rebuildOneDocument(KnowledgeDocumentDetail document, RebuildAccumulator accumulator) {
+        if (document == null || !hasText(document.getId()) || !hasText(document.getKbId())) {
+            accumulator.skippedDocuments++;
+            return;
+        }
+        accumulator.processedDocuments++;
+        try {
+            // 先删除再写入，避免历史残留 chunk 在搜索后端中继续可见。
+            keywordIndexPort.deleteDocumentChunks(document.getKbId(), document.getId());
+            accumulator.deletedDocuments++;
+            if (Boolean.FALSE.equals(document.getEnabled())) {
+                accumulator.skippedDocuments++;
+                return;
+            }
+            List<KnowledgeChunkRecord> chunks = documentRepositoryPort.listEnabledChunks(document.getId());
+            if (chunks.isEmpty()) {
+                accumulator.skippedDocuments++;
+                return;
+            }
+            List<VectorChunk> vectorChunks = chunks.stream()
+                    .filter(Objects::nonNull)
+                    .map(chunk -> toVectorChunk(document, chunk))
+                    .toList();
+            keywordIndexPort.indexDocumentChunks(document.getKbId(), document.getId(), vectorChunks);
+            accumulator.indexedDocuments++;
+            accumulator.indexedChunks += vectorChunks.size();
+        } catch (RuntimeException ex) {
+            accumulator.failedDocuments++;
+            accumulator.failures.add(document.getId() + ": " + Objects.requireNonNullElse(ex.getMessage(), ""));
+        }
+    }
+
+    private KnowledgeDocumentDetail requireDocument(String docId) {
+        String safeDocId = requireText(docId, "docId");
+        return documentRepositoryPort.findDetailById(safeDocId)
+                .orElseThrow(() -> new IllegalArgumentException("文档不存在：" + safeDocId));
+    }
+
+    private VectorChunk toVectorChunk(KnowledgeDocumentDetail document, KnowledgeChunkRecord record) {
+        VectorChunk chunk = new VectorChunk();
+        chunk.setChunkId(record.getId());
+        chunk.setIndex(record.getChunkIndex());
+        chunk.setContent(Objects.requireNonNullElse(record.getContent(), ""));
+        chunk.setMetadata(systemMetadata(document, record));
+        return chunk;
+    }
+
+    private Map<String, Object> systemMetadata(KnowledgeDocumentDetail document, KnowledgeChunkRecord record) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("kb_id", document.getKbId());
+        metadata.put("doc_id", document.getId());
+        metadata.put("doc_name", document.getDocName());
+        metadata.put("collection_name", document.getCollectionName());
+        metadata.put("chunk_index", record.getChunkIndex());
+        metadata.put("enabled", record.getEnabled() == null || record.getEnabled() == 1);
+        return metadata;
+    }
+
+    private int normalizeBatchSize(int batchSize) {
+        if (batchSize <= 0) {
+            return DEFAULT_BATCH_SIZE;
+        }
+        return Math.min(batchSize, MAX_BATCH_SIZE);
+    }
+
+    private String requireText(String value, String name) {
+        if (!hasText(value)) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+        return value.trim();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private static final class RebuildAccumulator {
+
+        private final String scope;
+        private final String targetId;
+        private int processedDocuments;
+        private int indexedDocuments;
+        private int indexedChunks;
+        private int deletedDocuments;
+        private int skippedDocuments;
+        private int failedDocuments;
+        private final List<String> failures = new ArrayList<>();
+
+        private RebuildAccumulator(String scope, String targetId) {
+            this.scope = scope;
+            this.targetId = targetId;
+        }
+
+        private KeywordIndexRebuildResult toResult() {
+            return new KeywordIndexRebuildResult(scope, targetId, processedDocuments, indexedDocuments,
+                    indexedChunks, deletedDocuments, skippedDocuments, failedDocuments, failures);
+        }
+    }
+}

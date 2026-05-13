@@ -75,3 +75,13 @@
   - `mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
   - `mvn -pl seahorse-agent-adapter-search-elasticsearch,seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=ElasticsearchKeywordSearchAdapterTests,ElasticsearchKeywordIndexAdapterTests,SeahorseAgentNativeAdapterAutoConfigurationTests,KeywordIndexOutboxAdapterTests,KeywordSearchChannelFeatureTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
   - `git diff --check -- . ':!缺少的功能.md' ':!元数据过滤：RAG与Agentic Search.md'` 通过，仅有 LF/CRLF warning。
+
+## 2026-05-13 继续推进 M3 关键词索引重建编排
+
+- 新增 `KeywordIndexMaintenanceInboundPort` 与 `KeywordIndexRebuildResult`，作为按文档/知识库重建关键词索引的 kernel 入站入口。
+- 新增 `KernelKeywordIndexMaintenanceService`，统一从 `KnowledgeDocumentRepositoryPort` 拉取文档详情与启用分片快照，先清理后端残留，再通过 `KeywordIndexPort.indexDocumentChunks` 写入关键词索引。
+- 重建编排跳过禁用文档和空分片文档，保留处理、删除、写入、跳过和失败计数，便于后续管理端展示与补偿。
+- starter 在存在 `KnowledgeDocumentRepositoryPort` 时自动装配 `KernelKeywordIndexMaintenanceService`，并通过 `KeywordIndexMaintenanceInboundPort` 暴露。
+- 新增 `KernelKeywordIndexMaintenanceServiceTests`，覆盖单文档重建、禁用文档只删除、知识库分页重建与失败摘要。
+- 验证通过：`mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=KernelKeywordIndexMaintenanceServiceTests,SeahorseAgentKernelAutoConfigurationTests,KeywordIndexOutboxAdapterTests,KernelKnowledgeDocumentServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，24 个测试成功。
+- 验证通过：`git diff --check -- . ':!缺少的功能.md' ':!元数据过滤：RAG与Agentic Search.md'`。
