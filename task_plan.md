@@ -116,3 +116,9 @@
 - [complete] 基于现有检索质量评测端口扩展多策略对比命令与报表，不新增 DDL，不引入外部评测 SDK。
 - [complete] 支持多个策略复用同一评测集，输出每个策略的 Recall@K、MRR、nDCG@K、空召回率与延迟指标，并给出相对 baseline 的差值。
 - [complete] Web 新增 `POST /knowledge-base/{kb-id}/retrieval-quality/compare`，请求只构造强类型 `RetrievalFilter` 与 `RetrievalOptions`，动态 metadata 仍由内核 Filter Compiler 校验。
+
+## 2026-05-13 P5 知识库检索策略模板
+
+- [complete] 新增无 DDL 的默认检索策略模板端口与内核服务，提供向量召回、混合 RRF、混合精排三类模板。
+- [complete] starter 自动暴露 `RetrievalStrategyTemplateInboundPort`，后续可替换为持久化或知识库级覆盖实现。
+- [complete] Web 新增 `GET /knowledge-base/{kb-id}/retrieval-strategy-templates`，管理端可直接读取模板中的强类型 `RetrievalOptions`。

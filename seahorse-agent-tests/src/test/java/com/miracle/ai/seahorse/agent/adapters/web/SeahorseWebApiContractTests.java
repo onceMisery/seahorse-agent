@@ -56,6 +56,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategyDelta;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplate;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
@@ -744,6 +746,32 @@ class SeahorseWebApiContractTests {
         assertThat(captor.getValue().cases().get(0).filter().system().tenantId()).isEqualTo("tenant-1");
         assertThat(captor.getValue().cases().get(0).filter().system().knowledgeBaseIds()).containsExactly("kb-1");
         assertThat(captor.getValue().cases().get(0).filter().system().aclSubjectIds()).containsExactly("dept-a");
+    }
+
+    @Test
+    void shouldKeepRetrievalStrategyTemplateContract() throws Exception {
+        RetrievalStrategyTemplateInboundPort templatePort = mock(RetrievalStrategyTemplateInboundPort.class);
+        when(templatePort.listTemplates("kb-1")).thenReturn(List.of(new RetrievalStrategyTemplate(
+                "hybrid_rrf",
+                "混合召回 RRF",
+                "同时启用向量和关键词召回",
+                com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions.builder()
+                        .finalTopK(5)
+                        .enableVector(true)
+                        .enableKeyword(true)
+                        .enableRrf(true)
+                        .build())));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseRetrievalStrategyTemplateController(templatePort)).build();
+
+        mvc.perform(get("/knowledge-base/kb-1/retrieval-strategy-templates"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data[0].templateKey").value("hybrid_rrf"))
+                .andExpect(jsonPath("$.data[0].options.enableKeyword").value(true))
+                .andExpect(jsonPath("$.data[0].options.enableRrf").value(true));
+
+        verify(templatePort).listTemplates("kb-1");
     }
 
     @Test

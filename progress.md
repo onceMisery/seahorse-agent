@@ -246,3 +246,12 @@
 - 新增 `RetrievalEvaluationComparisonRequest` 和 `POST /knowledge-base/{kb-id}/retrieval-quality/compare`；Web 层仍只构造强类型过滤与策略参数，不直接接触检索后端。
 - 补充 `KernelRetrievalEvaluationServiceTests` 和 `SeahorseWebApiContractTests`，覆盖 winner/delta 与 compare API 契约。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationServiceTests,SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，32 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-13 继续推进 P5 知识库检索策略模板
+
+- 新增 `RetrievalStrategyTemplateInboundPort` 和 `RetrievalStrategyTemplate`，模板只携带强类型 `RetrievalOptions`，不承载动态 metadata 条件。
+- 新增 `KernelRetrievalStrategyTemplateService`，以内置模板方式提供 `vector_only`、`hybrid_rrf` 和 `hybrid_rerank`，暂不新增表结构或仓储依赖。
+- 新增 `SeahorseRetrievalStrategyTemplateController`，暴露 `GET /knowledge-base/{kb-id}/retrieval-strategy-templates`。
+- starter 自动装配 `KernelRetrievalStrategyTemplateService` 并暴露 `RetrievalStrategyTemplateInboundPort`。
+- 补充 `KernelRetrievalStrategyTemplateServiceTests`、`SeahorseWebApiContractTests` 和 `SeahorseAgentKernelAutoConfigurationTests` 覆盖模板内容、Web 契约和自动装配。
+- 首次验证因沙箱无法写入 `C:\user-data\.m2\repo\org\bouncycastle\bcutil-jdk18on\resolver-status.properties` 失败；提升权限后同一 Maven 命令通过，32 个测试成功，reactor `BUILD SUCCESS`。

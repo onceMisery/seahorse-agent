@@ -61,6 +61,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiCha
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine.KernelRetrievalEnginePorts;
+import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalStrategyTemplateService;
 import com.miracle.ai.seahorse.agent.kernel.application.sample.KernelSampleQuestionService;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceService;
@@ -117,6 +118,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineIn
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
@@ -545,6 +547,12 @@ public class SeahorseAgentKernelAutoConfiguration {
     public KernelRetrievalEvaluationService seahorseRetrievalEvaluationInboundPort(
             KernelRetrievalEngine retrievalEngine) {
         return new KernelRetrievalEvaluationService(retrievalEngine);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(RetrievalStrategyTemplateInboundPort.class)
+    public KernelRetrievalStrategyTemplateService seahorseRetrievalStrategyTemplateInboundPort() {
+        return new KernelRetrievalStrategyTemplateService();
     }
 
     @Bean

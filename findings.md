@@ -166,3 +166,9 @@
 - A/B 对比应复用同一批评测样本，策略差异只放在 `RetrievalOptions` 与策略级 `topK`，避免不同样本集导致指标不可比。
 - winner 判定不能只看延迟，应先按 nDCG、Recall 和 MRR 选择质量更高的策略，再用空召回率和平均延迟作为并列时的次级条件。
 - 对比 API 仍需沿用评测 API 的边界：Web 只负责把租户、知识库和 ACL 转为 `RetrievalFilter`，动态 metadata 继续由内核 Schema 与 Filter Compiler 校验。
+
+## 2026-05-13 P5 知识库检索策略模板发现
+
+- 当前没有知识库级检索策略持久化边界，先用内核默认模板端口完成管理端可读闭环，比直接改具体检索后端更稳。
+- 模板只应表达 `RetrievalOptions`，不应该携带原始 metadata Map；实际过滤条件仍由请求侧构造 `RetrievalFilter` 并进入 Filter Compiler。
+- 混合精排模板可以启用 `enableRerank`，但具体 `rerankModel` 应由管理端或知识库配置补齐，避免内置模板绑定某个外部模型提供方。
