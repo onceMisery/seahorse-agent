@@ -51,6 +51,8 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSemanticMemory
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcShortTermMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcUserRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcWorkingMemoryRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordIndexAdapter;
+import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordSearchAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.storage.local.LocalObjectStorageAdapter;
 import com.miracle.ai.seahorse.agent.adapters.vector.noop.NoopVectorStoreAdapter;
@@ -75,6 +77,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSchedulePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshStateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
@@ -98,6 +102,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
+import okhttp3.OkHttpClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -215,6 +220,26 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(SemanticMemoryPort.class);
                     assertThat(context).hasSingleBean(MemoryQualitySnapshotRepositoryPort.class);
                     assertThat(context).hasSingleBean(MemoryConflictLogRepositoryPort.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterElasticsearchKeywordAdaptersWhenSelected() {
+        contextRunner.withBean(OkHttpClient.class, OkHttpClient::new)
+                .withBean(ObjectMapper.class, ObjectMapper::new)
+                .withPropertyValues(
+                        "seahorse-agent.adapters.keyword-search.type=elasticsearch",
+                        "seahorse-agent.adapters.keyword-index.type=elasticsearch",
+                        "seahorse-agent.adapters.keyword-search.elasticsearch.index-name=test_chunks",
+                        "seahorse-agent.adapters.keyword-index.elasticsearch.index-name=test_chunks")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(ElasticsearchKeywordSearchAdapter.class);
+                    assertThat(context).hasSingleBean(ElasticsearchKeywordIndexAdapter.class);
+                    assertThat(context.getBean(KeywordSearchPort.class))
+                            .isInstanceOf(ElasticsearchKeywordSearchAdapter.class);
+                    assertThat(context.getBean(KeywordIndexPort.class))
+                            .isInstanceOf(ElasticsearchKeywordIndexAdapter.class);
                 });
     }
 }

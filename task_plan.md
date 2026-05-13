@@ -35,3 +35,10 @@
 - [complete] M3 关键词索引维护入口：`KeywordIndexPort` 增加按文档/知识库重建的默认方法，JDBC fallback 已实现重算 `search_text`。
 - [complete] M3 JDBC/PostgreSQL `KeywordIndexPort` fallback：维护 `t_knowledge_chunk.search_text`，并在 starter 中注册默认 JDBC 索引适配器。
 - [pending] M3 生产级关键词索引：Elasticsearch adapter、管理端重建任务编排、异步索引失败观测与补偿策略仍待后续落地。
+
+## 2026-05-13 Elasticsearch adapter 继续推进
+
+- [complete] M3 Elasticsearch 生产级关键词检索/索引适配器：新增 `seahorse-agent-adapter-search-elasticsearch` 模块，基于 OkHttp REST API 实现 BM25 检索、bulk 索引写入和按文档 delete_by_query 清理。
+- [complete] M3 Elasticsearch 与 starter 接入：支持 `seahorse-agent.adapters.keyword-search.type=elasticsearch` 和 `seahorse-agent.adapters.keyword-index.type=elasticsearch`，outbox 消费端优先委托 ES adapter，缺省回退 JDBC adapter。
+- [pending] M3 管理端重建任务编排：ES adapter 已具备实时写入与删除契约，按文档/知识库历史回填仍需要上层任务从 chunk repository 拉取快照后调用 `indexDocumentChunks`。
+- [pending] M3 索引失败观测与补偿：当前 REST 调用失败会抛出异常，后续需要接入 observation 指标、失败事件记录与管理端补偿入口。

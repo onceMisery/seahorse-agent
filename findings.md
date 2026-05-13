@@ -38,3 +38,11 @@
 - `JdbcKeywordSearchAdapter` 已优先读取 `search_text`，因此 JDBC 关键词索引维护只需要更新同表 `tsvector`，无需新增 kernel 端口或跨模块依赖。
 - `KeywordIndexPort` 当前由 `IndexerNodeFeature` 同步调用；JDBC fallback 保持轻量实现，生产级 ES 写入和 Outbox 异步化仍应作为后续适配器能力推进。
 - 老库兼容性需要保留：`search_text` 列不存在时索引维护应跳过，避免还未执行 DDL 的部署在文档入库阶段失败。
+
+## 2026-05-13 Elasticsearch adapter 发现
+
+- 使用 OkHttp + Elasticsearch REST API 可以满足当前关键词检索/索引契约，不需要引入 Elasticsearch Java SDK，也不会污染 kernel 依赖边界。
+- 搜索 adapter 必须只消费 `CompiledMetadataFilter` 的 AST。当前实现把 `FieldEq/FieldIn/FieldRange/FieldContains/FieldExists/FilterAnd` 翻译为 ES `term/terms/range/match/exists/bool filter`。
+- 系统过滤与动态 metadata 过滤要分层处理：`enabled/tenant_id/kb_id/doc_id/collection_name` 等系统边界由 adapter 固定字段下推，动态字段使用 `MetadataFieldDescriptor.backendMapping().searchFieldName()`。
+- `KeywordIndexPort.rebuildDocument/rebuildKnowledgeBase` 只有 kb/doc 参数，ES adapter 无法凭空重建正文索引；后续重建任务应由管理端或应用服务从 chunk repository 拉取分片快照，再调用 `indexDocumentChunks`。
+- Spring `ApplicationContextRunner` 不一定提供 Boot Binder 的 `Duration` 转换能力；自动装配中简单配置值更稳妥的做法是接收字符串并在配置类本地解析。

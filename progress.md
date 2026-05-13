@@ -60,3 +60,18 @@
 - `JdbcKeywordIndexAdapter` 会先探测 `search_text` 列是否存在；老库未迁移或测试替身不支持 `information_schema` 时安全跳过，避免关键词索引维护影响主入库链路。
 - starter 在 JDBC repository 类型且存在 `DataSource` 时默认注册 `JdbcKeywordIndexAdapter`，同时保留 `@ConditionalOnMissingBean(KeywordIndexPort.class)` 方便生产环境替换 Elasticsearch 实现。
 - 运行 `mvn -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcKeywordIndexAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，通过：3 个测试成功。
+
+## 2026-05-13 继续推进 M3 Elasticsearch adapter
+
+- 新增 `seahorse-agent-adapter-search-elasticsearch` Maven 模块，并加入根 `pom.xml` modules。
+- 实现 `ElasticsearchKeywordProperties`、`ElasticsearchKeywordSearchAdapter`、`ElasticsearchKeywordIndexAdapter` 和 REST 封装 `ElasticsearchKeywordHttpClient`。
+- ES 搜索请求基于 `multi_match` + `bool.filter`；系统字段下推 `enabled/tenant_id/kb_id/doc_id/collection_name` 等，动态 metadata 只消费 `CompiledMetadataFilter.expression()`，不解析用户原始过滤 Map。
+- ES 索引写入使用 `_bulk`，删除使用 `_delete_by_query`；chunk 文档保存 `chunk_id/kb_id/doc_id/chunk_index/content/metadata/tenant_id/collection_name/enabled`。
+- starter 新增 ES 关键词搜索与索引自动装配，配置入口为 `seahorse-agent.adapters.keyword-search.type=elasticsearch` 和 `seahorse-agent.adapters.keyword-index.type=elasticsearch`。
+- outbox 订阅器委托选择改为优先 `ElasticsearchKeywordIndexAdapter`，不存在时回退 `JdbcKeywordIndexAdapter`，最后回退 noop。
+- 首次运行 starter 测试时发现 `@Value` 无法在轻量 `ApplicationContextRunner` 中把 `10s` 转为 `Duration`；已改为字符串注入并在配置类内解析 `ms/s/m/PT...`。
+- 验证通过：
+  - `mvn -pl seahorse-agent-adapter-search-elasticsearch -am test`
+  - `mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - `mvn -pl seahorse-agent-adapter-search-elasticsearch,seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=ElasticsearchKeywordSearchAdapterTests,ElasticsearchKeywordIndexAdapterTests,SeahorseAgentNativeAdapterAutoConfigurationTests,KeywordIndexOutboxAdapterTests,KeywordSearchChannelFeatureTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+  - `git diff --check -- . ':!缺少的功能.md' ':!元数据过滤：RAG与Agentic Search.md'` 通过，仅有 LF/CRLF warning。

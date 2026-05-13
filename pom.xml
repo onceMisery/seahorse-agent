@@ -47,6 +47,7 @@
         <module>seahorse-agent-adapter-vector-milvus</module>
         <module>seahorse-agent-adapter-vector-pgvector</module>
         <module>seahorse-agent-adapter-vector-noop</module>
+        <module>seahorse-agent-adapter-search-elasticsearch</module>
         <module>seahorse-agent-adapter-repository-jdbc</module>
         <module>seahorse-agent-adapter-cache-local</module>
         <module>seahorse-agent-adapter-cache-redis</module>

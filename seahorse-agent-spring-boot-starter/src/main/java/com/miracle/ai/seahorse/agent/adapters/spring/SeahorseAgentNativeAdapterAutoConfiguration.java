@@ -66,6 +66,9 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSampleQuestion
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSemanticMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcShortTermMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcWorkingMemoryRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordIndexAdapter;
+import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordProperties;
+import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordSearchAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.SeahorseOutboxRelayJob;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexMessageSubscriber;
@@ -162,8 +165,11 @@ import org.springframework.context.annotation.Primary;
 import software.amazon.awssdk.services.s3.S3Client;
 
 import javax.sql.DataSource;
+import java.time.Duration;
+import java.util.Arrays;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Seahorse 原生 L3 adapter 自动装配。
@@ -390,12 +396,80 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-search", name = "type",
+            havingValue = "elasticsearch")
+    @ConditionalOnMissingBean(ElasticsearchKeywordSearchAdapter.class)
+    public ElasticsearchKeywordSearchAdapter seahorseElasticsearchKeywordSearchAdapter(
+            OkHttpClient httpClient,
+            ObjectMapper objectMapper,
+            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.base-url:http://localhost:9200}")
+            String baseUrl,
+            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.index-name:seahorse_keyword_chunk}")
+            String indexName,
+            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.search-fields:content^3}")
+            String searchFields,
+            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.api-key:}")
+            String apiKey,
+            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.username:}")
+            String username,
+            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.password:}")
+            String password,
+            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.timeout:10s}")
+            String timeout) {
+        return new ElasticsearchKeywordSearchAdapter(httpClient, objectMapper,
+                new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields), apiKey, username, password,
+                        duration(timeout)));
+    }
+
+    @Bean
+    @ConditionalOnBean(ElasticsearchKeywordSearchAdapter.class)
+    @ConditionalOnMissingBean(KeywordSearchPort.class)
+    public KeywordSearchPort seahorseElasticsearchKeywordSearchPort(ElasticsearchKeywordSearchAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(KeywordSearchPort.class)
     public JdbcKeywordSearchAdapter seahorseJdbcKeywordSearchAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
         return new JdbcKeywordSearchAdapter(dataSource, objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "type",
+            havingValue = "elasticsearch")
+    @ConditionalOnMissingBean(ElasticsearchKeywordIndexAdapter.class)
+    public ElasticsearchKeywordIndexAdapter seahorseElasticsearchKeywordIndexAdapter(
+            OkHttpClient httpClient,
+            ObjectMapper objectMapper,
+            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.base-url:http://localhost:9200}")
+            String baseUrl,
+            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.index-name:seahorse_keyword_chunk}")
+            String indexName,
+            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.search-fields:content^3}")
+            String searchFields,
+            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.api-key:}")
+            String apiKey,
+            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.username:}")
+            String username,
+            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.password:}")
+            String password,
+            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.timeout:10s}")
+            String timeout) {
+        return new ElasticsearchKeywordIndexAdapter(httpClient, objectMapper,
+                new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields), apiKey, username, password,
+                        duration(timeout)));
+    }
+
+    @Bean
+    @ConditionalOnBean(ElasticsearchKeywordIndexAdapter.class)
+    @ConditionalOnMissingBean(value = KeywordIndexPort.class, ignored = KeywordIndexOutboxAdapter.class)
+    public KeywordIndexPort seahorseElasticsearchKeywordIndexPort(ElasticsearchKeywordIndexAdapter adapter) {
+        return adapter;
     }
 
     @Bean
@@ -419,17 +493,25 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({MessageSubscriptionPort.class, JdbcKeywordIndexAdapter.class})
+    @ConditionalOnBean(MessageSubscriptionPort.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "mode", havingValue = "outbox")
     @ConditionalOnMissingBean(KeywordIndexMessageSubscriber.class)
     public KeywordIndexMessageSubscriber seahorseKeywordIndexMessageSubscriber(
             MessageSubscriptionPort subscriptionPort,
-            JdbcKeywordIndexAdapter keywordIndexAdapter,
+            ObjectProvider<ElasticsearchKeywordIndexAdapter> elasticsearchKeywordIndexAdapter,
+            ObjectProvider<JdbcKeywordIndexAdapter> jdbcKeywordIndexAdapter,
             @Value("${seahorse-agent.adapters.keyword-index.topic:" + KeywordIndexOutboxAdapter.DEFAULT_TOPIC + "}")
             String topic,
             @Value("${seahorse-agent.adapters.keyword-index.subscription:seahorse-keyword-index}")
             String subscriptionName) {
-        return new KeywordIndexMessageSubscriber(subscriptionPort, topic, subscriptionName, keywordIndexAdapter);
+        KeywordIndexPort delegate = elasticsearchKeywordIndexAdapter.getIfAvailable();
+        if (delegate == null) {
+            delegate = jdbcKeywordIndexAdapter.getIfAvailable();
+        }
+        if (delegate == null) {
+            delegate = KeywordIndexPort.noop();
+        }
+        return new KeywordIndexMessageSubscriber(subscriptionPort, topic, subscriptionName, delegate);
     }
 
     @Bean
@@ -871,5 +953,36 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @ConditionalOnMissingBean(VectorCollectionAdminPort.class)
     public VectorCollectionAdminPort seahorseNativeNoopVectorAdminPort(NoopVectorStoreAdapter adapter) {
         return adapter;
+    }
+
+    private static List<String> csv(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isBlank())
+                .toList();
+    }
+
+    private static Duration duration(String value) {
+        if (value == null || value.isBlank()) {
+            return Duration.ofSeconds(10);
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        try {
+            if (normalized.endsWith("ms")) {
+                return Duration.ofMillis(Long.parseLong(normalized.substring(0, normalized.length() - 2)));
+            }
+            if (normalized.endsWith("s")) {
+                return Duration.ofSeconds(Long.parseLong(normalized.substring(0, normalized.length() - 1)));
+            }
+            if (normalized.endsWith("m")) {
+                return Duration.ofMinutes(Long.parseLong(normalized.substring(0, normalized.length() - 1)));
+            }
+            return Duration.parse(value.trim());
+        } catch (RuntimeException ex) {
+            return Duration.ofSeconds(10);
+        }
     }
 }
