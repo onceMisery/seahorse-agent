@@ -193,3 +193,13 @@
 - 验证通过：`mvn -pl seahorse-agent-adapter-search-elasticsearch -am "-Dtest=ElasticsearchKeywordSearchAdapterTests,ElasticsearchMetadataSchemaIndexAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，4 个测试成功。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-search-elasticsearch -am "-Dtest=KernelMetadataSchemaServiceTests,ElasticsearchMetadataSchemaIndexAdapterTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，5 个测试成功。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-search-elasticsearch -am "-Dtest=KernelMetadataSchemaServiceTests,ElasticsearchMetadataSchemaIndexAdapterTests,ElasticsearchKeywordSearchAdapterTests,SeahorseAgentNativeAdapterAutoConfigurationTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，22 个测试成功。
+
+## 2026-05-13 继续推进 M5 回填幂等收口
+
+- `MetadataExtractionResultRepositoryPort` 新增 `hasAcceptedResult` 查询入口，默认 noop 返回 false，保持未实现仓储的兼容性。
+- `KernelMetadataBackfillService` 在创建任务时把 `schemaVersion/extractorVersion` 和 `forceRerun/force` 写入 checkpoint；批次推进 checkpoint 时保留这些幂等控制字段。
+- 回填处理单文档前先查询同一租户、知识库、文档、Schema 版本和抽取器版本是否已有 ACCEPT 结果；命中则计入 skipped，不再触发入库治理流水线。
+- JDBC 治理适配器基于 `t_metadata_extraction_result` 查询 `ACCEPT/ACCEPTED` 状态，旧库或查询异常时返回 false，避免幂等检查阻断主回填流程。
+- starter 为回填服务注入可用的 `MetadataExtractionResultRepositoryPort`，未配置时继续使用 noop。
+- 测试补充同版本已 ACCEPT 跳过、Schema 版本变化重跑两条场景，并新增 JDBC 仓储级 `hasAcceptedResult` 版本匹配测试。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc -am "-Dtest=KernelMetadataBackfillServiceTests,JdbcMetadataQualityReportAdapterTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，JDBC 仓储测试 3 个用例和回填/自动装配测试 26 个用例成功，reactor `BUILD SUCCESS`。

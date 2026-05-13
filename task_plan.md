@@ -83,3 +83,9 @@
 - [complete] Schema 索引同步端口：新增 `MetadataSchemaIndexSyncPort`，由 `KernelMetadataSchemaService` 在字段创建/更新后触发。
 - [complete] Elasticsearch mapping 适配器：新增 `ElasticsearchMetadataSchemaIndexAdapter`，通过 REST `_mapping` 为已注册且可搜索索引的动态字段生成严格 mapping。
 - [complete] 查询字段路径对齐：默认 `BackendFieldMapping` 下，Elasticsearch 关键词过滤统一查询 `metadata.<fieldKey>`，避免 mapping 与查询错位。
+
+## 2026-05-13 M5 回填幂等收口
+
+- [complete] 回填幂等：按 `schemaVersion/extractorVersion` 查询已 ACCEPT 抽取结果，命中时跳过对应文档。
+- [complete] 回填幂等验证：覆盖同版本跳过、Schema 版本变化重跑、starter 自动装配和 JDBC 查询路径。
+- [pending] 提交回填幂等改动后继续推进下一项设计文档待办。

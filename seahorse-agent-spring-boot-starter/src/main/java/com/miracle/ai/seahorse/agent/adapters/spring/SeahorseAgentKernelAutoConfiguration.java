@@ -791,6 +791,7 @@ public class SeahorseAgentKernelAutoConfiguration {
             PipelineDefinitionRepositoryPort pipelineRepositoryPort,
             KernelIngestionEngine ingestionEngine,
             MetadataBackfillJobRepositoryPort jobRepositoryPort,
+            ObjectProvider<MetadataExtractionResultRepositoryPort> extractionResultRepositoryPort,
             ObjectProvider<ObservationPort> observationPort) {
         return new KernelMetadataBackfillService(
                 documentRepositoryPort,
@@ -798,6 +799,7 @@ public class SeahorseAgentKernelAutoConfiguration {
                 pipelineRepositoryPort,
                 ingestionEngine,
                 jobRepositoryPort,
+                extractionResultRepositoryPort.getIfAvailable(MetadataExtractionResultRepositoryPort::noop),
                 observationPort.getIfAvailable());
     }
 

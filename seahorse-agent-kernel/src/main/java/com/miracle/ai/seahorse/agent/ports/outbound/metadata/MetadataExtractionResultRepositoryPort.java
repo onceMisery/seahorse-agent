@@ -4,6 +4,14 @@ public interface MetadataExtractionResultRepositoryPort {
 
     void save(MetadataExtractionRecord record);
 
+    default boolean hasAcceptedResult(String tenantId,
+                                      String knowledgeBaseId,
+                                      String documentId,
+                                      int schemaVersion,
+                                      String extractorVersion) {
+        return false;
+    }
+
     static MetadataExtractionResultRepositoryPort noop() {
         return record -> {
         };

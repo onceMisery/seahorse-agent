@@ -274,6 +274,35 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     @Override
+    public boolean hasAcceptedResult(String tenantId,
+                                     String knowledgeBaseId,
+                                     String documentId,
+                                     int schemaVersion,
+                                     String extractorVersion) {
+        if (blank(documentId) || schemaVersion <= 0) {
+            return false;
+        }
+        try {
+            return count("""
+                    SELECT COUNT(1)
+                    FROM t_metadata_extraction_result
+                    WHERE tenant_id = ?
+                      AND kb_id = ?
+                      AND doc_id = ?
+                      AND schema_version = ?
+                      AND COALESCE(extractor_version, '') = ?
+                      AND status IN ('ACCEPT', 'ACCEPTED')
+                    """, Objects.requireNonNullElse(tenantId, ""),
+                    Objects.requireNonNullElse(knowledgeBaseId, ""),
+                    documentId,
+                    schemaVersion,
+                    Objects.requireNonNullElse(extractorVersion, "")) > 0;
+        } catch (DataAccessException ex) {
+            return false;
+        }
+    }
+
+    @Override
     public void enqueue(MetadataReviewItem item) {
         MetadataReviewItem safeItem = Objects.requireNonNull(item, "item must not be null");
         try {

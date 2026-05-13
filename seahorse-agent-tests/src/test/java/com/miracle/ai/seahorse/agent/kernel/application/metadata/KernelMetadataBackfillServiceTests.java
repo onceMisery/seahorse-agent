@@ -34,6 +34,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 import org.junit.jupiter.api.Test;
@@ -131,8 +133,56 @@ class KernelMetadataBackfillServiceTests {
         assertThat(documents.runningDocuments).containsExactly("doc-1");
     }
 
+    @Test
+    void shouldSkipAcceptedDocumentWithSameSchemaAndExtractorVersion() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        documents.add(document("doc-2", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        InMemoryExtractionResultRepository results = new InMemoryExtractionResultRepository();
+        results.accept("tenant-1", "kb-1", "doc-1", 3, "extractor-v2");
+        KernelMetadataBackfillService service = service(documents, jobs, results, Map.of());
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin",
+                Map.of("schemaVersion", 3, "extractorVersion", "extractor-v2")));
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+
+        assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
+        assertThat(result.processedDocuments()).isEqualTo(2);
+        assertThat(result.skippedDocuments()).isEqualTo(1);
+        assertThat(result.succeededDocuments()).isEqualTo(1);
+        assertThat(documents.runningDocuments).containsExactly("doc-2");
+    }
+
+    @Test
+    void shouldRerunDocumentWhenSchemaVersionChanges() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        InMemoryExtractionResultRepository results = new InMemoryExtractionResultRepository();
+        results.accept("tenant-1", "kb-1", "doc-1", 3, "extractor-v2");
+        KernelMetadataBackfillService service = service(documents, jobs, results, Map.of());
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin",
+                Map.of("schemaVersion", 4, "extractorVersion", "extractor-v2")));
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+
+        assertThat(result.skippedDocuments()).isZero();
+        assertThat(result.succeededDocuments()).isEqualTo(1);
+        assertThat(documents.runningDocuments).containsExactly("doc-1");
+    }
+
     private static KernelMetadataBackfillService service(InMemoryDocumentRepository documents,
                                                          InMemoryBackfillJobRepository jobs,
+                                                         Map<String, MetadataValidationDecision> decisions) {
+        return service(documents, jobs, MetadataExtractionResultRepositoryPort.noop(), decisions);
+    }
+
+    private static KernelMetadataBackfillService service(InMemoryDocumentRepository documents,
+                                                         InMemoryBackfillJobRepository jobs,
+                                                         MetadataExtractionResultRepositoryPort results,
                                                          Map<String, MetadataValidationDecision> decisions) {
         KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
         when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
@@ -148,7 +198,9 @@ class KernelMetadataBackfillServiceTests {
                 new InMemoryObjectStorage(),
                 pipelineRepository(),
                 engine,
-                jobs);
+                jobs,
+                results,
+                null);
     }
 
     private static KernelMetadataBackfillService serviceWithFailure(InMemoryDocumentRepository documents,
@@ -212,6 +264,32 @@ class KernelMetadataBackfillServiceTests {
         @Override
         public void save(MetadataBackfillJobRecord job) {
             records.put(job.jobId(), job);
+        }
+    }
+
+    private static final class InMemoryExtractionResultRepository implements MetadataExtractionResultRepositoryPort {
+
+        private final List<MetadataExtractionRecord> records = new ArrayList<>();
+
+        void accept(String tenantId, String kbId, String docId, int schemaVersion, String extractorVersion) {
+            records.add(new MetadataExtractionRecord(tenantId, kbId, docId, docId, schemaVersion,
+                    extractorVersion, MetadataValidationDecision.ACCEPT, Map.of(), Map.of(), List.of(), List.of()));
+        }
+
+        @Override
+        public void save(MetadataExtractionRecord record) {
+            records.add(record);
+        }
+
+        @Override
+        public boolean hasAcceptedResult(String tenantId, String knowledgeBaseId, String documentId,
+                                         int schemaVersion, String extractorVersion) {
+            return records.stream().anyMatch(record -> tenantId.equals(record.tenantId())
+                    && knowledgeBaseId.equals(record.knowledgeBaseId())
+                    && documentId.equals(record.documentId())
+                    && schemaVersion == record.schemaVersion()
+                    && extractorVersion.equals(record.extractorVersion())
+                    && MetadataValidationDecision.ACCEPT.equals(record.status()));
         }
     }
 

@@ -128,3 +128,10 @@
 - Elasticsearch mapping 同步需要显式开启，否则企业环境在尚未配置 ES 或迁移窗口中调用 Schema API 可能被外部搜索集群阻断。
 - 默认 `BackendFieldMapping.searchFieldName=fieldKey` 与当前 ES 文档结构不完全一致；ES adapter 需要把这种默认值解释为 `metadata.<fieldKey>`，显式配置的 `metadata.xxx.keyword` 则按配置透传。
 - `metadata.xxx.keyword` 查询路径要求 mapping 建立 `text + keyword sub-field`，而不是把 `keyword` 当作普通对象层级；否则 term 查询会找不到子字段。
+
+## 2026-05-13 M5 回填幂等收口发现
+
+- 回填幂等必须绑定 `schemaVersion` 与 `extractorVersion`，只按文档维度跳过会掩盖 Schema 升级或抽取器升级后的必要重跑。
+- 幂等跳过只能针对已 ACCEPT 的可信抽取结果；REVIEW、QUARANTINE、REJECTED 或失败结果仍需要后续治理或补偿流程继续处理。
+- `forceRerun/force` 适合作为 checkpoint 内的任务级开关，方便管理端临时覆盖幂等检查，同时不会改变仓储查询契约。
+- JDBC 幂等查询需要兼容历史状态值 `ACCEPT` 与可能的 `ACCEPTED`，并在旧库或迁移窗口异常时降级为不跳过，避免回填任务被幂等检查阻断。

@@ -31,6 +31,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
@@ -66,6 +67,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     private final PipelineDefinitionRepositoryPort pipelineRepositoryPort;
     private final KernelIngestionEngine ingestionEngine;
     private final MetadataBackfillJobRepositoryPort jobRepositoryPort;
+    private final MetadataExtractionResultRepositoryPort extractionResultRepositoryPort;
     private final ObservationPort observationPort;
 
     public KernelMetadataBackfillService(KnowledgeDocumentRepositoryPort documentRepositoryPort,
@@ -73,7 +75,8 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                                          PipelineDefinitionRepositoryPort pipelineRepositoryPort,
                                          KernelIngestionEngine ingestionEngine,
                                          MetadataBackfillJobRepositoryPort jobRepositoryPort) {
-        this(documentRepositoryPort, objectStoragePort, pipelineRepositoryPort, ingestionEngine, jobRepositoryPort, null);
+        this(documentRepositoryPort, objectStoragePort, pipelineRepositoryPort, ingestionEngine, jobRepositoryPort,
+                MetadataExtractionResultRepositoryPort.noop(), null);
     }
 
     public KernelMetadataBackfillService(KnowledgeDocumentRepositoryPort documentRepositoryPort,
@@ -82,6 +85,17 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                                          KernelIngestionEngine ingestionEngine,
                                          MetadataBackfillJobRepositoryPort jobRepositoryPort,
                                          ObservationPort observationPort) {
+        this(documentRepositoryPort, objectStoragePort, pipelineRepositoryPort, ingestionEngine, jobRepositoryPort,
+                MetadataExtractionResultRepositoryPort.noop(), observationPort);
+    }
+
+    public KernelMetadataBackfillService(KnowledgeDocumentRepositoryPort documentRepositoryPort,
+                                         ObjectStoragePort objectStoragePort,
+                                         PipelineDefinitionRepositoryPort pipelineRepositoryPort,
+                                         KernelIngestionEngine ingestionEngine,
+                                         MetadataBackfillJobRepositoryPort jobRepositoryPort,
+                                         MetadataExtractionResultRepositoryPort extractionResultRepositoryPort,
+                                         ObservationPort observationPort) {
         this.documentRepositoryPort = Objects.requireNonNull(documentRepositoryPort,
                 "documentRepositoryPort must not be null");
         this.objectStoragePort = Objects.requireNonNull(objectStoragePort, "objectStoragePort must not be null");
@@ -89,6 +103,8 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                 "pipelineRepositoryPort must not be null");
         this.ingestionEngine = Objects.requireNonNull(ingestionEngine, "ingestionEngine must not be null");
         this.jobRepositoryPort = Objects.requireNonNull(jobRepositoryPort, "jobRepositoryPort must not be null");
+        this.extractionResultRepositoryPort = Objects.requireNonNullElseGet(extractionResultRepositoryPort,
+                MetadataExtractionResultRepositoryPort::noop);
         this.observationPort = observationPort;
     }
 
@@ -112,7 +128,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                 0,
                 0,
                 0,
-                checkpoint(1L, ""),
+                initialCheckpoint(safeCommand.metadata()),
                 List.of(),
                 defaultText(safeCommand.operator(), DEFAULT_OPERATOR),
                 now,
@@ -184,7 +200,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                 job.knowledgeBaseId(), job.currentPage(), job.batchSize(), null, null);
         if (page.records().isEmpty()) {
             MetadataBackfillJobRecord completed = accumulator.toRecord(MetadataBackfillJobStatus.COMPLETED,
-                    job.currentPage(), checkpoint(job.currentPage(), ""));
+                    job.currentPage(), checkpoint(job.currentPage(), "", job.checkpoint()));
             jobRepositoryPort.save(completed);
             return completed;
         }
@@ -198,7 +214,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
             accumulator.apply(document, outcome);
             // 每处理一个文档就推进断点，降低批量回填中断后的重复扫描范围。
             jobRepositoryPort.save(accumulator.toRecord(MetadataBackfillJobStatus.RUNNING, job.currentPage(),
-                    checkpoint(job.currentPage(), document == null ? "" : document.getId())));
+                    checkpoint(job.currentPage(), document == null ? "" : document.getId(), job.checkpoint())));
         }
         long nextPage = job.currentPage() + 1;
         boolean completed = page.pages() > 0
@@ -208,7 +224,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                 ? MetadataBackfillJobStatus.COMPLETED
                 : MetadataBackfillJobStatus.PENDING;
         MetadataBackfillJobRecord result = accumulator.toRecord(nextStatus, completed ? job.currentPage() : nextPage,
-                checkpoint(completed ? job.currentPage() : nextPage, ""));
+                checkpoint(completed ? job.currentPage() : nextPage, "", job.checkpoint()));
         jobRepositoryPort.save(result);
         return result;
     }
@@ -219,6 +235,10 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         }
         if (Boolean.FALSE.equals(document.getEnabled())) {
             return DocumentOutcome.skipped("document disabled");
+        }
+        // 同一 Schema 与抽取器版本已经有可信结果时直接跳过，避免历史回填重复污染复核队列。
+        if (hasAcceptedResult(job, document)) {
+            return DocumentOutcome.skipped("accepted metadata exists");
         }
         String pipelineId = defaultText(job.pipelineId(), document.getPipelineId());
         if (!hasText(pipelineId)) {
@@ -306,11 +326,56 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                 || MetadataBackfillJobStatus.FAILED.equals(status);
     }
 
+    private boolean hasAcceptedResult(MetadataBackfillJobRecord job, KnowledgeDocumentDetail document) {
+        if (forceRerun(job)) {
+            return false;
+        }
+        int schemaVersion = intValue(job.checkpoint().get("schemaVersion"), 0);
+        if (schemaVersion <= 0) {
+            return false;
+        }
+        return extractionResultRepositoryPort.hasAcceptedResult(
+                job.tenantId(),
+                job.knowledgeBaseId(),
+                document.getId(),
+                schemaVersion,
+                textValue(job.checkpoint().get("extractorVersion"), ""));
+    }
+
+    private boolean forceRerun(MetadataBackfillJobRecord job) {
+        return booleanValue(job.checkpoint().get("forceRerun"))
+                || booleanValue(job.checkpoint().get("force"));
+    }
+
+    private Map<String, Object> initialCheckpoint(Map<String, Object> metadata) {
+        Map<String, Object> checkpoint = checkpoint(1L, "", metadata);
+        checkpoint.put("schemaVersion", intValue(metadata.get("schemaVersion"), 1));
+        checkpoint.put("extractorVersion", textValue(metadata.get("extractorVersion"), ""));
+        if (booleanValue(metadata.get("forceRerun")) || booleanValue(metadata.get("force"))) {
+            checkpoint.put("forceRerun", true);
+        }
+        return checkpoint;
+    }
+
     private Map<String, Object> checkpoint(long currentPage, String lastDocumentId) {
+        return checkpoint(currentPage, lastDocumentId, Map.of());
+    }
+
+    private Map<String, Object> checkpoint(long currentPage, String lastDocumentId, Map<String, Object> previous) {
         Map<String, Object> checkpoint = new LinkedHashMap<>();
         checkpoint.put("currentPage", currentPage);
         checkpoint.put("lastDocumentId", Objects.requireNonNullElse(lastDocumentId, ""));
+        copyCheckpointOption(previous, checkpoint, "schemaVersion");
+        copyCheckpointOption(previous, checkpoint, "extractorVersion");
+        copyCheckpointOption(previous, checkpoint, "forceRerun");
+        copyCheckpointOption(previous, checkpoint, "force");
         return checkpoint;
+    }
+
+    private void copyCheckpointOption(Map<String, Object> source, Map<String, Object> target, String key) {
+        if (source != null && source.containsKey(key)) {
+            target.put(key, source.get(key));
+        }
     }
 
     private int normalizeBatchSize(int batchSize) {
@@ -336,6 +401,29 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private int intValue(Object value, int defaultValue) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(Objects.toString(value, ""));
+        } catch (RuntimeException ex) {
+            return defaultValue;
+        }
+    }
+
+    private boolean booleanValue(Object value) {
+        if (value instanceof Boolean flag) {
+            return flag;
+        }
+        return Boolean.parseBoolean(Objects.toString(value, "false"));
+    }
+
+    private String textValue(Object value, String defaultValue) {
+        String text = Objects.toString(value, "");
+        return text.isBlank() ? defaultValue : text;
     }
 
     private ObservationScope startObservation(MetadataBackfillJobRecord job) {
