@@ -85,3 +85,10 @@
 - 新增 `KernelKeywordIndexMaintenanceServiceTests`，覆盖单文档重建、禁用文档只删除、知识库分页重建与失败摘要。
 - 验证通过：`mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-tests -am "-Dtest=KernelKeywordIndexMaintenanceServiceTests,SeahorseAgentKernelAutoConfigurationTests,KeywordIndexOutboxAdapterTests,KernelKnowledgeDocumentServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，24 个测试成功。
 - 验证通过：`git diff --check -- . ':!缺少的功能.md' ':!元数据过滤：RAG与Agentic Search.md'`。
+
+## 2026-05-13 继续推进 M3 Web 管理触发入口
+
+- 新增 `SeahorseKeywordIndexMaintenanceController`，按文档暴露 `POST /knowledge-base/docs/{doc-id}/keyword-index/rebuild`，按知识库暴露 `POST /knowledge-base/{kb-id}/keyword-index/rebuild`。
+- Web 层只调用 `KeywordIndexMaintenanceInboundPort`，不直接访问 chunk repository 或 Elasticsearch，保持重建数据来源仍由 kernel 编排。
+- 扩展 `SeahorseWebApiContractTests`，覆盖两个重建触发接口的 `{code,data}` 响应契约。
+- 验证通过：`mvn -pl seahorse-agent-adapter-web,seahorse-agent-tests -am "-Dtest=SeahorseWebApiContractTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，7 个测试成功。

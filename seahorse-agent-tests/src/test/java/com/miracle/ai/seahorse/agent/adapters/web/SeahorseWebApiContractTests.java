@@ -33,6 +33,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.intent.IntentTreeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeChunkInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeBaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeDocumentInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexRebuildResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.mapping.QueryTermMappingInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceRunResult;
@@ -500,6 +502,30 @@ class SeahorseWebApiContractTests {
         mvc.perform(delete("/knowledge-base/docs/doc-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
+    }
+
+    @Test
+    void shouldKeepKeywordIndexMaintenanceContracts() throws Exception {
+        KeywordIndexMaintenanceInboundPort maintenancePort = mock(KeywordIndexMaintenanceInboundPort.class);
+        when(maintenancePort.rebuildDocument("doc-1"))
+                .thenReturn(new KeywordIndexRebuildResult("document", "doc-1", 1, 1, 2, 1, 0, 0, List.of()));
+        when(maintenancePort.rebuildKnowledgeBase(eq("kb-1"), anyInt()))
+                .thenReturn(new KeywordIndexRebuildResult("knowledge_base", "kb-1", 3, 2, 8, 3, 1, 0, List.of()));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseKeywordIndexMaintenanceController(maintenancePort)).build();
+
+        mvc.perform(post("/knowledge-base/docs/doc-1/keyword-index/rebuild"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.scope").value("document"))
+                .andExpect(jsonPath("$.data.indexedChunks").value(2));
+
+        mvc.perform(post("/knowledge-base/kb-1/keyword-index/rebuild").param("batchSize", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.scope").value("knowledge_base"))
+                .andExpect(jsonPath("$.data.processedDocuments").value(3));
     }
 
     private String json(Object value) throws Exception {

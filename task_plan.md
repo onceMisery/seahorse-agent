@@ -16,8 +16,8 @@
 
 - M1 已完成：元数据治理领域模型、入库节点、Tika parser metadata、JDBC 治理仓储、chunk metadata 写入、starter 自动装配和基础测试。
 - M2 已完成：`RetrievalFilter`、`RetrievalOptions`、Filter AST、`MetadataFilterCompiler`、`MetadataGuardPostProcessorFeature`、query embedding、向量适配器 metadata 返回和基础过滤下推，并接入多通道检索入口与 starter 自动装配。
-- M3 已完成：新增 `KeywordSearchPort`、`KeywordIndexPort`、`KeywordSearchRequest` 和 `KeywordSearchChannelFeature`，starter 在存在 `KeywordSearchPort` 时注册关键词通道；已提供 JDBC/PostgreSQL FTS 轻量关键词 fallback、关键词索引 Outbox 异步化、Elasticsearch 生产适配器和 kernel 级重建编排入口。
-- M3 尚未完成：管理端/API/Job 触发入口、索引失败观测与补偿策略。
+- M3 已完成：新增 `KeywordSearchPort`、`KeywordIndexPort`、`KeywordSearchRequest` 和 `KeywordSearchChannelFeature`，starter 在存在 `KeywordSearchPort` 时注册关键词通道；已提供 JDBC/PostgreSQL FTS 轻量关键词 fallback、关键词索引 Outbox 异步化、Elasticsearch 生产适配器、kernel 级重建编排入口和 Web 管理触发入口。
+- M3 尚未完成：计划型 Job 触发入口、索引失败观测与补偿策略。
 - M4 已完成最小闭环：新增 `RrfFusionPostProcessorFeature`、`RerankPostProcessorFeature` 和 `FinalTruncatePostProcessorFeature`，支持通道排名融合、重复 chunk 去重、融合分记录、Rerank 候选截断、异常/空结果降级、`rerankScore` 回写和 finalTopK 截断。
 - M4 后续增强：Rerank 超时隔离、通道权重配置化和观测指标。
 
@@ -34,12 +34,13 @@
 - [complete] M3 Outbox 异步索引最小闭环：新增关键词索引 Outbox 发布器、消息事件和订阅器，支持通过配置切换到 outbox 模式。
 - [complete] M3 关键词索引维护入口：`KeywordIndexPort` 增加按文档/知识库重建的默认方法，JDBC fallback 已实现重算 `search_text`。
 - [complete] M3 JDBC/PostgreSQL `KeywordIndexPort` fallback：维护 `t_knowledge_chunk.search_text`，并在 starter 中注册默认 JDBC 索引适配器。
-- [pending] M3 生产级关键词索引：管理端/API/Job 触发入口、异步索引失败观测与补偿策略仍待后续落地。
+- [pending] M3 生产级关键词索引：计划型 Job 触发入口、异步索引失败观测与补偿策略仍待后续落地。
 
 ## 2026-05-13 Elasticsearch adapter 继续推进
 
 - [complete] M3 Elasticsearch 生产级关键词检索/索引适配器：新增 `seahorse-agent-adapter-search-elasticsearch` 模块，基于 OkHttp REST API 实现 BM25 检索、bulk 索引写入和按文档 delete_by_query 清理。
 - [complete] M3 Elasticsearch 与 starter 接入：支持 `seahorse-agent.adapters.keyword-search.type=elasticsearch` 和 `seahorse-agent.adapters.keyword-index.type=elasticsearch`，outbox 消费端优先委托 ES adapter，缺省回退 JDBC adapter。
 - [complete] M3 kernel 级重建编排入口：新增 `KeywordIndexMaintenanceInboundPort` 和 `KernelKeywordIndexMaintenanceService`，按文档/知识库从文档仓储拉取启用分片快照，先删除残留再调用 `indexDocumentChunks` 重建。
-- [pending] M3 管理端/API/Job 触发入口：kernel 已具备重建入口，后续需要 web/调度侧暴露按文档或知识库触发能力。
+- [complete] M3 Web 管理触发入口：新增按文档和按知识库触发关键词索引重建的 HTTP API。
+- [pending] M3 计划型 Job 触发入口：如需定时批量补偿，可继续在调度侧调用 `KeywordIndexMaintenanceInboundPort`。
 - [pending] M3 索引失败观测与补偿：当前 REST 调用失败会抛出异常，后续需要接入 observation 指标、失败事件记录与管理端补偿入口。
