@@ -103,3 +103,9 @@
 - 转隔离动作应保留 review 快照并写入 Quarantine，而不是把修正值写回文档；这是防止低质量元数据污染检索后端的最后一道治理边界。
 - Quarantine 的“重试”本轮先落为调度字段更新，不直接在 Web 层重跑入库；具体重放仍应由回填/调度编排读取 `next_retry_time` 后执行。
 - `t_metadata_review_item.result_id` 当前写入链路仍可能保存 taskId 而非抽取结果 id；管理仓储会在能匹配到抽取结果时同步 `approved_metadata`，文档 canonical metadata 写回由 kernel 服务保证。
+
+## 2026-05-13 M5 Metadata Schema 管理 API 发现
+
+- Schema 管理 API 是动态 metadata 进入过滤编译与索引映射前的注册入口；字段必须先落到 `t_metadata_field_schema`，后续 `MetadataSchemaRegistryPort.loadSchema()` 才能让 Filter Compiler 和后端 adapter 消费。
+- 本轮先实现字段 CRUD 与自动装配，不做索引模板自动生成；Elasticsearch/OpenSearch/Milvus 等后端的物理字段模板仍应放在 adapter 或运维迁移层处理，避免 kernel 依赖外部 SDK。
+- 更新字段采用完整载荷覆盖语义，避免局部更新时在 Web 层重新拼装旧值；管理端调用 PUT 时需要携带 `tenantId`、`fieldKey` 等 Schema 必填信息。

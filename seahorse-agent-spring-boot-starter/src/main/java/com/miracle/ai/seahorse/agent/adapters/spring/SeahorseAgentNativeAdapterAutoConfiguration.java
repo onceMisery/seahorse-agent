@@ -126,6 +126,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineM
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
@@ -660,6 +661,14 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
     @ConditionalOnMissingBean(MetadataQuarantineManagementRepositoryPort.class)
     public MetadataQuarantineManagementRepositoryPort seahorseMetadataQuarantineManagementRepositoryPort(
+            JdbcMetadataGovernanceRepositoryAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
+    @ConditionalOnMissingBean(MetadataSchemaManagementRepositoryPort.class)
+    public MetadataSchemaManagementRepositoryPort seahorseMetadataSchemaManagementRepositoryPort(
             JdbcMetadataGovernanceRepositoryAdapter adapter) {
         return adapter;
     }

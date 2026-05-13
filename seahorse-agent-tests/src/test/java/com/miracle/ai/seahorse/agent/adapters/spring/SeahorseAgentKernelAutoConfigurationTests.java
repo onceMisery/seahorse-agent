@@ -38,6 +38,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataB
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQualityService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQuarantineService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataReviewService;
+import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataSchemaService;
 import com.miracle.ai.seahorse.agent.kernel.application.model.KernelModelRoutingService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.sample.KernelSampleQuestionService;
@@ -71,6 +72,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInbo
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -114,6 +116,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
@@ -321,6 +324,8 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MetadataReviewInboundPort.class);
                     assertThat(context).hasSingleBean(KernelMetadataQuarantineService.class);
                     assertThat(context).hasSingleBean(MetadataQuarantineInboundPort.class);
+                    assertThat(context).hasSingleBean(KernelMetadataSchemaService.class);
+                    assertThat(context).hasSingleBean(MetadataSchemaInboundPort.class);
                     assertThat(context).hasSingleBean(SeahorseDocumentRefreshJob.class);
                     assertThat(context).doesNotHaveBean(SeahorseKeywordIndexMaintenanceJob.class);
                 });
@@ -690,6 +695,11 @@ class SeahorseAgentKernelAutoConfigurationTests {
         @Bean
         MetadataQuarantineManagementRepositoryPort metadataQuarantineManagementRepositoryPort() {
             return mock(MetadataQuarantineManagementRepositoryPort.class);
+        }
+
+        @Bean
+        MetadataSchemaManagementRepositoryPort metadataSchemaManagementRepositoryPort() {
+            return mock(MetadataSchemaManagementRepositoryPort.class);
         }
     }
 

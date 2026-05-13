@@ -53,6 +53,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldPayload;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -75,7 +78,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         MetadataDictionaryPort, MetadataExtractionResultRepositoryPort, MetadataReviewQueuePort,
         MetadataQuarantinePort, MetadataCanonicalWritePort, MetadataBackfillJobRepositoryPort,
         MetadataQualityReportRepositoryPort, MetadataReviewManagementRepositoryPort,
-        MetadataQuarantineManagementRepositoryPort {
+        MetadataQuarantineManagementRepositoryPort, MetadataSchemaManagementRepositoryPort {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
@@ -115,6 +118,119 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         } catch (DataAccessException ex) {
             return MetadataSchema.empty(safeTenantId, safeKbId);
         }
+    }
+
+    @Override
+    public List<MetadataSchemaFieldRecord> listSchemaFields(String tenantId, String knowledgeBaseId) {
+        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
+        String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
+        if (blank(safeTenantId)) {
+            return List.of();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, kb_id, field_key, display_name, value_type, allowed_ops,
+                           required, filterable, sortable, facetable, indexed, index_policy,
+                           min_confidence, trusted_sources, extraction_hints, backend_mapping,
+                           schema_version, create_time, update_time
+                    FROM t_metadata_field_schema
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ? OR kb_id IS NULL OR kb_id = '')
+                      AND deleted = 0
+                    ORDER BY CASE WHEN kb_id = ? THEN 0 ELSE 1 END, field_key
+                    """, this::toSchemaFieldRecord, safeTenantId, safeKbId, safeKbId, safeKbId);
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
+    @Override
+    public Optional<MetadataSchemaFieldRecord> findSchemaField(String fieldId) {
+        if (blank(fieldId)) {
+            return Optional.empty();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, kb_id, field_key, display_name, value_type, allowed_ops,
+                           required, filterable, sortable, facetable, indexed, index_policy,
+                           min_confidence, trusted_sources, extraction_hints, backend_mapping,
+                           schema_version, create_time, update_time
+                    FROM t_metadata_field_schema
+                    WHERE id = ? AND deleted = 0
+                    """, this::toSchemaFieldRecord, fieldId).stream().findFirst();
+        } catch (DataAccessException ex) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public String createSchemaField(MetadataSchemaFieldPayload payload) {
+        MetadataSchemaFieldPayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
+        String fieldId = UUID.randomUUID().toString();
+        jdbcTemplate.update("""
+                INSERT INTO t_metadata_field_schema(
+                    id, tenant_id, kb_id, field_key, display_name, value_type, allowed_ops,
+                    required, filterable, sortable, facetable, indexed, index_policy,
+                    min_confidence, trusted_sources, extraction_hints, backend_mapping,
+                    schema_version, create_time, update_time, deleted
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """, fieldId, safePayload.tenantId(), safePayload.knowledgeBaseId(), safePayload.fieldKey(),
+                safePayload.displayName(), safePayload.valueType().name(), json(safePayload.allowedOperators()),
+                flag(safePayload.required()), flag(safePayload.filterable()), flag(safePayload.sortable()),
+                flag(safePayload.facetable()), flag(safePayload.indexed()), safePayload.indexPolicy().name(),
+                safePayload.minConfidence(), json(safePayload.trustedSources()), json(safePayload.extractionHints()),
+                json(safePayload.backendMapping()), safePayload.schemaVersion());
+        return fieldId;
+    }
+
+    @Override
+    public MetadataSchemaFieldRecord updateSchemaField(String fieldId, MetadataSchemaFieldPayload payload) {
+        MetadataSchemaFieldPayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
+        int updated = jdbcTemplate.update("""
+                UPDATE t_metadata_field_schema
+                SET tenant_id = ?,
+                    kb_id = ?,
+                    field_key = ?,
+                    display_name = ?,
+                    value_type = ?,
+                    allowed_ops = ?,
+                    required = ?,
+                    filterable = ?,
+                    sortable = ?,
+                    facetable = ?,
+                    indexed = ?,
+                    index_policy = ?,
+                    min_confidence = ?,
+                    trusted_sources = ?,
+                    extraction_hints = ?,
+                    backend_mapping = ?,
+                    schema_version = ?,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE id = ? AND deleted = 0
+                """, safePayload.tenantId(), safePayload.knowledgeBaseId(), safePayload.fieldKey(),
+                safePayload.displayName(), safePayload.valueType().name(), json(safePayload.allowedOperators()),
+                flag(safePayload.required()), flag(safePayload.filterable()), flag(safePayload.sortable()),
+                flag(safePayload.facetable()), flag(safePayload.indexed()), safePayload.indexPolicy().name(),
+                safePayload.minConfidence(), json(safePayload.trustedSources()), json(safePayload.extractionHints()),
+                json(safePayload.backendMapping()), safePayload.schemaVersion(), fieldId);
+        if (updated <= 0) {
+            throw new IllegalArgumentException("Metadata Schema 字段不存在: " + fieldId);
+        }
+        return findSchemaField(fieldId)
+                .orElseThrow(() -> new IllegalArgumentException("Metadata Schema 字段不存在: " + fieldId));
+    }
+
+    @Override
+    public boolean deleteSchemaField(String fieldId) {
+        if (blank(fieldId)) {
+            return false;
+        }
+        return jdbcTemplate.update("""
+                UPDATE t_metadata_field_schema
+                SET deleted = 1,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE id = ? AND deleted = 0
+                """, fieldId) > 0;
     }
 
     @Override
@@ -707,6 +823,30 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
     }
 
+    private MetadataSchemaFieldRecord toSchemaFieldRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new MetadataSchemaFieldRecord(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getString("kb_id"),
+                rs.getString("field_key"),
+                rs.getString("display_name"),
+                enumValue(MetadataValueType.class, rs.getString("value_type"), MetadataValueType.STRING),
+                operators(rs.getString("allowed_ops")),
+                bool(rs, "required"),
+                bool(rs, "filterable"),
+                bool(rs, "sortable"),
+                bool(rs, "facetable"),
+                bool(rs, "indexed"),
+                enumValue(MetadataIndexPolicy.class, rs.getString("index_policy"), MetadataIndexPolicy.NONE),
+                rs.getDouble("min_confidence"),
+                trustedSources(rs.getString("trusted_sources")),
+                readMap(rs.getString("extraction_hints")),
+                backendMapping(rs.getString("backend_mapping"), rs.getString("field_key")),
+                rs.getInt("schema_version"),
+                instant(rs.getTimestamp("create_time")),
+                instant(rs.getTimestamp("update_time")));
+    }
+
     private MetadataFieldDescriptor toFieldDescriptor(ResultSet rs, int rowNum) throws SQLException {
         int schemaVersion = rs.getInt("schema_version");
         Map<String, Object> hints = mutableMap(rs.getString("extraction_hints"));
@@ -828,6 +968,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     private boolean bool(ResultSet rs, String column) throws SQLException {
         return rs.getInt(column) == 1;
+    }
+
+    private int flag(boolean value) {
+        return value ? 1 : 0;
     }
 
     private boolean bool(Object value) {

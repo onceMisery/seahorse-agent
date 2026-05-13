@@ -60,3 +60,9 @@
 - [complete] RRF 通道权重配置化：从 `RetrievalOptions.channelSettings` 读取 RRF k 值和通道权重。
 - [complete] Rerank 超时隔离：按 `RetrievalOptions.rerankTimeout` 控制模型精排耗时，超时回退原候选。
 - [complete] 检索后处理观测：通过 `ObservationPort` 记录 RRF/Rerank 成功、降级和候选规模等低基数字段。
+
+## 2026-05-13 M5 Metadata Schema 管理 API
+
+- [complete] M5 Schema 字段管理 API：新增字段列表、创建、更新、删除入站端口与 Web 契约。
+- [complete] M5 Schema 管理仓储：JDBC 治理仓储支持字段 CRUD，并保证 `loadSchema()` 可读取新注册字段。
+- [complete] M5 Schema 自动装配：starter 暴露 `MetadataSchemaManagementRepositoryPort` 和 `MetadataSchemaInboundPort`，供管理端和后续 Filter Compiler 入口复用。

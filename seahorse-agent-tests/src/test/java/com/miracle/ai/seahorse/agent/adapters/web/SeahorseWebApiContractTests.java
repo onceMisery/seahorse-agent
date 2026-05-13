@@ -19,6 +19,10 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.BackendFieldMapping;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataOperator;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureHealthAggregator;
@@ -45,6 +49,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillRunR
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
@@ -83,6 +88,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRecord;
@@ -703,6 +709,57 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.retryCount").value(2));
     }
 
+    @Test
+    void shouldKeepMetadataSchemaManagementContracts() throws Exception {
+        MetadataSchemaInboundPort schemaPort = mock(MetadataSchemaInboundPort.class);
+        when(schemaPort.listFields("tenant-1", "kb-1"))
+                .thenReturn(List.of(metadataSchemaField("field-1")));
+        when(schemaPort.createField(eq("kb-1"), any()))
+                .thenReturn(metadataSchemaField("field-1"));
+        when(schemaPort.updateField(eq("field-1"), any()))
+                .thenReturn(metadataSchemaField("field-1"));
+        when(schemaPort.deleteField("field-1")).thenReturn(true);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMetadataSchemaController(schemaPort)).build();
+
+        mvc.perform(get("/knowledge-base/kb-1/metadata-schema/fields")
+                        .param("tenantId", "tenant-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data[0].fieldKey").value("department"));
+        mvc.perform(post("/knowledge-base/kb-1/metadata-schema/fields")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-1",
+                                "fieldKey", "department",
+                                "displayName", "部门",
+                                "valueType", "STRING",
+                                "allowedOperators", List.of("EQ", "IN"),
+                                "filterable", true,
+                                "indexed", true,
+                                "indexPolicy", "SEARCH_KEYWORD"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("field-1"));
+        mvc.perform(put("/metadata-schema/fields/field-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-1",
+                                "fieldKey", "department",
+                                "displayName", "部门",
+                                "valueType", "STRING",
+                                "allowedOperators", List.of("EQ", "IN"),
+                                "filterable", true,
+                                "indexed", true,
+                                "indexPolicy", "SEARCH_KEYWORD",
+                                "minConfidence", 0.7D))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.fieldKey").value("department"));
+        mvc.perform(delete("/metadata-schema/fields/field-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleted").value(true));
+    }
+
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
     }
@@ -874,6 +931,30 @@ class SeahorseWebApiContractTests {
                 resolved,
                 resolved ? "auditor" : "",
                 resolved ? Instant.EPOCH : null,
+                Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataSchemaFieldRecord metadataSchemaField(String id) {
+        return new MetadataSchemaFieldRecord(
+                id,
+                "tenant-1",
+                "kb-1",
+                "department",
+                "部门",
+                MetadataValueType.STRING,
+                java.util.Set.of(MetadataOperator.EQ, MetadataOperator.IN),
+                false,
+                true,
+                false,
+                true,
+                true,
+                MetadataIndexPolicy.SEARCH_KEYWORD,
+                0.8D,
+                java.util.Set.of("source"),
+                Map.of("sourceKeys", List.of("department")),
+                BackendFieldMapping.defaults("department"),
+                1,
                 Instant.EPOCH,
                 Instant.EPOCH);
     }

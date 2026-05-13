@@ -159,3 +159,11 @@
 - 新增 `SeahorseMetadataReviewController` 和 `SeahorseMetadataQuarantineController`，Web 层只调用入站端口，不直接访问 JDBC。
 - starter 自动装配新增 `MetadataReviewManagementRepositoryPort`、`MetadataQuarantineManagementRepositoryPort`、`MetadataReviewInboundPort` 和 `MetadataQuarantineInboundPort`。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc -am "-Dtest=SeahorseWebApiContractTests,KernelMetadataReviewServiceTests,KernelMetadataQuarantineServiceTests,JdbcMetadataReviewQuarantineAdapterTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，33 个测试成功。
+
+## 2026-05-13 继续推进 M5 Metadata Schema 管理 API
+
+- 新增 `MetadataSchemaInboundPort`、`MetadataSchemaManagementRepositoryPort`、`MetadataSchemaFieldPayload`、`MetadataSchemaFieldRecord` 和 `KernelMetadataSchemaService`，作为管理端注册动态 metadata 字段的 kernel 入口。
+- `JdbcMetadataGovernanceRepositoryAdapter` 实现 Schema 字段列表、详情、创建、更新和软删除；新增 JDBC 测试覆盖 CRUD 后 `loadSchema()` 可读到注册字段。
+- 新增 `MetadataSchemaFieldRequest` 和 `SeahorseMetadataSchemaController`，暴露 `GET/POST /knowledge-base/{kb-id}/metadata-schema/fields`、`PUT/DELETE /metadata-schema/fields/{field-id}`。
+- starter 自动装配新增 `MetadataSchemaManagementRepositoryPort` 暴露和 `MetadataSchemaInboundPort` 注册，保证 JDBC 治理仓储可同时供 Schema Registry 与管理 API 使用。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc -am "-Dtest=SeahorseWebApiContractTests,JdbcMetadataSchemaManagementAdapterTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，31 个测试成功。
