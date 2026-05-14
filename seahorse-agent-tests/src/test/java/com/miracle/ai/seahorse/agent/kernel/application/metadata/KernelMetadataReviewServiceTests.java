@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
@@ -44,8 +45,9 @@ class KernelMetadataReviewServiceTests {
         InMemoryReviewRepository repository = new InMemoryReviewRepository();
         repository.put(review("review-1", MetadataReviewStatus.PENDING, Map.of()));
         CapturingCanonicalWritePort canonicalWritePort = new CapturingCanonicalWritePort();
+        CapturingIndexCompensationPort compensationPort = new CapturingIndexCompensationPort();
         KernelMetadataReviewService service = new KernelMetadataReviewService(
-                repository, canonicalWritePort, MetadataQuarantinePort.noop());
+                repository, canonicalWritePort, MetadataQuarantinePort.noop(), compensationPort);
 
         MetadataReviewRecord approved = service.approve("review-1",
                 new MetadataReviewDecisionCommand("auditor", "通过", Map.of()));
@@ -53,6 +55,7 @@ class KernelMetadataReviewServiceTests {
         assertThat(approved.reviewStatus()).isEqualTo(MetadataReviewStatus.APPROVED);
         assertThat(canonicalWritePort.documentId).isEqualTo("doc-1");
         assertThat(canonicalWritePort.metadata).containsEntry("department", "hr");
+        assertThat(compensationPort.documentId).isEqualTo("doc-1");
     }
 
     @Test
@@ -146,6 +149,16 @@ class KernelMetadataReviewServiceTests {
         public void writeDocumentMetadata(String documentId, Map<String, Object> acceptedMetadata) {
             this.documentId = documentId;
             this.metadata = Map.copyOf(acceptedMetadata);
+        }
+    }
+
+    private static final class CapturingIndexCompensationPort implements MetadataIndexCompensationPort {
+
+        private String documentId = "";
+
+        @Override
+        public void rebuildDocument(String documentId) {
+            this.documentId = documentId;
         }
     }
 }

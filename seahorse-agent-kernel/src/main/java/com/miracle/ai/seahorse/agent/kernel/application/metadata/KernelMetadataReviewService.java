@@ -3,6 +3,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
@@ -29,14 +30,24 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
     private final MetadataReviewManagementRepositoryPort reviewRepositoryPort;
     private final MetadataCanonicalWritePort canonicalWritePort;
     private final MetadataQuarantinePort quarantinePort;
+    private final MetadataIndexCompensationPort indexCompensationPort;
 
     public KernelMetadataReviewService(MetadataReviewManagementRepositoryPort reviewRepositoryPort,
                                        MetadataCanonicalWritePort canonicalWritePort,
                                        MetadataQuarantinePort quarantinePort) {
+        this(reviewRepositoryPort, canonicalWritePort, quarantinePort, MetadataIndexCompensationPort.noop());
+    }
+
+    public KernelMetadataReviewService(MetadataReviewManagementRepositoryPort reviewRepositoryPort,
+                                       MetadataCanonicalWritePort canonicalWritePort,
+                                       MetadataQuarantinePort quarantinePort,
+                                       MetadataIndexCompensationPort indexCompensationPort) {
         this.reviewRepositoryPort = Objects.requireNonNullElse(reviewRepositoryPort,
                 MetadataReviewManagementRepositoryPort.empty());
         this.canonicalWritePort = Objects.requireNonNullElse(canonicalWritePort, MetadataCanonicalWritePort.noop());
         this.quarantinePort = Objects.requireNonNullElse(quarantinePort, MetadataQuarantinePort.noop());
+        this.indexCompensationPort = Objects.requireNonNullElse(indexCompensationPort,
+                MetadataIndexCompensationPort.noop());
     }
 
     @Override
@@ -63,6 +74,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         MetadataReviewRecord updated = applyDecision(current, MetadataReviewStatus.APPROVED, command,
                 current.suggestedMetadata());
         writeCanonical(updated.documentId(), current.suggestedMetadata());
+        requestIndexCompensation(updated.documentId());
         return updated;
     }
 
@@ -76,6 +88,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         MetadataReviewRecord updated = applyDecision(current, MetadataReviewStatus.CORRECTED, safeCommand,
                 safeCommand.correctedMetadata());
         writeCanonical(updated.documentId(), safeCommand.correctedMetadata());
+        requestIndexCompensation(updated.documentId());
         return updated;
     }
 
@@ -124,6 +137,17 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
             return;
         }
         canonicalWritePort.writeDocumentMetadata(documentId, metadata);
+    }
+
+    private void requestIndexCompensation(String documentId) {
+        if (documentId == null || documentId.isBlank()) {
+            return;
+        }
+        try {
+            indexCompensationPort.rebuildDocument(documentId);
+        } catch (RuntimeException ex) {
+            // 索引补偿失败不能覆盖已经完成的复核决策和 canonical metadata 写回。
+        }
     }
 
     private MetadataReviewDecisionCommand safeCommand(MetadataReviewDecisionCommand command) {

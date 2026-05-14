@@ -170,6 +170,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWr
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
@@ -839,11 +840,25 @@ public class SeahorseAgentKernelAutoConfiguration {
     public KernelMetadataReviewService seahorseMetadataReviewInboundPort(
             MetadataReviewManagementRepositoryPort reviewRepositoryPort,
             ObjectProvider<MetadataCanonicalWritePort> canonicalWritePort,
-            ObjectProvider<MetadataQuarantinePort> quarantinePort) {
+            ObjectProvider<MetadataQuarantinePort> quarantinePort,
+            ObjectProvider<MetadataIndexCompensationPort> indexCompensationPort) {
         return new KernelMetadataReviewService(
                 reviewRepositoryPort,
                 canonicalWritePort.getIfAvailable(MetadataCanonicalWritePort::noop),
-                quarantinePort.getIfAvailable(MetadataQuarantinePort::noop));
+                quarantinePort.getIfAvailable(MetadataQuarantinePort::noop),
+                indexCompensationPort.getIfAvailable(MetadataIndexCompensationPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnBean(KeywordIndexMaintenanceInboundPort.class)
+    @ConditionalOnMissingBean(MetadataIndexCompensationPort.class)
+    public MetadataIndexCompensationPort seahorseMetadataIndexCompensationPort(
+            KeywordIndexMaintenanceInboundPort keywordIndexMaintenanceInboundPort) {
+        return documentId -> {
+            if (documentId != null && !documentId.isBlank()) {
+                keywordIndexMaintenanceInboundPort.rebuildDocument(documentId);
+            }
+        };
     }
 
     @Bean
