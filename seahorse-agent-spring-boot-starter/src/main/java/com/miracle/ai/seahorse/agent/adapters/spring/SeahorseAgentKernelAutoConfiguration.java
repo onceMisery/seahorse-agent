@@ -832,8 +832,9 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnBean(MetadataQualityReportRepositoryPort.class)
     @ConditionalOnMissingBean(MetadataQualityInboundPort.class)
     public KernelMetadataQualityService seahorseMetadataQualityInboundPort(
-            MetadataQualityReportRepositoryPort reportRepositoryPort) {
-        return new KernelMetadataQualityService(reportRepositoryPort);
+            MetadataQualityReportRepositoryPort reportRepositoryPort,
+            ObjectProvider<ObservationPort> observationPort) {
+        return new KernelMetadataQualityService(reportRepositoryPort, observationPort.getIfAvailable());
     }
 
     @Bean
