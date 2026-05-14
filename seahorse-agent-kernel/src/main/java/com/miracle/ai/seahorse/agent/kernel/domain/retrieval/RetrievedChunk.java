@@ -70,6 +70,12 @@ public class RetrievedChunk {
     @Builder.Default
     private Map<String, Integer> channelRanks = new LinkedHashMap<>();
 
+    /**
+     * 检索融合解释，记录 RRF 参数、通道排名和通道贡献，便于管理端排查排序来源。
+     */
+    @Builder.Default
+    private Map<String, Object> fusionExplanation = new LinkedHashMap<>();
+
     private Float fusionScore;
 
     private Float rerankScore;

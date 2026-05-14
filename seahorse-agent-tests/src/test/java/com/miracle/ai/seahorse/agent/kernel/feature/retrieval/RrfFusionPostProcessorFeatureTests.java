@@ -61,6 +61,20 @@ class RrfFusionPostProcessorFeatureTests {
         assertThat(fused).extracting(RetrievedChunk::getId).containsExactly("b", "a", "c");
         assertThat(fused.get(0).getChannelRanks()).containsEntry(IntentDirectedSearchFeature.NAME, 2);
         assertThat(fused.get(0).getChannelRanks()).containsEntry("KeywordSearch", 1);
+        Map<String, Object> fusionExplanation = fused.get(0).getFusionExplanation();
+        assertThat(fusionExplanation)
+                .containsEntry("strategy", "RRF")
+                .containsEntry("rrfK", 60)
+                .containsEntry("fusionScore", fused.get(0).getFusionScore());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> explainedRanks = (Map<String, Object>) fusionExplanation.get("channelRanks");
+        assertThat(explainedRanks)
+                .containsEntry(IntentDirectedSearchFeature.NAME, 2)
+                .containsEntry("KeywordSearch", 1);
+        @SuppressWarnings("unchecked")
+        Map<String, Float> explainedContributions = (Map<String, Float>) fusionExplanation.get("channelContributions");
+        assertThat(explainedContributions)
+                .containsKeys(IntentDirectedSearchFeature.NAME, "KeywordSearch");
         assertThat(finalChunks).extracting(RetrievedChunk::getId).containsExactly("b", "a");
     }
 

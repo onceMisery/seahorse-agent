@@ -31,6 +31,7 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
     private static final String SETTING_RRF_K = "rrfK";
     private static final String SETTING_RRF_K_DOTTED = "rrf.k";
     private static final String SETTING_CHANNEL_WEIGHTS = "channelWeights";
+    private static final String UNKNOWN_CHANNEL = "UNKNOWN";
 
     private final ObservationPort observationPort;
 
@@ -69,17 +70,25 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
         int rrfK = rrfK(options);
         Map<String, RetrievedChunk> merged = new LinkedHashMap<>();
         Map<String, Float> scores = new LinkedHashMap<>();
+        Map<String, Map<String, Float>> channelContributions = new LinkedHashMap<>();
+        Map<String, Map<String, Float>> channelWeights = new LinkedHashMap<>();
         for (SearchChannelResult result : results) {
             List<RetrievedChunk> channelChunks = safeChunks(result);
+            String channelKey = channelKey(result);
+            float weight = channelWeight(result, options);
             for (int index = 0; index < channelChunks.size(); index++) {
                 RetrievedChunk source = channelChunks.get(index);
                 String key = dedupeKey(source);
                 RetrievedChunk target = merged.computeIfAbsent(key, ignored -> copyChunk(source));
                 int rank = index + 1;
-                float rrfScore = channelWeight(result, options) / (rrfK + rank);
+                float rrfScore = weight / (rrfK + rank);
                 scores.merge(key, rrfScore, Float::sum);
-                target.getChannelRanks().put(result.getChannelName(), rank);
-                target.getChannelScores().put(result.getChannelName(), Objects.requireNonNullElse(source.getScore(), 0F));
+                // 解释字段只进入 fusionExplanation，避免污染动态 metadata 过滤条件。
+                channelContributions.computeIfAbsent(key, ignored -> new LinkedHashMap<>())
+                        .merge(channelKey, rrfScore, Float::sum);
+                channelWeights.computeIfAbsent(key, ignored -> new LinkedHashMap<>()).put(channelKey, weight);
+                target.getChannelRanks().put(channelKey, rank);
+                target.getChannelScores().put(channelKey, Objects.requireNonNullElse(source.getScore(), 0F));
             }
         }
         List<RetrievedChunk> fused = merged.entrySet().stream()
@@ -87,6 +96,12 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
                     Float score = scores.get(entry.getKey());
                     entry.getValue().setFusionScore(score);
                     entry.getValue().setScore(score);
+                    entry.getValue().setFusionExplanation(fusionExplanation(
+                            entry.getValue(),
+                            rrfK,
+                            score,
+                            channelContributions.get(entry.getKey()),
+                            channelWeights.get(entry.getKey())));
                 })
                 .map(Map.Entry::getValue)
                 .sorted(Comparator.comparing(RetrievedChunk::getFusionScore,
@@ -131,6 +146,16 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
             return byName;
         }
         return result.getChannelType() == null ? null : weight(weightMap.get(result.getChannelType().name()));
+    }
+
+    private String channelKey(SearchChannelResult result) {
+        if (result == null) {
+            return UNKNOWN_CHANNEL;
+        }
+        if (hasText(result.getChannelName())) {
+            return result.getChannelName();
+        }
+        return result.getChannelType() == null ? UNKNOWN_CHANNEL : result.getChannelType().name();
     }
 
     private int rrfK(RetrievalOptions options) {
@@ -222,8 +247,33 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
         copy.setDocId(source.getDocId());
         copy.setCollectionName(source.getCollectionName());
         copy.setChunkIndex(source.getChunkIndex());
+        copy.setFusionScore(source.getFusionScore());
+        copy.setRerankScore(source.getRerankScore());
         copy.getMetadata().putAll(Objects.requireNonNullElse(source.getMetadata(), Map.of()));
+        copy.getChannelScores().putAll(Objects.requireNonNullElse(source.getChannelScores(), Map.of()));
+        copy.getChannelRanks().putAll(Objects.requireNonNullElse(source.getChannelRanks(), Map.of()));
+        copy.getFusionExplanation().putAll(Objects.requireNonNullElse(source.getFusionExplanation(), Map.of()));
         return copy;
+    }
+
+    private Map<String, Object> fusionExplanation(RetrievedChunk chunk,
+                                                  int rrfK,
+                                                  Float fusionScore,
+                                                  Map<String, Float> channelContributions,
+                                                  Map<String, Float> channelWeights) {
+        Map<String, Object> explanation = new LinkedHashMap<>();
+        explanation.put("strategy", "RRF");
+        explanation.put("rrfK", rrfK);
+        explanation.put("fusionScore", fusionScore);
+        explanation.put("channelRanks", new LinkedHashMap<>(
+                Objects.requireNonNullElse(chunk.getChannelRanks(), Map.of())));
+        explanation.put("channelScores", new LinkedHashMap<>(
+                Objects.requireNonNullElse(chunk.getChannelScores(), Map.of())));
+        explanation.put("channelContributions", new LinkedHashMap<>(
+                Objects.requireNonNullElse(channelContributions, Map.of())));
+        explanation.put("channelWeights", new LinkedHashMap<>(
+                Objects.requireNonNullElse(channelWeights, Map.of())));
+        return explanation;
     }
 
     private String sha256(String text) {

@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -87,6 +88,24 @@ class RerankPostProcessorFeatureTests {
         assertThat(reranked).extracting(RetrievedChunk::getId).containsExactly("c2", "c1");
         assertThat(reranked).extracting(RetrievedChunk::getRerankScore).containsExactly(0.95F, 0.8F);
         assertThat(reranked).extracting(RetrievedChunk::getScore).containsExactly(0.95F, 0.8F);
+    }
+
+    @Test
+    void shouldPreserveFusionExplanationAfterRerank() {
+        RetrievedChunk original = chunk("c1", 0.1F);
+        original.getFusionExplanation().putAll(Map.of(
+                "strategy", "RRF",
+                "rrfK", 60));
+        RecordingRerankPort port = new RecordingRerankPort(List.of(chunk("c1", 0.95F)));
+        RerankPostProcessorFeature feature = new RerankPostProcessorFeature(port);
+
+        List<RetrievedChunk> reranked = feature.process(List.of(original), List.of(), enabledContext());
+
+        assertThat(reranked).hasSize(1);
+        assertThat(reranked.get(0).getRerankScore()).isEqualTo(0.95F);
+        assertThat(reranked.get(0).getFusionExplanation())
+                .containsEntry("strategy", "RRF")
+                .containsEntry("rrfK", 60);
     }
 
     @Test

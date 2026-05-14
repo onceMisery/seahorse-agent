@@ -168,6 +168,7 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
         merged.getMetadata().putAll(Objects.requireNonNullElse(reranked.getMetadata(), Map.of()));
         merged.getChannelScores().putAll(Objects.requireNonNullElse(reranked.getChannelScores(), Map.of()));
         merged.getChannelRanks().putAll(Objects.requireNonNullElse(reranked.getChannelRanks(), Map.of()));
+        mergeFusionExplanation(merged, reranked);
         return merged;
     }
 
@@ -186,7 +187,22 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
         copy.getMetadata().putAll(Objects.requireNonNullElse(source.getMetadata(), Map.of()));
         copy.getChannelScores().putAll(Objects.requireNonNullElse(source.getChannelScores(), Map.of()));
         copy.getChannelRanks().putAll(Objects.requireNonNullElse(source.getChannelRanks(), Map.of()));
+        copy.getFusionExplanation().putAll(Objects.requireNonNullElse(source.getFusionExplanation(), Map.of()));
         return copy;
+    }
+
+    private void mergeFusionExplanation(RetrievedChunk merged, RetrievedChunk reranked) {
+        Map<String, Object> rerankedExplanation = Objects.requireNonNullElse(
+                reranked.getFusionExplanation(), Map.of());
+        if (rerankedExplanation.isEmpty() || rerankedExplanation.equals(merged.getFusionExplanation())) {
+            return;
+        }
+        if (merged.getFusionExplanation().isEmpty()) {
+            merged.getFusionExplanation().putAll(rerankedExplanation);
+            return;
+        }
+        // 模型侧若返回额外解释，嵌入独立字段，避免覆盖 RRF 融合来源。
+        merged.getFusionExplanation().put("rerankExplanation", new LinkedHashMap<>(rerankedExplanation));
     }
 
     private String chunkKey(RetrievedChunk chunk) {
