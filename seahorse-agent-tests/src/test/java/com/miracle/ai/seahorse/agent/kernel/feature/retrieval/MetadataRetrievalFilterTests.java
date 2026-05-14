@@ -138,6 +138,32 @@ class MetadataRetrievalFilterTests {
     }
 
     @Test
+    void shouldFallbackBlankBackendCanonicalNameToFieldKey() {
+        MetadataFieldDescriptor field = new MetadataFieldDescriptor(
+                "department", "部门", MetadataValueType.STRING, Set.of(MetadataOperator.EQ),
+                false, true, false, false, true, MetadataIndexPolicy.JSON_GIN, 0.8D,
+                Set.of("source"), Map.of(), new BackendFieldMapping("", "", "", "",
+                true, true, false, Map.of()));
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(field));
+        RetrievalFilter filter = RetrievalFilter.builder()
+                .metadataConditions(List.of(new MetadataCondition("department", MetadataOperator.EQ, "HR")))
+                .build();
+        CompiledMetadataFilter compiledFilter = new DefaultMetadataFilterCompiler().compile(filter, schema);
+        SearchContext context = SearchContext.builder()
+                .filter(filter)
+                .compiledFilter(compiledFilter)
+                .build();
+
+        assertThat(field.backendMapping().canonicalName()).isEqualTo("department");
+        assertThat(field.backendMapping().searchFieldName()).isEqualTo("department");
+        List<RetrievedChunk> chunks = new MetadataGuardPostProcessorFeature().process(List.of(
+                chunk("1", "tenant-a", "kb-a", "HR", true),
+                chunk("2", "tenant-a", "kb-a", "FIN", true)), List.of(), context);
+
+        assertThat(chunks).extracting(RetrievedChunk::getId).containsExactly("1");
+    }
+
+    @Test
     void shouldGenerateQueryEmbeddingForVectorGlobalSearch() {
         RecordingVectorSearchPort vectorSearchPort = new RecordingVectorSearchPort();
         VectorGlobalSearchFeature feature = new VectorGlobalSearchFeature(
