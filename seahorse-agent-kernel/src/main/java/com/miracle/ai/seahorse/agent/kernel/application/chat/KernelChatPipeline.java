@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.GuidanceDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.PromptContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.QueryOptimizationResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.RewriteResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
@@ -31,9 +32,13 @@ import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentGroup;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,11 +50,13 @@ import static com.miracle.ai.seahorse.agent.kernel.domain.retrieval.KernelRagDef
 /**
  * L1 问答主链路内核编排器。
  * <p>
- * 执行顺序严格保持旧 {@code StreamChatPipeline} 的语义：
- * loadMemory -> rewriteQuery -> resolveIntents -> handleGuidance -> handleSystemOnly -> retrieve
- * -> handleEmptyRetrieval -> streamRagResponse。
+ * 执行顺序：
+ * loadMemory -> activateMemory -> rewriteQuery -> resolveIntents -> handleGuidance
+ * -> handleSystemOnly -> retrieve -> handleEmptyRetrieval -> streamRagResponse。
  */
 public class KernelChatPipeline {
+
+    private static final Logger LOG = LoggerFactory.getLogger(KernelChatPipeline.class);
 
     private static final String EMPTY_RETRIEVAL_MESSAGE = "未检索到与问题相关的文档内容。";
     private static final double SYSTEM_RESPONSE_TEMPERATURE = 0.7D;
@@ -84,6 +91,8 @@ public class KernelChatPipeline {
         StreamChatContext safeContext = Objects.requireNonNull(context, "流式问答上下文不能为空");
         TraceRunScope traceRunScope = safeContext.getTraceRunScope();
         traceRecorder.recordNode(traceRunScope, stage("load-memory", "loadMemory"), () -> loadMemory(safeContext));
+        traceRecorder.recordNode(traceRunScope, stage("activate-memory", "activateMemory"), () -> activateMemory(safeContext));
+        traceRecorder.recordNode(traceRunScope, stage("optimize-query", "optimizeQuery"), () -> optimizeQuery(safeContext));
         traceRecorder.recordNode(traceRunScope, stage("query-rewrite", "rewriteQuery"), () -> rewriteQuery(safeContext));
         traceRecorder.recordNode(traceRunScope, stage("intent-resolve", "resolveIntents"), () -> resolveIntents(safeContext));
 
@@ -114,10 +123,59 @@ public class KernelChatPipeline {
         context.setHistory(history);
     }
 
+    /**
+     * 从四层记忆引擎激活用户记忆。
+     * <p>
+     * 该阶段在 loadMemory（加载会话历史）之后执行，从短期/长期/语义记忆中
+     * 检索与当前用户相关的记忆，注入到上下文中供 Prompt 组装使用。
+     * 记忆激活失败不阻塞主链路。
+     */
+    private void activateMemory(StreamChatContext context) {
+        MemoryLoadRequest request = MemoryLoadRequest.builder()
+                .conversationId(context.getConversationId())
+                .userId(context.getUserId())
+                .currentQuestion(context.getQuestion())
+                .build();
+        try {
+            MemoryContext memoryContext = preparationPorts.memoryEnginePort().loadMemory(request);
+            context.setMemoryContext(memoryContext);
+        } catch (Exception ex) {
+            LOG.warn("记忆激活失败，降级为无记忆模式: userId={}", context.getUserId(), ex);
+        }
+    }
+
+    /**
+     * 查询优化：术语映射、专有名词保护。
+     * <p>
+     * 优化结果存入 context，rewriteQuery 使用 optimizedQuestion 作为输入。
+     * 优化失败时降级使用原始问题。
+     */
+    private void optimizeQuery(StreamChatContext context) {
+        try {
+            QueryOptimizationResult result = preparationPorts.queryOptimizerPort().optimize(
+                    context.getOriginalQuestion(),
+                    safeHistory(context),
+                    context.getMemoryContext());
+            context.setQueryOptimizationResult(result);
+        } catch (Exception ex) {
+            LOG.warn("查询优化失败，降级使用原始问题: question={}", context.getOriginalQuestion(), ex);
+        }
+    }
+
     private void rewriteQuery(StreamChatContext context) {
+        String input = resolveRewriteInput(context);
         RewriteResult rewriteResult = preparationPorts.queryRewritePort()
-                .rewriteWithSplit(context.getQuestion(), safeHistory(context));
+                .rewriteWithSplit(input, safeHistory(context));
         context.setRewriteResult(rewriteResult);
+    }
+
+    private String resolveRewriteInput(StreamChatContext context) {
+        QueryOptimizationResult optimizationResult = context.getQueryOptimizationResult();
+        if (optimizationResult != null && optimizationResult.optimizedQuestion() != null
+                && !optimizationResult.optimizedQuestion().isBlank()) {
+            return optimizationResult.optimizedQuestion();
+        }
+        return context.getOriginalQuestion();
     }
 
     private void resolveIntents(StreamChatContext context) {
@@ -168,7 +226,7 @@ public class KernelChatPipeline {
     private void streamRagResponse(StreamChatContext context, RetrievalContext retrievalContext) {
         IntentGroup mergedGroup = preparationPorts.intentResolutionPort().mergeIntentGroup(safeSubIntents(context));
         RagStreamRequest request = new RagStreamRequest(context.getRewriteResult(), retrievalContext, mergedGroup,
-                safeHistory(context), context.isDeepThinking(), requireCallback(context));
+                safeHistory(context), context.isDeepThinking(), requireCallback(context), context.getMemoryContext());
         StreamCancellationHandle handle = streamLlmResponse(request);
         responsePorts.streamTaskPort().bindHandle(context.getTaskId(), handle);
     }
@@ -217,6 +275,7 @@ public class KernelChatPipeline {
                 .mcpIntents(request.intentGroup().mcpIntents())
                 .kbIntents(request.intentGroup().kbIntents())
                 .intentChunks(request.retrievalContext().getIntentChunks())
+                .memoryContext(request.memoryContext())
                 .build();
 
         List<ChatMessage> messages = responsePorts.ragPromptPort().buildStructuredMessages(
@@ -276,6 +335,7 @@ public class KernelChatPipeline {
                                     IntentGroup intentGroup,
                                     List<ChatMessage> history,
                                     boolean deepThinking,
-                                    StreamCallback callback) {
+                                    StreamCallback callback,
+                                    MemoryContext memoryContext) {
     }
 }

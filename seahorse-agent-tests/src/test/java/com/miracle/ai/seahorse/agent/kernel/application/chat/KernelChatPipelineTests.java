@@ -117,9 +117,9 @@ class KernelChatPipelineTests {
 
         pipeline.execute(context);
 
-        Assertions.assertEquals(List.of("load-memory", "query-rewrite", "intent-resolve",
-                "guidance", "retrieval", "stream-response"), repository.startedNodeNames());
-        Assertions.assertEquals(6, repository.finishedNodes.size());
+        Assertions.assertEquals(List.of("load-memory", "activate-memory", "optimize-query", "query-rewrite",
+                "intent-resolve", "guidance", "retrieval", "stream-response"), repository.startedNodeNames());
+        Assertions.assertEquals(8, repository.finishedNodes.size());
         Assertions.assertTrue(repository.finishedNodes.stream()
                 .allMatch(finish -> KernelRagTraceRecorder.STATUS_SUCCESS.equals(finish.status())));
     }

@@ -1,0 +1,246 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.kernel.application.memory;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * 默认记忆引擎端口实现。
+ *
+ * <p>编排 {@link ShortTermMemoryPort}、{@link LongTermMemoryPort}、{@link SemanticMemoryPort}
+ * 三层记忆的读取和转换，实现 {@link MemoryEnginePort} 契约。
+ *
+ * <p>第一阶段行为：
+ * <ul>
+ *   <li>{@link #loadMemory} 多层读取、限量、转换、去重。</li>
+ *   <li>{@link #writeMemory} 第一阶段保持 no-op，不无条件写入用户原始问题。</li>
+ *   <li>{@link #executeMemoryDecay} 第一阶段不实现全量扫描，委托给治理服务。</li>
+ *   <li>{@link #assessMemoryQuality} 返回基础计数，不声称具备冲突检测能力。</li>
+ * </ul>
+ */
+public class DefaultMemoryEnginePort implements MemoryEnginePort {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultMemoryEnginePort.class);
+
+    private static final int DEFAULT_SHORT_TERM_LIMIT = 5;
+    private static final int DEFAULT_LONG_TERM_LIMIT = 3;
+    private static final int DEFAULT_SEMANTIC_LIMIT = 10;
+
+    private final ShortTermMemoryPort shortTermPort;
+    private final LongTermMemoryPort longTermPort;
+    private final SemanticMemoryPort semanticPort;
+    private final ObjectMapper objectMapper;
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper) {
+        this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
+        this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
+        this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+    }
+
+    @Override
+    public MemoryContext loadMemory(MemoryLoadRequest request) {
+        if (request == null || isBlank(request.userId())) {
+            return emptyContext(request);
+        }
+
+        String userId = request.userId();
+        List<MemoryItem> shortTerm = loadLayer(shortTermPort, userId, DEFAULT_SHORT_TERM_LIMIT, MemoryLayer.SHORT_TERM);
+        List<MemoryItem> longTerm = loadLayer(longTermPort, userId, DEFAULT_LONG_TERM_LIMIT, MemoryLayer.LONG_TERM);
+        List<MemoryItem> semantic = loadLayer(semanticPort, userId, DEFAULT_SEMANTIC_LIMIT, MemoryLayer.SEMANTIC);
+
+        return MemoryContext.builder()
+                .conversationId(request.conversationId())
+                .userId(userId)
+                .currentQuestion(request.currentQuestion())
+                .workingMemory(Collections.emptyList())
+                .shortTermMemories(shortTerm)
+                .longTermMemories(deduplicateById(longTerm))
+                .semanticMemories(semantic)
+                .promptMessages(Collections.emptyList())
+                .build();
+    }
+
+    @Override
+    public void writeMemory(MemoryWriteRequest request) {
+        // 第一阶段不写入。写入闭环在第二阶段实现。
+    }
+
+    @Override
+    public List<MemoryItem> retrieveMemories(MemoryLoadRequest request) {
+        MemoryContext context = loadMemory(request);
+        List<MemoryItem> all = new ArrayList<>();
+        all.addAll(context.getShortTermMemories());
+        all.addAll(context.getLongTermMemories());
+        all.addAll(context.getSemanticMemories());
+        return all;
+    }
+
+    @Override
+    public void executeMemoryDecay() {
+        // 第一阶段不实现全量扫描衰减。
+        // 正确路径需要新增 ShortTermMemoryMaintenancePort.scanExpiredOrDecayed(limit)，
+        // 由 KernelMemoryGovernanceService 和 SeahorseMemoryGovernanceJob 负责。
+    }
+
+    @Override
+    public MemoryQualityReport assessMemoryQuality(String userId) {
+        if (isBlank(userId)) {
+            return MemoryQualityReport.builder().build();
+        }
+        int shortTermCount = safeSize(shortTermPort.listByUser(userId, Integer.MAX_VALUE));
+        int longTermCount = safeSize(longTermPort.listByUser(userId, Integer.MAX_VALUE));
+        int semanticCount = safeSize(semanticPort.listByUser(userId, Integer.MAX_VALUE));
+        return MemoryQualityReport.builder()
+                .userId(userId)
+                .shortTermCount(shortTermCount)
+                .longTermCount(longTermCount)
+                .semanticCount(semanticCount)
+                .build();
+    }
+
+    // ========== 内部方法 ==========
+
+    private List<MemoryItem> loadLayer(ShortTermMemoryPort port, String userId, int limit, MemoryLayer layer) {
+        return loadLayerInternal(port, userId, limit, layer);
+    }
+
+    private List<MemoryItem> loadLayer(LongTermMemoryPort port, String userId, int limit, MemoryLayer layer) {
+        return loadLayerInternal(port, userId, limit, layer);
+    }
+
+    private List<MemoryItem> loadLayer(SemanticMemoryPort port, String userId, int limit, MemoryLayer layer) {
+        return loadLayerInternal(port, userId, limit, layer);
+    }
+
+    private List<MemoryItem> loadLayerInternal(com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort port,
+                                               String userId, int limit, MemoryLayer layer) {
+        try {
+            return port.listByUser(userId, limit).stream()
+                    .map(record -> toMemoryItem(record, layer))
+                    .toList();
+        } catch (Exception ex) {
+            LOG.warn("加载{}记忆失败: userId={}", layer.name(), userId, ex);
+            return Collections.emptyList();
+        }
+    }
+
+    private MemoryItem toMemoryItem(MemoryRecord record, MemoryLayer layer) {
+        return MemoryItem.builder()
+                .id(record.id())
+                .userId(stringField(record.metadata(), "userId"))
+                .conversationId(stringField(record.metadata(), "conversationId"))
+                .layer(layer)
+                .type(record.type())
+                .content(record.content())
+                .metadataJson(serializeMetadata(record.metadata()))
+                .importanceScore(numberField(record.metadata(), "importanceScore", 0D))
+                .confidenceLevel(numberField(record.metadata(), "confidenceLevel", 0D))
+                .createTime(record.updatedAt() != null
+                        ? record.updatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime()
+                        : null)
+                .build();
+    }
+
+    private List<MemoryItem> deduplicateById(List<MemoryItem> items) {
+        if (items == null || items.size() <= 1) {
+            return items == null ? Collections.emptyList() : items;
+        }
+        Set<String> seen = new LinkedHashSet<>();
+        List<MemoryItem> result = new ArrayList<>();
+        for (MemoryItem item : items) {
+            String id = item.getId();
+            if (id != null && seen.add(id)) {
+                result.add(item);
+            }
+        }
+        return result;
+    }
+
+    private String serializeMetadata(Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return "{}";
+        }
+        try {
+            return objectMapper.writeValueAsString(metadata);
+        } catch (JsonProcessingException ex) {
+            LOG.debug("序列化记忆元数据失败", ex);
+            return "{}";
+        }
+    }
+
+    private String stringField(Map<String, Object> metadata, String key) {
+        Object value = metadata.get(key);
+        return value == null ? "" : value.toString();
+    }
+
+    private double numberField(Map<String, Object> metadata, String key, double fallback) {
+        Object value = metadata.get(key);
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        return fallback;
+    }
+
+    private MemoryContext emptyContext(MemoryLoadRequest request) {
+        return MemoryContext.builder()
+                .conversationId(request != null ? request.conversationId() : "")
+                .userId(request != null ? request.userId() : "")
+                .currentQuestion(request != null ? request.currentQuestion() : "")
+                .workingMemory(Collections.emptyList())
+                .shortTermMemories(Collections.emptyList())
+                .longTermMemories(Collections.emptyList())
+                .semanticMemories(Collections.emptyList())
+                .promptMessages(Collections.emptyList())
+                .build();
+    }
+
+    private int safeSize(List<?> list) {
+        return list == null ? 0 : list.size();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+}

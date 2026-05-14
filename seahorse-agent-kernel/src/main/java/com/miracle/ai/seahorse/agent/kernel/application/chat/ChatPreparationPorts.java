@@ -20,8 +20,10 @@ package com.miracle.ai.seahorse.agent.kernel.application.chat;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryOptimizerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 
 import java.util.Objects;
 
@@ -29,13 +31,26 @@ import java.util.Objects;
  * 问答前置阶段端口集合。
  */
 public record ChatPreparationPorts(ConversationMemoryPort memoryPort,
+                                   MemoryEnginePort memoryEnginePort,
+                                   QueryOptimizerPort queryOptimizerPort,
                                    QueryRewritePort queryRewritePort,
                                    IntentResolutionPort intentResolutionPort,
                                    IntentGuidancePort intentGuidancePort,
                                    RetrievalContextPort retrievalContextPort) {
 
+    public ChatPreparationPorts(ConversationMemoryPort memoryPort,
+                                QueryRewritePort queryRewritePort,
+                                IntentResolutionPort intentResolutionPort,
+                                IntentGuidancePort intentGuidancePort,
+                                RetrievalContextPort retrievalContextPort) {
+        this(memoryPort, MemoryEnginePort.noop(), QueryOptimizerPort.passthrough(),
+                queryRewritePort, intentResolutionPort, intentGuidancePort, retrievalContextPort);
+    }
+
     public ChatPreparationPorts {
         Objects.requireNonNull(memoryPort, "对话记忆端口不能为空");
+        Objects.requireNonNull(memoryEnginePort, "记忆引擎端口不能为空");
+        Objects.requireNonNull(queryOptimizerPort, "查询优化端口不能为空");
         Objects.requireNonNull(queryRewritePort, "查询改写端口不能为空");
         Objects.requireNonNull(intentResolutionPort, "意图解析端口不能为空");
         Objects.requireNonNull(intentGuidancePort, "意图引导端口不能为空");
