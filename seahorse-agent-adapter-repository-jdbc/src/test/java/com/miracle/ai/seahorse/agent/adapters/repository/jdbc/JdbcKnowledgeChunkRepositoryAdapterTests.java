@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeChunkValues;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRecord;
@@ -30,6 +31,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -80,6 +82,24 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
         assertThat(chunks).extracting(KnowledgeChunkRecord::getId).containsExactly("chunk-0", "chunk-1");
     }
 
+    @Test
+    void shouldWriteChunkMetadataJsonWhenColumnExists() {
+        adapter.replaceDocumentChunks("kb-1", "doc-1", List.of(
+                VectorChunk.builder()
+                        .chunkId("chunk-meta")
+                        .index(0)
+                        .content("带元数据的分块")
+                        .metadata(Map.of("department", "FIN", "securityLevel", "internal"))
+                        .build()));
+
+        String metadataJson = jdbcTemplate.queryForObject(
+                "SELECT metadata_json FROM t_knowledge_chunk WHERE id = 'chunk-meta'", String.class);
+
+        assertThat(metadataJson)
+                .contains("\"department\":\"FIN\"")
+                .contains("\"securityLevel\":\"internal\"");
+    }
+
     private void insertChunk(String id, int index, String content, int enabled) {
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
@@ -123,6 +143,7 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
                     content VARCHAR(512),
                     content_hash VARCHAR(128),
                     char_count INTEGER,
+                    metadata_json VARCHAR(2048),
                     token_count INTEGER,
                     enabled INTEGER,
                     created_by VARCHAR(64),

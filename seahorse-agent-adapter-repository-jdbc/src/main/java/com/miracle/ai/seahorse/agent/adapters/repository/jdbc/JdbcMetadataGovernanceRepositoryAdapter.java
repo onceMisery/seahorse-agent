@@ -91,6 +91,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private Boolean documentMetadataJsonColumnExists;
 
     public JdbcMetadataGovernanceRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
@@ -525,11 +526,12 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         if (blank(documentId) || acceptedMetadata == null || acceptedMetadata.isEmpty()) {
             return;
         }
-        try {
-            jdbcTemplate.update("UPDATE t_knowledge_document SET metadata_json = ?, update_time = CURRENT_TIMESTAMP "
-                    + "WHERE id = ? AND deleted = 0", json(acceptedMetadata), documentId);
-        } catch (DataAccessException ignored) {
+        if (!documentMetadataJsonColumnExists()) {
+            return;
         }
+        // 列存在后写入失败必须向上传递，避免 canonical metadata 静默丢失。
+        jdbcTemplate.update("UPDATE t_knowledge_document SET metadata_json = ?, update_time = CURRENT_TIMESTAMP "
+                + "WHERE id = ? AND deleted = 0", json(acceptedMetadata), documentId);
     }
 
     @Override
@@ -1089,6 +1091,24 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         } catch (JsonProcessingException ex) {
             throw new IllegalArgumentException("serialize metadata json failed", ex);
         }
+    }
+
+    private boolean documentMetadataJsonColumnExists() {
+        if (documentMetadataJsonColumnExists != null) {
+            return documentMetadataJsonColumnExists;
+        }
+        try {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(1)
+                    FROM information_schema.columns
+                    WHERE lower(table_name) = 't_knowledge_document'
+                      AND lower(column_name) = 'metadata_json'
+                    """, Integer.class);
+            documentMetadataJsonColumnExists = count != null && count > 0;
+        } catch (RuntimeException ex) {
+            documentMetadataJsonColumnExists = false;
+        }
+        return documentMetadataJsonColumnExists;
     }
 
     private boolean bool(ResultSet rs, String column) throws SQLException {
