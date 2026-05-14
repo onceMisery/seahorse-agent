@@ -18,6 +18,7 @@ public record MetadataReviewRecord(
         String reasonCode,
         String reasonMessage,
         Map<String, Object> suggestedMetadata,
+        Map<String, Object> reviewContext,
         Map<String, Object> correctedMetadata,
         String reviewerId,
         String reviewComment,
@@ -36,10 +37,30 @@ public record MetadataReviewRecord(
         reasonCode = Objects.requireNonNullElse(reasonCode, "");
         reasonMessage = Objects.requireNonNullElse(reasonMessage, "");
         suggestedMetadata = Map.copyOf(Objects.requireNonNullElse(suggestedMetadata, Map.of()));
+        reviewContext = Map.copyOf(Objects.requireNonNullElse(reviewContext, Map.of()));
         correctedMetadata = Map.copyOf(Objects.requireNonNullElse(correctedMetadata, Map.of()));
         reviewerId = Objects.requireNonNullElse(reviewerId, "");
         reviewComment = Objects.requireNonNullElse(reviewComment, "");
         createTime = Objects.requireNonNullElseGet(createTime, Instant::now);
         updateTime = Objects.requireNonNullElseGet(updateTime, Instant::now);
+    }
+
+    public MetadataReviewRecord(String id,
+                                String tenantId,
+                                String knowledgeBaseId,
+                                String documentId,
+                                String resultId,
+                                MetadataReviewStatus reviewStatus,
+                                int priority,
+                                String reasonCode,
+                                String reasonMessage,
+                                Map<String, Object> suggestedMetadata,
+                                Map<String, Object> correctedMetadata,
+                                String reviewerId,
+                                String reviewComment,
+                                Instant createTime,
+                                Instant updateTime) {
+        this(id, tenantId, knowledgeBaseId, documentId, resultId, reviewStatus, priority, reasonCode, reasonMessage,
+                suggestedMetadata, Map.of(), correctedMetadata, reviewerId, reviewComment, createTime, updateTime);
     }
 }

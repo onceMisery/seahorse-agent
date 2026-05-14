@@ -321,11 +321,11 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             jdbcTemplate.update("""
                     INSERT INTO t_metadata_review_item(
                         id, tenant_id, kb_id, doc_id, result_id, review_status, priority, reason_code,
-                        reason_message, suggested_metadata, create_time, update_time
-                    ) VALUES (?, ?, ?, ?, ?, 'PENDING', 0, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        reason_message, suggested_metadata, review_context, create_time, update_time
+                    ) VALUES (?, ?, ?, ?, ?, 'PENDING', 0, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                     """, UUID.randomUUID().toString(), safeItem.tenantId(), safeItem.knowledgeBaseId(),
                     safeItem.documentId(), safeItem.resultId(), safeItem.reasonCode(), safeItem.reasonMessage(),
-                    json(safeItem.suggestedMetadata()));
+                    json(safeItem.suggestedMetadata()), json(safeItem.reviewContext()));
         } catch (DataAccessException ignored) {
         }
     }
@@ -359,7 +359,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         args.add(safeQuery.offset());
         List<MetadataReviewRecord> records = jdbcTemplate.query("""
                 SELECT id, tenant_id, kb_id, doc_id, result_id, review_status, priority,
-                       reason_code, reason_message, suggested_metadata, corrected_metadata,
+                       reason_code, reason_message, suggested_metadata, review_context, corrected_metadata,
                        reviewer_id, review_comment, create_time, update_time
                 FROM t_metadata_review_item
                 """ + where.sql() + """
@@ -378,7 +378,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         try {
             return jdbcTemplate.query("""
                     SELECT id, tenant_id, kb_id, doc_id, result_id, review_status, priority,
-                           reason_code, reason_message, suggested_metadata, corrected_metadata,
+                           reason_code, reason_message, suggested_metadata, review_context, corrected_metadata,
                            reviewer_id, review_comment, create_time, update_time
                     FROM t_metadata_review_item
                     WHERE id = ?
@@ -877,6 +877,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 rs.getString("reason_code"),
                 rs.getString("reason_message"),
                 readMap(rs.getString("suggested_metadata")),
+                readMap(rs.getString("review_context")),
                 readMap(rs.getString("corrected_metadata")),
                 rs.getString("reviewer_id"),
                 rs.getString("review_comment"),

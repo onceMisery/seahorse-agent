@@ -88,7 +88,7 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
             if (MetadataValidationDecision.REVIEW_REQUIRED.equals(result.decision())) {
                 reviewQueuePort.enqueue(new MetadataReviewItem(identity.tenantId(), identity.kbId(), identity.docId(),
                         firstText(resultId, safeContext.getTaskId()), "METADATA_REVIEW_REQUIRED", firstIssue(result.issues()),
-                        result.acceptedMetadata()));
+                        result.acceptedMetadata(), reviewContext(safeContext, result)));
                 // 需要人工复核的元数据不能直接写入 canonical metadata 或继续进入索引链路。
                 safeContext.setSkipIndexerWrite(true);
                 return NodeResult.terminate("metadata review required");
@@ -208,6 +208,16 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
         snapshot.put("normalizedMetadata", Objects.requireNonNullElse(context.getNormalizedMetadata(), Map.of()));
         snapshot.put("issues", Objects.requireNonNullElse(context.getMetadataIssues(), List.of()));
         return snapshot;
+    }
+
+    private Map<String, Object> reviewContext(IngestionContext context, MetadataValidationResult result) {
+        Map<String, Object> reviewContext = new LinkedHashMap<>();
+        // 复核上下文只用于管理端展示证据，避免污染可写回的 suggestedMetadata。
+        reviewContext.put("issues", result.issues());
+        reviewContext.put("fieldQualities", Objects.requireNonNullElse(context.getMetadataFieldQualities(), List.of()));
+        reviewContext.put("rawCandidates", Objects.requireNonNullElse(context.getMetadataCandidates(), List.of()));
+        reviewContext.put("rejectedMetadata", result.rejectedMetadata());
+        return reviewContext;
     }
 
     private MetadataSchema resolveSchema(IngestionContext context, NodeConfig config) {

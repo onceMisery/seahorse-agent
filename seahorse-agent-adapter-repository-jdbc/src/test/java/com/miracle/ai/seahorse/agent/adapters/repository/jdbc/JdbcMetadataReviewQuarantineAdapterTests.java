@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRetry;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
@@ -35,6 +36,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import javax.sql.DataSource;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -64,6 +66,7 @@ class JdbcMetadataReviewQuarantineAdapterTests {
 
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.records()).extracting(MetadataReviewRecord::id).containsExactly("review-1");
+        assertThat(page.records().get(0).reviewContext()).containsKey("issues");
 
         MetadataReviewRecord corrected = adapter.applyReviewDecision(new MetadataReviewDecision(
                 "review-1",
@@ -95,6 +98,26 @@ class JdbcMetadataReviewQuarantineAdapterTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT decision_metadata FROM t_metadata_review_audit WHERE review_item_id = 'review-1'",
                 String.class)).contains("legal");
+    }
+
+    @Test
+    void shouldPersistReviewContextWhenEnqueueReviewItem() {
+        adapter.enqueue(new MetadataReviewItem(
+                "tenant-1",
+                "kb-1",
+                "doc-context",
+                "result-context",
+                "METADATA_REVIEW_REQUIRED",
+                "字段置信度低",
+                Map.of("department", "hr"),
+                Map.of("issues", List.of("LOW_CONFIDENCE"), "evidence", "财务部预算说明")));
+
+        String reviewContextJson = jdbcTemplate.queryForObject(
+                "SELECT review_context FROM t_metadata_review_item WHERE doc_id = 'doc-context'",
+                String.class);
+
+        assertThat(reviewContextJson).contains("LOW_CONFIDENCE");
+        assertThat(reviewContextJson).contains("财务部预算说明");
     }
 
     @Test
@@ -180,6 +203,7 @@ class JdbcMetadataReviewQuarantineAdapterTests {
                     reason_code VARCHAR(64),
                     reason_message VARCHAR(512),
                     suggested_metadata VARCHAR(4096),
+                    review_context VARCHAR(4096),
                     corrected_metadata VARCHAR(4096),
                     reviewer_id VARCHAR(64),
                     review_comment VARCHAR(1024),
@@ -242,10 +266,11 @@ class JdbcMetadataReviewQuarantineAdapterTests {
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_review_item(
                     id, tenant_id, kb_id, doc_id, result_id, review_status, priority,
-                    reason_code, reason_message, suggested_metadata
+                    reason_code, reason_message, suggested_metadata, review_context
                 ) VALUES (?, 'tenant-1', 'kb-1', 'doc-1', ?, ?, 10,
-                    'LOW_CONFIDENCE', '字段置信度低', ?)
-                """, id, resultId, status, "{\"department\":\"hr\"}");
+                    'LOW_CONFIDENCE', '字段置信度低', ?, ?)
+                """, id, resultId, status, "{\"department\":\"hr\"}",
+                "{\"issues\":[\"LOW_CONFIDENCE\"]}");
     }
 
     private void insertQuarantineItem(String id, int resolved, int retryCount) {

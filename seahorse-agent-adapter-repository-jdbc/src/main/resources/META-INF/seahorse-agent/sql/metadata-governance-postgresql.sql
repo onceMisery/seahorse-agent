@@ -159,12 +159,16 @@ CREATE TABLE IF NOT EXISTS t_metadata_review_item (
     reason_code          VARCHAR(64),
     reason_message       VARCHAR(512),
     suggested_metadata   JSONB,
+    review_context       JSONB,
     corrected_metadata   JSONB,
     reviewer_id          VARCHAR(64),
     review_comment       VARCHAR(1024),
     create_time          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE t_metadata_review_item
+ADD COLUMN IF NOT EXISTS review_context JSONB;
 
 COMMENT ON TABLE t_metadata_review_item IS '元数据人工复核项表';
 COMMENT ON COLUMN t_metadata_review_item.id IS '复核项 ID';
@@ -177,6 +181,7 @@ COMMENT ON COLUMN t_metadata_review_item.priority IS '复核优先级，数值�
 COMMENT ON COLUMN t_metadata_review_item.reason_code IS '进入复核的原因编码';
 COMMENT ON COLUMN t_metadata_review_item.reason_message IS '进入复核的原因说明';
 COMMENT ON COLUMN t_metadata_review_item.suggested_metadata IS '系统建议的标准化元数据 JSON';
+COMMENT ON COLUMN t_metadata_review_item.review_context IS '复核上下文 JSON，包含问题、字段质量、候选证据和被拒绝字段';
 COMMENT ON COLUMN t_metadata_review_item.corrected_metadata IS '人工修正后的元数据 JSON';
 COMMENT ON COLUMN t_metadata_review_item.reviewer_id IS '复核人 ID';
 COMMENT ON COLUMN t_metadata_review_item.review_comment IS '复核备注';

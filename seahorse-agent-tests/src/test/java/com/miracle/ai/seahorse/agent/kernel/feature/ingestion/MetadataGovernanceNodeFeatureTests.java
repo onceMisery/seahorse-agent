@@ -259,6 +259,9 @@ class MetadataGovernanceNodeFeatureTests {
                 .normalizedMetadata(Map.of("department", "Finance"))
                 .metadataFieldQualities(List.of(new MetadataFieldQuality(
                         "department", 0.5D, "llm", "LlmMetadataExtractor", true, "")))
+                .metadataCandidates(List.of(new MetadataFieldCandidate(
+                        "department", "Finance", "llm", "LlmMetadataExtractor",
+                        0.5D, "财务部预算说明", 1, "extractor-v1")))
                 .build();
 
         NodeResult result = new MetadataValidatorNodeFeature(schemaRegistry,
@@ -274,6 +277,10 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(context.getMetadataValidationResult().decision()).isEqualTo(MetadataValidationDecision.REVIEW_REQUIRED);
         assertThat(reviewItems).extracting(MetadataReviewItem::reasonCode).containsExactly("METADATA_REVIEW_REQUIRED");
         assertThat(reviewItems.get(0).resultId()).isEqualTo("result-a");
+        assertThat(reviewItems.get(0).reviewContext())
+                .containsKeys("issues", "fieldQualities", "rawCandidates", "rejectedMetadata");
+        assertThat(reviewItems.get(0).reviewContext().get("rawCandidates").toString())
+                .contains("财务部预算说明");
         assertThat(writtenDocumentMetadata.get()).isNull();
         assertThat(context.getMetadata()).doesNotContainKeys("department", "acceptedMetadata");
     }
