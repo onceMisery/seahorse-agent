@@ -313,13 +313,16 @@ class KernelMetadataBackfillServiceTests {
                 null);
 
         String jobId = service.requestReExtract(new MetadataReviewReExtractRequest(
-                "tenant-1", "kb-1", "doc-2", "review-1", "extractor-v2", "pipe-1", "auditor"));
+                "tenant-1", "kb-1", "doc-2", "review-1", "extractor-v2", "pipe-1",
+                "llm-v2", "prompt-v2", "auditor"));
         MetadataBackfillJobRecord created = jobs.findById(jobId).orElseThrow();
         MetadataBackfillRunResult result = service.runNextBatch(jobId);
 
         assertThat(created.checkpoint())
                 .containsEntry("sourceReviewItemId", "review-1")
                 .containsEntry("extractorVersion", "extractor-v2")
+                .containsEntry("llmExtractorVersion", "llm-v2")
+                .containsEntry("llmPromptVersion", "prompt-v2")
                 .containsEntry("forceRerun", true)
                 .containsEntry("overwriteApproved", true)
                 .containsEntry("reExtract", true);
@@ -331,6 +334,8 @@ class KernelMetadataBackfillServiceTests {
         assertThat(contextMetadata.get(0))
                 .containsEntry("sourceReviewItemId", "review-1")
                 .containsEntry("extractorVersion", "extractor-v2")
+                .containsEntry("llmExtractorVersion", "llm-v2")
+                .containsEntry("llmPromptVersion", "prompt-v2")
                 .containsEntry("reExtract", true);
     }
 

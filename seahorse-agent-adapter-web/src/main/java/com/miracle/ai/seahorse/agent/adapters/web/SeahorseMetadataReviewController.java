@@ -125,7 +125,9 @@ public class SeahorseMetadataReviewController {
                 Objects.requireNonNullElse(safeRequest.getCorrectedMetadata(), Map.of()),
                 Objects.requireNonNullElse(safeRequest.getIgnoredFields(), List.of()),
                 Objects.requireNonNullElse(safeRequest.getExtractorVersion(), ""),
-                Objects.requireNonNullElse(safeRequest.getPipelineId(), ""));
+                Objects.requireNonNullElse(safeRequest.getPipelineId(), ""),
+                Objects.requireNonNullElse(safeRequest.getLlmExtractorVersion(), ""),
+                Objects.requireNonNullElse(safeRequest.getLlmPromptVersion(), ""));
     }
 
     private MetadataReviewStatus reviewStatus(String status) {

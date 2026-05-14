@@ -29,6 +29,8 @@ public record MetadataReviewReExtractRequest(
         String reviewItemId,
         String extractorVersion,
         String pipelineId,
+        String llmExtractorVersion,
+        String llmPromptVersion,
         String operator
 ) {
 
@@ -39,6 +41,18 @@ public record MetadataReviewReExtractRequest(
         reviewItemId = Objects.requireNonNullElse(reviewItemId, "");
         extractorVersion = Objects.requireNonNullElse(extractorVersion, "");
         pipelineId = Objects.requireNonNullElse(pipelineId, "");
+        llmExtractorVersion = Objects.requireNonNullElse(llmExtractorVersion, "");
+        llmPromptVersion = Objects.requireNonNullElse(llmPromptVersion, "");
         operator = Objects.requireNonNullElse(operator, "");
+    }
+
+    public MetadataReviewReExtractRequest(String tenantId,
+                                          String knowledgeBaseId,
+                                          String documentId,
+                                          String reviewItemId,
+                                          String extractorVersion,
+                                          String pipelineId,
+                                          String operator) {
+        this(tenantId, knowledgeBaseId, documentId, reviewItemId, extractorVersion, pipelineId, "", "", operator);
     }
 }

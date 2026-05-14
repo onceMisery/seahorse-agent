@@ -136,11 +136,19 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
                 current.id(),
                 safeCommand.extractorVersion(),
                 safeCommand.pipelineId(),
+                safeCommand.llmExtractorVersion(),
+                safeCommand.llmPromptVersion(),
                 operator(safeCommand.reviewerId())));
         Map<String, Object> decisionMetadata = new LinkedHashMap<>();
         decisionMetadata.put("reExtractJobId", jobId);
         decisionMetadata.put("extractorVersion", safeCommand.extractorVersion());
         decisionMetadata.put("pipelineId", safeCommand.pipelineId());
+        if (!safeCommand.llmExtractorVersion().isBlank()) {
+            decisionMetadata.put("llmExtractorVersion", safeCommand.llmExtractorVersion());
+        }
+        if (!safeCommand.llmPromptVersion().isBlank()) {
+            decisionMetadata.put("llmPromptVersion", safeCommand.llmPromptVersion());
+        }
         decisionMetadata.put("documentId", current.documentId());
         // RE_EXTRACT 只调度重抽取任务，不写 canonical metadata；新结果由回填流水线重新产出。
         return applyDecision(current, MetadataReviewStatus.RE_EXTRACTING, safeCommand, decisionMetadata);

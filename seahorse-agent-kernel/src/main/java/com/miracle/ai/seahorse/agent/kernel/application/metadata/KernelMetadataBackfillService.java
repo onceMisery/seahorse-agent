@@ -237,6 +237,12 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         metadata.put("documentIds", List.of(safeRequest.documentId()));
         metadata.put("sourceReviewItemId", safeRequest.reviewItemId());
         metadata.put("extractorVersion", requireText(safeRequest.extractorVersion(), "extractorVersion"));
+        if (hasText(safeRequest.llmExtractorVersion())) {
+            metadata.put("llmExtractorVersion", safeRequest.llmExtractorVersion());
+        }
+        if (hasText(safeRequest.llmPromptVersion())) {
+            metadata.put("llmPromptVersion", safeRequest.llmPromptVersion());
+        }
         metadata.put("forceRerun", true);
         metadata.put("overwriteApproved", true);
         metadata.put("reExtract", true);

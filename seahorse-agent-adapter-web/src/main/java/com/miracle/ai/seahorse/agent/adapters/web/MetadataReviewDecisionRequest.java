@@ -30,6 +30,8 @@ public class MetadataReviewDecisionRequest {
     private List<String> ignoredFields;
     private String extractorVersion;
     private String pipelineId;
+    private String llmExtractorVersion;
+    private String llmPromptVersion;
 
     public String getComment() {
         return comment;
@@ -69,5 +71,21 @@ public class MetadataReviewDecisionRequest {
 
     public void setPipelineId(String pipelineId) {
         this.pipelineId = pipelineId;
+    }
+
+    public String getLlmExtractorVersion() {
+        return llmExtractorVersion;
+    }
+
+    public void setLlmExtractorVersion(String llmExtractorVersion) {
+        this.llmExtractorVersion = llmExtractorVersion;
+    }
+
+    public String getLlmPromptVersion() {
+        return llmPromptVersion;
+    }
+
+    public void setLlmPromptVersion(String llmPromptVersion) {
+        this.llmPromptVersion = llmPromptVersion;
     }
 }

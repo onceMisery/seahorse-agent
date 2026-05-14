@@ -850,7 +850,9 @@ class SeahorseWebApiContractTests {
                         .content(json(Map.of(
                                 "comment", "重新抽取",
                                 "extractorVersion", "extractor-v2",
-                                "pipelineId", "pipe-1"))))
+                                "pipelineId", "pipe-1",
+                                "llmExtractorVersion", "llm-v2",
+                                "llmPromptVersion", "prompt-v2"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reviewStatus").value("RE_EXTRACTING"));
         mvc.perform(post("/metadata-review/items/review-1/reject")

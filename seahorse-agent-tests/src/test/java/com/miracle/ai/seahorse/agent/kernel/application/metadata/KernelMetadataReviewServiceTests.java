@@ -110,7 +110,8 @@ class KernelMetadataReviewServiceTests {
 
         MetadataReviewRecord reExtracting = service.reExtract("review-1",
                 new MetadataReviewDecisionCommand(
-                        "auditor", "重新抽取", Map.of(), List.of(), "extractor-v2", "pipe-2"));
+                        "auditor", "重新抽取", Map.of(), List.of(), "extractor-v2", "pipe-2",
+                        "llm-v2", "prompt-v2"));
 
         assertThat(reExtracting.reviewStatus()).isEqualTo(MetadataReviewStatus.RE_EXTRACTING);
         assertThat(canonicalWritePort.metadata).isEmpty();
@@ -119,6 +120,8 @@ class KernelMetadataReviewServiceTests {
                 .containsEntry("reExtractJobId", "backfill-job-1")
                 .containsEntry("extractorVersion", "extractor-v2")
                 .containsEntry("pipelineId", "pipe-2")
+                .containsEntry("llmExtractorVersion", "llm-v2")
+                .containsEntry("llmPromptVersion", "prompt-v2")
                 .containsEntry("documentId", "doc-1");
         assertThat(reExtractPort.request)
                 .extracting(MetadataReviewReExtractRequest::tenantId,
@@ -127,8 +130,11 @@ class KernelMetadataReviewServiceTests {
                         MetadataReviewReExtractRequest::reviewItemId,
                         MetadataReviewReExtractRequest::extractorVersion,
                         MetadataReviewReExtractRequest::pipelineId,
+                        MetadataReviewReExtractRequest::llmExtractorVersion,
+                        MetadataReviewReExtractRequest::llmPromptVersion,
                         MetadataReviewReExtractRequest::operator)
-                .containsExactly("tenant-1", "kb-1", "doc-1", "review-1", "extractor-v2", "pipe-2", "auditor");
+                .containsExactly("tenant-1", "kb-1", "doc-1", "review-1", "extractor-v2", "pipe-2",
+                        "llm-v2", "prompt-v2", "auditor");
     }
 
     @Test
