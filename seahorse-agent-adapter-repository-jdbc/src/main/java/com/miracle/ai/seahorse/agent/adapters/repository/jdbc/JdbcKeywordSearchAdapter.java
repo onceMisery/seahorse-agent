@@ -20,16 +20,26 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContains;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldExists;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldIn;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldRange;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -47,6 +57,8 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
     private static final String META_KB_ID = "kb_id";
     private static final String META_DOC_ID = "doc_id";
     private static final String META_CHUNK_INDEX = "chunk_index";
+    private static final String META_COLLECTION_NAME = "collection_name";
+    private static final String META_ACL_SUBJECTS = "acl_subjects";
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -83,19 +95,31 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
                 """.formatted(metadataSelect, searchVector, searchVector));
         args.add(request.query().trim());
         args.add(ENABLED_VALUE);
-        appendSystemFilter(sql, args, request.compiledFilter().sourceFilter().system());
+        appendSystemFilter(sql, args, request);
         sql.append(" ORDER BY rank_score DESC, update_time DESC LIMIT ?");
         args.add(request.topK());
         return sql.toString();
     }
 
-    private void appendSystemFilter(StringBuilder sql, List<Object> args, SystemRetrievalFilter filter) {
+    private void appendSystemFilter(StringBuilder sql, List<Object> args, KeywordSearchRequest request) {
+        SystemRetrievalFilter filter = request.compiledFilter().sourceFilter().system();
         if (filter == null) {
             return;
         }
         appendIn(sql, args, "kb_id", filter.knowledgeBaseIds());
         appendIn(sql, args, "doc_id", filter.documentIds());
-        // tenant_id 等字段通常位于 metadata_json，复杂动态过滤交给 MetadataGuardPostProcessor 兜底。
+        if (!metadataJsonColumnExists()) {
+            // 兼容未执行治理 DDL 的旧环境，无法下推的条件仍由 MetadataGuardPostProcessor 兜底。
+            return;
+        }
+        appendJsonEq(sql, args, META_TENANT_ID, filter.tenantId());
+        appendJsonIn(sql, args, META_COLLECTION_NAME, filter.collectionNames());
+        appendJsonIn(sql, args, "file_type", filter.fileTypes());
+        appendJsonIn(sql, args, "source_type", filter.sourceTypes());
+        appendJsonRange(sql, args, "created_at", filter.createdFrom(), filter.createdTo());
+        appendJsonRange(sql, args, "updated_at", filter.updatedFrom(), filter.updatedTo());
+        appendJsonAclAny(sql, args, filter.aclSubjectIds());
+        appendMetadataExpression(sql, args, request.compiledFilter().expression());
     }
 
     private void appendIn(StringBuilder sql, List<Object> args, String column, List<String> values) {
@@ -105,6 +129,98 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
         String placeholders = values.stream().map(ignored -> "?").collect(Collectors.joining(", "));
         sql.append(" AND ").append(column).append(" IN (").append(placeholders).append(")");
         args.addAll(values);
+    }
+
+    private void appendJsonEq(StringBuilder sql, List<Object> args, String key, Object value) {
+        if (value == null || Objects.toString(value, "").isBlank()) {
+            return;
+        }
+        sql.append(" AND metadata_json->>'").append(fieldKey(key)).append("' = ?");
+        args.add(jsonText(value));
+    }
+
+    private void appendJsonIn(StringBuilder sql, List<Object> args, String key, Collection<?> values) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        String placeholders = values.stream().map(ignored -> "?").collect(Collectors.joining(", "));
+        sql.append(" AND metadata_json->>'").append(fieldKey(key)).append("' IN (").append(placeholders).append(")");
+        values.forEach(value -> args.add(jsonText(value)));
+    }
+
+    private void appendJsonRange(StringBuilder sql, List<Object> args, String key, Object from, Object to) {
+        String safeKey = fieldKey(key);
+        if (from != null) {
+            sql.append(" AND metadata_json->>'").append(safeKey).append("' >= ?");
+            args.add(jsonText(from));
+        }
+        if (to != null) {
+            sql.append(" AND metadata_json->>'").append(safeKey).append("' <= ?");
+            args.add(jsonText(to));
+        }
+    }
+
+    private void appendJsonAclAny(StringBuilder sql, List<Object> args, List<String> aclSubjectIds) {
+        if (aclSubjectIds == null || aclSubjectIds.isEmpty()) {
+            return;
+        }
+        String placeholders = aclSubjectIds.stream().map(ignored -> "?").collect(Collectors.joining(", "));
+        sql.append("""
+                 AND EXISTS (
+                   SELECT 1
+                   FROM jsonb_array_elements_text(
+                     CASE WHEN jsonb_typeof(metadata_json -> '%s') = 'array'
+                          THEN metadata_json -> '%s'
+                          ELSE '[]'::jsonb
+                     END
+                   ) AS acl(value)
+                   WHERE acl.value IN (""".formatted(META_ACL_SUBJECTS, META_ACL_SUBJECTS));
+        sql.append(placeholders).append("))");
+        args.addAll(aclSubjectIds);
+    }
+
+    private void appendMetadataExpression(StringBuilder sql, List<Object> args, MetadataFilterExpr expression) {
+        if (expression == null) {
+            return;
+        }
+        if (expression instanceof FilterAnd filterAnd) {
+            filterAnd.children().forEach(child -> appendMetadataExpression(sql, args, child));
+            return;
+        }
+        // 动态 metadata 只消费 MetadataFilterCompiler 生成的 AST，不在 adapter 内解释原始用户 Map。
+        if (expression instanceof FieldEq fieldEq) {
+            appendJsonEq(sql, args, canonicalKey(fieldEq.field()), fieldEq.value());
+        } else if (expression instanceof FieldIn fieldIn) {
+            appendJsonIn(sql, args, canonicalKey(fieldIn.field()), fieldIn.values());
+        } else if (expression instanceof FieldRange fieldRange) {
+            appendJsonRange(sql, args, canonicalKey(fieldRange.field()), fieldRange.from(), fieldRange.to());
+        } else if (expression instanceof FieldContains fieldContains) {
+            String key = canonicalKey(fieldContains.field());
+            sql.append(" AND metadata_json->>'").append(fieldKey(key)).append("' LIKE ?");
+            args.add("%" + jsonText(fieldContains.value()) + "%");
+        } else if (expression instanceof FieldExists fieldExists) {
+            sql.append(" AND metadata_json ? '").append(fieldKey(canonicalKey(fieldExists.field()))).append("'");
+        }
+    }
+
+    private String canonicalKey(MetadataFieldDescriptor field) {
+        String mapped = field.backendMapping().canonicalName();
+        return mapped == null || mapped.isBlank() ? field.fieldKey() : mapped;
+    }
+
+    private String fieldKey(String key) {
+        String safeKey = Objects.requireNonNullElse(key, "").trim();
+        if (!safeKey.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+            throw new IllegalArgumentException("invalid metadata field key: " + key);
+        }
+        return safeKey;
+    }
+
+    private String jsonText(Object value) {
+        if (value instanceof BigDecimal decimal) {
+            return decimal.stripTrailingZeros().toPlainString();
+        }
+        return Objects.toString(value, "");
     }
 
     private RetrievedChunk toRetrievedChunk(ResultSet resultSet, int rowNumber) throws SQLException {
