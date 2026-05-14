@@ -45,6 +45,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflict
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryQualitySnapshotRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMessageFeedbackRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMetadataGovernanceRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMetadataSchemaIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPipelineDefinitionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
@@ -307,6 +308,21 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(ElasticsearchMetadataSchemaIndexAdapter.class);
                     assertThat(context.getBean(MetadataSchemaIndexSyncPort.class))
                             .isInstanceOf(ElasticsearchMetadataSchemaIndexAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterJdbcMetadataSchemaIndexAdapterWhenSelected() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:native-metadata-index;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+
+        contextRunner.withBean(DriverManagerDataSource.class, () -> dataSource)
+                .withPropertyValues("seahorse-agent.adapters.metadata-schema-index.type=jdbc")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(JdbcMetadataSchemaIndexAdapter.class);
+                    assertThat(context.getBean(MetadataSchemaIndexSyncPort.class))
+                            .isInstanceOf(JdbcMetadataSchemaIndexAdapter.class);
                 });
     }
 }

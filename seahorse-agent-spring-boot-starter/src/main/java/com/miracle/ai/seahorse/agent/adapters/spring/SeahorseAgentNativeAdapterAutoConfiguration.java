@@ -58,6 +58,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflict
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryQualitySnapshotRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMessageFeedbackRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMetadataGovernanceRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMetadataSchemaIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPipelineDefinitionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
@@ -516,6 +517,15 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     public MetadataSchemaIndexSyncPort seahorseElasticsearchMetadataSchemaIndexSyncPort(
             ElasticsearchMetadataSchemaIndexAdapter adapter) {
         return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.metadata-schema-index", name = "type",
+            havingValue = "jdbc")
+    @ConditionalOnMissingBean(MetadataSchemaIndexSyncPort.class)
+    public JdbcMetadataSchemaIndexAdapter seahorseJdbcMetadataSchemaIndexAdapter(DataSource dataSource) {
+        return new JdbcMetadataSchemaIndexAdapter(dataSource);
     }
 
     @Bean
