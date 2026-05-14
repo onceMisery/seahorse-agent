@@ -260,7 +260,13 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public void save(MetadataExtractionRecord record) {
+        saveAndReturnId(record);
+    }
+
+    @Override
+    public String saveAndReturnId(MetadataExtractionRecord record) {
         MetadataExtractionRecord safeRecord = Objects.requireNonNull(record, "record must not be null");
+        String resultId = UUID.randomUUID().toString();
         try {
             jdbcTemplate.update("""
                     INSERT INTO t_metadata_extraction_result(
@@ -268,12 +274,14 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                         normalized_metadata, raw_candidates, field_quality, validation_issues, approved_metadata,
                         create_time, update_time
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    """, UUID.randomUUID().toString(), safeRecord.tenantId(), safeRecord.knowledgeBaseId(),
+                    """, resultId, safeRecord.tenantId(), safeRecord.knowledgeBaseId(),
                     safeRecord.documentId(), safeRecord.taskId(), safeRecord.schemaVersion(),
                     safeRecord.extractorVersion(), safeRecord.status().name(), json(safeRecord.normalizedMetadata()),
                     json(Map.of()), json(safeRecord.fieldQualities()), json(safeRecord.issues()),
                     json(safeRecord.acceptedMetadata()));
+            return resultId;
         } catch (DataAccessException ignored) {
+            return "";
         }
     }
 

@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryP
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
@@ -123,7 +124,20 @@ class MetadataGovernanceNodeFeatureTests {
         MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
                 field("department", MetadataValueType.STRING, false, Map.of())));
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
-        List<String> reviewReasons = new ArrayList<>();
+        List<MetadataReviewItem> reviewItems = new ArrayList<>();
+        List<MetadataExtractionRecord> savedRecords = new ArrayList<>();
+        MetadataExtractionResultRepositoryPort resultRepository = new MetadataExtractionResultRepositoryPort() {
+            @Override
+            public void save(MetadataExtractionRecord record) {
+                savedRecords.add(record);
+            }
+
+            @Override
+            public String saveAndReturnId(MetadataExtractionRecord record) {
+                save(record);
+                return "result-a";
+            }
+        };
         AtomicReference<Map<String, Object>> writtenDocumentMetadata = new AtomicReference<>();
         IngestionContext context = IngestionContext.builder()
                 .taskId("doc-a")
@@ -134,8 +148,8 @@ class MetadataGovernanceNodeFeatureTests {
                 .build();
 
         NodeResult result = new MetadataValidatorNodeFeature(schemaRegistry,
-                MetadataExtractionResultRepositoryPort.noop(),
-                item -> reviewReasons.add(item.reasonCode()),
+                resultRepository,
+                reviewItems::add,
                 MetadataQuarantinePort.noop(),
                 (docId, acceptedMetadata) -> writtenDocumentMetadata.set(acceptedMetadata))
                 .execute(context, NodeConfig.builder().nodeType("metadata_validator").build());
@@ -144,7 +158,8 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(result.isShouldContinue()).isFalse();
         assertThat(context.isSkipIndexerWrite()).isTrue();
         assertThat(context.getMetadataValidationResult().decision()).isEqualTo(MetadataValidationDecision.REVIEW_REQUIRED);
-        assertThat(reviewReasons).containsExactly("METADATA_REVIEW_REQUIRED");
+        assertThat(reviewItems).extracting(MetadataReviewItem::reasonCode).containsExactly("METADATA_REVIEW_REQUIRED");
+        assertThat(reviewItems.get(0).resultId()).isEqualTo("result-a");
         assertThat(writtenDocumentMetadata.get()).isNull();
         assertThat(context.getMetadata()).doesNotContainKeys("department", "acceptedMetadata");
     }

@@ -99,6 +99,29 @@ class JdbcMetadataQualityReportAdapterTests {
     }
 
     @Test
+    void shouldReturnExtractionResultIdWhenSavingRecord() {
+        String resultId = adapter.saveAndReturnId(new MetadataExtractionRecord(
+                "tenant-1",
+                "kb-1",
+                "doc-5",
+                "job-1",
+                1,
+                "extractor-v1",
+                MetadataValidationDecision.REVIEW_REQUIRED,
+                Map.of("department", "Finance"),
+                Map.of("department", "Finance"),
+                List.of(),
+                List.of()));
+
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM t_metadata_extraction_result WHERE id = ?",
+                Integer.class,
+                resultId);
+        assertThat(resultId).isNotBlank();
+        assertThat(count).isEqualTo(1);
+    }
+
+    @Test
     void shouldCheckAcceptedResultBySchemaAndExtractorVersion() {
         insertExtraction("accepted-1", "doc-1",
                 Map.of("department", "Finance"),

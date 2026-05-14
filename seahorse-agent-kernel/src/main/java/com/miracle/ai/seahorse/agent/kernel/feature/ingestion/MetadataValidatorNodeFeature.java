@@ -76,7 +76,7 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
             MetadataValidationResult result = validate(schema, safeContext);
             safeContext.setMetadataValidationResult(result);
             safeContext.setMetadataIssues(result.issues());
-            persist(identity, schema, safeContext, result);
+            String resultId = persist(identity, schema, safeContext, result);
             if (MetadataValidationDecision.QUARANTINE.equals(result.decision())) {
                 safeContext.setSkipIndexerWrite(true);
                 quarantinePort.quarantine(new MetadataQuarantineItem(identity.tenantId(), identity.kbId(),
@@ -86,7 +86,7 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
             }
             if (MetadataValidationDecision.REVIEW_REQUIRED.equals(result.decision())) {
                 reviewQueuePort.enqueue(new MetadataReviewItem(identity.tenantId(), identity.kbId(), identity.docId(),
-                        safeContext.getTaskId(), "METADATA_REVIEW_REQUIRED", firstIssue(result.issues()),
+                        firstText(resultId, safeContext.getTaskId()), "METADATA_REVIEW_REQUIRED", firstIssue(result.issues()),
                         result.acceptedMetadata()));
                 // 需要人工复核的元数据不能直接写入 canonical metadata 或继续进入索引链路。
                 safeContext.setSkipIndexerWrite(true);
@@ -148,11 +148,11 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
         context.setMetadata(metadata);
     }
 
-    private void persist(ValidationIdentity identity,
-                         MetadataSchema schema,
-                         IngestionContext context,
-                         MetadataValidationResult result) {
-        resultRepositoryPort.save(new MetadataExtractionRecord(identity.tenantId(), identity.kbId(), identity.docId(),
+    private String persist(ValidationIdentity identity,
+                           MetadataSchema schema,
+                           IngestionContext context,
+                           MetadataValidationResult result) {
+        return resultRepositoryPort.saveAndReturnId(new MetadataExtractionRecord(identity.tenantId(), identity.kbId(), identity.docId(),
                 context.getTaskId(), schema.schemaVersion(), extractorVersion(context), result.decision(),
                 context.getNormalizedMetadata(), result.acceptedMetadata(), context.getMetadataFieldQualities(),
                 result.issues()));
