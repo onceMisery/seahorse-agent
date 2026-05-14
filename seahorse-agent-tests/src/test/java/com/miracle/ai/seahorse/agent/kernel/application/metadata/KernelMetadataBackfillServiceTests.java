@@ -221,6 +221,26 @@ class KernelMetadataBackfillServiceTests {
     }
 
     @Test
+    void shouldRerunAcceptedDocumentWhenOverwriteApprovedEnabled() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        InMemoryExtractionResultRepository results = new InMemoryExtractionResultRepository();
+        results.accept("tenant-1", "kb-1", "doc-1", 3, "extractor-v2");
+        KernelMetadataBackfillService service = service(documents, jobs, results, Map.of());
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin",
+                Map.of("schemaVersion", 3, "extractorVersion", "extractor-v2", "overwriteApproved", true)));
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+
+        assertThat(result.skippedDocuments()).isZero();
+        assertThat(result.succeededDocuments()).isEqualTo(1);
+        assertThat(result.checkpoint()).containsEntry("overwriteApproved", true);
+        assertThat(documents.runningDocuments).containsExactly("doc-1");
+    }
+
+    @Test
     void shouldResumeCurrentPageAfterCheckpointDocument() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
         documents.add(document("doc-1", true, "pipe-1"));

@@ -438,7 +438,9 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
 
     private boolean forceRerun(MetadataBackfillJobRecord job) {
         return booleanValue(job.checkpoint().get("forceRerun"))
-                || booleanValue(job.checkpoint().get("force"));
+                || booleanValue(job.checkpoint().get("force"))
+                // overwriteApproved 对齐治理设计：默认保留已审核结果，显式开启时允许回填重跑覆盖。
+                || booleanValue(job.checkpoint().get("overwriteApproved"));
     }
 
     private Map<String, Object> initialCheckpoint(Map<String, Object> metadata) {
@@ -447,6 +449,9 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         checkpoint.put("extractorVersion", textValue(metadata.get("extractorVersion"), ""));
         if (booleanValue(metadata.get("forceRerun")) || booleanValue(metadata.get("force"))) {
             checkpoint.put("forceRerun", true);
+        }
+        if (booleanValue(metadata.get("overwriteApproved"))) {
+            checkpoint.put("overwriteApproved", true);
         }
         return checkpoint;
     }
@@ -463,6 +468,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         copyCheckpointOption(previous, checkpoint, "extractorVersion");
         copyCheckpointOption(previous, checkpoint, "forceRerun");
         copyCheckpointOption(previous, checkpoint, "force");
+        copyCheckpointOption(previous, checkpoint, "overwriteApproved");
         return checkpoint;
     }
 
