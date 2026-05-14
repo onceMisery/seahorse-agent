@@ -12,6 +12,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContain
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldExists;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldIn;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldRange;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
@@ -108,6 +109,10 @@ public class MetadataGuardPostProcessorFeature implements SearchResultPostProces
         if (expression instanceof FieldEq fieldEq) {
             return compareValues(metadataValue(chunk.getMetadata(), fieldEq.field().backendMapping().canonicalName()),
                     fieldEq.value()) == 0;
+        }
+        if (expression instanceof FieldNe fieldNe) {
+            return compareValues(metadataValue(chunk.getMetadata(), fieldNe.field().backendMapping().canonicalName()),
+                    fieldNe.value()) != 0;
         }
         if (expression instanceof FieldIn fieldIn) {
             Object actual = metadataValue(chunk.getMetadata(), fieldIn.field().backendMapping().canonicalName());

@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchRequest;
 import org.junit.jupiter.api.Test;
@@ -108,6 +109,26 @@ class JdbcKeywordSearchAdapterTests {
 
         assertThat(sql).contains("metadata_json->>'category' = ?");
         assertThat(args).containsExactly("政策", 1, "policy", 4);
+    }
+
+    @Test
+    void shouldPushDownNotEqualsMetadataExpressionWhenMetadataJsonExists() throws Exception {
+        DriverManagerDataSource dataSource = dataSource("keyword-metadata-ne-filter");
+        createChunkTableWithMetadata(dataSource);
+        JdbcKeywordSearchAdapter adapter = new JdbcKeywordSearchAdapter(dataSource, new ObjectMapper());
+        MetadataFieldDescriptor category = new MetadataFieldDescriptor(
+                "category", "分类", MetadataValueType.STRING, Set.of(MetadataOperator.EQ, MetadataOperator.NE),
+                false, true, false, false, true, MetadataIndexPolicy.SEARCH_KEYWORD, 0.8D,
+                Set.of(), Map.of(), new BackendFieldMapping("category", "", "",
+                "category", true, true, false, Map.of()));
+        List<Object> args = new ArrayList<>();
+
+        String sql = searchSql(adapter, request("policy", 4,
+                new CompiledMetadataFilter(RetrievalFilter.builder().build(),
+                        new FilterAnd(List.of(new FieldNe(category, "internal"))), List.of(), List.of())), args);
+
+        assertThat(sql).contains("metadata_json->>'category' IS DISTINCT FROM ?");
+        assertThat(args).containsExactly("policy", 1, "internal", 4);
     }
 
     @SuppressWarnings("unchecked")

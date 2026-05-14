@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchRequest;
 import okhttp3.Interceptor;
@@ -108,6 +109,29 @@ class ElasticsearchKeywordSearchAdapterTests {
                         new FieldEq(category, "policy"), List.of(), List.of())));
 
         assertThat(interceptor.body()).contains("\"term\":{\"metadata.category\":\"policy\"}");
+    }
+
+    @Test
+    void shouldBuildNotEqualsFilterAsMustNotTerm() {
+        CapturingInterceptor interceptor = new CapturingInterceptor("{\"hits\":{\"hits\":[]}}");
+        ElasticsearchKeywordSearchAdapter adapter = new ElasticsearchKeywordSearchAdapter(
+                new OkHttpClient.Builder().addInterceptor(interceptor).build(),
+                objectMapper,
+                new ElasticsearchKeywordProperties("http://localhost:9200", "chunks",
+                        List.of("content"), "", "", "", Duration.ofSeconds(3)));
+
+        MetadataFieldDescriptor category = new MetadataFieldDescriptor(
+                "category", "分类", MetadataValueType.STRING, Set.of(MetadataOperator.EQ, MetadataOperator.NE),
+                false, true, false, false, true, MetadataIndexPolicy.SEARCH_KEYWORD, 0.8D,
+                Set.of(), Map.of(), new BackendFieldMapping("category", "", "",
+                "metadata.category.keyword", false, true, false, Map.of()));
+
+        adapter.search(new KeywordSearchRequest("metadata search", 3, null, null,
+                new CompiledMetadataFilter(RetrievalFilter.builder().build(),
+                        new FieldNe(category, "internal"), List.of(), List.of())));
+
+        assertThat(interceptor.body())
+                .contains("\"must_not\":[{\"term\":{\"metadata.category.keyword\":\"internal\"}}]");
     }
 
     private CompiledMetadataFilter compiledFilter() {

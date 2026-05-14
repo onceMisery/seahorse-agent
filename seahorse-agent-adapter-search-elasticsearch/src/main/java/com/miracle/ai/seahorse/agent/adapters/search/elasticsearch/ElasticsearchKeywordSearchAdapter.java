@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContain
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldExists;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldIn;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldRange;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
@@ -140,6 +141,8 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
         }
         if (expression instanceof FieldEq eq) {
             filters.add(term(searchField(eq.field()), normalizeValue(eq.value())));
+        } else if (expression instanceof FieldNe ne) {
+            filters.add(Map.of("bool", Map.of("must_not", List.of(term(searchField(ne.field()), ne.value())))));
         } else if (expression instanceof FieldIn in) {
             filters.add(Map.of("terms", Map.of(searchField(in.field()), in.values())));
         } else if (expression instanceof FieldRange range) {

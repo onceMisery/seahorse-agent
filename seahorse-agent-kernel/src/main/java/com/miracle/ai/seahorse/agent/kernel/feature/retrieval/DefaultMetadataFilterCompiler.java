@@ -11,6 +11,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContain
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldExists;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldIn;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldRange;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
@@ -74,7 +75,8 @@ public class DefaultMetadataFilterCompiler implements MetadataFilterCompiler {
 
     private MetadataFilterExpr toExpression(MetadataFieldDescriptor field, MetadataOperator operator, Object value) {
         return switch (operator) {
-            case EQ, NE -> new FieldEq(field, value);
+            case EQ -> new FieldEq(field, value);
+            case NE -> new FieldNe(field, value);
             case IN -> new FieldIn(field, value instanceof List<?> list ? list : List.of(value));
             case RANGE -> {
                 List<?> range = value instanceof List<?> list ? list : List.of();

@@ -34,6 +34,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.kernel.plugin.AgentFeatureProperties;
 import com.miracle.ai.seahorse.agent.kernel.plugin.DefaultExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionDescriptor;
@@ -112,6 +114,30 @@ class MetadataRetrievalFilterTests {
     }
 
     @Test
+    void shouldCompileNotEqualsAndGuardWithSameSemantics() {
+        DefaultMetadataFilterCompiler compiler = new DefaultMetadataFilterCompiler();
+        RetrievalFilter filter = RetrievalFilter.builder()
+                .metadataConditions(List.of(new MetadataCondition("department", MetadataOperator.NE, "HR")))
+                .build();
+        CompiledMetadataFilter compiledFilter = compiler.compile(filter,
+                schema(true, Set.of(MetadataOperator.EQ, MetadataOperator.NE)));
+        MetadataGuardPostProcessorFeature guard = new MetadataGuardPostProcessorFeature();
+        SearchContext context = SearchContext.builder()
+                .filter(filter)
+                .compiledFilter(compiledFilter)
+                .build();
+
+        assertThat(compiledFilter.expression()).isInstanceOfSatisfying(FilterAnd.class,
+                expression -> assertThat(expression.children()).singleElement().isInstanceOf(FieldNe.class));
+        List<RetrievedChunk> chunks = guard.process(List.of(
+                chunk("1", "tenant-a", "kb-a", "HR", true),
+                chunk("2", "tenant-a", "kb-a", "FIN", true),
+                chunk("3", "tenant-a", "kb-a", "", true)), List.of(), context);
+
+        assertThat(chunks).extracting(RetrievedChunk::getId).containsExactly("2", "3");
+    }
+
+    @Test
     void shouldGenerateQueryEmbeddingForVectorGlobalSearch() {
         RecordingVectorSearchPort vectorSearchPort = new RecordingVectorSearchPort();
         VectorGlobalSearchFeature feature = new VectorGlobalSearchFeature(
@@ -158,11 +184,15 @@ class MetadataRetrievalFilterTests {
     }
 
     private MetadataSchema schema(boolean pushdownToVector) {
+        return schema(pushdownToVector, Set.of(MetadataOperator.EQ));
+    }
+
+    private MetadataSchema schema(boolean pushdownToVector, Set<MetadataOperator> allowedOperators) {
         return new MetadataSchema("tenant-a", "kb-a", 1, List.of(new MetadataFieldDescriptor(
                 "department",
                 "部门",
                 MetadataValueType.STRING,
-                Set.of(MetadataOperator.EQ),
+                allowedOperators,
                 false,
                 true,
                 false,

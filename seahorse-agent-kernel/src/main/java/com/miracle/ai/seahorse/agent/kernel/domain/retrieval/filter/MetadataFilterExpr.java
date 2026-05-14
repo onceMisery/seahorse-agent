@@ -5,5 +5,5 @@ package com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter;
  * <p>
  * 适配器只能翻译该 AST，不能直接解析用户传入的原始 Map。
  */
-public sealed interface MetadataFilterExpr permits FieldEq, FieldIn, FieldRange, FieldContains, FieldExists, FilterAnd {
+public sealed interface MetadataFilterExpr permits FieldEq, FieldNe, FieldIn, FieldRange, FieldContains, FieldExists, FilterAnd {
 }

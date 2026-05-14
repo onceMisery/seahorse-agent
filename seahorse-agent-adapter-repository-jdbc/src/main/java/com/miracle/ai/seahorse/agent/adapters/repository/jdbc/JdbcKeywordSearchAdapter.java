@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContain
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldExists;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldIn;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldRange;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
@@ -139,6 +140,15 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
         args.add(jsonText(value));
     }
 
+    private void appendJsonNe(StringBuilder sql, List<Object> args, String key, Object value) {
+        if (value == null || Objects.toString(value, "").isBlank()) {
+            return;
+        }
+        // 使用 IS DISTINCT FROM，让缺失字段也能按内核兜底过滤的 NE 语义参与匹配。
+        sql.append(" AND metadata_json->>'").append(fieldKey(key)).append("' IS DISTINCT FROM ?");
+        args.add(jsonText(value));
+    }
+
     private void appendJsonIn(StringBuilder sql, List<Object> args, String key, Collection<?> values) {
         if (values == null || values.isEmpty()) {
             return;
@@ -190,6 +200,8 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
         // 动态 metadata 只消费 MetadataFilterCompiler 生成的 AST，不在 adapter 内解释原始用户 Map。
         if (expression instanceof FieldEq fieldEq) {
             appendJsonEq(sql, args, canonicalKey(fieldEq.field()), fieldEq.value());
+        } else if (expression instanceof FieldNe fieldNe) {
+            appendJsonNe(sql, args, canonicalKey(fieldNe.field()), fieldNe.value());
         } else if (expression instanceof FieldIn fieldIn) {
             appendJsonIn(sql, args, canonicalKey(fieldIn.field()), fieldIn.values());
         } else if (expression instanceof FieldRange fieldRange) {
