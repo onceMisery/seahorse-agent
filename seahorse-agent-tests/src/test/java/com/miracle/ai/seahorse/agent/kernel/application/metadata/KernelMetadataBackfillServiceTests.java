@@ -38,6 +38,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 import org.junit.jupiter.api.Test;
@@ -110,6 +112,30 @@ class KernelMetadataBackfillServiceTests {
         assertThat(result.failures()).singleElement().asString().contains("doc-2").contains("boom");
         assertThat(documents.failedDocuments).containsExactly("doc-2");
         assertThat(documents.successDocuments).containsExactly("doc-1", "doc-3");
+    }
+
+    @Test
+    void shouldQuarantineFailedDocumentDuringBackfill() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        List<MetadataQuarantineItem> quarantines = new ArrayList<>();
+        KernelMetadataBackfillService service = serviceWithFailure(
+                documents, jobs, "doc-1", quarantines::add);
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+
+        assertThat(result.failedDocuments()).isEqualTo(1);
+        assertThat(quarantines).hasSize(1);
+        MetadataQuarantineItem quarantine = quarantines.get(0);
+        assertThat(quarantine.stage()).isEqualTo("EXTRACT");
+        assertThat(quarantine.reasonCode()).isEqualTo("BACKFILL_DOCUMENT_FAILED");
+        assertThat(quarantine.taskId()).isEqualTo(job.jobId());
+        assertThat(quarantine.sourceSnapshot())
+                .containsEntry("backfillJobId", job.jobId())
+                .containsEntry("pipelineId", "pipe-1");
     }
 
     @Test
@@ -252,6 +278,13 @@ class KernelMetadataBackfillServiceTests {
     private static KernelMetadataBackfillService serviceWithFailure(InMemoryDocumentRepository documents,
                                                                     InMemoryBackfillJobRepository jobs,
                                                                     String failedDocId) {
+        return serviceWithFailure(documents, jobs, failedDocId, MetadataQuarantinePort.noop());
+    }
+
+    private static KernelMetadataBackfillService serviceWithFailure(InMemoryDocumentRepository documents,
+                                                                    InMemoryBackfillJobRepository jobs,
+                                                                    String failedDocId,
+                                                                    MetadataQuarantinePort quarantinePort) {
         KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
         when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
             IngestionContext context = invocation.getArgument(1);
@@ -268,7 +301,10 @@ class KernelMetadataBackfillServiceTests {
                 new InMemoryObjectStorage(),
                 pipelineRepository(),
                 engine,
-                jobs);
+                jobs,
+                MetadataExtractionResultRepositoryPort.noop(),
+                quarantinePort,
+                null);
     }
 
     private static PipelineDefinitionRepositoryPort pipelineRepository() {

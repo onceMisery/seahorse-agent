@@ -815,6 +815,7 @@ public class SeahorseAgentKernelAutoConfiguration {
             KernelIngestionEngine ingestionEngine,
             MetadataBackfillJobRepositoryPort jobRepositoryPort,
             ObjectProvider<MetadataExtractionResultRepositoryPort> extractionResultRepositoryPort,
+            ObjectProvider<MetadataQuarantinePort> quarantinePort,
             ObjectProvider<ObservationPort> observationPort) {
         return new KernelMetadataBackfillService(
                 documentRepositoryPort,
@@ -823,6 +824,7 @@ public class SeahorseAgentKernelAutoConfiguration {
                 ingestionEngine,
                 jobRepositoryPort,
                 extractionResultRepositoryPort.getIfAvailable(MetadataExtractionResultRepositoryPort::noop),
+                quarantinePort.getIfAvailable(MetadataQuarantinePort::noop),
                 observationPort.getIfAvailable());
     }
 

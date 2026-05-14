@@ -34,6 +34,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
@@ -70,6 +72,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     private final KernelIngestionEngine ingestionEngine;
     private final MetadataBackfillJobRepositoryPort jobRepositoryPort;
     private final MetadataExtractionResultRepositoryPort extractionResultRepositoryPort;
+    private final MetadataQuarantinePort quarantinePort;
     private final ObservationPort observationPort;
 
     public KernelMetadataBackfillService(KnowledgeDocumentRepositoryPort documentRepositoryPort,
@@ -78,7 +81,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                                          KernelIngestionEngine ingestionEngine,
                                          MetadataBackfillJobRepositoryPort jobRepositoryPort) {
         this(documentRepositoryPort, objectStoragePort, pipelineRepositoryPort, ingestionEngine, jobRepositoryPort,
-                MetadataExtractionResultRepositoryPort.noop(), null);
+                MetadataExtractionResultRepositoryPort.noop(), MetadataQuarantinePort.noop(), null);
     }
 
     public KernelMetadataBackfillService(KnowledgeDocumentRepositoryPort documentRepositoryPort,
@@ -88,7 +91,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                                          MetadataBackfillJobRepositoryPort jobRepositoryPort,
                                          ObservationPort observationPort) {
         this(documentRepositoryPort, objectStoragePort, pipelineRepositoryPort, ingestionEngine, jobRepositoryPort,
-                MetadataExtractionResultRepositoryPort.noop(), observationPort);
+                MetadataExtractionResultRepositoryPort.noop(), MetadataQuarantinePort.noop(), observationPort);
     }
 
     public KernelMetadataBackfillService(KnowledgeDocumentRepositoryPort documentRepositoryPort,
@@ -97,6 +100,18 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                                          KernelIngestionEngine ingestionEngine,
                                          MetadataBackfillJobRepositoryPort jobRepositoryPort,
                                          MetadataExtractionResultRepositoryPort extractionResultRepositoryPort,
+                                         ObservationPort observationPort) {
+        this(documentRepositoryPort, objectStoragePort, pipelineRepositoryPort, ingestionEngine, jobRepositoryPort,
+                extractionResultRepositoryPort, MetadataQuarantinePort.noop(), observationPort);
+    }
+
+    public KernelMetadataBackfillService(KnowledgeDocumentRepositoryPort documentRepositoryPort,
+                                         ObjectStoragePort objectStoragePort,
+                                         PipelineDefinitionRepositoryPort pipelineRepositoryPort,
+                                         KernelIngestionEngine ingestionEngine,
+                                         MetadataBackfillJobRepositoryPort jobRepositoryPort,
+                                         MetadataExtractionResultRepositoryPort extractionResultRepositoryPort,
+                                         MetadataQuarantinePort quarantinePort,
                                          ObservationPort observationPort) {
         this.documentRepositoryPort = Objects.requireNonNull(documentRepositoryPort,
                 "documentRepositoryPort must not be null");
@@ -107,6 +122,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         this.jobRepositoryPort = Objects.requireNonNull(jobRepositoryPort, "jobRepositoryPort must not be null");
         this.extractionResultRepositoryPort = Objects.requireNonNullElseGet(extractionResultRepositoryPort,
                 MetadataExtractionResultRepositoryPort::noop);
+        this.quarantinePort = Objects.requireNonNullElseGet(quarantinePort, MetadataQuarantinePort::noop);
         this.observationPort = observationPort;
     }
 
@@ -272,13 +288,19 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         }
         String pipelineId = defaultText(job.pipelineId(), document.getPipelineId());
         if (!hasText(pipelineId)) {
+            IllegalStateException ex = new IllegalStateException("pipelineId missing");
+            documentRepositoryPort.markFailed(document.getId(), job.operator(), ex.getMessage());
+            quarantineBackfillFailure(job, document, "EXTRACT", ex);
             return DocumentOutcome.failed("pipelineId missing");
         }
         if (!documentRepositoryPort.markRunning(document.getId(), job.operator())) {
             return DocumentOutcome.skipped("document is running");
         }
+        String failureStage = "FETCH";
         try (InputStream inputStream = objectStoragePort.openStream(requireText(document.getFileUrl(), "fileUrl"))) {
-            IngestionContext context = buildContext(job, document, inputStream.readAllBytes());
+            byte[] fileBytes = inputStream.readAllBytes();
+            failureStage = "EXTRACT";
+            IngestionContext context = buildContext(job, document, fileBytes);
             IngestionContext result = ingestionEngine.execute(requirePipeline(pipelineId), context);
             if (result.getError() != null) {
                 throw new IllegalStateException(result.getError().getMessage(), result.getError());
@@ -288,7 +310,34 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
             return DocumentOutcome.success(decision(result));
         } catch (Exception ex) {
             documentRepositoryPort.markFailed(document.getId(), job.operator(), ex.getMessage());
+            quarantineBackfillFailure(job, document, failureStage, ex);
             return DocumentOutcome.failed(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+        }
+    }
+
+    private void quarantineBackfillFailure(MetadataBackfillJobRecord job,
+                                           KnowledgeDocumentDetail document,
+                                           String stage,
+                                           Exception ex) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("backfillJobId", job.jobId());
+        snapshot.put("currentPage", job.currentPage());
+        snapshot.put("pipelineId", defaultText(job.pipelineId(), document.getPipelineId()));
+        snapshot.put("fileUrl", Objects.requireNonNullElse(document.getFileUrl(), ""));
+        snapshot.put("errorType", ex.getClass().getName());
+        snapshot.put("errorMessage", Objects.requireNonNullElse(ex.getMessage(), ""));
+        try {
+            quarantinePort.quarantine(new MetadataQuarantineItem(
+                    job.tenantId(),
+                    job.knowledgeBaseId(),
+                    document.getId(),
+                    job.jobId(),
+                    stage,
+                    "BACKFILL_DOCUMENT_FAILED",
+                    firstText(ex.getMessage(), "元数据历史回填文档处理失败"),
+                    snapshot));
+        } catch (RuntimeException ignored) {
+            // 隔离写入失败不能影响回填断点和文档失败状态。
         }
     }
 
@@ -427,6 +476,10 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
             return first.trim();
         }
         return Objects.requireNonNullElse(second, "").trim();
+    }
+
+    private String firstText(String first, String second) {
+        return hasText(first) ? first.trim() : Objects.requireNonNullElse(second, "");
     }
 
     private boolean hasText(String value) {
