@@ -69,6 +69,22 @@ class MetadataRetrievalFilterTests {
     }
 
     @Test
+    void shouldRejectTooManyMetadataFilterConditions() {
+        DefaultMetadataFilterCompiler compiler = new DefaultMetadataFilterCompiler();
+        List<MetadataCondition> conditions = new ArrayList<>();
+        for (int index = 0; index < 21; index++) {
+            conditions.add(new MetadataCondition("department", MetadataOperator.EQ, "HR"));
+        }
+        RetrievalFilter filter = RetrievalFilter.builder()
+                .metadataConditions(conditions)
+                .build();
+
+        assertThatThrownBy(() -> compiler.compile(filter, schema(true)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("condition count exceeds limit");
+    }
+
+    @Test
     void shouldGuardSystemAndMetadataConditionsAfterSearch() {
         DefaultMetadataFilterCompiler compiler = new DefaultMetadataFilterCompiler();
         RetrievalFilter filter = RetrievalFilter.builder()

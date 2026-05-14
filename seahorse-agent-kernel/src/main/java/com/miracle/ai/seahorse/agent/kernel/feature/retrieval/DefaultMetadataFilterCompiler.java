@@ -30,11 +30,18 @@ import java.util.Objects;
  */
 public class DefaultMetadataFilterCompiler implements MetadataFilterCompiler {
 
+    private static final int MAX_METADATA_CONDITION_COUNT = 20;
+
     @Override
     public CompiledMetadataFilter compile(RetrievalFilter filter, MetadataSchema schema) {
         RetrievalFilter safeFilter = Objects.requireNonNullElseGet(filter, RetrievalFilter::empty);
         MetadataSchema safeSchema = Objects.requireNonNullElseGet(schema,
                 () -> MetadataSchema.empty("", ""));
+        // 过滤条件过多会放大向量库/关键词后端查询成本，先在内核编译阶段统一拒绝。
+        if (safeFilter.metadataConditions().size() > MAX_METADATA_CONDITION_COUNT) {
+            throw new IllegalArgumentException("metadata filter condition count exceeds limit: "
+                    + MAX_METADATA_CONDITION_COUNT);
+        }
         List<MetadataFilterExpr> expressions = new ArrayList<>();
         List<MetadataCondition> guardOnlyConditions = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
