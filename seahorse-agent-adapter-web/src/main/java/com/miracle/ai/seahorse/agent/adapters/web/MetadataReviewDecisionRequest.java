@@ -28,6 +28,8 @@ public class MetadataReviewDecisionRequest {
     private String comment;
     private Map<String, Object> correctedMetadata;
     private List<String> ignoredFields;
+    private String extractorVersion;
+    private String pipelineId;
 
     public String getComment() {
         return comment;
@@ -51,5 +53,21 @@ public class MetadataReviewDecisionRequest {
 
     public void setIgnoredFields(List<String> ignoredFields) {
         this.ignoredFields = ignoredFields;
+    }
+
+    public String getExtractorVersion() {
+        return extractorVersion;
+    }
+
+    public void setExtractorVersion(String extractorVersion) {
+        this.extractorVersion = extractorVersion;
+    }
+
+    public String getPipelineId() {
+        return pipelineId;
+    }
+
+    public void setPipelineId(String pipelineId) {
+        this.pipelineId = pipelineId;
     }
 }

@@ -7,6 +7,7 @@ public enum MetadataReviewStatus {
     PENDING,
     APPROVED,
     CORRECTED,
+    RE_EXTRACTING,
     REJECTED,
     QUARANTINED
 }

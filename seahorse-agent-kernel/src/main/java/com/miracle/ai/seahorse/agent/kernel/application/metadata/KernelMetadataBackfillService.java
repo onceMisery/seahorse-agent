@@ -36,6 +36,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
@@ -46,9 +48,11 @@ import java.io.InputStream;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -57,7 +61,7 @@ import java.util.UUID;
  * <p>回填会重新执行文档入库流水线，让 MetadataExtractor/Normalizer/Validator 产生统一的
  * 抽取结果、Review 和 Quarantine 记录；服务自身只负责分页、断点、幂等重跑和失败隔离。
  */
-public class KernelMetadataBackfillService implements MetadataBackfillInboundPort {
+public class KernelMetadataBackfillService implements MetadataBackfillInboundPort, MetadataReviewReExtractPort {
 
     private static final int DEFAULT_BATCH_SIZE = 50;
     private static final int MAX_BATCH_SIZE = 500;
@@ -225,6 +229,27 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         return cancelled;
     }
 
+    @Override
+    public String requestReExtract(MetadataReviewReExtractRequest request) {
+        MetadataReviewReExtractRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+        requireText(safeRequest.documentId(), "documentId");
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("documentIds", List.of(safeRequest.documentId()));
+        metadata.put("sourceReviewItemId", safeRequest.reviewItemId());
+        metadata.put("extractorVersion", requireText(safeRequest.extractorVersion(), "extractorVersion"));
+        metadata.put("forceRerun", true);
+        metadata.put("overwriteApproved", true);
+        metadata.put("reExtract", true);
+        MetadataBackfillJobRecord job = createJob(new MetadataBackfillCommand(
+                safeRequest.tenantId(),
+                safeRequest.knowledgeBaseId(),
+                safeRequest.pipelineId(),
+                MAX_BATCH_SIZE,
+                defaultText(safeRequest.operator(), DEFAULT_OPERATOR),
+                metadata));
+        return job.jobId();
+    }
+
     private MetadataBackfillJobRecord executeBatch(MetadataBackfillJobRecord job) {
         BackfillAccumulator accumulator = new BackfillAccumulator(job);
         KnowledgeDocumentPage page = documentRepositoryPort.page(
@@ -268,16 +293,30 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         Map<String, Object> checkpoint = Objects.requireNonNullElse(job.checkpoint(), Map.of());
         String lastDocumentId = textValue(checkpoint.get("lastDocumentId"), "");
         if (!hasText(lastDocumentId) || longValue(checkpoint.get("currentPage"), job.currentPage()) != job.currentPage()) {
-            return records;
+            return targetDocuments(job, records);
         }
         for (int index = 0; index < records.size(); index++) {
             KnowledgeDocumentDetail document = records.get(index);
             if (document != null && lastDocumentId.equals(document.getId())) {
                 // 同页恢复时跳过已经写入 checkpoint 的文档，避免进程中断后重复污染复核或隔离队列。
-                return index >= records.size() - 1 ? List.of() : records.subList(index + 1, records.size());
+                return index >= records.size() - 1
+                        ? List.of()
+                        : targetDocuments(job, records.subList(index + 1, records.size()));
             }
         }
-        return records;
+        return targetDocuments(job, records);
+    }
+
+    private List<KnowledgeDocumentDetail> targetDocuments(MetadataBackfillJobRecord job,
+                                                          List<KnowledgeDocumentDetail> records) {
+        Set<String> targetDocumentIds = targetDocumentIds(job.checkpoint());
+        if (targetDocumentIds.isEmpty()) {
+            return records;
+        }
+        // Review 触发的 RE_EXTRACT 通过 documentIds 限定单文档回填，避免误扫整库。
+        return records.stream()
+                .filter(document -> document != null && targetDocumentIds.contains(document.getId()))
+                .toList();
     }
 
     private DocumentOutcome processDocument(MetadataBackfillJobRecord job, KnowledgeDocumentDetail document) {
@@ -362,6 +401,9 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         metadata.put("fileName", document.getDocName());
         metadata.put("collectionName", document.getCollectionName());
         metadata.put("backfillJobId", job.jobId());
+        copyCheckpointMetadata(job.checkpoint(), metadata, "sourceReviewItemId");
+        copyCheckpointMetadata(job.checkpoint(), metadata, "extractorVersion");
+        copyCheckpointMetadata(job.checkpoint(), metadata, "reExtract");
         return IngestionContext.builder()
                 .taskId(document.getId())
                 .pipelineId(defaultText(job.pipelineId(), document.getPipelineId()))
@@ -453,6 +495,9 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         if (booleanValue(metadata.get("overwriteApproved"))) {
             checkpoint.put("overwriteApproved", true);
         }
+        copyCheckpointOption(metadata, checkpoint, "documentIds");
+        copyCheckpointOption(metadata, checkpoint, "sourceReviewItemId");
+        copyCheckpointOption(metadata, checkpoint, "reExtract");
         return checkpoint;
     }
 
@@ -469,7 +514,42 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         copyCheckpointOption(previous, checkpoint, "forceRerun");
         copyCheckpointOption(previous, checkpoint, "force");
         copyCheckpointOption(previous, checkpoint, "overwriteApproved");
+        copyCheckpointOption(previous, checkpoint, "documentIds");
+        copyCheckpointOption(previous, checkpoint, "sourceReviewItemId");
+        copyCheckpointOption(previous, checkpoint, "reExtract");
         return checkpoint;
+    }
+
+    private void copyCheckpointMetadata(Map<String, Object> checkpoint, Map<String, Object> metadata, String key) {
+        if (checkpoint != null && checkpoint.containsKey(key)) {
+            metadata.put(key, checkpoint.get(key));
+        }
+    }
+
+    private Set<String> targetDocumentIds(Map<String, Object> checkpoint) {
+        if (checkpoint == null || !checkpoint.containsKey("documentIds")) {
+            return Set.of();
+        }
+        Object value = checkpoint.get("documentIds");
+        Set<String> ids = new LinkedHashSet<>();
+        if (value instanceof Iterable<?> iterable) {
+            for (Object item : iterable) {
+                addDocumentId(ids, item);
+            }
+        } else {
+            String text = textValue(value, "");
+            for (String item : text.split(",")) {
+                addDocumentId(ids, item);
+            }
+        }
+        return Set.copyOf(ids);
+    }
+
+    private void addDocumentId(Set<String> ids, Object value) {
+        String text = textValue(value, "");
+        if (hasText(text)) {
+            ids.add(text.trim());
+        }
     }
 
     private void copyCheckpointOption(Map<String, Object> source, Map<String, Object> target, String key) {

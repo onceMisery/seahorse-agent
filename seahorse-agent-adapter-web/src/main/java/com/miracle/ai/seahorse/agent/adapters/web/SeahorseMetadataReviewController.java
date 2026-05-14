@@ -93,6 +93,14 @@ public class SeahorseMetadataReviewController {
                 reviewPort.ignoreField(itemId, toCommand(request, userId)));
     }
 
+    @PostMapping("/metadata-review/items/{item-id}/re-extract")
+    public Map<String, Object> reExtract(@PathVariable("item-id") String itemId,
+                                         @RequestBody(required = false) MetadataReviewDecisionRequest request,
+                                         @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                reviewPort.reExtract(itemId, toCommand(request, userId)));
+    }
+
     @PostMapping("/metadata-review/items/{item-id}/reject")
     public Map<String, Object> reject(@PathVariable("item-id") String itemId,
                                       @RequestBody(required = false) MetadataReviewDecisionRequest request,
@@ -115,7 +123,9 @@ public class SeahorseMetadataReviewController {
                 operator(userId),
                 Objects.requireNonNullElse(safeRequest.getComment(), ""),
                 Objects.requireNonNullElse(safeRequest.getCorrectedMetadata(), Map.of()),
-                Objects.requireNonNullElse(safeRequest.getIgnoredFields(), List.of()));
+                Objects.requireNonNullElse(safeRequest.getIgnoredFields(), List.of()),
+                Objects.requireNonNullElse(safeRequest.getExtractorVersion(), ""),
+                Objects.requireNonNullElse(safeRequest.getPipelineId(), ""));
     }
 
     private MetadataReviewStatus reviewStatus(String status) {

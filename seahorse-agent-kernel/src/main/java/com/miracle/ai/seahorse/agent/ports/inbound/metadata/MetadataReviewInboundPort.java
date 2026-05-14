@@ -20,6 +20,8 @@ public interface MetadataReviewInboundPort {
 
     MetadataReviewRecord ignoreField(String itemId, MetadataReviewDecisionCommand command);
 
+    MetadataReviewRecord reExtract(String itemId, MetadataReviewDecisionCommand command);
+
     MetadataReviewRecord reject(String itemId, MetadataReviewDecisionCommand command);
 
     MetadataReviewRecord quarantine(String itemId, MetadataReviewDecisionCommand command);

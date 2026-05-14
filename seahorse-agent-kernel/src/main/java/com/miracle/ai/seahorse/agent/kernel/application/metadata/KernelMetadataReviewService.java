@@ -11,6 +11,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManag
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
 
 import java.util.LinkedHashMap;
@@ -31,6 +33,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
     private final MetadataCanonicalWritePort canonicalWritePort;
     private final MetadataQuarantinePort quarantinePort;
     private final MetadataIndexCompensationPort indexCompensationPort;
+    private final MetadataReviewReExtractPort reExtractPort;
 
     public KernelMetadataReviewService(MetadataReviewManagementRepositoryPort reviewRepositoryPort,
                                        MetadataCanonicalWritePort canonicalWritePort,
@@ -42,12 +45,22 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
                                        MetadataCanonicalWritePort canonicalWritePort,
                                        MetadataQuarantinePort quarantinePort,
                                        MetadataIndexCompensationPort indexCompensationPort) {
+        this(reviewRepositoryPort, canonicalWritePort, quarantinePort, indexCompensationPort,
+                MetadataReviewReExtractPort.noop());
+    }
+
+    public KernelMetadataReviewService(MetadataReviewManagementRepositoryPort reviewRepositoryPort,
+                                       MetadataCanonicalWritePort canonicalWritePort,
+                                       MetadataQuarantinePort quarantinePort,
+                                       MetadataIndexCompensationPort indexCompensationPort,
+                                       MetadataReviewReExtractPort reExtractPort) {
         this.reviewRepositoryPort = Objects.requireNonNullElse(reviewRepositoryPort,
                 MetadataReviewManagementRepositoryPort.empty());
         this.canonicalWritePort = Objects.requireNonNullElse(canonicalWritePort, MetadataCanonicalWritePort.noop());
         this.quarantinePort = Objects.requireNonNullElse(quarantinePort, MetadataQuarantinePort.noop());
         this.indexCompensationPort = Objects.requireNonNullElse(indexCompensationPort,
                 MetadataIndexCompensationPort.noop());
+        this.reExtractPort = Objects.requireNonNullElse(reExtractPort, MetadataReviewReExtractPort.noop());
     }
 
     @Override
@@ -109,6 +122,28 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         writeCanonical(updated.documentId(), remainingMetadata);
         requestIndexCompensation(updated);
         return updated;
+    }
+
+    @Override
+    public MetadataReviewRecord reExtract(String itemId, MetadataReviewDecisionCommand command) {
+        MetadataReviewDecisionCommand safeCommand = safeCommand(command);
+        requireText(safeCommand.extractorVersion(), "extractorVersion must not be blank");
+        MetadataReviewRecord current = queryById(itemId);
+        String jobId = reExtractPort.requestReExtract(new MetadataReviewReExtractRequest(
+                current.tenantId(),
+                current.knowledgeBaseId(),
+                current.documentId(),
+                current.id(),
+                safeCommand.extractorVersion(),
+                safeCommand.pipelineId(),
+                operator(safeCommand.reviewerId())));
+        Map<String, Object> decisionMetadata = new LinkedHashMap<>();
+        decisionMetadata.put("reExtractJobId", jobId);
+        decisionMetadata.put("extractorVersion", safeCommand.extractorVersion());
+        decisionMetadata.put("pipelineId", safeCommand.pipelineId());
+        decisionMetadata.put("documentId", current.documentId());
+        // RE_EXTRACT 只调度重抽取任务，不写 canonical metadata；新结果由回填流水线重新产出。
+        return applyDecision(current, MetadataReviewStatus.RE_EXTRACTING, safeCommand, decisionMetadata);
     }
 
     @Override

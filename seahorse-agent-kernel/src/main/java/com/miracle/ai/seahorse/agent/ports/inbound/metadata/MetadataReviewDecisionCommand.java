@@ -11,7 +11,9 @@ public record MetadataReviewDecisionCommand(
         String reviewerId,
         String comment,
         Map<String, Object> correctedMetadata,
-        List<String> ignoredFields
+        List<String> ignoredFields,
+        String extractorVersion,
+        String pipelineId
 ) {
 
     public MetadataReviewDecisionCommand {
@@ -19,11 +21,20 @@ public record MetadataReviewDecisionCommand(
         comment = Objects.requireNonNullElse(comment, "");
         correctedMetadata = Map.copyOf(Objects.requireNonNullElse(correctedMetadata, Map.of()));
         ignoredFields = List.copyOf(Objects.requireNonNullElse(ignoredFields, List.of()));
+        extractorVersion = Objects.requireNonNullElse(extractorVersion, "");
+        pipelineId = Objects.requireNonNullElse(pipelineId, "");
     }
 
     public MetadataReviewDecisionCommand(String reviewerId,
                                          String comment,
                                          Map<String, Object> correctedMetadata) {
-        this(reviewerId, comment, correctedMetadata, List.of());
+        this(reviewerId, comment, correctedMetadata, List.of(), "", "");
+    }
+
+    public MetadataReviewDecisionCommand(String reviewerId,
+                                         String comment,
+                                         Map<String, Object> correctedMetadata,
+                                         List<String> ignoredFields) {
+        this(reviewerId, comment, correctedMetadata, ignoredFields, "", "");
     }
 }
