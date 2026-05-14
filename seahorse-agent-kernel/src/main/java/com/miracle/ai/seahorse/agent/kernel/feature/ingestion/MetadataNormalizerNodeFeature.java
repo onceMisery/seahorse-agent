@@ -29,6 +29,7 @@ public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
     private static final String KEY_TENANT_ID = "tenantId";
     private static final String KEY_KB_ID = "kbId";
     private static final double PRIORITY_CONFIDENCE_EPSILON = 0.05D;
+    private static final double AGREEMENT_CONFIDENCE_BOOST = 0.03D;
     private static final double DEFAULT_MIN_CONFIDENCE = 0.8D;
 
     private final MetadataSchemaRegistryPort schemaRegistryPort;
@@ -197,14 +198,27 @@ public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
             }
             best.merge(candidate.fieldKey(), candidate,
                     (left, right) -> {
-                        if (!Objects.equals(left.rawValue(), right.rawValue())) {
-                            issues.add(MetadataIssue.warn(left.fieldKey(), NODE_TYPE, "CANDIDATE_CONFLICT",
-                                    "字段存在多个候选值，已按抽取器优先级和置信度选择主值"));
+                        double minConfidence = minConfidence(schema, left.fieldKey());
+                        if (Objects.equals(left.rawValue(), right.rawValue())) {
+                            return agreedCandidate(left, right, minConfidence);
                         }
-                        return betterCandidate(left, right, minConfidence(schema, left.fieldKey()));
+                        issues.add(MetadataIssue.warn(left.fieldKey(), NODE_TYPE, "CANDIDATE_CONFLICT",
+                                "字段存在多个候选值，已按抽取器优先级和置信度选择主值"));
+                        return betterCandidate(left, right, minConfidence);
                     });
         }
         return List.copyOf(best.values());
+    }
+
+    private MetadataFieldCandidate agreedCandidate(MetadataFieldCandidate left,
+                                                   MetadataFieldCandidate right,
+                                                   double minConfidence) {
+        MetadataFieldCandidate selected = betterCandidate(left, right, minConfidence);
+        double confidence = Math.min(1D, Math.max(left.confidence(), right.confidence()) + AGREEMENT_CONFIDENCE_BOOST);
+        // 多抽取器给出相同值时小幅提升置信度，避免单一来源过度放大。
+        return new MetadataFieldCandidate(selected.fieldKey(), selected.rawValue(), selected.sourceType(),
+                selected.extractorName(), confidence, selected.evidence(), selected.schemaVersion(),
+                selected.extractorVersion());
     }
 
     private MetadataFieldCandidate betterCandidate(MetadataFieldCandidate left,

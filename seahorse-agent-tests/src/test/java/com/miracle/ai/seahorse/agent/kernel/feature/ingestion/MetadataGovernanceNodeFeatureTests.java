@@ -148,6 +148,36 @@ class MetadataGovernanceNodeFeatureTests {
     }
 
     @Test
+    void shouldBoostConfidenceWhenMultipleExtractorsAgree() {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of())));
+        MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .metadataCandidates(List.of(
+                        new MetadataFieldCandidate("department", "Finance", "source",
+                                "SourceMetadataExtractor", 0.78D, "dept", 1, "deterministic-1"),
+                        new MetadataFieldCandidate("department", "Finance", "tika",
+                                "TikaMetadataExtractor", 0.77D, "author", 1, "deterministic-1")))
+                .build();
+
+        NodeResult normalizeResult = new MetadataNormalizerNodeFeature(schemaRegistry, MetadataDictionaryPort.noop())
+                .execute(context, NodeConfig.builder().nodeType("metadata_normalizer").build());
+        NodeResult validateResult = new MetadataValidatorNodeFeature(schemaRegistry,
+                MetadataExtractionResultRepositoryPort.noop(), MetadataReviewQueuePort.noop(),
+                MetadataQuarantinePort.noop(), MetadataCanonicalWritePort.noop())
+                .execute(context, NodeConfig.builder().nodeType("metadata_validator").build());
+
+        assertThat(normalizeResult.isSuccess()).isTrue();
+        assertThat(validateResult.isSuccess()).isTrue();
+        assertThat(context.getMetadataFieldQualities()).singleElement()
+                .satisfies(quality -> assertThat(quality.confidence()).isGreaterThanOrEqualTo(0.8D));
+        assertThat(context.getMetadataValidationResult().decision()).isEqualTo(MetadataValidationDecision.ACCEPT);
+        assertThat(context.getMetadataIssues()).isEmpty();
+    }
+
+    @Test
     void shouldQuarantineWhenRequiredMetadataMissing() {
         MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
                 field("securityLevel", MetadataValueType.STRING, true, Map.of())));
