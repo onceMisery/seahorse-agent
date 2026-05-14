@@ -1298,7 +1298,8 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
 
         private Map<String, Object> coveredMetadata() {
-            return normalizedMetadata.isEmpty() ? acceptedMetadata : normalizedMetadata;
+            // 人工复核修正后的 approved metadata 是更可信的 canonical 结果，质量报表应优先使用它。
+            return acceptedMetadata.isEmpty() ? normalizedMetadata : acceptedMetadata;
         }
     }
 

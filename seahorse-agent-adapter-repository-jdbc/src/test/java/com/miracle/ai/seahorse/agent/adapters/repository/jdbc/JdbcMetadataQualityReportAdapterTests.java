@@ -76,6 +76,22 @@ class JdbcMetadataQualityReportAdapterTests {
     }
 
     @Test
+    void shouldPreferApprovedMetadataWhenComputingCoverage() {
+        jdbcTemplate.update("INSERT INTO t_knowledge_document(id, kb_id, deleted) VALUES ('doc-1', 'kb-1', 0)");
+        insertExtraction("result-1", "doc-1",
+                Map.of("department", "Sales"),
+                Map.of("owner", "alice"),
+                List.of(),
+                Instant.parse("2026-05-13T08:00:00Z"));
+
+        MetadataQualityReport report = adapter.report("tenant-1", "kb-1", 1);
+
+        assertThat(report.extractedDocuments()).isEqualTo(1);
+        assertThat(coverage(report, "department").coverageRate()).isZero();
+        assertThat(coverage(report, "owner").coverageRate()).isEqualTo(1D);
+    }
+
+    @Test
     void shouldPersistFieldQualitiesForLowConfidenceReport() {
         adapter.save(new MetadataExtractionRecord(
                 "tenant-1",
@@ -284,6 +300,15 @@ class JdbcMetadataQualityReportAdapterTests {
                                   Map<String, Object> metadata,
                                   List<Map<String, Object>> qualities,
                                   Instant updateTime) {
+        insertExtraction(id, docId, metadata, metadata, qualities, updateTime);
+    }
+
+    private void insertExtraction(String id,
+                                  String docId,
+                                  Map<String, Object> metadata,
+                                  Map<String, Object> approvedMetadata,
+                                  List<Map<String, Object>> qualities,
+                                  Instant updateTime) {
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_extraction_result(
                     id, tenant_id, kb_id, doc_id, job_id, schema_version, extractor_version, status,
@@ -291,7 +316,7 @@ class JdbcMetadataQualityReportAdapterTests {
                     create_time, update_time
                 ) VALUES (?, 'tenant-1', 'kb-1', ?, 'job-1', 1, 'extractor-v1', 'ACCEPT',
                           ?, '{}', ?, '[]', ?, ?, ?)
-                """, id, docId, json(metadata), json(qualities), json(metadata),
+                """, id, docId, json(metadata), json(qualities), json(approvedMetadata),
                 Timestamp.from(updateTime), Timestamp.from(updateTime));
     }
 
