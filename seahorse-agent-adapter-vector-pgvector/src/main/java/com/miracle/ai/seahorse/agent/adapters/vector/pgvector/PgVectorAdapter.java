@@ -64,6 +64,7 @@ public class PgVectorAdapter implements VectorSearchPort, VectorIndexPort, Vecto
     private static final String META_DOC_ID = "doc_id";
     private static final String META_CHUNK_INDEX = "chunk_index";
     private static final String META_ENABLED = "enabled";
+    private static final String META_ACL_SUBJECTS = "acl_subjects";
     private static final String INDEX_NAME = "idx_seahorse_knowledge_vector_hnsw";
     private static final String SQL_EXTENSION_EXISTS = "SELECT COUNT(*) FROM pg_extension WHERE extname = 'vector'";
     private static final String SQL_SET_EF_SEARCH = "SET hnsw.ef_search = 200";
@@ -365,6 +366,7 @@ public class PgVectorAdapter implements VectorSearchPort, VectorIndexPort, Vecto
         appendIn(clauses, args, META_DOC_ID, system.documentIds());
         appendIn(clauses, args, "file_type", system.fileTypes());
         appendIn(clauses, args, "source_type", system.sourceTypes());
+        appendAcl(clauses, args, system.aclSubjectIds());
         if (system.enabledOnly()) {
             clauses.add("(metadata->>'" + META_ENABLED + "' IS NULL OR metadata->>'" + META_ENABLED + "' = 'true')");
         }
@@ -423,6 +425,23 @@ public class PgVectorAdapter implements VectorSearchPort, VectorIndexPort, Vecto
         String placeholders = values.stream().map(ignored -> "?").collect(Collectors.joining(", "));
         clauses.add("metadata->>'" + fieldKey(key) + "' IN (" + placeholders + ")");
         args.addAll(values);
+    }
+
+    private void appendAcl(List<String> clauses, List<Object> args, Collection<String> aclSubjectIds) {
+        if (aclSubjectIds == null || aclSubjectIds.isEmpty()) {
+            return;
+        }
+        String arrayPlaceholders = aclSubjectIds.stream()
+                .map(ignored -> "?::text")
+                .collect(Collectors.joining(", "));
+        String scalarPlaceholders = aclSubjectIds.stream()
+                .map(ignored -> "?")
+                .collect(Collectors.joining(", "));
+        // ACL 是权限边界字段，数组交集下推后仍由 MetadataGuard 做兜底校验。
+        clauses.add("(jsonb_exists_any(metadata->'" + META_ACL_SUBJECTS + "', ARRAY[" + arrayPlaceholders
+                + "]) OR metadata->>'" + META_ACL_SUBJECTS + "' IN (" + scalarPlaceholders + "))");
+        args.addAll(aclSubjectIds);
+        args.addAll(aclSubjectIds);
     }
 
     private String fieldKey(String key) {

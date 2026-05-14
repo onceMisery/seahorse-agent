@@ -77,6 +77,7 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
     private static final String META_DOC_ID = "doc_id";
     private static final String META_CHUNK_INDEX = "chunk_index";
     private static final String META_ENABLED = "enabled";
+    private static final String META_ACL_SUBJECTS = "acl_subjects";
     private static final int CONTENT_MAX_LENGTH = 65535;
 
     private final MilvusClientV2 milvusClient;
@@ -350,6 +351,7 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
         appendIn(clauses, META_DOC_ID, system.documentIds());
         appendIn(clauses, "file_type", system.fileTypes());
         appendIn(clauses, "source_type", system.sourceTypes());
+        appendAcl(clauses, system.aclSubjectIds());
         if (system.enabledOnly()) {
             clauses.add("(" + metadataPath(META_ENABLED) + " == true || " + metadataPath(META_ENABLED) + " == \"true\")");
         }
@@ -395,6 +397,15 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
         }
         String valueList = values.stream().map(this::literal).collect(Collectors.joining(", "));
         clauses.add(metadataPath(fieldKey(key)) + " in [" + valueList + "]");
+    }
+
+    private void appendAcl(List<String> clauses, Collection<String> aclSubjectIds) {
+        if (aclSubjectIds == null || aclSubjectIds.isEmpty()) {
+            return;
+        }
+        String valueList = aclSubjectIds.stream().map(this::literal).collect(Collectors.joining(", "));
+        // ACL 以 JSON 数组写入向量库，Milvus 侧先做 contains-any 下推，后处理链继续兜底。
+        clauses.add("json_contains_any(" + metadataPath(META_ACL_SUBJECTS) + ", [" + valueList + "])");
     }
 
     private String metadataPath(String key) {
