@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegis
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -124,12 +125,47 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
         for (MetadataFieldQuality quality : Objects.requireNonNullElse(context.getMetadataFieldQualities(),
                 List.<MetadataFieldQuality>of())) {
             MetadataFieldDescriptor field = schema.find(quality.fieldKey()).orElse(null);
-            if (field != null && accepted.containsKey(field.fieldKey()) && quality.confidence() < field.minConfidence()) {
+            if (field == null || !accepted.containsKey(field.fieldKey())) {
+                continue;
+            }
+            if (!trustedSource(field, quality.sourceType())) {
+                issues.add(untrustedSourceIssue(field));
+            }
+            if (quality.confidence() < field.minConfidence()) {
                 issues.add(MetadataIssue.warn(field.fieldKey(), NODE_TYPE, "LOW_CONFIDENCE", "字段置信度低于阈值"));
             }
         }
         MetadataValidationDecision decision = decision(issues);
         return new MetadataValidationResult(decision, issues, accepted, rejected);
+    }
+
+    private boolean trustedSource(MetadataFieldDescriptor field, String sourceType) {
+        if (field.trustedSources().isEmpty()) {
+            return true;
+        }
+        return field.trustedSources().stream()
+                .anyMatch(source -> source.equalsIgnoreCase(Objects.requireNonNullElse(sourceType, "")));
+    }
+
+    private boolean strictTrustedSource(MetadataFieldDescriptor field) {
+        // 权限/安全字段来源不可信时必须隔离；普通业务字段仍可进入人工复核。
+        String normalized = field.fieldKey()
+                .replace("_", "")
+                .replace("-", "")
+                .toLowerCase(Locale.ROOT);
+        return field.required()
+                || field.backendMapping().guardOnly()
+                || normalized.contains("acl")
+                || normalized.contains("security")
+                || normalized.contains("permission");
+    }
+
+    private MetadataIssue untrustedSourceIssue(MetadataFieldDescriptor field) {
+        String message = "字段来源不在 Schema 可信来源内";
+        if (strictTrustedSource(field)) {
+            return MetadataIssue.error(field.fieldKey(), NODE_TYPE, "UNTRUSTED_METADATA_SOURCE", message);
+        }
+        return MetadataIssue.warn(field.fieldKey(), NODE_TYPE, "UNTRUSTED_METADATA_SOURCE", message);
     }
 
     private MetadataValidationDecision decision(List<MetadataIssue> issues) {

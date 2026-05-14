@@ -172,6 +172,35 @@ class MetadataGovernanceNodeFeatureTests {
     }
 
     @Test
+    void shouldQuarantineUntrustedSecurityMetadataSource() {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+                field("securityLevel", MetadataValueType.STRING, false, Map.of())));
+        List<String> quarantineReasons = new ArrayList<>();
+        MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
+        MetadataQuarantinePort quarantinePort = item -> quarantineReasons.add(item.reasonCode());
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .normalizedMetadata(Map.of("securityLevel", "internal"))
+                .metadataFieldQualities(List.of(new MetadataFieldQuality(
+                        "securityLevel", 0.99D, "llm", "LlmMetadataExtractor", true, "")))
+                .build();
+
+        NodeResult result = new MetadataValidatorNodeFeature(schemaRegistry,
+                MetadataExtractionResultRepositoryPort.noop(), MetadataReviewQueuePort.noop(), quarantinePort,
+                MetadataCanonicalWritePort.noop())
+                .execute(context, NodeConfig.builder().nodeType("metadata_validator").build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.isShouldContinue()).isFalse();
+        assertThat(context.isSkipIndexerWrite()).isTrue();
+        assertThat(context.getMetadataValidationResult().decision()).isEqualTo(MetadataValidationDecision.QUARANTINE);
+        assertThat(context.getMetadataIssues())
+                .anySatisfy(issue -> assertThat(issue.code()).isEqualTo("UNTRUSTED_METADATA_SOURCE"));
+        assertThat(quarantineReasons).containsExactly("METADATA_QUARANTINE");
+    }
+
+    @Test
     void shouldRouteLowConfidenceMetadataToReviewWithoutCanonicalWrite() {
         MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
                 field("department", MetadataValueType.STRING, false, Map.of())));
