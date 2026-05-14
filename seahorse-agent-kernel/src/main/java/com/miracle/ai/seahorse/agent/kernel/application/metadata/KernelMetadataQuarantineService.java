@@ -17,12 +17,20 @@ import java.util.Objects;
 public class KernelMetadataQuarantineService implements MetadataQuarantineInboundPort {
 
     private static final String DEFAULT_OPERATOR = "system";
+    private static final int DEFAULT_MAX_RETRY_COUNT = 3;
 
     private final MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort;
+    private final int maxRetryCount;
 
     public KernelMetadataQuarantineService(MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort) {
+        this(quarantineRepositoryPort, DEFAULT_MAX_RETRY_COUNT);
+    }
+
+    public KernelMetadataQuarantineService(MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort,
+                                           int maxRetryCount) {
         this.quarantineRepositoryPort = Objects.requireNonNullElse(quarantineRepositoryPort,
                 MetadataQuarantineManagementRepositoryPort.empty());
+        this.maxRetryCount = maxRetryCount <= 0 ? DEFAULT_MAX_RETRY_COUNT : maxRetryCount;
     }
 
     @Override
@@ -52,7 +60,11 @@ public class KernelMetadataQuarantineService implements MetadataQuarantineInboun
 
     @Override
     public MetadataQuarantineRecord retry(String itemId, MetadataQuarantineRetryCommand command) {
-        queryById(itemId);
+        MetadataQuarantineRecord current = queryById(itemId);
+        if (current.retryCount() >= maxRetryCount) {
+            // 隔离区重试必须有上限，避免不可恢复数据反复污染回填队列。
+            throw new IllegalStateException("元数据隔离项已达到最大重试次数: " + itemId);
+        }
         MetadataQuarantineRetryCommand safeCommand = command == null
                 ? new MetadataQuarantineRetryCommand(DEFAULT_OPERATOR, null)
                 : command;

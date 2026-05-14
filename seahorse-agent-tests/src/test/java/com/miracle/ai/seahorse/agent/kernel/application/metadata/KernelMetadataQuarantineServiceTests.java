@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class KernelMetadataQuarantineServiceTests {
 
@@ -50,6 +51,22 @@ class KernelMetadataQuarantineServiceTests {
         assertThat(retried.resolved()).isFalse();
         assertThat(retried.retryCount()).isEqualTo(2);
         assertThat(retried.nextRetryTime()).isEqualTo(Instant.parse("2026-05-13T10:00:00Z"));
+    }
+
+    @Test
+    void shouldRejectRetryWhenMaxRetryCountReached() {
+        InMemoryQuarantineRepository repository = new InMemoryQuarantineRepository();
+        repository.put(quarantine("q-1", false, 3, null));
+        KernelMetadataQuarantineService service = new KernelMetadataQuarantineService(repository, 3);
+
+        assertThatThrownBy(() -> service.retry("q-1",
+                new MetadataQuarantineRetryCommand("auditor", Instant.parse("2026-05-13T10:00:00Z"))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("最大重试次数");
+
+        assertThat(repository.findQuarantineItem("q-1")).get()
+                .extracting(MetadataQuarantineRecord::retryCount)
+                .isEqualTo(3);
     }
 
     private static MetadataQuarantineRecord quarantine(String id,

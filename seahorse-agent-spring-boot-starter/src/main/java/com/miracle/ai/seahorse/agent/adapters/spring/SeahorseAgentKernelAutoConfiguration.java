@@ -868,8 +868,9 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnBean(MetadataQuarantineManagementRepositoryPort.class)
     @ConditionalOnMissingBean(MetadataQuarantineInboundPort.class)
     public KernelMetadataQuarantineService seahorseMetadataQuarantineInboundPort(
-            MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort) {
-        return new KernelMetadataQuarantineService(quarantineRepositoryPort);
+            MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort,
+            @Value("${seahorse-agent.metadata.governance.quarantine.max-retry-count:3}") int maxRetryCount) {
+        return new KernelMetadataQuarantineService(quarantineRepositoryPort, maxRetryCount);
     }
 
     @Bean
