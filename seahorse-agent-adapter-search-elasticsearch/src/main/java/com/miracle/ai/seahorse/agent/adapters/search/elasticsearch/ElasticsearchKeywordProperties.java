@@ -30,11 +30,23 @@ public record ElasticsearchKeywordProperties(
         String baseUrl,
         String indexName,
         List<String> searchFields,
+        String analyzer,
+        String minimumShouldMatch,
         String apiKey,
         String username,
         String password,
         Duration requestTimeout
 ) {
+
+    public ElasticsearchKeywordProperties(String baseUrl,
+                                          String indexName,
+                                          List<String> searchFields,
+                                          String apiKey,
+                                          String username,
+                                          String password,
+                                          Duration requestTimeout) {
+        this(baseUrl, indexName, searchFields, "", "", apiKey, username, password, requestTimeout);
+    }
 
     public ElasticsearchKeywordProperties {
         baseUrl = hasText(baseUrl) ? trimTrailingSlash(baseUrl.trim()) : "http://localhost:9200";
@@ -43,6 +55,8 @@ public record ElasticsearchKeywordProperties(
         if (searchFields.isEmpty()) {
             searchFields = List.of("content^3");
         }
+        analyzer = Objects.requireNonNullElse(analyzer, "").trim();
+        minimumShouldMatch = Objects.requireNonNullElse(minimumShouldMatch, "").trim();
         apiKey = Objects.requireNonNullElse(apiKey, "").trim();
         username = Objects.requireNonNullElse(username, "").trim();
         password = Objects.requireNonNullElse(password, "");

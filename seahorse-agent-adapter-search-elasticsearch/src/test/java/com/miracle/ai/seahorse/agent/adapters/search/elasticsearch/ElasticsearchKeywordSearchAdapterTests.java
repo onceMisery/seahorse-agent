@@ -62,7 +62,8 @@ class ElasticsearchKeywordSearchAdapterTests {
                 new OkHttpClient.Builder().addInterceptor(interceptor).build(),
                 objectMapper,
                 new ElasticsearchKeywordProperties("http://localhost:9200", "chunks",
-                        List.of("content^2", "title"), "", "", "", Duration.ofSeconds(3)));
+                        List.of("content^2", "title"), "ik_smart", "2<75%",
+                        "", "", "", Duration.ofSeconds(3)));
 
         var results = adapter.search(new KeywordSearchRequest("metadata search", 7, null, null,
                 compiledFilter()));
@@ -75,6 +76,8 @@ class ElasticsearchKeywordSearchAdapterTests {
         JsonNode body = objectMapper.readTree(interceptor.body());
         assertThat(body.path("size").asInt()).isEqualTo(7);
         assertThat(body.at("/query/bool/must/0/multi_match/query").asText()).isEqualTo("metadata search");
+        assertThat(body.at("/query/bool/must/0/multi_match/analyzer").asText()).isEqualTo("ik_smart");
+        assertThat(body.at("/query/bool/must/0/multi_match/minimum_should_match").asText()).isEqualTo("2<75%");
         assertThat(interceptor.request().url().encodedPath()).isEqualTo("/chunks/_search");
         assertThat(interceptor.body()).contains("\"terms\":{\"kb_id\":[\"kb-1\"]}");
         assertThat(interceptor.body()).contains("\"term\":{\"tenant_id\":\"tenant-1\"}");

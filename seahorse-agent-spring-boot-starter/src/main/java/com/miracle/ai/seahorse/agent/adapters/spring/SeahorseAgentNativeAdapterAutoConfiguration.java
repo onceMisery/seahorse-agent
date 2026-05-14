@@ -416,6 +416,10 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
             String indexName,
             @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.search-fields:content^3}")
             String searchFields,
+            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.analyzer:}")
+            String analyzer,
+            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.minimum-should-match:}")
+            String minimumShouldMatch,
             @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.api-key:}")
             String apiKey,
             @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.username:}")
@@ -425,8 +429,8 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
             @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.timeout:10s}")
             String timeout) {
         return new ElasticsearchKeywordSearchAdapter(httpClient, objectMapper,
-                new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields), apiKey, username, password,
-                        duration(timeout)));
+                new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields), analyzer,
+                        minimumShouldMatch, apiKey, username, password, duration(timeout)));
     }
 
     @Bean

@@ -80,10 +80,17 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
 
     Map<String, Object> searchBody(KeywordSearchRequest request) {
         Map<String, Object> bool = new LinkedHashMap<>();
-        bool.put("must", List.of(Map.of("multi_match", Map.of(
-                "query", request.query().trim(),
-                "fields", properties.searchFields()
-        ))));
+        Map<String, Object> multiMatch = new LinkedHashMap<>();
+        multiMatch.put("query", request.query().trim());
+        multiMatch.put("fields", properties.searchFields());
+        // analyzer 与 minimum_should_match 属于 ES 查询调优项，只在 adapter 内消费配置。
+        if (hasText(properties.analyzer())) {
+            multiMatch.put("analyzer", properties.analyzer());
+        }
+        if (hasText(properties.minimumShouldMatch())) {
+            multiMatch.put("minimum_should_match", properties.minimumShouldMatch());
+        }
+        bool.put("must", List.of(Map.of("multi_match", multiMatch)));
         List<Object> filters = new ArrayList<>();
         appendSystemFilters(filters, request.compiledFilter().sourceFilter().system());
         appendMetadataFilter(filters, request.compiledFilter().expression());
@@ -181,6 +188,10 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
             return instant.toString();
         }
         return value;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private List<RetrievedChunk> parseResponse(String response) {
