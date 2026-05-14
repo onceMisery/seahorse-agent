@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParseResul
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,8 +32,9 @@ class TikaDocumentParserAdapterTests {
 
     @Test
     void shouldReturnStableMetadataForPlainText() {
+        byte[] content = "hello\r\n\r\n\r\nworld".getBytes(StandardCharsets.UTF_8);
         DocumentParseResult result = adapter.parse(
-                "hello\r\n\r\n\r\nworld".getBytes(StandardCharsets.UTF_8),
+                content,
                 "text/plain",
                 "demo.txt",
                 Map.of());
@@ -44,7 +46,11 @@ class TikaDocumentParserAdapterTests {
                 .containsEntry("contentType", "text/plain")
                 .containsEntry("mimeType", "text/plain")
                 .containsEntry("resourceName", "demo.txt")
-                .containsEntry("fileName", "demo.txt");
+                .containsEntry("fileName", "demo.txt")
+                .containsEntry("inputSizeBytes", content.length)
+                .containsEntry("textCharCount", result.text().length())
+                .containsEntry("warnings", List.of());
+        assertThat((Long) result.metadata().get("parseDurationMs")).isGreaterThanOrEqualTo(0L);
     }
 
     @Test
@@ -64,8 +70,9 @@ class TikaDocumentParserAdapterTests {
                 </html>
                 """;
 
+        byte[] content = html.getBytes(StandardCharsets.UTF_8);
         DocumentParseResult result = adapter.parse(
-                html.getBytes(StandardCharsets.UTF_8),
+                content,
                 "text/html",
                 "quarterly.html",
                 Map.of());
@@ -80,6 +87,10 @@ class TikaDocumentParserAdapterTests {
                 .containsEntry("mimeType", "text/html")
                 .containsEntry("resourceName", "quarterly.html")
                 .containsEntry("fileName", "quarterly.html")
+                .containsEntry("inputSizeBytes", content.length)
+                .containsEntry("textCharCount", result.text().length())
+                .containsEntry("warnings", List.of())
                 .containsKeys("Content-Type", "dc:title", "dc:creator");
+        assertThat((Long) result.metadata().get("parseDurationMs")).isGreaterThanOrEqualTo(0L);
     }
 }

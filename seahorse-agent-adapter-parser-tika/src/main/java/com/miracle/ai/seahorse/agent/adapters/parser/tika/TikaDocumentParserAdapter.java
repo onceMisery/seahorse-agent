@@ -28,10 +28,13 @@ import org.apache.tika.metadata.TikaCoreProperties;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
@@ -57,23 +60,30 @@ public class TikaDocumentParserAdapter implements DocumentParserPort {
     private static final String KEY_MODIFIED_TIME = "modifiedTime";
     private static final String KEY_LANGUAGE = "language";
     private static final String KEY_PAGE_COUNT = "pageCount";
+    private static final String KEY_PARSE_DURATION_MS = "parseDurationMs";
+    private static final String KEY_INPUT_SIZE_BYTES = "inputSizeBytes";
+    private static final String KEY_TEXT_CHAR_COUNT = "textCharCount";
+    private static final String KEY_WARNINGS = "warnings";
     private static final Pattern EXCESSIVE_BLANK_LINES = Pattern.compile("\\n{3,}");
     private static final Pattern HORIZONTAL_SPACES = Pattern.compile("[\\t\\x0B\\f\\r ]+");
 
     @Override
     public DocumentParseResult parse(byte[] content, String mimeType, String fileName, Map<String, Object> options) {
+        long startNanos = System.nanoTime();
         byte[] safeContent = Objects.requireNonNullElse(content, new byte[0]);
         if (safeContent.length == 0) {
             return DocumentParseResult.ofText("");
         }
         if (isPlainText(mimeType, fileName)) {
-            return new DocumentParseResult(cleanup(new String(safeContent, StandardCharsets.UTF_8)),
-                    baseMetadata(mimeType, fileName));
+            String text = cleanup(new String(safeContent, StandardCharsets.UTF_8));
+            Map<String, Object> metadata = baseMetadata(mimeType, fileName);
+            addParseMetrics(metadata, startNanos, safeContent.length, text.length());
+            return new DocumentParseResult(text, metadata);
         }
-        return parseWithTika(safeContent, mimeType, fileName);
+        return parseWithTika(safeContent, mimeType, fileName, startNanos);
     }
 
-    private DocumentParseResult parseWithTika(byte[] content, String mimeType, String fileName) {
+    private DocumentParseResult parseWithTika(byte[] content, String mimeType, String fileName, long startNanos) {
         Metadata metadata = new Metadata();
         if (mimeType != null && !mimeType.isBlank()) {
             metadata.set(Metadata.CONTENT_TYPE, mimeType);
@@ -82,7 +92,10 @@ public class TikaDocumentParserAdapter implements DocumentParserPort {
             metadata.set(TikaCoreProperties.RESOURCE_NAME_KEY, fileName);
         }
         try (ByteArrayInputStream inputStream = new ByteArrayInputStream(content)) {
-            return new DocumentParseResult(cleanup(TIKA.parseToString(inputStream, metadata)), metadata(metadata));
+            String text = cleanup(TIKA.parseToString(inputStream, metadata));
+            Map<String, Object> values = metadata(metadata);
+            addParseMetrics(values, startNanos, content.length, text.length());
+            return new DocumentParseResult(text, values);
         } catch (Exception ex) {
             throw new IllegalStateException("Tika document parse failed", ex);
         }
@@ -139,6 +152,7 @@ public class TikaDocumentParserAdapter implements DocumentParserPort {
         putIfPresent(values, KEY_LANGUAGE,
                 firstText(metadata.get(TikaCoreProperties.LANGUAGE), metadata.get(TikaCoreProperties.TIKA_DETECTED_LANGUAGE)));
         putIfPresent(values, KEY_PAGE_COUNT, pageCount(metadata));
+        putIfPresent(values, KEY_WARNINGS, warnings(metadata));
     }
 
     private Object metadataValue(Metadata metadata, Property... properties) {
@@ -163,6 +177,31 @@ public class TikaDocumentParserAdapter implements DocumentParserPort {
             return pages;
         }
         return metadata.getInt(Office.PAGE_COUNT);
+    }
+
+    private void addParseMetrics(Map<String, Object> metadata, long startNanos, int inputSizeBytes, int textCharCount) {
+        // 解析耗时和体量指标用于治理报表，不参与检索过滤。
+        long elapsedMs = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos));
+        putIfPresent(metadata, KEY_PARSE_DURATION_MS, elapsedMs);
+        putIfPresent(metadata, KEY_INPUT_SIZE_BYTES, inputSizeBytes);
+        putIfPresent(metadata, KEY_TEXT_CHAR_COUNT, textCharCount);
+        putIfPresent(metadata, KEY_WARNINGS, List.of());
+    }
+
+    private List<String> warnings(Metadata metadata) {
+        List<String> warnings = new ArrayList<>();
+        for (String name : metadata.names()) {
+            String lowerName = name.toLowerCase(java.util.Locale.ROOT);
+            if (!lowerName.contains("warning") && !lowerName.contains("exception")) {
+                continue;
+            }
+            for (String value : metadata.getValues(name)) {
+                if (hasText(value)) {
+                    warnings.add(name + ": " + value.trim());
+                }
+            }
+        }
+        return List.copyOf(warnings);
     }
 
     private void putIfPresent(Map<String, Object> metadata, String key, Object value) {
