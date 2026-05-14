@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.feature.retrieval;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchRequest;
@@ -60,6 +61,7 @@ class KeywordSearchChannelFeatureTests {
         assertThat(port.request).isNotNull();
         assertThat(port.request.query()).isEqualTo("入职流程");
         assertThat(port.request.topK()).isEqualTo(7);
+        assertThat(result.getChannelType()).isEqualTo(SearchChannelType.KEYWORD_BM25);
         assertThat(result.getChunks()).extracting(RetrievedChunk::getId).containsExactly("chunk-1");
     }
 

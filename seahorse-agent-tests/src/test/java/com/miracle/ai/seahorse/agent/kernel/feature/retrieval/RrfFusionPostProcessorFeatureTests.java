@@ -52,7 +52,7 @@ class RrfFusionPostProcessorFeatureTests {
         List<SearchChannelResult> results = List.of(
                 result(IntentDirectedSearchFeature.NAME, SearchChannelType.INTENT_DIRECTED,
                         List.of(chunk("a", 0.9F), chunk("b", 0.8F))),
-                result("KeywordSearch", SearchChannelType.KEYWORD_ES,
+                result("KeywordSearch", SearchChannelType.KEYWORD_BM25,
                         List.of(chunk("b", 0.7F), chunk("c", 0.6F))));
 
         List<RetrievedChunk> fused = rrf.process(List.of(), results, context);
@@ -83,7 +83,7 @@ class RrfFusionPostProcessorFeatureTests {
         List<SearchChannelResult> results = List.of(
                 result(IntentDirectedSearchFeature.NAME, SearchChannelType.INTENT_DIRECTED,
                         List.of(chunk("a", 0.9F))),
-                result("KeywordSearch", SearchChannelType.KEYWORD_ES,
+                result("KeywordSearch", SearchChannelType.KEYWORD_BM25,
                         List.of(chunk("b", 0.7F))));
 
         List<RetrievedChunk> fused = rrf.process(List.of(), results, context);

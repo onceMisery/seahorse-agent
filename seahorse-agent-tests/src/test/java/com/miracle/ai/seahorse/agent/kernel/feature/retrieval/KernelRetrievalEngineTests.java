@@ -168,7 +168,7 @@ class KernelRetrievalEngineTests {
     }
 
     private SearchChannelFeature failingChannel() {
-        return new ContractSearchChannelFeature(FAILING_CHANNEL, SearchChannelType.KEYWORD_ES, true);
+        return new ContractSearchChannelFeature(FAILING_CHANNEL, SearchChannelType.KEYWORD_BM25, true);
     }
 
     private SearchChannelFeature workingChannel() {

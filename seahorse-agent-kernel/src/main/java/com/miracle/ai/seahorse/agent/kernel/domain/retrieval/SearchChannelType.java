@@ -38,6 +38,11 @@ public enum SearchChannelType {
     KEYWORD_ES,
 
     /**
+     * 后端无关的关键词/BM25 检索，实际实现可由 Elasticsearch、PostgreSQL FTS 等 adapter 承担。
+     */
+    KEYWORD_BM25,
+
+    /**
      * 混合检索。
      */
     HYBRID

@@ -40,7 +40,7 @@ public class KeywordSearchChannelFeature implements SearchChannelFeature {
 
     @Override
     public SearchChannelType channelType() {
-        return SearchChannelType.KEYWORD_ES;
+        return SearchChannelType.KEYWORD_BM25;
     }
 
     @Override
