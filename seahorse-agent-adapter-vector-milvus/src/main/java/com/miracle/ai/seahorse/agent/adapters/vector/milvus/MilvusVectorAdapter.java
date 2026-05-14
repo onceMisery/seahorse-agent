@@ -21,6 +21,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContains;
@@ -381,7 +382,10 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
                 clauses.add(metadataPath(key) + " <= " + literal(fieldRange.to()));
             }
         } else if (expression instanceof FieldContains fieldContains) {
-            appendEq(clauses, fieldKey(fieldContains.field().backendMapping().canonicalName()), fieldContains.value());
+            appendContains(clauses,
+                    fieldKey(fieldContains.field().backendMapping().canonicalName()),
+                    fieldContains.field().valueType(),
+                    fieldContains.value());
         } else if (expression instanceof FieldExists fieldExists) {
             clauses.add(metadataPath(fieldKey(fieldExists.field().backendMapping().canonicalName())) + " != null");
         }
@@ -401,6 +405,16 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
         String path = metadataPath(fieldKey(key));
         // Milvus JSON 缺失字段按 null 兜底，避免 NE 下推漏掉后置 guard 本应保留的结果。
         clauses.add("(" + path + " != " + literal(value) + " || " + path + " == null)");
+    }
+
+    private void appendContains(List<String> clauses, String key, MetadataValueType valueType, Object value) {
+        if (value == null || Objects.toString(value, "").isBlank()) {
+            return;
+        }
+        if (valueType == MetadataValueType.STRING_ARRAY || valueType == MetadataValueType.NUMBER_ARRAY) {
+            clauses.add("json_contains(" + metadataPath(fieldKey(key)) + ", " + literal(value) + ")");
+        }
+        // 字符串 substring 的 Milvus JSON 表达式没有统一安全语义，保留给后置 guard 兜底。
     }
 
     private void appendIn(List<String> clauses, String key, Collection<?> values) {

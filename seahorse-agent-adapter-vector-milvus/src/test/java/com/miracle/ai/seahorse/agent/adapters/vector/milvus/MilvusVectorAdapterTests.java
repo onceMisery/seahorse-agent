@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContains;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
@@ -79,6 +80,37 @@ class MilvusVectorAdapterTests {
                 .contains("(metadata[\"department\"] != \"HR\" || metadata[\"department\"] == null)");
     }
 
+    @Test
+    void shouldPushDownArrayContainsMetadataExpression() {
+        MilvusClientV2 client = mock(MilvusClientV2.class);
+        when(client.search(any(SearchReq.class))).thenReturn(SearchResp.builder().searchResults(List.of()).build());
+        MilvusVectorAdapter adapter = new MilvusVectorAdapter(client,
+                new MilvusVectorProperties("default_collection", 2, "COSINE"));
+
+        adapter.search(searchRequest(new FieldContains(field("tags", MetadataValueType.STRING_ARRAY), "hr")));
+
+        ArgumentCaptor<SearchReq> requestCaptor = ArgumentCaptor.forClass(SearchReq.class);
+        verify(client).search(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getFilter())
+                .contains("json_contains(metadata[\"tags\"], \"hr\")");
+    }
+
+    @Test
+    void shouldLeaveStringContainsForGuard() {
+        MilvusClientV2 client = mock(MilvusClientV2.class);
+        when(client.search(any(SearchReq.class))).thenReturn(SearchResp.builder().searchResults(List.of()).build());
+        MilvusVectorAdapter adapter = new MilvusVectorAdapter(client,
+                new MilvusVectorProperties("default_collection", 2, "COSINE"));
+
+        adapter.search(searchRequest(new FieldContains(field("title"), "policy")));
+
+        ArgumentCaptor<SearchReq> requestCaptor = ArgumentCaptor.forClass(SearchReq.class);
+        verify(client).search(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getFilter())
+                .doesNotContain("metadata[\"title\"] == \"policy\"")
+                .doesNotContain("json_contains(metadata[\"title\"]");
+    }
+
     private VectorSearchRequest searchRequest() {
         return searchRequest(new FilterAnd(List.of()));
     }
@@ -105,8 +137,12 @@ class MilvusVectorAdapterTests {
     }
 
     private MetadataFieldDescriptor field(String fieldKey) {
-        return new MetadataFieldDescriptor(fieldKey, fieldKey, MetadataValueType.STRING,
-                Set.of(MetadataOperator.EQ, MetadataOperator.NE), false, true, false, false, true,
+        return field(fieldKey, MetadataValueType.STRING);
+    }
+
+    private MetadataFieldDescriptor field(String fieldKey, MetadataValueType valueType) {
+        return new MetadataFieldDescriptor(fieldKey, fieldKey, valueType,
+                Set.of(MetadataOperator.EQ, MetadataOperator.NE, MetadataOperator.CONTAINS), false, true, false, false, true,
                 MetadataIndexPolicy.MILVUS_JSON, 0.8D, Set.of(), Map.of(), BackendFieldMapping.defaults(fieldKey));
     }
 }
