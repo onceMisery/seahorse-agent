@@ -790,6 +790,8 @@ class SeahorseWebApiContractTests {
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.CORRECTED));
         when(reviewPort.ignoreField(eq("review-1"), any()))
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.CORRECTED));
+        when(reviewPort.reExtract(eq("review-1"), any()))
+                .thenReturn(metadataReview("review-1", MetadataReviewStatus.RE_EXTRACTING));
         when(reviewPort.reject(eq("review-1"), any()))
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.REJECTED));
         when(reviewPort.quarantine(eq("review-1"), any()))
@@ -842,6 +844,15 @@ class SeahorseWebApiContractTests {
                                 "ignoredFields", List.of("owner")))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reviewStatus").value("CORRECTED"));
+        mvc.perform(post("/metadata-review/items/review-1/re-extract")
+                        .header("X-User-Id", "auditor")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "comment", "重新抽取",
+                                "extractorVersion", "extractor-v2",
+                                "pipelineId", "pipe-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("RE_EXTRACTING"));
         mvc.perform(post("/metadata-review/items/review-1/reject")
                         .header("X-User-Id", "auditor")
                         .contentType(MediaType.APPLICATION_JSON)
