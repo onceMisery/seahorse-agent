@@ -31,6 +31,11 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
     private static final String NAME = "Rerank";
     private static final int ORDER = 200;
     private static final String EVENT_RERANK = "retrieval.rerank";
+    private static final String SETTING_RERANK_INPUT_TOP_K = "rerankInputTopK";
+    private static final String SETTING_RERANK_INPUT_TOP_K_DOTTED = "rerank.inputTopK";
+    private static final String SETTING_RERANK_MAX_TEXT_CHARS = "rerankMaxTextChars";
+    private static final String SETTING_RERANK_MAX_TEXT_CHARS_DOTTED = "rerank.maxTextChars";
+    private static final int DEFAULT_RERANK_MAX_TEXT_CHARS = 4000;
 
     private final RerankModelPort rerankModelPort;
     private final ObservationPort observationPort;
@@ -72,17 +77,20 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
         }
         RetrievalOptions options = context.effectiveOptions();
         List<RetrievedChunk> candidates = chunks.stream()
-                // Rerank 是成本较高的精排阶段，必须先用 fusion/rerank 配置收窄候选集。
-                .limit(candidateLimit(options))
+                // Rerank 是成本较高的精排阶段，先用 inputTopK 收窄候选，再由 rerankTopK 控制输出。
+                .limit(rerankInputTopK(options))
                 .toList();
         if (candidates.isEmpty()) {
             recordRerankEvent(context, "skipped", 0, 0, 0L, timeoutMs(options), "");
             return chunks;
         }
+        List<RetrievedChunk> modelCandidates = candidates.stream()
+                .map(candidate -> truncateForRerank(candidate, options))
+                .toList();
         long started = System.nanoTime();
         List<RetrievedChunk> reranked;
         try {
-            reranked = invokeRerank(options, context, candidates);
+            reranked = invokeRerank(options, context, modelCandidates);
         } catch (RerankTimeoutException ex) {
             LOG.debug("Rerank post processor timed out, fallback to original chunks", ex);
             recordRerankEvent(context, "timeout", candidates.size(), chunks.size(), elapsedMs(started),
@@ -99,15 +107,18 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
                     timeoutMs(options), "");
             return chunks;
         }
-        List<RetrievedChunk> normalized = normalizeRerankedChunks(candidates, reranked);
+        List<RetrievedChunk> normalized = normalizeRerankedChunks(candidates, modelCandidates, reranked);
         if (normalized.isEmpty()) {
             recordRerankEvent(context, "unmatched", candidates.size(), chunks.size(), elapsedMs(started),
                     timeoutMs(options), "");
             return chunks;
         }
-        recordRerankEvent(context, "success", candidates.size(), normalized.size(), elapsedMs(started),
+        List<RetrievedChunk> output = normalized.stream()
+                .limit(options.rerankTopK())
+                .toList();
+        recordRerankEvent(context, "success", candidates.size(), output.size(), elapsedMs(started),
                 timeoutMs(options), "");
-        return normalized;
+        return output;
     }
 
     private List<RetrievedChunk> invokeRerank(RetrievalOptions options,
@@ -137,14 +148,26 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
         }
     }
 
-    private long candidateLimit(RetrievalOptions options) {
-        return Math.min(options.fusionTopK(), options.rerankTopK());
+    private long rerankInputTopK(RetrievalOptions options) {
+        if (options == null) {
+            return 1L;
+        }
+        int configured = intSetting(options, SETTING_RERANK_INPUT_TOP_K,
+                SETTING_RERANK_INPUT_TOP_K_DOTTED, options.fusionTopK());
+        return Math.max(1L, configured);
     }
 
-    private List<RetrievedChunk> normalizeRerankedChunks(List<RetrievedChunk> candidates, List<RetrievedChunk> reranked) {
+    private List<RetrievedChunk> normalizeRerankedChunks(List<RetrievedChunk> candidates,
+                                                         List<RetrievedChunk> modelCandidates,
+                                                         List<RetrievedChunk> reranked) {
         Map<String, RetrievedChunk> originalByKey = new LinkedHashMap<>();
-        for (RetrievedChunk candidate : candidates) {
+        for (int index = 0; index < candidates.size(); index++) {
+            RetrievedChunk candidate = candidates.get(index);
             originalByKey.putIfAbsent(chunkKey(candidate), candidate);
+            if (index < modelCandidates.size()) {
+                // 文本被裁剪时，模型侧返回的 key 可能来自裁剪副本，仍需映射回原始 Chunk。
+                originalByKey.putIfAbsent(chunkKey(modelCandidates.get(index)), candidate);
+            }
         }
         return reranked.stream()
                 // 防止模型端口返回候选集外的内容，后续上下文只允许来自已检索 Chunk。
@@ -158,7 +181,7 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
             return null;
         }
         RetrievedChunk merged = copyChunk(original);
-        if (hasText(reranked.getText())) {
+        if (!hasText(original.getText()) && hasText(reranked.getText())) {
             merged.setText(reranked.getText());
         }
         Float rerankScore = firstNonNull(reranked.getRerankScore(), reranked.getScore(),
@@ -189,6 +212,37 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
         copy.getChannelRanks().putAll(Objects.requireNonNullElse(source.getChannelRanks(), Map.of()));
         copy.getFusionExplanation().putAll(Objects.requireNonNullElse(source.getFusionExplanation(), Map.of()));
         return copy;
+    }
+
+    private RetrievedChunk truncateForRerank(RetrievedChunk source, RetrievalOptions options) {
+        RetrievedChunk copy = copyChunk(source);
+        String text = copy.getText();
+        int maxTextChars = rerankMaxTextChars(options);
+        if (text != null && text.length() > maxTextChars) {
+            copy.setText(text.substring(0, maxTextChars));
+        }
+        return copy;
+    }
+
+    private int rerankMaxTextChars(RetrievalOptions options) {
+        return Math.max(1, intSetting(options, SETTING_RERANK_MAX_TEXT_CHARS,
+                SETTING_RERANK_MAX_TEXT_CHARS_DOTTED, DEFAULT_RERANK_MAX_TEXT_CHARS));
+    }
+
+    private int intSetting(RetrievalOptions options, String key, String dottedKey, int defaultValue) {
+        if (options == null) {
+            return defaultValue;
+        }
+        Map<String, Object> settings = options.channelSettings();
+        Object value = settings.containsKey(key) ? settings.get(key) : settings.get(dottedKey);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(Objects.toString(value, ""));
+        } catch (RuntimeException ex) {
+            return defaultValue;
+        }
     }
 
     private void mergeFusionExplanation(RetrievedChunk merged, RetrievedChunk reranked) {

@@ -66,7 +66,8 @@ class RerankPostProcessorFeatureTests {
     void shouldRerankLimitedCandidatesAndWriteScores() {
         RecordingRerankPort port = new RecordingRerankPort(List.of(
                 chunk("c2", 0.95F),
-                chunk("c1", 0.8F)));
+                chunk("c1", 0.8F),
+                chunk("c3", 0.7F)));
         RerankPostProcessorFeature feature = new RerankPostProcessorFeature(port);
         SearchContext context = SearchContext.builder()
                 .originalQuestion("原始问题")
@@ -84,10 +85,47 @@ class RerankPostProcessorFeatureTests {
 
         assertThat(port.modelId).isEqualTo("rerank-a");
         assertThat(port.query).isEqualTo("改写问题");
-        assertThat(port.candidates).extracting(RetrievedChunk::getId).containsExactly("c1", "c2");
+        assertThat(port.candidates).extracting(RetrievedChunk::getId).containsExactly("c1", "c2", "c3");
         assertThat(reranked).extracting(RetrievedChunk::getId).containsExactly("c2", "c1");
         assertThat(reranked).extracting(RetrievedChunk::getRerankScore).containsExactly(0.95F, 0.8F);
         assertThat(reranked).extracting(RetrievedChunk::getScore).containsExactly(0.95F, 0.8F);
+    }
+
+    @Test
+    void shouldTruncateRerankInputAndKeepOriginalText() {
+        List<RetrievedChunk> modelCandidates = new ArrayList<>();
+        RerankPostProcessorFeature feature = new RerankPostProcessorFeature((modelId, query, chunks) -> {
+            modelCandidates.addAll(chunks);
+            return List.of(RetrievedChunk.builder()
+                    .id("c1")
+                    .text(chunks.get(0).getText())
+                    .score(0.95F)
+                    .build());
+        });
+        SearchContext context = SearchContext.builder()
+                .originalQuestion("问题")
+                .options(RetrievalOptions.builder()
+                        .enableRerank(true)
+                        .rerankModel("rerank-a")
+                        .fusionTopK(1)
+                        .rerankTopK(1)
+                        .channelSettings(Map.of("rerankMaxTextChars", 5))
+                        .build())
+                .build();
+
+        List<RetrievedChunk> reranked = feature.process(
+                List.of(RetrievedChunk.builder()
+                        .id("c1")
+                        .text("123456789")
+                        .score(0.1F)
+                        .build()),
+                List.of(),
+                context);
+
+        assertThat(modelCandidates).extracting(RetrievedChunk::getText).containsExactly("12345");
+        assertThat(reranked).hasSize(1);
+        assertThat(reranked.get(0).getText()).isEqualTo("123456789");
+        assertThat(reranked.get(0).getRerankScore()).isEqualTo(0.95F);
     }
 
     @Test
