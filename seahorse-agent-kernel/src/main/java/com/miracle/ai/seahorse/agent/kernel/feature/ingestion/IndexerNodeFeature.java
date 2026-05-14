@@ -21,14 +21,19 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Seahorse 原生索引节点 Feature。
@@ -42,6 +47,15 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
     private static final String KEY_COLLECTION_NAME = "collectionName";
     private static final String KEY_KB_ID = "kbId";
     private static final String KEY_DOC_ID = "docId";
+    private static final String META_COLLECTION_NAME = "collection_name";
+    private static final String META_TENANT_ID = "tenant_id";
+    private static final String META_KB_ID = "kb_id";
+    private static final String META_DOC_ID = "doc_id";
+    private static final String META_CHUNK_ID = "chunk_id";
+    private static final String META_CHUNK_INDEX = "chunk_index";
+    private static final Set<String> VECTOR_SYSTEM_METADATA_KEYS = Set.of(
+            META_TENANT_ID, META_KB_ID, META_DOC_ID, META_CHUNK_ID, META_CHUNK_INDEX, META_COLLECTION_NAME,
+            "enabled", "acl_subjects", "security_level", "file_type", "source_type", "created_at", "updated_at");
 
     private final VectorCollectionAdminPort collectionAdminPort;
     private final VectorIndexPort vectorIndexPort;
@@ -87,14 +101,68 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
             collectionAdminPort.ensureCollection(request.collectionName());
             if (!safeContext.isSkipIndexerWrite()) {
                 chunkRepositoryPort.replaceDocumentChunks(request.kbId(), request.docId(), chunks);
-                vectorIndexPort.indexDocumentChunks(request.collectionName(), request.docId(), chunks);
-                // 关键词索引与向量索引共享同一批治理后的 Chunk，后续可替换为 Outbox 异步投递。
+                vectorIndexPort.indexDocumentChunks(request.collectionName(), request.docId(),
+                        vectorIndexChunks(safeContext, request, chunks));
+                // 关键词索引保留完整治理后 Chunk；向量索引使用上面的过滤副本，后续可替换为 Outbox 异步投递。
                 keywordIndexPort.indexDocumentChunks(request.kbId(), request.docId(), chunks);
             }
             return NodeResult.ok("已准备 " + chunks.size() + " 个分块索引");
         } catch (Exception ex) {
             return NodeResult.fail(ex);
         }
+    }
+
+    private List<VectorChunk> vectorIndexChunks(IngestionContext context, IndexerRequest request, List<VectorChunk> chunks) {
+        return chunks.stream()
+                .map(chunk -> VectorChunk.builder()
+                        .chunkId(chunk.getChunkId())
+                        .index(chunk.getIndex())
+                        .content(chunk.getContent())
+                        .embedding(chunk.getEmbedding())
+                        .metadata(vectorMetadata(context.getMetadataSchema(), request, chunk))
+                        .build())
+                .toList();
+    }
+
+    private Map<String, Object> vectorMetadata(MetadataSchema schema, IndexerRequest request, VectorChunk chunk) {
+        Map<String, Object> source = Objects.requireNonNullElse(chunk.getMetadata(), Map.of());
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        // 向量库只携带可下推过滤或权限兜底需要的字段，避免未声明动态 metadata 直接进入检索后端。
+        VECTOR_SYSTEM_METADATA_KEYS.forEach(key -> putIfPresent(metadata, key, source.get(key)));
+        putIfPresent(metadata, META_COLLECTION_NAME, firstValue(source.get(META_COLLECTION_NAME), request.collectionName()));
+        putIfPresent(metadata, META_KB_ID, firstValue(source.get(META_KB_ID), request.kbId()));
+        putIfPresent(metadata, META_DOC_ID, firstValue(source.get(META_DOC_ID), request.docId()));
+        putIfPresent(metadata, META_CHUNK_ID, firstValue(source.get(META_CHUNK_ID), chunk.getChunkId()));
+        putIfPresent(metadata, META_CHUNK_INDEX, firstValue(source.get(META_CHUNK_INDEX), chunk.getIndex()));
+        if (schema != null && !schema.empty()) {
+            for (MetadataFieldDescriptor field : schema.fields()) {
+                if (field.backendMapping().pushdownToVector()) {
+                    String key = canonicalKey(field);
+                    putIfPresent(metadata, key, source.get(key));
+                }
+            }
+        }
+        return metadata;
+    }
+
+    private String canonicalKey(MetadataFieldDescriptor field) {
+        String mapped = field.backendMapping().canonicalName();
+        return hasText(mapped) ? mapped.trim() : field.fieldKey();
+    }
+
+    private Object firstValue(Object first, Object second) {
+        return present(first) ? first : second;
+    }
+
+    private void putIfPresent(Map<String, Object> metadata, String key, Object value) {
+        if (!hasText(key) || !present(value)) {
+            return;
+        }
+        metadata.put(key, value);
+    }
+
+    private boolean present(Object value) {
+        return value != null && !(value instanceof String text && text.isBlank());
     }
 
     private IndexerRequest resolveRequest(IngestionContext context, NodeConfig config) {

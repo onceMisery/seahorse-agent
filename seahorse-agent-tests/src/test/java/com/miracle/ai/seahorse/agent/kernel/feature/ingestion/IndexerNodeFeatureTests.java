@@ -21,12 +21,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.BackendFieldMapping;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataOperator;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -67,6 +75,46 @@ class IndexerNodeFeatureTests {
 
         assertThat(result.isSuccess()).isTrue();
         assertThat(keywordIndexPort.keywordWrites).containsExactly("kb-1/doc-1/2");
+    }
+
+    @Test
+    void shouldFilterVectorMetadataBySystemKeysAndSchemaPushdown() {
+        RecordingPorts ports = new RecordingPorts();
+        IndexerNodeFeature feature = new IndexerNodeFeature(ports, ports, ports);
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("tenant_id", "tenant-1");
+        metadata.put("file_type", "pdf");
+        metadata.put("acl_subjects", List.of("dept-a"));
+        metadata.put("department", "HR");
+        metadata.put("internal_note", "only-for-postgres");
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-1")
+                .chunks(List.of(chunk("chunk-1", 0, metadata)))
+                .metadata(Map.of("kbId", "kb-1", "collectionName", "collection-a"))
+                .metadataSchema(schema(
+                        field("department", "department", true),
+                        field("internal_note", "internal_note", false)))
+                .build();
+
+        NodeResult result = feature.execute(context, NodeConfig.builder().nodeType("indexer").build());
+
+        assertThat(result.isSuccess()).isTrue();
+        Map<String, Object> repositoryMetadata = ports.repositoryBatches.get(0).get(0).getMetadata();
+        assertThat(repositoryMetadata)
+                .containsEntry("department", "HR")
+                .containsEntry("internal_note", "only-for-postgres");
+        Map<String, Object> vectorMetadata = ports.vectorBatches.get(0).get(0).getMetadata();
+        assertThat(vectorMetadata)
+                .containsEntry("tenant_id", "tenant-1")
+                .containsEntry("kb_id", "kb-1")
+                .containsEntry("doc_id", "doc-1")
+                .containsEntry("chunk_id", "chunk-1")
+                .containsEntry("chunk_index", 0)
+                .containsEntry("collection_name", "collection-a")
+                .containsEntry("file_type", "pdf")
+                .containsEntry("acl_subjects", List.of("dept-a"))
+                .containsEntry("department", "HR")
+                .doesNotContainKey("internal_note");
     }
 
     @Test
@@ -138,6 +186,39 @@ class IndexerNodeFeatureTests {
                 .build();
     }
 
+    private VectorChunk chunk(String chunkId, int index, Map<String, Object> metadata) {
+        return VectorChunk.builder()
+                .chunkId(chunkId)
+                .index(index)
+                .content("content-" + index)
+                .metadata(metadata)
+                .embedding(new float[]{1.0F, 2.0F})
+                .build();
+    }
+
+    private MetadataSchema schema(MetadataFieldDescriptor... fields) {
+        return new MetadataSchema("tenant-1", "kb-1", 1, List.of(fields));
+    }
+
+    private MetadataFieldDescriptor field(String fieldKey, String canonicalName, boolean pushdownToVector) {
+        return new MetadataFieldDescriptor(
+                fieldKey,
+                fieldKey,
+                MetadataValueType.STRING,
+                Set.of(MetadataOperator.EQ),
+                false,
+                true,
+                false,
+                false,
+                true,
+                MetadataIndexPolicy.MILVUS_JSON,
+                0.8D,
+                Set.of("source"),
+                Map.of(),
+                new BackendFieldMapping(canonicalName, "", "", canonicalName, pushdownToVector,
+                        true, false, Map.of()));
+    }
+
     private static class RecordingPorts implements com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort,
             com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort,
             com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRepositoryPort {
@@ -145,6 +226,8 @@ class IndexerNodeFeatureTests {
         private final List<String> collectionNames = new ArrayList<>();
         private final List<String> repositoryWrites = new ArrayList<>();
         private final List<String> vectorWrites = new ArrayList<>();
+        private final List<List<VectorChunk>> repositoryBatches = new ArrayList<>();
+        private final List<List<VectorChunk>> vectorBatches = new ArrayList<>();
 
         @Override
         public boolean collectionExists(String collectionName) {
@@ -159,6 +242,7 @@ class IndexerNodeFeatureTests {
         @Override
         public void indexDocumentChunks(String collectionName, String docId, List<VectorChunk> chunks) {
             vectorWrites.add(collectionName + "/" + docId + "/" + chunks.size());
+            vectorBatches.add(List.copyOf(chunks));
         }
 
         @Override
@@ -184,6 +268,7 @@ class IndexerNodeFeatureTests {
         @Override
         public void replaceDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
             repositoryWrites.add(kbId + "/" + docId + "/" + chunks.size());
+            repositoryBatches.add(List.copyOf(chunks));
         }
     }
 
