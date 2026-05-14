@@ -96,6 +96,31 @@ class MetadataGovernanceNodeFeatureTests {
     }
 
     @Test
+    void shouldMapParserMetadataByParseKeysWithoutUsingSourceAliases() {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+                field("owner", MetadataValueType.STRING, false, Map.of("parseKeys", List.of("author")))));
+        MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .metadata(Map.of(
+                        "tenantId", "tenant-a",
+                        "kbId", "kb-a",
+                        "author", "source-author",
+                        "parseMetadata", Map.of("author", "Data Team")))
+                .build();
+
+        NodeResult result = new MetadataExtractorNodeFeature(schemaRegistry)
+                .execute(context, NodeConfig.builder().nodeType("metadata_extractor").build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(context.getMetadataCandidates()).hasSize(1);
+        assertThat(context.getMetadataCandidates().get(0).fieldKey()).isEqualTo("owner");
+        assertThat(context.getMetadataCandidates().get(0).sourceType()).isEqualTo("tika");
+        assertThat(context.getMetadataCandidates().get(0).rawValue()).isEqualTo("Data Team");
+        assertThat(context.getMetadataCandidates().get(0).evidence()).isEqualTo("author");
+    }
+
+    @Test
     void shouldQuarantineWhenRequiredMetadataMissing() {
         MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
                 field("securityLevel", MetadataValueType.STRING, true, Map.of())));

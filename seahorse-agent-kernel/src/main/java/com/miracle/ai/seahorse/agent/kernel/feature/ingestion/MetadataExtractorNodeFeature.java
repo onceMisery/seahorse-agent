@@ -278,7 +278,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                                double confidence,
                                int schemaVersion,
                                List<MetadataFieldCandidate> candidates) {
-        for (String key : candidateKeys(field)) {
+        for (String key : candidateKeys(field, sourceType)) {
             Object value = metadata.get(key);
             if (present(value)) {
                 candidates.add(candidate(field.fieldKey(), value, sourceType, extractorName, confidence,
@@ -311,15 +311,25 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
         }
     }
 
-    private List<String> candidateKeys(MetadataFieldDescriptor field) {
+    private List<String> candidateKeys(MetadataFieldDescriptor field, String sourceType) {
         List<String> keys = new ArrayList<>();
         keys.add(field.fieldKey());
         keys.add(field.backendMapping().canonicalName());
-        Object hint = field.extractionHints().get("sourceKeys");
+        // 不同抽取来源使用各自的别名，避免 sourceKeys 误匹配 Tika 解析元数据。
+        if ("source".equals(sourceType)) {
+            addHintKeys(keys, field, "sourceKeys");
+        } else if ("tika".equals(sourceType)) {
+            addHintKeys(keys, field, "parseKeys");
+            addHintKeys(keys, field, "tikaKeys");
+        }
+        return keys.stream().filter(this::hasText).distinct().toList();
+    }
+
+    private void addHintKeys(List<String> keys, MetadataFieldDescriptor field, String hintName) {
+        Object hint = field.extractionHints().get(hintName);
         if (hint instanceof List<?> list) {
             list.stream().filter(Objects::nonNull).map(String::valueOf).forEach(keys::add);
         }
-        return keys.stream().filter(this::hasText).distinct().toList();
     }
 
     private Object regexValue(String text, String regex) {
