@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFactory;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.auth.KernelAuthService;
 import com.miracle.ai.seahorse.agent.kernel.application.dashboard.KernelDashboardService;
@@ -76,6 +77,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineIn
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplate;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
@@ -123,6 +125,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineM
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
@@ -196,6 +199,20 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasNotFailed();
                     assertThat(context.getBean(RetrievalContextPort.class))
                             .isInstanceOf(KernelRetrievalEngine.class);
+                });
+    }
+
+    @Test
+    void shouldWireRetrievalStrategyTemplateRepositoryOverride() {
+        contextRunner.withUserConfiguration(RetrievalTemplateRepositoryConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    RetrievalStrategyTemplateInboundPort templatePort =
+                            context.getBean(RetrievalStrategyTemplateInboundPort.class);
+
+                    assertThat(templatePort.listTemplates("kb-1"))
+                            .extracting(RetrievalStrategyTemplate::templateKey)
+                            .containsExactly("vector_only", "hybrid_rrf", "hybrid_rerank", "kb_custom");
                 });
     }
 
@@ -865,6 +882,19 @@ class SeahorseAgentKernelAutoConfigurationTests {
                 public void finishNode(RagTraceNodeFinish finish) {
                 }
             };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class RetrievalTemplateRepositoryConfiguration {
+
+        @Bean
+        RetrievalStrategyTemplateRepositoryPort retrievalStrategyTemplateRepositoryPort() {
+            return kbId -> java.util.List.of(new RetrievalStrategyTemplate(
+                    "kb_custom",
+                    "知识库自定义模板",
+                    "自动配置应注入模板仓储端口",
+                    RetrievalOptions.defaults(7)));
         }
     }
 

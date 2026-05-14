@@ -193,6 +193,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AdapterHealthIndicatorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
@@ -555,8 +556,10 @@ public class SeahorseAgentKernelAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(RetrievalStrategyTemplateInboundPort.class)
-    public KernelRetrievalStrategyTemplateService seahorseRetrievalStrategyTemplateInboundPort() {
-        return new KernelRetrievalStrategyTemplateService();
+    public KernelRetrievalStrategyTemplateService seahorseRetrievalStrategyTemplateInboundPort(
+            ObjectProvider<RetrievalStrategyTemplateRepositoryPort> repositoryPort) {
+        return new KernelRetrievalStrategyTemplateService(
+                repositoryPort.getIfAvailable(RetrievalStrategyTemplateRepositoryPort::empty));
     }
 
     @Bean

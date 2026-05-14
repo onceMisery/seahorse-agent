@@ -20,9 +20,12 @@ package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplate;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 内核默认检索策略模板服务。
@@ -31,10 +34,42 @@ import java.util.Map;
  */
 public class KernelRetrievalStrategyTemplateService implements RetrievalStrategyTemplateInboundPort {
 
+    private final RetrievalStrategyTemplateRepositoryPort repositoryPort;
+
+    public KernelRetrievalStrategyTemplateService() {
+        this(RetrievalStrategyTemplateRepositoryPort.empty());
+    }
+
+    public KernelRetrievalStrategyTemplateService(RetrievalStrategyTemplateRepositoryPort repositoryPort) {
+        this.repositoryPort = Objects.requireNonNullElse(repositoryPort,
+                RetrievalStrategyTemplateRepositoryPort.empty());
+    }
+
     @Override
     public List<RetrievalStrategyTemplate> listTemplates(String kbId) {
-        // kbId 预留给后续知识库级模板覆盖，本轮保持无 DDL 的默认模板闭环。
+        return mergeTemplates(defaultTemplates(), repositoryPort.listTemplates(kbId));
+    }
+
+    private List<RetrievalStrategyTemplate> defaultTemplates() {
         return List.of(vectorOnly(), hybridRrf(), hybridRerank());
+    }
+
+    private List<RetrievalStrategyTemplate> mergeTemplates(List<RetrievalStrategyTemplate> defaults,
+                                                           List<RetrievalStrategyTemplate> overrides) {
+        Map<String, RetrievalStrategyTemplate> merged = new LinkedHashMap<>();
+        for (RetrievalStrategyTemplate template : defaults) {
+            merged.put(template.templateKey(), template);
+        }
+        List<RetrievalStrategyTemplate> safeOverrides = Objects.requireNonNullElse(
+                overrides, List.<RetrievalStrategyTemplate>of());
+        for (RetrievalStrategyTemplate template : safeOverrides) {
+            if (template == null || template.templateKey().isBlank()) {
+                continue;
+            }
+            // 知识库级覆盖按 templateKey 替换内置模板，新模板追加在末尾。
+            merged.put(template.templateKey(), template);
+        }
+        return List.copyOf(merged.values());
     }
 
     private RetrievalStrategyTemplate vectorOnly() {
