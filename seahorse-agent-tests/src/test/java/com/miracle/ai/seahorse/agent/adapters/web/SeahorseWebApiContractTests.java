@@ -788,6 +788,8 @@ class SeahorseWebApiContractTests {
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.APPROVED));
         when(reviewPort.correct(eq("review-1"), any()))
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.CORRECTED));
+        when(reviewPort.ignoreField(eq("review-1"), any()))
+                .thenReturn(metadataReview("review-1", MetadataReviewStatus.CORRECTED));
         when(reviewPort.reject(eq("review-1"), any()))
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.REJECTED));
         when(reviewPort.quarantine(eq("review-1"), any()))
@@ -830,6 +832,14 @@ class SeahorseWebApiContractTests {
                         .content(json(Map.of(
                                 "comment", "修正部门",
                                 "correctedMetadata", Map.of("department", "legal")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("CORRECTED"));
+        mvc.perform(post("/metadata-review/items/review-1/ignore-field")
+                        .header("X-User-Id", "auditor")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "comment", "忽略非关键字段",
+                                "ignoredFields", List.of("owner")))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reviewStatus").value("CORRECTED"));
         mvc.perform(post("/metadata-review/items/review-1/reject")

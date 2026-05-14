@@ -93,6 +93,25 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
     }
 
     @Override
+    public MetadataReviewRecord ignoreField(String itemId, MetadataReviewDecisionCommand command) {
+        MetadataReviewDecisionCommand safeCommand = safeCommand(command);
+        if (safeCommand.ignoredFields().isEmpty()) {
+            throw new IllegalArgumentException("ignoredFields must not be empty");
+        }
+        MetadataReviewRecord current = queryById(itemId);
+        Map<String, Object> remainingMetadata = ignoreFields(current.suggestedMetadata(), safeCommand);
+        if (remainingMetadata.isEmpty()) {
+            throw new IllegalArgumentException("ignoredFields must not remove all suggested metadata");
+        }
+        // IGNORE_FIELD 是字段级修正动作，底层复用 CORRECTED 终态，审计和 approved_metadata 保存剩余字段。
+        MetadataReviewRecord updated = applyDecision(current, MetadataReviewStatus.CORRECTED, safeCommand,
+                remainingMetadata);
+        writeCanonical(updated.documentId(), remainingMetadata);
+        requestIndexCompensation(updated);
+        return updated;
+    }
+
+    @Override
     public MetadataReviewRecord reject(String itemId, MetadataReviewDecisionCommand command) {
         MetadataReviewRecord current = queryById(itemId);
         return applyDecision(current, MetadataReviewStatus.REJECTED, command, Map.of());
@@ -137,6 +156,21 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
             return;
         }
         canonicalWritePort.writeDocumentMetadata(documentId, metadata);
+    }
+
+    private Map<String, Object> ignoreFields(Map<String, Object> suggestedMetadata,
+                                             MetadataReviewDecisionCommand command) {
+        Map<String, Object> remainingMetadata = new LinkedHashMap<>(Objects.requireNonNullElse(suggestedMetadata,
+                Map.of()));
+        for (String fieldKey : command.ignoredFields()) {
+            if (fieldKey != null && !fieldKey.isBlank()) {
+                remainingMetadata.remove(fieldKey.trim());
+            }
+        }
+        if (remainingMetadata.size() == Objects.requireNonNullElse(suggestedMetadata, Map.of()).size()) {
+            throw new IllegalArgumentException("ignoredFields must match suggested metadata");
+        }
+        return remainingMetadata;
     }
 
     private void requestIndexCompensation(MetadataReviewRecord record) {

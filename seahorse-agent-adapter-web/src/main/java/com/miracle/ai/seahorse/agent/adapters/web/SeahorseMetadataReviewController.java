@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -84,6 +85,14 @@ public class SeahorseMetadataReviewController {
                 reviewPort.correct(itemId, toCommand(request, userId)));
     }
 
+    @PostMapping("/metadata-review/items/{item-id}/ignore-field")
+    public Map<String, Object> ignoreField(@PathVariable("item-id") String itemId,
+                                           @RequestBody(required = false) MetadataReviewDecisionRequest request,
+                                           @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                reviewPort.ignoreField(itemId, toCommand(request, userId)));
+    }
+
     @PostMapping("/metadata-review/items/{item-id}/reject")
     public Map<String, Object> reject(@PathVariable("item-id") String itemId,
                                       @RequestBody(required = false) MetadataReviewDecisionRequest request,
@@ -105,7 +114,8 @@ public class SeahorseMetadataReviewController {
         return new MetadataReviewDecisionCommand(
                 operator(userId),
                 Objects.requireNonNullElse(safeRequest.getComment(), ""),
-                Objects.requireNonNullElse(safeRequest.getCorrectedMetadata(), Map.of()));
+                Objects.requireNonNullElse(safeRequest.getCorrectedMetadata(), Map.of()),
+                Objects.requireNonNullElse(safeRequest.getIgnoredFields(), List.of()));
     }
 
     private MetadataReviewStatus reviewStatus(String status) {

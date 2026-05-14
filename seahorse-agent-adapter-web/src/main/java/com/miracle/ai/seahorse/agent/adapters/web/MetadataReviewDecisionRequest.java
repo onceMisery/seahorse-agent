@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -26,6 +27,7 @@ public class MetadataReviewDecisionRequest {
 
     private String comment;
     private Map<String, Object> correctedMetadata;
+    private List<String> ignoredFields;
 
     public String getComment() {
         return comment;
@@ -41,5 +43,13 @@ public class MetadataReviewDecisionRequest {
 
     public void setCorrectedMetadata(Map<String, Object> correctedMetadata) {
         this.correctedMetadata = correctedMetadata;
+    }
+
+    public List<String> getIgnoredFields() {
+        return ignoredFields;
+    }
+
+    public void setIgnoredFields(List<String> ignoredFields) {
+        this.ignoredFields = ignoredFields;
     }
 }

@@ -77,6 +77,26 @@ class KernelMetadataReviewServiceTests {
     }
 
     @Test
+    void shouldIgnoreSelectedFieldAndWriteRemainingMetadata() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-1", MetadataReviewStatus.PENDING, Map.of()));
+        CapturingCanonicalWritePort canonicalWritePort = new CapturingCanonicalWritePort();
+        CapturingIndexCompensationPort compensationPort = new CapturingIndexCompensationPort();
+        KernelMetadataReviewService service = new KernelMetadataReviewService(
+                repository, canonicalWritePort, MetadataQuarantinePort.noop(), compensationPort);
+
+        MetadataReviewRecord corrected = service.ignoreField("review-1",
+                new MetadataReviewDecisionCommand("auditor", "忽略非关键字段", Map.of(), List.of("owner")));
+
+        assertThat(corrected.reviewStatus()).isEqualTo(MetadataReviewStatus.CORRECTED);
+        assertThat(corrected.correctedMetadata()).containsEntry("department", "hr");
+        assertThat(corrected.correctedMetadata()).doesNotContainKey("owner");
+        assertThat(canonicalWritePort.metadata).containsEntry("department", "hr");
+        assertThat(canonicalWritePort.metadata).doesNotContainKey("owner");
+        assertThat(compensationPort.documentId).isEqualTo("doc-1");
+    }
+
+    @Test
     void shouldQuarantineIndexCompensationFailureAfterApprove() {
         InMemoryReviewRepository repository = new InMemoryReviewRepository();
         repository.put(review("review-1", MetadataReviewStatus.PENDING, Map.of()));
@@ -113,7 +133,7 @@ class KernelMetadataReviewServiceTests {
                 0,
                 "LOW_CONFIDENCE",
                 "字段置信度低",
-                Map.of("department", "hr"),
+                Map.of("department", "hr", "owner", "alice"),
                 correctedMetadata,
                 "auditor",
                 "comment",

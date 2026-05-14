@@ -1,5 +1,6 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.metadata;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -9,12 +10,20 @@ import java.util.Objects;
 public record MetadataReviewDecisionCommand(
         String reviewerId,
         String comment,
-        Map<String, Object> correctedMetadata
+        Map<String, Object> correctedMetadata,
+        List<String> ignoredFields
 ) {
 
     public MetadataReviewDecisionCommand {
         reviewerId = Objects.requireNonNullElse(reviewerId, "");
         comment = Objects.requireNonNullElse(comment, "");
         correctedMetadata = Map.copyOf(Objects.requireNonNullElse(correctedMetadata, Map.of()));
+        ignoredFields = List.copyOf(Objects.requireNonNullElse(ignoredFields, List.of()));
+    }
+
+    public MetadataReviewDecisionCommand(String reviewerId,
+                                         String comment,
+                                         Map<String, Object> correctedMetadata) {
+        this(reviewerId, comment, correctedMetadata, List.of());
     }
 }
