@@ -40,6 +40,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 import org.junit.jupiter.api.Test;
@@ -238,6 +239,54 @@ class KernelMetadataBackfillServiceTests {
         assertThat(result.succeededDocuments()).isEqualTo(1);
         assertThat(result.checkpoint()).containsEntry("overwriteApproved", true);
         assertThat(documents.runningDocuments).containsExactly("doc-1");
+    }
+
+    @Test
+    void shouldCreateSingleDocumentBackfillJobForReviewReExtract() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        documents.add(document("doc-2", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        List<Map<String, Object>> contextMetadata = new ArrayList<>();
+        KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
+        when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
+            IngestionContext context = invocation.getArgument(1);
+            contextMetadata.add(Map.copyOf(context.getMetadata()));
+            context.setMetadataValidationResult(new MetadataValidationResult(
+                    MetadataValidationDecision.ACCEPT, List.of(), Map.of(), Map.of()));
+            context.setChunks(List.of(new VectorChunk()));
+            return context;
+        });
+        KernelMetadataBackfillService service = new KernelMetadataBackfillService(
+                documents,
+                new InMemoryObjectStorage(),
+                pipelineRepository(),
+                engine,
+                jobs,
+                MetadataExtractionResultRepositoryPort.noop(),
+                MetadataQuarantinePort.noop(),
+                null);
+
+        String jobId = service.requestReExtract(new MetadataReviewReExtractRequest(
+                "tenant-1", "kb-1", "doc-2", "review-1", "extractor-v2", "pipe-1", "auditor"));
+        MetadataBackfillJobRecord created = jobs.findById(jobId).orElseThrow();
+        MetadataBackfillRunResult result = service.runNextBatch(jobId);
+
+        assertThat(created.checkpoint())
+                .containsEntry("sourceReviewItemId", "review-1")
+                .containsEntry("extractorVersion", "extractor-v2")
+                .containsEntry("forceRerun", true)
+                .containsEntry("overwriteApproved", true)
+                .containsEntry("reExtract", true);
+        assertThat(created.checkpoint().get("documentIds")).isEqualTo(List.of("doc-2"));
+        assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
+        assertThat(result.processedDocuments()).isEqualTo(1);
+        assertThat(documents.runningDocuments).containsExactly("doc-2");
+        assertThat(contextMetadata).hasSize(1);
+        assertThat(contextMetadata.get(0))
+                .containsEntry("sourceReviewItemId", "review-1")
+                .containsEntry("extractorVersion", "extractor-v2")
+                .containsEntry("reExtract", true);
     }
 
     @Test

@@ -151,6 +151,34 @@ class JdbcMetadataReviewQuarantineAdapterTests {
     }
 
     @Test
+    void shouldSyncExtractionStatusAndAuditMetadataWhenReviewReExtracting() {
+        insertExtractionResult("result-re-extract");
+        insertReviewItem("review-re-extract", "PENDING", "result-re-extract");
+
+        MetadataReviewRecord reExtracting = adapter.applyReviewDecision(new MetadataReviewDecision(
+                "review-re-extract",
+                MetadataReviewStatus.RE_EXTRACTING,
+                "auditor",
+                "重新抽取",
+                Map.of("reExtractJobId", "backfill-job-1", "extractorVersion", "extractor-v2")));
+
+        assertThat(reExtracting.reviewStatus()).isEqualTo(MetadataReviewStatus.RE_EXTRACTING);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT review_status FROM t_metadata_review_item WHERE id = 'review-re-extract'", String.class))
+                .isEqualTo("RE_EXTRACTING");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM t_metadata_extraction_result WHERE id = 'result-re-extract'", String.class))
+                .isEqualTo("RE_EXTRACTING");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT decision_metadata
+                FROM t_metadata_review_audit
+                WHERE review_item_id = 'review-re-extract'
+                """, String.class))
+                .contains("backfill-job-1")
+                .contains("extractor-v2");
+    }
+
+    @Test
     void shouldPageResolveAndScheduleQuarantineRetry() {
         insertQuarantineItem("q-1", 0, 1);
 

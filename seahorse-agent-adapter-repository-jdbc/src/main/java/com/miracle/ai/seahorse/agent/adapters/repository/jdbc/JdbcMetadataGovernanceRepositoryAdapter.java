@@ -410,7 +410,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         if (updated <= 0) {
             throw new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId());
         }
-        insertReviewAudit(current, safeDecision, approvedMetadata);
+        insertReviewAudit(current, safeDecision, decisionAuditMetadata(safeDecision, approvedMetadata));
         // 复核完成后同步抽取结果终态，避免管理端仍把已处理数据视为 REVIEW_REQUIRED。
         if (MetadataReviewStatus.APPROVED.equals(safeDecision.reviewStatus())
                 || MetadataReviewStatus.CORRECTED.equals(safeDecision.reviewStatus())) {
@@ -424,6 +424,15 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
         return findReviewItem(safeDecision.itemId())
                 .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId()));
+    }
+
+    private Map<String, Object> decisionAuditMetadata(MetadataReviewDecision decision,
+                                                      Map<String, Object> approvedMetadata) {
+        if (MetadataReviewStatus.RE_EXTRACTING.equals(decision.reviewStatus())) {
+            // RE_EXTRACT 的 correctedMetadata 承载调度信息，只进入审计，不写 approved_metadata。
+            return decision.correctedMetadata();
+        }
+        return approvedMetadata;
     }
 
     private void insertReviewAudit(MetadataReviewRecord current,

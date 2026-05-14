@@ -121,6 +121,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompen
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
@@ -331,6 +332,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MetadataQualityInboundPort.class);
                     assertThat(context).hasSingleBean(KernelMetadataReviewService.class);
                     assertThat(context).hasSingleBean(MetadataReviewInboundPort.class);
+                    assertThat(context).hasSingleBean(MetadataReviewReExtractPort.class);
                     assertThat(context).hasSingleBean(MetadataIndexCompensationPort.class);
                     assertThat(context).hasSingleBean(KernelMetadataQuarantineService.class);
                     assertThat(context).hasSingleBean(MetadataQuarantineInboundPort.class);

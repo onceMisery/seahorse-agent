@@ -27,6 +27,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManag
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
 import org.junit.jupiter.api.Test;
 
@@ -94,6 +96,39 @@ class KernelMetadataReviewServiceTests {
         assertThat(canonicalWritePort.metadata).containsEntry("department", "hr");
         assertThat(canonicalWritePort.metadata).doesNotContainKey("owner");
         assertThat(compensationPort.documentId).isEqualTo("doc-1");
+    }
+
+    @Test
+    void shouldScheduleReExtractWithoutCanonicalWrite() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-1", MetadataReviewStatus.PENDING, Map.of()));
+        CapturingCanonicalWritePort canonicalWritePort = new CapturingCanonicalWritePort();
+        CapturingIndexCompensationPort compensationPort = new CapturingIndexCompensationPort();
+        CapturingReExtractPort reExtractPort = new CapturingReExtractPort();
+        KernelMetadataReviewService service = new KernelMetadataReviewService(
+                repository, canonicalWritePort, MetadataQuarantinePort.noop(), compensationPort, reExtractPort);
+
+        MetadataReviewRecord reExtracting = service.reExtract("review-1",
+                new MetadataReviewDecisionCommand(
+                        "auditor", "重新抽取", Map.of(), List.of(), "extractor-v2", "pipe-2"));
+
+        assertThat(reExtracting.reviewStatus()).isEqualTo(MetadataReviewStatus.RE_EXTRACTING);
+        assertThat(canonicalWritePort.metadata).isEmpty();
+        assertThat(compensationPort.documentId).isEmpty();
+        assertThat(reExtracting.correctedMetadata())
+                .containsEntry("reExtractJobId", "backfill-job-1")
+                .containsEntry("extractorVersion", "extractor-v2")
+                .containsEntry("pipelineId", "pipe-2")
+                .containsEntry("documentId", "doc-1");
+        assertThat(reExtractPort.request)
+                .extracting(MetadataReviewReExtractRequest::tenantId,
+                        MetadataReviewReExtractRequest::knowledgeBaseId,
+                        MetadataReviewReExtractRequest::documentId,
+                        MetadataReviewReExtractRequest::reviewItemId,
+                        MetadataReviewReExtractRequest::extractorVersion,
+                        MetadataReviewReExtractRequest::pipelineId,
+                        MetadataReviewReExtractRequest::operator)
+                .containsExactly("tenant-1", "kb-1", "doc-1", "review-1", "extractor-v2", "pipe-2", "auditor");
     }
 
     @Test
@@ -203,6 +238,17 @@ class KernelMetadataReviewServiceTests {
         @Override
         public void rebuildDocument(String documentId) {
             this.documentId = documentId;
+        }
+    }
+
+    private static final class CapturingReExtractPort implements MetadataReviewReExtractPort {
+
+        private MetadataReviewReExtractRequest request;
+
+        @Override
+        public String requestReExtract(MetadataReviewReExtractRequest request) {
+            this.request = request;
+            return "backfill-job-1";
         }
     }
 }
