@@ -419,6 +419,8 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             updateExtractionStatus(current.resultId(), "REJECTED");
         } else if (MetadataReviewStatus.QUARANTINED.equals(safeDecision.reviewStatus())) {
             updateExtractionStatus(current.resultId(), "QUARANTINED");
+        } else if (MetadataReviewStatus.RE_EXTRACTING.equals(safeDecision.reviewStatus())) {
+            updateExtractionStatus(current.resultId(), "RE_EXTRACTING");
         }
         return findReviewItem(safeDecision.itemId())
                 .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId()));
