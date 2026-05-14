@@ -34,6 +34,8 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationRe
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDashboardRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDocumentRefreshScheduleAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcIntentTreeRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKeywordIndexAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKeywordSearchAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeBaseRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeBaseQueryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeChunkRepositoryAdapter;
@@ -55,6 +57,9 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcWorkingMemoryR
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchMetadataSchemaIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordSearchAdapter;
+import com.miracle.ai.seahorse.agent.adapters.mq.direct.DirectMessageQueueAdapter;
+import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexMessageSubscriber;
+import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexOutboxAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.storage.local.LocalObjectStorageAdapter;
 import com.miracle.ai.seahorse.agent.adapters.vector.noop.NoopVectorStoreAdapter;
@@ -203,6 +208,8 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(JdbcMemoryQualitySnapshotRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(JdbcMemoryConflictLogRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(JdbcMetadataGovernanceRepositoryAdapter.class);
+                    assertThat(context).hasSingleBean(JdbcKeywordSearchAdapter.class);
+                    assertThat(context).hasSingleBean(JdbcKeywordIndexAdapter.class);
                     assertThat(context).hasSingleBean(KnowledgeBaseQueryPort.class);
                     assertThat(context).hasSingleBean(KnowledgeChunkRepositoryPort.class);
                     assertThat(context).hasSingleBean(KnowledgeDocumentRepositoryPort.class);
@@ -234,12 +241,20 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MetadataReviewManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataQuarantineManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataSchemaManagementRepositoryPort.class);
+                    assertThat(context.getBean(KeywordSearchPort.class))
+                            .isInstanceOf(JdbcKeywordSearchAdapter.class);
+                    assertThat(context.getBean(KeywordIndexPort.class))
+                            .isInstanceOf(JdbcKeywordIndexAdapter.class);
                 });
     }
 
     @Test
     void shouldRegisterElasticsearchKeywordAdaptersWhenSelected() {
-        contextRunner.withBean(OkHttpClient.class, OkHttpClient::new)
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:native-keyword-es;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+
+        contextRunner.withBean(DriverManagerDataSource.class, () -> dataSource)
+                .withBean(OkHttpClient.class, OkHttpClient::new)
                 .withBean(ObjectMapper.class, ObjectMapper::new)
                 .withPropertyValues(
                         "seahorse-agent.adapters.keyword-search.type=elasticsearch",
@@ -250,10 +265,33 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(ElasticsearchKeywordSearchAdapter.class);
                     assertThat(context).hasSingleBean(ElasticsearchKeywordIndexAdapter.class);
+                    assertThat(context).doesNotHaveBean(JdbcKeywordSearchAdapter.class);
+                    assertThat(context).doesNotHaveBean(JdbcKeywordIndexAdapter.class);
                     assertThat(context.getBean(KeywordSearchPort.class))
                             .isInstanceOf(ElasticsearchKeywordSearchAdapter.class);
                     assertThat(context.getBean(KeywordIndexPort.class))
                             .isInstanceOf(ElasticsearchKeywordIndexAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldWrapKeywordIndexPortWithOutboxWhenConfigured() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:native-keyword-outbox;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        DirectMessageQueueAdapter queue = new DirectMessageQueueAdapter();
+
+        contextRunner.withBean(DriverManagerDataSource.class, () -> dataSource)
+                .withBean(ObjectMapper.class, ObjectMapper::new)
+                .withBean(DirectMessageQueueAdapter.class, () -> queue)
+                .withPropertyValues("seahorse-agent.adapters.keyword-index.mode=outbox")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(JdbcKeywordIndexAdapter.class);
+                    assertThat(context).hasSingleBean(KeywordIndexOutboxAdapter.class);
+                    assertThat(context).hasSingleBean(KeywordIndexMessageSubscriber.class);
+                    // outbox 作为主端口拦截入库链路，真实索引写入由订阅端选择 JDBC/ES delegate。
+                    assertThat(context.getBean(KeywordIndexPort.class))
+                            .isInstanceOf(KeywordIndexOutboxAdapter.class);
                 });
     }
 
