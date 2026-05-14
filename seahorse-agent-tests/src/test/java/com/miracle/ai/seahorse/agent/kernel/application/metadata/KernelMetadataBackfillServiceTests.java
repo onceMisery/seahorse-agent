@@ -173,6 +173,35 @@ class KernelMetadataBackfillServiceTests {
     }
 
     @Test
+    void shouldResumeCurrentPageAfterCheckpointDocument() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        documents.add(document("doc-2", true, "pipe-1"));
+        documents.add(document("doc-3", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        KernelMetadataBackfillService service = service(documents, jobs, Map.of());
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 3, "admin", Map.of()));
+        Map<String, Object> checkpoint = new LinkedHashMap<>(job.checkpoint());
+        checkpoint.put("currentPage", 1L);
+        checkpoint.put("lastDocumentId", "doc-2");
+        // 模拟进程在同一页处理完 doc-2 后中断，恢复时应从 doc-3 继续，而不是重跑 doc-1/doc-2。
+        jobs.save(new MetadataBackfillJobRecord(
+                job.jobId(), job.tenantId(), job.knowledgeBaseId(), job.pipelineId(),
+                MetadataBackfillJobStatus.RUNNING, 1L, job.batchSize(), 2, 2,
+                0, 0, 0, 0, checkpoint, List.of(), job.operator(),
+                job.createTime(), job.updateTime()));
+
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+
+        assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
+        assertThat(result.processedDocuments()).isEqualTo(3);
+        assertThat(result.succeededDocuments()).isEqualTo(3);
+        assertThat(documents.runningDocuments).containsExactly("doc-3");
+    }
+
+    @Test
     void shouldRerunDocumentWhenSchemaVersionChanges() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
         documents.add(document("doc-1", true, "pipe-1"));

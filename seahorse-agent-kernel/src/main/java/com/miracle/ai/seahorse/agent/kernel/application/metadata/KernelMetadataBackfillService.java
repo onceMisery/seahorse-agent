@@ -214,7 +214,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
             jobRepositoryPort.save(completed);
             return completed;
         }
-        for (KnowledgeDocumentDetail document : page.records()) {
+        for (KnowledgeDocumentDetail document : recordsAfterCheckpoint(job, page.records())) {
             MetadataBackfillJobRecord latest = jobRepositoryPort.findById(job.jobId()).orElse(job);
             if (MetadataBackfillJobStatus.PAUSED.equals(latest.status())
                     || MetadataBackfillJobStatus.CANCELLED.equals(latest.status())) {
@@ -237,6 +237,26 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                 checkpoint(completed ? job.currentPage() : nextPage, "", job.checkpoint()));
         jobRepositoryPort.save(result);
         return result;
+    }
+
+    private List<KnowledgeDocumentDetail> recordsAfterCheckpoint(MetadataBackfillJobRecord job,
+                                                                 List<KnowledgeDocumentDetail> records) {
+        if (records == null || records.isEmpty()) {
+            return List.of();
+        }
+        Map<String, Object> checkpoint = Objects.requireNonNullElse(job.checkpoint(), Map.of());
+        String lastDocumentId = textValue(checkpoint.get("lastDocumentId"), "");
+        if (!hasText(lastDocumentId) || longValue(checkpoint.get("currentPage"), job.currentPage()) != job.currentPage()) {
+            return records;
+        }
+        for (int index = 0; index < records.size(); index++) {
+            KnowledgeDocumentDetail document = records.get(index);
+            if (document != null && lastDocumentId.equals(document.getId())) {
+                // 同页恢复时跳过已经写入 checkpoint 的文档，避免进程中断后重复污染复核或隔离队列。
+                return index >= records.size() - 1 ? List.of() : records.subList(index + 1, records.size());
+            }
+        }
+        return records;
     }
 
     private DocumentOutcome processDocument(MetadataBackfillJobRecord job, KnowledgeDocumentDetail document) {
@@ -419,6 +439,17 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         }
         try {
             return Integer.parseInt(Objects.toString(value, ""));
+        } catch (RuntimeException ex) {
+            return defaultValue;
+        }
+    }
+
+    private long longValue(Object value, long defaultValue) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(Objects.toString(value, ""));
         } catch (RuntimeException ex) {
             return defaultValue;
         }
