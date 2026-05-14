@@ -161,14 +161,26 @@ public class KernelKeywordIndexMaintenanceService implements KeywordIndexMainten
     }
 
     private Map<String, Object> systemMetadata(KnowledgeDocumentDetail document, KnowledgeChunkRecord record) {
-        Map<String, Object> metadata = new LinkedHashMap<>();
+        Map<String, Object> metadata = new LinkedHashMap<>(Objects.requireNonNullElse(record.getMetadata(), Map.of()));
+        // 补偿重建先保留已治理的业务 metadata，再用文档快照覆盖系统字段，避免旧值继续进入搜索后端。
         metadata.put("kb_id", document.getKbId());
         metadata.put("doc_id", document.getId());
         metadata.put("doc_name", document.getDocName());
         metadata.put("collection_name", document.getCollectionName());
         metadata.put("chunk_index", record.getChunkIndex());
         metadata.put("enabled", record.getEnabled() == null || record.getEnabled() == 1);
+        putIfPresent(metadata, "file_type", document.getFileType());
+        putIfPresent(metadata, "source_type", document.getSourceType());
+        putIfPresent(metadata, "created_at", document.getCreateTime());
+        putIfPresent(metadata, "updated_at", document.getUpdateTime());
         return metadata;
+    }
+
+    private void putIfPresent(Map<String, Object> metadata, String key, Object value) {
+        if (value == null || (value instanceof String text && text.isBlank())) {
+            return;
+        }
+        metadata.put(key, value);
     }
 
     private int normalizeBatchSize(int batchSize) {

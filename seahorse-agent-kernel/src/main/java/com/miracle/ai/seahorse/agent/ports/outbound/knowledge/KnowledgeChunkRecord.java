@@ -18,6 +18,9 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.knowledge;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * Chunk 管理记录。
@@ -37,6 +40,7 @@ public class KnowledgeChunkRecord {
     private String updatedBy;
     private Instant createTime;
     private Instant updateTime;
+    private Map<String, Object> metadata = Map.of();
 
     public String getId() {
         return id;
@@ -140,5 +144,13 @@ public class KnowledgeChunkRecord {
 
     public void setUpdateTime(Instant updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public Map<String, Object> getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(Map<String, Object> metadata) {
+        this.metadata = new LinkedHashMap<>(Objects.requireNonNullElse(metadata, Map.of()));
     }
 }

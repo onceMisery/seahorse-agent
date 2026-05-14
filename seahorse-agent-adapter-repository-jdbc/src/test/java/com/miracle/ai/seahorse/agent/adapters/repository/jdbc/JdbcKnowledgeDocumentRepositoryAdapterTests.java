@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentChunkLogPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentDetail;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentUpdateValues;
@@ -29,6 +30,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -76,6 +78,25 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
         assertThat(deleted).isTrue();
         assertThat(adapter.findDetailById("doc-1")).isEmpty();
         assertThat(adapter.listEnabledChunks("doc-1")).isEmpty();
+    }
+
+    @Test
+    void shouldReadChunkMetadataWhenGovernanceColumnExists() {
+        jdbcTemplate.execute("ALTER TABLE t_knowledge_chunk ADD COLUMN metadata_json VARCHAR(2048)");
+        jdbcTemplate.update("""
+                UPDATE t_knowledge_chunk
+                SET metadata_json = '{"department":"研发","acl_subjects":["user-1"]}'
+                WHERE id = 'chunk-0'
+                """);
+
+        List<KnowledgeChunkRecord> records = adapter.listEnabledChunks("doc-1");
+
+        KnowledgeChunkRecord chunk = records.stream()
+                .filter(record -> "chunk-0".equals(record.getId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(chunk.getMetadata()).containsEntry("department", "研发");
+        assertThat(chunk.getMetadata().get("acl_subjects")).asList().contains("user-1");
     }
 
     private void createSchema() {

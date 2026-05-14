@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeDocumentCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentChunkLogPage;
@@ -37,6 +39,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,6 +51,8 @@ import java.util.UUID;
  */
 public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocumentRepositoryPort {
 
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
     private static final String STATUS_PENDING = "pending";
     private static final String STATUS_RUNNING = "running";
     private static final String STATUS_SUCCESS = "success";
@@ -149,15 +154,19 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
             """;
     private static final String SQL_DELETE_LOGS =
             "DELETE FROM t_knowledge_document_chunk_log WHERE doc_id = ?";
-    private static final String SQL_LIST_DOCUMENT_CHUNKS = """
+    private static final String SQL_LIST_DOCUMENT_CHUNKS_BASE = """
             SELECT id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
                    token_count, enabled, created_by, updated_by, create_time, update_time
+            """;
+    private static final String SQL_LIST_DOCUMENT_CHUNKS_TAIL = """
             FROM t_knowledge_chunk
             WHERE doc_id = ? AND deleted = 0
             ORDER BY chunk_index ASC
             """;
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private Boolean chunkMetadataJsonColumnExists;
 
     public JdbcKnowledgeDocumentRepositoryAdapter(DataSource dataSource) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
@@ -322,7 +331,7 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
         if (docId == null || docId.isBlank()) {
             return List.of();
         }
-        return jdbcTemplate.query(SQL_LIST_DOCUMENT_CHUNKS, this::toChunkRecord, docId);
+        return jdbcTemplate.query(listDocumentChunksSql(), this::toChunkRecord, docId);
     }
 
     private KnowledgeDocumentRecord toDocumentRecord(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -410,7 +419,44 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
         record.setUpdatedBy(resultSet.getString("updated_by"));
         record.setCreateTime(toInstant(resultSet.getTimestamp("create_time")));
         record.setUpdateTime(toInstant(resultSet.getTimestamp("update_time")));
+        record.setMetadata(readMap(resultSet.getString("metadata_json")));
         return record;
+    }
+
+    private String listDocumentChunksSql() {
+        String metadataSelect = chunkMetadataJsonColumnExists()
+                ? ", metadata_json "
+                : ", '{}' AS metadata_json ";
+        return SQL_LIST_DOCUMENT_CHUNKS_BASE + metadataSelect + SQL_LIST_DOCUMENT_CHUNKS_TAIL;
+    }
+
+    private boolean chunkMetadataJsonColumnExists() {
+        if (chunkMetadataJsonColumnExists != null) {
+            return chunkMetadataJsonColumnExists;
+        }
+        try {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(1)
+                    FROM information_schema.columns
+                    WHERE lower(table_name) = 't_knowledge_chunk'
+                      AND lower(column_name) = 'metadata_json'
+                    """, Integer.class);
+            chunkMetadataJsonColumnExists = count != null && count > 0;
+        } catch (RuntimeException ex) {
+            chunkMetadataJsonColumnExists = false;
+        }
+        return chunkMetadataJsonColumnExists;
+    }
+
+    private Map<String, Object> readMap(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(json, MAP_TYPE);
+        } catch (Exception ex) {
+            return Map.of();
+        }
     }
 
     private KnowledgeDocumentProcessRef normalizeProcess(KnowledgeDocumentProcessRef process) {

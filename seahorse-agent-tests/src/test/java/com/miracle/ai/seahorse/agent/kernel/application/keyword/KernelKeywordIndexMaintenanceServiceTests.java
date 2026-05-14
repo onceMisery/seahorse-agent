@@ -44,7 +44,9 @@ class KernelKeywordIndexMaintenanceServiceTests {
     void shouldRebuildDocumentFromEnabledChunkSnapshot() {
         InMemoryDocumentRepository repository = new InMemoryDocumentRepository();
         repository.addDocument(document("doc-1", "kb-1", true));
-        repository.addChunks("doc-1", List.of(chunk("chunk-1", 0, "元数据治理"), chunk("chunk-2", 1, "混合检索")));
+        repository.addChunks("doc-1", List.of(
+                chunk("chunk-1", 0, "元数据治理", Map.of("department", "研发", "file_type", "stale")),
+                chunk("chunk-2", 1, "混合检索")));
         RecordingKeywordIndexPort keywordIndex = new RecordingKeywordIndexPort();
         KernelKeywordIndexMaintenanceService service = new KernelKeywordIndexMaintenanceService(repository, keywordIndex);
 
@@ -58,7 +60,10 @@ class KernelKeywordIndexMaintenanceServiceTests {
         assertThat(keywordIndex.lastChunks.get(0).getMetadata())
                 .containsEntry("kb_id", "kb-1")
                 .containsEntry("doc_id", "doc-1")
-                .containsEntry("collection_name", "collection-a");
+                .containsEntry("collection_name", "collection-a")
+                .containsEntry("department", "研发")
+                .containsEntry("file_type", "text/plain")
+                .containsEntry("source_type", "file");
     }
 
     @Test
@@ -108,15 +113,22 @@ class KernelKeywordIndexMaintenanceServiceTests {
         detail.setDocName("设计文档");
         detail.setCollectionName("collection-a");
         detail.setEnabled(enabled);
+        detail.setFileType("text/plain");
+        detail.setSourceType("file");
         return detail;
     }
 
     private static KnowledgeChunkRecord chunk(String chunkId, int index, String content) {
+        return chunk(chunkId, index, content, Map.of());
+    }
+
+    private static KnowledgeChunkRecord chunk(String chunkId, int index, String content, Map<String, Object> metadata) {
         KnowledgeChunkRecord record = new KnowledgeChunkRecord();
         record.setId(chunkId);
         record.setChunkIndex(index);
         record.setContent(content);
         record.setEnabled(1);
+        record.setMetadata(metadata);
         return record;
     }
 
