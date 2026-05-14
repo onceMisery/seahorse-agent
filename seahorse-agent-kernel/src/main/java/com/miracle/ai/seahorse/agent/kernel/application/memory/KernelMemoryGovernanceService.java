@@ -95,7 +95,7 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
             }
         }
         return new MemoryGovernanceRunResult(safeUserId, Objects.requireNonNullElse(reason, "manual"),
-                promoted, semanticUpserted, false, assessQuality, errors, Instant.now());
+                promoted, semanticUpserted, inferred, false, assessQuality, errors, Instant.now());
     }
 
     private int runInference(String userId, List<MemoryRecord> shortTermRecords, List<String> errors) {
@@ -152,7 +152,7 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
             errors.add(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
         }
         return new MemoryGovernanceRunResult("", Objects.requireNonNullElse(reason, "manual-decay"),
-                0, 0, true, false, errors, Instant.now());
+                0, 0, 0, true, false, errors, Instant.now());
     }
 
     @Override

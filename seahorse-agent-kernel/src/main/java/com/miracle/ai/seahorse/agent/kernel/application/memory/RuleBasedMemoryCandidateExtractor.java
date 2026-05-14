@@ -81,7 +81,7 @@ public class RuleBasedMemoryCandidateExtractor implements MemoryInferencePort {
                     "profile:" + normalizeKey(value),
                     "PROFILE",
                     "用户" + matcher.group(0).trim(),
-                    0.7D,
+                    0.75D,
                     List.of(sourceId),
                     "规则提取: 自我声明模式"));
         }
@@ -97,7 +97,7 @@ public class RuleBasedMemoryCandidateExtractor implements MemoryInferencePort {
                     "",
                     "PREFERENCE",
                     "用户" + matcher.group(0).trim(),
-                    0.6D,
+                    0.7D,
                     List.of(sourceId),
                     "规则提取: 偏好声明模式"));
         }

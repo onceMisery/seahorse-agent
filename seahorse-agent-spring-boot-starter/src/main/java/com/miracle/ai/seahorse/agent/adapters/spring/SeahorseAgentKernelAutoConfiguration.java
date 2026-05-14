@@ -1010,7 +1010,8 @@ public class SeahorseAgentKernelAutoConfiguration {
             ShortTermMemoryPort shortTermMemoryPort,
             LongTermMemoryPort longTermMemoryPort,
             SemanticMemoryPort semanticMemoryPort,
-            ObjectMapper objectMapper) {
+            ObjectProvider<ObjectMapper> objectMapperProvider) {
+        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         return new DefaultMemoryEnginePort(
                 shortTermMemoryPort,
                 longTermMemoryPort,

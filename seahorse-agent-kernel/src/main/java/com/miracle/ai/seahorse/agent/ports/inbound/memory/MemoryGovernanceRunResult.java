@@ -26,6 +26,7 @@ public record MemoryGovernanceRunResult(
         String reason,
         int promotedCount,
         int semanticUpsertCount,
+        int inferredCount,
         boolean decayExecuted,
         boolean qualityAssessed,
         List<String> errors,
