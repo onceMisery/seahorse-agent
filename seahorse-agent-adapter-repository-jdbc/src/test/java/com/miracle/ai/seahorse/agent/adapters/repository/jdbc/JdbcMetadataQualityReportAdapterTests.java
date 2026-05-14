@@ -66,6 +66,7 @@ class JdbcMetadataQualityReportAdapterTests {
         assertThat(report.reviewPassRate()).isCloseTo(2D / 3D, offset(0.0001D));
         assertThat(report.pendingReviewCount()).isEqualTo(2);
         assertThat(report.unresolvedQuarantineCount()).isEqualTo(3);
+        assertThat(report.indexSyncFailureCount()).isEqualTo(1);
         assertThat(coverage(report, "department").coverageRate()).isCloseTo(2D / 3D, offset(0.0001D));
         assertThat(coverage(report, "securityLevel").coverageRate()).isCloseTo(1D / 3D, offset(0.0001D));
         assertThat(coverage(report, "owner").coverageRate()).isCloseTo(1D / 3D, offset(0.0001D));
@@ -193,6 +194,7 @@ class JdbcMetadataQualityReportAdapterTests {
                     id VARCHAR(64) PRIMARY KEY,
                     tenant_id VARCHAR(64) NOT NULL,
                     kb_id VARCHAR(64),
+                    stage VARCHAR(32),
                     reason_code VARCHAR(64),
                     reason_message VARCHAR(512),
                     resolved SMALLINT NOT NULL DEFAULT 0
@@ -236,10 +238,11 @@ class JdbcMetadataQualityReportAdapterTests {
                 + "VALUES ('review-4', 'tenant-1', 'kb-1', 'CORRECTED')");
         jdbcTemplate.update("INSERT INTO t_metadata_review_item(id, tenant_id, kb_id, review_status) "
                 + "VALUES ('review-5', 'tenant-1', 'kb-1', 'REJECTED')");
-        insertQuarantine("q-1", "SCHEMA_MISSING", "缺少 Schema", 0);
-        insertQuarantine("q-2", "SCHEMA_MISSING", "缺少 Schema", 0);
-        insertQuarantine("q-3", "PARSE_FAILED", "解析失败", 0);
-        insertQuarantine("q-4", "SCHEMA_MISSING", "缺少 Schema", 1);
+        insertQuarantine("q-1", "VALIDATE", "SCHEMA_MISSING", "缺少 Schema", 0);
+        insertQuarantine("q-2", "VALIDATE", "SCHEMA_MISSING", "缺少 Schema", 0);
+        insertQuarantine("q-3", "PARSE", "PARSE_FAILED", "解析失败", 0);
+        insertQuarantine("q-4", "VALIDATE", "SCHEMA_MISSING", "缺少 Schema", 1);
+        insertQuarantine("q-5", "INDEX", "KEYWORD_INDEX_FAILED", "关键词索引失败", 1);
     }
 
     private void insertField(String id, String fieldKey, String displayName, boolean required, double minConfidence) {
@@ -269,11 +272,11 @@ class JdbcMetadataQualityReportAdapterTests {
                 Timestamp.from(updateTime), Timestamp.from(updateTime));
     }
 
-    private void insertQuarantine(String id, String reasonCode, String reasonMessage, int resolved) {
+    private void insertQuarantine(String id, String stage, String reasonCode, String reasonMessage, int resolved) {
         jdbcTemplate.update("""
-                INSERT INTO t_metadata_quarantine_item(id, tenant_id, kb_id, reason_code, reason_message, resolved)
-                VALUES (?, 'tenant-1', 'kb-1', ?, ?, ?)
-                """, id, reasonCode, reasonMessage, resolved);
+                INSERT INTO t_metadata_quarantine_item(id, tenant_id, kb_id, stage, reason_code, reason_message, resolved)
+                VALUES (?, 'tenant-1', 'kb-1', ?, ?, ?, ?)
+                """, id, stage, reasonCode, reasonMessage, resolved);
     }
 
     private Map<String, Object> quality(String fieldKey, double confidence) {

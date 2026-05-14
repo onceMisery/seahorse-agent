@@ -659,6 +659,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         LowConfidenceStats lowConfidenceStats = lowConfidenceStats(schema, snapshots);
         int pendingReviewCount = countPendingReviews(safeTenantId, safeKbId);
         int unresolvedQuarantineCount = countUnresolvedQuarantines(safeTenantId, safeKbId);
+        int indexSyncFailureCount = countIndexSyncFailures(safeTenantId, safeKbId);
         List<MetadataQuarantineReasonCount> reasonTopN = quarantineReasonTopN(safeTenantId, safeKbId, safeTopN);
         return new MetadataQualityReport(
                 safeTenantId,
@@ -670,6 +671,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 reviewPassRate(safeTenantId, safeKbId),
                 pendingReviewCount,
                 unresolvedQuarantineCount,
+                indexSyncFailureCount,
                 fieldCoverages,
                 reasonTopN,
                 Instant.now());
@@ -800,6 +802,20 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     WHERE tenant_id = ?
                       AND (? = '' OR kb_id = ?)
                       AND resolved = 0
+                    """, tenantId, knowledgeBaseId, knowledgeBaseId);
+        } catch (DataAccessException ex) {
+            return 0;
+        }
+    }
+
+    private int countIndexSyncFailures(String tenantId, String knowledgeBaseId) {
+        try {
+            return count("""
+                    SELECT COUNT(1)
+                    FROM t_metadata_quarantine_item
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ?)
+                      AND stage = 'INDEX'
                     """, tenantId, knowledgeBaseId, knowledgeBaseId);
         } catch (DataAccessException ex) {
             return 0;

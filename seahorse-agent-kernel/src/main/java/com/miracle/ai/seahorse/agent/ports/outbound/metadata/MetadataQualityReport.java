@@ -17,6 +17,7 @@ public record MetadataQualityReport(
         double reviewPassRate,
         int pendingReviewCount,
         int unresolvedQuarantineCount,
+        int indexSyncFailureCount,
         List<MetadataFieldCoverage> fieldCoverages,
         List<MetadataQuarantineReasonCount> quarantineReasons,
         Instant generatedAt
@@ -32,13 +33,14 @@ public record MetadataQualityReport(
         reviewPassRate = clamp(reviewPassRate);
         pendingReviewCount = Math.max(0, pendingReviewCount);
         unresolvedQuarantineCount = Math.max(0, unresolvedQuarantineCount);
+        indexSyncFailureCount = Math.max(0, indexSyncFailureCount);
         fieldCoverages = List.copyOf(Objects.requireNonNullElse(fieldCoverages, List.of()));
         quarantineReasons = List.copyOf(Objects.requireNonNullElse(quarantineReasons, List.of()));
         generatedAt = Objects.requireNonNullElseGet(generatedAt, Instant::now);
     }
 
     public static MetadataQualityReport empty(String tenantId, String knowledgeBaseId) {
-        return new MetadataQualityReport(tenantId, knowledgeBaseId, 0, 0, 0D, 0D, 0D, 0, 0,
+        return new MetadataQualityReport(tenantId, knowledgeBaseId, 0, 0, 0D, 0D, 0D, 0, 0, 0,
                 List.of(), List.of(), Instant.now());
     }
 
