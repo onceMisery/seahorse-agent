@@ -121,6 +121,33 @@ class MetadataGovernanceNodeFeatureTests {
     }
 
     @Test
+    void shouldKeepHighConfidenceDeterministicCandidateOverLlmConflict() {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of())));
+        MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .metadataCandidates(List.of(
+                        new MetadataFieldCandidate("department", "Finance", "source",
+                                "SourceMetadataExtractor", 0.86D, "dept", 1, "deterministic-1"),
+                        new MetadataFieldCandidate("department", "Legal", "llm",
+                                "LlmMetadataExtractor", 0.99D, "paragraph", 1, "llm-1")))
+                .build();
+
+        NodeResult result = new MetadataNormalizerNodeFeature(schemaRegistry, MetadataDictionaryPort.noop())
+                .execute(context, NodeConfig.builder().nodeType("metadata_normalizer").build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(context.getNormalizedMetadata()).containsEntry("department", "Finance");
+        assertThat(context.getMetadataFieldQualities())
+                .extracting(MetadataFieldQuality::sourceType)
+                .containsExactly("source");
+        assertThat(context.getMetadataIssues())
+                .anySatisfy(issue -> assertThat(issue.code()).isEqualTo("CANDIDATE_CONFLICT"));
+    }
+
+    @Test
     void shouldQuarantineWhenRequiredMetadataMissing() {
         MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
                 field("securityLevel", MetadataValueType.STRING, true, Map.of())));

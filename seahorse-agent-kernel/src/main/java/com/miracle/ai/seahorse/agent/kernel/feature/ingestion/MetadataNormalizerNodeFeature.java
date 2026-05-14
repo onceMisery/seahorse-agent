@@ -18,7 +18,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +28,8 @@ public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
     public static final String NODE_TYPE = "metadata_normalizer";
     private static final String KEY_TENANT_ID = "tenantId";
     private static final String KEY_KB_ID = "kbId";
+    private static final double PRIORITY_CONFIDENCE_EPSILON = 0.05D;
+    private static final double DEFAULT_MIN_CONFIDENCE = 0.8D;
 
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final MetadataDictionaryPort dictionaryPort;
@@ -63,7 +64,7 @@ public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
             List<MetadataFieldQuality> qualities = new ArrayList<>();
             List<MetadataIssue> issues = new ArrayList<>(Objects.requireNonNullElse(safeContext.getMetadataIssues(),
                     List.of()));
-            for (MetadataFieldCandidate candidate : bestCandidates(safeContext.getMetadataCandidates())) {
+            for (MetadataFieldCandidate candidate : bestCandidates(schema, safeContext.getMetadataCandidates(), issues)) {
                 MetadataFieldDescriptor field = schema.find(candidate.fieldKey()).orElse(null);
                 if (field == null) {
                     issues.add(MetadataIssue.warn(candidate.fieldKey(), NODE_TYPE, "UNREGISTERED_FIELD",
@@ -186,17 +187,66 @@ public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
                 .toList();
     }
 
-    private List<MetadataFieldCandidate> bestCandidates(List<MetadataFieldCandidate> candidates) {
+    private List<MetadataFieldCandidate> bestCandidates(MetadataSchema schema,
+                                                        List<MetadataFieldCandidate> candidates,
+                                                        List<MetadataIssue> issues) {
         Map<String, MetadataFieldCandidate> best = new LinkedHashMap<>();
         for (MetadataFieldCandidate candidate : Objects.requireNonNullElse(candidates, List.<MetadataFieldCandidate>of())) {
             if (candidate == null || !hasText(candidate.fieldKey())) {
                 continue;
             }
             best.merge(candidate.fieldKey(), candidate,
-                    (left, right) -> Comparator.comparingDouble(MetadataFieldCandidate::confidence)
-                            .compare(left, right) >= 0 ? left : right);
+                    (left, right) -> {
+                        if (!Objects.equals(left.rawValue(), right.rawValue())) {
+                            issues.add(MetadataIssue.warn(left.fieldKey(), NODE_TYPE, "CANDIDATE_CONFLICT",
+                                    "字段存在多个候选值，已按抽取器优先级和置信度选择主值"));
+                        }
+                        return betterCandidate(left, right, minConfidence(schema, left.fieldKey()));
+                    });
         }
         return List.copyOf(best.values());
+    }
+
+    private MetadataFieldCandidate betterCandidate(MetadataFieldCandidate left,
+                                                   MetadataFieldCandidate right,
+                                                   double minConfidence) {
+        // LLM 只能补充缺失或低置信字段，不能覆盖已达标的确定性候选。
+        if (isLlm(right) && !isLlm(left) && left.confidence() >= minConfidence) {
+            return left;
+        }
+        if (isLlm(left) && !isLlm(right) && right.confidence() >= minConfidence) {
+            return right;
+        }
+        double confidenceDiff = Math.abs(left.confidence() - right.confidence());
+        if (confidenceDiff <= PRIORITY_CONFIDENCE_EPSILON) {
+            return sourcePriority(left) <= sourcePriority(right) ? left : right;
+        }
+        return left.confidence() >= right.confidence() ? left : right;
+    }
+
+    private double minConfidence(MetadataSchema schema, String fieldKey) {
+        if (schema == null) {
+            return DEFAULT_MIN_CONFIDENCE;
+        }
+        return schema.find(fieldKey).map(MetadataFieldDescriptor::minConfidence).orElse(DEFAULT_MIN_CONFIDENCE);
+    }
+
+    private boolean isLlm(MetadataFieldCandidate candidate) {
+        return "llm".equalsIgnoreCase(candidate.sourceType())
+                || "LlmMetadataExtractor".equalsIgnoreCase(candidate.extractorName());
+    }
+
+    private int sourcePriority(MetadataFieldCandidate candidate) {
+        String sourceType = Objects.requireNonNullElse(candidate.sourceType(), "").toLowerCase();
+        return switch (sourceType) {
+            case "source", "metadata" -> 10;
+            case "tika", "parsemetadata" -> 20;
+            case "path" -> 30;
+            case "rule", "text" -> 40;
+            case "dictionary" -> 50;
+            case "llm" -> 80;
+            default -> 60;
+        };
     }
 
     private MetadataSchema resolveSchema(IngestionContext context, NodeConfig config) {
