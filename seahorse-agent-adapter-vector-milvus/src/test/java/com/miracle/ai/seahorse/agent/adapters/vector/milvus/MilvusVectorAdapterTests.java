@@ -17,10 +17,17 @@
 
 package com.miracle.ai.seahorse.agent.adapters.vector.milvus;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.BackendFieldMapping;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataOperator;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchRequest;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.SearchReq;
@@ -30,6 +37,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -56,7 +64,26 @@ class MilvusVectorAdapterTests {
                 .contains("(metadata[\"enabled\"] == true || metadata[\"enabled\"] == \"true\")");
     }
 
+    @Test
+    void shouldPushDownNotEqualsMetadataExpression() {
+        MilvusClientV2 client = mock(MilvusClientV2.class);
+        when(client.search(any(SearchReq.class))).thenReturn(SearchResp.builder().searchResults(List.of()).build());
+        MilvusVectorAdapter adapter = new MilvusVectorAdapter(client,
+                new MilvusVectorProperties("default_collection", 2, "COSINE"));
+
+        adapter.search(searchRequest(new FieldNe(field("department"), "HR")));
+
+        ArgumentCaptor<SearchReq> requestCaptor = ArgumentCaptor.forClass(SearchReq.class);
+        verify(client).search(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getFilter())
+                .contains("(metadata[\"department\"] != \"HR\" || metadata[\"department\"] == null)");
+    }
+
     private VectorSearchRequest searchRequest() {
+        return searchRequest(new FilterAnd(List.of()));
+    }
+
+    private VectorSearchRequest searchRequest(MetadataFilterExpr expression) {
         SystemRetrievalFilter system = SystemRetrievalFilter.builder()
                 .tenantId("tenant-1")
                 .aclSubjectIds(List.of("dept-a", "user-1"))
@@ -65,7 +92,7 @@ class MilvusVectorAdapterTests {
         RetrievalFilter filter = RetrievalFilter.builder().system(system).build();
         CompiledMetadataFilter compiledFilter = new CompiledMetadataFilter(
                 filter,
-                new FilterAnd(List.of()),
+                expression,
                 List.of(),
                 List.of());
         return new VectorSearchRequest(
@@ -75,5 +102,11 @@ class MilvusVectorAdapterTests {
                 3,
                 Map.of(),
                 compiledFilter);
+    }
+
+    private MetadataFieldDescriptor field(String fieldKey) {
+        return new MetadataFieldDescriptor(fieldKey, fieldKey, MetadataValueType.STRING,
+                Set.of(MetadataOperator.EQ, MetadataOperator.NE), false, true, false, false, true,
+                MetadataIndexPolicy.MILVUS_JSON, 0.8D, Set.of(), Map.of(), BackendFieldMapping.defaults(fieldKey));
     }
 }

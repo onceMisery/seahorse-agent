@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContain
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldExists;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldIn;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldRange;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
@@ -388,6 +389,8 @@ public class PgVectorAdapter implements VectorSearchPort, VectorIndexPort, Vecto
         }
         if (expression instanceof FieldEq fieldEq) {
             appendEq(clauses, args, fieldKey(fieldEq.field().backendMapping().canonicalName()), fieldEq.value());
+        } else if (expression instanceof FieldNe fieldNe) {
+            appendNe(clauses, args, fieldKey(fieldNe.field().backendMapping().canonicalName()), fieldNe.value());
         } else if (expression instanceof FieldIn fieldIn) {
             appendIn(clauses, args, fieldKey(fieldIn.field().backendMapping().canonicalName()), fieldIn.values());
         } else if (expression instanceof FieldRange fieldRange) {
@@ -415,6 +418,15 @@ public class PgVectorAdapter implements VectorSearchPort, VectorIndexPort, Vecto
             return;
         }
         clauses.add("metadata->>'" + fieldKey(key) + "' = ?");
+        args.add(value);
+    }
+
+    private void appendNe(List<String> clauses, List<Object> args, String key, Object value) {
+        if (value == null || Objects.toString(value, "").isBlank()) {
+            return;
+        }
+        // IS DISTINCT FROM 能覆盖 JSON key 缺失的场景，语义与内核后置 guard 保持一致。
+        clauses.add("metadata->>'" + fieldKey(key) + "' IS DISTINCT FROM ?");
         args.add(value);
     }
 

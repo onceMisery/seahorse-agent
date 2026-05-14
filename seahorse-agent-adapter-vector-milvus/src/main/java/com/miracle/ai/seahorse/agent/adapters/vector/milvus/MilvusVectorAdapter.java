@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContain
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldExists;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldIn;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldRange;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
@@ -367,6 +368,8 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
             filterAnd.children().forEach(child -> appendExpression(clauses, child));
         } else if (expression instanceof FieldEq fieldEq) {
             appendEq(clauses, fieldKey(fieldEq.field().backendMapping().canonicalName()), fieldEq.value());
+        } else if (expression instanceof FieldNe fieldNe) {
+            appendNe(clauses, fieldKey(fieldNe.field().backendMapping().canonicalName()), fieldNe.value());
         } else if (expression instanceof FieldIn fieldIn) {
             appendIn(clauses, fieldKey(fieldIn.field().backendMapping().canonicalName()), fieldIn.values());
         } else if (expression instanceof FieldRange fieldRange) {
@@ -389,6 +392,15 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
             return;
         }
         clauses.add(metadataPath(fieldKey(key)) + " == " + literal(value));
+    }
+
+    private void appendNe(List<String> clauses, String key, Object value) {
+        if (value == null || Objects.toString(value, "").isBlank()) {
+            return;
+        }
+        String path = metadataPath(fieldKey(key));
+        // Milvus JSON 缺失字段按 null 兜底，避免 NE 下推漏掉后置 guard 本应保留的结果。
+        clauses.add("(" + path + " != " + literal(value) + " || " + path + " == null)");
     }
 
     private void appendIn(List<String> clauses, String key, Collection<?> values) {
