@@ -326,6 +326,45 @@ class MetadataGovernanceNodeFeatureTests {
                 .anySatisfy(issue -> assertThat(issue.code()).isEqualTo("LLM_FORBIDDEN_FIELD"));
     }
 
+    @Test
+    void shouldCapLlmConfidenceWhenEvidenceMissing() throws Exception {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of("description", "所属部门"))));
+        ChatModelPort modelPort = (request, modelId) -> """
+                {
+                  "department": {"value": "Finance", "confidence": 0.95}
+                }
+                """;
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .rawText("财务部预算说明，面向内部员工。")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .build();
+        NodeConfig config = NodeConfig.builder()
+                .nodeType("metadata_extractor")
+                .settings(objectMapper.readTree("""
+                        {
+                          "tenantId": "tenant-a",
+                          "kbId": "kb-a",
+                          "llmEnabled": true,
+                          "llmModel": "metadata-model"
+                        }
+                        """))
+                .build();
+
+        NodeResult result = new MetadataExtractorNodeFeature((tenantId, knowledgeBaseId) -> schema, modelPort)
+                .execute(context, config);
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(context.getMetadataCandidates()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.fieldKey()).isEqualTo("department");
+            assertThat(candidate.confidence()).isEqualTo(0.6D);
+            assertThat(candidate.evidence()).isEmpty();
+        });
+        assertThat(context.getMetadataIssues())
+                .anySatisfy(issue -> assertThat(issue.code()).isEqualTo("LLM_EVIDENCE_MISSING"));
+    }
+
     private MetadataFieldDescriptor field(String fieldKey,
                                           MetadataValueType valueType,
                                           boolean required,

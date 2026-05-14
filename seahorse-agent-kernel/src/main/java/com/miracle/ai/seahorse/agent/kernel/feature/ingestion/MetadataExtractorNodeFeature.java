@@ -41,6 +41,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
     private static final String KEY_LLM_MODEL = "llmModel";
     private static final String KEY_LLM_CONFIDENCE = "llmConfidence";
     private static final String KEY_LLM_MAX_TEXT_CHARS = "llmMaxTextChars";
+    private static final double LLM_MISSING_EVIDENCE_CONFIDENCE_CAP = 0.6D;
     private static final Set<String> LLM_FORBIDDEN_FIELDS = Set.of(
             "tenantid", "kbid", "docid", "aclsubjects", "securitylevel");
 
@@ -194,9 +195,14 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
             }
             LlmFieldValue fieldValue = llmFieldValue(entry.getValue(), defaultConfidence);
             if (present(fieldValue.value())) {
+                double confidence = fieldValue.confidence();
+                if (!hasText(fieldValue.evidence())) {
+                    confidence = Math.min(confidence, LLM_MISSING_EVIDENCE_CONFIDENCE_CAP);
+                    issues.add(MetadataIssue.warn(fieldKey, NODE_TYPE, "LLM_EVIDENCE_MISSING",
+                            "LLM 返回字段缺少证据片段"));
+                }
                 candidates.add(candidate(fieldKey, fieldValue.value(), "llm", "LlmMetadataExtractor",
-                        fieldValue.confidence(), fieldValue.evidence(), schema.schemaVersion(),
-                        LLM_EXTRACTOR_VERSION));
+                        confidence, fieldValue.evidence(), schema.schemaVersion(), LLM_EXTRACTOR_VERSION));
             }
         }
     }
@@ -212,9 +218,6 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
         }
         Object value = valueNode == null || valueNode.isNull()
                 ? null : OBJECT_MAPPER.convertValue(valueNode, Object.class);
-        if (!hasText(evidence) && value != null) {
-            evidence = evidence(value);
-        }
         return new LlmFieldValue(value, confidence, evidence);
     }
 
