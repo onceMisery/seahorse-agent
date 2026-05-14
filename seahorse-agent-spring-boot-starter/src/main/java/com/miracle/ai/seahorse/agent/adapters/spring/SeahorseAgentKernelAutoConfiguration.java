@@ -176,6 +176,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineM
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
@@ -844,12 +845,14 @@ public class SeahorseAgentKernelAutoConfiguration {
             MetadataReviewManagementRepositoryPort reviewRepositoryPort,
             ObjectProvider<MetadataCanonicalWritePort> canonicalWritePort,
             ObjectProvider<MetadataQuarantinePort> quarantinePort,
-            ObjectProvider<MetadataIndexCompensationPort> indexCompensationPort) {
+            ObjectProvider<MetadataIndexCompensationPort> indexCompensationPort,
+            ObjectProvider<MetadataReviewReExtractPort> reExtractPort) {
         return new KernelMetadataReviewService(
                 reviewRepositoryPort,
                 canonicalWritePort.getIfAvailable(MetadataCanonicalWritePort::noop),
                 quarantinePort.getIfAvailable(MetadataQuarantinePort::noop),
-                indexCompensationPort.getIfAvailable(MetadataIndexCompensationPort::noop));
+                indexCompensationPort.getIfAvailable(MetadataIndexCompensationPort::noop),
+                reExtractPort.getIfAvailable(MetadataReviewReExtractPort::noop));
     }
 
     @Bean
