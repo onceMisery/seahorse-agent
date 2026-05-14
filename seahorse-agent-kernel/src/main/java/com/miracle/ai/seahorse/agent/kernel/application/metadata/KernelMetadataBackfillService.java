@@ -403,6 +403,9 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         metadata.put("backfillJobId", job.jobId());
         copyCheckpointMetadata(job.checkpoint(), metadata, "sourceReviewItemId");
         copyCheckpointMetadata(job.checkpoint(), metadata, "extractorVersion");
+        // LLM 抽取版本必须跟随回填上下文进入 MetadataExtractor，保证 prompt/模型策略可审计、可重放。
+        copyCheckpointMetadata(job.checkpoint(), metadata, "llmExtractorVersion");
+        copyCheckpointMetadata(job.checkpoint(), metadata, "llmPromptVersion");
         copyCheckpointMetadata(job.checkpoint(), metadata, "reExtract");
         return IngestionContext.builder()
                 .taskId(document.getId())
@@ -489,6 +492,8 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         Map<String, Object> checkpoint = checkpoint(1L, "", metadata);
         checkpoint.put("schemaVersion", intValue(metadata.get("schemaVersion"), 1));
         checkpoint.put("extractorVersion", textValue(metadata.get("extractorVersion"), ""));
+        copyCheckpointOption(metadata, checkpoint, "llmExtractorVersion");
+        copyCheckpointOption(metadata, checkpoint, "llmPromptVersion");
         if (booleanValue(metadata.get("forceRerun")) || booleanValue(metadata.get("force"))) {
             checkpoint.put("forceRerun", true);
         }
@@ -511,6 +516,8 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         checkpoint.put("lastDocumentId", Objects.requireNonNullElse(lastDocumentId, ""));
         copyCheckpointOption(previous, checkpoint, "schemaVersion");
         copyCheckpointOption(previous, checkpoint, "extractorVersion");
+        copyCheckpointOption(previous, checkpoint, "llmExtractorVersion");
+        copyCheckpointOption(previous, checkpoint, "llmPromptVersion");
         copyCheckpointOption(previous, checkpoint, "forceRerun");
         copyCheckpointOption(previous, checkpoint, "force");
         copyCheckpointOption(previous, checkpoint, "overwriteApproved");

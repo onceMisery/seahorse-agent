@@ -242,6 +242,51 @@ class KernelMetadataBackfillServiceTests {
     }
 
     @Test
+    void shouldPropagateLlmExtractionVersionsToBackfillContext() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        List<Map<String, Object>> contextMetadata = new ArrayList<>();
+        KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
+        when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
+            IngestionContext context = invocation.getArgument(1);
+            contextMetadata.add(Map.copyOf(context.getMetadata()));
+            context.setMetadataValidationResult(new MetadataValidationResult(
+                    MetadataValidationDecision.ACCEPT, List.of(), Map.of(), Map.of()));
+            context.setChunks(List.of(new VectorChunk()));
+            return context;
+        });
+        KernelMetadataBackfillService service = new KernelMetadataBackfillService(
+                documents,
+                new InMemoryObjectStorage(),
+                pipelineRepository(),
+                engine,
+                jobs,
+                MetadataExtractionResultRepositoryPort.noop(),
+                MetadataQuarantinePort.noop(),
+                null);
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin",
+                Map.of(
+                        "extractorVersion", "extractor-v2",
+                        "llmExtractorVersion", "llm-v3",
+                        "llmPromptVersion", "prompt-v3")));
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+
+        assertThat(job.checkpoint())
+                .containsEntry("extractorVersion", "extractor-v2")
+                .containsEntry("llmExtractorVersion", "llm-v3")
+                .containsEntry("llmPromptVersion", "prompt-v3");
+        assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
+        assertThat(contextMetadata).hasSize(1);
+        assertThat(contextMetadata.get(0))
+                .containsEntry("extractorVersion", "extractor-v2")
+                .containsEntry("llmExtractorVersion", "llm-v3")
+                .containsEntry("llmPromptVersion", "prompt-v3");
+    }
+
+    @Test
     void shouldCreateSingleDocumentBackfillJobForReviewReExtract() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
         documents.add(document("doc-1", true, "pipe-1"));
