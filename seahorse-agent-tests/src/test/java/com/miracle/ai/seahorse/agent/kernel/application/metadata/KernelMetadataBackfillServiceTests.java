@@ -115,6 +115,28 @@ class KernelMetadataBackfillServiceTests {
     }
 
     @Test
+    void shouldMarkJobFailedWhenBatchFailsBeforeDocumentProcessing() {
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
+        KernelMetadataBackfillService service = new KernelMetadataBackfillService(
+                new FailingPageDocumentRepository(),
+                new InMemoryObjectStorage(),
+                pipelineRepository(),
+                engine,
+                jobs);
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+
+        assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.FAILED);
+        assertThat(result.failures()).singleElement().asString().contains("page unavailable");
+        assertThat(jobs.findById(job.jobId())).get()
+                .extracting(MetadataBackfillJobRecord::status)
+                .isEqualTo(MetadataBackfillJobStatus.FAILED);
+    }
+
+    @Test
     void shouldQuarantineFailedDocumentDuringBackfill() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
         documents.add(document("doc-1", true, "pipe-1"));
@@ -426,6 +448,37 @@ class KernelMetadataBackfillServiceTests {
         @Override
         public void markFailed(String docId, String operator, String errorMessage) {
             failedDocuments.add(docId);
+        }
+
+        @Override
+        public KnowledgeDocumentRecord createPendingDocument(CreateKnowledgeDocumentCommand command) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<KnowledgeDocumentRecord> findById(String docId) {
+            return Optional.empty();
+        }
+    }
+
+    private static final class FailingPageDocumentRepository implements KnowledgeDocumentRepositoryPort {
+
+        @Override
+        public KnowledgeDocumentPage page(String kbId, long current, long size, String status, String keyword) {
+            throw new IllegalStateException("page unavailable");
+        }
+
+        @Override
+        public boolean markRunning(String docId, String operator) {
+            return false;
+        }
+
+        @Override
+        public void markSuccess(String docId, int chunkCount, String operator) {
+        }
+
+        @Override
+        public void markFailed(String docId, String operator, String errorMessage) {
         }
 
         @Override

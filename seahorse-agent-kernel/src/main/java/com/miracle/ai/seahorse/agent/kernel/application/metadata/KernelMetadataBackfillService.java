@@ -168,6 +168,11 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
             MetadataBackfillJobRecord result = executeBatch(running);
             recordBackfillResult(observationScope, result);
             return toResult(result);
+        } catch (RuntimeException ex) {
+            MetadataBackfillJobRecord failed = failBatch(running, ex);
+            jobRepositoryPort.save(failed);
+            recordBackfillResult(observationScope, failed);
+            return toResult(failed);
         } finally {
             closeObservation(observationScope);
         }
@@ -392,6 +397,16 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                 job.checkpoint(), job.failures(), defaultText(operator, job.operator()), job.createTime(), Instant.now());
     }
 
+    private MetadataBackfillJobRecord failBatch(MetadataBackfillJobRecord job, RuntimeException ex) {
+        List<String> failures = new ArrayList<>(job.failures());
+        failures.add("batch: " + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+        // 批次级异常没有具体文档归属，直接终止任务并保留原 checkpoint，便于人工排查后重建任务。
+        return new MetadataBackfillJobRecord(job.jobId(), job.tenantId(), job.knowledgeBaseId(), job.pipelineId(),
+                MetadataBackfillJobStatus.FAILED, job.currentPage(), job.batchSize(), job.processedDocuments(),
+                job.succeededDocuments(), job.failedDocuments(), job.skippedDocuments(), job.reviewDocuments(),
+                job.quarantineDocuments(), job.checkpoint(), failures, job.operator(), job.createTime(), Instant.now());
+    }
+
     private MetadataBackfillRunResult toResult(MetadataBackfillJobRecord job) {
         return new MetadataBackfillRunResult(job.jobId(), job.status(), job.currentPage(), job.batchSize(),
                 job.processedDocuments(), job.succeededDocuments(), job.failedDocuments(), job.skippedDocuments(),
@@ -533,10 +548,11 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     }
 
     private void recordBackfillResult(ObservationScope scope, MetadataBackfillJobRecord job) {
-        String eventName = job.failedDocuments() == 0 ? EVENT_BACKFILL_SUCCESS : EVENT_BACKFILL_FAILURE;
+        boolean hasFailures = MetadataBackfillJobStatus.FAILED.equals(job.status()) || job.failedDocuments() > 0;
+        String eventName = hasFailures ? EVENT_BACKFILL_FAILURE : EVENT_BACKFILL_SUCCESS;
         recordObservationEvent(scope, eventName, Map.of(
                 "status", job.status().name(),
-                "hasFailures", String.valueOf(job.failedDocuments() > 0)));
+                "hasFailures", String.valueOf(hasFailures)));
     }
 
     private void recordObservationEvent(ObservationScope scope, String name, Map<String, String> attributes) {
