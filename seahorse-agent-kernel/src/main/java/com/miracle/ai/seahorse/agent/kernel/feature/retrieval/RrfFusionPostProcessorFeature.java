@@ -79,11 +79,14 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
             List<RetrievedChunk> channelChunks = safeChunks(result);
             String channelKey = channelKey(result);
             float weight = channelWeight(result, options);
-            for (int index = 0; index < channelChunks.size(); index++) {
-                RetrievedChunk source = channelChunks.get(index);
+            int rank = 0;
+            for (RetrievedChunk source : channelChunks) {
+                if (source == null) {
+                    continue;
+                }
+                rank++;
                 String key = dedupeKey(source);
                 RetrievedChunk target = merged.computeIfAbsent(key, ignored -> copyChunk(source));
-                int rank = index + 1;
                 float rrfScore = weight / (rrfK + rank);
                 scores.merge(key, rrfScore, Float::sum);
                 // 解释字段只进入 fusionExplanation，避免污染动态 metadata 过滤条件。

@@ -79,6 +79,28 @@ class RrfFusionPostProcessorFeatureTests {
     }
 
     @Test
+    void shouldSkipNullChannelAndChunk() {
+        RrfFusionPostProcessorFeature rrf = new RrfFusionPostProcessorFeature();
+        SearchContext context = SearchContext.builder()
+                .options(RetrievalOptions.builder()
+                        .enableRrf(true)
+                        .fusionTopK(3)
+                        .build())
+                .build();
+        List<RetrievedChunk> channelChunks = new ArrayList<>();
+        channelChunks.add(null);
+        channelChunks.add(chunk("a", 0.9F));
+        List<SearchChannelResult> results = new ArrayList<>();
+        results.add(null);
+        results.add(result(null, SearchChannelType.KEYWORD_BM25, channelChunks));
+
+        List<RetrievedChunk> fused = rrf.process(List.of(), results, context);
+
+        assertThat(fused).extracting(RetrievedChunk::getId).containsExactly("a");
+        assertThat(fused.get(0).getChannelRanks()).containsEntry(SearchChannelType.KEYWORD_BM25.name(), 1);
+    }
+
+    @Test
     void shouldUseConfiguredRrfWeightsAndRecordObservation() {
         RecordingObservationPort observation = new RecordingObservationPort();
         RrfFusionPostProcessorFeature rrf = new RrfFusionPostProcessorFeature(observation);

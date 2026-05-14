@@ -77,6 +77,7 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
         }
         RetrievalOptions options = context.effectiveOptions();
         List<RetrievedChunk> candidates = chunks.stream()
+                .filter(Objects::nonNull)
                 // Rerank 是成本较高的精排阶段，先用 inputTopK 收窄候选，再由 rerankTopK 控制输出。
                 .limit(rerankInputTopK(options))
                 .toList();

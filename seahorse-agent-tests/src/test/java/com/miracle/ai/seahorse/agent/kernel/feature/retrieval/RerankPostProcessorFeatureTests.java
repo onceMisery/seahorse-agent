@@ -129,6 +129,20 @@ class RerankPostProcessorFeatureTests {
     }
 
     @Test
+    void shouldIgnoreNullChunksBeforeCallingRerank() {
+        RecordingRerankPort port = new RecordingRerankPort(List.of(chunk("c1", 0.95F)));
+        RerankPostProcessorFeature feature = new RerankPostProcessorFeature(port);
+        List<RetrievedChunk> chunks = new ArrayList<>();
+        chunks.add(null);
+        chunks.add(chunk("c1", 0.1F));
+
+        List<RetrievedChunk> reranked = feature.process(chunks, List.of(), enabledContext());
+
+        assertThat(port.candidates).extracting(RetrievedChunk::getId).containsExactly("c1");
+        assertThat(reranked).extracting(RetrievedChunk::getId).containsExactly("c1");
+    }
+
+    @Test
     void shouldPreserveFusionExplanationAfterRerank() {
         RetrievedChunk original = chunk("c1", 0.1F);
         original.getFusionExplanation().putAll(Map.of(
