@@ -137,7 +137,7 @@ COMMENT ON COLUMN t_metadata_extraction_result.doc_id IS '文档 ID';
 COMMENT ON COLUMN t_metadata_extraction_result.job_id IS '来源抽取任务 ID';
 COMMENT ON COLUMN t_metadata_extraction_result.schema_version IS '抽取结果对应的 Metadata Schema 版本';
 COMMENT ON COLUMN t_metadata_extraction_result.extractor_version IS '抽取结果对应的抽取器版本';
-COMMENT ON COLUMN t_metadata_extraction_result.status IS '结果状态：ACCEPT/REVIEW_REQUIRED/QUARANTINE';
+COMMENT ON COLUMN t_metadata_extraction_result.status IS '结果状态：ACCEPT/ACCEPTED/REVIEW_REQUIRED/QUARANTINE/QUARANTINED/REJECTED';
 COMMENT ON COLUMN t_metadata_extraction_result.normalized_metadata IS '标准化后的元数据 JSON';
 COMMENT ON COLUMN t_metadata_extraction_result.raw_candidates IS '原始字段候选值、来源、证据和置信度 JSON';
 COMMENT ON COLUMN t_metadata_extraction_result.field_quality IS '字段级质量信息 JSON';

@@ -98,6 +98,36 @@ class JdbcMetadataReviewQuarantineAdapterTests {
     }
 
     @Test
+    void shouldSyncExtractionTerminalStatusWhenReviewRejectedOrQuarantined() {
+        insertExtractionResult("result-rejected");
+        insertReviewItem("review-rejected", "PENDING", "result-rejected");
+        insertExtractionResult("result-quarantined");
+        insertReviewItem("review-quarantined", "PENDING", "result-quarantined");
+
+        MetadataReviewRecord rejected = adapter.applyReviewDecision(new MetadataReviewDecision(
+                "review-rejected",
+                MetadataReviewStatus.REJECTED,
+                "auditor",
+                "拒绝低置信字段",
+                Map.of()));
+        MetadataReviewRecord quarantined = adapter.applyReviewDecision(new MetadataReviewDecision(
+                "review-quarantined",
+                MetadataReviewStatus.QUARANTINED,
+                "auditor",
+                "转入隔离区",
+                Map.of()));
+
+        assertThat(rejected.reviewStatus()).isEqualTo(MetadataReviewStatus.REJECTED);
+        assertThat(quarantined.reviewStatus()).isEqualTo(MetadataReviewStatus.QUARANTINED);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM t_metadata_extraction_result WHERE id = 'result-rejected'", String.class))
+                .isEqualTo("REJECTED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM t_metadata_extraction_result WHERE id = 'result-quarantined'", String.class))
+                .isEqualTo("QUARANTINED");
+    }
+
+    @Test
     void shouldPageResolveAndScheduleQuarantineRetry() {
         insertQuarantineItem("q-1", 0, 1);
 
@@ -196,17 +226,26 @@ class JdbcMetadataReviewQuarantineAdapterTests {
     }
 
     private void insertExtractionResult() {
-        jdbcTemplate.update("INSERT INTO t_metadata_extraction_result(id, status) VALUES ('result-1', 'REVIEW_REQUIRED')");
+        insertExtractionResult("result-1");
+    }
+
+    private void insertExtractionResult(String resultId) {
+        jdbcTemplate.update("INSERT INTO t_metadata_extraction_result(id, status) VALUES (?, 'REVIEW_REQUIRED')",
+                resultId);
     }
 
     private void insertReviewItem(String id, String status) {
+        insertReviewItem(id, status, "result-1");
+    }
+
+    private void insertReviewItem(String id, String status, String resultId) {
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_review_item(
                     id, tenant_id, kb_id, doc_id, result_id, review_status, priority,
                     reason_code, reason_message, suggested_metadata
-                ) VALUES (?, 'tenant-1', 'kb-1', 'doc-1', 'result-1', ?, 10,
+                ) VALUES (?, 'tenant-1', 'kb-1', 'doc-1', ?, ?, 10,
                     'LOW_CONFIDENCE', '字段置信度低', ?)
-                """, id, status, "{\"department\":\"hr\"}");
+                """, id, resultId, status, "{\"department\":\"hr\"}");
     }
 
     private void insertQuarantineItem(String id, int resolved, int retryCount) {

@@ -411,12 +411,14 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             throw new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId());
         }
         insertReviewAudit(current, safeDecision, approvedMetadata);
-        // 复核通过或修正后，抽取结果也同步写入 approved_metadata，保留审核人和审核时间。
+        // 复核完成后同步抽取结果终态，避免管理端仍把已处理数据视为 REVIEW_REQUIRED。
         if (MetadataReviewStatus.APPROVED.equals(safeDecision.reviewStatus())
                 || MetadataReviewStatus.CORRECTED.equals(safeDecision.reviewStatus())) {
             updateExtractionApproval(current.resultId(), approvedMetadata, safeDecision.reviewerId());
+        } else if (MetadataReviewStatus.REJECTED.equals(safeDecision.reviewStatus())) {
+            updateExtractionStatus(current.resultId(), "REJECTED");
         } else if (MetadataReviewStatus.QUARANTINED.equals(safeDecision.reviewStatus())) {
-            updateExtractionStatus(current.resultId(), "QUARANTINE");
+            updateExtractionStatus(current.resultId(), "QUARANTINED");
         }
         return findReviewItem(safeDecision.itemId())
                 .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId()));
