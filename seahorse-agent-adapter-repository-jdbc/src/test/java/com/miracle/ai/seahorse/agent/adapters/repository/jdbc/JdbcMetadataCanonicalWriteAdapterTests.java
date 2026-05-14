@@ -49,7 +49,12 @@ class JdbcMetadataCanonicalWriteAdapterTests {
     @Test
     void shouldWriteCanonicalMetadataToKnowledgeDocumentJson() throws Exception {
         createDocumentTable(true);
+        createChunkTable(true);
         jdbcTemplate.update("INSERT INTO t_knowledge_document(id, deleted) VALUES ('doc-1', 0)");
+        jdbcTemplate.update("""
+                INSERT INTO t_knowledge_chunk(id, doc_id, metadata_json, deleted)
+                VALUES ('chunk-1', 'doc-1', '{"source_type":"file","department":"OLD"}', 0)
+                """);
 
         adapter.writeDocumentMetadata("doc-1", Map.of(
                 "department", "FIN",
@@ -59,6 +64,13 @@ class JdbcMetadataCanonicalWriteAdapterTests {
                 "SELECT metadata_json FROM t_knowledge_document WHERE id = 'doc-1'", String.class);
         Map<String, Object> metadata = objectMapper.readValue(metadataJson, MAP_TYPE);
         assertThat(metadata)
+                .containsEntry("department", "FIN")
+                .containsEntry("securityLevel", "internal");
+        String chunkMetadataJson = jdbcTemplate.queryForObject(
+                "SELECT metadata_json FROM t_knowledge_chunk WHERE id = 'chunk-1'", String.class);
+        Map<String, Object> chunkMetadata = objectMapper.readValue(chunkMetadataJson, MAP_TYPE);
+        assertThat(chunkMetadata)
+                .containsEntry("source_type", "file")
                 .containsEntry("department", "FIN")
                 .containsEntry("securityLevel", "internal");
     }
@@ -81,6 +93,20 @@ class JdbcMetadataCanonicalWriteAdapterTests {
         jdbcTemplate.execute("""
                 CREATE TABLE t_knowledge_document (
                     id VARCHAR(64) PRIMARY KEY,
+                    %s
+                    update_time TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """.formatted(metadataColumn));
+    }
+
+    private void createChunkTable(boolean withMetadataJson) {
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_knowledge_chunk");
+        String metadataColumn = withMetadataJson ? "metadata_json VARCHAR(2048)," : "";
+        jdbcTemplate.execute("""
+                CREATE TABLE t_knowledge_chunk (
+                    id VARCHAR(64) PRIMARY KEY,
+                    doc_id VARCHAR(64),
                     %s
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0

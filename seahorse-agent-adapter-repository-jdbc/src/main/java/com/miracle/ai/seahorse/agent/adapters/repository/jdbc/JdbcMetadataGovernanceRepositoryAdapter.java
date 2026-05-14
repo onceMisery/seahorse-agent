@@ -92,6 +92,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private Boolean documentMetadataJsonColumnExists;
+    private Boolean chunkMetadataJsonColumnExists;
 
     public JdbcMetadataGovernanceRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
@@ -532,6 +533,30 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         // 列存在后写入失败必须向上传递，避免 canonical metadata 静默丢失。
         jdbcTemplate.update("UPDATE t_knowledge_document SET metadata_json = ?, update_time = CURRENT_TIMESTAMP "
                 + "WHERE id = ? AND deleted = 0", json(acceptedMetadata), documentId);
+        writeChunkMetadata(documentId, acceptedMetadata);
+    }
+
+    private void writeChunkMetadata(String documentId, Map<String, Object> acceptedMetadata) {
+        if (!chunkMetadataJsonColumnExists()) {
+            return;
+        }
+        List<ChunkMetadataRow> rows = jdbcTemplate.query("""
+                SELECT id, metadata_json
+                FROM t_knowledge_chunk
+                WHERE doc_id = ? AND deleted = 0
+                """, (rs, rowNum) -> new ChunkMetadataRow(rs.getString("id"), rs.getString("metadata_json")),
+                documentId);
+        for (ChunkMetadataRow row : rows) {
+            Map<String, Object> merged = new java.util.LinkedHashMap<>(readMap(row.metadataJson()));
+            // 人工复核后的 canonical metadata 覆盖旧业务字段，但保留 chunk 原有的系统字段和来源快照。
+            merged.putAll(acceptedMetadata);
+            jdbcTemplate.update("""
+                    UPDATE t_knowledge_chunk
+                    SET metadata_json = ?,
+                        update_time = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """, json(merged), row.id());
+        }
     }
 
     @Override
@@ -1111,6 +1136,24 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         return documentMetadataJsonColumnExists;
     }
 
+    private boolean chunkMetadataJsonColumnExists() {
+        if (chunkMetadataJsonColumnExists != null) {
+            return chunkMetadataJsonColumnExists;
+        }
+        try {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(1)
+                    FROM information_schema.columns
+                    WHERE lower(table_name) = 't_knowledge_chunk'
+                      AND lower(column_name) = 'metadata_json'
+                    """, Integer.class);
+            chunkMetadataJsonColumnExists = count != null && count > 0;
+        } catch (RuntimeException ex) {
+            chunkMetadataJsonColumnExists = false;
+        }
+        return chunkMetadataJsonColumnExists;
+    }
+
     private boolean bool(ResultSet rs, String column) throws SQLException {
         return rs.getInt(column) == 1;
     }
@@ -1234,6 +1277,9 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     private record LowConfidenceStats(int lowConfidenceFields, int evaluatedFields) {
+    }
+
+    private record ChunkMetadataRow(String id, String metadataJson) {
     }
 
     private record SqlWhere(String sql, List<Object> args) {
