@@ -28,7 +28,8 @@ public record RetrievalEvaluationStrategyDelta(
         double mrrDelta,
         double ndcgAtKDelta,
         double emptyRecallRateDelta,
-        double averageLatencyMsDelta
+        double averageLatencyMsDelta,
+        double p95LatencyMsDelta
 ) {
 
     public RetrievalEvaluationStrategyDelta {

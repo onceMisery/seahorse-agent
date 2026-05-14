@@ -106,6 +106,9 @@ class KernelRetrievalEvaluationServiceTests {
         assertThat(report.deltas().get(0).recallAtKDelta()).isCloseTo(0D, within(0.0001D));
         assertThat(report.deltas().get(1).recallAtKDelta()).isCloseTo(1D, within(0.0001D));
         assertThat(report.deltas().get(1).ndcgAtKDelta()).isCloseTo(1D, within(0.0001D));
+        assertThat(report.deltas().get(1).p95LatencyMsDelta()).isCloseTo(
+                report.reports().get(1).p95LatencyMs() - report.reports().get(0).p95LatencyMs(),
+                within(0.0001D));
     }
 
     private static RetrievedChunk chunk(String chunkId, String docId, String kbId) {

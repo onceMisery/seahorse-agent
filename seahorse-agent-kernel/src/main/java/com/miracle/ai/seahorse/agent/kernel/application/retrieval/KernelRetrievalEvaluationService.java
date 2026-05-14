@@ -144,7 +144,8 @@ public class KernelRetrievalEvaluationService implements RetrievalEvaluationInbo
                 report.mrr() - baseline.mrr(),
                 report.ndcgAtK() - baseline.ndcgAtK(),
                 report.emptyRecallRate() - baseline.emptyRecallRate(),
-                report.averageLatencyMs() - baseline.averageLatencyMs());
+                report.averageLatencyMs() - baseline.averageLatencyMs(),
+                report.p95LatencyMs() - baseline.p95LatencyMs());
     }
 
     private int compareReportQuality(RetrievalEvaluationReport left,

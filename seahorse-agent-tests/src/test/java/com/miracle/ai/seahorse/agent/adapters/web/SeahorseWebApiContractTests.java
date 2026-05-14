@@ -701,8 +701,8 @@ class SeahorseWebApiContractTests {
                                 1.0D, 1.0D, 1.0D, 0.0D,
                                 15.0D, 15.0D, List.of())),
                 List.of(
-                        new RetrievalEvaluationStrategyDelta("baseline", 0D, 0D, 0D, 0D, 0D),
-                        new RetrievalEvaluationStrategyDelta("keyword", 1D, 1D, 1D, -1D, -5D))));
+                        new RetrievalEvaluationStrategyDelta("baseline", 0D, 0D, 0D, 0D, 0D, 0D),
+                        new RetrievalEvaluationStrategyDelta("keyword", 1D, 1D, 1D, -1D, -5D, -5D))));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseRetrievalEvaluationController(evaluationPort)).build();
 
@@ -733,7 +733,8 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.baselineStrategyName").value("baseline"))
                 .andExpect(jsonPath("$.data.winnerStrategyName").value("keyword"))
                 .andExpect(jsonPath("$.data.reports[1].strategyName").value("keyword"))
-                .andExpect(jsonPath("$.data.deltas[1].recallAtKDelta").value(1.0D));
+                .andExpect(jsonPath("$.data.deltas[1].recallAtKDelta").value(1.0D))
+                .andExpect(jsonPath("$.data.deltas[1].p95LatencyMsDelta").value(-5.0D));
 
         ArgumentCaptor<RetrievalEvaluationComparisonCommand> captor =
                 ArgumentCaptor.forClass(RetrievalEvaluationComparisonCommand.class);
