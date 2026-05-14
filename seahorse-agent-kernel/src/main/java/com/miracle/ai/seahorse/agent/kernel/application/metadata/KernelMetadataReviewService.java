@@ -74,7 +74,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         MetadataReviewRecord updated = applyDecision(current, MetadataReviewStatus.APPROVED, command,
                 current.suggestedMetadata());
         writeCanonical(updated.documentId(), current.suggestedMetadata());
-        requestIndexCompensation(updated.documentId());
+        requestIndexCompensation(updated);
         return updated;
     }
 
@@ -88,7 +88,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         MetadataReviewRecord updated = applyDecision(current, MetadataReviewStatus.CORRECTED, safeCommand,
                 safeCommand.correctedMetadata());
         writeCanonical(updated.documentId(), safeCommand.correctedMetadata());
-        requestIndexCompensation(updated.documentId());
+        requestIndexCompensation(updated);
         return updated;
     }
 
@@ -139,14 +139,40 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         canonicalWritePort.writeDocumentMetadata(documentId, metadata);
     }
 
-    private void requestIndexCompensation(String documentId) {
+    private void requestIndexCompensation(MetadataReviewRecord record) {
+        if (record == null) {
+            return;
+        }
+        String documentId = record.documentId();
         if (documentId == null || documentId.isBlank()) {
             return;
         }
         try {
             indexCompensationPort.rebuildDocument(documentId);
         } catch (RuntimeException ex) {
-            // 索引补偿失败不能覆盖已经完成的复核决策和 canonical metadata 写回。
+            quarantineIndexFailure(record, ex);
+        }
+    }
+
+    private void quarantineIndexFailure(MetadataReviewRecord record, RuntimeException ex) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("reviewItemId", record.id());
+        snapshot.put("reviewStatus", record.reviewStatus().name());
+        snapshot.put("resultId", record.resultId());
+        snapshot.put("errorType", ex.getClass().getName());
+        snapshot.put("errorMessage", Objects.requireNonNullElse(ex.getMessage(), ""));
+        try {
+            quarantinePort.quarantine(new MetadataQuarantineItem(
+                    record.tenantId(),
+                    record.knowledgeBaseId(),
+                    record.documentId(),
+                    record.resultId(),
+                    "INDEX",
+                    "METADATA_INDEX_COMPENSATION_FAILED",
+                    firstText(ex.getMessage(), "元数据复核后的索引补偿失败"),
+                    snapshot));
+        } catch (RuntimeException ignored) {
+            // 隔离写入失败也不能覆盖已经完成的复核决策和 canonical metadata 写回。
         }
     }
 

@@ -76,6 +76,30 @@ class KernelMetadataReviewServiceTests {
         assertThat(quarantines.get(0).reasonCode()).isEqualTo("REVIEW_QUARANTINED");
     }
 
+    @Test
+    void shouldQuarantineIndexCompensationFailureAfterApprove() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-1", MetadataReviewStatus.PENDING, Map.of()));
+        CapturingCanonicalWritePort canonicalWritePort = new CapturingCanonicalWritePort();
+        List<MetadataQuarantineItem> quarantines = new java.util.ArrayList<>();
+        KernelMetadataReviewService service = new KernelMetadataReviewService(
+                repository, canonicalWritePort, quarantines::add, documentId -> {
+                    throw new IllegalStateException("keyword rebuild failed");
+                });
+
+        MetadataReviewRecord approved = service.approve("review-1",
+                new MetadataReviewDecisionCommand("auditor", "通过", Map.of()));
+
+        assertThat(approved.reviewStatus()).isEqualTo(MetadataReviewStatus.APPROVED);
+        assertThat(canonicalWritePort.metadata).containsEntry("department", "hr");
+        assertThat(quarantines).hasSize(1);
+        MetadataQuarantineItem quarantine = quarantines.get(0);
+        assertThat(quarantine.stage()).isEqualTo("INDEX");
+        assertThat(quarantine.reasonCode()).isEqualTo("METADATA_INDEX_COMPENSATION_FAILED");
+        assertThat(quarantine.taskId()).isEqualTo("result-1");
+        assertThat(quarantine.sourceSnapshot()).containsEntry("reviewItemId", "review-1");
+    }
+
     private static MetadataReviewRecord review(String id,
                                                MetadataReviewStatus status,
                                                Map<String, Object> correctedMetadata) {
