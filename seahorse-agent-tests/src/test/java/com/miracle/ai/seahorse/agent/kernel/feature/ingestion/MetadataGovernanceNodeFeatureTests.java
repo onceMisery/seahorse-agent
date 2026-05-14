@@ -90,6 +90,9 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(context.getMetadataValidationResult().decision()).isEqualTo(MetadataValidationDecision.ACCEPT);
         assertThat(context.getMetadataValidationResult().acceptedMetadata()).containsEntry("department", "FIN");
         assertThat(savedRecords).hasSize(1);
+        assertThat(savedRecords.get(0).rawCandidates())
+                .extracting(MetadataFieldCandidate::fieldKey)
+                .containsExactly("department");
         assertThat(writtenDocumentMetadata.get()).containsEntry("department", "FIN");
         assertThat(context.getChunks()).allSatisfy(chunk ->
                 assertThat(chunk.getMetadata()).containsEntry("department", "FIN"));

@@ -277,7 +277,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     """, resultId, safeRecord.tenantId(), safeRecord.knowledgeBaseId(),
                     safeRecord.documentId(), safeRecord.taskId(), safeRecord.schemaVersion(),
                     safeRecord.extractorVersion(), safeRecord.status().name(), json(safeRecord.normalizedMetadata()),
-                    json(Map.of()), json(safeRecord.fieldQualities()), json(safeRecord.issues()),
+                    json(safeRecord.rawCandidates()), json(safeRecord.fieldQualities()), json(safeRecord.issues()),
                     json(safeRecord.acceptedMetadata()));
             return resultId;
         } catch (DataAccessException ignored) {

@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldCandidate;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldQuality;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
@@ -112,6 +113,32 @@ class JdbcMetadataQualityReportAdapterTests {
 
         assertThat(qualityJson).contains("department");
         assertThat(qualityJson).contains("0.42");
+    }
+
+    @Test
+    void shouldPersistRawCandidatesWithEvidence() {
+        adapter.save(new MetadataExtractionRecord(
+                "tenant-1",
+                "kb-1",
+                "doc-raw",
+                "job-1",
+                1,
+                "extractor-v1",
+                MetadataValidationDecision.ACCEPT,
+                Map.of("department", "Finance"),
+                Map.of("department", "Finance"),
+                List.of(),
+                List.of(),
+                List.of(new MetadataFieldCandidate("department", "Finance", "source",
+                        "SourceMetadataExtractor", 0.91D, "dept", 1, "extractor-v1"))));
+
+        String rawCandidatesJson = jdbcTemplate.queryForObject(
+                "SELECT raw_candidates FROM t_metadata_extraction_result WHERE doc_id = 'doc-raw'",
+                String.class);
+
+        assertThat(rawCandidatesJson).contains("department");
+        assertThat(rawCandidatesJson).contains("SourceMetadataExtractor");
+        assertThat(rawCandidatesJson).contains("dept");
     }
 
     @Test

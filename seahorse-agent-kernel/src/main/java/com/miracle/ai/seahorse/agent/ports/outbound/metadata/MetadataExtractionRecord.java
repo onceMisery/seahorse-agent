@@ -1,6 +1,7 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.metadata;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIssue;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldCandidate;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldQuality;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationDecision;
 
@@ -19,7 +20,8 @@ public record MetadataExtractionRecord(
         Map<String, Object> normalizedMetadata,
         Map<String, Object> acceptedMetadata,
         List<MetadataFieldQuality> fieldQualities,
-        List<MetadataIssue> issues
+        List<MetadataIssue> issues,
+        List<MetadataFieldCandidate> rawCandidates
 ) {
 
     public MetadataExtractionRecord {
@@ -34,5 +36,21 @@ public record MetadataExtractionRecord(
         acceptedMetadata = Map.copyOf(Objects.requireNonNullElse(acceptedMetadata, Map.of()));
         fieldQualities = List.copyOf(Objects.requireNonNullElse(fieldQualities, List.of()));
         issues = List.copyOf(Objects.requireNonNullElse(issues, List.of()));
+        rawCandidates = List.copyOf(Objects.requireNonNullElse(rawCandidates, List.of()));
+    }
+
+    public MetadataExtractionRecord(String tenantId,
+                                    String knowledgeBaseId,
+                                    String documentId,
+                                    String taskId,
+                                    int schemaVersion,
+                                    String extractorVersion,
+                                    MetadataValidationDecision status,
+                                    Map<String, Object> normalizedMetadata,
+                                    Map<String, Object> acceptedMetadata,
+                                    List<MetadataFieldQuality> fieldQualities,
+                                    List<MetadataIssue> issues) {
+        this(tenantId, knowledgeBaseId, documentId, taskId, schemaVersion, extractorVersion, status,
+                normalizedMetadata, acceptedMetadata, fieldQualities, issues, List.of());
     }
 }
