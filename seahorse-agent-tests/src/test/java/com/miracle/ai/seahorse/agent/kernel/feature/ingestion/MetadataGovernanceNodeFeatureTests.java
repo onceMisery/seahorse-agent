@@ -124,6 +124,61 @@ class MetadataGovernanceNodeFeatureTests {
     }
 
     @Test
+    void shouldUseContextExtractorVersionForReExtractCandidates() {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 3, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of())));
+        MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .metadata(Map.of(
+                        "tenantId", "tenant-a",
+                        "kbId", "kb-a",
+                        "department", "Finance",
+                        "extractorVersion", "extractor-v2"))
+                .build();
+
+        NodeResult result = new MetadataExtractorNodeFeature(schemaRegistry)
+                .execute(context, NodeConfig.builder().nodeType("metadata_extractor").build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(context.getMetadataCandidates()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.fieldKey()).isEqualTo("department");
+            assertThat(candidate.extractorVersion()).isEqualTo("extractor-v2");
+        });
+    }
+
+    @Test
+    void shouldPersistReExtractExtractorVersionAfterValidation() {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 3, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of())));
+        MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
+        List<MetadataExtractionRecord> savedRecords = new ArrayList<>();
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .metadata(Map.of(
+                        "tenantId", "tenant-a",
+                        "kbId", "kb-a",
+                        "department", "Finance",
+                        "extractorVersion", "extractor-v2"))
+                .build();
+
+        NodeResult extractResult = new MetadataExtractorNodeFeature(schemaRegistry)
+                .execute(context, NodeConfig.builder().nodeType("metadata_extractor").build());
+        NodeResult normalizeResult = new MetadataNormalizerNodeFeature(schemaRegistry, MetadataDictionaryPort.noop())
+                .execute(context, NodeConfig.builder().nodeType("metadata_normalizer").build());
+        NodeResult validateResult = new MetadataValidatorNodeFeature(schemaRegistry, savedRecords::add,
+                MetadataReviewQueuePort.noop(), MetadataQuarantinePort.noop(), MetadataCanonicalWritePort.noop())
+                .execute(context, NodeConfig.builder().nodeType("metadata_validator").build());
+
+        assertThat(extractResult.isSuccess()).isTrue();
+        assertThat(normalizeResult.isSuccess()).isTrue();
+        assertThat(validateResult.isSuccess()).isTrue();
+        assertThat(context.getMetadataValidationResult().decision()).isEqualTo(MetadataValidationDecision.ACCEPT);
+        assertThat(savedRecords).singleElement()
+                .satisfies(record -> assertThat(record.extractorVersion()).isEqualTo("extractor-v2"));
+    }
+
+    @Test
     void shouldKeepHighConfidenceDeterministicCandidateOverLlmConflict() {
         MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
                 field("department", MetadataValueType.STRING, false, Map.of())));
@@ -314,7 +369,9 @@ class MetadataGovernanceNodeFeatureTests {
                           "kbId": "kb-a",
                           "llmEnabled": true,
                           "llmModel": "metadata-model",
-                          "llmConfidence": 0.7
+                          "llmConfidence": 0.7,
+                          "llmExtractorVersion": "llm-v2",
+                          "llmPromptVersion": "prompt-v2"
                         }
                         """))
                 .build();
@@ -327,10 +384,14 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(messagesRef.get())
                 .extracting(ChatMessage::getContent)
                 .anySatisfy(content -> assertThat(content).contains("department").contains("只返回 JSON"));
+        assertThat(messagesRef.get())
+                .extracting(ChatMessage::getContent)
+                .anySatisfy(content -> assertThat(content).contains("prompt-v2"));
         assertThat(context.getMetadataCandidates())
                 .extracting(MetadataFieldCandidate::fieldKey)
                 .containsExactly("department");
         assertThat(context.getMetadataCandidates().get(0).sourceType()).isEqualTo("llm");
+        assertThat(context.getMetadataCandidates().get(0).extractorVersion()).isEqualTo("llm-v2");
         assertThat(context.getMetadataCandidates().get(0).confidence()).isEqualTo(0.73D);
         assertThat(context.getMetadataIssues())
                 .anySatisfy(issue -> assertThat(issue.code()).isEqualTo("LLM_FORBIDDEN_FIELD"));

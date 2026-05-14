@@ -32,13 +32,17 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
     };
     private static final String EXTRACTOR_VERSION = "deterministic-1";
     private static final String LLM_EXTRACTOR_VERSION = "llm-1";
+    private static final String LLM_PROMPT_VERSION = "prompt-v1";
     private static final String KEY_TENANT_ID = "tenantId";
     private static final String KEY_KB_ID = "kbId";
     private static final String KEY_DOC_ID = "docId";
     private static final String KEY_PARSE_METADATA = "parseMetadata";
     private static final String KEY_RULES = "rules";
+    private static final String KEY_EXTRACTOR_VERSION = "extractorVersion";
     private static final String KEY_LLM_ENABLED = "llmEnabled";
     private static final String KEY_LLM_MODEL = "llmModel";
+    private static final String KEY_LLM_EXTRACTOR_VERSION = "llmExtractorVersion";
+    private static final String KEY_LLM_PROMPT_VERSION = "llmPromptVersion";
     private static final String KEY_LLM_CONFIDENCE = "llmConfidence";
     private static final String KEY_LLM_MAX_TEXT_CHARS = "llmMaxTextChars";
     private static final double LLM_MISSING_EVIDENCE_CONFIDENCE_CAP = 0.6D;
@@ -85,9 +89,15 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
             List<MetadataFieldCandidate> candidates = new ArrayList<>();
             Map<String, Object> sourceMetadata = sourceMetadata(safeContext);
             Map<String, Object> parseMetadata = parseMetadata(sourceMetadata);
-            extractFromSchemaFields(schema, sourceMetadata, parseMetadata, safeContext, candidates, issues);
-            extractFromConfiguredRules(schema, safeContext, config, sourceMetadata, parseMetadata, candidates, issues);
-            extractFromLlm(schema, safeContext, config, sourceMetadata, parseMetadata, candidates, issues);
+            String extractorVersion = resolveExtractorVersion(safeContext, config);
+            String llmExtractorVersion = resolveLlmExtractorVersion(safeContext, config);
+            String llmPromptVersion = resolveLlmPromptVersion(safeContext, config);
+            extractFromSchemaFields(schema, sourceMetadata, parseMetadata, safeContext, extractorVersion,
+                    candidates, issues);
+            extractFromConfiguredRules(schema, safeContext, config, sourceMetadata, parseMetadata,
+                    extractorVersion, candidates, issues);
+            extractFromLlm(schema, safeContext, config, sourceMetadata, parseMetadata, llmExtractorVersion,
+                    llmPromptVersion, candidates, issues);
             safeContext.setMetadataCandidates(candidates);
             safeContext.setMetadataIssues(issues);
             return NodeResult.ok("metadata candidates=" + candidates.size());
@@ -100,17 +110,18 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                                          Map<String, Object> sourceMetadata,
                                          Map<String, Object> parseMetadata,
                                          IngestionContext context,
+                                         String extractorVersion,
                                          List<MetadataFieldCandidate> candidates,
                                          List<MetadataIssue> issues) {
         for (MetadataFieldDescriptor field : schema.fields()) {
             collectDirect(field, sourceMetadata, "source", "SourceMetadataExtractor", 0.99D,
-                    schema.schemaVersion(), candidates);
+                    schema.schemaVersion(), extractorVersion, candidates);
             collectDirect(field, parseMetadata, "tika", "TikaMetadataExtractor", 0.95D,
-                    schema.schemaVersion(), candidates);
+                    schema.schemaVersion(), extractorVersion, candidates);
             collectRegex(field, context.getRawText(), "rule", "RuleMetadataExtractor", 0.9D,
-                    schema.schemaVersion(), candidates, issues);
+                    schema.schemaVersion(), extractorVersion, candidates, issues);
             collectRegex(field, metadataText(context, "fileName"), "path", "PathMetadataExtractor", 0.88D,
-                    schema.schemaVersion(), candidates, issues);
+                    schema.schemaVersion(), extractorVersion, candidates, issues);
         }
     }
 
@@ -119,6 +130,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                                             NodeConfig config,
                                             Map<String, Object> sourceMetadata,
                                             Map<String, Object> parseMetadata,
+                                            String extractorVersion,
                                             List<MetadataFieldCandidate> candidates,
                                             List<MetadataIssue> issues) {
         JsonNode rules = config == null || config.getSettings() == null ? null : config.getSettings().get(KEY_RULES);
@@ -142,7 +154,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
             };
             if (present(value)) {
                 candidates.add(candidate(fieldKey, value, source, "ConfiguredMetadataExtractor",
-                        confidence, evidence(value), schema.schemaVersion()));
+                        confidence, evidence(value), schema.schemaVersion(), extractorVersion));
             }
         }
     }
@@ -152,6 +164,8 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                                 NodeConfig config,
                                 Map<String, Object> sourceMetadata,
                                 Map<String, Object> parseMetadata,
+                                String llmExtractorVersion,
+                                String llmPromptVersion,
                                 List<MetadataFieldCandidate> candidates,
                                 List<MetadataIssue> issues) {
         if (!booleanSetting(config, KEY_LLM_ENABLED) || schema.fields().isEmpty()) {
@@ -162,13 +176,14 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
             int maxTextChars = intSetting(config, KEY_LLM_MAX_TEXT_CHARS, 4000);
             String response = chatModelPort.chat(modelId, List.of(
                     ChatMessage.system(llmSystemPrompt()),
-                    ChatMessage.user(llmUserPrompt(schema, context, sourceMetadata, parseMetadata, maxTextChars))));
+                    ChatMessage.user(llmUserPrompt(schema, context, sourceMetadata, parseMetadata,
+                            maxTextChars, llmPromptVersion))));
             JsonNode root = parseLlmJson(response);
             if (root == null || !root.isObject()) {
                 issues.add(MetadataIssue.warn("", NODE_TYPE, "LLM_RESPONSE_INVALID", "LLM 元数据抽取结果不是 JSON 对象"));
                 return;
             }
-            collectLlmCandidates(schema, config, root, candidates, issues);
+            collectLlmCandidates(schema, config, root, llmExtractorVersion, candidates, issues);
         } catch (RuntimeException ex) {
             issues.add(MetadataIssue.warn("", NODE_TYPE, "LLM_EXTRACT_FAILED", ex.getMessage()));
         }
@@ -177,6 +192,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
     private void collectLlmCandidates(MetadataSchema schema,
                                       NodeConfig config,
                                       JsonNode root,
+                                      String llmExtractorVersion,
                                       List<MetadataFieldCandidate> candidates,
                                       List<MetadataIssue> issues) {
         double defaultConfidence = doubleSetting(config, KEY_LLM_CONFIDENCE, 0.72D);
@@ -202,7 +218,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                             "LLM 返回字段缺少证据片段"));
                 }
                 candidates.add(candidate(fieldKey, fieldValue.value(), "llm", "LlmMetadataExtractor",
-                        confidence, fieldValue.evidence(), schema.schemaVersion(), LLM_EXTRACTOR_VERSION));
+                        confidence, fieldValue.evidence(), schema.schemaVersion(), llmExtractorVersion));
             }
         }
     }
@@ -233,7 +249,8 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                                  IngestionContext context,
                                  Map<String, Object> sourceMetadata,
                                  Map<String, Object> parseMetadata,
-                                 int maxTextChars) {
+                                 int maxTextChars,
+                                 String llmPromptVersion) {
         return """
                 请只返回 JSON，不要输出 Markdown 或解释。
                 Schema 字段：
@@ -248,7 +265,8 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                 文档文本：
                 %s
                 """.formatted(schemaSummary(schema), json(parseMetadata), json(sourceMetadata),
-                truncate(Objects.requireNonNullElse(context.getRawText(), ""), maxTextChars));
+                truncate(Objects.requireNonNullElse(context.getRawText(), ""), maxTextChars))
+                + "\nPrompt version: " + llmPromptVersion;
     }
 
     private String schemaSummary(MetadataSchema schema) {
@@ -280,12 +298,13 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                                String extractorName,
                                double confidence,
                                int schemaVersion,
+                               String extractorVersion,
                                List<MetadataFieldCandidate> candidates) {
         for (String key : candidateKeys(field, sourceType)) {
             Object value = metadata.get(key);
             if (present(value)) {
                 candidates.add(candidate(field.fieldKey(), value, sourceType, extractorName, confidence,
-                        key, schemaVersion));
+                        key, schemaVersion, extractorVersion));
                 return;
             }
         }
@@ -297,6 +316,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                               String extractorName,
                               double confidence,
                               int schemaVersion,
+                              String extractorVersion,
                               List<MetadataFieldCandidate> candidates,
                               List<MetadataIssue> issues) {
         Object regex = field.extractionHints().get(sourceType + "Regex");
@@ -307,11 +327,28 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
             Object value = regexValue(text, pattern);
             if (present(value)) {
                 candidates.add(candidate(field.fieldKey(), value, sourceType, extractorName, confidence,
-                        pattern, schemaVersion));
+                        pattern, schemaVersion, extractorVersion));
             }
         } catch (RuntimeException ex) {
             issues.add(MetadataIssue.warn(field.fieldKey(), NODE_TYPE, "REGEX_FAILED", ex.getMessage()));
         }
+    }
+
+    private String resolveExtractorVersion(IngestionContext context, NodeConfig config) {
+        // 复核重抽取会把目标 extractorVersion 写入上下文，这里统一收敛版本来源。
+        return firstText(firstText(setting(config, KEY_EXTRACTOR_VERSION),
+                metadataText(context, KEY_EXTRACTOR_VERSION)), EXTRACTOR_VERSION);
+    }
+
+    private String resolveLlmExtractorVersion(IngestionContext context, NodeConfig config) {
+        return firstText(
+                firstText(setting(config, KEY_LLM_EXTRACTOR_VERSION), setting(config, KEY_EXTRACTOR_VERSION)),
+                firstText(metadataText(context, KEY_EXTRACTOR_VERSION), LLM_EXTRACTOR_VERSION));
+    }
+
+    private String resolveLlmPromptVersion(IngestionContext context, NodeConfig config) {
+        return firstText(firstText(setting(config, KEY_LLM_PROMPT_VERSION),
+                metadataText(context, KEY_LLM_PROMPT_VERSION)), LLM_PROMPT_VERSION);
     }
 
     private List<String> candidateKeys(MetadataFieldDescriptor field, String sourceType) {
