@@ -105,7 +105,40 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
         body.put("_source", List.of("chunk_id", "kb_id", "doc_id", "chunk_index", "content",
                 "metadata", "tenant_id", "collection_name", FIELD_ACL_SUBJECT_IDS,
                 "file_type", "source_type", "created_at", "updated_at", "enabled"));
+        Map<String, Object> highlight = highlight();
+        if (!highlight.isEmpty()) {
+            body.put("highlight", highlight);
+        }
         return body;
+    }
+
+    private Map<String, Object> highlight() {
+        List<String> fields = highlightFields();
+        if (fields.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> highlightFields = new LinkedHashMap<>();
+        for (String field : fields) {
+            highlightFields.put(field, Map.of("fragment_size", 160, "number_of_fragments", 3));
+        }
+        return Map.of(
+                "pre_tags", List.of("<em>"),
+                "post_tags", List.of("</em>"),
+                "fields", highlightFields);
+    }
+
+    private List<String> highlightFields() {
+        return properties.searchFields().stream()
+                .map(this::stripBoost)
+                .filter(this::hasText)
+                .distinct()
+                .toList();
+    }
+
+    private String stripBoost(String field) {
+        String safeField = Objects.requireNonNullElse(field, "").trim();
+        int boostIndex = safeField.indexOf('^');
+        return boostIndex > 0 ? safeField.substring(0, boostIndex) : safeField;
     }
 
     private void appendSystemFilters(List<Object> filters, SystemRetrievalFilter filter) {
@@ -232,6 +265,11 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
         putIfPresent(metadata, "created_at", value(source, "created_at"));
         putIfPresent(metadata, "updated_at", value(source, "updated_at"));
         metadata.putIfAbsent("enabled", source.path("enabled").asBoolean(true));
+        Map<String, Object> keywordHighlights = highlights(hit.path("highlight"));
+        if (!keywordHighlights.isEmpty()) {
+            // 高亮片段是 ES 通道的展示型结果，放入 metadata 透传，不参与过滤编译。
+            metadata.put("keywordHighlights", keywordHighlights);
+        }
         return RetrievedChunk.builder()
                 .id(firstText(source, "chunk_id", hit.path("_id").asText("")))
                 .text(text(source, "content"))
@@ -251,6 +289,22 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
         }
         return new LinkedHashMap<>(objectMapper.convertValue(node, new TypeReference<Map<String, Object>>() {
         }));
+    }
+
+    private Map<String, Object> highlights(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull() || !node.isObject()) {
+            return Map.of();
+        }
+        Map<String, Object> highlights = new LinkedHashMap<>();
+        node.fields().forEachRemaining(entry -> {
+            JsonNode fragments = entry.getValue();
+            if (fragments != null && fragments.isArray() && !fragments.isEmpty()) {
+                List<String> values = new ArrayList<>();
+                fragments.forEach(fragment -> values.add(fragment.asText()));
+                highlights.put(entry.getKey(), values);
+            }
+        });
+        return highlights;
     }
 
     private String firstText(JsonNode node, String field, String fallback) {

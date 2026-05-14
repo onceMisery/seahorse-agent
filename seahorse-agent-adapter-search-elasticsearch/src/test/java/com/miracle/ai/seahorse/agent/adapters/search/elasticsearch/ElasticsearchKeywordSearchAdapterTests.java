@@ -58,7 +58,8 @@ class ElasticsearchKeywordSearchAdapterTests {
                 "_source":{"chunk_id":"chunk-1","kb_id":"kb-1","doc_id":"doc-1","chunk_index":2,
                 "content":"混合检索","tenant_id":"tenant-1","collection_name":"default",
                 "acl_subject_ids":["dept-a"],"file_type":"pdf",
-                "metadata":{"category":"policy"},"enabled":true}}]}}
+                "metadata":{"category":"policy"},"enabled":true},
+                "highlight":{"content":["<em>metadata</em> search"],"title":["metadata"]}}]}}
                 """);
         ElasticsearchKeywordSearchAdapter adapter = new ElasticsearchKeywordSearchAdapter(
                 new OkHttpClient.Builder().addInterceptor(interceptor).build(),
@@ -76,13 +77,18 @@ class ElasticsearchKeywordSearchAdapterTests {
         assertThat(results.get(0).getMetadata())
                 .containsEntry("category", "policy")
                 .containsEntry("acl_subjects", List.of("dept-a"))
-                .containsEntry("file_type", "pdf");
+                .containsEntry("file_type", "pdf")
+                .containsEntry("keywordHighlights", Map.of(
+                        "content", List.of("<em>metadata</em> search"),
+                        "title", List.of("metadata")));
 
         JsonNode body = objectMapper.readTree(interceptor.body());
         assertThat(body.path("size").asInt()).isEqualTo(7);
         assertThat(body.at("/query/bool/must/0/multi_match/query").asText()).isEqualTo("metadata search");
         assertThat(body.at("/query/bool/must/0/multi_match/analyzer").asText()).isEqualTo("ik_smart");
         assertThat(body.at("/query/bool/must/0/multi_match/minimum_should_match").asText()).isEqualTo("2<75%");
+        assertThat(body.at("/highlight/fields/content/fragment_size").asInt()).isEqualTo(160);
+        assertThat(body.at("/highlight/fields/title/number_of_fragments").asInt()).isEqualTo(3);
         assertThat(interceptor.request().url().encodedPath()).isEqualTo("/chunks/_search");
         assertThat(interceptor.body()).contains("\"terms\":{\"kb_id\":[\"kb-1\"]}");
         assertThat(interceptor.body()).contains("\"term\":{\"tenant_id\":\"tenant-1\"}");
