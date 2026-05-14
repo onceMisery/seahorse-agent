@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
@@ -25,6 +26,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.DefaultMetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchChannelFeature;
@@ -59,15 +63,13 @@ public class KernelMultiChannelRetrievalEngine {
     private final FeatureActivationContext activationContext;
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final MetadataFilterCompiler metadataFilterCompiler;
+    private final KernelRagTraceRecorder traceRecorder;
 
     public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
                                              Executor retrievalExecutor,
                                              FeatureActivationContext activationContext) {
-        this.extensionRegistry = Objects.requireNonNull(extensionRegistry, "扩展注册表不能为空");
-        this.retrievalExecutor = Objects.requireNonNull(retrievalExecutor, "检索线程池不能为空");
-        this.activationContext = Objects.requireNonNullElse(activationContext, FeatureActivationContext.empty());
-        this.schemaRegistryPort = MetadataSchemaRegistryPort.empty();
-        this.metadataFilterCompiler = new DefaultMetadataFilterCompiler();
+        this(extensionRegistry, retrievalExecutor, activationContext,
+                MetadataSchemaRegistryPort.empty(), new DefaultMetadataFilterCompiler(), KernelRagTraceRecorder.noop());
     }
 
     public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
@@ -75,12 +77,23 @@ public class KernelMultiChannelRetrievalEngine {
                                              FeatureActivationContext activationContext,
                                              MetadataSchemaRegistryPort schemaRegistryPort,
                                              MetadataFilterCompiler metadataFilterCompiler) {
+        this(extensionRegistry, retrievalExecutor, activationContext, schemaRegistryPort, metadataFilterCompiler,
+                KernelRagTraceRecorder.noop());
+    }
+
+    public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
+                                             Executor retrievalExecutor,
+                                             FeatureActivationContext activationContext,
+                                             MetadataSchemaRegistryPort schemaRegistryPort,
+                                             MetadataFilterCompiler metadataFilterCompiler,
+                                             KernelRagTraceRecorder traceRecorder) {
         this.extensionRegistry = Objects.requireNonNull(extensionRegistry, "extensionRegistry must not be null");
         this.retrievalExecutor = Objects.requireNonNull(retrievalExecutor, "retrievalExecutor must not be null");
         this.activationContext = Objects.requireNonNullElse(activationContext, FeatureActivationContext.empty());
         this.schemaRegistryPort = Objects.requireNonNullElseGet(schemaRegistryPort, MetadataSchemaRegistryPort::empty);
         this.metadataFilterCompiler = Objects.requireNonNullElseGet(metadataFilterCompiler,
                 DefaultMetadataFilterCompiler::new);
+        this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
     }
 
     /**
@@ -91,7 +104,13 @@ public class KernelMultiChannelRetrievalEngine {
      * @return 检索结果 Chunk 列表
      */
     public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents, int topK) {
-        return retrieveKnowledgeChannels(subIntents, topK, null, null);
+        return retrieveKnowledgeChannels(subIntents, topK, null, null, null);
+    }
+
+    public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents,
+                                                          int topK,
+                                                          TraceRunScope traceRunScope) {
+        return retrieveKnowledgeChannels(subIntents, topK, null, null, traceRunScope);
     }
 
     /**
@@ -109,7 +128,15 @@ public class KernelMultiChannelRetrievalEngine {
                                                           int topK,
                                                           RetrievalFilter filter,
                                                           RetrievalOptions options) {
-        SearchContext context = buildSearchContext(subIntents, topK, filter, options);
+        return retrieveKnowledgeChannels(subIntents, topK, filter, options, null);
+    }
+
+    public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents,
+                                                          int topK,
+                                                          RetrievalFilter filter,
+                                                          RetrievalOptions options,
+                                                          TraceRunScope traceRunScope) {
+        SearchContext context = buildSearchContext(subIntents, topK, filter, options, traceRunScope);
         List<SearchChannelResult> channelResults = executeSearchChannels(context);
         if (channelResults.isEmpty()) {
             return List.of();
@@ -140,9 +167,13 @@ public class KernelMultiChannelRetrievalEngine {
     }
 
     private SearchChannelResult executeSingleChannel(SearchChannelFeature channel, SearchContext context) {
+        TraceNodeScope nodeScope = traceRecorder.startNode(traceRunScope(context), channelTraceCommand(channel));
         try {
-            return channel.search(context);
+            SearchChannelResult result = channel.search(context);
+            traceRecorder.finishNode(nodeScope);
+            return result;
         } catch (Exception ex) {
+            traceRecorder.finishNode(nodeScope, ex);
             LOG.error(LOG_MSG_CHANNEL_FAILED, channel.name(), ex);
             return emptyResult(channel);
         }
@@ -175,9 +206,13 @@ public class KernelMultiChannelRetrievalEngine {
                                                        List<RetrievedChunk> chunks,
                                                        List<SearchChannelResult> results,
                                                        SearchContext context) {
+        TraceNodeScope nodeScope = traceRecorder.startNode(traceRunScope(context), processorTraceCommand(processor));
         try {
-            return processor.process(chunks, results, context);
+            List<RetrievedChunk> processed = processor.process(chunks, results, context);
+            traceRecorder.finishNode(nodeScope);
+            return processed;
         } catch (Exception ex) {
+            traceRecorder.finishNode(nodeScope, ex);
             LOG.error(LOG_MSG_PROCESSOR_FAILED, processor.name(), ex);
             return chunks;
         }
@@ -199,7 +234,8 @@ public class KernelMultiChannelRetrievalEngine {
     private SearchContext buildSearchContext(List<SubQuestionIntent> subIntents,
                                              int topK,
                                              RetrievalFilter filter,
-                                             RetrievalOptions options) {
+                                             RetrievalOptions options,
+                                             TraceRunScope traceRunScope) {
         List<SubQuestionIntent> safeSubIntents = Objects.requireNonNullElse(subIntents, List.of());
         String question = safeSubIntents.isEmpty() ? "" : safeSubIntents.get(0).subQuestion();
         return SearchContext.builder()
@@ -210,7 +246,34 @@ public class KernelMultiChannelRetrievalEngine {
                 .filter(filter)
                 .options(options)
                 .compiledFilter(compileFilter(filter))
+                .traceRunScope(traceRunScope)
                 .build();
+    }
+
+    private TraceRunScope traceRunScope(SearchContext context) {
+        TraceRunScope traceRunScope = context == null ? null : context.getTraceRunScope();
+        return traceRunScope == null ? TraceRunScope.disabled() : traceRunScope;
+    }
+
+    private TraceNodeStartCommand channelTraceCommand(SearchChannelFeature channel) {
+        // 检索 Trace 只记录编排节点，不改变通道失败时返回空结果的降级语义。
+        return new TraceNodeStartCommand(
+                "search-channel:" + Objects.requireNonNullElse(channel.name(), "unknown"),
+                "RETRIEVAL_CHANNEL",
+                channel.getClass().getName(),
+                "search",
+                null,
+                1);
+    }
+
+    private TraceNodeStartCommand processorTraceCommand(SearchResultPostProcessorFeature processor) {
+        return new TraceNodeStartCommand(
+                "post-processor:" + Objects.requireNonNullElse(processor.name(), "unknown"),
+                "RETRIEVAL_POST_PROCESSOR",
+                processor.getClass().getName(),
+                "process",
+                null,
+                1);
     }
 
     private CompiledMetadataFilter compileFilter(RetrievalFilter filter) {

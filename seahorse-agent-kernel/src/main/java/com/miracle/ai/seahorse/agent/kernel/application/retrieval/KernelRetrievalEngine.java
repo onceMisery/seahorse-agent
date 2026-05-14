@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
@@ -91,6 +92,11 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
      */
     @Override
     public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK) {
+        return retrieve(subIntents, topK, null);
+    }
+
+    @Override
+    public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK, TraceRunScope traceRunScope) {
         List<SubQuestionIntent> safeIntents = Objects.requireNonNullElse(subIntents, List.of());
         if (safeIntents.isEmpty()) {
             return RetrievalContext.builder().intentChunks(Map.of()).build();
@@ -99,7 +105,7 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
         int finalTopK = topK > 0 ? topK : DEFAULT_TOP_K;
         List<CompletableFuture<SubQuestionContext>> tasks = safeIntents.stream()
                 .map(intent -> CompletableFuture.supplyAsync(
-                        () -> buildSubQuestionContext(intent, resolveSubQuestionTopK(intent, finalTopK)),
+                        () -> buildSubQuestionContext(intent, resolveSubQuestionTopK(intent, finalTopK), traceRunScope),
                         ragContextExecutor))
                 .toList();
         List<SubQuestionContext> contexts = tasks.stream()
@@ -119,6 +125,12 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
         return multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK);
     }
 
+    public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents,
+                                                          int topK,
+                                                          TraceRunScope traceRunScope) {
+        return multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK, traceRunScope);
+    }
+
     /**
      * 执行带 Schema 治理过滤条件的知识库检索。
      * <p>
@@ -131,12 +143,12 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
         return multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK, filter, options);
     }
 
-    private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent, int topK) {
+    private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent, int topK, TraceRunScope traceRunScope) {
         SubQuestionIntent safeIntent = safeIntent(intent);
         List<IntentScore> scores = safeScores(safeIntent);
         List<IntentScore> kbIntents = IntentScoreFilters.kb(scores);
         List<IntentScore> mcpIntents = IntentScoreFilters.mcp(scores);
-        KbResult kbResult = retrieveAndRerank(safeIntent, kbIntents, topK);
+        KbResult kbResult = retrieveAndRerank(safeIntent, kbIntents, topK, traceRunScope);
         String mcpContext = mcpIntents.isEmpty() ? "" : executeMcpAndMerge(safeIntent.subQuestion(), mcpIntents);
         return new SubQuestionContext(safeIntent.subQuestion(), kbResult.groupedContext(), mcpContext,
                 kbResult.intentChunks());
@@ -189,8 +201,11 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
                 .orElse(fallbackTopK);
     }
 
-    private KbResult retrieveAndRerank(SubQuestionIntent intent, List<IntentScore> kbIntents, int topK) {
-        List<RetrievedChunk> chunks = retrieveKnowledgeChannels(List.of(intent), topK);
+    private KbResult retrieveAndRerank(SubQuestionIntent intent,
+                                       List<IntentScore> kbIntents,
+                                       int topK,
+                                       TraceRunScope traceRunScope) {
+        List<RetrievedChunk> chunks = retrieveKnowledgeChannels(List.of(intent), topK, traceRunScope);
         if (chunks == null || chunks.isEmpty()) {
             return KbResult.empty();
         }

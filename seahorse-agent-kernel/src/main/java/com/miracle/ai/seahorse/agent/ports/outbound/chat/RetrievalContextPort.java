@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.chat;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 
 import java.util.List;
 
@@ -35,4 +36,11 @@ public interface RetrievalContextPort {
      * @return 检索上下文
      */
     RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK);
+
+    /**
+     * 带 Trace run 的检索入口，默认回落到旧契约，避免外部实现被迫改造。
+     */
+    default RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK, TraceRunScope traceRunScope) {
+        return retrieve(subIntents, topK);
+    }
 }

@@ -151,7 +151,8 @@ public class KernelChatPipeline {
     }
 
     private RetrievalContext retrieve(StreamChatContext context) {
-        return preparationPorts.retrievalContextPort().retrieve(safeSubIntents(context), DEFAULT_TOP_K);
+        return preparationPorts.retrievalContextPort()
+                .retrieve(safeSubIntents(context), DEFAULT_TOP_K, context.getTraceRunScope());
     }
 
     private boolean handleEmptyRetrieval(StreamChatContext context, RetrievalContext retrievalContext) {

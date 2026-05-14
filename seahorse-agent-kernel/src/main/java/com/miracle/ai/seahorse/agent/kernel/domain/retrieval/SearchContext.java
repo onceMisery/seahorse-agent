@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.domain.retrieval;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import lombok.Builder;
 import lombok.Data;
 
@@ -50,6 +51,8 @@ public class SearchContext {
     private RetrievalOptions options;
 
     private CompiledMetadataFilter compiledFilter;
+
+    private TraceRunScope traceRunScope;
 
     @Builder.Default
     private Map<String, Object> metadata = new HashMap<>();
