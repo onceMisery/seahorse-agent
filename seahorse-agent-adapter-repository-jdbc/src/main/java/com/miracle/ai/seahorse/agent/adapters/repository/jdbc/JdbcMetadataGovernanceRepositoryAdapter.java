@@ -438,6 +438,43 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     private void insertReviewAudit(MetadataReviewRecord current,
                                    MetadataReviewDecision decision,
                                    Map<String, Object> decisionMetadata) {
+        Map<String, Object> previousMetadata = previousAuditMetadata(current);
+        try {
+            jdbcTemplate.update("""
+                    INSERT INTO t_metadata_review_audit(
+                        id, review_item_id, tenant_id, kb_id, doc_id, result_id,
+                        from_status, to_status, reviewer_id, review_comment,
+                        previous_metadata, updated_metadata, decision_metadata, create_time
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    UUID.randomUUID().toString(),
+                    current.id(),
+                    current.tenantId(),
+                    current.knowledgeBaseId(),
+                    current.documentId(),
+                    current.resultId(),
+                    current.reviewStatus().name(),
+                    decision.reviewStatus().name(),
+                    decision.reviewerId(),
+                    decision.reviewComment(),
+                    json(previousMetadata),
+                    json(decisionMetadata),
+                    json(decisionMetadata));
+        } catch (DataAccessException ex) {
+            insertReviewAuditLegacy(current, decision, decisionMetadata);
+        }
+    }
+
+    private Map<String, Object> previousAuditMetadata(MetadataReviewRecord current) {
+        if (current.correctedMetadata() != null && !current.correctedMetadata().isEmpty()) {
+            return current.correctedMetadata();
+        }
+        return current.suggestedMetadata();
+    }
+
+    private void insertReviewAuditLegacy(MetadataReviewRecord current,
+                                         MetadataReviewDecision decision,
+                                         Map<String, Object> decisionMetadata) {
         try {
             jdbcTemplate.update("""
                     INSERT INTO t_metadata_review_audit(

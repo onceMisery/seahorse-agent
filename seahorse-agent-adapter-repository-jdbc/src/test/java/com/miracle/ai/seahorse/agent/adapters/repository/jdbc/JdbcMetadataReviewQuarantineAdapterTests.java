@@ -98,6 +98,12 @@ class JdbcMetadataReviewQuarantineAdapterTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT decision_metadata FROM t_metadata_review_audit WHERE review_item_id = 'review-1'",
                 String.class)).contains("legal");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT previous_metadata FROM t_metadata_review_audit WHERE review_item_id = 'review-1'",
+                String.class)).contains("hr");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT updated_metadata FROM t_metadata_review_audit WHERE review_item_id = 'review-1'",
+                String.class)).contains("legal");
     }
 
     @Test
@@ -251,6 +257,8 @@ class JdbcMetadataReviewQuarantineAdapterTests {
                     to_status VARCHAR(32) NOT NULL,
                     reviewer_id VARCHAR(64),
                     review_comment VARCHAR(1024),
+                    previous_metadata VARCHAR(4096),
+                    updated_metadata VARCHAR(4096),
                     decision_metadata VARCHAR(4096),
                     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )

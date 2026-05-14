@@ -205,9 +205,17 @@ CREATE TABLE IF NOT EXISTS t_metadata_review_audit (
     to_status            VARCHAR(32) NOT NULL,
     reviewer_id          VARCHAR(64),
     review_comment       VARCHAR(1024),
+    previous_metadata    JSONB,
+    updated_metadata     JSONB,
     decision_metadata    JSONB,
     create_time          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE t_metadata_review_audit
+ADD COLUMN IF NOT EXISTS previous_metadata JSONB;
+
+ALTER TABLE t_metadata_review_audit
+ADD COLUMN IF NOT EXISTS updated_metadata JSONB;
 
 COMMENT ON TABLE t_metadata_review_audit IS '元数据人工复核决策审计表';
 COMMENT ON COLUMN t_metadata_review_audit.id IS '审计记录 ID';
@@ -220,6 +228,8 @@ COMMENT ON COLUMN t_metadata_review_audit.from_status IS '决策前复核状态'
 COMMENT ON COLUMN t_metadata_review_audit.to_status IS '决策后复核状态';
 COMMENT ON COLUMN t_metadata_review_audit.reviewer_id IS '复核人 ID';
 COMMENT ON COLUMN t_metadata_review_audit.review_comment IS '复核备注';
+COMMENT ON COLUMN t_metadata_review_audit.previous_metadata IS '复核决策前的建议或已修正元数据快照 JSON';
+COMMENT ON COLUMN t_metadata_review_audit.updated_metadata IS '复核决策后的采纳、修正或调度元数据快照 JSON';
 COMMENT ON COLUMN t_metadata_review_audit.decision_metadata IS '本次决策采纳或修正的元数据 JSON';
 COMMENT ON COLUMN t_metadata_review_audit.create_time IS '审计记录创建时间';
 
