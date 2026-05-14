@@ -313,7 +313,12 @@ class MetadataGovernanceNodeFeatureTests {
         AtomicReference<Map<String, Object>> writtenDocumentMetadata = new AtomicReference<>();
         IngestionContext context = IngestionContext.builder()
                 .taskId("doc-a")
-                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .metadata(Map.of(
+                        "tenantId", "tenant-a",
+                        "kbId", "kb-a",
+                        "metadataExtractionContext", Map.of(
+                                "llmExtractorVersion", "llm-v2",
+                                "llmPromptVersion", "prompt-v2")))
                 .normalizedMetadata(Map.of("department", "Finance"))
                 .metadataFieldQualities(List.of(new MetadataFieldQuality(
                         "department", 0.5D, "llm", "LlmMetadataExtractor", true, "")))
@@ -336,7 +341,9 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(reviewItems).extracting(MetadataReviewItem::reasonCode).containsExactly("METADATA_REVIEW_REQUIRED");
         assertThat(reviewItems.get(0).resultId()).isEqualTo("result-a");
         assertThat(reviewItems.get(0).reviewContext())
-                .containsKeys("issues", "fieldQualities", "rawCandidates", "rejectedMetadata");
+                .containsKeys("issues", "fieldQualities", "rawCandidates", "rejectedMetadata", "extractionContext");
+        assertThat(reviewItems.get(0).reviewContext().get("extractionContext").toString())
+                .contains("llm-v2", "prompt-v2");
         assertThat(reviewItems.get(0).reviewContext().get("rawCandidates").toString())
                 .contains("财务部预算说明");
         assertThat(writtenDocumentMetadata.get()).isNull();
@@ -390,6 +397,9 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(messagesRef.get())
                 .extracting(ChatMessage::getContent)
                 .anySatisfy(content -> assertThat(content).contains("prompt-v2"));
+        Map<?, ?> extractionContext = (Map<?, ?>) context.getMetadata().get("metadataExtractionContext");
+        assertThat(extractionContext.get("llmExtractorVersion")).isEqualTo("llm-v2");
+        assertThat(extractionContext.get("llmPromptVersion")).isEqualTo("prompt-v2");
         assertThat(context.getMetadataCandidates())
                 .extracting(MetadataFieldCandidate::fieldKey)
                 .containsExactly("department");

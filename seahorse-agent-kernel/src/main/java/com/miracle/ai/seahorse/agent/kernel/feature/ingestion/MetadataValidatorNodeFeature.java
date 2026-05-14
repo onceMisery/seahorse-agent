@@ -34,6 +34,7 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
     private static final String KEY_KB_ID = "kbId";
     private static final String KEY_DOC_ID = "docId";
     private static final String KEY_EXTRACTOR_VERSION = "extractorVersion";
+    private static final String KEY_METADATA_EXTRACTION_CONTEXT = "metadataExtractionContext";
 
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final MetadataExtractionResultRepositoryPort resultRepositoryPort;
@@ -220,7 +221,18 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
         reviewContext.put("fieldQualities", Objects.requireNonNullElse(context.getMetadataFieldQualities(), List.of()));
         reviewContext.put("rawCandidates", Objects.requireNonNullElse(context.getMetadataCandidates(), List.of()));
         reviewContext.put("rejectedMetadata", result.rejectedMetadata());
+        addExtractionContext(context, reviewContext);
         return reviewContext;
+    }
+
+    private void addExtractionContext(IngestionContext context, Map<String, Object> reviewContext) {
+        Object value = context.getMetadata() == null ? null : context.getMetadata().get(KEY_METADATA_EXTRACTION_CONTEXT);
+        if (!(value instanceof Map<?, ?> map) || map.isEmpty()) {
+            return;
+        }
+        Map<String, Object> extractionContext = new LinkedHashMap<>();
+        map.forEach((key, item) -> extractionContext.put(String.valueOf(key), item));
+        reviewContext.put("extractionContext", extractionContext);
     }
 
     private MetadataSchema resolveSchema(IngestionContext context, NodeConfig config) {

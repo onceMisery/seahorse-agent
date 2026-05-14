@@ -39,6 +39,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
     private static final String KEY_PARSE_METADATA = "parseMetadata";
     private static final String KEY_RULES = "rules";
     private static final String KEY_EXTRACTOR_VERSION = "extractorVersion";
+    private static final String KEY_METADATA_EXTRACTION_CONTEXT = "metadataExtractionContext";
     private static final String KEY_LLM_ENABLED = "llmEnabled";
     private static final String KEY_LLM_MODEL = "llmModel";
     private static final String KEY_LLM_EXTRACTOR_VERSION = "llmExtractorVersion";
@@ -92,6 +93,8 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
             String extractorVersion = resolveExtractorVersion(safeContext, config);
             String llmExtractorVersion = resolveLlmExtractorVersion(safeContext, config);
             String llmPromptVersion = resolveLlmPromptVersion(safeContext, config);
+            boolean llmEnabled = booleanSetting(config, KEY_LLM_ENABLED);
+            attachExtractionContext(safeContext, extractorVersion, llmExtractorVersion, llmPromptVersion, llmEnabled);
             extractFromSchemaFields(schema, sourceMetadata, parseMetadata, safeContext, extractorVersion,
                     candidates, issues);
             extractFromConfiguredRules(schema, safeContext, config, sourceMetadata, parseMetadata,
@@ -349,6 +352,23 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
     private String resolveLlmPromptVersion(IngestionContext context, NodeConfig config) {
         return firstText(firstText(setting(config, KEY_LLM_PROMPT_VERSION),
                 metadataText(context, KEY_LLM_PROMPT_VERSION)), LLM_PROMPT_VERSION);
+    }
+
+    private void attachExtractionContext(IngestionContext context,
+                                         String extractorVersion,
+                                         String llmExtractorVersion,
+                                         String llmPromptVersion,
+                                         boolean llmEnabled) {
+        Map<String, Object> metadata = new LinkedHashMap<>(Objects.requireNonNullElse(context.getMetadata(), Map.of()));
+        Map<String, Object> extractionContext = new LinkedHashMap<>();
+        // 仅写入审计上下文，不作为候选字段参与 Schema 抽取或 accepted metadata 写回。
+        extractionContext.put(KEY_EXTRACTOR_VERSION, extractorVersion);
+        if (llmEnabled) {
+            extractionContext.put(KEY_LLM_EXTRACTOR_VERSION, llmExtractorVersion);
+            extractionContext.put(KEY_LLM_PROMPT_VERSION, llmPromptVersion);
+        }
+        metadata.put(KEY_METADATA_EXTRACTION_CONTEXT, extractionContext);
+        context.setMetadata(metadata);
     }
 
     private List<String> candidateKeys(MetadataFieldDescriptor field, String sourceType) {
