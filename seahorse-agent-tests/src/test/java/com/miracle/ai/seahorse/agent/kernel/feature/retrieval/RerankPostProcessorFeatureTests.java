@@ -200,7 +200,10 @@ class RerankPostProcessorFeatureTests {
             assertThat(event.name()).isEqualTo("retrieval.rerank");
             assertThat(event.attributes()).containsEntry("tenant", "tenant-1");
             assertThat(event.attributes()).containsEntry("status", "timeout");
+            assertThat(event.attributes()).containsEntry("model", "rerank-a");
+            assertThat(event.attributes()).containsEntry("outputTopK", "2");
             assertThat(event.attributes()).containsEntry("timeoutMs", "20");
+            assertThat(event.attributes()).containsEntry("fallback", "true");
         });
     }
 

@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.StringJoiner;
 
 /**
  * RRF 多通道融合后处理器。
@@ -63,7 +64,9 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
                                         List<SearchChannelResult> results,
                                         SearchContext context) {
         if (results == null || results.isEmpty()) {
-            recordRrfEvent(context, "skipped", 0, 0, 0, DEFAULT_RRF_K);
+            RetrievalOptions options = context == null ? null : context.effectiveOptions();
+            recordRrfEvent(context, "skipped", 0, 0, 0, rrfK(options),
+                    fusionTopK(options), channelWeightsSummary(options));
             return List.of();
         }
         RetrievalOptions options = context.effectiveOptions();
@@ -108,7 +111,8 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(options.fusionTopK())
                 .toList();
-        recordRrfEvent(context, "success", results.size(), merged.size(), fused.size(), rrfK);
+        recordRrfEvent(context, "success", results.size(), merged.size(), fused.size(), rrfK,
+                fusionTopK(options), channelWeightsSummary(options));
         return fused;
     }
 
@@ -169,6 +173,30 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
         return configured <= 0 ? DEFAULT_RRF_K : configured;
     }
 
+    private int fusionTopK(RetrievalOptions options) {
+        return options == null ? 0 : options.fusionTopK();
+    }
+
+    private String channelWeightsSummary(RetrievalOptions options) {
+        if (options == null) {
+            return "";
+        }
+        Object weights = options.channelSettings().get(SETTING_CHANNEL_WEIGHTS);
+        if (!(weights instanceof Map<?, ?> weightMap) || weightMap.isEmpty()) {
+            return "";
+        }
+        StringJoiner joiner = new StringJoiner(",");
+        weightMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey(Comparator.comparing(Objects::toString)))
+                .forEach(entry -> {
+                    Float parsed = weight(entry.getValue());
+                    if (parsed != null) {
+                        joiner.add(Objects.toString(entry.getKey(), "") + "=" + parsed);
+                    }
+                });
+        return joiner.toString();
+    }
+
     private Float weight(Object value) {
         if (value instanceof Number number) {
             return number.floatValue();
@@ -199,7 +227,9 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
                                 int channelCount,
                                 int candidateCount,
                                 int outputCount,
-                                int rrfK) {
+                                int rrfK,
+                                int fusionTopK,
+                                String channelWeights) {
         if (observationPort == null) {
             return;
         }
@@ -211,7 +241,9 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
                     "channelCount", String.valueOf(channelCount),
                     "candidateCount", String.valueOf(candidateCount),
                     "outputCount", String.valueOf(outputCount),
-                    "rrfK", String.valueOf(rrfK))));
+                    "fusionTopK", String.valueOf(fusionTopK),
+                    "rrfK", String.valueOf(rrfK),
+                    "channelWeights", Objects.requireNonNullElse(channelWeights, ""))));
         } catch (RuntimeException ex) {
             // 观测失败不能影响检索结果。
         }

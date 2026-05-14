@@ -107,7 +107,9 @@ class RrfFusionPostProcessorFeatureTests {
             assertThat(event.name()).isEqualTo("retrieval.rrf");
             assertThat(event.attributes()).containsEntry("tenant", "tenant-1");
             assertThat(event.attributes()).containsEntry("status", "success");
+            assertThat(event.attributes()).containsEntry("fusionTopK", "2");
             assertThat(event.attributes()).containsEntry("rrfK", "1");
+            assertThat(event.attributes()).containsEntry("channelWeights", "KeywordSearch=10.0");
         });
     }
 

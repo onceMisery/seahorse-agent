@@ -306,17 +306,39 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
         }
         try {
             // 只记录低基数运维字段，避免把候选 chunk 明细写入指标标签。
-            observationPort.recordEvent(new ObservationEvent(EVENT_RERANK, null, Map.of(
-                    "tenant", tenantId(context),
-                    "status", status,
-                    "inputCount", String.valueOf(inputCount),
-                    "outputCount", String.valueOf(outputCount),
-                    "durationMs", String.valueOf(durationMs),
-                    "timeoutMs", String.valueOf(timeoutMs),
-                    "exception", Objects.requireNonNullElse(exception, ""))));
+            RetrievalOptions options = options(context);
+            Map<String, String> attributes = new LinkedHashMap<>();
+            attributes.put("tenant", tenantId(context));
+            attributes.put("status", status);
+            attributes.put("model", rerankModel(options));
+            attributes.put("inputCount", String.valueOf(inputCount));
+            attributes.put("outputCount", String.valueOf(outputCount));
+            attributes.put("inputTopK", String.valueOf(rerankInputTopK(options)));
+            attributes.put("outputTopK", String.valueOf(rerankOutputTopK(options)));
+            attributes.put("durationMs", String.valueOf(durationMs));
+            attributes.put("timeoutMs", String.valueOf(timeoutMs));
+            attributes.put("fallback", String.valueOf(isFallbackStatus(status)));
+            attributes.put("exception", Objects.requireNonNullElse(exception, ""));
+            observationPort.recordEvent(new ObservationEvent(EVENT_RERANK, null, attributes));
         } catch (RuntimeException ex) {
             // 观测失败不能影响检索结果。
         }
+    }
+
+    private RetrievalOptions options(SearchContext context) {
+        return context == null ? null : context.effectiveOptions();
+    }
+
+    private String rerankModel(RetrievalOptions options) {
+        return options == null ? "" : options.rerankModel();
+    }
+
+    private int rerankOutputTopK(RetrievalOptions options) {
+        return options == null ? 0 : options.rerankTopK();
+    }
+
+    private boolean isFallbackStatus(String status) {
+        return !"success".equals(status) && !"skipped".equals(status);
     }
 
     private String tenantId(SearchContext context) {
