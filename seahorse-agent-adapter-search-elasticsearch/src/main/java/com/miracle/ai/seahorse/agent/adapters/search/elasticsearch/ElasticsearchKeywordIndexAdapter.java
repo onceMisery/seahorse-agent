@@ -38,6 +38,8 @@ public class ElasticsearchKeywordIndexAdapter implements KeywordIndexPort {
 
     private static final String META_TENANT_ID = "tenant_id";
     private static final String META_COLLECTION_NAME = "collection_name";
+    private static final String META_ACL_SUBJECTS = "acl_subjects";
+    private static final String FIELD_ACL_SUBJECT_IDS = "acl_subject_ids";
 
     private final ObjectMapper objectMapper;
     private final ElasticsearchKeywordProperties properties;
@@ -108,8 +110,18 @@ public class ElasticsearchKeywordIndexAdapter implements KeywordIndexPort {
         document.put("metadata", metadata);
         document.put("tenant_id", metadata.get(META_TENANT_ID));
         document.put("collection_name", metadata.get(META_COLLECTION_NAME));
-        document.put("enabled", true);
+        // 将权限与治理字段提升为顶层字段，确保 ES 侧可以执行 ACL 和系统过滤下推。
+        document.put(FIELD_ACL_SUBJECT_IDS, firstValue(metadata.get(FIELD_ACL_SUBJECT_IDS), metadata.get(META_ACL_SUBJECTS)));
+        document.put("file_type", metadata.get("file_type"));
+        document.put("source_type", metadata.get("source_type"));
+        document.put("created_at", metadata.get("created_at"));
+        document.put("updated_at", metadata.get("updated_at"));
+        document.put("enabled", firstValue(metadata.get("enabled"), true));
         return document;
+    }
+
+    private Object firstValue(Object first, Object second) {
+        return first == null ? second : first;
     }
 
     private String toJson(Object value) {

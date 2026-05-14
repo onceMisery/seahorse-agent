@@ -55,6 +55,8 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
     private static final String META_KB_ID = "kb_id";
     private static final String META_DOC_ID = "doc_id";
     private static final String META_CHUNK_INDEX = "chunk_index";
+    private static final String META_ACL_SUBJECTS = "acl_subjects";
+    private static final String FIELD_ACL_SUBJECT_IDS = "acl_subject_ids";
 
     private final ObjectMapper objectMapper;
     private final ElasticsearchKeywordProperties properties;
@@ -100,7 +102,8 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
         body.put("size", request.topK());
         body.put("query", Map.of("bool", bool));
         body.put("_source", List.of("chunk_id", "kb_id", "doc_id", "chunk_index", "content",
-                "metadata", "tenant_id", "collection_name", "enabled"));
+                "metadata", "tenant_id", "collection_name", FIELD_ACL_SUBJECT_IDS,
+                "file_type", "source_type", "created_at", "updated_at", "enabled"));
         return body;
     }
 
@@ -118,7 +121,7 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
         appendTerms(filters, "kb_id", filter.knowledgeBaseIds());
         appendTerms(filters, "doc_id", filter.documentIds());
         appendTerms(filters, "collection_name", filter.collectionNames());
-        appendTerms(filters, "acl_subject_ids", filter.aclSubjectIds());
+        appendTerms(filters, FIELD_ACL_SUBJECT_IDS, filter.aclSubjectIds());
         appendTerms(filters, "file_type", filter.fileTypes());
         appendTerms(filters, "source_type", filter.sourceTypes());
         appendRange(filters, "created_at", filter.createdFrom(), filter.createdTo());
@@ -219,6 +222,12 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
         metadata.putIfAbsent(META_KB_ID, kbId);
         metadata.putIfAbsent(META_DOC_ID, docId);
         metadata.putIfAbsent(META_CHUNK_INDEX, chunkIndex);
+        // 顶层字段是检索过滤入口，回填到 metadata 便于后续兜底过滤和审计链路复用。
+        putIfPresent(metadata, META_ACL_SUBJECTS, value(source, FIELD_ACL_SUBJECT_IDS));
+        putIfPresent(metadata, "file_type", value(source, "file_type"));
+        putIfPresent(metadata, "source_type", value(source, "source_type"));
+        putIfPresent(metadata, "created_at", value(source, "created_at"));
+        putIfPresent(metadata, "updated_at", value(source, "updated_at"));
         metadata.putIfAbsent("enabled", source.path("enabled").asBoolean(true));
         return RetrievedChunk.builder()
                 .id(firstText(source, "chunk_id", hit.path("_id").asText("")))
@@ -249,6 +258,20 @@ public class ElasticsearchKeywordSearchAdapter implements KeywordSearchPort {
     private String text(JsonNode node, String field) {
         JsonNode value = node.path(field);
         return value.isMissingNode() || value.isNull() ? null : value.asText();
+    }
+
+    private Object value(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        if (value.isMissingNode() || value.isNull()) {
+            return null;
+        }
+        return objectMapper.convertValue(value, Object.class);
+    }
+
+    private void putIfPresent(Map<String, Object> metadata, String key, Object value) {
+        if (value != null && !metadata.containsKey(key)) {
+            metadata.put(key, value);
+        }
     }
 
     private String toJson(Object value) {

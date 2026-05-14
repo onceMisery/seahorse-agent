@@ -50,7 +50,13 @@ class ElasticsearchKeywordIndexAdapterTests {
                 .chunkId("chunk-1")
                 .index(1)
                 .content("企业级元数据治理")
-                .metadata(Map.of("tenant_id", "tenant-1", "collection_name", "default"))
+                .metadata(Map.of(
+                        "tenant_id", "tenant-1",
+                        "collection_name", "default",
+                        "acl_subjects", List.of("dept-a"),
+                        "file_type", "pdf",
+                        "source_type", "upload",
+                        "enabled", false))
                 .build()));
         adapter.deleteDocumentChunks("kb-1", "doc-1");
 
@@ -60,6 +66,10 @@ class ElasticsearchKeywordIndexAdapterTests {
                 .contains("\"_id\":\"chunk-1\"")
                 .contains("\"content\":\"企业级元数据治理\"")
                 .contains("\"tenant_id\":\"tenant-1\"")
+                .contains("\"acl_subject_ids\":[\"dept-a\"]")
+                .contains("\"file_type\":\"pdf\"")
+                .contains("\"source_type\":\"upload\"")
+                .contains("\"enabled\":false")
                 .endsWith("\n");
         assertThat(interceptor.requests().get(1).url().encodedPath()).isEqualTo("/chunks/_delete_by_query");
         assertThat(interceptor.bodies().get(1))

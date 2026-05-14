@@ -56,6 +56,7 @@ class ElasticsearchKeywordSearchAdapterTests {
                 {"hits":{"hits":[{"_id":"chunk-1","_score":3.5,
                 "_source":{"chunk_id":"chunk-1","kb_id":"kb-1","doc_id":"doc-1","chunk_index":2,
                 "content":"混合检索","tenant_id":"tenant-1","collection_name":"default",
+                "acl_subject_ids":["dept-a"],"file_type":"pdf",
                 "metadata":{"category":"policy"},"enabled":true}}]}}
                 """);
         ElasticsearchKeywordSearchAdapter adapter = new ElasticsearchKeywordSearchAdapter(
@@ -71,7 +72,10 @@ class ElasticsearchKeywordSearchAdapterTests {
         assertThat(results).hasSize(1);
         assertThat(results.get(0).getId()).isEqualTo("chunk-1");
         assertThat(results.get(0).getKbId()).isEqualTo("kb-1");
-        assertThat(results.get(0).getMetadata()).containsEntry("category", "policy");
+        assertThat(results.get(0).getMetadata())
+                .containsEntry("category", "policy")
+                .containsEntry("acl_subjects", List.of("dept-a"))
+                .containsEntry("file_type", "pdf");
 
         JsonNode body = objectMapper.readTree(interceptor.body());
         assertThat(body.path("size").asInt()).isEqualTo(7);
@@ -81,6 +85,7 @@ class ElasticsearchKeywordSearchAdapterTests {
         assertThat(interceptor.request().url().encodedPath()).isEqualTo("/chunks/_search");
         assertThat(interceptor.body()).contains("\"terms\":{\"kb_id\":[\"kb-1\"]}");
         assertThat(interceptor.body()).contains("\"term\":{\"tenant_id\":\"tenant-1\"}");
+        assertThat(interceptor.body()).contains("\"terms\":{\"acl_subject_ids\":[\"dept-a\"]}");
         assertThat(interceptor.body()).contains("\"term\":{\"metadata.category.keyword\":\"policy\"}");
     }
 
@@ -116,6 +121,7 @@ class ElasticsearchKeywordSearchAdapterTests {
                         .tenantId("tenant-1")
                         .knowledgeBaseIds(List.of("kb-1"))
                         .documentIds(List.of("doc-1"))
+                        .aclSubjectIds(List.of("dept-a"))
                         .enabledOnly(true)
                         .build())
                 .build();
