@@ -33,6 +33,7 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
     private static final String KEY_TENANT_ID = "tenantId";
     private static final String KEY_KB_ID = "kbId";
     private static final String KEY_DOC_ID = "docId";
+    private static final String KEY_EXTRACTOR_VERSION = "extractorVersion";
 
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final MetadataExtractionResultRepositoryPort resultRepositoryPort;
@@ -195,11 +196,13 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
     }
 
     private String extractorVersion(IngestionContext context) {
-        return Objects.requireNonNullElse(context.getMetadataCandidates(), List.<com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldCandidate>of())
+        String candidateVersion = Objects.requireNonNullElse(context.getMetadataCandidates(), List.<com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldCandidate>of())
                 .stream()
                 .findFirst()
                 .map(com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldCandidate::extractorVersion)
                 .orElse("");
+        // 无候选值的隔离/失败场景仍需保留任务上下文中的抽取器版本，便于审计和幂等重跑。
+        return firstText(candidateVersion, metadataText(context, KEY_EXTRACTOR_VERSION));
     }
 
     private Map<String, Object> snapshot(IngestionContext context) {

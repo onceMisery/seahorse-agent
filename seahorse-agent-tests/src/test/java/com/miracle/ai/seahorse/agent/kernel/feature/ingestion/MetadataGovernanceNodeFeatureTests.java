@@ -240,15 +240,16 @@ class MetadataGovernanceNodeFeatureTests {
         MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
                 field("securityLevel", MetadataValueType.STRING, true, Map.of())));
         List<String> quarantineReasons = new ArrayList<>();
+        List<MetadataExtractionRecord> savedRecords = new ArrayList<>();
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
         MetadataQuarantinePort quarantinePort = item -> quarantineReasons.add(item.reasonCode());
         IngestionContext context = IngestionContext.builder()
                 .taskId("doc-a")
-                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a", "extractorVersion", "extractor-v2"))
                 .build();
 
         NodeResult result = new MetadataValidatorNodeFeature(schemaRegistry,
-                MetadataExtractionResultRepositoryPort.noop(), MetadataReviewQueuePort.noop(), quarantinePort,
+                savedRecords::add, MetadataReviewQueuePort.noop(), quarantinePort,
                 MetadataCanonicalWritePort.noop())
                 .execute(context, NodeConfig.builder().nodeType("metadata_validator").build());
 
@@ -256,6 +257,8 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(result.isShouldContinue()).isFalse();
         assertThat(context.isSkipIndexerWrite()).isTrue();
         assertThat(context.getMetadataValidationResult().decision()).isEqualTo(MetadataValidationDecision.QUARANTINE);
+        assertThat(savedRecords).singleElement()
+                .satisfies(record -> assertThat(record.extractorVersion()).isEqualTo("extractor-v2"));
         assertThat(quarantineReasons).containsExactly("METADATA_QUARANTINE");
     }
 
