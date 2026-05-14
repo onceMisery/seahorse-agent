@@ -88,6 +88,9 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
                 reviewQueuePort.enqueue(new MetadataReviewItem(identity.tenantId(), identity.kbId(), identity.docId(),
                         safeContext.getTaskId(), "METADATA_REVIEW_REQUIRED", firstIssue(result.issues()),
                         result.acceptedMetadata()));
+                // 需要人工复核的元数据不能直接写入 canonical metadata 或继续进入索引链路。
+                safeContext.setSkipIndexerWrite(true);
+                return NodeResult.terminate("metadata review required");
             }
             mergeAcceptedMetadata(safeContext, result.acceptedMetadata());
             canonicalWritePort.writeDocumentMetadata(identity.docId(), result.acceptedMetadata());

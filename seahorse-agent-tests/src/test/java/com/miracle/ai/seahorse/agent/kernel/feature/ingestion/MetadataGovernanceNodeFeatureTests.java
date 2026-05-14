@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldCandidate;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.BackendFieldMapping;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldQuality;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataOperator;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
@@ -115,6 +116,37 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(context.isSkipIndexerWrite()).isTrue();
         assertThat(context.getMetadataValidationResult().decision()).isEqualTo(MetadataValidationDecision.QUARANTINE);
         assertThat(quarantineReasons).containsExactly("METADATA_QUARANTINE");
+    }
+
+    @Test
+    void shouldRouteLowConfidenceMetadataToReviewWithoutCanonicalWrite() {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of())));
+        MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
+        List<String> reviewReasons = new ArrayList<>();
+        AtomicReference<Map<String, Object>> writtenDocumentMetadata = new AtomicReference<>();
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .normalizedMetadata(Map.of("department", "Finance"))
+                .metadataFieldQualities(List.of(new MetadataFieldQuality(
+                        "department", 0.5D, "llm", "LlmMetadataExtractor", true, "")))
+                .build();
+
+        NodeResult result = new MetadataValidatorNodeFeature(schemaRegistry,
+                MetadataExtractionResultRepositoryPort.noop(),
+                item -> reviewReasons.add(item.reasonCode()),
+                MetadataQuarantinePort.noop(),
+                (docId, acceptedMetadata) -> writtenDocumentMetadata.set(acceptedMetadata))
+                .execute(context, NodeConfig.builder().nodeType("metadata_validator").build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.isShouldContinue()).isFalse();
+        assertThat(context.isSkipIndexerWrite()).isTrue();
+        assertThat(context.getMetadataValidationResult().decision()).isEqualTo(MetadataValidationDecision.REVIEW_REQUIRED);
+        assertThat(reviewReasons).containsExactly("METADATA_REVIEW_REQUIRED");
+        assertThat(writtenDocumentMetadata.get()).isNull();
+        assertThat(context.getMetadata()).doesNotContainKeys("department", "acceptedMetadata");
     }
 
     @Test
