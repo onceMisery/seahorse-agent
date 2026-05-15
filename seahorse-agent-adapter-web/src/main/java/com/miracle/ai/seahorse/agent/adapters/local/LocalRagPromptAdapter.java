@@ -95,6 +95,9 @@ public class LocalRagPromptAdapter implements RagPromptPort {
         if (items == null || items.isEmpty()) {
             return;
         }
+        if (!builder.isEmpty()) {
+            builder.append("\n");
+        }
         builder.append(title);
         for (MemoryItem item : items) {
             String content = truncate(item.getContent(), MAX_MEMORY_ITEM_LENGTH);

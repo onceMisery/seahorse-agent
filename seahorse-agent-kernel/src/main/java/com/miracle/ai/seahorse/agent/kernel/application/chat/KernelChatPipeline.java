@@ -147,7 +147,10 @@ public class KernelChatPipeline {
     /**
      * 查询优化：术语映射、专有名词保护。
      * <p>
-     * 优化结果存入 context，rewriteQuery 使用 optimizedQuestion 作为输入。
+     * Phase 3A 行为：optimizedQuestion 与 originalQuestion 相同，不修改查询文本。
+     * protectedTerms 和 expandedTerms 存入结果对象供 trace 观测，但当前不被
+     * rewriteQuery 消费。Phase 3B（LLM 优化器）才会真正修改查询文本。
+     * <p>
      * 优化失败时降级使用原始问题。
      */
     private void optimizeQuery(StreamChatContext context) {
@@ -157,6 +160,14 @@ public class KernelChatPipeline {
                     safeHistory(context),
                     context.getMemoryContext());
             context.setQueryOptimizationResult(result);
+            if (result != null && !result.protectedTerms().isEmpty()) {
+                LOG.debug("查询优化检测到保护词: question={}, protected={}",
+                        context.getOriginalQuestion(), result.protectedTerms().keySet());
+            }
+            if (result != null && !result.expandedTerms().isEmpty()) {
+                LOG.debug("查询优化检测到扩展词: question={}, expanded={}",
+                        context.getOriginalQuestion(), result.expandedTerms());
+            }
         } catch (Exception ex) {
             LOG.warn("查询优化失败，降级使用原始问题: question={}", context.getOriginalQuestion(), ex);
         }

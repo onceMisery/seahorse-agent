@@ -104,10 +104,11 @@ public class RuleBasedMemoryCandidateExtractor implements MemoryInferencePort {
     }
 
     private boolean isUserMessage(MemoryRecord record) {
-        // 通过 metadata 中的 role 或 type 判断
         Object role = record.metadata().get("role");
-        if (role != null && "user".equalsIgnoreCase(role.toString())) return true;
-        // 默认假设短期记忆来自用户消息
+        if (role != null) {
+            return "user".equalsIgnoreCase(role.toString());
+        }
+        // metadata 中无 role 字段时，按 type 兜底
         return "CONVERSATION".equalsIgnoreCase(record.type());
     }
 

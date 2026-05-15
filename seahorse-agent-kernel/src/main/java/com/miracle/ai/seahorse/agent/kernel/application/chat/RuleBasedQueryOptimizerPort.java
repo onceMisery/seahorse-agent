@@ -34,11 +34,16 @@ import java.util.regex.Pattern;
 /**
  * 基于规则的查询优化器。
  *
- * <p>Phase 3A 实现，不调用 LLM。执行以下确定性优化：
+ * <p>Phase 3A 实现，不调用 LLM。执行以下确定性检测：
  * <ul>
  *   <li>术语映射：通过 {@link QueryTermExpansionPort} 匹配已注册术语</li>
  *   <li>专有名词保护：检测 camelCase、全大写缩写、技术术语模式</li>
  * </ul>
+ *
+ * <p>Phase 3A 行为边界：optimizedQuestion 与 originalQuestion 相同，不修改查询文本。
+ * protectedTerms 和 expandedTerms 存入结果对象供 trace 观测，但当前不被
+ * rewriteQuery 消费。需要 Phase 3B（LLM 优化器）或 QueryRewritePort 实现改造
+ * 才能让保护词和扩展词真正生效。
  */
 public class RuleBasedQueryOptimizerPort implements QueryOptimizerPort {
 
