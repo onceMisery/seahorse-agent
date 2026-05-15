@@ -281,6 +281,55 @@ class MetadataRetrievalFilterTests {
                         .containsEntry("hitCount", "0")
                         .containsEntry("success", "false")
                         .containsEntry("exception", "IllegalStateException"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.empty"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("stage", "channel")
+                        .containsEntry("reason", "channels_returned_empty")
+                        .containsEntry("channelCount", "1")
+                        .containsEntry("candidateCount", "0"));
+    }
+
+    @Test
+    void shouldRecordEmptyRetrievalWhenMetadataGuardFiltersAllCandidates() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        RecordingSearchChannelFeature channel = new RecordingSearchChannelFeature();
+        MetadataGuardPostProcessorFeature guard = new MetadataGuardPostProcessorFeature();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        registry.register(new ExtensionDescriptor(channel.name(), SearchChannelFeature.class,
+                FeatureType.SEARCH_CHANNEL, 1, true), channel);
+        registry.register(new ExtensionDescriptor(guard.name(), SearchResultPostProcessorFeature.class,
+                FeatureType.SEARCH_RESULT_POST_PROCESSOR, guard.order(), true), guard);
+        KernelMultiChannelRetrievalEngine engine = new KernelMultiChannelRetrievalEngine(
+                registry,
+                Runnable::run,
+                new FeatureActivationContext("tenant-a", "user-a", Map.of(), AgentFeatureProperties.empty()),
+                (tenantId, knowledgeBaseId) -> schema(false),
+                new DefaultMetadataFilterCompiler(),
+                KernelRagTraceRecorder.noop(),
+                observationPort);
+        RetrievalFilter filter = RetrievalFilter.builder()
+                .system(SystemRetrievalFilter.builder().tenantId("tenant-a").knowledgeBaseIds(List.of("kb-a")).build())
+                .metadataConditions(List.of(new MetadataCondition("department", MetadataOperator.EQ, "LEGAL")))
+                .build();
+
+        List<RetrievedChunk> chunks = engine.retrieveKnowledgeChannels(
+                List.of(new SubQuestionIntent("法务制度", List.of())), 5, filter, RetrievalOptions.defaults(5));
+
+        assertThat(chunks).isEmpty();
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.empty"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("stage", "post_processor")
+                        .containsEntry("reason", "post_processor_filtered_all")
+                        .containsEntry("channelCount", "1")
+                        .containsEntry("candidateCount", "2")
+                        .containsEntry("filterApplied", "true"));
     }
 
     private MetadataSchema schema(boolean pushdownToVector) {

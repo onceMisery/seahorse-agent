@@ -61,6 +61,7 @@ public class KernelMultiChannelRetrievalEngine {
     private static final String EVENT_METADATA_FILTER_COMPILED = "retrieval.metadata.filter.compiled";
     private static final String EVENT_CHANNEL_COMPLETED = "retrieval.channel.completed";
     private static final String EVENT_METADATA_GUARD = "retrieval.metadata.guard";
+    private static final String EVENT_RETRIEVAL_EMPTY = "retrieval.empty";
     private static final String PROCESSOR_METADATA_GUARD = "MetadataGuard";
     private static final String LOG_MSG_CHANNEL_FAILED = "检索通道 {} 执行失败，按空结果降级";
     private static final String LOG_MSG_PROCESSOR_FAILED = "检索后处理器 {} 执行失败，跳过该处理器";
@@ -159,9 +160,19 @@ public class KernelMultiChannelRetrievalEngine {
         SearchContext context = buildSearchContext(subIntents, topK, filter, options, traceRunScope);
         List<SearchChannelResult> channelResults = executeSearchChannels(context);
         if (channelResults.isEmpty()) {
+            recordRetrievalEmpty(context, "channel", "no_enabled_channels", 0, 0);
             return List.of();
         }
-        return executePostProcessors(channelResults, context);
+        List<RetrievedChunk> chunks = executePostProcessors(channelResults, context);
+        if (chunks.isEmpty()) {
+            int candidateCount = channelCandidateCount(channelResults);
+            recordRetrievalEmpty(context,
+                    candidateCount == 0 ? "channel" : "post_processor",
+                    candidateCount == 0 ? "channels_returned_empty" : "post_processor_filtered_all",
+                    channelResults.size(),
+                    candidateCount);
+        }
+        return chunks;
     }
 
     private List<SearchChannelResult> executeSearchChannels(SearchContext context) {
@@ -293,6 +304,12 @@ public class KernelMultiChannelRetrievalEngine {
 
     private int chunkCount(List<RetrievedChunk> chunks) {
         return chunks == null ? 0 : chunks.size();
+    }
+
+    private int channelCandidateCount(List<SearchChannelResult> results) {
+        return Objects.requireNonNullElse(results, List.<SearchChannelResult>of()).stream()
+                .mapToInt(result -> safeChunks(result).size())
+                .sum();
     }
 
     private SearchContext buildSearchContext(List<SubQuestionIntent> subIntents,
@@ -433,6 +450,31 @@ public class KernelMultiChannelRetrievalEngine {
             observationPort.recordEvent(new ObservationEvent(EVENT_METADATA_GUARD, null, attributes));
         } catch (RuntimeException ignored) {
             // 观测失败不能影响权限和动态 metadata 的兜底过滤链路。
+        }
+    }
+
+    private void recordRetrievalEmpty(SearchContext context,
+                                      String stage,
+                                      String reason,
+                                      int channelCount,
+                                      int candidateCount) {
+        if (observationPort == null) {
+            return;
+        }
+        try {
+            Map<String, String> attributes = new java.util.LinkedHashMap<>();
+            attributes.put("tenantId", tenantId(context));
+            attributes.put("knowledgeBaseId", knowledgeBaseId(context));
+            attributes.put("stage", Objects.requireNonNullElse(stage, ""));
+            attributes.put("reason", Objects.requireNonNullElse(reason, ""));
+            attributes.put("channelCount", Integer.toString(channelCount));
+            attributes.put("candidateCount", Integer.toString(candidateCount));
+            attributes.put("topK", Integer.toString(context == null ? 0 : context.getTopK()));
+            attributes.put("filterApplied", Boolean.toString(context != null && context.getFilter() != null));
+            // 空召回事件只提供质量诊断证据，不触发任何检索重试或兜底改写。
+            observationPort.recordEvent(new ObservationEvent(EVENT_RETRIEVAL_EMPTY, null, attributes));
+        } catch (RuntimeException ignored) {
+            // 观测失败不能改变空结果返回语义。
         }
     }
 }
