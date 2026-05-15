@@ -15,13 +15,16 @@ public interface MetadataReviewInboundPort {
     MetadataReviewPage page(String tenantId, String knowledgeBaseId, MetadataReviewStatus status, long current,
                             long size);
 
-    MetadataReviewPage page(String tenantId,
-                            String knowledgeBaseId,
-                            MetadataReviewStatus status,
-                            String reasonCode,
-                            String documentId,
-                            long current,
-                            long size);
+    default MetadataReviewPage page(String tenantId,
+                                    String knowledgeBaseId,
+                                    MetadataReviewStatus status,
+                                    String reasonCode,
+                                    String documentId,
+                                    long current,
+                                    long size) {
+        // 兼容外部旧实现：未覆盖增强筛选方法时，仍回落到原分页契约。
+        return page(tenantId, knowledgeBaseId, status, current, size);
+    }
 
     MetadataReviewRecord queryById(String itemId);
 
