@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWr
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
@@ -161,6 +162,24 @@ class KernelMetadataReviewServiceTests {
         assertThat(quarantine.sourceSnapshot()).containsEntry("reviewItemId", "review-1");
     }
 
+    @Test
+    void shouldListReviewAuditsWithoutSideEffects() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-1", MetadataReviewStatus.CORRECTED, Map.of("department", "legal")));
+        repository.addAudit(reviewAudit("audit-1"));
+        CapturingCanonicalWritePort canonicalWritePort = new CapturingCanonicalWritePort();
+        CapturingIndexCompensationPort compensationPort = new CapturingIndexCompensationPort();
+        KernelMetadataReviewService service = new KernelMetadataReviewService(
+                repository, canonicalWritePort, MetadataQuarantinePort.noop(), compensationPort);
+
+        List<MetadataReviewAuditRecord> audits = service.listAudits("review-1");
+
+        assertThat(audits).hasSize(1);
+        assertThat(audits.get(0).updatedMetadata()).containsEntry("department", "legal");
+        assertThat(canonicalWritePort.metadata).isEmpty();
+        assertThat(compensationPort.documentId).isEmpty();
+    }
+
     private static MetadataReviewRecord review(String id,
                                                MetadataReviewStatus status,
                                                Map<String, Object> correctedMetadata) {
@@ -182,12 +201,35 @@ class KernelMetadataReviewServiceTests {
                 Instant.EPOCH);
     }
 
+    private static MetadataReviewAuditRecord reviewAudit(String id) {
+        return new MetadataReviewAuditRecord(
+                id,
+                "review-1",
+                "tenant-1",
+                "kb-1",
+                "doc-1",
+                "result-1",
+                "PENDING",
+                "CORRECTED",
+                "auditor",
+                "修正部门",
+                Map.of("department", "hr"),
+                Map.of("department", "legal"),
+                Map.of("department", "legal"),
+                Instant.EPOCH);
+    }
+
     private static final class InMemoryReviewRepository implements MetadataReviewManagementRepositoryPort {
 
         private final Map<String, MetadataReviewRecord> records = new LinkedHashMap<>();
+        private final List<MetadataReviewAuditRecord> audits = new java.util.ArrayList<>();
 
         void put(MetadataReviewRecord record) {
             records.put(record.id(), record);
+        }
+
+        void addAudit(MetadataReviewAuditRecord audit) {
+            audits.add(audit);
         }
 
         @Override
@@ -199,6 +241,13 @@ class KernelMetadataReviewServiceTests {
         @Override
         public Optional<MetadataReviewRecord> findReviewItem(String itemId) {
             return Optional.ofNullable(records.get(itemId));
+        }
+
+        @Override
+        public List<MetadataReviewAuditRecord> listReviewAudits(String itemId) {
+            return audits.stream()
+                    .filter(audit -> audit.reviewItemId().equals(itemId))
+                    .toList();
         }
 
         @Override

@@ -48,6 +48,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRetry;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
@@ -385,6 +386,40 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     """, this::toReviewRecord, itemId).stream().findFirst();
         } catch (DataAccessException ex) {
             return Optional.empty();
+        }
+    }
+
+    @Override
+    public List<MetadataReviewAuditRecord> listReviewAudits(String itemId) {
+        if (blank(itemId)) {
+            return List.of();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, review_item_id, tenant_id, kb_id, doc_id, result_id,
+                           from_status, to_status, reviewer_id, review_comment,
+                           previous_metadata, updated_metadata, decision_metadata, create_time
+                    FROM t_metadata_review_audit
+                    WHERE review_item_id = ?
+                    ORDER BY create_time ASC, id ASC
+                    """, this::toReviewAuditRecord, itemId);
+        } catch (DataAccessException ex) {
+            return listReviewAuditsLegacy(itemId);
+        }
+    }
+
+    private List<MetadataReviewAuditRecord> listReviewAuditsLegacy(String itemId) {
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, review_item_id, tenant_id, kb_id, doc_id, result_id,
+                           from_status, to_status, reviewer_id, review_comment,
+                           decision_metadata, create_time
+                    FROM t_metadata_review_audit
+                    WHERE review_item_id = ?
+                    ORDER BY create_time ASC, id ASC
+                    """, this::toReviewAuditRecordLegacy, itemId);
+        } catch (DataAccessException ignored) {
+            return List.of();
         }
     }
 
@@ -931,6 +966,43 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 rs.getString("review_comment"),
                 instant(rs.getTimestamp("create_time")),
                 instant(rs.getTimestamp("update_time")));
+    }
+
+    private MetadataReviewAuditRecord toReviewAuditRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new MetadataReviewAuditRecord(
+                rs.getString("id"),
+                rs.getString("review_item_id"),
+                rs.getString("tenant_id"),
+                rs.getString("kb_id"),
+                rs.getString("doc_id"),
+                rs.getString("result_id"),
+                rs.getString("from_status"),
+                rs.getString("to_status"),
+                rs.getString("reviewer_id"),
+                rs.getString("review_comment"),
+                readMap(rs.getString("previous_metadata")),
+                readMap(rs.getString("updated_metadata")),
+                readMap(rs.getString("decision_metadata")),
+                instant(rs.getTimestamp("create_time")));
+    }
+
+    private MetadataReviewAuditRecord toReviewAuditRecordLegacy(ResultSet rs, int rowNum) throws SQLException {
+        Map<String, Object> decisionMetadata = readMap(rs.getString("decision_metadata"));
+        return new MetadataReviewAuditRecord(
+                rs.getString("id"),
+                rs.getString("review_item_id"),
+                rs.getString("tenant_id"),
+                rs.getString("kb_id"),
+                rs.getString("doc_id"),
+                rs.getString("result_id"),
+                rs.getString("from_status"),
+                rs.getString("to_status"),
+                rs.getString("reviewer_id"),
+                rs.getString("review_comment"),
+                Map.of(),
+                decisionMetadata,
+                decisionMetadata,
+                instant(rs.getTimestamp("create_time")));
     }
 
     private MetadataQuarantineRecord toQuarantineRecord(ResultSet rs, int rowNum) throws SQLException {

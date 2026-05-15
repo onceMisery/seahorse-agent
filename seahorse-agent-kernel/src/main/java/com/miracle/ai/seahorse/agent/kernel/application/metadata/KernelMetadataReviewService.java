@@ -6,6 +6,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWr
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
@@ -16,6 +17,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExt
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -79,6 +81,13 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         requireText(itemId, "itemId must not be blank");
         return reviewRepositoryPort.findReviewItem(itemId)
                 .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + itemId));
+    }
+
+    @Override
+    public List<MetadataReviewAuditRecord> listAudits(String itemId) {
+        requireText(itemId, "itemId must not be blank");
+        // 审计记录只读展示，不触发 canonical metadata 写回或索引补偿。
+        return reviewRepositoryPort.listReviewAudits(itemId);
     }
 
     @Override

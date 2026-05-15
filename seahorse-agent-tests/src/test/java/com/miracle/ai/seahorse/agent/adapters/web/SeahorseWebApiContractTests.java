@@ -95,6 +95,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineReasonCount;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
@@ -784,6 +785,8 @@ class SeahorseWebApiContractTests {
                         1, 10, 1, 1));
         when(reviewPort.queryById("review-1"))
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.PENDING));
+        when(reviewPort.listAudits("review-1"))
+                .thenReturn(List.of(metadataReviewAudit("audit-1")));
         when(reviewPort.approve(eq("review-1"), any()))
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.APPROVED));
         when(reviewPort.correct(eq("review-1"), any()))
@@ -822,6 +825,11 @@ class SeahorseWebApiContractTests {
         mvc.perform(get("/metadata-review/items/review-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.documentId").value("doc-1"));
+        mvc.perform(get("/metadata-review/items/review-1/audits"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value("audit-1"))
+                .andExpect(jsonPath("$.data[0].toStatus").value("CORRECTED"))
+                .andExpect(jsonPath("$.data[0].decisionMetadata.department").value("legal"));
         mvc.perform(post("/metadata-review/items/review-1/approve")
                         .header("X-User-Id", "auditor")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -1094,6 +1102,24 @@ class SeahorseWebApiContractTests {
                 "auditor",
                 "ok",
                 Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataReviewAuditRecord metadataReviewAudit(String id) {
+        return new MetadataReviewAuditRecord(
+                id,
+                "review-1",
+                "tenant-1",
+                "kb-1",
+                "doc-1",
+                "result-1",
+                "PENDING",
+                "CORRECTED",
+                "auditor",
+                "ok",
+                Map.of("department", "hr"),
+                Map.of("department", "legal"),
+                Map.of("department", "legal"),
                 Instant.EPOCH);
     }
 

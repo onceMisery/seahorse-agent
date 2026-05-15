@@ -69,6 +69,11 @@ public class SeahorseMetadataReviewController {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, reviewPort.queryById(itemId));
     }
 
+    @GetMapping("/metadata-review/items/{item-id}/audits")
+    public Map<String, Object> listAudits(@PathVariable("item-id") String itemId) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, reviewPort.listAudits(itemId));
+    }
+
     @PostMapping("/metadata-review/items/{item-id}/approve")
     public Map<String, Object> approve(@PathVariable("item-id") String itemId,
                                        @RequestBody(required = false) MetadataReviewDecisionRequest request,

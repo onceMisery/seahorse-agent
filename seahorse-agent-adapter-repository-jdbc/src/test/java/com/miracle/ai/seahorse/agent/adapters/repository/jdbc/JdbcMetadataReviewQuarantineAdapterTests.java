@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRetry;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery;
@@ -104,6 +105,13 @@ class JdbcMetadataReviewQuarantineAdapterTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT updated_metadata FROM t_metadata_review_audit WHERE review_item_id = 'review-1'",
                 String.class)).contains("legal");
+
+        List<MetadataReviewAuditRecord> audits = adapter.listReviewAudits("review-1");
+        assertThat(audits).hasSize(1);
+        assertThat(audits.get(0).fromStatus()).isEqualTo("PENDING");
+        assertThat(audits.get(0).toStatus()).isEqualTo("CORRECTED");
+        assertThat(audits.get(0).previousMetadata()).containsEntry("department", "hr");
+        assertThat(audits.get(0).decisionMetadata()).containsEntry("department", "legal");
     }
 
     @Test
