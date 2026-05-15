@@ -218,7 +218,8 @@ class MetadataRetrievalFilterTests {
         assertThat(chunks).extracting(RetrievedChunk::getId).containsExactly("1");
         assertThat(observationPort.events)
                 .extracting(ObservationEvent::name)
-                .contains("retrieval.metadata.filter.compiled", "retrieval.channel.completed");
+                .contains("retrieval.metadata.filter.compiled", "retrieval.channel.completed",
+                        "retrieval.metadata.guard");
         assertThat(observationPort.events)
                 .filteredOn(event -> event.name().equals("retrieval.metadata.filter.compiled"))
                 .singleElement()
@@ -237,6 +238,16 @@ class MetadataRetrievalFilterTests {
                         .containsEntry("channelName", "recording-search")
                         .containsEntry("channelType", "VECTOR_GLOBAL")
                         .containsEntry("hitCount", "2")
+                        .containsEntry("success", "true"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.metadata.guard"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("inputCount", "2")
+                        .containsEntry("outputCount", "1")
+                        .containsEntry("filteredCount", "1")
                         .containsEntry("success", "true"));
     }
 

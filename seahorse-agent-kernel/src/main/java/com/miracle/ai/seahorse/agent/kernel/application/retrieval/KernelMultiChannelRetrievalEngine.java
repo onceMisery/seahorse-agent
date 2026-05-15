@@ -60,6 +60,8 @@ public class KernelMultiChannelRetrievalEngine {
     private static final Logger LOG = LoggerFactory.getLogger(KernelMultiChannelRetrievalEngine.class);
     private static final String EVENT_METADATA_FILTER_COMPILED = "retrieval.metadata.filter.compiled";
     private static final String EVENT_CHANNEL_COMPLETED = "retrieval.channel.completed";
+    private static final String EVENT_METADATA_GUARD = "retrieval.metadata.guard";
+    private static final String PROCESSOR_METADATA_GUARD = "MetadataGuard";
     private static final String LOG_MSG_CHANNEL_FAILED = "检索通道 {} 执行失败，按空结果降级";
     private static final String LOG_MSG_PROCESSOR_FAILED = "检索后处理器 {} 执行失败，跳过该处理器";
 
@@ -259,11 +261,17 @@ public class KernelMultiChannelRetrievalEngine {
                                                        List<SearchChannelResult> results,
                                                        SearchContext context) {
         TraceNodeScope nodeScope = traceRecorder.startNode(traceRunScope(context), processorTraceCommand(processor));
+        long startedAt = System.currentTimeMillis();
+        int inputCount = chunkCount(chunks);
         try {
             List<RetrievedChunk> processed = processor.process(chunks, results, context);
+            recordMetadataGuardCompleted(processor, context, inputCount, chunkCount(processed),
+                    System.currentTimeMillis() - startedAt, null);
             traceRecorder.finishNode(nodeScope);
             return processed;
         } catch (Exception ex) {
+            recordMetadataGuardCompleted(processor, context, inputCount, inputCount,
+                    System.currentTimeMillis() - startedAt, ex);
             traceRecorder.finishNode(nodeScope, ex);
             LOG.error(LOG_MSG_PROCESSOR_FAILED, processor.name(), ex);
             return chunks;
@@ -281,6 +289,10 @@ public class KernelMultiChannelRetrievalEngine {
             return List.of();
         }
         return Objects.requireNonNullElse(result.getChunks(), List.of());
+    }
+
+    private int chunkCount(List<RetrievedChunk> chunks) {
+        return chunks == null ? 0 : chunks.size();
     }
 
     private SearchContext buildSearchContext(List<SubQuestionIntent> subIntents,
@@ -390,6 +402,37 @@ public class KernelMultiChannelRetrievalEngine {
                     "warningCount", Integer.toString(compiledFilter.warnings().size()))));
         } catch (RuntimeException ignored) {
             // 观测失败不能影响检索主链路，也不能绕过已编译的 Schema/Filter Compiler 结果。
+        }
+    }
+
+    private void recordMetadataGuardCompleted(SearchResultPostProcessorFeature processor,
+                                              SearchContext context,
+                                              int inputCount,
+                                              int outputCount,
+                                              long elapsedMs,
+                                              Exception ex) {
+        if (observationPort == null
+                || !PROCESSOR_METADATA_GUARD.equals(Objects.requireNonNullElse(processor.name(), ""))) {
+            return;
+        }
+        try {
+            int filteredCount = Math.max(inputCount - outputCount, 0);
+            Map<String, String> attributes = new java.util.LinkedHashMap<>();
+            attributes.put("tenantId", tenantId(context));
+            attributes.put("knowledgeBaseId", knowledgeBaseId(context));
+            attributes.put("inputCount", Integer.toString(inputCount));
+            attributes.put("outputCount", Integer.toString(outputCount));
+            attributes.put("filteredCount", Integer.toString(filteredCount));
+            attributes.put("reason", filteredCount > 0 ? "metadata_or_acl_filtered" : "none");
+            attributes.put("durationMs", Long.toString(elapsedMs));
+            attributes.put("success", Boolean.toString(ex == null));
+            if (ex != null) {
+                attributes.put("exception", ex.getClass().getSimpleName());
+            }
+            // 该事件只记录兜底过滤效果，不能改变后处理器异常时的原有降级行为。
+            observationPort.recordEvent(new ObservationEvent(EVENT_METADATA_GUARD, null, attributes));
+        } catch (RuntimeException ignored) {
+            // 观测失败不能影响权限和动态 metadata 的兜底过滤链路。
         }
     }
 }
