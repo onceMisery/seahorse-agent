@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import lombok.Data;
@@ -30,6 +31,8 @@ import java.util.List;
 public class StreamChatContext {
 
     private String question;
+
+    private String originalQuestion;
 
     private String conversationId;
 
@@ -49,6 +52,10 @@ public class StreamChatContext {
 
     private List<SubQuestionIntent> subIntents;
 
+    private MemoryContext memoryContext;
+
+    private QueryOptimizationResult queryOptimizationResult;
+
     public static Builder builder() {
         return new Builder();
     }
@@ -59,6 +66,7 @@ public class StreamChatContext {
 
         public Builder question(String question) {
             context.setQuestion(question);
+            context.setOriginalQuestion(question);
             return this;
         }
 

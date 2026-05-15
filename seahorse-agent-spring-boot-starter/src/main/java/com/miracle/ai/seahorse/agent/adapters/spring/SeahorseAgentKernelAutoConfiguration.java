@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFactory;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentAdapterProperties;
@@ -46,10 +47,13 @@ import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocum
 import com.miracle.ai.seahorse.agent.kernel.application.keyword.KernelKeywordIndexMaintenanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.mapping.KernelQueryTermMappingService;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryEnginePort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryGovernanceServicePorts;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.RuleBasedMemoryCandidateExtractor;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryManagementServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataBackfillService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQualityService;
@@ -130,7 +134,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
+import com.miracle.ai.seahorse.agent.adapters.ai.openai.LlmQueryOptimizerAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.RuleBasedQueryOptimizerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryOptimizerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermExpansionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
@@ -563,14 +571,37 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(ChatModelPort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.query-optimizer", name = "llm-enabled", havingValue = "true")
+    @ConditionalOnMissingBean(QueryOptimizerPort.class)
+    public QueryOptimizerPort seahorseLlmQueryOptimizer(
+            ChatModelPort chatModelPort,
+            PromptTemplatePort promptTemplatePort,
+            ObjectMapper objectMapper) {
+        return new LlmQueryOptimizerAdapter(chatModelPort, promptTemplatePort, objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(QueryOptimizerPort.class)
+    public QueryOptimizerPort seahorseRuleBasedQueryOptimizer(
+            ObjectProvider<QueryTermExpansionPort> termExpansionPort) {
+        return new RuleBasedQueryOptimizerPort(
+                termExpansionPort.getIfAvailable(QueryTermExpansionPort::noop));
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     public ChatPreparationPorts seahorseChatPreparationPorts(ObjectProvider<ConversationMemoryPort> memoryPort,
+                                                             ObjectProvider<MemoryEnginePort> memoryEnginePort,
+                                                             ObjectProvider<QueryOptimizerPort> queryOptimizerPort,
                                                              ObjectProvider<QueryRewritePort> queryRewritePort,
                                                              ObjectProvider<IntentResolutionPort> intentResolutionPort,
                                                              ObjectProvider<IntentGuidancePort> intentGuidancePort,
                                                              ObjectProvider<RetrievalContextPort> retrievalContextPort) {
         return new ChatPreparationPorts(
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
+                memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
+                queryOptimizerPort.getIfAvailable(QueryOptimizerPort::passthrough),
                 queryRewritePort.getIfAvailable(QueryRewritePort::passthrough),
                 intentResolutionPort.getIfAvailable(IntentResolutionPort::empty),
                 intentGuidancePort.getIfAvailable(IntentGuidancePort::none),
@@ -979,6 +1010,22 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
+    @ConditionalOnMissingBean(MemoryEnginePort.class)
+    public MemoryEnginePort seahorseDefaultMemoryEnginePort(
+            ShortTermMemoryPort shortTermMemoryPort,
+            LongTermMemoryPort longTermMemoryPort,
+            SemanticMemoryPort semanticMemoryPort,
+            ObjectProvider<ObjectMapper> objectMapperProvider) {
+        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        return new DefaultMemoryEnginePort(
+                shortTermMemoryPort,
+                longTermMemoryPort,
+                semanticMemoryPort,
+                objectMapper);
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     public KernelMemoryEngine seahorseKernelMemoryEngine(ObjectProvider<MemoryEnginePort> memoryEnginePort) {
         return new KernelMemoryEngine(memoryEnginePort.getIfAvailable(MemoryEnginePort::noop));
@@ -1013,18 +1060,26 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(MemoryInferencePort.class)
+    public MemoryInferencePort seahorseRuleBasedMemoryCandidateExtractor() {
+        return new RuleBasedMemoryCandidateExtractor();
+    }
+
+    @Bean
     @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
     @ConditionalOnMissingBean
     public MemoryGovernanceServicePorts seahorseMemoryGovernanceServicePorts(
             ShortTermMemoryPort shortTermMemoryPort,
             LongTermMemoryPort longTermMemoryPort,
             SemanticMemoryPort semanticMemoryPort,
-            ObjectProvider<MemoryEnginePort> memoryEnginePort) {
+            ObjectProvider<MemoryEnginePort> memoryEnginePort,
+            ObjectProvider<MemoryInferencePort> memoryInferencePort) {
         return new MemoryGovernanceServicePorts(
                 shortTermMemoryPort,
                 longTermMemoryPort,
                 semanticMemoryPort,
-                memoryEnginePort.getIfAvailable(MemoryEnginePort::noop));
+                memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
+                memoryInferencePort.getIfAvailable(MemoryInferencePort::noop));
     }
 
     @Bean
@@ -1033,8 +1088,10 @@ public class SeahorseAgentKernelAutoConfiguration {
     public KernelMemoryGovernanceService seahorseMemoryGovernanceInboundPort(
             MemoryGovernanceServicePorts servicePorts,
             @Value("${seahorse-agent.memory.long-term-importance-threshold:0.6}")
-            double promotionThreshold) {
-        return new KernelMemoryGovernanceService(servicePorts, promotionThreshold);
+            double promotionThreshold,
+            @Value("${seahorse-agent.memory.inference-enabled:false}")
+            boolean inferenceEnabled) {
+        return new KernelMemoryGovernanceService(servicePorts, promotionThreshold, inferenceEnabled);
     }
 
     @Bean

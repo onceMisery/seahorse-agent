@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import lombok.Builder;
@@ -44,11 +45,24 @@ public class PromptContext {
 
     private Map<String, List<RetrievedChunk>> intentChunks;
 
+    private MemoryContext memoryContext;
+
     public boolean hasMcp() {
         return mcpContext != null && !mcpContext.isBlank();
     }
 
     public boolean hasKb() {
         return kbContext != null && !kbContext.isBlank();
+    }
+
+    public boolean hasMemory() {
+        return memoryContext != null
+                && (notEmpty(memoryContext.getShortTermMemories())
+                || notEmpty(memoryContext.getLongTermMemories())
+                || notEmpty(memoryContext.getSemanticMemories()));
+    }
+
+    private boolean notEmpty(List<?> list) {
+        return list != null && !list.isEmpty();
     }
 }

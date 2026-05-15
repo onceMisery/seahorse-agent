@@ -1142,7 +1142,7 @@ class SeahorseWebApiContractTests {
     }
 
     private static MemoryGovernanceRunResult governanceResult(String userId) {
-        return new MemoryGovernanceRunResult(userId, "manual", 0, 0, false, false, List.of(), Instant.EPOCH);
+        return new MemoryGovernanceRunResult(userId, "manual", 0, 0, 0, false, false, List.of(), Instant.EPOCH);
     }
 
     private static <T> ObjectProvider<T> emptyProvider(Class<T> type) {

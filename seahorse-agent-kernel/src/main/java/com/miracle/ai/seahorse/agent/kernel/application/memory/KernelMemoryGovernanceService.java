@@ -17,10 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.InferredMemory;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceRunResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -30,15 +33,26 @@ import java.util.Objects;
 
 public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPort {
 
+    private static final Logger LOG = LoggerFactory.getLogger(KernelMemoryGovernanceService.class);
+
     private static final int PROMOTION_SCAN_LIMIT = 500;
     private static final double DEFAULT_PROMOTION_THRESHOLD = 0.6D;
+    private static final double INFERENCE_CONFIDENCE_THRESHOLD = 0.7D;
 
     private final MemoryGovernanceServicePorts ports;
     private final double promotionThreshold;
+    private final boolean inferenceEnabled;
 
     public KernelMemoryGovernanceService(MemoryGovernanceServicePorts ports, double promotionThreshold) {
+        this(ports, promotionThreshold, false);
+    }
+
+    public KernelMemoryGovernanceService(MemoryGovernanceServicePorts ports,
+                                         double promotionThreshold,
+                                         boolean inferenceEnabled) {
         this.ports = Objects.requireNonNull(ports, "ports must not be null");
         this.promotionThreshold = promotionThreshold <= 0D ? DEFAULT_PROMOTION_THRESHOLD : promotionThreshold;
+        this.inferenceEnabled = inferenceEnabled;
     }
 
     @Override
@@ -47,7 +61,11 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
         List<String> errors = new ArrayList<>();
         int promoted = 0;
         int semanticUpserted = 0;
-        for (MemoryRecord record : ports.shortTermMemoryPort().listByUser(safeUserId, PROMOTION_SCAN_LIMIT)) {
+
+        List<MemoryRecord> shortTermRecords = ports.shortTermMemoryPort().listByUser(safeUserId, PROMOTION_SCAN_LIMIT);
+
+        // 晋升：短期 → 长期/语义
+        for (MemoryRecord record : shortTermRecords) {
             if (!shouldPromote(record)) {
                 continue;
             }
@@ -62,6 +80,13 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
                 errors.add(record.id() + ":" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
             }
         }
+
+        // 推理：从短期记忆中推理新的长期/语义记忆
+        int inferred = 0;
+        if (inferenceEnabled) {
+            inferred = runInference(safeUserId, shortTermRecords, errors);
+        }
+
         if (assessQuality) {
             try {
                 ports.memoryEnginePort().assessMemoryQuality(safeUserId);
@@ -70,7 +95,52 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
             }
         }
         return new MemoryGovernanceRunResult(safeUserId, Objects.requireNonNullElse(reason, "manual"),
-                promoted, semanticUpserted, false, assessQuality, errors, Instant.now());
+                promoted, semanticUpserted, inferred, false, assessQuality, errors, Instant.now());
+    }
+
+    private int runInference(String userId, List<MemoryRecord> shortTermRecords, List<String> errors) {
+        int inferred = 0;
+        try {
+            List<MemoryRecord> semanticRecords = ports.semanticMemoryPort().listByUser(userId, 100);
+            List<InferredMemory> candidates = ports.memoryInferencePort().infer(
+                    userId, shortTermRecords, semanticRecords);
+            for (InferredMemory candidate : candidates) {
+                if (candidate.confidence() < INFERENCE_CONFIDENCE_THRESHOLD) {
+                    continue;
+                }
+                try {
+                    MemoryRecord record = toInferredRecord(userId, candidate);
+                    if ("semantic".equals(candidate.targetLayer())) {
+                        ports.semanticMemoryPort().save(record);
+                    } else {
+                        ports.longTermMemoryPort().save(record);
+                    }
+                    inferred++;
+                } catch (RuntimeException ex) {
+                    errors.add("inference:" + candidate.content() + ":" +
+                            Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+                }
+            }
+            if (inferred > 0) {
+                LOG.info("跨会话推理完成: userId={}, inferred={}", userId, inferred);
+            }
+        } catch (RuntimeException ex) {
+            errors.add("inference:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+        }
+        return inferred;
+    }
+
+    private MemoryRecord toInferredRecord(String userId, InferredMemory candidate) {
+        Map<String, Object> metadata = Map.of(
+                "userId", userId,
+                "importanceScore", candidate.confidence(),
+                "confidenceLevel", candidate.confidence(),
+                "sourceType", "inferred",
+                "sourceIds", candidate.sourceIds().toString(),
+                "reasoning", candidate.reasoning(),
+                "semanticKey", candidate.semanticKey());
+        return new MemoryRecord("", candidate.targetLayer(), candidate.type(), candidate.content(),
+                metadata, Instant.now());
     }
 
     @Override
@@ -82,7 +152,7 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
             errors.add(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
         }
         return new MemoryGovernanceRunResult("", Objects.requireNonNullElse(reason, "manual-decay"),
-                0, 0, true, false, errors, Instant.now());
+                0, 0, 0, true, false, errors, Instant.now());
     }
 
     @Override

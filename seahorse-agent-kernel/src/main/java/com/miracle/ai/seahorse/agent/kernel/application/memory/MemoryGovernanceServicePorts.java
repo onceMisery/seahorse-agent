@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 
@@ -28,13 +29,23 @@ public record MemoryGovernanceServicePorts(
         ShortTermMemoryPort shortTermMemoryPort,
         LongTermMemoryPort longTermMemoryPort,
         SemanticMemoryPort semanticMemoryPort,
-        MemoryEnginePort memoryEnginePort
+        MemoryEnginePort memoryEnginePort,
+        MemoryInferencePort memoryInferencePort
 ) {
+
+    public MemoryGovernanceServicePorts(ShortTermMemoryPort shortTermMemoryPort,
+                                        LongTermMemoryPort longTermMemoryPort,
+                                        SemanticMemoryPort semanticMemoryPort,
+                                        MemoryEnginePort memoryEnginePort) {
+        this(shortTermMemoryPort, longTermMemoryPort, semanticMemoryPort, memoryEnginePort,
+                MemoryInferencePort.noop());
+    }
 
     public MemoryGovernanceServicePorts {
         Objects.requireNonNull(shortTermMemoryPort, "shortTermMemoryPort must not be null");
         Objects.requireNonNull(longTermMemoryPort, "longTermMemoryPort must not be null");
         Objects.requireNonNull(semanticMemoryPort, "semanticMemoryPort must not be null");
         Objects.requireNonNull(memoryEnginePort, "memoryEnginePort must not be null");
+        Objects.requireNonNull(memoryInferencePort, "memoryInferencePort must not be null");
     }
 }

@@ -15,28 +15,28 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.inbound.memory;
+package com.miracle.ai.seahorse.agent.ports.outbound.mapping;
 
-import java.time.Instant;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
 
-public record MemoryGovernanceRunResult(
-        String userId,
-        String reason,
-        int promotedCount,
-        int semanticUpsertCount,
-        int inferredCount,
-        boolean decayExecuted,
-        boolean qualityAssessed,
-        List<String> errors,
-        Instant executedAt
-) {
+/**
+ * 术语扩展端口。
+ *
+ * <p>从用户查询中匹配已注册的术语映射，返回扩展结果。
+ * 与 {@link QueryTermMappingRepositoryPort}（管理分页）不同，该端口面向在线查询。
+ */
+public interface QueryTermExpansionPort {
 
-    public MemoryGovernanceRunResult {
-        userId = Objects.requireNonNullElse(userId, "");
-        reason = Objects.requireNonNullElse(reason, "");
-        errors = List.copyOf(Objects.requireNonNullElse(errors, List.of()));
-        executedAt = Objects.requireNonNullElse(executedAt, Instant.EPOCH);
+    /**
+     * 对查询文本进行术语匹配和扩展。
+     *
+     * @param queryText 查询文本
+     * @return 匹配到的术语映射（key=源词, value=目标词列表）
+     */
+    Map<String, List<String>> expand(String queryText);
+
+    static QueryTermExpansionPort noop() {
+        return queryText -> Map.of();
     }
 }
