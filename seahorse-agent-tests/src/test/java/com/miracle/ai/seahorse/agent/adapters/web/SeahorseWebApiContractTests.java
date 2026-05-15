@@ -46,6 +46,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillRunResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataDictionaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
@@ -90,6 +91,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataFieldCoverage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
@@ -989,6 +991,52 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.deleted").value(true));
     }
 
+    @Test
+    void shouldKeepMetadataDictionaryManagementContracts() throws Exception {
+        MetadataDictionaryInboundPort dictionaryPort = mock(MetadataDictionaryInboundPort.class);
+        when(dictionaryPort.listItems("tenant-1", "department", false))
+                .thenReturn(List.of(metadataDictionaryItem("dict-1", true)));
+        when(dictionaryPort.createItem(any()))
+                .thenReturn(metadataDictionaryItem("dict-1", true));
+        when(dictionaryPort.updateItem(eq("dict-1"), any()))
+                .thenReturn(metadataDictionaryItem("dict-1", true));
+        when(dictionaryPort.deleteItem("dict-1")).thenReturn(true);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMetadataDictionaryController(dictionaryPort)).build();
+
+        mvc.perform(get("/metadata-dictionaries/items")
+                        .param("tenantId", "tenant-1")
+                        .param("dictCode", "department"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data[0].rawValue").value("hr"));
+        mvc.perform(post("/metadata-dictionaries/items")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-1",
+                                "dictionaryCode", "department",
+                                "rawValue", "hr",
+                                "canonicalValue", "HR",
+                                "displayName", "Human Resource"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("dict-1"));
+        mvc.perform(put("/metadata-dictionaries/items/dict-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-1",
+                                "dictionaryCode", "department",
+                                "rawValue", "hr",
+                                "canonicalValue", "HR",
+                                "displayName", "Human Resource",
+                                "enabled", true))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.canonicalValue").value("HR"));
+        mvc.perform(delete("/metadata-dictionaries/items/dict-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleted").value(true));
+    }
+
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
     }
@@ -1204,6 +1252,19 @@ class SeahorseWebApiContractTests {
                 Map.of("sourceKeys", List.of("department")),
                 BackendFieldMapping.defaults("department"),
                 1,
+                Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataDictionaryItemRecord metadataDictionaryItem(String id, boolean enabled) {
+        return new MetadataDictionaryItemRecord(
+                id,
+                "tenant-1",
+                "department",
+                "hr",
+                "HR",
+                "Human Resource",
+                enabled,
                 Instant.EPOCH,
                 Instant.EPOCH);
     }

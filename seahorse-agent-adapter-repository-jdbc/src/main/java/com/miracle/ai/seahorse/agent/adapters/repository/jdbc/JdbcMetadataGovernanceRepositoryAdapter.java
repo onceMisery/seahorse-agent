@@ -32,6 +32,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemPayload;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
@@ -81,7 +84,8 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         MetadataDictionaryPort, MetadataExtractionResultRepositoryPort, MetadataReviewQueuePort,
         MetadataQuarantinePort, MetadataCanonicalWritePort, MetadataBackfillJobRepositoryPort,
         MetadataQualityReportRepositoryPort, MetadataReviewManagementRepositoryPort,
-        MetadataQuarantineManagementRepositoryPort, MetadataSchemaManagementRepositoryPort {
+        MetadataQuarantineManagementRepositoryPort, MetadataSchemaManagementRepositoryPort,
+        MetadataDictionaryManagementRepositoryPort {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
@@ -257,6 +261,97 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         } catch (DataAccessException ex) {
             return Optional.empty();
         }
+    }
+
+    @Override
+    public List<MetadataDictionaryItemRecord> listDictionaryItems(String tenantId,
+                                                                  String dictionaryCode,
+                                                                  boolean includeDisabled) {
+        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
+        String safeDictionaryCode = Objects.requireNonNullElse(dictionaryCode, "");
+        if (blank(safeTenantId)) {
+            return List.of();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, dict_code, raw_value, canonical_value, display_name,
+                           enabled, create_time, update_time
+                    FROM t_metadata_dictionary_item
+                    WHERE tenant_id = ?
+                      AND (? = '' OR dict_code = ?)
+                      AND (? = 1 OR enabled = 1)
+                    ORDER BY dict_code, raw_value, update_time DESC
+                    """, this::toDictionaryItemRecord,
+                    safeTenantId, safeDictionaryCode, safeDictionaryCode, flag(includeDisabled));
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
+    @Override
+    public Optional<MetadataDictionaryItemRecord> findDictionaryItem(String itemId) {
+        if (blank(itemId)) {
+            return Optional.empty();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, dict_code, raw_value, canonical_value, display_name,
+                           enabled, create_time, update_time
+                    FROM t_metadata_dictionary_item
+                    WHERE id = ?
+                    """, this::toDictionaryItemRecord, itemId).stream().findFirst();
+        } catch (DataAccessException ex) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public String createDictionaryItem(MetadataDictionaryItemPayload payload) {
+        MetadataDictionaryItemPayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
+        String itemId = UUID.randomUUID().toString();
+        jdbcTemplate.update("""
+                INSERT INTO t_metadata_dictionary_item(
+                    id, tenant_id, dict_code, raw_value, canonical_value, display_name,
+                    enabled, create_time, update_time
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, itemId, safePayload.tenantId(), safePayload.dictionaryCode(), safePayload.rawValue(),
+                safePayload.canonicalValue(), safePayload.displayName(), flag(safePayload.enabled()));
+        return itemId;
+    }
+
+    @Override
+    public MetadataDictionaryItemRecord updateDictionaryItem(String itemId, MetadataDictionaryItemPayload payload) {
+        MetadataDictionaryItemPayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
+        int updated = jdbcTemplate.update("""
+                UPDATE t_metadata_dictionary_item
+                SET tenant_id = ?,
+                    dict_code = ?,
+                    raw_value = ?,
+                    canonical_value = ?,
+                    display_name = ?,
+                    enabled = ?,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """, safePayload.tenantId(), safePayload.dictionaryCode(), safePayload.rawValue(),
+                safePayload.canonicalValue(), safePayload.displayName(), flag(safePayload.enabled()), itemId);
+        if (updated <= 0) {
+            throw new IllegalArgumentException("Metadata Dictionary 字典项不存在: " + itemId);
+        }
+        return findDictionaryItem(itemId)
+                .orElseThrow(() -> new IllegalArgumentException("Metadata Dictionary 字典项不存在: " + itemId));
+    }
+
+    @Override
+    public boolean disableDictionaryItem(String itemId) {
+        if (blank(itemId)) {
+            return false;
+        }
+        return jdbcTemplate.update("""
+                UPDATE t_metadata_dictionary_item
+                SET enabled = 0,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE id = ? AND enabled = 1
+                """, itemId) > 0;
     }
 
     @Override
@@ -1142,6 +1237,19 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 readMap(rs.getString("extraction_hints")),
                 backendMapping(rs.getString("backend_mapping"), rs.getString("field_key")),
                 rs.getInt("schema_version"),
+                instant(rs.getTimestamp("create_time")),
+                instant(rs.getTimestamp("update_time")));
+    }
+
+    private MetadataDictionaryItemRecord toDictionaryItemRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new MetadataDictionaryItemRecord(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getString("dict_code"),
+                rs.getString("raw_value"),
+                rs.getString("canonical_value"),
+                rs.getString("display_name"),
+                bool(rs, "enabled"),
                 instant(rs.getTimestamp("create_time")),
                 instant(rs.getTimestamp("update_time")));
     }
