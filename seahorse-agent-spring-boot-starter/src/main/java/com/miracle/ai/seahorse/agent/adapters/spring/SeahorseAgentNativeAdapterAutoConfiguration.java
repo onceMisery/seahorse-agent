@@ -901,9 +901,11 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
             MessageQueuePort messageQueuePort,
             ObjectMapper objectMapper,
             ObjectProvider<DistributedLockPort> lockPort,
+            ObjectProvider<MetadataQuarantinePort> quarantinePort,
             @Value("${seahorse-agent.adapters.mq.outbox.relay.batch-size:50}") int batchSize) {
         return new SeahorseOutboxRelayJob(outboxEventRepositoryPort, messageQueuePort, objectMapper,
-                lockPort.getIfAvailable(DistributedLockPort::noop), batchSize);
+                lockPort.getIfAvailable(DistributedLockPort::noop),
+                quarantinePort.getIfAvailable(MetadataQuarantinePort::noop), batchSize);
     }
 
     @Bean

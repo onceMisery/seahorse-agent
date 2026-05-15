@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdap
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.SeahorseOutboxRelayJob;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventStatus;
@@ -70,12 +71,15 @@ class KeywordIndexOutboxAdapterTests {
         ReliableMessageQueueAdapter reliableQueue = new ReliableMessageQueueAdapter(
                 delegateQueue, delegateQueue, () -> repository, () -> OBJECT_MAPPER);
         RecordingObservationPort observationPort = new RecordingObservationPort();
+        List<MetadataQuarantineItem> quarantines = new ArrayList<>();
         KeywordIndexMessageSubscriber subscriber = new KeywordIndexMessageSubscriber(
                 reliableQueue, KeywordIndexOutboxAdapter.DEFAULT_TOPIC, "keyword-index-test",
                 new FailingKeywordIndexPort(), observationPort);
         KeywordIndexOutboxAdapter adapter = new KeywordIndexOutboxAdapter(
                 reliableQueue, KeywordIndexOutboxAdapter.DEFAULT_TOPIC);
-        SeahorseOutboxRelayJob relayJob = new SeahorseOutboxRelayJob(repository, reliableQueue, OBJECT_MAPPER, 10);
+        SeahorseOutboxRelayJob relayJob = new SeahorseOutboxRelayJob(repository, reliableQueue, OBJECT_MAPPER,
+                com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort.noop(),
+                quarantines::add, 10);
         subscriber.start();
 
         adapter.indexDocumentChunks("kb-1", "doc-1", List.of(VectorChunk.builder().chunkId("chunk-1").build()));
@@ -86,6 +90,13 @@ class KeywordIndexOutboxAdapterTests {
         assertThat(observationPort.events)
                 .extracting(ObservationEvent::name)
                 .contains("keyword.index.outbox.consume.failure");
+        assertThat(quarantines).singleElement().satisfies(item -> {
+            assertThat(item.stage()).isEqualTo("INDEX");
+            assertThat(item.reasonCode()).isEqualTo("OUTBOX_RELAY_FAILED");
+            assertThat(item.knowledgeBaseId()).isEqualTo("kb-1");
+            assertThat(item.documentId()).isEqualTo("doc-1");
+            assertThat(item.sourceSnapshot()).containsEntry("operation", "INDEX_DOCUMENT_CHUNKS");
+        });
     }
 
     private static final class RecordingKeywordIndexPort implements KeywordIndexPort {
