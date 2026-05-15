@@ -59,6 +59,7 @@ public class KernelMultiChannelRetrievalEngine {
 
     private static final Logger LOG = LoggerFactory.getLogger(KernelMultiChannelRetrievalEngine.class);
     private static final String EVENT_METADATA_FILTER_COMPILED = "retrieval.metadata.filter.compiled";
+    private static final String EVENT_CHANNEL_COMPLETED = "retrieval.channel.completed";
     private static final String LOG_MSG_CHANNEL_FAILED = "检索通道 {} 执行失败，按空结果降级";
     private static final String LOG_MSG_PROCESSOR_FAILED = "检索后处理器 {} 执行失败，跳过该处理器";
 
@@ -185,23 +186,57 @@ public class KernelMultiChannelRetrievalEngine {
 
     private SearchChannelResult executeSingleChannel(SearchChannelFeature channel, SearchContext context) {
         TraceNodeScope nodeScope = traceRecorder.startNode(traceRunScope(context), channelTraceCommand(channel));
+        long startedAt = System.currentTimeMillis();
         try {
             SearchChannelResult result = channel.search(context);
+            recordChannelCompleted(channel, context, result, null, System.currentTimeMillis() - startedAt);
             traceRecorder.finishNode(nodeScope);
             return result;
         } catch (Exception ex) {
+            long latencyMs = System.currentTimeMillis() - startedAt;
+            SearchChannelResult result = emptyResult(channel, latencyMs);
+            recordChannelCompleted(channel, context, result, ex, latencyMs);
             traceRecorder.finishNode(nodeScope, ex);
             LOG.error(LOG_MSG_CHANNEL_FAILED, channel.name(), ex);
-            return emptyResult(channel);
+            return result;
         }
     }
 
-    private SearchChannelResult emptyResult(SearchChannelFeature channel) {
+    private SearchChannelResult emptyResult(SearchChannelFeature channel, long latencyMs) {
         return SearchChannelResult.builder()
                 .channelType(channel.channelType())
                 .channelName(channel.name())
                 .chunks(List.of())
+                .latencyMs(latencyMs)
                 .build();
+    }
+
+    private void recordChannelCompleted(SearchChannelFeature channel,
+                                        SearchContext context,
+                                        SearchChannelResult result,
+                                        Exception ex,
+                                        long elapsedMs) {
+        if (observationPort == null) {
+            return;
+        }
+        try {
+            Map<String, String> attributes = new java.util.LinkedHashMap<>();
+            attributes.put("tenantId", tenantId(context));
+            attributes.put("knowledgeBaseId", knowledgeBaseId(context));
+            attributes.put("channelName", Objects.requireNonNullElse(channel.name(), ""));
+            attributes.put("channelType", channel.channelType() == null ? "" : channel.channelType().name());
+            attributes.put("status", ex == null ? "success" : "failure");
+            attributes.put("success", Boolean.toString(ex == null));
+            attributes.put("hitCount", Integer.toString(safeChunks(result).size()));
+            attributes.put("latencyMs", Long.toString(elapsedMs));
+            if (ex != null) {
+                attributes.put("exception", ex.getClass().getSimpleName());
+            }
+            // 通道失败会按空结果降级；观测事件保留失败证据，便于识别 ES/关键词通道不可用。
+            observationPort.recordEvent(new ObservationEvent(EVENT_CHANNEL_COMPLETED, null, attributes));
+        } catch (RuntimeException ignored) {
+            // 观测失败不能影响检索通道降级和后处理链。
+        }
     }
 
     private List<RetrievedChunk> executePostProcessors(List<SearchChannelResult> results, SearchContext context) {
@@ -265,6 +300,22 @@ public class KernelMultiChannelRetrievalEngine {
                 .compiledFilter(compileFilter(filter))
                 .traceRunScope(traceRunScope)
                 .build();
+    }
+
+    private String tenantId(SearchContext context) {
+        RetrievalFilter filter = context == null ? null : context.getFilter();
+        if (filter != null && filter.system() != null && !filter.system().tenantId().isBlank()) {
+            return filter.system().tenantId();
+        }
+        return Objects.requireNonNullElse(activationContext.tenantId(), "");
+    }
+
+    private String knowledgeBaseId(SearchContext context) {
+        RetrievalFilter filter = context == null ? null : context.getFilter();
+        if (filter == null || filter.system() == null || filter.system().knowledgeBaseIds().isEmpty()) {
+            return "";
+        }
+        return Objects.requireNonNullElse(filter.system().knowledgeBaseIds().get(0), "");
     }
 
     private TraceRunScope traceRunScope(SearchContext context) {

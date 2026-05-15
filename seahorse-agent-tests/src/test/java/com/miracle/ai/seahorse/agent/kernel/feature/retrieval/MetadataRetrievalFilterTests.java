@@ -46,6 +46,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQuery
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentSummary;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
@@ -215,7 +216,13 @@ class MetadataRetrievalFilterTests {
         assertThat(channel.observedCompiledFilter).isNotNull();
         assertThat(channel.observedCompiledFilter.guardOnlyConditions()).hasSize(1);
         assertThat(chunks).extracting(RetrievedChunk::getId).containsExactly("1");
-        assertThat(observationPort.events).singleElement().satisfies(event -> {
+        assertThat(observationPort.events)
+                .extracting(ObservationEvent::name)
+                .contains("retrieval.metadata.filter.compiled", "retrieval.channel.completed");
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.metadata.filter.compiled"))
+                .singleElement()
+                .satisfies(event -> {
             assertThat(event.name()).isEqualTo("retrieval.metadata.filter.compiled");
             assertThat(event.attributes())
                     .containsEntry("tenantId", "tenant-a")
@@ -223,6 +230,46 @@ class MetadataRetrievalFilterTests {
                     .containsEntry("fieldKeys", "department")
                     .containsEntry("guardOnlyFieldKeys", "department");
         });
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.channel.completed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("channelName", "recording-search")
+                        .containsEntry("channelType", "VECTOR_GLOBAL")
+                        .containsEntry("hitCount", "2")
+                        .containsEntry("success", "true"));
+    }
+
+    @Test
+    void shouldRecordChannelFailureObservationWhenChannelFallsBack() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        FailingSearchChannelFeature channel = new FailingSearchChannelFeature();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        registry.register(new ExtensionDescriptor(channel.name(), SearchChannelFeature.class,
+                FeatureType.SEARCH_CHANNEL, 1, true), channel);
+        KernelMultiChannelRetrievalEngine engine = new KernelMultiChannelRetrievalEngine(
+                registry,
+                Runnable::run,
+                new FeatureActivationContext("tenant-a", "user-a", Map.of(), AgentFeatureProperties.empty()),
+                MetadataSchemaRegistryPort.empty(),
+                new DefaultMetadataFilterCompiler(),
+                KernelRagTraceRecorder.noop(),
+                observationPort);
+
+        List<RetrievedChunk> chunks = engine.retrieveKnowledgeChannels(
+                List.of(new SubQuestionIntent("关键词检索失败", List.of())), 5);
+
+        assertThat(chunks).isEmpty();
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.channel.completed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("channelName", "failing-keyword")
+                        .containsEntry("channelType", "KEYWORD_BM25")
+                        .containsEntry("hitCount", "0")
+                        .containsEntry("success", "false")
+                        .containsEntry("exception", "IllegalStateException"));
     }
 
     private MetadataSchema schema(boolean pushdownToVector) {
@@ -355,6 +402,29 @@ class MetadataRetrievalFilterTests {
                                             "department", "FIN"))
                                     .build()))
                     .build();
+        }
+    }
+
+    private static class FailingSearchChannelFeature implements SearchChannelFeature {
+
+        @Override
+        public String name() {
+            return "failing-keyword";
+        }
+
+        @Override
+        public SearchChannelType channelType() {
+            return SearchChannelType.KEYWORD_BM25;
+        }
+
+        @Override
+        public boolean enabled(SearchContext context) {
+            return true;
+        }
+
+        @Override
+        public SearchChannelResult search(SearchContext context) {
+            throw new IllegalStateException("keyword backend unavailable");
         }
     }
 }
