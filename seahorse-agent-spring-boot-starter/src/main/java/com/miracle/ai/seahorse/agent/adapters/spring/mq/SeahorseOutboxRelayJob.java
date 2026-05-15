@@ -132,7 +132,7 @@ public class SeahorseOutboxRelayJob {
         try {
             Map<String, Object> snapshot = outboxSnapshot(event, ex, retryCount);
             quarantinePort.quarantine(new MetadataQuarantineItem(
-                    "",
+                    text(snapshot.get("tenantId")),
                     text(snapshot.get("kbId")),
                     text(snapshot.get("docId")),
                     event.id(),
@@ -176,12 +176,33 @@ public class SeahorseOutboxRelayJob {
         try {
             JsonNode payload = objectMapper.readTree(objectMapper.readValue(payloadJson, ReliableMessageEnvelope.class)
                     .getPayloadJson());
+            putTextIfPresent(snapshot, "tenantId", firstText(
+                    payload.path("tenantId").asText(""),
+                    payload.path("tenant_id").asText("")));
             putTextIfPresent(snapshot, "kbId", payload.path("kbId").asText(""));
             putTextIfPresent(snapshot, "docId", payload.path("docId").asText(""));
             putTextIfPresent(snapshot, "operation", payload.path("operation").asText(""));
+            addFirstChunkIdentity(payload, snapshot);
         } catch (RuntimeException | java.io.IOException ignored) {
             // payload 解析失败时保留 event 级快照，避免二次异常影响主流程。
         }
+    }
+
+    private void addFirstChunkIdentity(JsonNode payload, Map<String, Object> snapshot) {
+        JsonNode chunks = payload.path("chunks");
+        if (!chunks.isArray() || chunks.isEmpty()) {
+            return;
+        }
+        JsonNode metadata = chunks.get(0).path("metadata");
+        putTextIfPresent(snapshot, "tenantId", firstText(
+                metadata.path("tenant_id").asText(""),
+                metadata.path("tenantId").asText("")));
+        putTextIfPresent(snapshot, "kbId", firstText(
+                metadata.path("kb_id").asText(""),
+                metadata.path("kbId").asText("")));
+        putTextIfPresent(snapshot, "docId", firstText(
+                metadata.path("doc_id").asText(""),
+                metadata.path("docId").asText("")));
     }
 
     private void putTextIfPresent(Map<String, Object> snapshot, String key, String value) {
@@ -192,5 +213,9 @@ public class SeahorseOutboxRelayJob {
 
     private String text(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private String firstText(String first, String second) {
+        return first != null && !first.isBlank() ? first : Objects.requireNonNullElse(second, "");
     }
 }

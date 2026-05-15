@@ -36,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -57,7 +58,7 @@ class KeywordIndexOutboxAdapterTests {
         SeahorseOutboxRelayJob relayJob = new SeahorseOutboxRelayJob(repository, reliableQueue, OBJECT_MAPPER, 10);
         subscriber.start();
 
-        adapter.indexDocumentChunks("kb-1", "doc-1", List.of(VectorChunk.builder().chunkId("chunk-1").build()));
+        adapter.indexDocumentChunks("kb-1", "doc-1", List.of(identityChunk()));
         relayJob.relay();
 
         assertThat(repository.events).extracting(event -> event.delivery().status()).containsExactly(OutboxEventStatus.SENT);
@@ -82,7 +83,7 @@ class KeywordIndexOutboxAdapterTests {
                 quarantines::add, 10);
         subscriber.start();
 
-        adapter.indexDocumentChunks("kb-1", "doc-1", List.of(VectorChunk.builder().chunkId("chunk-1").build()));
+        adapter.indexDocumentChunks("kb-1", "doc-1", List.of(identityChunk()));
         relayJob.relay();
 
         assertThat(repository.events).extracting(event -> event.delivery().status()).containsExactly(OutboxEventStatus.FAILED);
@@ -93,6 +94,7 @@ class KeywordIndexOutboxAdapterTests {
         assertThat(quarantines).singleElement().satisfies(item -> {
             assertThat(item.stage()).isEqualTo("INDEX");
             assertThat(item.reasonCode()).isEqualTo("OUTBOX_RELAY_FAILED");
+            assertThat(item.tenantId()).isEqualTo("tenant-1");
             assertThat(item.knowledgeBaseId()).isEqualTo("kb-1");
             assertThat(item.documentId()).isEqualTo("doc-1");
             assertThat(item.sourceSnapshot()).containsEntry("operation", "INDEX_DOCUMENT_CHUNKS");
@@ -111,6 +113,14 @@ class KeywordIndexOutboxAdapterTests {
         @Override
         public void deleteDocumentChunks(String kbId, String docId) {
         }
+    }
+
+    private static VectorChunk identityChunk() {
+        return VectorChunk.builder()
+                .chunkId("chunk-1")
+                // Outbox 失败隔离依赖 chunk metadata 补齐租户维度，便于质量报表按租户统计。
+                .metadata(Map.of("tenant_id", "tenant-1", "kb_id", "kb-1", "doc_id", "doc-1"))
+                .build();
     }
 
     private static final class FailingKeywordIndexPort implements KeywordIndexPort {
