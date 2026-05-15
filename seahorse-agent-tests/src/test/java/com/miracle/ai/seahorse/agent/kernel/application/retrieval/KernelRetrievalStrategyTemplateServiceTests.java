@@ -19,9 +19,11 @@ package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplate;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplatePayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -118,5 +120,49 @@ class KernelRetrievalStrategyTemplateServiceTests {
 
         assertThat(templates).extracting(RetrievalStrategyTemplate::templateKey)
                 .containsExactly("vector_only", "hybrid_rrf", "hybrid_rerank");
+    }
+
+    @Test
+    void shouldDelegateTemplateUpsertAndDeleteToRepository() {
+        CapturingTemplateRepository repository = new CapturingTemplateRepository();
+        KernelRetrievalStrategyTemplateService service = new KernelRetrievalStrategyTemplateService(repository);
+        RetrievalStrategyTemplatePayload payload = new RetrievalStrategyTemplatePayload(
+                "keyword_precise",
+                "关键词精确优先",
+                "优先使用关键词通道",
+                RetrievalOptions.builder().finalTopK(3).enableKeyword(true).build(),
+                20,
+                true);
+
+        RetrievalStrategyTemplate saved = service.upsertTemplate("kb-1", payload);
+        boolean deleted = service.deleteTemplate("kb-1", "keyword_precise");
+
+        assertThat(saved.templateKey()).isEqualTo("keyword_precise");
+        assertThat(repository.upsertKbIds).containsExactly("kb-1");
+        assertThat(repository.deletedKeys).containsExactly("kb-1:keyword_precise");
+        assertThat(deleted).isTrue();
+    }
+
+    private static final class CapturingTemplateRepository implements RetrievalStrategyTemplateRepositoryPort {
+
+        private final List<String> upsertKbIds = new ArrayList<>();
+        private final List<String> deletedKeys = new ArrayList<>();
+
+        @Override
+        public List<RetrievalStrategyTemplate> listTemplates(String kbId) {
+            return List.of();
+        }
+
+        @Override
+        public RetrievalStrategyTemplate upsertTemplate(String kbId, RetrievalStrategyTemplatePayload payload) {
+            upsertKbIds.add(kbId);
+            return payload.toTemplate();
+        }
+
+        @Override
+        public boolean deleteTemplate(String kbId, String templateKey) {
+            deletedKeys.add(kbId + ":" + templateKey);
+            return true;
+        }
     }
 }

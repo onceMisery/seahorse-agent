@@ -126,6 +126,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -764,6 +765,17 @@ class SeahorseWebApiContractTests {
                         .enableKeyword(true)
                         .enableRrf(true)
                         .build())));
+        when(templatePort.upsertTemplate(eq("kb-1"), any())).thenReturn(new RetrievalStrategyTemplate(
+                "keyword_precise",
+                "关键词精确优先",
+                "优先使用关键词通道",
+                com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions.builder()
+                        .finalTopK(3)
+                        .enableVector(false)
+                        .enableKeyword(true)
+                        .enableRrf(false)
+                        .build()));
+        when(templatePort.deleteTemplate("kb-1", "keyword_precise")).thenReturn(true);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseRetrievalStrategyTemplateController(templatePort)).build();
 
@@ -773,8 +785,37 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data[0].templateKey").value("hybrid_rrf"))
                 .andExpect(jsonPath("$.data[0].options.enableKeyword").value(true))
                 .andExpect(jsonPath("$.data[0].options.enableRrf").value(true));
+        mvc.perform(post("/knowledge-base/kb-1/retrieval-strategy-templates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "templateKey", "keyword_precise",
+                                "displayName", "关键词精确优先",
+                                "description", "优先使用关键词通道",
+                                "sortOrder", 10,
+                                "enabled", true,
+                                "options", Map.of(
+                                        "finalTopK", 3,
+                                        "enableVector", false,
+                                        "enableKeyword", true,
+                                        "enableRrf", false)))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.templateKey").value("keyword_precise"))
+                .andExpect(jsonPath("$.data.options.enableKeyword").value(true));
+        mvc.perform(put("/knowledge-base/kb-1/retrieval-strategy-templates/keyword_precise")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "displayName", "关键词精确优先",
+                                "description", "优先使用关键词通道",
+                                "options", Map.of("finalTopK", 3, "enableKeyword", true)))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.templateKey").value("keyword_precise"));
+        mvc.perform(delete("/knowledge-base/kb-1/retrieval-strategy-templates/keyword_precise"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleted").value(true));
 
         verify(templatePort).listTemplates("kb-1");
+        verify(templatePort, times(2)).upsertTemplate(eq("kb-1"), any());
+        verify(templatePort).deleteTemplate("kb-1", "keyword_precise");
     }
 
     @Test
