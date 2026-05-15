@@ -423,6 +423,7 @@ class MetadataGovernanceNodeFeatureTests {
                 .containsExactly("department");
         assertThat(context.getMetadataCandidates().get(0).sourceType()).isEqualTo("llm");
         assertThat(context.getMetadataCandidates().get(0).extractorVersion()).isEqualTo("llm-v2");
+        assertThat(context.getMetadataCandidates().get(0).promptVersion()).isEqualTo("prompt-v2");
         assertThat(context.getMetadataCandidates().get(0).confidence()).isEqualTo(0.73D);
         assertThat(context.getMetadataIssues())
                 .anySatisfy(issue -> assertThat(issue.code()).isEqualTo("LLM_FORBIDDEN_FIELD"));

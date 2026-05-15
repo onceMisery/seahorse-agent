@@ -218,7 +218,7 @@ public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
         // 多抽取器给出相同值时小幅提升置信度，避免单一来源过度放大。
         return new MetadataFieldCandidate(selected.fieldKey(), selected.rawValue(), selected.sourceType(),
                 selected.extractorName(), confidence, selected.evidence(), selected.schemaVersion(),
-                selected.extractorVersion());
+                selected.extractorVersion(), selected.promptVersion());
     }
 
     private MetadataFieldCandidate betterCandidate(MetadataFieldCandidate left,

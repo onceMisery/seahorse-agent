@@ -186,7 +186,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                 issues.add(MetadataIssue.warn("", NODE_TYPE, "LLM_RESPONSE_INVALID", "LLM 元数据抽取结果不是 JSON 对象"));
                 return;
             }
-            collectLlmCandidates(schema, config, root, llmExtractorVersion, candidates, issues);
+            collectLlmCandidates(schema, config, root, llmExtractorVersion, llmPromptVersion, candidates, issues);
         } catch (RuntimeException ex) {
             issues.add(MetadataIssue.warn("", NODE_TYPE, "LLM_EXTRACT_FAILED", ex.getMessage()));
         }
@@ -196,6 +196,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                                       NodeConfig config,
                                       JsonNode root,
                                       String llmExtractorVersion,
+                                      String llmPromptVersion,
                                       List<MetadataFieldCandidate> candidates,
                                       List<MetadataIssue> issues) {
         double defaultConfidence = doubleSetting(config, KEY_LLM_CONFIDENCE, 0.72D);
@@ -221,7 +222,8 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                             "LLM 返回字段缺少证据片段"));
                 }
                 candidates.add(candidate(fieldKey, fieldValue.value(), "llm", "LlmMetadataExtractor",
-                        confidence, fieldValue.evidence(), schema.schemaVersion(), llmExtractorVersion));
+                        confidence, fieldValue.evidence(), schema.schemaVersion(), llmExtractorVersion,
+                        llmPromptVersion));
             }
         }
     }
@@ -424,6 +426,19 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                                              String extractorVersion) {
         return new MetadataFieldCandidate(fieldKey, value, sourceType, extractorName, confidence, evidence,
                 Math.max(schemaVersion, 1), extractorVersion);
+    }
+
+    private MetadataFieldCandidate candidate(String fieldKey,
+                                             Object value,
+                                             String sourceType,
+                                             String extractorName,
+                                             double confidence,
+                                             String evidence,
+                                             int schemaVersion,
+                                             String extractorVersion,
+                                             String promptVersion) {
+        return new MetadataFieldCandidate(fieldKey, value, sourceType, extractorName, confidence, evidence,
+                Math.max(schemaVersion, 1), extractorVersion, promptVersion);
     }
 
     private Map<String, Object> sourceMetadata(IngestionContext context) {
