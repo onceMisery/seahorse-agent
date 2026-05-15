@@ -651,6 +651,8 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.pendingReviewCount").value(2))
                 .andExpect(jsonPath("$.data.indexSyncFailureCount").value(1))
                 .andExpect(jsonPath("$.data.fieldCoverages[0].fieldKey").value("department"))
+                .andExpect(jsonPath("$.data.fieldCoverages[0].lowConfidenceDocuments").value(1))
+                .andExpect(jsonPath("$.data.fieldCoverages[0].lowConfidenceRate").value(1D / 3D))
                 .andExpect(jsonPath("$.data.quarantineReasons[0].reasonCode").value("SCHEMA_MISSING"));
     }
 
@@ -1200,7 +1202,7 @@ class SeahorseWebApiContractTests {
                 2,
                 1,
                 1,
-                List.of(new MetadataFieldCoverage("department", "部门", true, 3, 4, 0.75D)),
+                List.of(new MetadataFieldCoverage("department", "部门", true, 3, 4, 0.75D, 1, 1D / 3D)),
                 List.of(new MetadataQuarantineReasonCount("SCHEMA_MISSING", "缺少 Schema", 1)),
                 Instant.EPOCH);
     }

@@ -889,7 +889,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         List<ExtractionSnapshot> snapshots = latestExtractionSnapshots(safeTenantId, safeKbId);
         int totalDocuments = Math.max(countDocuments(safeKbId), snapshots.size());
         List<MetadataFieldCoverage> fieldCoverages = fieldCoverages(schema, snapshots, totalDocuments);
-        LowConfidenceStats lowConfidenceStats = lowConfidenceStats(schema, snapshots);
+        LowConfidenceStats lowConfidenceStats = lowConfidenceStats(fieldCoverages);
         int pendingReviewCount = countPendingReviews(safeTenantId, safeKbId);
         int unresolvedQuarantineCount = countUnresolvedQuarantines(safeTenantId, safeKbId);
         int indexSyncFailureCount = countIndexSyncFailures(safeTenantId, safeKbId);
@@ -917,9 +917,13 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         // 覆盖率以 Schema 字段为基准，避免动态 metadata 任意扩张影响治理报表口径。
         for (MetadataFieldDescriptor field : schema.fields()) {
             int covered = 0;
+            int lowConfidence = 0;
             for (ExtractionSnapshot snapshot : snapshots) {
                 if (hasValue(snapshot.coveredMetadata().get(field.fieldKey()))) {
                     covered++;
+                    if (lowConfidence(field, snapshot.fieldQualities())) {
+                        lowConfidence++;
+                    }
                 }
             }
             coverages.add(new MetadataFieldCoverage(
@@ -928,32 +932,28 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     field.required(),
                     covered,
                     totalDocuments,
-                    ratio(covered, totalDocuments)));
+                    ratio(covered, totalDocuments),
+                    lowConfidence,
+                    ratio(lowConfidence, covered)));
         }
         return List.copyOf(coverages);
     }
 
-    private LowConfidenceStats lowConfidenceStats(MetadataSchema schema, List<ExtractionSnapshot> snapshots) {
-        Map<String, MetadataFieldDescriptor> fields = schema.fields().stream()
-                .collect(Collectors.toMap(MetadataFieldDescriptor::fieldKey, field -> field, (left, right) -> left));
-        int evaluated = 0;
-        int lowConfidence = 0;
-        for (ExtractionSnapshot snapshot : snapshots) {
-            Map<String, Object> covered = snapshot.coveredMetadata();
-            for (Map<String, Object> quality : snapshot.fieldQualities()) {
-                String fieldKey = text(quality.get("fieldKey"), "");
-                if (blank(fieldKey) || !hasValue(covered.get(fieldKey))) {
-                    continue;
-                }
-                evaluated++;
-                double confidence = doubleValue(quality.get("confidence"), 0D);
-                MetadataFieldDescriptor field = fields.get(fieldKey);
-                double minConfidence = field == null ? 0.8D : field.minConfidence();
-                if (confidence < minConfidence) {
-                    lowConfidence++;
-                }
+    private boolean lowConfidence(MetadataFieldDescriptor field, List<Map<String, Object>> qualities) {
+        // 低置信度按“字段 + 文档”去重统计，避免同字段多条质量记录重复放大比例。
+        for (Map<String, Object> quality : qualities) {
+            String fieldKey = text(quality.get("fieldKey"), "");
+            if (field.fieldKey().equals(fieldKey)
+                    && doubleValue(quality.get("confidence"), 0D) < field.minConfidence()) {
+                return true;
             }
         }
+        return false;
+    }
+
+    private LowConfidenceStats lowConfidenceStats(List<MetadataFieldCoverage> coverages) {
+        int evaluated = coverages.stream().mapToInt(MetadataFieldCoverage::coveredDocuments).sum();
+        int lowConfidence = coverages.stream().mapToInt(MetadataFieldCoverage::lowConfidenceDocuments).sum();
         return new LowConfidenceStats(lowConfidence, evaluated);
     }
 

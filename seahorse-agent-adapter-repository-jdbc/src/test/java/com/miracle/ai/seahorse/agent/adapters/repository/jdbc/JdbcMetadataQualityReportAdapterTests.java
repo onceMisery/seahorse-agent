@@ -69,8 +69,12 @@ class JdbcMetadataQualityReportAdapterTests {
         assertThat(report.unresolvedQuarantineCount()).isEqualTo(3);
         assertThat(report.indexSyncFailureCount()).isEqualTo(1);
         assertThat(coverage(report, "department").coverageRate()).isCloseTo(2D / 3D, offset(0.0001D));
+        assertThat(coverage(report, "department").lowConfidenceDocuments()).isEqualTo(1);
+        assertThat(coverage(report, "department").lowConfidenceRate()).isCloseTo(1D / 2D, offset(0.0001D));
         assertThat(coverage(report, "securityLevel").coverageRate()).isCloseTo(1D / 3D, offset(0.0001D));
+        assertThat(coverage(report, "securityLevel").lowConfidenceRate()).isZero();
         assertThat(coverage(report, "owner").coverageRate()).isCloseTo(1D / 3D, offset(0.0001D));
+        assertThat(coverage(report, "owner").lowConfidenceRate()).isZero();
         assertThat(report.quarantineReasons()).hasSize(1);
         assertThat(report.quarantineReasons().get(0).reasonCode()).isEqualTo("SCHEMA_MISSING");
         assertThat(report.quarantineReasons().get(0).count()).isEqualTo(2);
