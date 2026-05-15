@@ -9,6 +9,13 @@ public record MetadataBackfillJobQuery(
         String tenantId,
         String knowledgeBaseId,
         MetadataBackfillJobStatus status,
+        String pipelineId,
+        String operator,
+        String documentId,
+        String pauseReason,
+        String failureKeyword,
+        Boolean hasFailures,
+        Boolean reExtract,
         long current,
         long size
 ) {
@@ -16,8 +23,21 @@ public record MetadataBackfillJobQuery(
     public MetadataBackfillJobQuery {
         tenantId = Objects.requireNonNullElse(tenantId, "");
         knowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, "");
+        pipelineId = Objects.requireNonNullElse(pipelineId, "");
+        operator = Objects.requireNonNullElse(operator, "");
+        documentId = Objects.requireNonNullElse(documentId, "");
+        pauseReason = Objects.requireNonNullElse(pauseReason, "");
+        failureKeyword = Objects.requireNonNullElse(failureKeyword, "");
         current = Math.max(1L, current);
         size = Math.max(1L, Math.min(100L, size));
+    }
+
+    public MetadataBackfillJobQuery(String tenantId,
+                                    String knowledgeBaseId,
+                                    MetadataBackfillJobStatus status,
+                                    long current,
+                                    long size) {
+        this(tenantId, knowledgeBaseId, status, "", "", "", "", "", null, null, current, size);
     }
 
     public long offset() {

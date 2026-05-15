@@ -68,12 +68,20 @@ public class SeahorseMetadataBackfillController {
     public Map<String, Object> pageJobs(@PathVariable("kb-id") String kbId,
                                         @RequestParam(value = "tenantId", required = false) String tenantId,
                                         @RequestParam(value = "status", required = false) String status,
+                                        @RequestParam(value = "pipelineId", required = false) String pipelineId,
+                                        @RequestParam(value = "operator", required = false) String operator,
+                                        @RequestParam(value = "documentId", required = false) String documentId,
+                                        @RequestParam(value = "pauseReason", required = false) String pauseReason,
+                                        @RequestParam(value = "failureKeyword", required = false) String failureKeyword,
+                                        @RequestParam(value = "hasFailures", required = false) Boolean hasFailures,
+                                        @RequestParam(value = "reExtract", required = false) Boolean reExtract,
                                         @RequestParam(value = "current", defaultValue = "1") long current,
                                         @RequestParam(value = "size", defaultValue = "10") long size) {
         // 列表查询只拼装筛选条件，具体分页和状态口径由 kernel 统一处理。
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
                 backfillPort.pageJobs(new MetadataBackfillJobQuery(
-                        tenantId, kbId, status(status), current, size)));
+                        tenantId, kbId, status(status), pipelineId, operator, documentId, pauseReason,
+                        failureKeyword, hasFailures, reExtract, current, size)));
     }
 
     @GetMapping("/metadata-backfill/jobs/{job-id}")

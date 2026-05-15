@@ -605,12 +605,30 @@ class SeahorseWebApiContractTests {
         mvc.perform(get("/knowledge-base/kb-1/metadata-backfill/jobs")
                         .param("tenantId", "tenant-1")
                         .param("status", "PENDING")
+                        .param("pipelineId", "pipe-1")
+                        .param("operator", "admin")
+                        .param("documentId", "doc-2")
+                        .param("pauseReason", "SCHEMA_MISSING")
+                        .param("failureKeyword", "boom")
+                        .param("hasFailures", "true")
+                        .param("reExtract", "true")
                         .param("current", "1")
                         .param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.records[0].jobId").value("job-1"));
+        ArgumentCaptor<MetadataBackfillJobQuery> backfillQueryCaptor =
+                ArgumentCaptor.forClass(MetadataBackfillJobQuery.class);
+        verify(backfillPort).pageJobs(backfillQueryCaptor.capture());
+        MetadataBackfillJobQuery capturedBackfillQuery = backfillQueryCaptor.getValue();
+        assertThat(capturedBackfillQuery.pipelineId()).isEqualTo("pipe-1");
+        assertThat(capturedBackfillQuery.operator()).isEqualTo("admin");
+        assertThat(capturedBackfillQuery.documentId()).isEqualTo("doc-2");
+        assertThat(capturedBackfillQuery.pauseReason()).isEqualTo("SCHEMA_MISSING");
+        assertThat(capturedBackfillQuery.failureKeyword()).isEqualTo("boom");
+        assertThat(capturedBackfillQuery.hasFailures()).isTrue();
+        assertThat(capturedBackfillQuery.reExtract()).isTrue();
 
         mvc.perform(get("/metadata-backfill/jobs/job-1"))
                 .andExpect(status().isOk())

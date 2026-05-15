@@ -1266,7 +1266,60 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             sql.append(" AND status = ?");
             args.add(query.status().name());
         }
+        if (!blank(query.pipelineId())) {
+            sql.append(" AND pipeline_id = ?");
+            args.add(query.pipelineId());
+        }
+        if (!blank(query.operator())) {
+            sql.append(" AND operator = ?");
+            args.add(query.operator());
+        }
+        if (!blank(query.documentId())) {
+            // 回填任务按文档定位依赖 checkpoint_json 中的 documentIds/lastDocumentId，不新增任务明细表。
+            appendJsonTextLike(sql, args, "checkpoint_json", query.documentId());
+        }
+        if (!blank(query.pauseReason())) {
+            appendJsonTextLike(sql, args, "checkpoint_json", "\"pauseReason\"");
+            appendJsonTextLike(sql, args, "checkpoint_json", query.pauseReason());
+        }
+        if (!blank(query.failureKeyword())) {
+            appendJsonTextLike(sql, args, "failure_summary", query.failureKeyword());
+        }
+        if (Boolean.TRUE.equals(query.hasFailures())) {
+            sql.append("""
+                     AND (status = 'FAILED'
+                          OR failed_count > 0
+                          OR CAST(failure_summary AS VARCHAR) NOT IN ('', '[]', '{}', 'null'))
+                    """);
+        } else if (Boolean.FALSE.equals(query.hasFailures())) {
+            sql.append("""
+                     AND status <> 'FAILED'
+                     AND failed_count = 0
+                     AND (failure_summary IS NULL
+                          OR CAST(failure_summary AS VARCHAR) IN ('', '[]', '{}', 'null'))
+                    """);
+        }
+        if (Boolean.TRUE.equals(query.reExtract())) {
+            appendJsonTextLike(sql, args, "checkpoint_json", "\"reExtract\"");
+            appendJsonTextLike(sql, args, "checkpoint_json", "true");
+        } else if (Boolean.FALSE.equals(query.reExtract())) {
+            sql.append("""
+                     AND (checkpoint_json IS NULL
+                          OR CAST(checkpoint_json AS VARCHAR) NOT LIKE ?
+                          OR CAST(checkpoint_json AS VARCHAR) LIKE ?)
+                    """);
+            args.add("%\"reExtract\"%");
+            args.add("%false%");
+        }
         return new SqlWhere(sql.toString(), args);
+    }
+
+    private void appendJsonTextLike(StringBuilder sql, List<Object> args, String column, String value) {
+        if (blank(value)) {
+            return;
+        }
+        sql.append(" AND CAST(").append(column).append(" AS VARCHAR) LIKE ?");
+        args.add("%" + value.trim() + "%");
     }
 
     private Map<String, Object> approvedMetadata(MetadataReviewRecord current, MetadataReviewDecision decision) {

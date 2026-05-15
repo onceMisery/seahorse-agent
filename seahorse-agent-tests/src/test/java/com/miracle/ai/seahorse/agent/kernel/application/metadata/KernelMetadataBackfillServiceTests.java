@@ -48,10 +48,12 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -232,6 +234,29 @@ class KernelMetadataBackfillServiceTests {
 
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.records()).extracting(MetadataBackfillJobRecord::jobId).containsExactly(job.jobId());
+    }
+
+    @Test
+    void shouldPageBackfillJobsByGovernanceFilters() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        KernelMetadataBackfillService service = service(documents, jobs, Map.of());
+        Instant now = Instant.parse("2026-05-15T00:00:00Z");
+        jobs.create(new MetadataBackfillJobRecord(
+                "job-reextract", "tenant-1", "kb-1", "pipe-1", MetadataBackfillJobStatus.PAUSED,
+                1, 50, 1, 0, 1, 0, 0, 0,
+                Map.of("documentIds", List.of("doc-9"), "pauseReason", "SCHEMA_MISSING", "reExtract", true),
+                List.of("doc-9: metadata schema missing"), "auditor", now, now));
+        jobs.create(new MetadataBackfillJobRecord(
+                "job-normal", "tenant-1", "kb-1", "pipe-1", MetadataBackfillJobStatus.COMPLETED,
+                1, 50, 1, 1, 0, 0, 0, 0, Map.of("currentPage", 1),
+                List.of(), "admin", now, now));
+
+        MetadataBackfillJobPage page = service.pageJobs(new MetadataBackfillJobQuery(
+                "tenant-1", "kb-1", null, "pipe-1", "auditor", "doc-9",
+                "SCHEMA_MISSING", "schema", true, true, 1, 10));
+
+        assertThat(page.records()).extracting(MetadataBackfillJobRecord::jobId).containsExactly("job-reextract");
     }
 
     @Test
@@ -526,6 +551,18 @@ class KernelMetadataBackfillServiceTests {
                     .filter(record -> query.knowledgeBaseId().isBlank()
                             || query.knowledgeBaseId().equals(record.knowledgeBaseId()))
                     .filter(record -> query.status() == null || query.status().equals(record.status()))
+                    .filter(record -> query.pipelineId().isBlank() || query.pipelineId().equals(record.pipelineId()))
+                    .filter(record -> query.operator().isBlank() || query.operator().equals(record.operator()))
+                    .filter(record -> query.documentId().isBlank()
+                            || checkpointText(record).contains(query.documentId()))
+                    .filter(record -> query.pauseReason().isBlank()
+                            || query.pauseReason().equals(record.checkpoint().get("pauseReason")))
+                    .filter(record -> query.failureKeyword().isBlank()
+                            || failuresText(record).contains(query.failureKeyword()))
+                    .filter(record -> query.hasFailures() == null
+                            || query.hasFailures().equals(hasFailures(record)))
+                    .filter(record -> query.reExtract() == null
+                            || query.reExtract().equals(Boolean.TRUE.equals(record.checkpoint().get("reExtract"))))
                     .toList();
             int from = (int) Math.min(query.offset(), matched.size());
             int to = (int) Math.min(from + query.size(), matched.size());
@@ -537,6 +574,20 @@ class KernelMetadataBackfillServiceTests {
         @Override
         public void save(MetadataBackfillJobRecord job) {
             records.put(job.jobId(), job);
+        }
+
+        private String checkpointText(MetadataBackfillJobRecord record) {
+            return Objects.toString(record.checkpoint(), "");
+        }
+
+        private String failuresText(MetadataBackfillJobRecord record) {
+            return Objects.toString(record.failures(), "");
+        }
+
+        private boolean hasFailures(MetadataBackfillJobRecord record) {
+            return MetadataBackfillJobStatus.FAILED.equals(record.status())
+                    || record.failedDocuments() > 0
+                    || !record.failures().isEmpty();
         }
     }
 
