@@ -42,7 +42,7 @@ class KernelMetadataQualityServiceTests {
                 (tenantId, knowledgeBaseId, quarantineTopN) -> report,
                 observationPort);
 
-        MetadataQualityReport result = service.report("tenant-1", "kb-1", 5);
+        MetadataQualityReport result = service.report("tenant-1", "kb-1", 5, 2, "extractor-v2");
 
         assertThat(result).isEqualTo(report);
         assertThat(observationPort.events).singleElement().satisfies(event -> {
@@ -50,6 +50,8 @@ class KernelMetadataQualityServiceTests {
             assertThat(event.attributes())
                     .containsEntry("tenantId", "tenant-1")
                     .containsEntry("knowledgeBaseId", "kb-1")
+                    .containsEntry("schemaVersion", "2")
+                    .containsEntry("extractorVersion", "extractor-v2")
                     .containsEntry("totalDocuments", "10")
                     .containsEntry("indexSyncFailureCount", "1");
         });
