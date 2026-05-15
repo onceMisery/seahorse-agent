@@ -731,7 +731,7 @@ KernelMetadataSchemaService       -- 元数据 Schema 管理
 
 | 序号 | 问题 | 位置 | 改进措施 | 影响 |
 |------|------|------|----------|------|
-| 1 | 冗余索引 | `schema_pg.sql:79-80` | 删除 `idx_conversation_summary` | 减少存储和写入开销 |
+| 1 | 冗余索引 | `seahorse_init.sql:79-80` | 删除 `idx_conversation_summary` | 减少存储和写入开销 |
 | 2 | 自动配置类过大 | `SeahorseAgentKernelAutoConfiguration` | 拆分为 5-6 个领域配置类 | 提高可维护性 |
 | 3 | 检索通道无超时 | `KernelMultiChannelRetrievalEngine` | 添加通道级超时和降级 | 避免慢通道阻塞 |
 
@@ -754,7 +754,7 @@ KernelMetadataSchemaService       -- 元数据 Schema 管理
 | 12 | ChatPage useEffect 过多 | `frontend/src/pages/ChatPage.tsx` | 抽取 useSessionInit | 简化组件 |
 | 13 | Micrometer 指标不足 | `MicrometerObservationAdapter` | 添加业务级指标 | 提高可观测性 |
 | 14 | 缺少索引 | `t_knowledge_chunk` | 添加 `(kb_id, doc_id)` 复合索引 | 提高查询性能 |
-| 15 | 向量维度硬编码 | `schema_pg.sql` | 支持可配置维度 | 灵活性 |
+| 15 | 向量维度硬编码 | `seahorse_init.sql` | 支持可配置维度 | 灵活性 |
 | 16 | cache-local 命名 | `adapter-cache-local` | 重命名为 `adapter-coordination-local` | 消除误导 |
 | 17 | ObjectStoragePort 冗余 | `ObjectStoragePort` | 移除 `reliableUpload` | 简化接口 |
 | 18 | 记忆治理阈值硬编码 | `KernelMemoryGovernanceService` | 提取为配置项 | 便于调优 |
