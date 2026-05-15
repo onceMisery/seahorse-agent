@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.feature.retrieval;
 
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.BackendFieldMapping;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
@@ -45,6 +46,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQuery
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentSummary;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchRequest;
 import org.junit.jupiter.api.Test;
 
@@ -186,6 +191,7 @@ class MetadataRetrievalFilterTests {
         DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
         RecordingSearchChannelFeature channel = new RecordingSearchChannelFeature();
         MetadataGuardPostProcessorFeature guard = new MetadataGuardPostProcessorFeature();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
         registry.register(new ExtensionDescriptor(channel.name(), SearchChannelFeature.class,
                 FeatureType.SEARCH_CHANNEL, 1, true), channel);
         registry.register(new ExtensionDescriptor(guard.name(), SearchResultPostProcessorFeature.class,
@@ -195,7 +201,9 @@ class MetadataRetrievalFilterTests {
                 Runnable::run,
                 new FeatureActivationContext("tenant-a", "user-a", Map.of(), AgentFeatureProperties.empty()),
                 (tenantId, knowledgeBaseId) -> schema(false),
-                new DefaultMetadataFilterCompiler());
+                new DefaultMetadataFilterCompiler(),
+                KernelRagTraceRecorder.noop(),
+                observationPort);
         RetrievalFilter filter = RetrievalFilter.builder()
                 .system(SystemRetrievalFilter.builder().tenantId("tenant-a").knowledgeBaseIds(List.of("kb-a")).build())
                 .metadataConditions(List.of(new MetadataCondition("department", MetadataOperator.EQ, "HR")))
@@ -207,6 +215,14 @@ class MetadataRetrievalFilterTests {
         assertThat(channel.observedCompiledFilter).isNotNull();
         assertThat(channel.observedCompiledFilter.guardOnlyConditions()).hasSize(1);
         assertThat(chunks).extracting(RetrievedChunk::getId).containsExactly("1");
+        assertThat(observationPort.events).singleElement().satisfies(event -> {
+            assertThat(event.name()).isEqualTo("retrieval.metadata.filter.compiled");
+            assertThat(event.attributes())
+                    .containsEntry("tenantId", "tenant-a")
+                    .containsEntry("knowledgeBaseId", "kb-a")
+                    .containsEntry("fieldKeys", "department")
+                    .containsEntry("guardOnlyFieldKeys", "department");
+        });
     }
 
     private MetadataSchema schema(boolean pushdownToVector) {
@@ -271,6 +287,30 @@ class MetadataRetrievalFilterTests {
         public List<RetrievedChunk> search(VectorSearchRequest request) {
             requests.add(request);
             return List.of();
+        }
+    }
+
+    private static class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 

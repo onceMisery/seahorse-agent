@@ -36,11 +36,14 @@ import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchResultPostPr
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -55,6 +58,7 @@ import java.util.stream.Collectors;
 public class KernelMultiChannelRetrievalEngine {
 
     private static final Logger LOG = LoggerFactory.getLogger(KernelMultiChannelRetrievalEngine.class);
+    private static final String EVENT_METADATA_FILTER_COMPILED = "retrieval.metadata.filter.compiled";
     private static final String LOG_MSG_CHANNEL_FAILED = "检索通道 {} 执行失败，按空结果降级";
     private static final String LOG_MSG_PROCESSOR_FAILED = "检索后处理器 {} 执行失败，跳过该处理器";
 
@@ -64,6 +68,7 @@ public class KernelMultiChannelRetrievalEngine {
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final MetadataFilterCompiler metadataFilterCompiler;
     private final KernelRagTraceRecorder traceRecorder;
+    private final ObservationPort observationPort;
 
     public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
                                              Executor retrievalExecutor,
@@ -87,6 +92,17 @@ public class KernelMultiChannelRetrievalEngine {
                                              MetadataSchemaRegistryPort schemaRegistryPort,
                                              MetadataFilterCompiler metadataFilterCompiler,
                                              KernelRagTraceRecorder traceRecorder) {
+        this(extensionRegistry, retrievalExecutor, activationContext, schemaRegistryPort, metadataFilterCompiler,
+                traceRecorder, null);
+    }
+
+    public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
+                                             Executor retrievalExecutor,
+                                             FeatureActivationContext activationContext,
+                                             MetadataSchemaRegistryPort schemaRegistryPort,
+                                             MetadataFilterCompiler metadataFilterCompiler,
+                                             KernelRagTraceRecorder traceRecorder,
+                                             ObservationPort observationPort) {
         this.extensionRegistry = Objects.requireNonNull(extensionRegistry, "extensionRegistry must not be null");
         this.retrievalExecutor = Objects.requireNonNull(retrievalExecutor, "retrievalExecutor must not be null");
         this.activationContext = Objects.requireNonNullElse(activationContext, FeatureActivationContext.empty());
@@ -94,6 +110,7 @@ public class KernelMultiChannelRetrievalEngine {
         this.metadataFilterCompiler = Objects.requireNonNullElseGet(metadataFilterCompiler,
                 DefaultMetadataFilterCompiler::new);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
+        this.observationPort = observationPort;
     }
 
     /**
@@ -286,6 +303,42 @@ public class KernelMultiChannelRetrievalEngine {
         String tenantId = !filter.system().tenantId().isBlank() ? filter.system().tenantId() : activationContext.tenantId();
         MetadataSchema schema = schemaRegistryPort.loadSchema(tenantId, knowledgeBaseId);
         // 只有通过 Schema 编译后的表达式才能进入向量库或关键词后端，避免原始 Map 直通外部查询。
-        return metadataFilterCompiler.compile(filter, schema);
+        CompiledMetadataFilter compiledFilter = metadataFilterCompiler.compile(filter, schema);
+        recordMetadataFilterUsage(tenantId, knowledgeBaseId, schema, compiledFilter);
+        return compiledFilter;
+    }
+
+    private void recordMetadataFilterUsage(String tenantId,
+                                           String knowledgeBaseId,
+                                           MetadataSchema schema,
+                                           CompiledMetadataFilter compiledFilter) {
+        if (observationPort == null || compiledFilter == null
+                || compiledFilter.sourceFilter().metadataConditions().isEmpty()) {
+            return;
+        }
+        try {
+            List<String> fieldKeys = compiledFilter.sourceFilter().metadataConditions().stream()
+                    .map(condition -> Objects.requireNonNullElse(condition.fieldKey(), ""))
+                    .filter(fieldKey -> !fieldKey.isBlank())
+                    .distinct()
+                    .toList();
+            List<String> guardOnlyFieldKeys = compiledFilter.guardOnlyConditions().stream()
+                    .map(condition -> Objects.requireNonNullElse(condition.fieldKey(), ""))
+                    .filter(fieldKey -> !fieldKey.isBlank())
+                    .distinct()
+                    .toList();
+            // 该事件为后续 Schema 使用情况报表提供原始证据，不影响检索下推和兜底过滤语义。
+            observationPort.recordEvent(new ObservationEvent(EVENT_METADATA_FILTER_COMPILED, null, Map.of(
+                    "tenantId", Objects.requireNonNullElse(tenantId, ""),
+                    "knowledgeBaseId", Objects.requireNonNullElse(knowledgeBaseId, ""),
+                    "schemaVersion", Integer.toString(schema == null ? 0 : schema.schemaVersion()),
+                    "fieldKeys", String.join(",", fieldKeys),
+                    "fieldCount", Integer.toString(fieldKeys.size()),
+                    "guardOnlyFieldKeys", String.join(",", guardOnlyFieldKeys),
+                    "guardOnlyCount", Integer.toString(guardOnlyFieldKeys.size()),
+                    "warningCount", Integer.toString(compiledFilter.warnings().size()))));
+        } catch (RuntimeException ignored) {
+            // 观测失败不能影响检索主链路，也不能绕过已编译的 Schema/Filter Compiler 结果。
+        }
     }
 }

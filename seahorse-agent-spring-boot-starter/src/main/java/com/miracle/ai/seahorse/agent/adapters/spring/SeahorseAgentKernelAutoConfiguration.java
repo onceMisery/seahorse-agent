@@ -519,12 +519,14 @@ public class SeahorseAgentKernelAutoConfiguration {
             FeatureActivationContext activationContext,
             ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
             ObjectProvider<MetadataFilterCompiler> metadataFilterCompiler,
-            ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
+            ObjectProvider<KernelRagTraceRecorder> traceRecorder,
+            ObjectProvider<ObservationPort> observationPort) {
         return new KernelMultiChannelRetrievalEngine(extensionRegistry,
                 retrievalExecutor.getIfAvailable(() -> Runnable::run), activationContext,
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
                 metadataFilterCompiler.getIfAvailable(DefaultMetadataFilterCompiler::new),
-                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
+                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
+                observationPort.getIfAvailable());
     }
 
     @Bean
