@@ -10,6 +10,16 @@ public interface MetadataQuarantineInboundPort {
 
     MetadataQuarantinePage page(String tenantId, String knowledgeBaseId, Boolean resolved, long current, long size);
 
+    MetadataQuarantinePage page(String tenantId,
+                                String knowledgeBaseId,
+                                Boolean resolved,
+                                String stage,
+                                String reasonCode,
+                                String documentId,
+                                String jobId,
+                                long current,
+                                long size);
+
     MetadataQuarantineRecord queryById(String itemId);
 
     MetadataQuarantineRecord resolve(String itemId, String operator);

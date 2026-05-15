@@ -71,9 +71,20 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
                                    MetadataReviewStatus status,
                                    long current,
                                    long size) {
+        return page(tenantId, knowledgeBaseId, status, null, null, current, size);
+    }
+
+    @Override
+    public MetadataReviewPage page(String tenantId,
+                                   String knowledgeBaseId,
+                                   MetadataReviewStatus status,
+                                   String reasonCode,
+                                   String documentId,
+                                   long current,
+                                   long size) {
         requireText(tenantId, "tenantId must not be blank");
         return reviewRepositoryPort.pageReviewItems(
-                new MetadataReviewQuery(tenantId, knowledgeBaseId, status, current, size));
+                new MetadataReviewQuery(tenantId, knowledgeBaseId, status, reasonCode, documentId, current, size));
     }
 
     @Override

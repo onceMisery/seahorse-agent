@@ -15,6 +15,14 @@ public interface MetadataReviewInboundPort {
     MetadataReviewPage page(String tenantId, String knowledgeBaseId, MetadataReviewStatus status, long current,
                             long size);
 
+    MetadataReviewPage page(String tenantId,
+                            String knowledgeBaseId,
+                            MetadataReviewStatus status,
+                            String reasonCode,
+                            String documentId,
+                            long current,
+                            long size);
+
     MetadataReviewRecord queryById(String itemId);
 
     List<MetadataReviewAuditRecord> listAudits(String itemId);

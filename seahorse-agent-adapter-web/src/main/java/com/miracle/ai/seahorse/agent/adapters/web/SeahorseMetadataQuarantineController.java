@@ -56,10 +56,14 @@ public class SeahorseMetadataQuarantineController {
     public Map<String, Object> page(@RequestParam String tenantId,
                                     @RequestParam(required = false) String kbId,
                                     @RequestParam(required = false) Boolean resolved,
+                                    @RequestParam(required = false) String stage,
+                                    @RequestParam(required = false) String reasonCode,
+                                    @RequestParam(required = false) String documentId,
+                                    @RequestParam(required = false) String jobId,
                                     @RequestParam(defaultValue = "1") long current,
                                     @RequestParam(defaultValue = "10") long size) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                quarantinePort.page(tenantId, kbId, resolved, current, size));
+                quarantinePort.page(tenantId, kbId, resolved, stage, reasonCode, documentId, jobId, current, size));
     }
 
     @GetMapping("/metadata-quarantine/items/{item-id}")

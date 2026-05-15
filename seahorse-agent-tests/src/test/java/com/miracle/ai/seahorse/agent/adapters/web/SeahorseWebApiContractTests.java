@@ -828,7 +828,8 @@ class SeahorseWebApiContractTests {
     @Test
     void shouldKeepMetadataReviewAndQuarantineManagementContracts() throws Exception {
         MetadataReviewInboundPort reviewPort = mock(MetadataReviewInboundPort.class);
-        when(reviewPort.page("tenant-1", "kb-1", MetadataReviewStatus.PENDING, 1, 10))
+        when(reviewPort.page(
+                "tenant-1", "kb-1", MetadataReviewStatus.PENDING, "LOW_CONFIDENCE", "doc-1", 1, 10))
                 .thenReturn(new MetadataReviewPage(List.of(metadataReview("review-1", MetadataReviewStatus.PENDING)),
                         1, 10, 1, 1));
         when(reviewPort.queryById("review-1"))
@@ -849,7 +850,8 @@ class SeahorseWebApiContractTests {
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.QUARANTINED));
 
         MetadataQuarantineInboundPort quarantinePort = mock(MetadataQuarantineInboundPort.class);
-        when(quarantinePort.page("tenant-1", "kb-1", Boolean.FALSE, 1, 10))
+        when(quarantinePort.page(
+                "tenant-1", "kb-1", Boolean.FALSE, "VALIDATE", "SCHEMA_MISSING", "doc-1", "job-1", 1, 10))
                 .thenReturn(new MetadataQuarantinePage(List.of(metadataQuarantine("q-1", false, 1)), 1, 10, 1, 1));
         when(quarantinePort.queryById("q-1"))
                 .thenReturn(metadataQuarantine("q-1", false, 1));
@@ -865,7 +867,9 @@ class SeahorseWebApiContractTests {
         mvc.perform(get("/metadata-review/items")
                         .param("tenantId", "tenant-1")
                         .param("kbId", "kb-1")
-                        .param("status", "PENDING"))
+                        .param("status", "PENDING")
+                        .param("reasonCode", "LOW_CONFIDENCE")
+                        .param("documentId", "doc-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.records[0].id").value("review-1"))
@@ -927,7 +931,11 @@ class SeahorseWebApiContractTests {
         mvc.perform(get("/metadata-quarantine/items")
                         .param("tenantId", "tenant-1")
                         .param("kbId", "kb-1")
-                        .param("resolved", "false"))
+                        .param("resolved", "false")
+                        .param("stage", "VALIDATE")
+                        .param("reasonCode", "SCHEMA_MISSING")
+                        .param("documentId", "doc-1")
+                        .param("jobId", "job-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.records[0].id").value("q-1"))
                 .andExpect(jsonPath("$.data.records[0].resolved").value(false));

@@ -1206,6 +1206,14 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             sql.append(" AND review_status = ?");
             args.add(query.reviewStatus().name());
         }
+        if (!blank(query.reasonCode())) {
+            sql.append(" AND reason_code = ?");
+            args.add(query.reasonCode());
+        }
+        if (!blank(query.documentId())) {
+            sql.append(" AND doc_id = ?");
+            args.add(query.documentId());
+        }
         return new SqlWhere(sql.toString(), args);
     }
 
@@ -1223,6 +1231,22 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         if (query.resolved() != null) {
             sql.append(" AND resolved = ?");
             args.add(Boolean.TRUE.equals(query.resolved()) ? 1 : 0);
+        }
+        if (!blank(query.stage())) {
+            sql.append(" AND stage = ?");
+            args.add(query.stage());
+        }
+        if (!blank(query.reasonCode())) {
+            sql.append(" AND reason_code = ?");
+            args.add(query.reasonCode());
+        }
+        if (!blank(query.documentId())) {
+            sql.append(" AND doc_id = ?");
+            args.add(query.documentId());
+        }
+        if (!blank(query.jobId())) {
+            sql.append(" AND job_id = ?");
+            args.add(query.jobId());
         }
         return new SqlWhere(sql.toString(), args);
     }

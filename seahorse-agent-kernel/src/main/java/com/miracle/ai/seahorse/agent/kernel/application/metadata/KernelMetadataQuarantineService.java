@@ -39,9 +39,23 @@ public class KernelMetadataQuarantineService implements MetadataQuarantineInboun
                                        Boolean resolved,
                                        long current,
                                        long size) {
+        return page(tenantId, knowledgeBaseId, resolved, null, null, null, null, current, size);
+    }
+
+    @Override
+    public MetadataQuarantinePage page(String tenantId,
+                                       String knowledgeBaseId,
+                                       Boolean resolved,
+                                       String stage,
+                                       String reasonCode,
+                                       String documentId,
+                                       String jobId,
+                                       long current,
+                                       long size) {
         requireText(tenantId, "tenantId must not be blank");
         return quarantineRepositoryPort.pageQuarantineItems(
-                new MetadataQuarantineQuery(tenantId, knowledgeBaseId, resolved, current, size));
+                new MetadataQuarantineQuery(
+                        tenantId, knowledgeBaseId, resolved, stage, reasonCode, documentId, jobId, current, size));
     }
 
     @Override
