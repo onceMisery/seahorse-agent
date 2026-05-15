@@ -39,10 +39,13 @@ class KernelMetadataExtractionResultServiceTests {
         KernelMetadataExtractionResultService service = new KernelMetadataExtractionResultService(repository);
 
         MetadataExtractionResultPage page = service.page(
-                "tenant-1", "kb-1", "doc-1", "job-1", "ACCEPTED", 1, 10);
+                "tenant-1", "kb-1", "doc-1", "job-1", "ACCEPTED",
+                2, "extractor-v2", 1, 10);
         MetadataExtractionResultRecord detail = service.queryById("result-1");
 
         assertThat(repository.lastQuery.tenantId()).isEqualTo("tenant-1");
+        assertThat(repository.lastQuery.schemaVersion()).isEqualTo(2);
+        assertThat(repository.lastQuery.extractorVersion()).isEqualTo("extractor-v2");
         assertThat(page.records()).hasSize(1);
         assertThat(detail.id()).isEqualTo("result-1");
     }

@@ -62,25 +62,49 @@ class JdbcMetadataExtractionResultManagementAdapterTests {
         assertThat(detail.approvedMetadata()).containsEntry("department", "HR");
     }
 
+    @Test
+    void shouldFilterExtractionResultsBySchemaAndExtractorVersion() {
+        insertResult("result-v1", "tenant-1", "kb-1", "doc-1", "job-1", "ACCEPTED", 1, "extractor-v1");
+        insertResult("result-v2", "tenant-1", "kb-1", "doc-2", "job-1", "ACCEPTED", 2, "extractor-v2");
+        insertResult("result-v3", "tenant-1", "kb-1", "doc-3", "job-1", "ACCEPTED", 2, "extractor-v3");
+
+        MetadataExtractionResultPage page = adapter.pageExtractionResults(new MetadataExtractionResultQuery(
+                "tenant-1", "kb-1", "", "job-1", "ACCEPTED", 2, "extractor-v2", 1, 10));
+
+        assertThat(page.total()).isEqualTo(1);
+        assertThat(page.records()).extracting(MetadataExtractionResultRecord::id).containsExactly("result-v2");
+    }
+
     private void insertResult(String id,
                               String tenantId,
                               String kbId,
                               String docId,
                               String jobId,
                               String status) {
+        insertResult(id, tenantId, kbId, docId, jobId, status, 2, "extractor-v2");
+    }
+
+    private void insertResult(String id,
+                              String tenantId,
+                              String kbId,
+                              String docId,
+                              String jobId,
+                              String status,
+                              int schemaVersion,
+                              String extractorVersion) {
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_extraction_result(
                     id, tenant_id, kb_id, doc_id, job_id, schema_version, extractor_version, status,
                     normalized_metadata, raw_candidates, field_quality, validation_issues,
                     approved_metadata, approved_by, approved_time, create_time, update_time
-                ) VALUES (?, ?, ?, ?, ?, 2, 'extractor-v2', ?,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,
                           '{"department":"HR"}',
                           '[{"fieldKey":"department","value":"hr"}]',
                           '[{"fieldKey":"department","confidence":0.93}]',
                           '[{"fieldKey":"department","reason":"LOW_CONFIDENCE"}]',
                           '{"department":"HR"}',
                           'auditor', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                """, id, tenantId, kbId, docId, jobId, status);
+                """, id, tenantId, kbId, docId, jobId, schemaVersion, extractorVersion, status);
     }
 
     private void createSchema() {

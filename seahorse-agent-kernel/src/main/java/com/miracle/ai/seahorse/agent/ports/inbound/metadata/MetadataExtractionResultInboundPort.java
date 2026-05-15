@@ -16,5 +16,18 @@ public interface MetadataExtractionResultInboundPort {
                                       long current,
                                       long size);
 
+    default MetadataExtractionResultPage page(String tenantId,
+                                             String knowledgeBaseId,
+                                             String documentId,
+                                             String jobId,
+                                             String status,
+                                             Integer schemaVersion,
+                                             String extractorVersion,
+                                             long current,
+                                             long size) {
+        // 兼容外部旧实现：未覆盖增强查询时仍走原有分页入口。
+        return page(tenantId, knowledgeBaseId, documentId, jobId, status, current, size);
+    }
+
     MetadataExtractionResultRecord queryById(String resultId);
 }

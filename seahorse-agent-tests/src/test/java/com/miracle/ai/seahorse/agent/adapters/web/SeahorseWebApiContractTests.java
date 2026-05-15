@@ -1074,7 +1074,8 @@ class SeahorseWebApiContractTests {
     @Test
     void shouldKeepMetadataExtractionResultManagementContracts() throws Exception {
         MetadataExtractionResultInboundPort resultPort = mock(MetadataExtractionResultInboundPort.class);
-        when(resultPort.page("tenant-1", "kb-1", "doc-1", "job-1", "ACCEPTED", 1, 10))
+        when(resultPort.page("tenant-1", "kb-1", "doc-1", "job-1", "ACCEPTED",
+                Integer.valueOf(2), "extractor-v2", 1L, 10L))
                 .thenReturn(new MetadataExtractionResultPage(
                         List.of(metadataExtractionResult("result-1")), 1, 10, 1, 1));
         when(resultPort.queryById("result-1")).thenReturn(metadataExtractionResult("result-1"));
@@ -1087,7 +1088,9 @@ class SeahorseWebApiContractTests {
                         .param("kbId", "kb-1")
                         .param("docId", "doc-1")
                         .param("jobId", "job-1")
-                        .param("status", "ACCEPTED"))
+                        .param("status", "ACCEPTED")
+                        .param("schemaVersion", "2")
+                        .param("extractorVersion", "extractor-v2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.records[0].id").value("result-1"))

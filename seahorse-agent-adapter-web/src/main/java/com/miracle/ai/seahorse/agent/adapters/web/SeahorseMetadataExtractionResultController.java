@@ -50,10 +50,12 @@ public class SeahorseMetadataExtractionResultController {
                                            @RequestParam(required = false, defaultValue = "") String docId,
                                            @RequestParam(required = false, defaultValue = "") String jobId,
                                            @RequestParam(required = false, defaultValue = "") String status,
+                                           @RequestParam(required = false) Integer schemaVersion,
+                                           @RequestParam(required = false, defaultValue = "") String extractorVersion,
                                            @RequestParam(defaultValue = "1") long current,
                                            @RequestParam(defaultValue = "10") long size) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                resultPort.page(tenantId, kbId, docId, jobId, status, current, size));
+                resultPort.page(tenantId, kbId, docId, jobId, status, schemaVersion, extractorVersion, current, size));
     }
 
     @GetMapping("/metadata-extraction/results/{result-id}")

@@ -30,9 +30,25 @@ public class KernelMetadataExtractionResultService implements MetadataExtraction
                                              String status,
                                              long current,
                                              long size) {
+        return page(tenantId, knowledgeBaseId, documentId, jobId, status, null, "", current, size);
+    }
+
+    @Override
+    public MetadataExtractionResultPage page(String tenantId,
+                                             String knowledgeBaseId,
+                                             String documentId,
+                                             String jobId,
+                                             String status,
+                                             Integer schemaVersion,
+                                             String extractorVersion,
+                                             long current,
+                                             long size) {
         String safeTenantId = requireText(tenantId, "tenantId must not be blank");
+        Integer safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? null : schemaVersion;
+        String safeExtractorVersion = Objects.requireNonNullElse(extractorVersion, "");
         return repositoryPort.pageExtractionResults(new MetadataExtractionResultQuery(
-                safeTenantId, knowledgeBaseId, documentId, jobId, status, current, size));
+                safeTenantId, knowledgeBaseId, documentId, jobId, status,
+                safeSchemaVersion, safeExtractorVersion, current, size));
     }
 
     @Override

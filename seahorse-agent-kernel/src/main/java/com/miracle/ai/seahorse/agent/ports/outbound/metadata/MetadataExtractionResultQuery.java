@@ -11,6 +11,8 @@ public record MetadataExtractionResultQuery(
         String documentId,
         String jobId,
         String status,
+        Integer schemaVersion,
+        String extractorVersion,
         long current,
         long size
 ) {
@@ -21,8 +23,21 @@ public record MetadataExtractionResultQuery(
         documentId = Objects.requireNonNullElse(documentId, "").trim();
         jobId = Objects.requireNonNullElse(jobId, "").trim();
         status = Objects.requireNonNullElse(status, "").trim();
+        schemaVersion = schemaVersion == null || schemaVersion <= 0 ? null : schemaVersion;
+        extractorVersion = Objects.requireNonNullElse(extractorVersion, "").trim();
         current = Math.max(1L, current);
         size = Math.max(1L, Math.min(100L, size));
+    }
+
+    public MetadataExtractionResultQuery(String tenantId,
+                                         String knowledgeBaseId,
+                                         String documentId,
+                                         String jobId,
+                                         String status,
+                                         long current,
+                                         long size) {
+        // 兼容旧调用方：未传版本条件时保持原有查询语义。
+        this(tenantId, knowledgeBaseId, documentId, jobId, status, null, "", current, size);
     }
 
     public long offset() {

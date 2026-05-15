@@ -1206,6 +1206,14 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             sql.append(" AND status = ?");
             args.add(query.status());
         }
+        if (query.schemaVersion() != null) {
+            sql.append(" AND schema_version = ?");
+            args.add(query.schemaVersion());
+        }
+        if (!blank(query.extractorVersion())) {
+            sql.append(" AND COALESCE(extractor_version, '') = ?");
+            args.add(query.extractorVersion());
+        }
         return new SqlWhere(sql.toString(), args);
     }
 
