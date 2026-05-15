@@ -50,7 +50,7 @@
 | 数据库设计 | B+ | 表结构合理，但存在冗余索引和过度设计 |
 | 前端架构 | A- | 技术栈现代，SSE 实现完整，chatStore 偏大 |
 | 可观测性 | B | Micrometer 适配器过于简单，RAG Trace 是亮点 |
-| 记忆管理 | B | 4 层架构设计合理，但 MemoryEnginePort 未接入主链路 |
+| 记忆管理 | B+ | 4 层架构设计合理，MemoryEnginePort 已接入主链路，QueryOptimizer 和跨会话推理基础设施已完成 |
 
 ### 1.3 关键发现
 
@@ -61,8 +61,13 @@
 **中优先级（P1）**:
 3. 出站端口 201 个，合并后可减少到 ~120 个
 4. JDBC 适配器 44 个文件，合并后可减少到 ~20 个
-5. 记忆子系统 4 层 + 6 表过度设计
-6. HNSW 索引参数硬编码
+5. HNSW 索引参数硬编码
+
+**已解决**:
+- 记忆子系统 4 层架构已接入主链路（DefaultMemoryEnginePort + activateMemory）
+- QueryOptimizer 端口和规则实现已完成（Phase 3A）
+- LLM QueryOptimizer 已实现，默认关闭（Phase 3B）
+- 跨会话推理基础设施已集成到 KernelMemoryGovernanceService（Phase 4）
 
 **低优先级（P2）**:
 7. Milvus 适配器使用 Gson 而非项目统一的 Jackson
@@ -642,15 +647,17 @@ public KernelMemoryEngine seahorseKernelMemoryEngine(ObjectProvider<MemoryEngine
 
 5. **治理逻辑有明确价值**：短期 → 长期 → 语义的晋升路径，以及基于重要性评分的衰减机制，是记忆系统区别于简单缓存的核心能力。
 
-#### 9.5.2 真正的问题：设计愿景未落地 ⚠️
+#### 9.5.2 已解决的问题
 
-**问题不在于四层架构过度设计，而在于：**
+以下问题已在后续迭代中解决：
 
-1. **MemoryEnginePort 未接入主链路**：`KernelChatPipeline` 使用 `ConversationMemoryPort` 而非 `MemoryEnginePort`，导致四层记忆的加载和写入能力闲置。设计文档规划了"记忆激活机制"（多层融合加载），但代码中没有实现。
+1. **MemoryEnginePort 已接入主链路**：`DefaultMemoryEnginePort` 编排 ShortTerm/LongTerm/Semantic 三层记忆读取，通过 `activateMemory()` 阶段集成到 `KernelChatPipeline`。
 
-2. **MemoryEnginePort 没有真实实现**：自动配置始终注入 noop，没有 JDBC 或其他适配器实现 `MemoryEnginePort` 的 `loadMemory()` 和 `writeMemory()`。
+2. **MemoryEnginePort 已有真实实现**：`DefaultMemoryEnginePort` 组合三个分层端口，`loadMemory()` 做多层读取、限量、转换、去重。自动配置通过 `ObjectProvider<ObjectMapper>` + fallback 避免启动失败。
 
-3. **记忆治理是孤立的定时任务**：`SeahorseMemoryGovernanceJob` 每 30 分钟执行衰减，但衰减结果没有反馈到主链路的记忆加载中。
+3. **跨会话推理已集成到治理服务**：`KernelMemoryGovernanceService` 通过 `inferenceEnabled` 配置开关调用 `MemoryInferencePort`，`MemoryGovernanceRunResult` 新增 `inferredCount` 字段。
+
+4. **QueryOptimizer 已实现**：`RuleBasedQueryOptimizerPort`（确定性，默认开启）和 `LlmQueryOptimizerAdapter`（LLM，默认关闭）均已完成。
 
 4. **设计文档中的高级能力未实现**：QueryOptimizer、ForgettingController（仿生衰减算法）、MemoryQualityAssessor（冲突检测）、多级摘要、Token 预算管理等都是设计愿景，代码中没有对应实现。
 
@@ -724,10 +731,9 @@ KernelMetadataSchemaService       -- 元数据 Schema 管理
 
 | 序号 | 问题 | 位置 | 改进措施 | 影响 |
 |------|------|------|----------|------|
-| 1 | MemoryEnginePort 未接入主链路 | `KernelChatPipeline` + 自动配置 | 实现 MemoryEnginePort JDBC 适配器并接入聊天链路 | 释放四层记忆能力 |
-| 2 | 冗余索引 | `schema_pg.sql:79-80` | 删除 `idx_conversation_summary` | 减少存储和写入开销 |
-| 3 | 自动配置类过大 | `SeahorseAgentKernelAutoConfiguration` | 拆分为 5-6 个领域配置类 | 提高可维护性 |
-| 4 | 检索通道无超时 | `KernelMultiChannelRetrievalEngine` | 添加通道级超时和降级 | 避免慢通道阻塞 |
+| 1 | 冗余索引 | `schema_pg.sql:79-80` | 删除 `idx_conversation_summary` | 减少存储和写入开销 |
+| 2 | 自动配置类过大 | `SeahorseAgentKernelAutoConfiguration` | 拆分为 5-6 个领域配置类 | 提高可维护性 |
+| 3 | 检索通道无超时 | `KernelMultiChannelRetrievalEngine` | 添加通道级超时和降级 | 避免慢通道阻塞 |
 
 ### 11.2 中优先级（P1）
 
@@ -735,9 +741,8 @@ KernelMetadataSchemaService       -- 元数据 Schema 管理
 |------|------|------|----------|------|
 | 4 | 出站端口过多 | `ports/outbound/` | 合并语义相近端口到 ~120 个 | 降低理解成本 |
 | 5 | JDBC 适配器过多 | `adapter-repository-jdbc` | 合并为 ~20 个领域 Adapter | 减少文件数量 |
-| 6 | MemoryEnginePort 未接入主链路 | `KernelChatPipeline` | 实现 MemoryEnginePort JDBC 适配器并接入聊天链路 | 释放四层记忆能力 |
-| 7 | HNSW 参数硬编码 | `MilvusVectorAdapter` | 提取为配置项 | 支持不同场景 |
-| 8 | 流式响应线程池 | `OpenAiCompatibleModelAdapter` | 注入专用线程池 | 避免耗尽公共池 |
+| 6 | HNSW 参数硬编码 | `MilvusVectorAdapter` | 提取为配置项 | 支持不同场景 |
+| 7 | 流式响应线程池 | `OpenAiCompatibleModelAdapter` | 注入专用线程池 | 避免耗尽公共池 |
 | 9 | Wrapper 空壳实现 | `kernel/plugin/wrapper/` | 删除 | 减少误导 |
 
 ### 11.3 低优先级（P2）
