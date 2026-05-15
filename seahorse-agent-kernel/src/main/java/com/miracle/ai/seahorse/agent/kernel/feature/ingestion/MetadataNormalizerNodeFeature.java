@@ -12,6 +12,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -22,23 +24,33 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
 
     public static final String NODE_TYPE = "metadata_normalizer";
     private static final String KEY_TENANT_ID = "tenantId";
     private static final String KEY_KB_ID = "kbId";
+    private static final String EVENT_NORMALIZATION_COMPLETED = "metadata.normalization.completed";
     private static final double PRIORITY_CONFIDENCE_EPSILON = 0.05D;
     private static final double AGREEMENT_CONFIDENCE_BOOST = 0.03D;
     private static final double DEFAULT_MIN_CONFIDENCE = 0.8D;
 
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final MetadataDictionaryPort dictionaryPort;
+    private final ObservationPort observationPort;
 
     public MetadataNormalizerNodeFeature(MetadataSchemaRegistryPort schemaRegistryPort,
                                          MetadataDictionaryPort dictionaryPort) {
+        this(schemaRegistryPort, dictionaryPort, null);
+    }
+
+    public MetadataNormalizerNodeFeature(MetadataSchemaRegistryPort schemaRegistryPort,
+                                         MetadataDictionaryPort dictionaryPort,
+                                         ObservationPort observationPort) {
         this.schemaRegistryPort = Objects.requireNonNullElse(schemaRegistryPort, MetadataSchemaRegistryPort.empty());
         this.dictionaryPort = Objects.requireNonNullElse(dictionaryPort, MetadataDictionaryPort.noop());
+        this.observationPort = observationPort;
     }
 
     @Override
@@ -59,6 +71,7 @@ public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
     @Override
     public NodeResult execute(IngestionContext context, NodeConfig config) {
         IngestionContext safeContext = Objects.requireNonNull(context, "context must not be null");
+        long startedAt = System.nanoTime();
         try {
             MetadataSchema schema = resolveSchema(safeContext, config);
             Map<String, Object> normalized = new LinkedHashMap<>();
@@ -77,9 +90,54 @@ public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
             safeContext.setNormalizedMetadata(normalized);
             safeContext.setMetadataFieldQualities(qualities);
             safeContext.setMetadataIssues(issues);
+            recordNormalizationEvent(schema, safeContext, config, normalized.size(), qualities, issues, true, null,
+                    elapsedMillis(startedAt));
             return NodeResult.ok("normalized metadata fields=" + normalized.size());
         } catch (Exception ex) {
+            recordNormalizationEvent(null, safeContext, config, 0, List.of(),
+                    Objects.requireNonNullElse(safeContext.getMetadataIssues(), List.of()), false, ex,
+                    elapsedMillis(startedAt));
             return NodeResult.fail(ex);
+        }
+    }
+
+    private void recordNormalizationEvent(MetadataSchema schema,
+                                          IngestionContext context,
+                                          NodeConfig config,
+                                          int normalizedFieldCount,
+                                          List<MetadataFieldQuality> qualities,
+                                          List<MetadataIssue> issues,
+                                          boolean success,
+                                          Exception ex,
+                                          long durationMs) {
+        if (observationPort == null) {
+            return;
+        }
+        try {
+            List<MetadataFieldQuality> safeQualities = Objects.requireNonNullElseGet(qualities, List::of);
+            List<MetadataIssue> safeIssues = Objects.requireNonNullElseGet(issues, List::of);
+            Map<String, String> attributes = new LinkedHashMap<>();
+            attributes.put("tenantId", firstText(schema == null ? "" : schema.tenantId(),
+                    firstText(setting(config, KEY_TENANT_ID), metadataText(context, KEY_TENANT_ID))));
+            attributes.put("knowledgeBaseId", firstText(schema == null ? "" : schema.knowledgeBaseId(),
+                    firstText(setting(config, KEY_KB_ID), metadataText(context, KEY_KB_ID))));
+            attributes.put("schemaVersion", Integer.toString(schema == null ? 0 : schema.schemaVersion()));
+            attributes.put("candidateCount", Integer.toString(candidateCount(context)));
+            attributes.put("normalizedFieldCount", Integer.toString(normalizedFieldCount));
+            attributes.put("qualityCount", Integer.toString(safeQualities.size()));
+            attributes.put("failedQualityCount", Long.toString(safeQualities.stream()
+                    .filter(quality -> !quality.normalized())
+                    .count()));
+            attributes.put("issueCount", Integer.toString(safeIssues.size()));
+            attributes.put("durationMs", Long.toString(durationMs));
+            attributes.put("success", Boolean.toString(success));
+            if (ex != null) {
+                attributes.put("exception", ex.getClass().getSimpleName());
+            }
+            // 只记录数量和版本信息，避免把业务字段值写入观测事件。
+            observationPort.recordEvent(new ObservationEvent(EVENT_NORMALIZATION_COMPLETED, null, attributes));
+        } catch (RuntimeException ignored) {
+            // 观测失败不能影响标准化与后续校验链路。
         }
     }
 
@@ -291,5 +349,13 @@ public class MetadataNormalizerNodeFeature implements IngestionNodeFeature {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private int candidateCount(IngestionContext context) {
+        return context == null || context.getMetadataCandidates() == null ? 0 : context.getMetadataCandidates().size();
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
     }
 }

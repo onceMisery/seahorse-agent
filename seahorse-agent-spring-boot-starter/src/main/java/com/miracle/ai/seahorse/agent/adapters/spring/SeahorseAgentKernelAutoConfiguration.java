@@ -309,10 +309,12 @@ public class SeahorseAgentKernelAutoConfiguration {
     public MetadataNormalizerNodeFeature seahorseMetadataNormalizerNodeFeature(
             ExtensionRegistry extensionRegistry,
             ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
-            ObjectProvider<MetadataDictionaryPort> dictionaryPort) {
+            ObjectProvider<MetadataDictionaryPort> dictionaryPort,
+            ObjectProvider<ObservationPort> observationPort) {
         MetadataNormalizerNodeFeature feature = new MetadataNormalizerNodeFeature(
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
-                dictionaryPort.getIfAvailable(MetadataDictionaryPort::noop));
+                dictionaryPort.getIfAvailable(MetadataDictionaryPort::noop),
+                observationPort.getIfAvailable());
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
                 FeatureType.INGESTION_NODE, feature.order(), true), feature);
         return feature;

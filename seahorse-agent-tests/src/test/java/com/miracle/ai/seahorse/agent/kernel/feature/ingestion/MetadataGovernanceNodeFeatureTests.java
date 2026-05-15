@@ -118,7 +118,8 @@ class MetadataGovernanceNodeFeatureTests {
         NodeResult extractResult = new MetadataExtractorNodeFeature(
                 schemaRegistry, ChatModelPort.noop(), observationPort)
                 .execute(context, NodeConfig.builder().nodeType("metadata_extractor").build());
-        NodeResult normalizeResult = new MetadataNormalizerNodeFeature(schemaRegistry, MetadataDictionaryPort.noop())
+        NodeResult normalizeResult = new MetadataNormalizerNodeFeature(
+                schemaRegistry, MetadataDictionaryPort.noop(), observationPort)
                 .execute(context, NodeConfig.builder().nodeType("metadata_normalizer").build());
         NodeResult validateResult = new MetadataValidatorNodeFeature(schemaRegistry, savedRecords::add,
                 MetadataReviewQueuePort.noop(), MetadataQuarantinePort.noop(), MetadataCanonicalWritePort.noop(),
@@ -130,7 +131,8 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(validateResult.isSuccess()).isTrue();
         assertThat(observationPort.events)
                 .extracting(ObservationEvent::name)
-                .contains("metadata.extraction.completed", "metadata.validation.completed");
+                .contains("metadata.extraction.completed", "metadata.normalization.completed",
+                        "metadata.validation.completed");
         assertThat(observationPort.events)
                 .filteredOn(event -> event.name().equals("metadata.extraction.completed"))
                 .singleElement()
@@ -139,6 +141,17 @@ class MetadataGovernanceNodeFeatureTests {
                         .containsEntry("knowledgeBaseId", "kb-a")
                         .containsEntry("schemaVersion", "3")
                         .containsEntry("candidateCount", "1")
+                        .containsEntry("success", "true"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.normalization.completed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("schemaVersion", "3")
+                        .containsEntry("candidateCount", "1")
+                        .containsEntry("normalizedFieldCount", "1")
+                        .containsEntry("failedQualityCount", "0")
                         .containsEntry("success", "true"));
         assertThat(observationPort.events)
                 .filteredOn(event -> event.name().equals("metadata.validation.completed"))
