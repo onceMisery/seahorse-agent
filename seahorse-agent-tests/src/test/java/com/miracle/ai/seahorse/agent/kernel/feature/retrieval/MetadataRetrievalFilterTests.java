@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.feature.retrieval;
 
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.BackendFieldMapping;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
@@ -45,6 +46,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQuery
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentSummary;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchRequest;
 import org.junit.jupiter.api.Test;
 
@@ -68,6 +74,39 @@ class MetadataRetrievalFilterTests {
         assertThatThrownBy(() -> compiler.compile(filter, MetadataSchema.empty("tenant-a", "kb-a")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("unknown");
+    }
+
+    @Test
+    void shouldRecordRejectedMetadataFilterObservationBeforeThrowing() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        KernelMultiChannelRetrievalEngine engine = new KernelMultiChannelRetrievalEngine(
+                registry,
+                Runnable::run,
+                new FeatureActivationContext("tenant-a", "user-a", Map.of(), AgentFeatureProperties.empty()),
+                (tenantId, knowledgeBaseId) -> schema(true),
+                new DefaultMetadataFilterCompiler(),
+                KernelRagTraceRecorder.noop(),
+                observationPort);
+        RetrievalFilter filter = RetrievalFilter.builder()
+                .system(SystemRetrievalFilter.builder().tenantId("tenant-a").knowledgeBaseIds(List.of("kb-a")).build())
+                .metadataConditions(List.of(new MetadataCondition("unknown", MetadataOperator.EQ, "HR")))
+                .build();
+
+        assertThatThrownBy(() -> engine.retrieveKnowledgeChannels(
+                List.of(new SubQuestionIntent("元数据过滤", List.of())), 5, filter, RetrievalOptions.defaults(5)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unknown");
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.metadata.filter.rejected"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("fieldKeys", "unknown")
+                        .containsEntry("reason", "UNREGISTERED_FIELD")
+                        .containsEntry("success", "false")
+                        .containsEntry("exception", "IllegalArgumentException"));
     }
 
     @Test
@@ -186,6 +225,7 @@ class MetadataRetrievalFilterTests {
         DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
         RecordingSearchChannelFeature channel = new RecordingSearchChannelFeature();
         MetadataGuardPostProcessorFeature guard = new MetadataGuardPostProcessorFeature();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
         registry.register(new ExtensionDescriptor(channel.name(), SearchChannelFeature.class,
                 FeatureType.SEARCH_CHANNEL, 1, true), channel);
         registry.register(new ExtensionDescriptor(guard.name(), SearchResultPostProcessorFeature.class,
@@ -195,7 +235,9 @@ class MetadataRetrievalFilterTests {
                 Runnable::run,
                 new FeatureActivationContext("tenant-a", "user-a", Map.of(), AgentFeatureProperties.empty()),
                 (tenantId, knowledgeBaseId) -> schema(false),
-                new DefaultMetadataFilterCompiler());
+                new DefaultMetadataFilterCompiler(),
+                KernelRagTraceRecorder.noop(),
+                observationPort);
         RetrievalFilter filter = RetrievalFilter.builder()
                 .system(SystemRetrievalFilter.builder().tenantId("tenant-a").knowledgeBaseIds(List.of("kb-a")).build())
                 .metadataConditions(List.of(new MetadataCondition("department", MetadataOperator.EQ, "HR")))
@@ -207,6 +249,120 @@ class MetadataRetrievalFilterTests {
         assertThat(channel.observedCompiledFilter).isNotNull();
         assertThat(channel.observedCompiledFilter.guardOnlyConditions()).hasSize(1);
         assertThat(chunks).extracting(RetrievedChunk::getId).containsExactly("1");
+        assertThat(observationPort.events)
+                .extracting(ObservationEvent::name)
+                .contains("retrieval.metadata.filter.compiled", "retrieval.channel.completed",
+                        "retrieval.metadata.guard");
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.metadata.filter.compiled"))
+                .singleElement()
+                .satisfies(event -> {
+            assertThat(event.name()).isEqualTo("retrieval.metadata.filter.compiled");
+            assertThat(event.attributes())
+                    .containsEntry("tenantId", "tenant-a")
+                    .containsEntry("knowledgeBaseId", "kb-a")
+                    .containsEntry("fieldKeys", "department")
+                    .containsEntry("guardOnlyFieldKeys", "department");
+        });
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.channel.completed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("channelName", "recording-search")
+                        .containsEntry("channelType", "VECTOR_GLOBAL")
+                        .containsEntry("hitCount", "2")
+                        .containsEntry("success", "true"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.metadata.guard"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("inputCount", "2")
+                        .containsEntry("outputCount", "1")
+                        .containsEntry("filteredCount", "1")
+                        .containsEntry("success", "true"));
+    }
+
+    @Test
+    void shouldRecordChannelFailureObservationWhenChannelFallsBack() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        FailingSearchChannelFeature channel = new FailingSearchChannelFeature();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        registry.register(new ExtensionDescriptor(channel.name(), SearchChannelFeature.class,
+                FeatureType.SEARCH_CHANNEL, 1, true), channel);
+        KernelMultiChannelRetrievalEngine engine = new KernelMultiChannelRetrievalEngine(
+                registry,
+                Runnable::run,
+                new FeatureActivationContext("tenant-a", "user-a", Map.of(), AgentFeatureProperties.empty()),
+                MetadataSchemaRegistryPort.empty(),
+                new DefaultMetadataFilterCompiler(),
+                KernelRagTraceRecorder.noop(),
+                observationPort);
+
+        List<RetrievedChunk> chunks = engine.retrieveKnowledgeChannels(
+                List.of(new SubQuestionIntent("关键词检索失败", List.of())), 5);
+
+        assertThat(chunks).isEmpty();
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.channel.completed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("channelName", "failing-keyword")
+                        .containsEntry("channelType", "KEYWORD_BM25")
+                        .containsEntry("hitCount", "0")
+                        .containsEntry("success", "false")
+                        .containsEntry("exception", "IllegalStateException"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.empty"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("stage", "channel")
+                        .containsEntry("reason", "channels_returned_empty")
+                        .containsEntry("channelCount", "1")
+                        .containsEntry("candidateCount", "0"));
+    }
+
+    @Test
+    void shouldRecordEmptyRetrievalWhenMetadataGuardFiltersAllCandidates() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        RecordingSearchChannelFeature channel = new RecordingSearchChannelFeature();
+        MetadataGuardPostProcessorFeature guard = new MetadataGuardPostProcessorFeature();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        registry.register(new ExtensionDescriptor(channel.name(), SearchChannelFeature.class,
+                FeatureType.SEARCH_CHANNEL, 1, true), channel);
+        registry.register(new ExtensionDescriptor(guard.name(), SearchResultPostProcessorFeature.class,
+                FeatureType.SEARCH_RESULT_POST_PROCESSOR, guard.order(), true), guard);
+        KernelMultiChannelRetrievalEngine engine = new KernelMultiChannelRetrievalEngine(
+                registry,
+                Runnable::run,
+                new FeatureActivationContext("tenant-a", "user-a", Map.of(), AgentFeatureProperties.empty()),
+                (tenantId, knowledgeBaseId) -> schema(false),
+                new DefaultMetadataFilterCompiler(),
+                KernelRagTraceRecorder.noop(),
+                observationPort);
+        RetrievalFilter filter = RetrievalFilter.builder()
+                .system(SystemRetrievalFilter.builder().tenantId("tenant-a").knowledgeBaseIds(List.of("kb-a")).build())
+                .metadataConditions(List.of(new MetadataCondition("department", MetadataOperator.EQ, "LEGAL")))
+                .build();
+
+        List<RetrievedChunk> chunks = engine.retrieveKnowledgeChannels(
+                List.of(new SubQuestionIntent("法务制度", List.of())), 5, filter, RetrievalOptions.defaults(5));
+
+        assertThat(chunks).isEmpty();
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.empty"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("stage", "post_processor")
+                        .containsEntry("reason", "post_processor_filtered_all")
+                        .containsEntry("channelCount", "1")
+                        .containsEntry("candidateCount", "2")
+                        .containsEntry("filterApplied", "true"));
     }
 
     private MetadataSchema schema(boolean pushdownToVector) {
@@ -274,6 +430,30 @@ class MetadataRetrievalFilterTests {
         }
     }
 
+    private static class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
+        }
+    }
+
     private static class RecordingSearchChannelFeature implements SearchChannelFeature {
 
         private CompiledMetadataFilter observedCompiledFilter;
@@ -315,6 +495,29 @@ class MetadataRetrievalFilterTests {
                                             "department", "FIN"))
                                     .build()))
                     .build();
+        }
+    }
+
+    private static class FailingSearchChannelFeature implements SearchChannelFeature {
+
+        @Override
+        public String name() {
+            return "failing-keyword";
+        }
+
+        @Override
+        public SearchChannelType channelType() {
+            return SearchChannelType.KEYWORD_BM25;
+        }
+
+        @Override
+        public boolean enabled(SearchContext context) {
+            return true;
+        }
+
+        @Override
+        public SearchChannelResult search(SearchContext context) {
+            throw new IllegalStateException("keyword backend unavailable");
         }
     }
 }

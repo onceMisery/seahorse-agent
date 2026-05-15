@@ -24,9 +24,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineQ
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRetry;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +46,8 @@ class KernelMetadataQuarantineServiceTests {
     void shouldResolveAndScheduleRetryThroughRepository() {
         InMemoryQuarantineRepository repository = new InMemoryQuarantineRepository();
         repository.put(quarantine("q-1", false, 1, null));
-        KernelMetadataQuarantineService service = new KernelMetadataQuarantineService(repository);
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        KernelMetadataQuarantineService service = new KernelMetadataQuarantineService(repository, 3, observationPort);
 
         MetadataQuarantineRecord resolved = service.resolve("q-1", "auditor");
         MetadataQuarantineRecord retried = service.retry("q-1",
@@ -51,6 +57,21 @@ class KernelMetadataQuarantineServiceTests {
         assertThat(retried.resolved()).isFalse();
         assertThat(retried.retryCount()).isEqualTo(2);
         assertThat(retried.nextRetryTime()).isEqualTo(Instant.parse("2026-05-13T10:00:00Z"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.quarantine.action.completed"))
+                .hasSize(2);
+        assertThat(observationPort.events.get(0).attributes())
+                .containsEntry("tenantId", "tenant-1")
+                .containsEntry("knowledgeBaseId", "kb-1")
+                .containsEntry("action", "RESOLVE")
+                .containsEntry("stage", "VALIDATE")
+                .containsEntry("reasonCode", "SCHEMA_MISSING")
+                .containsEntry("resolved", "true");
+        assertThat(observationPort.events.get(1).attributes())
+                .containsEntry("action", "RETRY")
+                .containsEntry("retryCount", "2")
+                .containsEntry("maxRetryCount", "3")
+                .containsEntry("nextRetryScheduled", "true");
     }
 
     @Test
@@ -127,6 +148,30 @@ class KernelMetadataQuarantineServiceTests {
                     retry.nextRetryTime());
             records.put(updated.id(), updated);
             return updated;
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 }

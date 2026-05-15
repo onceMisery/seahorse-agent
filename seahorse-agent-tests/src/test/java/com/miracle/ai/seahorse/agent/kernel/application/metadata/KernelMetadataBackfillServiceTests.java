@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchemaMissingException;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
@@ -41,16 +42,22 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -162,6 +169,40 @@ class KernelMetadataBackfillServiceTests {
     }
 
     @Test
+    void shouldPauseBackfillWhenMetadataSchemaMissing() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        List<MetadataQuarantineItem> quarantines = new ArrayList<>();
+        KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
+        when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
+            IngestionContext context = invocation.getArgument(1);
+            context.setError(new MetadataSchemaMissingException("tenant-1", "kb-1"));
+            return context;
+        });
+        KernelMetadataBackfillService service = new KernelMetadataBackfillService(
+                documents,
+                new InMemoryObjectStorage(),
+                pipelineRepository(),
+                engine,
+                jobs,
+                MetadataExtractionResultRepositoryPort.noop(),
+                quarantines::add,
+                null);
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+
+        assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.PAUSED);
+        assertThat(result.processedDocuments()).isZero();
+        assertThat(result.failures()).singleElement().asString().contains("metadata schema missing");
+        assertThat(result.checkpoint()).containsEntry("pauseReason", "SCHEMA_MISSING");
+        assertThat(documents.failedDocuments).containsExactly("doc-1");
+        assertThat(quarantines).isEmpty();
+    }
+
+    @Test
     void shouldHonorPauseAndResume() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
         documents.add(document("doc-1", true, "pipe-1"));
@@ -185,6 +226,69 @@ class KernelMetadataBackfillServiceTests {
     }
 
     @Test
+    void shouldRecordBackfillLifecycleAndBatchObservationEvents() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        KernelMetadataBackfillService service = new KernelMetadataBackfillService(
+                documents,
+                new InMemoryObjectStorage(),
+                pipelineRepository(),
+                acceptingEngine(),
+                jobs,
+                MetadataExtractionResultRepositoryPort.noop(),
+                MetadataQuarantinePort.noop(),
+                observationPort);
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin",
+                Map.of("schemaVersion", 3, "extractorVersion", "extractor-v2", "reExtract", true)));
+        service.pause(job.jobId(), "ops");
+        service.resume(job.jobId(), "ops");
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+        MetadataBackfillJobRecord cancelledJob = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+        service.cancel(cancelledJob.jobId(), "ops");
+
+        assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
+        assertThat(observationPort.events)
+                .extracting(ObservationEvent::name)
+                .contains(
+                        "metadata.backfill.job.created",
+                        "metadata.backfill.job.paused",
+                        "metadata.backfill.job.resumed",
+                        "metadata.backfill.batch.success",
+                        "metadata.backfill.job.cancelled");
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.backfill.job.paused"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("operation", "PAUSE")
+                        .containsEntry("previousStatus", "PENDING")
+                        .containsEntry("status", "PAUSED"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.backfill.job.resumed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("operation", "RESUME")
+                        .containsEntry("previousStatus", "PAUSED")
+                        .containsEntry("status", "PENDING"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.backfill.batch.success"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-1")
+                        .containsEntry("knowledgeBaseId", "kb-1")
+                        .containsEntry("status", "COMPLETED")
+                        .containsEntry("processedDocuments", "1")
+                        .containsEntry("succeededDocuments", "1")
+                        .containsEntry("schemaVersion", "3")
+                        .containsEntry("extractorVersion", "extractor-v2")
+                        .containsEntry("reExtract", "true"));
+    }
+
+    @Test
     void shouldPageBackfillJobsForManagement() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
@@ -197,6 +301,29 @@ class KernelMetadataBackfillServiceTests {
 
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.records()).extracting(MetadataBackfillJobRecord::jobId).containsExactly(job.jobId());
+    }
+
+    @Test
+    void shouldPageBackfillJobsByGovernanceFilters() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        KernelMetadataBackfillService service = service(documents, jobs, Map.of());
+        Instant now = Instant.parse("2026-05-15T00:00:00Z");
+        jobs.create(new MetadataBackfillJobRecord(
+                "job-reextract", "tenant-1", "kb-1", "pipe-1", MetadataBackfillJobStatus.PAUSED,
+                1, 50, 1, 0, 1, 0, 0, 0,
+                Map.of("documentIds", List.of("doc-9"), "pauseReason", "SCHEMA_MISSING", "reExtract", true),
+                List.of("doc-9: metadata schema missing"), "auditor", now, now));
+        jobs.create(new MetadataBackfillJobRecord(
+                "job-normal", "tenant-1", "kb-1", "pipe-1", MetadataBackfillJobStatus.COMPLETED,
+                1, 50, 1, 1, 0, 0, 0, 0, Map.of("currentPage", 1),
+                List.of(), "admin", now, now));
+
+        MetadataBackfillJobPage page = service.pageJobs(new MetadataBackfillJobQuery(
+                "tenant-1", "kb-1", null, "pipe-1", "auditor", "doc-9",
+                "SCHEMA_MISSING", "schema", true, true, 1, 10));
+
+        assertThat(page.records()).extracting(MetadataBackfillJobRecord::jobId).containsExactly("job-reextract");
     }
 
     @Test
@@ -448,6 +575,18 @@ class KernelMetadataBackfillServiceTests {
                 null);
     }
 
+    private static KernelIngestionEngine acceptingEngine() {
+        KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
+        when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
+            IngestionContext context = invocation.getArgument(1);
+            context.setMetadataValidationResult(new MetadataValidationResult(
+                    MetadataValidationDecision.ACCEPT, List.of(), Map.of(), Map.of()));
+            context.setChunks(List.of(new VectorChunk()));
+            return context;
+        });
+        return engine;
+    }
+
     private static PipelineDefinitionRepositoryPort pipelineRepository() {
         return pipelineId -> Optional.of(PipelineDefinition.builder()
                 .id(pipelineId)
@@ -491,6 +630,18 @@ class KernelMetadataBackfillServiceTests {
                     .filter(record -> query.knowledgeBaseId().isBlank()
                             || query.knowledgeBaseId().equals(record.knowledgeBaseId()))
                     .filter(record -> query.status() == null || query.status().equals(record.status()))
+                    .filter(record -> query.pipelineId().isBlank() || query.pipelineId().equals(record.pipelineId()))
+                    .filter(record -> query.operator().isBlank() || query.operator().equals(record.operator()))
+                    .filter(record -> query.documentId().isBlank()
+                            || checkpointText(record).contains(query.documentId()))
+                    .filter(record -> query.pauseReason().isBlank()
+                            || query.pauseReason().equals(record.checkpoint().get("pauseReason")))
+                    .filter(record -> query.failureKeyword().isBlank()
+                            || failuresText(record).contains(query.failureKeyword()))
+                    .filter(record -> query.hasFailures() == null
+                            || query.hasFailures().equals(hasFailures(record)))
+                    .filter(record -> query.reExtract() == null
+                            || query.reExtract().equals(Boolean.TRUE.equals(record.checkpoint().get("reExtract"))))
                     .toList();
             int from = (int) Math.min(query.offset(), matched.size());
             int to = (int) Math.min(from + query.size(), matched.size());
@@ -502,6 +653,20 @@ class KernelMetadataBackfillServiceTests {
         @Override
         public void save(MetadataBackfillJobRecord job) {
             records.put(job.jobId(), job);
+        }
+
+        private String checkpointText(MetadataBackfillJobRecord record) {
+            return Objects.toString(record.checkpoint(), "");
+        }
+
+        private String failuresText(MetadataBackfillJobRecord record) {
+            return Objects.toString(record.failures(), "");
+        }
+
+        private boolean hasFailures(MetadataBackfillJobRecord record) {
+            return MetadataBackfillJobStatus.FAILED.equals(record.status())
+                    || record.failedDocuments() > 0
+                    || !record.failures().isEmpty();
         }
     }
 
@@ -528,6 +693,30 @@ class KernelMetadataBackfillServiceTests {
                     && schemaVersion == record.schemaVersion()
                     && extractorVersion.equals(record.extractorVersion())
                     && MetadataValidationDecision.ACCEPT.equals(record.status()));
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 

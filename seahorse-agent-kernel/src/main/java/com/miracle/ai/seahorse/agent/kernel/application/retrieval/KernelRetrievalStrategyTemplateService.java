@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplate;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplatePayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 
 import java.util.LinkedHashMap;
@@ -30,7 +31,7 @@ import java.util.Objects;
 /**
  * 内核默认检索策略模板服务。
  *
- * <p>当前阶段只提供内置模板，不持久化知识库级覆盖配置；后续可用仓储适配器替换该端口实现。</p>
+ * <p>服务负责合并内置模板和知识库级覆盖；具体持久化由仓储适配器提供。</p>
  */
 public class KernelRetrievalStrategyTemplateService implements RetrievalStrategyTemplateInboundPort {
 
@@ -48,6 +49,20 @@ public class KernelRetrievalStrategyTemplateService implements RetrievalStrategy
     @Override
     public List<RetrievalStrategyTemplate> listTemplates(String kbId) {
         return mergeTemplates(defaultTemplates(), repositoryPort.listTemplates(kbId));
+    }
+
+    @Override
+    public RetrievalStrategyTemplate upsertTemplate(String kbId, RetrievalStrategyTemplatePayload payload) {
+        String safeKbId = requireText(kbId, "kbId must not be blank");
+        RetrievalStrategyTemplatePayload safePayload = validate(payload);
+        return repositoryPort.upsertTemplate(safeKbId, safePayload);
+    }
+
+    @Override
+    public boolean deleteTemplate(String kbId, String templateKey) {
+        String safeKbId = requireText(kbId, "kbId must not be blank");
+        String safeTemplateKey = requireText(templateKey, "templateKey must not be blank");
+        return repositoryPort.deleteTemplate(safeKbId, safeTemplateKey);
     }
 
     private List<RetrievalStrategyTemplate> defaultTemplates() {
@@ -70,6 +85,20 @@ public class KernelRetrievalStrategyTemplateService implements RetrievalStrategy
             merged.put(template.templateKey(), template);
         }
         return List.copyOf(merged.values());
+    }
+
+    private RetrievalStrategyTemplatePayload validate(RetrievalStrategyTemplatePayload payload) {
+        RetrievalStrategyTemplatePayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
+        requireText(safePayload.templateKey(), "templateKey must not be blank");
+        requireText(safePayload.displayName(), "displayName must not be blank");
+        return safePayload;
+    }
+
+    private String requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
     }
 
     private RetrievalStrategyTemplate vectorOnly() {

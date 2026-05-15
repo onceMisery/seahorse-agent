@@ -58,15 +58,22 @@ public class SeahorseMetadataReviewController {
     public Map<String, Object> page(@RequestParam String tenantId,
                                     @RequestParam(required = false) String kbId,
                                     @RequestParam(required = false) String status,
+                                    @RequestParam(required = false) String reasonCode,
+                                    @RequestParam(required = false) String documentId,
                                     @RequestParam(defaultValue = "1") long current,
                                     @RequestParam(defaultValue = "10") long size) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                reviewPort.page(tenantId, kbId, reviewStatus(status), current, size));
+                reviewPort.page(tenantId, kbId, reviewStatus(status), reasonCode, documentId, current, size));
     }
 
     @GetMapping("/metadata-review/items/{item-id}")
     public Map<String, Object> queryById(@PathVariable("item-id") String itemId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, reviewPort.queryById(itemId));
+    }
+
+    @GetMapping("/metadata-review/items/{item-id}/audits")
+    public Map<String, Object> listAudits(@PathVariable("item-id") String itemId) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, reviewPort.listAudits(itemId));
     }
 
     @PostMapping("/metadata-review/items/{item-id}/approve")

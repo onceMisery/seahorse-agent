@@ -21,6 +21,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplate;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplatePayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -32,6 +33,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * 基于 JDBC 的知识库检索策略模板覆盖仓储。
@@ -69,6 +72,57 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
         }
     }
 
+    @Override
+    public RetrievalStrategyTemplate upsertTemplate(String kbId, RetrievalStrategyTemplatePayload payload) {
+        String safeKbId = Objects.requireNonNullElse(kbId, "").trim();
+        RetrievalStrategyTemplatePayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
+        String optionsJson = json(safePayload.options());
+        int enabled = Boolean.FALSE.equals(safePayload.enabled()) ? 0 : 1;
+        // 软删除后再次保存同 key 时复用原记录，避免触发范围唯一索引。
+        int updated = jdbcTemplate.update("""
+                UPDATE t_retrieval_strategy_template
+                SET display_name = ?,
+                    description = ?,
+                    options_json = ?,
+                    sort_order = ?,
+                    enabled = ?,
+                    deleted = 0,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE COALESCE(kb_id, '') = ?
+                  AND template_key = ?
+                """, safePayload.displayName(), safePayload.description(), optionsJson,
+                safePayload.sortOrder(), enabled, safeKbId, safePayload.templateKey());
+        if (updated <= 0) {
+            jdbcTemplate.update("""
+                    INSERT INTO t_retrieval_strategy_template(
+                        id, kb_id, template_key, display_name, description, options_json,
+                        sort_order, enabled, create_time, update_time, deleted
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                    """, UUID.randomUUID().toString(), safeKbId, safePayload.templateKey(),
+                    safePayload.displayName(), safePayload.description(), optionsJson,
+                    safePayload.sortOrder(), enabled);
+        }
+        return findTemplate(safeKbId, safePayload.templateKey()).orElseGet(safePayload::toTemplate);
+    }
+
+    @Override
+    public boolean deleteTemplate(String kbId, String templateKey) {
+        String safeKbId = Objects.requireNonNullElse(kbId, "").trim();
+        String safeTemplateKey = Objects.requireNonNullElse(templateKey, "").trim();
+        if (safeTemplateKey.isBlank()) {
+            return false;
+        }
+        return jdbcTemplate.update("""
+                UPDATE t_retrieval_strategy_template
+                SET deleted = 1,
+                    enabled = 0,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE COALESCE(kb_id, '') = ?
+                  AND template_key = ?
+                  AND deleted = 0
+                """, safeKbId, safeTemplateKey) > 0;
+    }
+
     private List<RetrievalStrategyTemplate> mergeByTemplateKey(List<RetrievalStrategyTemplate> templates) {
         Map<String, RetrievalStrategyTemplate> merged = new LinkedHashMap<>();
         for (RetrievalStrategyTemplate template : templates) {
@@ -89,6 +143,20 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
                 options(resultSet.getString("options_json")));
     }
 
+    private Optional<RetrievalStrategyTemplate> findTemplate(String kbId, String templateKey) {
+        try {
+            return jdbcTemplate.query("""
+                    SELECT template_key, display_name, description, options_json
+                    FROM t_retrieval_strategy_template
+                    WHERE COALESCE(kb_id, '') = ?
+                      AND template_key = ?
+                      AND deleted = 0
+                    """, this::toTemplate, kbId, templateKey).stream().findFirst();
+        } catch (DataAccessException ex) {
+            return Optional.empty();
+        }
+    }
+
     private RetrievalOptions options(String optionsJson) {
         if (optionsJson == null || optionsJson.isBlank()) {
             return RetrievalOptions.defaults(5);
@@ -98,6 +166,14 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
         } catch (JsonProcessingException ex) {
             // 单条模板配置异常时降级默认参数，避免管理端列表整体不可用。
             return RetrievalOptions.defaults(5);
+        }
+    }
+
+    private String json(Object value) {
+        try {
+            return objectMapper.writeValueAsString(Objects.requireNonNull(value, "value must not be null"));
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("serialize retrieval strategy template failed", ex);
         }
     }
 }

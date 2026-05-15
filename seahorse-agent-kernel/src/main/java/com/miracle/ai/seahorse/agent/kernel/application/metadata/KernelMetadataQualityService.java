@@ -6,6 +6,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -32,28 +33,50 @@ public class KernelMetadataQualityService implements MetadataQualityInboundPort 
 
     @Override
     public MetadataQualityReport report(String tenantId, String knowledgeBaseId, int quarantineTopN) {
+        return report(tenantId, knowledgeBaseId, quarantineTopN, null, "");
+    }
+
+    @Override
+    public MetadataQualityReport report(String tenantId,
+                                        String knowledgeBaseId,
+                                        int quarantineTopN,
+                                        Integer schemaVersion,
+                                        String extractorVersion) {
         int safeTopN = quarantineTopN <= 0 ? 5 : Math.min(quarantineTopN, 50);
-        MetadataQualityReport report = reportRepositoryPort.report(tenantId, knowledgeBaseId, safeTopN);
-        recordQualityReport(report);
+        Integer safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? null : schemaVersion;
+        String safeExtractorVersion = Objects.requireNonNullElse(extractorVersion, "");
+        MetadataQualityReport report = reportRepositoryPort.report(
+                tenantId, knowledgeBaseId, safeTopN, safeSchemaVersion, safeExtractorVersion);
+        recordQualityReport(report, safeSchemaVersion, safeExtractorVersion);
         return report;
     }
 
-    private void recordQualityReport(MetadataQualityReport report) {
+    private void recordQualityReport(MetadataQualityReport report,
+                                     Integer schemaVersion,
+                                     String extractorVersion) {
         if (observationPort == null || report == null) {
             return;
         }
         try {
-            observationPort.recordEvent(new ObservationEvent(EVENT_QUALITY_REPORT, null, Map.ofEntries(
-                    Map.entry("tenantId", report.tenantId()),
-                    Map.entry("knowledgeBaseId", report.knowledgeBaseId()),
-                    Map.entry("totalDocuments", Integer.toString(report.totalDocuments())),
-                    Map.entry("extractedDocuments", Integer.toString(report.extractedDocuments())),
-                    Map.entry("averageFieldCoverage", Double.toString(report.averageFieldCoverage())),
-                    Map.entry("lowConfidenceRatio", Double.toString(report.lowConfidenceRatio())),
-                    Map.entry("reviewPassRate", Double.toString(report.reviewPassRate())),
-                    Map.entry("pendingReviewCount", Integer.toString(report.pendingReviewCount())),
-                    Map.entry("unresolvedQuarantineCount", Integer.toString(report.unresolvedQuarantineCount())),
-                    Map.entry("indexSyncFailureCount", Integer.toString(report.indexSyncFailureCount())))));
+            Map<String, String> attributes = new LinkedHashMap<>();
+            attributes.put("tenantId", report.tenantId());
+            attributes.put("knowledgeBaseId", report.knowledgeBaseId());
+            attributes.put("totalDocuments", Integer.toString(report.totalDocuments()));
+            attributes.put("extractedDocuments", Integer.toString(report.extractedDocuments()));
+            attributes.put("averageFieldCoverage", Double.toString(report.averageFieldCoverage()));
+            attributes.put("lowConfidenceRatio", Double.toString(report.lowConfidenceRatio()));
+            attributes.put("reviewPassRate", Double.toString(report.reviewPassRate()));
+            attributes.put("pendingReviewCount", Integer.toString(report.pendingReviewCount()));
+            attributes.put("unresolvedQuarantineCount", Integer.toString(report.unresolvedQuarantineCount()));
+            attributes.put("indexSyncFailureCount", Integer.toString(report.indexSyncFailureCount()));
+            // 版本筛选条件进入观测事件，便于区分不同 Schema/Extractor 的质量报表口径。
+            if (schemaVersion != null) {
+                attributes.put("schemaVersion", Integer.toString(schemaVersion));
+            }
+            if (extractorVersion != null && !extractorVersion.isBlank()) {
+                attributes.put("extractorVersion", extractorVersion);
+            }
+            observationPort.recordEvent(new ObservationEvent(EVENT_QUALITY_REPORT, null, attributes));
         } catch (RuntimeException ignored) {
             // 质量报表查询不能被观测端口异常打断。
         }

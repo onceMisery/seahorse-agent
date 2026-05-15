@@ -123,6 +123,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
@@ -667,8 +669,24 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
+    @ConditionalOnMissingBean(MetadataDictionaryManagementRepositoryPort.class)
+    public MetadataDictionaryManagementRepositoryPort seahorseMetadataDictionaryManagementRepositoryPort(
+            JdbcMetadataGovernanceRepositoryAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
     @ConditionalOnMissingBean(MetadataExtractionResultRepositoryPort.class)
     public MetadataExtractionResultRepositoryPort seahorseMetadataExtractionResultRepositoryPort(
+            JdbcMetadataGovernanceRepositoryAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
+    @ConditionalOnMissingBean(MetadataExtractionResultManagementRepositoryPort.class)
+    public MetadataExtractionResultManagementRepositoryPort seahorseMetadataExtractionResultManagementRepositoryPort(
             JdbcMetadataGovernanceRepositoryAdapter adapter) {
         return adapter;
     }
@@ -883,9 +901,11 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
             MessageQueuePort messageQueuePort,
             ObjectMapper objectMapper,
             ObjectProvider<DistributedLockPort> lockPort,
+            ObjectProvider<MetadataQuarantinePort> quarantinePort,
             @Value("${seahorse-agent.adapters.mq.outbox.relay.batch-size:50}") int batchSize) {
         return new SeahorseOutboxRelayJob(outboxEventRepositoryPort, messageQueuePort, objectMapper,
-                lockPort.getIfAvailable(DistributedLockPort::noop), batchSize);
+                lockPort.getIfAvailable(DistributedLockPort::noop),
+                quarantinePort.getIfAvailable(MetadataQuarantinePort::noop), batchSize);
     }
 
     @Bean

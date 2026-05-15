@@ -67,6 +67,27 @@ class JdbcMetadataBackfillJobAdapterTests {
                 .containsOnly("kb-1");
     }
 
+    @Test
+    void shouldFilterBackfillJobsByGovernanceDetails() {
+        adapter.create(job("job-1", "tenant-1", "kb-1", MetadataBackfillJobStatus.PAUSED,
+                Map.of(
+                        "currentPage", 2,
+                        "documentIds", List.of("doc-1"),
+                        "pauseReason", "SCHEMA_MISSING",
+                        "reExtract", true),
+                List.of("doc-1: metadata schema missing"),
+                "auditor"));
+        adapter.create(job("job-2", "tenant-1", "kb-1", MetadataBackfillJobStatus.COMPLETED,
+                Map.of("currentPage", 1), List.of(), "admin"));
+
+        MetadataBackfillJobPage page = adapter.page(new MetadataBackfillJobQuery(
+                "tenant-1", "kb-1", null, "pipe-1", "auditor", "doc-1",
+                "SCHEMA_MISSING", "schema", true, true, 1, 10));
+
+        assertThat(page.total()).isEqualTo(1);
+        assertThat(page.records()).extracting(MetadataBackfillJobRecord::jobId).containsExactly("job-1");
+    }
+
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_metadata_extraction_job");
         jdbcTemplate.execute("""
@@ -97,6 +118,16 @@ class JdbcMetadataBackfillJobAdapterTests {
                                           String tenantId,
                                           String knowledgeBaseId,
                                           MetadataBackfillJobStatus status) {
+        return job(jobId, tenantId, knowledgeBaseId, status, Map.of("currentPage", 1), List.of(), "admin");
+    }
+
+    private MetadataBackfillJobRecord job(String jobId,
+                                          String tenantId,
+                                          String knowledgeBaseId,
+                                          MetadataBackfillJobStatus status,
+                                          Map<String, Object> checkpoint,
+                                          List<String> failures,
+                                          String operator) {
         Instant now = Instant.parse("2026-05-13T10:00:00Z");
         return new MetadataBackfillJobRecord(
                 jobId,
@@ -112,9 +143,9 @@ class JdbcMetadataBackfillJobAdapterTests {
                 0,
                 0,
                 0,
-                Map.of("currentPage", 1),
-                List.of(),
-                "admin",
+                checkpoint,
+                failures,
+                operator,
                 now,
                 now);
     }

@@ -49,7 +49,7 @@ class IndexerNodeFeatureTests {
         IngestionContext context = IngestionContext.builder()
                 .taskId("doc-1")
                 .chunks(List.of(chunk("chunk-1", 0), chunk("chunk-2", 1)))
-                .metadata(Map.of("kbId", "kb-1", "collectionName", "collection-a"))
+                .metadata(Map.of("tenantId", "tenant-1", "kbId", "kb-1", "collectionName", "collection-a"))
                 .build();
 
         NodeResult result = feature.execute(context, NodeConfig.builder().nodeType("indexer").build());
@@ -58,6 +58,14 @@ class IndexerNodeFeatureTests {
         assertThat(ports.collectionNames).containsExactly("collection-a");
         assertThat(ports.repositoryWrites).containsExactly("kb-1/doc-1/2");
         assertThat(ports.vectorWrites).containsExactly("collection-a/doc-1/2");
+        assertThat(ports.repositoryBatches.get(0).get(0).getMetadata())
+                .containsEntry("tenant_id", "tenant-1")
+                .containsEntry("kb_id", "kb-1")
+                .containsEntry("doc_id", "doc-1")
+                .containsEntry("chunk_id", "chunk-1")
+                .containsEntry("chunk_index", 0)
+                .containsEntry("collection_name", "collection-a")
+                .containsEntry("enabled", true);
     }
 
     @Test
@@ -68,13 +76,17 @@ class IndexerNodeFeatureTests {
         IngestionContext context = IngestionContext.builder()
                 .taskId("doc-1")
                 .chunks(List.of(chunk("chunk-1", 0), chunk("chunk-2", 1)))
-                .metadata(Map.of("kbId", "kb-1", "collectionName", "collection-a"))
+                .metadata(Map.of("tenantId", "tenant-1", "kbId", "kb-1", "collectionName", "collection-a"))
                 .build();
 
         NodeResult result = feature.execute(context, NodeConfig.builder().nodeType("indexer").build());
 
         assertThat(result.isSuccess()).isTrue();
         assertThat(keywordIndexPort.keywordWrites).containsExactly("kb-1/doc-1/2");
+        assertThat(keywordIndexPort.lastChunks.get(0).getMetadata())
+                .containsEntry("tenant_id", "tenant-1")
+                .containsEntry("kb_id", "kb-1")
+                .containsEntry("doc_id", "doc-1");
     }
 
     @Test
@@ -276,10 +288,12 @@ class IndexerNodeFeatureTests {
             implements com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort {
 
         private final List<String> keywordWrites = new ArrayList<>();
+        private List<VectorChunk> lastChunks = List.of();
 
         @Override
         public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
             keywordWrites.add(kbId + "/" + docId + "/" + chunks.size());
+            lastChunks = List.copyOf(chunks);
         }
 
         @Override

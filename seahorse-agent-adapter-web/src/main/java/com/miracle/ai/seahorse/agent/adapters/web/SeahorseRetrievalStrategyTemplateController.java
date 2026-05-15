@@ -18,9 +18,14 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplatePayload;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
@@ -46,5 +51,28 @@ public class SeahorseRetrievalStrategyTemplateController {
     @GetMapping("/knowledge-base/{kb-id}/retrieval-strategy-templates")
     public Map<String, Object> listTemplates(@PathVariable("kb-id") String kbId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, templatePort.listTemplates(kbId));
+    }
+
+    @PostMapping("/knowledge-base/{kb-id}/retrieval-strategy-templates")
+    public Map<String, Object> createTemplate(@PathVariable("kb-id") String kbId,
+                                              @RequestBody RetrievalStrategyTemplatePayload request) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, templatePort.upsertTemplate(kbId, request));
+    }
+
+    @PutMapping("/knowledge-base/{kb-id}/retrieval-strategy-templates/{template-key}")
+    public Map<String, Object> updateTemplate(@PathVariable("kb-id") String kbId,
+                                              @PathVariable("template-key") String templateKey,
+                                              @RequestBody RetrievalStrategyTemplatePayload request) {
+        RetrievalStrategyTemplatePayload safeRequest = Objects.requireNonNull(request,
+                "request must not be null");
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                templatePort.upsertTemplate(kbId, safeRequest.withTemplateKey(templateKey)));
+    }
+
+    @DeleteMapping("/knowledge-base/{kb-id}/retrieval-strategy-templates/{template-key}")
+    public Map<String, Object> deleteTemplate(@PathVariable("kb-id") String kbId,
+                                              @PathVariable("template-key") String templateKey) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                Map.of("deleted", templatePort.deleteTemplate(kbId, templateKey)));
     }
 }

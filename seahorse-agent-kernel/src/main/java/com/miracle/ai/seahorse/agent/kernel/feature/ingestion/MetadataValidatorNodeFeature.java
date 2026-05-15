@@ -9,6 +9,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldQuality
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIssue;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIssueSeverity;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchemaMissingException;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
@@ -19,6 +20,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineP
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -26,6 +29,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
 
@@ -35,24 +39,39 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
     private static final String KEY_DOC_ID = "docId";
     private static final String KEY_EXTRACTOR_VERSION = "extractorVersion";
     private static final String KEY_METADATA_EXTRACTION_CONTEXT = "metadataExtractionContext";
+    private static final String KEY_BACKFILL_JOB_ID = "backfillJobId";
+    private static final String KEY_REQUIRE_SCHEMA = "requireSchema";
+    private static final String KEY_REQUIRE_METADATA_SCHEMA = "requireMetadataSchema";
+    private static final String EVENT_VALIDATION_COMPLETED = "metadata.validation.completed";
 
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final MetadataExtractionResultRepositoryPort resultRepositoryPort;
     private final MetadataReviewQueuePort reviewQueuePort;
     private final MetadataQuarantinePort quarantinePort;
     private final MetadataCanonicalWritePort canonicalWritePort;
+    private final ObservationPort observationPort;
 
     public MetadataValidatorNodeFeature(MetadataSchemaRegistryPort schemaRegistryPort,
                                         MetadataExtractionResultRepositoryPort resultRepositoryPort,
                                         MetadataReviewQueuePort reviewQueuePort,
                                         MetadataQuarantinePort quarantinePort,
                                         MetadataCanonicalWritePort canonicalWritePort) {
+        this(schemaRegistryPort, resultRepositoryPort, reviewQueuePort, quarantinePort, canonicalWritePort, null);
+    }
+
+    public MetadataValidatorNodeFeature(MetadataSchemaRegistryPort schemaRegistryPort,
+                                        MetadataExtractionResultRepositoryPort resultRepositoryPort,
+                                        MetadataReviewQueuePort reviewQueuePort,
+                                        MetadataQuarantinePort quarantinePort,
+                                        MetadataCanonicalWritePort canonicalWritePort,
+                                        ObservationPort observationPort) {
         this.schemaRegistryPort = Objects.requireNonNullElse(schemaRegistryPort, MetadataSchemaRegistryPort.empty());
         this.resultRepositoryPort = Objects.requireNonNullElse(resultRepositoryPort,
                 MetadataExtractionResultRepositoryPort.noop());
         this.reviewQueuePort = Objects.requireNonNullElse(reviewQueuePort, MetadataReviewQueuePort.noop());
         this.quarantinePort = Objects.requireNonNullElse(quarantinePort, MetadataQuarantinePort.noop());
         this.canonicalWritePort = Objects.requireNonNullElse(canonicalWritePort, MetadataCanonicalWritePort.noop());
+        this.observationPort = observationPort;
     }
 
     @Override
@@ -73,8 +92,16 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
     @Override
     public NodeResult execute(IngestionContext context, NodeConfig config) {
         IngestionContext safeContext = Objects.requireNonNull(context, "context must not be null");
+        long startedAt = System.nanoTime();
         try {
             MetadataSchema schema = resolveSchema(safeContext, config);
+            if (schema.empty() && requiresSchema(safeContext, config)) {
+                throw new MetadataSchemaMissingException(
+                        firstText(schema.tenantId(), firstText(setting(config, KEY_TENANT_ID),
+                                metadataText(safeContext, KEY_TENANT_ID))),
+                        firstText(schema.knowledgeBaseId(), firstText(setting(config, KEY_KB_ID),
+                                metadataText(safeContext, KEY_KB_ID))));
+            }
             ValidationIdentity identity = identity(safeContext, config, schema);
             MetadataValidationResult result = validate(schema, safeContext);
             safeContext.setMetadataValidationResult(result);
@@ -85,6 +112,7 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
                 quarantinePort.quarantine(new MetadataQuarantineItem(identity.tenantId(), identity.kbId(),
                         identity.docId(), safeContext.getTaskId(), NODE_TYPE, "METADATA_QUARANTINE",
                         firstIssue(result.issues()), snapshot(safeContext)));
+                recordValidationEvent(identity, schema, safeContext, result, true, null, elapsedMillis(startedAt));
                 return NodeResult.terminate("metadata quarantined");
             }
             if (MetadataValidationDecision.REVIEW_REQUIRED.equals(result.decision())) {
@@ -93,14 +121,56 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
                         result.acceptedMetadata(), reviewContext(safeContext, result)));
                 // 需要人工复核的元数据不能直接写入 canonical metadata 或继续进入索引链路。
                 safeContext.setSkipIndexerWrite(true);
+                recordValidationEvent(identity, schema, safeContext, result, true, null, elapsedMillis(startedAt));
                 return NodeResult.terminate("metadata review required");
             }
             mergeAcceptedMetadata(safeContext, result.acceptedMetadata());
             canonicalWritePort.writeDocumentMetadata(identity.docId(), result.acceptedMetadata());
+            recordValidationEvent(identity, schema, safeContext, result, true, null, elapsedMillis(startedAt));
             return NodeResult.ok("metadata decision=" + result.decision());
         } catch (Exception ex) {
+            recordValidationFailure(safeContext, config, ex, elapsedMillis(startedAt));
             return NodeResult.fail(ex);
         }
+    }
+
+    private void recordValidationEvent(ValidationIdentity identity,
+                                       MetadataSchema schema,
+                                       IngestionContext context,
+                                       MetadataValidationResult result,
+                                       boolean success,
+                                       Exception ex,
+                                       long durationMs) {
+        if (observationPort == null) {
+            return;
+        }
+        try {
+            Map<String, String> attributes = new LinkedHashMap<>();
+            attributes.put("tenantId", identity.tenantId());
+            attributes.put("knowledgeBaseId", identity.kbId());
+            attributes.put("schemaVersion", Integer.toString(schema == null ? 0 : schema.schemaVersion()));
+            attributes.put("extractorVersion", extractorVersion(context));
+            attributes.put("decision", result == null ? "ERROR" : result.decision().name());
+            attributes.put("acceptedFieldCount", Integer.toString(result == null ? 0 : result.acceptedMetadata().size()));
+            attributes.put("rejectedFieldCount", Integer.toString(result == null ? 0 : result.rejectedMetadata().size()));
+            attributes.put("issueCount", Integer.toString(result == null ? 0 : result.issues().size()));
+            attributes.put("durationMs", Long.toString(durationMs));
+            attributes.put("success", Boolean.toString(success));
+            if (ex != null) {
+                attributes.put("exception", ex.getClass().getSimpleName());
+            }
+            observationPort.recordEvent(new ObservationEvent(EVENT_VALIDATION_COMPLETED, null, attributes));
+        } catch (RuntimeException ignored) {
+            // 观测失败不能影响元数据校验、复核或隔离主流程。
+        }
+    }
+
+    private void recordValidationFailure(IngestionContext context, NodeConfig config, Exception ex, long durationMs) {
+        ValidationIdentity identity = new ValidationIdentity(
+                firstText(setting(config, KEY_TENANT_ID), metadataText(context, KEY_TENANT_ID)),
+                firstText(setting(config, KEY_KB_ID), metadataText(context, KEY_KB_ID)),
+                firstText(setting(config, KEY_DOC_ID), firstText(metadataText(context, KEY_DOC_ID), context.getTaskId())));
+        recordValidationEvent(identity, null, context, null, false, ex, durationMs);
     }
 
     private MetadataValidationResult validate(MetadataSchema schema, IngestionContext context) {
@@ -246,6 +316,14 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
         return schema;
     }
 
+    private boolean requiresSchema(IngestionContext context, NodeConfig config) {
+        // 历史回填必须绑定 Schema；普通入库仍允许通过配置逐步启用治理节点。
+        return hasText(metadataText(context, KEY_BACKFILL_JOB_ID))
+                || flag(setting(config, KEY_REQUIRE_SCHEMA))
+                || flag(setting(config, KEY_REQUIRE_METADATA_SCHEMA))
+                || flag(metadataText(context, KEY_REQUIRE_METADATA_SCHEMA));
+    }
+
     private ValidationIdentity identity(IngestionContext context, NodeConfig config, MetadataSchema schema) {
         return new ValidationIdentity(
                 firstText(schema.tenantId(), firstText(setting(config, KEY_TENANT_ID), metadataText(context, KEY_TENANT_ID))),
@@ -274,6 +352,14 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private boolean flag(String value) {
+        return Boolean.parseBoolean(Objects.requireNonNullElse(value, "false"));
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
     }
 
     private record ValidationIdentity(String tenantId, String kbId, String docId) {

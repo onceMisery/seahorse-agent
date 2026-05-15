@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRetry;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery;
@@ -104,6 +105,13 @@ class JdbcMetadataReviewQuarantineAdapterTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT updated_metadata FROM t_metadata_review_audit WHERE review_item_id = 'review-1'",
                 String.class)).contains("legal");
+
+        List<MetadataReviewAuditRecord> audits = adapter.listReviewAudits("review-1");
+        assertThat(audits).hasSize(1);
+        assertThat(audits.get(0).fromStatus()).isEqualTo("PENDING");
+        assertThat(audits.get(0).toStatus()).isEqualTo("CORRECTED");
+        assertThat(audits.get(0).previousMetadata()).containsEntry("department", "hr");
+        assertThat(audits.get(0).decisionMetadata()).containsEntry("department", "legal");
     }
 
     @Test
@@ -182,6 +190,26 @@ class JdbcMetadataReviewQuarantineAdapterTests {
                 """, String.class))
                 .contains("backfill-job-1")
                 .contains("extractor-v2");
+    }
+
+    @Test
+    void shouldFilterReviewAndQuarantineManagementPages() {
+        insertExtractionResult("result-review-filter-1");
+        insertReviewItem("review-filter-1", "PENDING", "result-review-filter-1",
+                "doc-1", "LOW_CONFIDENCE");
+        insertExtractionResult("result-review-filter-2");
+        insertReviewItem("review-filter-2", "PENDING", "result-review-filter-2",
+                "doc-2", "REQUIRED_MISSING");
+        insertQuarantineItem("q-filter-1", 0, 0, "doc-1", "job-1", "VALIDATE", "SCHEMA_MISSING");
+        insertQuarantineItem("q-filter-2", 0, 0, "doc-2", "job-2", "PARSE", "PARSE_FAILED");
+
+        MetadataReviewPage reviewPage = adapter.pageReviewItems(new MetadataReviewQuery(
+                "tenant-1", "kb-1", MetadataReviewStatus.PENDING, "LOW_CONFIDENCE", "doc-1", 1, 10));
+        MetadataQuarantinePage quarantinePage = adapter.pageQuarantineItems(new MetadataQuarantineQuery(
+                "tenant-1", "kb-1", Boolean.FALSE, "VALIDATE", "SCHEMA_MISSING", "doc-1", "job-1", 1, 10));
+
+        assertThat(reviewPage.records()).extracting(MetadataReviewRecord::id).containsExactly("review-filter-1");
+        assertThat(quarantinePage.records()).extracting(MetadataQuarantineRecord::id).containsExactly("q-filter-1");
     }
 
     @Test
@@ -299,23 +327,36 @@ class JdbcMetadataReviewQuarantineAdapterTests {
     }
 
     private void insertReviewItem(String id, String status, String resultId) {
+        insertReviewItem(id, status, resultId, "doc-1", "LOW_CONFIDENCE");
+    }
+
+    private void insertReviewItem(String id, String status, String resultId, String docId, String reasonCode) {
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_review_item(
                     id, tenant_id, kb_id, doc_id, result_id, review_status, priority,
                     reason_code, reason_message, suggested_metadata, review_context
-                ) VALUES (?, 'tenant-1', 'kb-1', 'doc-1', ?, ?, 10,
-                    'LOW_CONFIDENCE', '字段置信度低', ?, ?)
-                """, id, resultId, status, "{\"department\":\"hr\"}",
+                ) VALUES (?, 'tenant-1', 'kb-1', ?, ?, ?, 10,
+                    ?, '字段置信度低', ?, ?)
+                """, id, docId, resultId, status, reasonCode, "{\"department\":\"hr\"}",
                 "{\"issues\":[\"LOW_CONFIDENCE\"]}");
     }
 
     private void insertQuarantineItem(String id, int resolved, int retryCount) {
+        insertQuarantineItem(id, resolved, retryCount, "doc-1", "job-1", "VALIDATE", "SCHEMA_MISSING");
+    }
+
+    private void insertQuarantineItem(String id,
+                                      int resolved,
+                                      int retryCount,
+                                      String docId,
+                                      String jobId,
+                                      String stage,
+                                      String reasonCode) {
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_quarantine_item(
                     id, tenant_id, kb_id, doc_id, job_id, stage, reason_code, reason_message,
                     source_snapshot, retry_count, resolved
-                ) VALUES (?, 'tenant-1', 'kb-1', 'doc-1', 'job-1', 'VALIDATE',
-                    'SCHEMA_MISSING', '缺少 Schema', ?, ?, ?)
-                """, id, "{\"source\":\"test\"}", retryCount, resolved);
+                ) VALUES (?, 'tenant-1', 'kb-1', ?, ?, ?, ?, '缺少 Schema', ?, ?, ?)
+                """, id, docId, jobId, stage, reasonCode, "{\"source\":\"test\"}", retryCount, resolved);
     }
 }

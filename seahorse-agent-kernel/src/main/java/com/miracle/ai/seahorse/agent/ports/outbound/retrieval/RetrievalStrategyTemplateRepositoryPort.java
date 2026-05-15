@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.retrieval;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplate;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplatePayload;
 
 import java.util.List;
 
@@ -35,6 +36,22 @@ public interface RetrievalStrategyTemplateRepositoryPort {
      * @return 覆盖模板；同名 templateKey 会覆盖内置模板，新 templateKey 会追加
      */
     List<RetrievalStrategyTemplate> listTemplates(String kbId);
+
+    /**
+     * 新增或更新指定知识库的模板覆盖。
+     *
+     * <p>默认实现显式声明只读，避免无持久化仓储时误以为写入成功。
+     */
+    default RetrievalStrategyTemplate upsertTemplate(String kbId, RetrievalStrategyTemplatePayload payload) {
+        throw new UnsupportedOperationException("retrieval strategy template repository is read-only");
+    }
+
+    /**
+     * 软删除指定知识库的模板覆盖。
+     */
+    default boolean deleteTemplate(String kbId, String templateKey) {
+        return false;
+    }
 
     static RetrievalStrategyTemplateRepositoryPort empty() {
         return kbId -> List.of();

@@ -46,6 +46,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillRunResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataDictionaryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataExtractionResultInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
@@ -90,11 +92,15 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataFieldCoverage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineReasonCount;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
@@ -125,6 +131,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -598,12 +605,30 @@ class SeahorseWebApiContractTests {
         mvc.perform(get("/knowledge-base/kb-1/metadata-backfill/jobs")
                         .param("tenantId", "tenant-1")
                         .param("status", "PENDING")
+                        .param("pipelineId", "pipe-1")
+                        .param("operator", "admin")
+                        .param("documentId", "doc-2")
+                        .param("pauseReason", "SCHEMA_MISSING")
+                        .param("failureKeyword", "boom")
+                        .param("hasFailures", "true")
+                        .param("reExtract", "true")
                         .param("current", "1")
                         .param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.records[0].jobId").value("job-1"));
+        ArgumentCaptor<MetadataBackfillJobQuery> backfillQueryCaptor =
+                ArgumentCaptor.forClass(MetadataBackfillJobQuery.class);
+        verify(backfillPort).pageJobs(backfillQueryCaptor.capture());
+        MetadataBackfillJobQuery capturedBackfillQuery = backfillQueryCaptor.getValue();
+        assertThat(capturedBackfillQuery.pipelineId()).isEqualTo("pipe-1");
+        assertThat(capturedBackfillQuery.operator()).isEqualTo("admin");
+        assertThat(capturedBackfillQuery.documentId()).isEqualTo("doc-2");
+        assertThat(capturedBackfillQuery.pauseReason()).isEqualTo("SCHEMA_MISSING");
+        assertThat(capturedBackfillQuery.failureKeyword()).isEqualTo("boom");
+        assertThat(capturedBackfillQuery.hasFailures()).isTrue();
+        assertThat(capturedBackfillQuery.reExtract()).isTrue();
 
         mvc.perform(get("/metadata-backfill/jobs/job-1"))
                 .andExpect(status().isOk())
@@ -628,13 +653,16 @@ class SeahorseWebApiContractTests {
     @Test
     void shouldKeepMetadataQualityReportContract() throws Exception {
         MetadataQualityInboundPort qualityPort = mock(MetadataQualityInboundPort.class);
-        when(qualityPort.report("tenant-1", "kb-1", 3)).thenReturn(metadataQualityReport());
+        when(qualityPort.report("tenant-1", "kb-1", 3, 2, "extractor-v2"))
+                .thenReturn(metadataQualityReport());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMetadataQualityController(qualityPort)).build();
 
         mvc.perform(get("/knowledge-base/kb-1/metadata-quality/report")
                         .param("tenantId", "tenant-1")
+                        .param("schemaVersion", "2")
+                        .param("extractorVersion", "extractor-v2")
                         .param("topN", "3"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
@@ -644,6 +672,8 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.pendingReviewCount").value(2))
                 .andExpect(jsonPath("$.data.indexSyncFailureCount").value(1))
                 .andExpect(jsonPath("$.data.fieldCoverages[0].fieldKey").value("department"))
+                .andExpect(jsonPath("$.data.fieldCoverages[0].lowConfidenceDocuments").value(1))
+                .andExpect(jsonPath("$.data.fieldCoverages[0].lowConfidenceRate").value(1D / 3D))
                 .andExpect(jsonPath("$.data.quarantineReasons[0].reasonCode").value("SCHEMA_MISSING"));
     }
 
@@ -763,6 +793,17 @@ class SeahorseWebApiContractTests {
                         .enableKeyword(true)
                         .enableRrf(true)
                         .build())));
+        when(templatePort.upsertTemplate(eq("kb-1"), any())).thenReturn(new RetrievalStrategyTemplate(
+                "keyword_precise",
+                "关键词精确优先",
+                "优先使用关键词通道",
+                com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions.builder()
+                        .finalTopK(3)
+                        .enableVector(false)
+                        .enableKeyword(true)
+                        .enableRrf(false)
+                        .build()));
+        when(templatePort.deleteTemplate("kb-1", "keyword_precise")).thenReturn(true);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseRetrievalStrategyTemplateController(templatePort)).build();
 
@@ -772,18 +813,50 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data[0].templateKey").value("hybrid_rrf"))
                 .andExpect(jsonPath("$.data[0].options.enableKeyword").value(true))
                 .andExpect(jsonPath("$.data[0].options.enableRrf").value(true));
+        mvc.perform(post("/knowledge-base/kb-1/retrieval-strategy-templates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "templateKey", "keyword_precise",
+                                "displayName", "关键词精确优先",
+                                "description", "优先使用关键词通道",
+                                "sortOrder", 10,
+                                "enabled", true,
+                                "options", Map.of(
+                                        "finalTopK", 3,
+                                        "enableVector", false,
+                                        "enableKeyword", true,
+                                        "enableRrf", false)))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.templateKey").value("keyword_precise"))
+                .andExpect(jsonPath("$.data.options.enableKeyword").value(true));
+        mvc.perform(put("/knowledge-base/kb-1/retrieval-strategy-templates/keyword_precise")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "displayName", "关键词精确优先",
+                                "description", "优先使用关键词通道",
+                                "options", Map.of("finalTopK", 3, "enableKeyword", true)))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.templateKey").value("keyword_precise"));
+        mvc.perform(delete("/knowledge-base/kb-1/retrieval-strategy-templates/keyword_precise"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleted").value(true));
 
         verify(templatePort).listTemplates("kb-1");
+        verify(templatePort, times(2)).upsertTemplate(eq("kb-1"), any());
+        verify(templatePort).deleteTemplate("kb-1", "keyword_precise");
     }
 
     @Test
     void shouldKeepMetadataReviewAndQuarantineManagementContracts() throws Exception {
         MetadataReviewInboundPort reviewPort = mock(MetadataReviewInboundPort.class);
-        when(reviewPort.page("tenant-1", "kb-1", MetadataReviewStatus.PENDING, 1, 10))
+        when(reviewPort.page(
+                "tenant-1", "kb-1", MetadataReviewStatus.PENDING, "LOW_CONFIDENCE", "doc-1", 1, 10))
                 .thenReturn(new MetadataReviewPage(List.of(metadataReview("review-1", MetadataReviewStatus.PENDING)),
                         1, 10, 1, 1));
         when(reviewPort.queryById("review-1"))
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.PENDING));
+        when(reviewPort.listAudits("review-1"))
+                .thenReturn(List.of(metadataReviewAudit("audit-1")));
         when(reviewPort.approve(eq("review-1"), any()))
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.APPROVED));
         when(reviewPort.correct(eq("review-1"), any()))
@@ -798,7 +871,8 @@ class SeahorseWebApiContractTests {
                 .thenReturn(metadataReview("review-1", MetadataReviewStatus.QUARANTINED));
 
         MetadataQuarantineInboundPort quarantinePort = mock(MetadataQuarantineInboundPort.class);
-        when(quarantinePort.page("tenant-1", "kb-1", Boolean.FALSE, 1, 10))
+        when(quarantinePort.page(
+                "tenant-1", "kb-1", Boolean.FALSE, "VALIDATE", "SCHEMA_MISSING", "doc-1", "job-1", 1, 10))
                 .thenReturn(new MetadataQuarantinePage(List.of(metadataQuarantine("q-1", false, 1)), 1, 10, 1, 1));
         when(quarantinePort.queryById("q-1"))
                 .thenReturn(metadataQuarantine("q-1", false, 1));
@@ -814,7 +888,9 @@ class SeahorseWebApiContractTests {
         mvc.perform(get("/metadata-review/items")
                         .param("tenantId", "tenant-1")
                         .param("kbId", "kb-1")
-                        .param("status", "PENDING"))
+                        .param("status", "PENDING")
+                        .param("reasonCode", "LOW_CONFIDENCE")
+                        .param("documentId", "doc-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.records[0].id").value("review-1"))
@@ -822,6 +898,11 @@ class SeahorseWebApiContractTests {
         mvc.perform(get("/metadata-review/items/review-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.documentId").value("doc-1"));
+        mvc.perform(get("/metadata-review/items/review-1/audits"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value("audit-1"))
+                .andExpect(jsonPath("$.data[0].toStatus").value("CORRECTED"))
+                .andExpect(jsonPath("$.data[0].decisionMetadata.department").value("legal"));
         mvc.perform(post("/metadata-review/items/review-1/approve")
                         .header("X-User-Id", "auditor")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -871,7 +952,11 @@ class SeahorseWebApiContractTests {
         mvc.perform(get("/metadata-quarantine/items")
                         .param("tenantId", "tenant-1")
                         .param("kbId", "kb-1")
-                        .param("resolved", "false"))
+                        .param("resolved", "false")
+                        .param("stage", "VALIDATE")
+                        .param("reasonCode", "SCHEMA_MISSING")
+                        .param("documentId", "doc-1")
+                        .param("jobId", "job-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.records[0].id").value("q-1"))
                 .andExpect(jsonPath("$.data.records[0].resolved").value(false));
@@ -938,6 +1023,82 @@ class SeahorseWebApiContractTests {
         mvc.perform(delete("/metadata-schema/fields/field-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.deleted").value(true));
+    }
+
+    @Test
+    void shouldKeepMetadataDictionaryManagementContracts() throws Exception {
+        MetadataDictionaryInboundPort dictionaryPort = mock(MetadataDictionaryInboundPort.class);
+        when(dictionaryPort.listItems("tenant-1", "department", false))
+                .thenReturn(List.of(metadataDictionaryItem("dict-1", true)));
+        when(dictionaryPort.createItem(any()))
+                .thenReturn(metadataDictionaryItem("dict-1", true));
+        when(dictionaryPort.updateItem(eq("dict-1"), any()))
+                .thenReturn(metadataDictionaryItem("dict-1", true));
+        when(dictionaryPort.deleteItem("dict-1")).thenReturn(true);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMetadataDictionaryController(dictionaryPort)).build();
+
+        mvc.perform(get("/metadata-dictionaries/items")
+                        .param("tenantId", "tenant-1")
+                        .param("dictCode", "department"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data[0].rawValue").value("hr"));
+        mvc.perform(post("/metadata-dictionaries/items")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-1",
+                                "dictionaryCode", "department",
+                                "rawValue", "hr",
+                                "canonicalValue", "HR",
+                                "displayName", "Human Resource"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("dict-1"));
+        mvc.perform(put("/metadata-dictionaries/items/dict-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-1",
+                                "dictionaryCode", "department",
+                                "rawValue", "hr",
+                                "canonicalValue", "HR",
+                                "displayName", "Human Resource",
+                                "enabled", true))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.canonicalValue").value("HR"));
+        mvc.perform(delete("/metadata-dictionaries/items/dict-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleted").value(true));
+    }
+
+    @Test
+    void shouldKeepMetadataExtractionResultManagementContracts() throws Exception {
+        MetadataExtractionResultInboundPort resultPort = mock(MetadataExtractionResultInboundPort.class);
+        when(resultPort.page("tenant-1", "kb-1", "doc-1", "job-1", "ACCEPTED",
+                Integer.valueOf(2), "extractor-v2", 1L, 10L))
+                .thenReturn(new MetadataExtractionResultPage(
+                        List.of(metadataExtractionResult("result-1")), 1, 10, 1, 1));
+        when(resultPort.queryById("result-1")).thenReturn(metadataExtractionResult("result-1"));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMetadataExtractionResultController(resultPort)).build();
+
+        mvc.perform(get("/metadata-extraction/results")
+                        .param("tenantId", "tenant-1")
+                        .param("kbId", "kb-1")
+                        .param("docId", "doc-1")
+                        .param("jobId", "job-1")
+                        .param("status", "ACCEPTED")
+                        .param("schemaVersion", "2")
+                        .param("extractorVersion", "extractor-v2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.records[0].id").value("result-1"))
+                .andExpect(jsonPath("$.data.records[0].normalizedMetadata.department").value("HR"));
+        mvc.perform(get("/metadata-extraction/results/result-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("result-1"))
+                .andExpect(jsonPath("$.data.rawCandidates[0].fieldKey").value("department"));
     }
 
     private String json(Object value) throws Exception {
@@ -1073,7 +1234,7 @@ class SeahorseWebApiContractTests {
                 2,
                 1,
                 1,
-                List.of(new MetadataFieldCoverage("department", "部门", true, 3, 4, 0.75D)),
+                List.of(new MetadataFieldCoverage("department", "部门", true, 3, 4, 0.75D, 1, 1D / 3D)),
                 List.of(new MetadataQuarantineReasonCount("SCHEMA_MISSING", "缺少 Schema", 1)),
                 Instant.EPOCH);
     }
@@ -1094,6 +1255,24 @@ class SeahorseWebApiContractTests {
                 "auditor",
                 "ok",
                 Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataReviewAuditRecord metadataReviewAudit(String id) {
+        return new MetadataReviewAuditRecord(
+                id,
+                "review-1",
+                "tenant-1",
+                "kb-1",
+                "doc-1",
+                "result-1",
+                "PENDING",
+                "CORRECTED",
+                "auditor",
+                "ok",
+                Map.of("department", "hr"),
+                Map.of("department", "legal"),
+                Map.of("department", "legal"),
                 Instant.EPOCH);
     }
 
@@ -1137,6 +1316,40 @@ class SeahorseWebApiContractTests {
                 Map.of("sourceKeys", List.of("department")),
                 BackendFieldMapping.defaults("department"),
                 1,
+                Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataDictionaryItemRecord metadataDictionaryItem(String id, boolean enabled) {
+        return new MetadataDictionaryItemRecord(
+                id,
+                "tenant-1",
+                "department",
+                "hr",
+                "HR",
+                "Human Resource",
+                enabled,
+                Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataExtractionResultRecord metadataExtractionResult(String id) {
+        return new MetadataExtractionResultRecord(
+                id,
+                "tenant-1",
+                "kb-1",
+                "doc-1",
+                "job-1",
+                2,
+                "extractor-v2",
+                "ACCEPTED",
+                Map.of("department", "HR"),
+                List.of(Map.of("fieldKey", "department", "value", "hr")),
+                List.of(Map.of("fieldKey", "department", "confidence", 0.93D)),
+                List.of(),
+                Map.of("department", "HR"),
+                "auditor",
+                Instant.EPOCH,
                 Instant.EPOCH,
                 Instant.EPOCH);
     }

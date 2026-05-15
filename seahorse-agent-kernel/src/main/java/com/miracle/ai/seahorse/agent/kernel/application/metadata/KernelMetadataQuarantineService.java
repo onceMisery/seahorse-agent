@@ -8,7 +8,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineQ
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRetry;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -18,9 +22,11 @@ public class KernelMetadataQuarantineService implements MetadataQuarantineInboun
 
     private static final String DEFAULT_OPERATOR = "system";
     private static final int DEFAULT_MAX_RETRY_COUNT = 3;
+    private static final String EVENT_QUARANTINE_ACTION_COMPLETED = "metadata.quarantine.action.completed";
 
     private final MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort;
     private final int maxRetryCount;
+    private final ObservationPort observationPort;
 
     public KernelMetadataQuarantineService(MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort) {
         this(quarantineRepositoryPort, DEFAULT_MAX_RETRY_COUNT);
@@ -28,9 +34,16 @@ public class KernelMetadataQuarantineService implements MetadataQuarantineInboun
 
     public KernelMetadataQuarantineService(MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort,
                                            int maxRetryCount) {
+        this(quarantineRepositoryPort, maxRetryCount, null);
+    }
+
+    public KernelMetadataQuarantineService(MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort,
+                                           int maxRetryCount,
+                                           ObservationPort observationPort) {
         this.quarantineRepositoryPort = Objects.requireNonNullElse(quarantineRepositoryPort,
                 MetadataQuarantineManagementRepositoryPort.empty());
         this.maxRetryCount = maxRetryCount <= 0 ? DEFAULT_MAX_RETRY_COUNT : maxRetryCount;
+        this.observationPort = observationPort;
     }
 
     @Override
@@ -39,9 +52,23 @@ public class KernelMetadataQuarantineService implements MetadataQuarantineInboun
                                        Boolean resolved,
                                        long current,
                                        long size) {
+        return page(tenantId, knowledgeBaseId, resolved, null, null, null, null, current, size);
+    }
+
+    @Override
+    public MetadataQuarantinePage page(String tenantId,
+                                       String knowledgeBaseId,
+                                       Boolean resolved,
+                                       String stage,
+                                       String reasonCode,
+                                       String documentId,
+                                       String jobId,
+                                       long current,
+                                       long size) {
         requireText(tenantId, "tenantId must not be blank");
         return quarantineRepositoryPort.pageQuarantineItems(
-                new MetadataQuarantineQuery(tenantId, knowledgeBaseId, resolved, current, size));
+                new MetadataQuarantineQuery(
+                        tenantId, knowledgeBaseId, resolved, stage, reasonCode, documentId, jobId, current, size));
     }
 
     @Override
@@ -54,8 +81,10 @@ public class KernelMetadataQuarantineService implements MetadataQuarantineInboun
     @Override
     public MetadataQuarantineRecord resolve(String itemId, String operator) {
         queryById(itemId);
-        return quarantineRepositoryPort.resolveQuarantineItem(
+        MetadataQuarantineRecord updated = quarantineRepositoryPort.resolveQuarantineItem(
                 new MetadataQuarantineResolution(itemId, operator(operator)));
+        recordQuarantineAction(updated, "RESOLVE");
+        return updated;
     }
 
     @Override
@@ -68,10 +97,34 @@ public class KernelMetadataQuarantineService implements MetadataQuarantineInboun
         MetadataQuarantineRetryCommand safeCommand = command == null
                 ? new MetadataQuarantineRetryCommand(DEFAULT_OPERATOR, null)
                 : command;
-        return quarantineRepositoryPort.scheduleQuarantineRetry(new MetadataQuarantineRetry(
+        MetadataQuarantineRecord updated = quarantineRepositoryPort.scheduleQuarantineRetry(new MetadataQuarantineRetry(
                 itemId,
                 operator(safeCommand.operator()),
                 safeCommand.nextRetryTime()));
+        recordQuarantineAction(updated, "RETRY");
+        return updated;
+    }
+
+    private void recordQuarantineAction(MetadataQuarantineRecord record, String action) {
+        if (observationPort == null || record == null) {
+            return;
+        }
+        try {
+            Map<String, String> attributes = new LinkedHashMap<>();
+            attributes.put("tenantId", record.tenantId());
+            attributes.put("knowledgeBaseId", record.knowledgeBaseId());
+            attributes.put("action", Objects.requireNonNullElse(action, ""));
+            attributes.put("stage", record.stage());
+            attributes.put("reasonCode", record.reasonCode());
+            attributes.put("retryCount", Integer.toString(record.retryCount()));
+            attributes.put("maxRetryCount", Integer.toString(maxRetryCount));
+            attributes.put("resolved", Boolean.toString(record.resolved()));
+            attributes.put("nextRetryScheduled", Boolean.toString(record.nextRetryTime() != null));
+            // 隔离区事件记录处理轨迹的指标维度；详细快照仍保留在隔离表中。
+            observationPort.recordEvent(new ObservationEvent(EVENT_QUARANTINE_ACTION_COMPLETED, null, attributes));
+        } catch (RuntimeException ignored) {
+            // 观测失败不能影响隔离项处理或重试调度。
+        }
     }
 
     private String operator(String operator) {

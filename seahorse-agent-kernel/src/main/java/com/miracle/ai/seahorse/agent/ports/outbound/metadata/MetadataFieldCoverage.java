@@ -11,7 +11,9 @@ public record MetadataFieldCoverage(
         boolean required,
         int coveredDocuments,
         int totalDocuments,
-        double coverageRate
+        double coverageRate,
+        int lowConfidenceDocuments,
+        double lowConfidenceRate
 ) {
 
     public MetadataFieldCoverage {
@@ -20,6 +22,17 @@ public record MetadataFieldCoverage(
         coveredDocuments = Math.max(0, coveredDocuments);
         totalDocuments = Math.max(0, totalDocuments);
         coverageRate = clamp(coverageRate);
+        lowConfidenceDocuments = Math.max(0, lowConfidenceDocuments);
+        lowConfidenceRate = clamp(lowConfidenceRate);
+    }
+
+    public MetadataFieldCoverage(String fieldKey,
+                                 String displayName,
+                                 boolean required,
+                                 int coveredDocuments,
+                                 int totalDocuments,
+                                 double coverageRate) {
+        this(fieldKey, displayName, required, coveredDocuments, totalDocuments, coverageRate, 0, 0D);
     }
 
     private static double clamp(double value) {

@@ -56,6 +56,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.RuleBasedMemoryCa
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryManagementServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataBackfillService;
+import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataDictionaryService;
+import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataExtractionResultService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQualityService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQuarantineService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataReviewService;
@@ -117,6 +119,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.mapping.QueryTermMappingInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataDictionaryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataExtractionResultInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
@@ -177,6 +181,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
@@ -287,10 +293,12 @@ public class SeahorseAgentKernelAutoConfiguration {
     public MetadataExtractorNodeFeature seahorseMetadataExtractorNodeFeature(
             ExtensionRegistry extensionRegistry,
             ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
-            ObjectProvider<ChatModelPort> chatModelPort) {
+            ObjectProvider<ChatModelPort> chatModelPort,
+            ObjectProvider<ObservationPort> observationPort) {
         MetadataExtractorNodeFeature feature = new MetadataExtractorNodeFeature(
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
-                chatModelPort.getIfAvailable(ChatModelPort::noop));
+                chatModelPort.getIfAvailable(ChatModelPort::noop),
+                observationPort.getIfAvailable());
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
                 FeatureType.INGESTION_NODE, feature.order(), true), feature);
         return feature;
@@ -301,10 +309,12 @@ public class SeahorseAgentKernelAutoConfiguration {
     public MetadataNormalizerNodeFeature seahorseMetadataNormalizerNodeFeature(
             ExtensionRegistry extensionRegistry,
             ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
-            ObjectProvider<MetadataDictionaryPort> dictionaryPort) {
+            ObjectProvider<MetadataDictionaryPort> dictionaryPort,
+            ObjectProvider<ObservationPort> observationPort) {
         MetadataNormalizerNodeFeature feature = new MetadataNormalizerNodeFeature(
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
-                dictionaryPort.getIfAvailable(MetadataDictionaryPort::noop));
+                dictionaryPort.getIfAvailable(MetadataDictionaryPort::noop),
+                observationPort.getIfAvailable());
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
                 FeatureType.INGESTION_NODE, feature.order(), true), feature);
         return feature;
@@ -318,13 +328,15 @@ public class SeahorseAgentKernelAutoConfiguration {
             ObjectProvider<MetadataExtractionResultRepositoryPort> resultRepositoryPort,
             ObjectProvider<MetadataReviewQueuePort> reviewQueuePort,
             ObjectProvider<MetadataQuarantinePort> quarantinePort,
-            ObjectProvider<MetadataCanonicalWritePort> canonicalWritePort) {
+            ObjectProvider<MetadataCanonicalWritePort> canonicalWritePort,
+            ObjectProvider<ObservationPort> observationPort) {
         MetadataValidatorNodeFeature feature = new MetadataValidatorNodeFeature(
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
                 resultRepositoryPort.getIfAvailable(MetadataExtractionResultRepositoryPort::noop),
                 reviewQueuePort.getIfAvailable(MetadataReviewQueuePort::noop),
                 quarantinePort.getIfAvailable(MetadataQuarantinePort::noop),
-                canonicalWritePort.getIfAvailable(MetadataCanonicalWritePort::noop));
+                canonicalWritePort.getIfAvailable(MetadataCanonicalWritePort::noop),
+                observationPort.getIfAvailable());
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
                 FeatureType.INGESTION_NODE, feature.order(), true), feature);
         return feature;
@@ -513,12 +525,14 @@ public class SeahorseAgentKernelAutoConfiguration {
             FeatureActivationContext activationContext,
             ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
             ObjectProvider<MetadataFilterCompiler> metadataFilterCompiler,
-            ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
+            ObjectProvider<KernelRagTraceRecorder> traceRecorder,
+            ObjectProvider<ObservationPort> observationPort) {
         return new KernelMultiChannelRetrievalEngine(extensionRegistry,
                 retrievalExecutor.getIfAvailable(() -> Runnable::run), activationContext,
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
                 metadataFilterCompiler.getIfAvailable(DefaultMetadataFilterCompiler::new),
-                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
+                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
+                observationPort.getIfAvailable());
     }
 
     @Bean
@@ -880,13 +894,15 @@ public class SeahorseAgentKernelAutoConfiguration {
             ObjectProvider<MetadataCanonicalWritePort> canonicalWritePort,
             ObjectProvider<MetadataQuarantinePort> quarantinePort,
             ObjectProvider<MetadataIndexCompensationPort> indexCompensationPort,
-            ObjectProvider<MetadataReviewReExtractPort> reExtractPort) {
+            ObjectProvider<MetadataReviewReExtractPort> reExtractPort,
+            ObjectProvider<ObservationPort> observationPort) {
         return new KernelMetadataReviewService(
                 reviewRepositoryPort,
                 canonicalWritePort.getIfAvailable(MetadataCanonicalWritePort::noop),
                 quarantinePort.getIfAvailable(MetadataQuarantinePort::noop),
                 indexCompensationPort.getIfAvailable(MetadataIndexCompensationPort::noop),
-                reExtractPort.getIfAvailable(MetadataReviewReExtractPort::noop));
+                reExtractPort.getIfAvailable(MetadataReviewReExtractPort::noop),
+                observationPort.getIfAvailable());
     }
 
     @Bean
@@ -906,8 +922,10 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnMissingBean(MetadataQuarantineInboundPort.class)
     public KernelMetadataQuarantineService seahorseMetadataQuarantineInboundPort(
             MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort,
-            @Value("${seahorse-agent.metadata.governance.quarantine.max-retry-count:3}") int maxRetryCount) {
-        return new KernelMetadataQuarantineService(quarantineRepositoryPort, maxRetryCount);
+            @Value("${seahorse-agent.metadata.governance.quarantine.max-retry-count:3}") int maxRetryCount,
+            ObjectProvider<ObservationPort> observationPort) {
+        return new KernelMetadataQuarantineService(quarantineRepositoryPort, maxRetryCount,
+                observationPort.getIfAvailable());
     }
 
     @Bean
@@ -918,6 +936,22 @@ public class SeahorseAgentKernelAutoConfiguration {
             ObjectProvider<MetadataSchemaIndexSyncPort> indexSyncPort) {
         return new KernelMetadataSchemaService(repositoryPort,
                 indexSyncPort.getIfAvailable(MetadataSchemaIndexSyncPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnBean(MetadataDictionaryManagementRepositoryPort.class)
+    @ConditionalOnMissingBean(MetadataDictionaryInboundPort.class)
+    public KernelMetadataDictionaryService seahorseMetadataDictionaryInboundPort(
+            MetadataDictionaryManagementRepositoryPort repositoryPort) {
+        return new KernelMetadataDictionaryService(repositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnBean(MetadataExtractionResultManagementRepositoryPort.class)
+    @ConditionalOnMissingBean(MetadataExtractionResultInboundPort.class)
+    public KernelMetadataExtractionResultService seahorseMetadataExtractionResultInboundPort(
+            MetadataExtractionResultManagementRepositoryPort repositoryPort) {
+        return new KernelMetadataExtractionResultService(repositoryPort);
     }
 
     @Bean

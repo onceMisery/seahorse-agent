@@ -13,6 +13,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIssue;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -21,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,12 +49,14 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
     private static final String KEY_LLM_PROMPT_VERSION = "llmPromptVersion";
     private static final String KEY_LLM_CONFIDENCE = "llmConfidence";
     private static final String KEY_LLM_MAX_TEXT_CHARS = "llmMaxTextChars";
+    private static final String EVENT_EXTRACTION_COMPLETED = "metadata.extraction.completed";
     private static final double LLM_MISSING_EVIDENCE_CONFIDENCE_CAP = 0.6D;
     private static final Set<String> LLM_FORBIDDEN_FIELDS = Set.of(
             "tenantid", "kbid", "docid", "aclsubjects", "securitylevel");
 
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final ChatModelPort chatModelPort;
+    private final ObservationPort observationPort;
 
     public MetadataExtractorNodeFeature(MetadataSchemaRegistryPort schemaRegistryPort) {
         this(schemaRegistryPort, ChatModelPort.noop());
@@ -59,8 +64,15 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
 
     public MetadataExtractorNodeFeature(MetadataSchemaRegistryPort schemaRegistryPort,
                                         ChatModelPort chatModelPort) {
+        this(schemaRegistryPort, chatModelPort, null);
+    }
+
+    public MetadataExtractorNodeFeature(MetadataSchemaRegistryPort schemaRegistryPort,
+                                        ChatModelPort chatModelPort,
+                                        ObservationPort observationPort) {
         this.schemaRegistryPort = Objects.requireNonNullElse(schemaRegistryPort, MetadataSchemaRegistryPort.empty());
         this.chatModelPort = Objects.requireNonNullElse(chatModelPort, ChatModelPort.noop());
+        this.observationPort = observationPort;
     }
 
     @Override
@@ -81,6 +93,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
     @Override
     public NodeResult execute(IngestionContext context, NodeConfig config) {
         IngestionContext safeContext = Objects.requireNonNull(context, "context must not be null");
+        long startedAt = System.nanoTime();
         try {
             MetadataSchema schema = schemaRegistryPort.loadSchema(
                     firstText(setting(config, KEY_TENANT_ID), metadataText(safeContext, KEY_TENANT_ID)),
@@ -103,9 +116,45 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                     llmPromptVersion, candidates, issues);
             safeContext.setMetadataCandidates(candidates);
             safeContext.setMetadataIssues(issues);
+            recordExtractionEvent(schema, safeContext, config, candidates.size(), issues.size(), true, null,
+                    elapsedMillis(startedAt));
             return NodeResult.ok("metadata candidates=" + candidates.size());
         } catch (Exception ex) {
+            recordExtractionEvent(null, safeContext, config, 0, 0, false, ex, elapsedMillis(startedAt));
             return NodeResult.fail(ex);
+        }
+    }
+
+    private void recordExtractionEvent(MetadataSchema schema,
+                                       IngestionContext context,
+                                       NodeConfig config,
+                                       int candidateCount,
+                                       int issueCount,
+                                       boolean success,
+                                       Exception ex,
+                                       long durationMs) {
+        if (observationPort == null) {
+            return;
+        }
+        try {
+            Map<String, String> attributes = new LinkedHashMap<>();
+            attributes.put("tenantId", firstText(schema == null ? "" : schema.tenantId(),
+                    firstText(setting(config, KEY_TENANT_ID), metadataText(context, KEY_TENANT_ID))));
+            attributes.put("knowledgeBaseId", firstText(schema == null ? "" : schema.knowledgeBaseId(),
+                    firstText(setting(config, KEY_KB_ID), metadataText(context, KEY_KB_ID))));
+            attributes.put("schemaVersion", Integer.toString(schema == null ? 0 : schema.schemaVersion()));
+            attributes.put("extractorVersion", resolveExtractorVersion(context, config));
+            attributes.put("llmEnabled", Boolean.toString(booleanSetting(config, KEY_LLM_ENABLED)));
+            attributes.put("candidateCount", Integer.toString(candidateCount));
+            attributes.put("issueCount", Integer.toString(issueCount));
+            attributes.put("durationMs", Long.toString(durationMs));
+            attributes.put("success", Boolean.toString(success));
+            if (ex != null) {
+                attributes.put("exception", ex.getClass().getSimpleName());
+            }
+            observationPort.recordEvent(new ObservationEvent(EVENT_EXTRACTION_COMPLETED, null, attributes));
+        } catch (RuntimeException ignored) {
+            // 观测失败不能影响元数据抽取主流程。
         }
     }
 
@@ -186,7 +235,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                 issues.add(MetadataIssue.warn("", NODE_TYPE, "LLM_RESPONSE_INVALID", "LLM 元数据抽取结果不是 JSON 对象"));
                 return;
             }
-            collectLlmCandidates(schema, config, root, llmExtractorVersion, candidates, issues);
+            collectLlmCandidates(schema, config, root, llmExtractorVersion, llmPromptVersion, candidates, issues);
         } catch (RuntimeException ex) {
             issues.add(MetadataIssue.warn("", NODE_TYPE, "LLM_EXTRACT_FAILED", ex.getMessage()));
         }
@@ -196,6 +245,7 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                                       NodeConfig config,
                                       JsonNode root,
                                       String llmExtractorVersion,
+                                      String llmPromptVersion,
                                       List<MetadataFieldCandidate> candidates,
                                       List<MetadataIssue> issues) {
         double defaultConfidence = doubleSetting(config, KEY_LLM_CONFIDENCE, 0.72D);
@@ -221,7 +271,8 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                             "LLM 返回字段缺少证据片段"));
                 }
                 candidates.add(candidate(fieldKey, fieldValue.value(), "llm", "LlmMetadataExtractor",
-                        confidence, fieldValue.evidence(), schema.schemaVersion(), llmExtractorVersion));
+                        confidence, fieldValue.evidence(), schema.schemaVersion(), llmExtractorVersion,
+                        llmPromptVersion));
             }
         }
     }
@@ -426,6 +477,19 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
                 Math.max(schemaVersion, 1), extractorVersion);
     }
 
+    private MetadataFieldCandidate candidate(String fieldKey,
+                                             Object value,
+                                             String sourceType,
+                                             String extractorName,
+                                             double confidence,
+                                             String evidence,
+                                             int schemaVersion,
+                                             String extractorVersion,
+                                             String promptVersion) {
+        return new MetadataFieldCandidate(fieldKey, value, sourceType, extractorName, confidence, evidence,
+                Math.max(schemaVersion, 1), extractorVersion, promptVersion);
+    }
+
     private Map<String, Object> sourceMetadata(IngestionContext context) {
         return new LinkedHashMap<>(Objects.requireNonNullElse(context.getMetadata(), Map.of()));
     }
@@ -521,6 +585,10 @@ public class MetadataExtractorNodeFeature implements IngestionNodeFeature {
 
     private double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
     }
 
     private boolean isLlmForbiddenField(String fieldKey) {

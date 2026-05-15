@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWr
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
@@ -30,9 +31,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecor
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +64,40 @@ class KernelMetadataReviewServiceTests {
         assertThat(canonicalWritePort.documentId).isEqualTo("doc-1");
         assertThat(canonicalWritePort.metadata).containsEntry("department", "hr");
         assertThat(compensationPort.documentId).isEqualTo("doc-1");
+    }
+
+    @Test
+    void shouldRecordReviewDecisionObservationAfterApprove() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-1", MetadataReviewStatus.PENDING, Map.of()));
+        CapturingCanonicalWritePort canonicalWritePort = new CapturingCanonicalWritePort();
+        CapturingIndexCompensationPort compensationPort = new CapturingIndexCompensationPort();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        KernelMetadataReviewService service = new KernelMetadataReviewService(
+                repository,
+                canonicalWritePort,
+                MetadataQuarantinePort.noop(),
+                compensationPort,
+                MetadataReviewReExtractPort.noop(),
+                observationPort);
+
+        service.approve("review-1", new MetadataReviewDecisionCommand("auditor", "通过", Map.of()));
+
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.review.decision.completed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-1")
+                        .containsEntry("knowledgeBaseId", "kb-1")
+                        .containsEntry("action", "APPROVE")
+                        .containsEntry("reviewStatus", "APPROVED")
+                        .containsEntry("reasonCode", "LOW_CONFIDENCE")
+                        .containsEntry("suggestedFieldCount", "2")
+                        .containsEntry("correctedFieldCount", "2")
+                        .containsEntry("canonicalWritten", "true")
+                        .containsEntry("indexCompensationRequested", "true")
+                        .containsEntry("quarantined", "false")
+                        .containsEntry("reExtractRequested", "false"));
     }
 
     @Test
@@ -161,6 +201,24 @@ class KernelMetadataReviewServiceTests {
         assertThat(quarantine.sourceSnapshot()).containsEntry("reviewItemId", "review-1");
     }
 
+    @Test
+    void shouldListReviewAuditsWithoutSideEffects() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-1", MetadataReviewStatus.CORRECTED, Map.of("department", "legal")));
+        repository.addAudit(reviewAudit("audit-1"));
+        CapturingCanonicalWritePort canonicalWritePort = new CapturingCanonicalWritePort();
+        CapturingIndexCompensationPort compensationPort = new CapturingIndexCompensationPort();
+        KernelMetadataReviewService service = new KernelMetadataReviewService(
+                repository, canonicalWritePort, MetadataQuarantinePort.noop(), compensationPort);
+
+        List<MetadataReviewAuditRecord> audits = service.listAudits("review-1");
+
+        assertThat(audits).hasSize(1);
+        assertThat(audits.get(0).updatedMetadata()).containsEntry("department", "legal");
+        assertThat(canonicalWritePort.metadata).isEmpty();
+        assertThat(compensationPort.documentId).isEmpty();
+    }
+
     private static MetadataReviewRecord review(String id,
                                                MetadataReviewStatus status,
                                                Map<String, Object> correctedMetadata) {
@@ -182,12 +240,35 @@ class KernelMetadataReviewServiceTests {
                 Instant.EPOCH);
     }
 
+    private static MetadataReviewAuditRecord reviewAudit(String id) {
+        return new MetadataReviewAuditRecord(
+                id,
+                "review-1",
+                "tenant-1",
+                "kb-1",
+                "doc-1",
+                "result-1",
+                "PENDING",
+                "CORRECTED",
+                "auditor",
+                "修正部门",
+                Map.of("department", "hr"),
+                Map.of("department", "legal"),
+                Map.of("department", "legal"),
+                Instant.EPOCH);
+    }
+
     private static final class InMemoryReviewRepository implements MetadataReviewManagementRepositoryPort {
 
         private final Map<String, MetadataReviewRecord> records = new LinkedHashMap<>();
+        private final List<MetadataReviewAuditRecord> audits = new java.util.ArrayList<>();
 
         void put(MetadataReviewRecord record) {
             records.put(record.id(), record);
+        }
+
+        void addAudit(MetadataReviewAuditRecord audit) {
+            audits.add(audit);
         }
 
         @Override
@@ -199,6 +280,13 @@ class KernelMetadataReviewServiceTests {
         @Override
         public Optional<MetadataReviewRecord> findReviewItem(String itemId) {
             return Optional.ofNullable(records.get(itemId));
+        }
+
+        @Override
+        public List<MetadataReviewAuditRecord> listReviewAudits(String itemId) {
+            return audits.stream()
+                    .filter(audit -> audit.reviewItemId().equals(itemId))
+                    .toList();
         }
 
         @Override
@@ -255,6 +343,30 @@ class KernelMetadataReviewServiceTests {
         public String requestReExtract(MetadataReviewReExtractRequest request) {
             this.request = request;
             return "backfill-job-1";
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 }

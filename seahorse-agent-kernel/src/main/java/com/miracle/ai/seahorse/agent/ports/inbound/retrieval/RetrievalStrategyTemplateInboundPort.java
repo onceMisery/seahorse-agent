@@ -25,4 +25,8 @@ import java.util.List;
 public interface RetrievalStrategyTemplateInboundPort {
 
     List<RetrievalStrategyTemplate> listTemplates(String kbId);
+
+    RetrievalStrategyTemplate upsertTemplate(String kbId, RetrievalStrategyTemplatePayload payload);
+
+    boolean deleteTemplate(String kbId, String templateKey);
 }

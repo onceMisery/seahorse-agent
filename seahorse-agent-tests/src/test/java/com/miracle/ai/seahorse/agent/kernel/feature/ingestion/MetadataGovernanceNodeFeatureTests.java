@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldQuality
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataOperator;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchemaMissingException;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
@@ -40,6 +41,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -99,6 +104,66 @@ class MetadataGovernanceNodeFeatureTests {
     }
 
     @Test
+    void shouldRecordMetadataExtractionAndValidationObservationEvents() {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 3, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of("sourceKeys", List.of("dept")))));
+        MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        List<MetadataExtractionRecord> savedRecords = new ArrayList<>();
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a", "dept", "Finance"))
+                .build();
+
+        NodeResult extractResult = new MetadataExtractorNodeFeature(
+                schemaRegistry, ChatModelPort.noop(), observationPort)
+                .execute(context, NodeConfig.builder().nodeType("metadata_extractor").build());
+        NodeResult normalizeResult = new MetadataNormalizerNodeFeature(
+                schemaRegistry, MetadataDictionaryPort.noop(), observationPort)
+                .execute(context, NodeConfig.builder().nodeType("metadata_normalizer").build());
+        NodeResult validateResult = new MetadataValidatorNodeFeature(schemaRegistry, savedRecords::add,
+                MetadataReviewQueuePort.noop(), MetadataQuarantinePort.noop(), MetadataCanonicalWritePort.noop(),
+                observationPort)
+                .execute(context, NodeConfig.builder().nodeType("metadata_validator").build());
+
+        assertThat(extractResult.isSuccess()).isTrue();
+        assertThat(normalizeResult.isSuccess()).isTrue();
+        assertThat(validateResult.isSuccess()).isTrue();
+        assertThat(observationPort.events)
+                .extracting(ObservationEvent::name)
+                .contains("metadata.extraction.completed", "metadata.normalization.completed",
+                        "metadata.validation.completed");
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.extraction.completed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("schemaVersion", "3")
+                        .containsEntry("candidateCount", "1")
+                        .containsEntry("success", "true"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.normalization.completed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("schemaVersion", "3")
+                        .containsEntry("candidateCount", "1")
+                        .containsEntry("normalizedFieldCount", "1")
+                        .containsEntry("failedQualityCount", "0")
+                        .containsEntry("success", "true"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.validation.completed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("decision", "ACCEPT")
+                        .containsEntry("acceptedFieldCount", "1")
+                        .containsEntry("issueCount", "0")
+                        .containsEntry("success", "true"));
+    }
+
+    @Test
     void shouldMapParserMetadataByParseKeysWithoutUsingSourceAliases() {
         MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
                 field("owner", MetadataValueType.STRING, false, Map.of("parseKeys", List.of("author")))));
@@ -145,6 +210,23 @@ class MetadataGovernanceNodeFeatureTests {
             assertThat(candidate.fieldKey()).isEqualTo("department");
             assertThat(candidate.extractorVersion()).isEqualTo("extractor-v2");
         });
+    }
+
+    @Test
+    void shouldFailBackfillValidationWhenSchemaMissing() {
+        MetadataSchemaRegistryPort schemaRegistry = MetadataSchemaRegistryPort.empty();
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a", "backfillJobId", "job-a"))
+                .build();
+
+        NodeResult result = new MetadataValidatorNodeFeature(schemaRegistry,
+                MetadataExtractionResultRepositoryPort.noop(), MetadataReviewQueuePort.noop(),
+                MetadataQuarantinePort.noop(), MetadataCanonicalWritePort.noop())
+                .execute(context, NodeConfig.builder().nodeType("metadata_validator").build());
+
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getError()).isInstanceOf(MetadataSchemaMissingException.class);
     }
 
     @Test
@@ -405,6 +487,7 @@ class MetadataGovernanceNodeFeatureTests {
                 .containsExactly("department");
         assertThat(context.getMetadataCandidates().get(0).sourceType()).isEqualTo("llm");
         assertThat(context.getMetadataCandidates().get(0).extractorVersion()).isEqualTo("llm-v2");
+        assertThat(context.getMetadataCandidates().get(0).promptVersion()).isEqualTo("prompt-v2");
         assertThat(context.getMetadataCandidates().get(0).confidence()).isEqualTo(0.73D);
         assertThat(context.getMetadataIssues())
                 .anySatisfy(issue -> assertThat(issue.code()).isEqualTo("LLM_FORBIDDEN_FIELD"));
@@ -447,6 +530,33 @@ class MetadataGovernanceNodeFeatureTests {
         });
         assertThat(context.getMetadataIssues())
                 .anySatisfy(issue -> assertThat(issue.code()).isEqualTo("LLM_EVIDENCE_MISSING"));
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new RecordingObservationScope(events);
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
+        }
+    }
+
+    private record RecordingObservationScope(List<ObservationEvent> events) implements ObservationScope {
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public void close() {
+        }
     }
 
     private MetadataFieldDescriptor field(String fieldKey,

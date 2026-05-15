@@ -36,6 +36,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngin
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataBackfillService;
+import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataDictionaryService;
+import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataExtractionResultService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQualityService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQuarantineService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataReviewService;
@@ -72,6 +74,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenan
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataDictionaryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataExtractionResultInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
@@ -119,6 +123,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
@@ -355,6 +361,10 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MetadataQuarantineInboundPort.class);
                     assertThat(context).hasSingleBean(KernelMetadataSchemaService.class);
                     assertThat(context).hasSingleBean(MetadataSchemaInboundPort.class);
+                    assertThat(context).hasSingleBean(KernelMetadataDictionaryService.class);
+                    assertThat(context).hasSingleBean(MetadataDictionaryInboundPort.class);
+                    assertThat(context).hasSingleBean(KernelMetadataExtractionResultService.class);
+                    assertThat(context).hasSingleBean(MetadataExtractionResultInboundPort.class);
                     assertThat(context).hasSingleBean(SeahorseDocumentRefreshJob.class);
                     assertThat(context).doesNotHaveBean(SeahorseKeywordIndexMaintenanceJob.class);
                 });
@@ -729,6 +739,16 @@ class SeahorseAgentKernelAutoConfigurationTests {
         @Bean
         MetadataSchemaManagementRepositoryPort metadataSchemaManagementRepositoryPort() {
             return mock(MetadataSchemaManagementRepositoryPort.class);
+        }
+
+        @Bean
+        MetadataDictionaryManagementRepositoryPort metadataDictionaryManagementRepositoryPort() {
+            return mock(MetadataDictionaryManagementRepositoryPort.class);
+        }
+
+        @Bean
+        MetadataExtractionResultManagementRepositoryPort metadataExtractionResultManagementRepositoryPort() {
+            return mock(MetadataExtractionResultManagementRepositoryPort.class);
         }
     }
 
