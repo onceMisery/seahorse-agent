@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldQuality
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataOperator;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchemaMissingException;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
@@ -145,6 +146,23 @@ class MetadataGovernanceNodeFeatureTests {
             assertThat(candidate.fieldKey()).isEqualTo("department");
             assertThat(candidate.extractorVersion()).isEqualTo("extractor-v2");
         });
+    }
+
+    @Test
+    void shouldFailBackfillValidationWhenSchemaMissing() {
+        MetadataSchemaRegistryPort schemaRegistry = MetadataSchemaRegistryPort.empty();
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a", "backfillJobId", "job-a"))
+                .build();
+
+        NodeResult result = new MetadataValidatorNodeFeature(schemaRegistry,
+                MetadataExtractionResultRepositoryPort.noop(), MetadataReviewQueuePort.noop(),
+                MetadataQuarantinePort.noop(), MetadataCanonicalWritePort.noop())
+                .execute(context, NodeConfig.builder().nodeType("metadata_validator").build());
+
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getError()).isInstanceOf(MetadataSchemaMissingException.class);
     }
 
     @Test

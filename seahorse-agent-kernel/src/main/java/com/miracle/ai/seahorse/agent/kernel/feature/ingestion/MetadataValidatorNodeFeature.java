@@ -9,6 +9,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldQuality
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIssue;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIssueSeverity;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchemaMissingException;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
@@ -35,6 +36,9 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
     private static final String KEY_DOC_ID = "docId";
     private static final String KEY_EXTRACTOR_VERSION = "extractorVersion";
     private static final String KEY_METADATA_EXTRACTION_CONTEXT = "metadataExtractionContext";
+    private static final String KEY_BACKFILL_JOB_ID = "backfillJobId";
+    private static final String KEY_REQUIRE_SCHEMA = "requireSchema";
+    private static final String KEY_REQUIRE_METADATA_SCHEMA = "requireMetadataSchema";
 
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final MetadataExtractionResultRepositoryPort resultRepositoryPort;
@@ -75,6 +79,13 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
         IngestionContext safeContext = Objects.requireNonNull(context, "context must not be null");
         try {
             MetadataSchema schema = resolveSchema(safeContext, config);
+            if (schema.empty() && requiresSchema(safeContext, config)) {
+                throw new MetadataSchemaMissingException(
+                        firstText(schema.tenantId(), firstText(setting(config, KEY_TENANT_ID),
+                                metadataText(safeContext, KEY_TENANT_ID))),
+                        firstText(schema.knowledgeBaseId(), firstText(setting(config, KEY_KB_ID),
+                                metadataText(safeContext, KEY_KB_ID))));
+            }
             ValidationIdentity identity = identity(safeContext, config, schema);
             MetadataValidationResult result = validate(schema, safeContext);
             safeContext.setMetadataValidationResult(result);
@@ -246,6 +257,14 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
         return schema;
     }
 
+    private boolean requiresSchema(IngestionContext context, NodeConfig config) {
+        // 历史回填必须绑定 Schema；普通入库仍允许通过配置逐步启用治理节点。
+        return hasText(metadataText(context, KEY_BACKFILL_JOB_ID))
+                || flag(setting(config, KEY_REQUIRE_SCHEMA))
+                || flag(setting(config, KEY_REQUIRE_METADATA_SCHEMA))
+                || flag(metadataText(context, KEY_REQUIRE_METADATA_SCHEMA));
+    }
+
     private ValidationIdentity identity(IngestionContext context, NodeConfig config, MetadataSchema schema) {
         return new ValidationIdentity(
                 firstText(schema.tenantId(), firstText(setting(config, KEY_TENANT_ID), metadataText(context, KEY_TENANT_ID))),
@@ -274,6 +293,10 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private boolean flag(String value) {
+        return Boolean.parseBoolean(Objects.requireNonNullElse(value, "false"));
     }
 
     private record ValidationIdentity(String tenantId, String kbId, String docId) {

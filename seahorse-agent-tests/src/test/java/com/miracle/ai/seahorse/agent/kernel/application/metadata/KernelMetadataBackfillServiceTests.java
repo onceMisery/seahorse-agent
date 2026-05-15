@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchemaMissingException;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
@@ -159,6 +160,40 @@ class KernelMetadataBackfillServiceTests {
         assertThat(quarantine.sourceSnapshot())
                 .containsEntry("backfillJobId", job.jobId())
                 .containsEntry("pipelineId", "pipe-1");
+    }
+
+    @Test
+    void shouldPauseBackfillWhenMetadataSchemaMissing() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        List<MetadataQuarantineItem> quarantines = new ArrayList<>();
+        KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
+        when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
+            IngestionContext context = invocation.getArgument(1);
+            context.setError(new MetadataSchemaMissingException("tenant-1", "kb-1"));
+            return context;
+        });
+        KernelMetadataBackfillService service = new KernelMetadataBackfillService(
+                documents,
+                new InMemoryObjectStorage(),
+                pipelineRepository(),
+                engine,
+                jobs,
+                MetadataExtractionResultRepositoryPort.noop(),
+                quarantines::add,
+                null);
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+
+        assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.PAUSED);
+        assertThat(result.processedDocuments()).isZero();
+        assertThat(result.failures()).singleElement().asString().contains("metadata schema missing");
+        assertThat(result.checkpoint()).containsEntry("pauseReason", "SCHEMA_MISSING");
+        assertThat(documents.failedDocuments).containsExactly("doc-1");
+        assertThat(quarantines).isEmpty();
     }
 
     @Test

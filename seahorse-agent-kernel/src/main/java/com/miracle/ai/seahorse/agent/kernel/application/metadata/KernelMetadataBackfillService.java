@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchemaMissingException;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValidationDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
@@ -69,6 +70,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     private static final String OBSERVATION_BACKFILL = "metadata.backfill.batch";
     private static final String EVENT_BACKFILL_SUCCESS = "metadata.backfill.batch.success";
     private static final String EVENT_BACKFILL_FAILURE = "metadata.backfill.batch.failure";
+    private static final String PAUSE_REASON_SCHEMA_MISSING = "SCHEMA_MISSING";
 
     private final KnowledgeDocumentRepositoryPort documentRepositoryPort;
     private final ObjectStoragePort objectStoragePort;
@@ -272,7 +274,14 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                     || MetadataBackfillJobStatus.CANCELLED.equals(latest.status())) {
                 return latest;
             }
-            DocumentOutcome outcome = processDocument(job, document);
+            DocumentOutcome outcome;
+            try {
+                outcome = processDocument(job, document);
+            } catch (MetadataSchemaMissingException ex) {
+                MetadataBackfillJobRecord paused = pauseForSchemaMissing(job, accumulator, ex);
+                jobRepositoryPort.save(paused);
+                return paused;
+            }
             accumulator.apply(document, outcome);
             // 每处理一个文档就推进断点，降低批量回填中断后的重复扫描范围。
             jobRepositoryPort.save(accumulator.toRecord(MetadataBackfillJobStatus.RUNNING, job.currentPage(),
@@ -353,16 +362,47 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
             IngestionContext context = buildContext(job, document, fileBytes);
             IngestionContext result = ingestionEngine.execute(requirePipeline(pipelineId), context);
             if (result.getError() != null) {
+                MetadataSchemaMissingException schemaMissing = schemaMissing(result.getError());
+                if (schemaMissing != null) {
+                    throw schemaMissing;
+                }
                 throw new IllegalStateException(result.getError().getMessage(), result.getError());
             }
             int chunkCount = result.getChunks() == null ? 0 : result.getChunks().size();
             documentRepositoryPort.markSuccess(document.getId(), chunkCount, job.operator());
             return DocumentOutcome.success(decision(result));
+        } catch (MetadataSchemaMissingException ex) {
+            documentRepositoryPort.markFailed(document.getId(), job.operator(), ex.getMessage());
+            throw ex;
         } catch (Exception ex) {
             documentRepositoryPort.markFailed(document.getId(), job.operator(), ex.getMessage());
             quarantineBackfillFailure(job, document, failureStage, ex);
             return DocumentOutcome.failed(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
         }
+    }
+
+    private MetadataBackfillJobRecord pauseForSchemaMissing(MetadataBackfillJobRecord job,
+                                                            BackfillAccumulator accumulator,
+                                                            MetadataSchemaMissingException ex) {
+        MetadataBackfillJobRecord latest = jobRepositoryPort.findById(job.jobId()).orElse(job);
+        Map<String, Object> checkpoint = new LinkedHashMap<>(Objects.requireNonNullElse(latest.checkpoint(),
+                Map.of()));
+        checkpoint.put("pauseReason", PAUSE_REASON_SCHEMA_MISSING);
+        checkpoint.put("pauseMessage", ex.getMessage());
+        accumulator.addFailure("schema: " + ex.getMessage());
+        // Schema 缺失是任务级阻塞：暂停等待治理配置补齐，不把当前文档写入 Review/Quarantine。
+        return accumulator.toRecord(MetadataBackfillJobStatus.PAUSED, latest.currentPage(), checkpoint);
+    }
+
+    private MetadataSchemaMissingException schemaMissing(Throwable error) {
+        Throwable cursor = error;
+        while (cursor != null) {
+            if (cursor instanceof MetadataSchemaMissingException schemaMissing) {
+                return schemaMissing;
+            }
+            cursor = cursor.getCause();
+        }
+        return null;
     }
 
     private void quarantineBackfillFailure(MetadataBackfillJobRecord job,
@@ -407,6 +447,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         metadata.put("fileName", document.getDocName());
         metadata.put("collectionName", document.getCollectionName());
         metadata.put("backfillJobId", job.jobId());
+        metadata.put("requireMetadataSchema", true);
         copyCheckpointMetadata(job.checkpoint(), metadata, "sourceReviewItemId");
         copyCheckpointMetadata(job.checkpoint(), metadata, "extractorVersion");
         // LLM 抽取版本必须跟随回填上下文进入 MetadataExtractor，保证 prompt/模型策略可审计、可重放。
@@ -647,7 +688,9 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     }
 
     private void recordBackfillResult(ObservationScope scope, MetadataBackfillJobRecord job) {
-        boolean hasFailures = MetadataBackfillJobStatus.FAILED.equals(job.status()) || job.failedDocuments() > 0;
+        boolean hasFailures = MetadataBackfillJobStatus.FAILED.equals(job.status())
+                || job.failedDocuments() > 0
+                || !job.failures().isEmpty();
         String eventName = hasFailures ? EVENT_BACKFILL_FAILURE : EVENT_BACKFILL_SUCCESS;
         recordObservationEvent(scope, eventName, Map.of(
                 "status", job.status().name(),
@@ -726,6 +769,10 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                     base.pipelineId(), status, currentPage, base.batchSize(), processedDocuments,
                     succeededDocuments, failedDocuments, skippedDocuments, reviewDocuments, quarantineDocuments,
                     checkpoint, failures, base.operator(), base.createTime(), Instant.now());
+        }
+
+        private void addFailure(String message) {
+            failures.add(Objects.requireNonNullElse(message, ""));
         }
     }
 
