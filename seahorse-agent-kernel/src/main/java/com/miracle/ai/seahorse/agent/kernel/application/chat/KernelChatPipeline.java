@@ -148,7 +148,7 @@ public class KernelChatPipeline {
      * 查询优化：术语映射、专有名词保护。
      * <p>
      * Phase 3A 行为：optimizedQuestion 与 originalQuestion 相同，不修改查询文本。
-     * protectedTerms 和 expandedTerms 存入结果对象供 trace 观测，但当前不被
+     * protectedTerms 和 expandedTerms 存入结果对象并通过 debug log 输出，但当前不被
      * rewriteQuery 消费。Phase 3B（LLM 优化器）才会真正修改查询文本。
      * <p>
      * 优化失败时降级使用原始问题。
