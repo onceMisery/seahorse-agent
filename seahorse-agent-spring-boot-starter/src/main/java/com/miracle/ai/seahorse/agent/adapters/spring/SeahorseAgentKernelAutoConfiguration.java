@@ -293,10 +293,12 @@ public class SeahorseAgentKernelAutoConfiguration {
     public MetadataExtractorNodeFeature seahorseMetadataExtractorNodeFeature(
             ExtensionRegistry extensionRegistry,
             ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
-            ObjectProvider<ChatModelPort> chatModelPort) {
+            ObjectProvider<ChatModelPort> chatModelPort,
+            ObjectProvider<ObservationPort> observationPort) {
         MetadataExtractorNodeFeature feature = new MetadataExtractorNodeFeature(
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
-                chatModelPort.getIfAvailable(ChatModelPort::noop));
+                chatModelPort.getIfAvailable(ChatModelPort::noop),
+                observationPort.getIfAvailable());
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
                 FeatureType.INGESTION_NODE, feature.order(), true), feature);
         return feature;
@@ -324,13 +326,15 @@ public class SeahorseAgentKernelAutoConfiguration {
             ObjectProvider<MetadataExtractionResultRepositoryPort> resultRepositoryPort,
             ObjectProvider<MetadataReviewQueuePort> reviewQueuePort,
             ObjectProvider<MetadataQuarantinePort> quarantinePort,
-            ObjectProvider<MetadataCanonicalWritePort> canonicalWritePort) {
+            ObjectProvider<MetadataCanonicalWritePort> canonicalWritePort,
+            ObjectProvider<ObservationPort> observationPort) {
         MetadataValidatorNodeFeature feature = new MetadataValidatorNodeFeature(
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
                 resultRepositoryPort.getIfAvailable(MetadataExtractionResultRepositoryPort::noop),
                 reviewQueuePort.getIfAvailable(MetadataReviewQueuePort::noop),
                 quarantinePort.getIfAvailable(MetadataQuarantinePort::noop),
-                canonicalWritePort.getIfAvailable(MetadataCanonicalWritePort::noop));
+                canonicalWritePort.getIfAvailable(MetadataCanonicalWritePort::noop),
+                observationPort.getIfAvailable());
         extensionRegistry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
                 FeatureType.INGESTION_NODE, feature.order(), true), feature);
         return feature;

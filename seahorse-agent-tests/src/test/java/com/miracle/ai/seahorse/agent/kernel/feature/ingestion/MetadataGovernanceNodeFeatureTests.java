@@ -41,6 +41,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -97,6 +101,53 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(writtenDocumentMetadata.get()).containsEntry("department", "FIN");
         assertThat(context.getChunks()).allSatisfy(chunk ->
                 assertThat(chunk.getMetadata()).containsEntry("department", "FIN"));
+    }
+
+    @Test
+    void shouldRecordMetadataExtractionAndValidationObservationEvents() {
+        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 3, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of("sourceKeys", List.of("dept")))));
+        MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        List<MetadataExtractionRecord> savedRecords = new ArrayList<>();
+        IngestionContext context = IngestionContext.builder()
+                .taskId("doc-a")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a", "dept", "Finance"))
+                .build();
+
+        NodeResult extractResult = new MetadataExtractorNodeFeature(
+                schemaRegistry, ChatModelPort.noop(), observationPort)
+                .execute(context, NodeConfig.builder().nodeType("metadata_extractor").build());
+        NodeResult normalizeResult = new MetadataNormalizerNodeFeature(schemaRegistry, MetadataDictionaryPort.noop())
+                .execute(context, NodeConfig.builder().nodeType("metadata_normalizer").build());
+        NodeResult validateResult = new MetadataValidatorNodeFeature(schemaRegistry, savedRecords::add,
+                MetadataReviewQueuePort.noop(), MetadataQuarantinePort.noop(), MetadataCanonicalWritePort.noop(),
+                observationPort)
+                .execute(context, NodeConfig.builder().nodeType("metadata_validator").build());
+
+        assertThat(extractResult.isSuccess()).isTrue();
+        assertThat(normalizeResult.isSuccess()).isTrue();
+        assertThat(validateResult.isSuccess()).isTrue();
+        assertThat(observationPort.events)
+                .extracting(ObservationEvent::name)
+                .contains("metadata.extraction.completed", "metadata.validation.completed");
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.extraction.completed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("schemaVersion", "3")
+                        .containsEntry("candidateCount", "1")
+                        .containsEntry("success", "true"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.validation.completed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("decision", "ACCEPT")
+                        .containsEntry("acceptedFieldCount", "1")
+                        .containsEntry("issueCount", "0")
+                        .containsEntry("success", "true"));
     }
 
     @Test
@@ -466,6 +517,33 @@ class MetadataGovernanceNodeFeatureTests {
         });
         assertThat(context.getMetadataIssues())
                 .anySatisfy(issue -> assertThat(issue.code()).isEqualTo("LLM_EVIDENCE_MISSING"));
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new RecordingObservationScope(events);
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
+        }
+    }
+
+    private record RecordingObservationScope(List<ObservationEvent> events) implements ObservationScope {
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public void close() {
+        }
     }
 
     private MetadataFieldDescriptor field(String fieldKey,
