@@ -49,7 +49,10 @@ public class SeahorseMetadataQualityController {
     @GetMapping("/knowledge-base/{kb-id}/metadata-quality/report")
     public Map<String, Object> report(@PathVariable("kb-id") String kbId,
                                       @RequestParam String tenantId,
+                                      @RequestParam(value = "schemaVersion", required = false) Integer schemaVersion,
+                                      @RequestParam(value = "extractorVersion", required = false) String extractorVersion,
                                       @RequestParam(defaultValue = "5") int topN) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, qualityPort.report(tenantId, kbId, topN));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                qualityPort.report(tenantId, kbId, topN, schemaVersion, extractorVersion));
     }
 }

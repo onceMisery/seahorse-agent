@@ -97,6 +97,33 @@ class JdbcMetadataQualityReportAdapterTests {
     }
 
     @Test
+    void shouldFilterQualityReportBySchemaAndExtractorVersion() {
+        jdbcTemplate.update("INSERT INTO t_knowledge_document(id, kb_id, deleted) VALUES ('doc-1', 'kb-1', 0)");
+        jdbcTemplate.update("INSERT INTO t_knowledge_document(id, kb_id, deleted) VALUES ('doc-2', 'kb-1', 0)");
+        insertExtraction("result-v1", "doc-1", 1, "extractor-v1",
+                Map.of("department", "Sales"),
+                Map.of(),
+                List.of(quality("department", 0.95D)),
+                Instant.parse("2026-05-13T08:00:00Z"));
+        insertExtraction("result-v2-doc1", "doc-1", 2, "extractor-v2",
+                Map.of("department", "Finance", "owner", "alice"),
+                Map.of(),
+                List.of(quality("department", 0.91D), quality("owner", 0.9D)),
+                Instant.parse("2026-05-13T09:00:00Z"));
+        insertExtraction("result-v2-doc2", "doc-2", 2, "extractor-v2",
+                Map.of("department", "Finance"),
+                Map.of(),
+                List.of(quality("department", 0.92D)),
+                Instant.parse("2026-05-13T10:00:00Z"));
+
+        MetadataQualityReport report = adapter.report("tenant-1", "kb-1", 1, 2, "extractor-v2");
+
+        assertThat(report.extractedDocuments()).isEqualTo(2);
+        assertThat(coverage(report, "department").coverageRate()).isEqualTo(1D);
+        assertThat(coverage(report, "owner").coverageRate()).isEqualTo(0.5D);
+    }
+
+    @Test
     void shouldPersistFieldQualitiesForLowConfidenceReport() {
         adapter.save(new MetadataExtractionRecord(
                 "tenant-1",
@@ -340,14 +367,25 @@ class JdbcMetadataQualityReportAdapterTests {
                                   Map<String, Object> approvedMetadata,
                                   List<Map<String, Object>> qualities,
                                   Instant updateTime) {
+        insertExtraction(id, docId, 1, "extractor-v1", metadata, approvedMetadata, qualities, updateTime);
+    }
+
+    private void insertExtraction(String id,
+                                  String docId,
+                                  int schemaVersion,
+                                  String extractorVersion,
+                                  Map<String, Object> metadata,
+                                  Map<String, Object> approvedMetadata,
+                                  List<Map<String, Object>> qualities,
+                                  Instant updateTime) {
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_extraction_result(
                     id, tenant_id, kb_id, doc_id, job_id, schema_version, extractor_version, status,
                     normalized_metadata, raw_candidates, field_quality, validation_issues, approved_metadata,
                     create_time, update_time
-                ) VALUES (?, 'tenant-1', 'kb-1', ?, 'job-1', 1, 'extractor-v1', 'ACCEPT',
+                ) VALUES (?, 'tenant-1', 'kb-1', ?, 'job-1', ?, ?, 'ACCEPT',
                           ?, '{}', ?, '[]', ?, ?, ?)
-                """, id, docId, json(metadata), json(qualities), json(approvedMetadata),
+                """, id, docId, schemaVersion, extractorVersion, json(metadata), json(qualities), json(approvedMetadata),
                 Timestamp.from(updateTime), Timestamp.from(updateTime));
     }
 

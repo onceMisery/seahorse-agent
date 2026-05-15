@@ -55,6 +55,50 @@ class KernelMetadataQualityServiceTests {
         });
     }
 
+    @Test
+    void shouldPassSchemaAndExtractorVersionToRepository() {
+        MetadataQualityReport report = MetadataQualityReport.empty("tenant-1", "kb-1");
+        RecordingQualityReportRepository repository = new RecordingQualityReportRepository(report);
+        KernelMetadataQualityService service = new KernelMetadataQualityService(repository);
+
+        MetadataQualityReport result = service.report("tenant-1", "kb-1", 500, 2, "extractor-v2");
+
+        assertThat(result).isEqualTo(report);
+        assertThat(repository.topN).isEqualTo(50);
+        assertThat(repository.schemaVersion).isEqualTo(2);
+        assertThat(repository.extractorVersion).isEqualTo("extractor-v2");
+    }
+
+    private static final class RecordingQualityReportRepository
+            implements com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort {
+
+        private final MetadataQualityReport report;
+        private int topN;
+        private Integer schemaVersion;
+        private String extractorVersion;
+
+        private RecordingQualityReportRepository(MetadataQualityReport report) {
+            this.report = report;
+        }
+
+        @Override
+        public MetadataQualityReport report(String tenantId, String knowledgeBaseId, int quarantineTopN) {
+            return report(tenantId, knowledgeBaseId, quarantineTopN, null, "");
+        }
+
+        @Override
+        public MetadataQualityReport report(String tenantId,
+                                            String knowledgeBaseId,
+                                            int quarantineTopN,
+                                            Integer schemaVersion,
+                                            String extractorVersion) {
+            this.topN = quarantineTopN;
+            this.schemaVersion = schemaVersion;
+            this.extractorVersion = extractorVersion;
+            return report;
+        }
+    }
+
     private static final class RecordingObservationPort implements ObservationPort {
 
         private final List<ObservationEvent> events = new ArrayList<>();

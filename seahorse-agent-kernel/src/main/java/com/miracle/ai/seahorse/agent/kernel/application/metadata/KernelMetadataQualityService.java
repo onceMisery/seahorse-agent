@@ -32,8 +32,20 @@ public class KernelMetadataQualityService implements MetadataQualityInboundPort 
 
     @Override
     public MetadataQualityReport report(String tenantId, String knowledgeBaseId, int quarantineTopN) {
+        return report(tenantId, knowledgeBaseId, quarantineTopN, null, "");
+    }
+
+    @Override
+    public MetadataQualityReport report(String tenantId,
+                                        String knowledgeBaseId,
+                                        int quarantineTopN,
+                                        Integer schemaVersion,
+                                        String extractorVersion) {
         int safeTopN = quarantineTopN <= 0 ? 5 : Math.min(quarantineTopN, 50);
-        MetadataQualityReport report = reportRepositoryPort.report(tenantId, knowledgeBaseId, safeTopN);
+        Integer safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? null : schemaVersion;
+        String safeExtractorVersion = Objects.requireNonNullElse(extractorVersion, "");
+        MetadataQualityReport report = reportRepositoryPort.report(
+                tenantId, knowledgeBaseId, safeTopN, safeSchemaVersion, safeExtractorVersion);
         recordQualityReport(report);
         return report;
     }

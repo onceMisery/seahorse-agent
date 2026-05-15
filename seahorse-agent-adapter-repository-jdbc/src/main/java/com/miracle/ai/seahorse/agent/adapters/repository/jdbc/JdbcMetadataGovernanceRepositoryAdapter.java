@@ -882,11 +882,23 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public MetadataQualityReport report(String tenantId, String knowledgeBaseId, int quarantineTopN) {
+        return report(tenantId, knowledgeBaseId, quarantineTopN, null, "");
+    }
+
+    @Override
+    public MetadataQualityReport report(String tenantId,
+                                        String knowledgeBaseId,
+                                        int quarantineTopN,
+                                        Integer schemaVersion,
+                                        String extractorVersion) {
         String safeTenantId = Objects.requireNonNullElse(tenantId, "");
         String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
         int safeTopN = Math.max(1, Math.min(quarantineTopN, 50));
+        Integer safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? null : schemaVersion;
+        String safeExtractorVersion = Objects.requireNonNullElse(extractorVersion, "");
         MetadataSchema schema = loadSchema(safeTenantId, safeKbId);
-        List<ExtractionSnapshot> snapshots = latestExtractionSnapshots(safeTenantId, safeKbId);
+        List<ExtractionSnapshot> snapshots = latestExtractionSnapshots(
+                safeTenantId, safeKbId, safeSchemaVersion, safeExtractorVersion);
         int totalDocuments = Math.max(countDocuments(safeKbId), snapshots.size());
         List<MetadataFieldCoverage> fieldCoverages = fieldCoverages(schema, snapshots, totalDocuments);
         LowConfidenceStats lowConfidenceStats = lowConfidenceStats(fieldCoverages);
@@ -957,7 +969,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         return new LowConfidenceStats(lowConfidence, evaluated);
     }
 
-    private List<ExtractionSnapshot> latestExtractionSnapshots(String tenantId, String knowledgeBaseId) {
+    private List<ExtractionSnapshot> latestExtractionSnapshots(String tenantId,
+                                                               String knowledgeBaseId,
+                                                               Integer schemaVersion,
+                                                               String extractorVersion) {
         try {
             return jdbcTemplate.query("""
                     SELECT doc_id, normalized_metadata, approved_metadata, field_quality
@@ -970,9 +985,12 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                         FROM t_metadata_extraction_result
                         WHERE tenant_id = ?
                           AND (? = '' OR kb_id = ?)
+                          AND (? IS NULL OR schema_version = ?)
+                          AND (? = '' OR extractor_version = ?)
                     ) latest
                     WHERE rn = 1
-                    """, this::toExtractionSnapshot, tenantId, knowledgeBaseId, knowledgeBaseId);
+                    """, this::toExtractionSnapshot, tenantId, knowledgeBaseId, knowledgeBaseId,
+                    schemaVersion, schemaVersion, extractorVersion, extractorVersion);
         } catch (DataAccessException ex) {
             return List.of();
         }

@@ -653,13 +653,16 @@ class SeahorseWebApiContractTests {
     @Test
     void shouldKeepMetadataQualityReportContract() throws Exception {
         MetadataQualityInboundPort qualityPort = mock(MetadataQualityInboundPort.class);
-        when(qualityPort.report("tenant-1", "kb-1", 3)).thenReturn(metadataQualityReport());
+        when(qualityPort.report("tenant-1", "kb-1", 3, 2, "extractor-v2"))
+                .thenReturn(metadataQualityReport());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMetadataQualityController(qualityPort)).build();
 
         mvc.perform(get("/knowledge-base/kb-1/metadata-quality/report")
                         .param("tenantId", "tenant-1")
+                        .param("schemaVersion", "2")
+                        .param("extractorVersion", "extractor-v2")
                         .param("topN", "3"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
