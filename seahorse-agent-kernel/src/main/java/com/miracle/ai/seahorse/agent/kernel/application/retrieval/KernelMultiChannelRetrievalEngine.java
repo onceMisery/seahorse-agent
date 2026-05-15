@@ -59,6 +59,7 @@ public class KernelMultiChannelRetrievalEngine {
 
     private static final Logger LOG = LoggerFactory.getLogger(KernelMultiChannelRetrievalEngine.class);
     private static final String EVENT_METADATA_FILTER_COMPILED = "retrieval.metadata.filter.compiled";
+    private static final String EVENT_METADATA_FILTER_REJECTED = "retrieval.metadata.filter.rejected";
     private static final String EVENT_CHANNEL_COMPLETED = "retrieval.channel.completed";
     private static final String EVENT_METADATA_GUARD = "retrieval.metadata.guard";
     private static final String EVENT_RETRIEVAL_EMPTY = "retrieval.empty";
@@ -382,10 +383,62 @@ public class KernelMultiChannelRetrievalEngine {
                 : filter.system().knowledgeBaseIds().get(0);
         String tenantId = !filter.system().tenantId().isBlank() ? filter.system().tenantId() : activationContext.tenantId();
         MetadataSchema schema = schemaRegistryPort.loadSchema(tenantId, knowledgeBaseId);
-        // 只有通过 Schema 编译后的表达式才能进入向量库或关键词后端，避免原始 Map 直通外部查询。
-        CompiledMetadataFilter compiledFilter = metadataFilterCompiler.compile(filter, schema);
-        recordMetadataFilterUsage(tenantId, knowledgeBaseId, schema, compiledFilter);
-        return compiledFilter;
+        try {
+            // 只有通过 Schema 编译后的表达式才能进入向量库或关键词后端，避免原始 Map 直通外部查询。
+            CompiledMetadataFilter compiledFilter = metadataFilterCompiler.compile(filter, schema);
+            recordMetadataFilterUsage(tenantId, knowledgeBaseId, schema, compiledFilter);
+            return compiledFilter;
+        } catch (RuntimeException ex) {
+            recordMetadataFilterRejected(tenantId, knowledgeBaseId, schema, filter, ex);
+            throw ex;
+        }
+    }
+
+    private void recordMetadataFilterRejected(String tenantId,
+                                              String knowledgeBaseId,
+                                              MetadataSchema schema,
+                                              RetrievalFilter filter,
+                                              RuntimeException ex) {
+        if (observationPort == null || filter == null || filter.metadataConditions().isEmpty()) {
+            return;
+        }
+        try {
+            List<String> fieldKeys = filter.metadataConditions().stream()
+                    .map(condition -> Objects.requireNonNullElse(condition.fieldKey(), ""))
+                    .filter(fieldKey -> !fieldKey.isBlank())
+                    .distinct()
+                    .toList();
+            Map<String, String> attributes = new java.util.LinkedHashMap<>();
+            attributes.put("tenantId", Objects.requireNonNullElse(tenantId, ""));
+            attributes.put("knowledgeBaseId", Objects.requireNonNullElse(knowledgeBaseId, ""));
+            attributes.put("schemaVersion", Integer.toString(schema == null ? 0 : schema.schemaVersion()));
+            attributes.put("fieldKeys", String.join(",", fieldKeys));
+            attributes.put("fieldCount", Integer.toString(fieldKeys.size()));
+            attributes.put("success", "false");
+            attributes.put("reason", metadataFilterRejectReason(ex));
+            attributes.put("exception", ex.getClass().getSimpleName());
+            // 只记录字段名和拒绝原因，不记录过滤值，避免把业务查询条件写入观测事件。
+            observationPort.recordEvent(new ObservationEvent(EVENT_METADATA_FILTER_REJECTED, null, attributes));
+        } catch (RuntimeException ignored) {
+            // 观测失败不能改变 Filter Compiler 的拒绝语义。
+        }
+    }
+
+    private String metadataFilterRejectReason(RuntimeException ex) {
+        String message = Objects.requireNonNullElse(ex.getMessage(), "");
+        if (message.contains("not registered")) {
+            return "UNREGISTERED_FIELD";
+        }
+        if (message.contains("not filterable")) {
+            return "NOT_FILTERABLE";
+        }
+        if (message.contains("not allowed")) {
+            return "OPERATOR_NOT_ALLOWED";
+        }
+        if (message.contains("exceeds limit")) {
+            return "CONDITION_LIMIT_EXCEEDED";
+        }
+        return "INVALID_FILTER";
     }
 
     private void recordMetadataFilterUsage(String tenantId,

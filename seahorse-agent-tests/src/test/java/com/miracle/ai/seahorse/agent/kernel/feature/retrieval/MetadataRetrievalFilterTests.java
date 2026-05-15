@@ -77,6 +77,39 @@ class MetadataRetrievalFilterTests {
     }
 
     @Test
+    void shouldRecordRejectedMetadataFilterObservationBeforeThrowing() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        KernelMultiChannelRetrievalEngine engine = new KernelMultiChannelRetrievalEngine(
+                registry,
+                Runnable::run,
+                new FeatureActivationContext("tenant-a", "user-a", Map.of(), AgentFeatureProperties.empty()),
+                (tenantId, knowledgeBaseId) -> schema(true),
+                new DefaultMetadataFilterCompiler(),
+                KernelRagTraceRecorder.noop(),
+                observationPort);
+        RetrievalFilter filter = RetrievalFilter.builder()
+                .system(SystemRetrievalFilter.builder().tenantId("tenant-a").knowledgeBaseIds(List.of("kb-a")).build())
+                .metadataConditions(List.of(new MetadataCondition("unknown", MetadataOperator.EQ, "HR")))
+                .build();
+
+        assertThatThrownBy(() -> engine.retrieveKnowledgeChannels(
+                List.of(new SubQuestionIntent("元数据过滤", List.of())), 5, filter, RetrievalOptions.defaults(5)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unknown");
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("retrieval.metadata.filter.rejected"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-a")
+                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("fieldKeys", "unknown")
+                        .containsEntry("reason", "UNREGISTERED_FIELD")
+                        .containsEntry("success", "false")
+                        .containsEntry("exception", "IllegalArgumentException"));
+    }
+
+    @Test
     void shouldRejectTooManyMetadataFilterConditions() {
         DefaultMetadataFilterCompiler compiler = new DefaultMetadataFilterCompiler();
         List<MetadataCondition> conditions = new ArrayList<>();
