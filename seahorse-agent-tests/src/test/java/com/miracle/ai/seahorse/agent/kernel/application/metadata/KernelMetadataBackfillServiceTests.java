@@ -42,6 +42,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 import org.junit.jupiter.api.Test;
@@ -219,6 +223,69 @@ class KernelMetadataBackfillServiceTests {
         assertThat(resumed.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
         assertThat(resumed.succeededDocuments()).isEqualTo(1);
         assertThat(documents.runningDocuments).containsExactly("doc-1");
+    }
+
+    @Test
+    void shouldRecordBackfillLifecycleAndBatchObservationEvents() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        KernelMetadataBackfillService service = new KernelMetadataBackfillService(
+                documents,
+                new InMemoryObjectStorage(),
+                pipelineRepository(),
+                acceptingEngine(),
+                jobs,
+                MetadataExtractionResultRepositoryPort.noop(),
+                MetadataQuarantinePort.noop(),
+                observationPort);
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin",
+                Map.of("schemaVersion", 3, "extractorVersion", "extractor-v2", "reExtract", true)));
+        service.pause(job.jobId(), "ops");
+        service.resume(job.jobId(), "ops");
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+        MetadataBackfillJobRecord cancelledJob = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+        service.cancel(cancelledJob.jobId(), "ops");
+
+        assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
+        assertThat(observationPort.events)
+                .extracting(ObservationEvent::name)
+                .contains(
+                        "metadata.backfill.job.created",
+                        "metadata.backfill.job.paused",
+                        "metadata.backfill.job.resumed",
+                        "metadata.backfill.batch.success",
+                        "metadata.backfill.job.cancelled");
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.backfill.job.paused"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("operation", "PAUSE")
+                        .containsEntry("previousStatus", "PENDING")
+                        .containsEntry("status", "PAUSED"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.backfill.job.resumed"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("operation", "RESUME")
+                        .containsEntry("previousStatus", "PAUSED")
+                        .containsEntry("status", "PENDING"));
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.backfill.batch.success"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("tenantId", "tenant-1")
+                        .containsEntry("knowledgeBaseId", "kb-1")
+                        .containsEntry("status", "COMPLETED")
+                        .containsEntry("processedDocuments", "1")
+                        .containsEntry("succeededDocuments", "1")
+                        .containsEntry("schemaVersion", "3")
+                        .containsEntry("extractorVersion", "extractor-v2")
+                        .containsEntry("reExtract", "true"));
     }
 
     @Test
@@ -508,6 +575,18 @@ class KernelMetadataBackfillServiceTests {
                 null);
     }
 
+    private static KernelIngestionEngine acceptingEngine() {
+        KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
+        when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
+            IngestionContext context = invocation.getArgument(1);
+            context.setMetadataValidationResult(new MetadataValidationResult(
+                    MetadataValidationDecision.ACCEPT, List.of(), Map.of(), Map.of()));
+            context.setChunks(List.of(new VectorChunk()));
+            return context;
+        });
+        return engine;
+    }
+
     private static PipelineDefinitionRepositoryPort pipelineRepository() {
         return pipelineId -> Optional.of(PipelineDefinition.builder()
                 .id(pipelineId)
@@ -614,6 +693,30 @@ class KernelMetadataBackfillServiceTests {
                     && schemaVersion == record.schemaVersion()
                     && extractorVersion.equals(record.extractorVersion())
                     && MetadataValidationDecision.ACCEPT.equals(record.status()));
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 
