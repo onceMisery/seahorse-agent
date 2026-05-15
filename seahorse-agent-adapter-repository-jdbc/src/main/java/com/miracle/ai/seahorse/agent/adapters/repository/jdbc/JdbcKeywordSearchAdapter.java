@@ -136,7 +136,9 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
         if (value == null || Objects.toString(value, "").isBlank()) {
             return;
         }
-        sql.append(" AND metadata_json->>'").append(fieldKey(key)).append("' = ?");
+        sql.append(" AND ")
+                .append(JdbcMetadataSqlExpressions.textValueExpression("metadata_json", key))
+                .append(" = ?");
         args.add(jsonText(value));
     }
 
@@ -145,7 +147,9 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
             return;
         }
         // 使用 IS DISTINCT FROM，让缺失字段也能按内核兜底过滤的 NE 语义参与匹配。
-        sql.append(" AND metadata_json->>'").append(fieldKey(key)).append("' IS DISTINCT FROM ?");
+        sql.append(" AND ")
+                .append(JdbcMetadataSqlExpressions.textValueExpression("metadata_json", key))
+                .append(" IS DISTINCT FROM ?");
         args.add(jsonText(value));
     }
 
@@ -154,18 +158,47 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
             return;
         }
         String placeholders = values.stream().map(ignored -> "?").collect(Collectors.joining(", "));
-        sql.append(" AND metadata_json->>'").append(fieldKey(key)).append("' IN (").append(placeholders).append(")");
+        sql.append(" AND ")
+                .append(JdbcMetadataSqlExpressions.textValueExpression("metadata_json", key))
+                .append(" IN (")
+                .append(placeholders)
+                .append(")");
         values.forEach(value -> args.add(jsonText(value)));
     }
 
     private void appendJsonRange(StringBuilder sql, List<Object> args, String key, Object from, Object to) {
-        String safeKey = fieldKey(key);
+        appendJsonRange(sql, args,
+                JdbcMetadataSqlExpressions.textValueExpression("metadata_json", key),
+                JdbcMetadataSqlExpressions.parameterPlaceholder(null),
+                from,
+                to);
+    }
+
+    private void appendJsonRange(StringBuilder sql,
+                                 List<Object> args,
+                                 MetadataFieldDescriptor field,
+                                 Object from,
+                                 Object to) {
+        String key = canonicalKey(field);
+        String valueExpression = JdbcMetadataSqlExpressions.comparableValueExpression(
+                "metadata_json", key, field.valueType());
+        String placeholder = JdbcMetadataSqlExpressions.parameterPlaceholder(field.valueType());
+        appendJsonRange(sql, args, valueExpression, placeholder, from, to);
+    }
+
+    private void appendJsonRange(StringBuilder sql,
+                                 List<Object> args,
+                                 String valueExpression,
+                                 String placeholder,
+                                 Object from,
+                                 Object to) {
         if (from != null) {
-            sql.append(" AND metadata_json->>'").append(safeKey).append("' >= ?");
+            // 范围过滤使用与 Schema 驱动表达式索引一致的字段表达式，避免数值字段按字符串字典序比较。
+            sql.append(" AND ").append(valueExpression).append(" >= ").append(placeholder);
             args.add(jsonText(from));
         }
         if (to != null) {
-            sql.append(" AND metadata_json->>'").append(safeKey).append("' <= ?");
+            sql.append(" AND ").append(valueExpression).append(" <= ").append(placeholder);
             args.add(jsonText(to));
         }
     }
@@ -205,27 +238,23 @@ public class JdbcKeywordSearchAdapter implements KeywordSearchPort {
         } else if (expression instanceof FieldIn fieldIn) {
             appendJsonIn(sql, args, canonicalKey(fieldIn.field()), fieldIn.values());
         } else if (expression instanceof FieldRange fieldRange) {
-            appendJsonRange(sql, args, canonicalKey(fieldRange.field()), fieldRange.from(), fieldRange.to());
+            appendJsonRange(sql, args, fieldRange.field(), fieldRange.from(), fieldRange.to());
         } else if (expression instanceof FieldContains fieldContains) {
             String key = canonicalKey(fieldContains.field());
-            sql.append(" AND metadata_json->>'").append(fieldKey(key)).append("' LIKE ?");
+            sql.append(" AND ")
+                    .append(JdbcMetadataSqlExpressions.textValueExpression("metadata_json", key))
+                    .append(" LIKE ?");
             args.add("%" + jsonText(fieldContains.value()) + "%");
         } else if (expression instanceof FieldExists fieldExists) {
-            sql.append(" AND metadata_json ? '").append(fieldKey(canonicalKey(fieldExists.field()))).append("'");
+            sql.append(" AND metadata_json ? '")
+                    .append(JdbcMetadataSqlExpressions.safeFieldKey(canonicalKey(fieldExists.field())))
+                    .append("'");
         }
     }
 
     private String canonicalKey(MetadataFieldDescriptor field) {
         String mapped = field.backendMapping().canonicalName();
         return mapped == null || mapped.isBlank() ? field.fieldKey() : mapped;
-    }
-
-    private String fieldKey(String key) {
-        String safeKey = Objects.requireNonNullElse(key, "").trim();
-        if (!safeKey.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-            throw new IllegalArgumentException("invalid metadata field key: " + key);
-        }
-        return safeKey;
     }
 
     private String jsonText(Object value) {

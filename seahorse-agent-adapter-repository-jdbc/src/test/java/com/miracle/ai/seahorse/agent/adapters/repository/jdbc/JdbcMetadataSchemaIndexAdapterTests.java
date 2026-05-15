@@ -57,6 +57,27 @@ class JdbcMetadataSchemaIndexAdapterTests {
     }
 
     @Test
+    void shouldBuildTypedExpressionIndexForNumberField() {
+        JdbcMetadataSchemaIndexAdapter adapter = new JdbcMetadataSchemaIndexAdapter(dataSource("number-expression"));
+
+        String sql = adapter.indexSql(field("amount", MetadataIndexPolicy.EXPRESSION_INDEX, MetadataValueType.NUMBER));
+
+        assertThat(sql).contains("CREATE INDEX IF NOT EXISTS idx_kc_meta_amount_");
+        assertThat(sql).contains("CAST(metadata_json->>'amount' AS NUMERIC)");
+    }
+
+    @Test
+    void shouldKeepDateTimeExpressionIndexTextComparable() {
+        JdbcMetadataSchemaIndexAdapter adapter = new JdbcMetadataSchemaIndexAdapter(dataSource("datetime-expression"));
+
+        String sql = adapter.indexSql(field("effectiveAt", MetadataIndexPolicy.EXPRESSION_INDEX,
+                MetadataValueType.DATE_TIME));
+
+        assertThat(sql).contains("CREATE INDEX IF NOT EXISTS idx_kc_meta_effectiveat_");
+        assertThat(sql).contains("ON t_knowledge_chunk ((metadata_json->>'effectiveAt'))");
+    }
+
+    @Test
     void shouldSkipSyncWhenMetadataColumnMissing() {
         DriverManagerDataSource dataSource = dataSource("missing-column");
         new JdbcTemplate(dataSource).execute("""
@@ -86,6 +107,10 @@ class JdbcMetadataSchemaIndexAdapterTests {
     }
 
     private MetadataSchemaFieldRecord field(String fieldKey, MetadataIndexPolicy policy) {
+        return field(fieldKey, policy, MetadataValueType.STRING);
+    }
+
+    private MetadataSchemaFieldRecord field(String fieldKey, MetadataIndexPolicy policy, MetadataValueType valueType) {
         Instant now = Instant.parse("2026-05-14T00:00:00Z");
         return new MetadataSchemaFieldRecord(
                 "field-1",
@@ -93,7 +118,7 @@ class JdbcMetadataSchemaIndexAdapterTests {
                 "kb-1",
                 fieldKey,
                 fieldKey,
-                MetadataValueType.STRING,
+                valueType,
                 Set.of(MetadataOperator.EQ),
                 false,
                 true,

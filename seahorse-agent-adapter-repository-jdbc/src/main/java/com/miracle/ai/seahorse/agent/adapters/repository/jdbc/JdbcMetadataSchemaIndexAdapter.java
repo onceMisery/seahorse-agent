@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
+import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
 import org.springframework.dao.DataAccessException;
@@ -59,8 +60,10 @@ public class JdbcMetadataSchemaIndexAdapter implements MetadataSchemaIndexSyncPo
                     + " ON " + CHUNK_TABLE + " USING GIN (" + METADATA_COLUMN + ")";
         }
         String key = fieldKey(field);
-        return "CREATE INDEX IF NOT EXISTS " + expressionIndexName(key, policy)
-                + " ON " + CHUNK_TABLE + " ((" + METADATA_COLUMN + "->>'" + key + "'))";
+        String valueExpression = JdbcMetadataSqlExpressions.comparableValueExpression(
+                METADATA_COLUMN, key, field.valueType());
+        return "CREATE INDEX IF NOT EXISTS " + expressionIndexName(key, policy, field.valueType())
+                + " ON " + CHUNK_TABLE + " ((" + valueExpression + "))";
     }
 
     private boolean shouldSync(MetadataSchemaFieldRecord field) {
@@ -94,20 +97,25 @@ public class JdbcMetadataSchemaIndexAdapter implements MetadataSchemaIndexSyncPo
     private String fieldKey(MetadataSchemaFieldRecord field) {
         String canonicalName = field.backendMapping().canonicalName();
         String key = canonicalName == null || canonicalName.isBlank() ? field.fieldKey() : canonicalName;
-        String safeKey = Objects.requireNonNullElse(key, "").trim();
-        if (!safeKey.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-            throw new IllegalArgumentException("invalid metadata field key: " + key);
-        }
-        return safeKey;
+        return JdbcMetadataSqlExpressions.safeFieldKey(key);
     }
 
     private String ginIndexName() {
         return "idx_kc_metadata_json_gin";
     }
 
-    private String expressionIndexName(String key, MetadataIndexPolicy policy) {
-        String rawName = "idx_kc_meta_" + key + "_" + Integer.toHexString(Objects.hash(key, policy));
+    private String expressionIndexName(String key, MetadataIndexPolicy policy, MetadataValueType valueType) {
+        Object hashScope = isTextLike(valueType) ? policy : Objects.hash(policy, valueType);
+        String rawName = "idx_kc_meta_" + key + "_" + Integer.toHexString(Objects.hash(key, hashScope));
         return safeIdentifier(rawName);
+    }
+
+    private boolean isTextLike(MetadataValueType valueType) {
+        MetadataValueType safeType = Objects.requireNonNullElse(valueType, MetadataValueType.STRING);
+        return switch (safeType) {
+            case STRING, STRING_ARRAY, ENUM -> true;
+            default -> false;
+        };
     }
 
     private String safeIdentifier(String value) {

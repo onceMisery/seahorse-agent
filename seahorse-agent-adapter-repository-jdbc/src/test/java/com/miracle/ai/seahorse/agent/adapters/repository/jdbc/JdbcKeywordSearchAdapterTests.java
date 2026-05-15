@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilt
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldEq;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldRange;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchRequest;
 import org.junit.jupiter.api.Test;
@@ -129,6 +130,28 @@ class JdbcKeywordSearchAdapterTests {
 
         assertThat(sql).contains("metadata_json->>'category' IS DISTINCT FROM ?");
         assertThat(args).containsExactly("policy", 1, "internal", 4);
+    }
+
+    @Test
+    void shouldPushDownNumericRangeExpressionWhenMetadataJsonExists() throws Exception {
+        DriverManagerDataSource dataSource = dataSource("keyword-metadata-range-filter");
+        createChunkTableWithMetadata(dataSource);
+        JdbcKeywordSearchAdapter adapter = new JdbcKeywordSearchAdapter(dataSource, new ObjectMapper());
+        MetadataFieldDescriptor amount = new MetadataFieldDescriptor(
+                "amount", "金额", MetadataValueType.NUMBER, Set.of(MetadataOperator.RANGE),
+                false, true, false, false, true, MetadataIndexPolicy.EXPRESSION_INDEX, 0.8D,
+                Set.of(), Map.of(), new BackendFieldMapping("amount", "", "",
+                "amount", true, true, false, Map.of()));
+        List<Object> args = new ArrayList<>();
+
+        String sql = searchSql(adapter, request("invoice", 4,
+                new CompiledMetadataFilter(RetrievalFilter.builder().build(),
+                        new FilterAnd(List.of(new FieldRange(amount, 20, 100))), List.of(), List.of())), args);
+
+        assertThat(sql).contains("CAST(metadata_json->>'amount' AS NUMERIC)");
+        assertThat(sql).contains(">= CAST(? AS NUMERIC)");
+        assertThat(sql).contains("<= CAST(? AS NUMERIC)");
+        assertThat(args).containsExactly("invoice", 1, "20", "100", 4);
     }
 
     @SuppressWarnings("unchecked")
