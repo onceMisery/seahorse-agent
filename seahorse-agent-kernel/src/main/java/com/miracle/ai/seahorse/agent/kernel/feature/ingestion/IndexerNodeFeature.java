@@ -100,16 +100,43 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
             validateEmbeddings(chunks);
             collectionAdminPort.ensureCollection(request.collectionName());
             if (!safeContext.isSkipIndexerWrite()) {
-                chunkRepositoryPort.replaceDocumentChunks(request.kbId(), request.docId(), chunks);
+                List<VectorChunk> indexedChunks = chunksWithSystemMetadata(safeContext, request, chunks);
+                chunkRepositoryPort.replaceDocumentChunks(request.kbId(), request.docId(), indexedChunks);
                 vectorIndexPort.indexDocumentChunks(request.collectionName(), request.docId(),
-                        vectorIndexChunks(safeContext, request, chunks));
-                // 关键词索引保留完整治理后 Chunk；向量索引使用上面的过滤副本，后续可替换为 Outbox 异步投递。
-                keywordIndexPort.indexDocumentChunks(request.kbId(), request.docId(), chunks);
+                        vectorIndexChunks(safeContext, request, indexedChunks));
+                // 关键词索引保留完整治理后 Chunk；向量索引使用过滤副本，二者共享同一份系统字段快照。
+                keywordIndexPort.indexDocumentChunks(request.kbId(), request.docId(), indexedChunks);
             }
             return NodeResult.ok("已准备 " + chunks.size() + " 个分块索引");
         } catch (Exception ex) {
             return NodeResult.fail(ex);
         }
+    }
+
+    private List<VectorChunk> chunksWithSystemMetadata(IngestionContext context,
+                                                       IndexerRequest request,
+                                                       List<VectorChunk> chunks) {
+        return chunks.stream()
+                .map(chunk -> VectorChunk.builder()
+                        .chunkId(chunk.getChunkId())
+                        .index(chunk.getIndex())
+                        .content(chunk.getContent())
+                        .embedding(chunk.getEmbedding())
+                        .metadata(systemMetadata(context, request, chunk))
+                        .build())
+                .toList();
+    }
+
+    private Map<String, Object> systemMetadata(IngestionContext context, IndexerRequest request, VectorChunk chunk) {
+        Map<String, Object> metadata = new LinkedHashMap<>(Objects.requireNonNullElse(chunk.getMetadata(), Map.of()));
+        putIfPresent(metadata, META_TENANT_ID, firstValue(metadata.get(META_TENANT_ID), tenantId(context)));
+        putIfPresent(metadata, META_COLLECTION_NAME, firstValue(metadata.get(META_COLLECTION_NAME), request.collectionName()));
+        putIfPresent(metadata, META_KB_ID, request.kbId());
+        putIfPresent(metadata, META_DOC_ID, request.docId());
+        putIfPresent(metadata, META_CHUNK_ID, chunk.getChunkId());
+        putIfPresent(metadata, META_CHUNK_INDEX, chunk.getIndex());
+        putIfPresent(metadata, "enabled", firstValue(metadata.get("enabled"), true));
+        return metadata;
     }
 
     private List<VectorChunk> vectorIndexChunks(IngestionContext context, IndexerRequest request, List<VectorChunk> chunks) {
@@ -150,8 +177,25 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
         return hasText(mapped) ? mapped.trim() : field.fieldKey();
     }
 
+    private String tenantId(IngestionContext context) {
+        MetadataSchema schema = context.getMetadataSchema();
+        if (schema != null && hasText(schema.tenantId())) {
+            return schema.tenantId();
+        }
+        return firstText(metadataText(context, META_TENANT_ID), metadataText(context, "tenantId"));
+    }
+
     private Object firstValue(Object first, Object second) {
         return present(first) ? first : second;
+    }
+
+    private String firstText(String first, String second) {
+        return hasText(first) ? first.trim() : Objects.requireNonNullElse(second, "").trim();
+    }
+
+    private String metadataText(IngestionContext context, String key) {
+        Object value = context.getMetadata() == null ? null : context.getMetadata().get(key);
+        return value == null ? "" : String.valueOf(value);
     }
 
     private void putIfPresent(Map<String, Object> metadata, String key, Object value) {
@@ -220,10 +264,6 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
         }
         Object value = context.getMetadata().get(key);
         return value == null ? "" : String.valueOf(value);
-    }
-
-    private String firstText(String first, String second) {
-        return hasText(first) ? first.trim() : Objects.requireNonNullElse(second, "").trim();
     }
 
     private String requireText(String value, String name) {
