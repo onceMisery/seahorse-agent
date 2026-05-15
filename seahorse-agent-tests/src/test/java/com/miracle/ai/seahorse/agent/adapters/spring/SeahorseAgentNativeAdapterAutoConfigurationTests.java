@@ -97,6 +97,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
@@ -247,6 +248,7 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MetadataQuarantineManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataSchemaManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataDictionaryManagementRepositoryPort.class);
+                    assertThat(context).hasSingleBean(MetadataExtractionResultManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(RetrievalStrategyTemplateRepositoryPort.class);
                     assertThat(context.getBean(KeywordSearchPort.class))
                             .isInstanceOf(JdbcKeywordSearchAdapter.class);

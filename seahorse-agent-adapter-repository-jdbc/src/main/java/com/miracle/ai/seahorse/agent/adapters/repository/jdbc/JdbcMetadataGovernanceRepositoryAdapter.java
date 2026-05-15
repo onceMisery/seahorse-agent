@@ -37,7 +37,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryI
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataFieldCoverage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
@@ -85,7 +89,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         MetadataQuarantinePort, MetadataCanonicalWritePort, MetadataBackfillJobRepositoryPort,
         MetadataQualityReportRepositoryPort, MetadataReviewManagementRepositoryPort,
         MetadataQuarantineManagementRepositoryPort, MetadataSchemaManagementRepositoryPort,
-        MetadataDictionaryManagementRepositoryPort {
+        MetadataDictionaryManagementRepositoryPort, MetadataExtractionResultManagementRepositoryPort {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
@@ -407,6 +411,47 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     Objects.requireNonNullElse(extractorVersion, "")) > 0;
         } catch (DataAccessException ex) {
             return false;
+        }
+    }
+
+    @Override
+    public MetadataExtractionResultPage pageExtractionResults(MetadataExtractionResultQuery query) {
+        MetadataExtractionResultQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
+        SqlWhere where = extractionResultWhere(safeQuery);
+        long total = countLong("SELECT COUNT(1) FROM t_metadata_extraction_result" + where.sql(), where.args());
+        if (total <= 0L) {
+            return MetadataExtractionResultPage.empty(safeQuery.current(), safeQuery.size());
+        }
+        List<Object> args = new ArrayList<>(where.args());
+        args.add(safeQuery.size());
+        args.add(safeQuery.offset());
+        List<MetadataExtractionResultRecord> records = jdbcTemplate.query("""
+                SELECT id, tenant_id, kb_id, doc_id, job_id, schema_version, extractor_version, status,
+                       normalized_metadata, raw_candidates, field_quality, validation_issues,
+                       approved_metadata, approved_by, approved_time, create_time, update_time
+                FROM t_metadata_extraction_result
+                """.stripTrailing() + where.sql()
+                + " ORDER BY update_time DESC, create_time DESC, id DESC LIMIT ? OFFSET ?",
+                this::toExtractionResultRecord, args.toArray());
+        return new MetadataExtractionResultPage(records, total, safeQuery.size(), safeQuery.current(),
+                pages(total, safeQuery.size()));
+    }
+
+    @Override
+    public Optional<MetadataExtractionResultRecord> findExtractionResult(String resultId) {
+        if (blank(resultId)) {
+            return Optional.empty();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, kb_id, doc_id, job_id, schema_version, extractor_version, status,
+                           normalized_metadata, raw_candidates, field_quality, validation_issues,
+                           approved_metadata, approved_by, approved_time, create_time, update_time
+                    FROM t_metadata_extraction_result
+                    WHERE id = ?
+                    """, this::toExtractionResultRecord, resultId).stream().findFirst();
+        } catch (DataAccessException ex) {
+            return Optional.empty();
         }
     }
 
@@ -1120,6 +1165,32 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 instant(rs.getTimestamp("update_time")));
     }
 
+    private SqlWhere extractionResultWhere(MetadataExtractionResultQuery query) {
+        StringBuilder sql = new StringBuilder(" WHERE 1 = 1");
+        List<Object> args = new ArrayList<>();
+        if (!blank(query.tenantId())) {
+            sql.append(" AND tenant_id = ?");
+            args.add(query.tenantId());
+        }
+        if (!blank(query.knowledgeBaseId())) {
+            sql.append(" AND kb_id = ?");
+            args.add(query.knowledgeBaseId());
+        }
+        if (!blank(query.documentId())) {
+            sql.append(" AND doc_id = ?");
+            args.add(query.documentId());
+        }
+        if (!blank(query.jobId())) {
+            sql.append(" AND job_id = ?");
+            args.add(query.jobId());
+        }
+        if (!blank(query.status())) {
+            sql.append(" AND status = ?");
+            args.add(query.status());
+        }
+        return new SqlWhere(sql.toString(), args);
+    }
+
     private SqlWhere reviewWhere(MetadataReviewQuery query) {
         StringBuilder sql = new StringBuilder(" WHERE 1 = 1");
         List<Object> args = new ArrayList<>();
@@ -1250,6 +1321,27 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 rs.getString("canonical_value"),
                 rs.getString("display_name"),
                 bool(rs, "enabled"),
+                instant(rs.getTimestamp("create_time")),
+                instant(rs.getTimestamp("update_time")));
+    }
+
+    private MetadataExtractionResultRecord toExtractionResultRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new MetadataExtractionResultRecord(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getString("kb_id"),
+                rs.getString("doc_id"),
+                rs.getString("job_id"),
+                rs.getInt("schema_version"),
+                rs.getString("extractor_version"),
+                rs.getString("status"),
+                readMap(rs.getString("normalized_metadata")),
+                readMapList(rs.getString("raw_candidates")),
+                readMapList(rs.getString("field_quality")),
+                readMapList(rs.getString("validation_issues")),
+                readMap(rs.getString("approved_metadata")),
+                rs.getString("approved_by"),
+                nullableInstant(rs.getTimestamp("approved_time")),
                 instant(rs.getTimestamp("create_time")),
                 instant(rs.getTimestamp("update_time")));
     }

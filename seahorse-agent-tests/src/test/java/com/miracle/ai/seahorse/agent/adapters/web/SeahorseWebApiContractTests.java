@@ -47,6 +47,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillRunResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataDictionaryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataExtractionResultInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
@@ -92,6 +93,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataFieldCoverage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
@@ -1037,6 +1040,33 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.deleted").value(true));
     }
 
+    @Test
+    void shouldKeepMetadataExtractionResultManagementContracts() throws Exception {
+        MetadataExtractionResultInboundPort resultPort = mock(MetadataExtractionResultInboundPort.class);
+        when(resultPort.page("tenant-1", "kb-1", "doc-1", "job-1", "ACCEPTED", 1, 10))
+                .thenReturn(new MetadataExtractionResultPage(
+                        List.of(metadataExtractionResult("result-1")), 1, 10, 1, 1));
+        when(resultPort.queryById("result-1")).thenReturn(metadataExtractionResult("result-1"));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMetadataExtractionResultController(resultPort)).build();
+
+        mvc.perform(get("/metadata-extraction/results")
+                        .param("tenantId", "tenant-1")
+                        .param("kbId", "kb-1")
+                        .param("docId", "doc-1")
+                        .param("jobId", "job-1")
+                        .param("status", "ACCEPTED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.records[0].id").value("result-1"))
+                .andExpect(jsonPath("$.data.records[0].normalizedMetadata.department").value("HR"));
+        mvc.perform(get("/metadata-extraction/results/result-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("result-1"))
+                .andExpect(jsonPath("$.data.rawCandidates[0].fieldKey").value("department"));
+    }
+
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
     }
@@ -1265,6 +1295,27 @@ class SeahorseWebApiContractTests {
                 "HR",
                 "Human Resource",
                 enabled,
+                Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataExtractionResultRecord metadataExtractionResult(String id) {
+        return new MetadataExtractionResultRecord(
+                id,
+                "tenant-1",
+                "kb-1",
+                "doc-1",
+                "job-1",
+                2,
+                "extractor-v2",
+                "ACCEPTED",
+                Map.of("department", "HR"),
+                List.of(Map.of("fieldKey", "department", "value", "hr")),
+                List.of(Map.of("fieldKey", "department", "confidence", 0.93D)),
+                List.of(),
+                Map.of("department", "HR"),
+                "auditor",
+                Instant.EPOCH,
                 Instant.EPOCH,
                 Instant.EPOCH);
     }
