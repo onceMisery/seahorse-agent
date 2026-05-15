@@ -55,7 +55,8 @@ Seahorse Agent 的 AI 能力由内核编排和出站端口共同组成：
 - **向量检索**：`VectorSearchPort` 抽象检索能力，`MilvusVectorAdapter` 使用 FloatVector 字段、HNSW 索引和可配置 metric；pgvector Adapter 适合 PostgreSQL 向量化部署。
 - **知识库问答**：知识库、文档和分块通过仓储端口持久化，分块内容写入向量库后可被 RAG 检索链路召回。
 - **意图解析与引导**：查询先经过 rewrite/split，再解析为子意图；当意图存在歧义时可返回引导提示，系统类意图可走系统提示回答。
-- **会话记忆**：`ConversationMemoryPort` 加载历史消息并追加用户输入，配合短期、长期、语义、工作记忆等端口支持上下文延续。
+- **会话记忆**：`ConversationMemoryPort` 加载历史消息并追加用户输入，`DefaultMemoryEnginePort` 编排短期/长期/语义三层记忆，通过 `activateMemory` 阶段注入 Prompt 上下文。
+- **查询优化**：`QueryOptimizerPort` 在查询改写前执行专有名词保护和术语映射，默认规则版确定性实现，可切换为 LLM 版。
 - **深度思考开关**：聊天接口支持 `deepThinking` 参数，最终传入模型采样选项，前端可处理 thinking 类型流式事件。
 - **MCP 工具扩展**：MCP HTTP 适配器、工具注册和参数抽取端口为工具调用与外部能力编排预留扩展点。
 
@@ -195,7 +196,9 @@ flowchart TD
     D --> E["ChatInboundPort.streamChat"]
     E --> F["KernelChatPipeline.execute"]
     F --> G["loadMemory 加载会话记忆"]
-    G --> H["rewriteQuery 查询改写与拆分"]
+    G --> G2["activateMemory 激活四层记忆"]
+    G2 --> G3["optimizeQuery 查询优化"]
+    G3 --> H["rewriteQuery 查询改写与拆分"]
     H --> I["resolveIntents 子意图解析"]
     I --> J{"是否需要澄清引导"}
     J -- 是 --> K["返回引导提示并结束"]
@@ -204,7 +207,7 @@ flowchart TD
     L -- 否 --> N["retrieve 检索 KB/MCP 上下文"]
     N --> O{"检索为空"}
     O -- 是 --> P["返回未检索到相关文档"]
-    O -- 否 --> Q["构造 RAG Prompt"]
+    O -- 否 --> Q["构造 RAG Prompt（含用户记忆上下文）"]
     Q --> R["StreamingChatModelPort.streamChat"]
     R --> S["OpenAI 兼容模型 SSE"]
     S --> T["前端处理 meta/message/thinking/finish/done"]
@@ -215,6 +218,8 @@ flowchart TD
 - RAG 回答温度根据上下文来源调整：MCP 上下文使用更高温度，知识库上下文使用更稳定的低温配置。
 - 每个主要阶段可由 `KernelRagTraceRecorder` 记录 trace node，便于定位慢阶段与回答质量问题。
 - 前端 SSE 解析支持 `meta`、`message`、`finish`、`done`、`cancel`、`reject`、`title`、`error` 等事件。
+- `activateMemory` 从短期/长期/语义三层记忆中检索用户记忆，注入 Prompt 上下文。
+- `optimizeQuery` 对原始问题进行专有名词保护和术语映射（Phase 3A 确定性规则）。
 
 ### 2. 文档解析与知识入库链路
 
