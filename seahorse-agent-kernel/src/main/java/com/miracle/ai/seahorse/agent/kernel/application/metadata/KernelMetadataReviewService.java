@@ -15,6 +15,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecor
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,12 +32,14 @@ import java.util.Objects;
 public class KernelMetadataReviewService implements MetadataReviewInboundPort {
 
     private static final String DEFAULT_OPERATOR = "system";
+    private static final String EVENT_REVIEW_DECISION_COMPLETED = "metadata.review.decision.completed";
 
     private final MetadataReviewManagementRepositoryPort reviewRepositoryPort;
     private final MetadataCanonicalWritePort canonicalWritePort;
     private final MetadataQuarantinePort quarantinePort;
     private final MetadataIndexCompensationPort indexCompensationPort;
     private final MetadataReviewReExtractPort reExtractPort;
+    private final ObservationPort observationPort;
 
     public KernelMetadataReviewService(MetadataReviewManagementRepositoryPort reviewRepositoryPort,
                                        MetadataCanonicalWritePort canonicalWritePort,
@@ -56,6 +60,15 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
                                        MetadataQuarantinePort quarantinePort,
                                        MetadataIndexCompensationPort indexCompensationPort,
                                        MetadataReviewReExtractPort reExtractPort) {
+        this(reviewRepositoryPort, canonicalWritePort, quarantinePort, indexCompensationPort, reExtractPort, null);
+    }
+
+    public KernelMetadataReviewService(MetadataReviewManagementRepositoryPort reviewRepositoryPort,
+                                       MetadataCanonicalWritePort canonicalWritePort,
+                                       MetadataQuarantinePort quarantinePort,
+                                       MetadataIndexCompensationPort indexCompensationPort,
+                                       MetadataReviewReExtractPort reExtractPort,
+                                       ObservationPort observationPort) {
         this.reviewRepositoryPort = Objects.requireNonNullElse(reviewRepositoryPort,
                 MetadataReviewManagementRepositoryPort.empty());
         this.canonicalWritePort = Objects.requireNonNullElse(canonicalWritePort, MetadataCanonicalWritePort.noop());
@@ -63,6 +76,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         this.indexCompensationPort = Objects.requireNonNullElse(indexCompensationPort,
                 MetadataIndexCompensationPort.noop());
         this.reExtractPort = Objects.requireNonNullElse(reExtractPort, MetadataReviewReExtractPort.noop());
+        this.observationPort = observationPort;
     }
 
     @Override
@@ -108,6 +122,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
                 current.suggestedMetadata());
         writeCanonical(updated.documentId(), current.suggestedMetadata());
         requestIndexCompensation(updated);
+        recordReviewDecision(updated, "APPROVE", true, true, false, false);
         return updated;
     }
 
@@ -122,6 +137,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
                 safeCommand.correctedMetadata());
         writeCanonical(updated.documentId(), safeCommand.correctedMetadata());
         requestIndexCompensation(updated);
+        recordReviewDecision(updated, "CORRECT", true, true, false, false);
         return updated;
     }
 
@@ -141,6 +157,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
                 remainingMetadata);
         writeCanonical(updated.documentId(), remainingMetadata);
         requestIndexCompensation(updated);
+        recordReviewDecision(updated, "IGNORE_FIELD", true, true, false, false);
         return updated;
     }
 
@@ -171,13 +188,18 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         }
         decisionMetadata.put("documentId", current.documentId());
         // RE_EXTRACT 只调度重抽取任务，不写 canonical metadata；新结果由回填流水线重新产出。
-        return applyDecision(current, MetadataReviewStatus.RE_EXTRACTING, safeCommand, decisionMetadata);
+        MetadataReviewRecord updated = applyDecision(current, MetadataReviewStatus.RE_EXTRACTING, safeCommand,
+                decisionMetadata);
+        recordReviewDecision(updated, "RE_EXTRACT", false, false, false, true);
+        return updated;
     }
 
     @Override
     public MetadataReviewRecord reject(String itemId, MetadataReviewDecisionCommand command) {
         MetadataReviewRecord current = queryById(itemId);
-        return applyDecision(current, MetadataReviewStatus.REJECTED, command, Map.of());
+        MetadataReviewRecord updated = applyDecision(current, MetadataReviewStatus.REJECTED, command, Map.of());
+        recordReviewDecision(updated, "REJECT", false, false, false, false);
+        return updated;
     }
 
     @Override
@@ -198,6 +220,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
                 "REVIEW_QUARANTINED",
                 firstText(updated.reviewComment(), updated.reasonMessage()),
                 snapshot));
+        recordReviewDecision(updated, "QUARANTINE", false, false, true, false);
         return updated;
     }
 
@@ -275,6 +298,35 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
 
     private MetadataReviewDecisionCommand safeCommand(MetadataReviewDecisionCommand command) {
         return command == null ? new MetadataReviewDecisionCommand(DEFAULT_OPERATOR, "", Map.of()) : command;
+    }
+
+    private void recordReviewDecision(MetadataReviewRecord record,
+                                      String action,
+                                      boolean canonicalWritten,
+                                      boolean indexCompensationRequested,
+                                      boolean quarantined,
+                                      boolean reExtractRequested) {
+        if (observationPort == null || record == null) {
+            return;
+        }
+        try {
+            Map<String, String> attributes = new LinkedHashMap<>();
+            attributes.put("tenantId", record.tenantId());
+            attributes.put("knowledgeBaseId", record.knowledgeBaseId());
+            attributes.put("action", Objects.requireNonNullElse(action, ""));
+            attributes.put("reviewStatus", record.reviewStatus().name());
+            attributes.put("reasonCode", record.reasonCode());
+            attributes.put("suggestedFieldCount", Integer.toString(record.suggestedMetadata().size()));
+            attributes.put("correctedFieldCount", Integer.toString(record.correctedMetadata().size()));
+            attributes.put("canonicalWritten", Boolean.toString(canonicalWritten));
+            attributes.put("indexCompensationRequested", Boolean.toString(indexCompensationRequested));
+            attributes.put("quarantined", Boolean.toString(quarantined));
+            attributes.put("reExtractRequested", Boolean.toString(reExtractRequested));
+            // 复核事件用于质量指标和操作流诊断；具体审核人、前后值仍以审计表为准。
+            observationPort.recordEvent(new ObservationEvent(EVENT_REVIEW_DECISION_COMPLETED, null, attributes));
+        } catch (RuntimeException ignored) {
+            // 观测失败不能影响复核决策、canonical 写回、隔离或索引补偿。
+        }
     }
 
     private String operator(String operator) {

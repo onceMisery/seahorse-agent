@@ -892,13 +892,15 @@ public class SeahorseAgentKernelAutoConfiguration {
             ObjectProvider<MetadataCanonicalWritePort> canonicalWritePort,
             ObjectProvider<MetadataQuarantinePort> quarantinePort,
             ObjectProvider<MetadataIndexCompensationPort> indexCompensationPort,
-            ObjectProvider<MetadataReviewReExtractPort> reExtractPort) {
+            ObjectProvider<MetadataReviewReExtractPort> reExtractPort,
+            ObjectProvider<ObservationPort> observationPort) {
         return new KernelMetadataReviewService(
                 reviewRepositoryPort,
                 canonicalWritePort.getIfAvailable(MetadataCanonicalWritePort::noop),
                 quarantinePort.getIfAvailable(MetadataQuarantinePort::noop),
                 indexCompensationPort.getIfAvailable(MetadataIndexCompensationPort::noop),
-                reExtractPort.getIfAvailable(MetadataReviewReExtractPort::noop));
+                reExtractPort.getIfAvailable(MetadataReviewReExtractPort::noop),
+                observationPort.getIfAvailable());
     }
 
     @Bean
