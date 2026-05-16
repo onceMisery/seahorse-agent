@@ -178,3 +178,10 @@
 - 直接复用 `ObservationPort` 不足以支撑 Schema 使用情况管理查询，因为当前观测适配器只有 noop/micrometer，没有可查询的事件持久化。
 - 更稳妥的做法是保留 `retrieval.metadata.filter.compiled/rejected` 作为观测证据，同时增加专用 `MetadataSchemaUsageReportRepositoryPort` 写入轻量事件快照，避免污染通用观测契约。
 - 使用“每个字段一行、按 requestId 聚合”的轻量事件表，可以在 PostgreSQL 与 H2 上稳定统计字段使用频次、guard-only 命中率和拒绝率，不依赖 JSON 拆分或数据库方言特性。
+
+## 2026-05-16 C3 跨版本质量对比接口发现
+
+- 现有代码已经分别具备 `metadata-quality/compare` 与 `retrieval-quality/compare` 两条对比链路，C3 的关键不是新建统计，而是提供统一编排与统一响应模型。
+- 组合接口应依赖 `MetadataQualityInboundPort` 和 `RetrievalEvaluationInboundPort` 两个入站端口，而不是直接下探 repository；这样可以复用既有版本筛选、字段 delta 和评测 winner 口径。
+- 检索评测部分继续复用 `RetrievalEvaluationComparisonRequest` 最稳妥；若顶层请求已经给出 `tenantId`，则应自动回填到嵌套评测请求，避免管理端重复填写同一租户上下文。
+- `task_plan.md` 中的 C2 状态与代码实际已漂移：`MetadataBackfillInboundPort.overview(...)`、`KernelMetadataBackfillService.overview(...)` 和 `/metadata-backfill/overview` 契约已经存在并有测试覆盖，因此本轮顺手修正为 complete。

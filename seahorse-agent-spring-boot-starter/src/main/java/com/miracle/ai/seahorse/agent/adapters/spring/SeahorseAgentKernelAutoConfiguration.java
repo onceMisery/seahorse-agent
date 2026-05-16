@@ -64,6 +64,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQ
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataReviewService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataSchemaService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataSchemaUsageService;
+import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelVersionQualityComparisonService;
 import com.miracle.ai.seahorse.agent.kernel.application.model.KernelModelRoutingService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationService;
@@ -128,6 +129,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineIn
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaUsageInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
@@ -898,6 +900,19 @@ public class SeahorseAgentKernelAutoConfiguration {
     public KernelMetadataSchemaUsageService seahorseMetadataSchemaUsageInboundPort(
             MetadataSchemaUsageReportRepositoryPort reportRepositoryPort) {
         return new KernelMetadataSchemaUsageService(reportRepositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({MetadataQualityInboundPort.class, RetrievalEvaluationInboundPort.class})
+    @ConditionalOnMissingBean(VersionQualityComparisonInboundPort.class)
+    public KernelVersionQualityComparisonService seahorseVersionQualityComparisonInboundPort(
+            MetadataQualityInboundPort metadataQualityInboundPort,
+            RetrievalEvaluationInboundPort retrievalEvaluationInboundPort,
+            ObjectProvider<ObservationPort> observationPort) {
+        return new KernelVersionQualityComparisonService(
+                metadataQualityInboundPort,
+                retrievalEvaluationInboundPort,
+                observationPort.getIfAvailable());
     }
 
     @Bean

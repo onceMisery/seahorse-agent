@@ -230,8 +230,8 @@
 实施切片：
 
 - [complete] C1 新增 Schema 使用情况报表：通过专用 `MetadataSchemaUsageReportRepositoryPort` 在过滤编译成功/拒绝时写入轻量事件快照，JDBC 聚合输出字段使用频次、guard-only 命中率、拒绝率，并暴露管理查询接口。
-- [pending] C2 新增回填运维视图，聚合任务状态、失败原因、待补偿文档数、Review/Quarantine 流向和最近一次重抽取结果。
-- [pending] C3 新增跨版本质量对比接口，支持把治理报表与检索评测结果并列输出，服务上线前对比 `baseline` 与候选版本。
+- [complete] C2 新增回填运维视图，聚合任务状态、失败原因、待补偿文档数、Review/Quarantine 流向和最近一次重抽取结果。
+- [complete] C3 新增跨版本质量对比接口，新增统一 `VersionQualityComparisonInboundPort` 与 `POST /knowledge-base/{kb-id}/version-quality/compare`，复用既有 `metadata-quality/compare` 与 `retrieval-quality/compare`，并列输出治理报表与检索评测对比结果用于上线前比较 `baseline` 与候选版本。
 - [pending] C4 为关键观测补充低基数标签约束与统一命名，避免后续 Micrometer/日志平台接入时标签爆炸。
 
 涉及模块 / 文件：

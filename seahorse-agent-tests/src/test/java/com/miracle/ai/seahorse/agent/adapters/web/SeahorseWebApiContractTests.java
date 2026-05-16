@@ -53,6 +53,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineIn
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaUsageInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
@@ -115,6 +117,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaField
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldCapabilityRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageFieldRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.VersionQualityComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRecord;
@@ -857,6 +860,59 @@ class SeahorseWebApiContractTests {
     }
 
     @Test
+    void shouldKeepVersionQualityComparisonContract() throws Exception {
+        VersionQualityComparisonInboundPort comparisonPort = mock(VersionQualityComparisonInboundPort.class);
+        when(comparisonPort.compare(any())).thenReturn(versionQualityComparisonReport());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseVersionQualityComparisonController(comparisonPort)).build();
+
+        mvc.perform(post("/knowledge-base/kb-1/version-quality/compare")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-1",
+                                "quarantineTopN", 3,
+                                "baselineSchemaVersion", 1,
+                                "baselineExtractorVersion", "extractor-v1",
+                                "baselineLlmPromptVersion", "prompt-v1",
+                                "candidateSchemaVersion", 2,
+                                "candidateExtractorVersion", "extractor-v2",
+                                "candidateLlmPromptVersion", "prompt-v3",
+                                "retrievalComparison", Map.of(
+                                        "baselineStrategyName", "baseline",
+                                        "topK", 2,
+                                        "strategies", List.of(
+                                                Map.of("strategyName", "baseline", "topK", 2),
+                                                Map.of("strategyName", "candidate", "topK", 2,
+                                                        "options", Map.of("enableKeyword", true, "finalTopK", 2))),
+                                        "cases", List.of(Map.of(
+                                                "caseId", "case-1",
+                                                "question", "question-a",
+                                                "expectedDocIds", List.of("doc-1"),
+                                                "aclSubjectIds", List.of("dept-a"))))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.metadataQuality.delta.averageFieldCoverageDelta").value(0.1D))
+                .andExpect(jsonPath("$.data.retrievalQuality.winnerStrategyName").value("candidate"))
+                .andExpect(jsonPath("$.data.retrievalQuality.deltas[1].recallAtKDelta").value(1.0D));
+
+        ArgumentCaptor<VersionQualityComparisonCommand> captor =
+                ArgumentCaptor.forClass(VersionQualityComparisonCommand.class);
+        verify(comparisonPort).compare(captor.capture());
+        assertThat(captor.getValue().tenantId()).isEqualTo("tenant-1");
+        assertThat(captor.getValue().knowledgeBaseId()).isEqualTo("kb-1");
+        assertThat(captor.getValue().quarantineTopN()).isEqualTo(3);
+        assertThat(captor.getValue().baselineSchemaVersion()).isEqualTo(1);
+        assertThat(captor.getValue().candidateSchemaVersion()).isEqualTo(2);
+        assertThat(captor.getValue().retrievalComparison().baselineStrategyName()).isEqualTo("baseline");
+        assertThat(captor.getValue().retrievalComparison().strategies()).hasSize(2);
+        assertThat(captor.getValue().retrievalComparison().cases().get(0).filter().system().tenantId())
+                .isEqualTo("tenant-1");
+        assertThat(captor.getValue().retrievalComparison().cases().get(0).filter().system().knowledgeBaseIds())
+                .containsExactly("kb-1");
+    }
+
+    @Test
     void shouldKeepRetrievalStrategyTemplateContract() throws Exception {
         RetrievalStrategyTemplateInboundPort templatePort = mock(RetrievalStrategyTemplateInboundPort.class);
         when(templatePort.listTemplates("kb-1")).thenReturn(List.of(new RetrievalStrategyTemplate(
@@ -1393,6 +1449,27 @@ class SeahorseWebApiContractTests {
                         new MetadataSchemaUsageFieldRecord("department", "部门", 3L, 0L, 0L, 0D, 0D),
                         new MetadataSchemaUsageFieldRecord("owner", "负责人", 1L, 1L, 1L, 1D, 0.5D)),
                 Instant.parse("2026-05-16T10:00:00Z"));
+    }
+
+    private static VersionQualityComparisonReport versionQualityComparisonReport() {
+        return new VersionQualityComparisonReport(
+                "tenant-1",
+                "kb-1",
+                metadataQualityComparisonReport(),
+                new RetrievalEvaluationComparisonReport(
+                        "baseline",
+                        "candidate",
+                        List.of(
+                                new RetrievalEvaluationReport("baseline", 2, 1, 1,
+                                        0.0D, 0.0D, 0.0D, 1.0D,
+                                        20.0D, 20.0D, List.of()),
+                                new RetrievalEvaluationReport("candidate", 2, 1, 1,
+                                        1.0D, 1.0D, 1.0D, 0.0D,
+                                        15.0D, 15.0D, List.of())),
+                        List.of(
+                                new RetrievalEvaluationStrategyDelta("baseline", 0D, 0D, 0D, 0D, 0D, 0D),
+                                new RetrievalEvaluationStrategyDelta("candidate", 1D, 1D, 1D, -1D, -5D, -5D))),
+                Instant.EPOCH);
     }
 
     private static MetadataReviewRecord metadataReview(String id, MetadataReviewStatus status) {

@@ -265,3 +265,12 @@
 - 新增 `SeahorseMetadataSchemaUsageController`，暴露 `GET /knowledge-base/{kb-id}/metadata-schema/usage-report?tenantId=...&schemaVersion=...`。
 - 补充 `MetadataRetrievalFilterTests`、`KernelMetadataSchemaUsageServiceTests`、`JdbcMetadataSchemaUsageReportAdapterTests`、`SeahorseWebApiContractTests`、`SeahorseAgentKernelAutoConfigurationTests`、`SeahorseAgentNativeAdapterAutoConfigurationTests`，覆盖快照写入、JDBC 聚合、Web 契约和 starter 自动装配。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=MetadataRetrievalFilterTests,KernelMetadataSchemaUsageServiceTests,JdbcMetadataSchemaUsageReportAdapterTests,SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，53 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 C3 跨版本质量对比接口
+
+- 新增 `VersionQualityComparisonInboundPort`、`VersionQualityComparisonCommand`、`VersionQualityComparisonReport` 与 `KernelVersionQualityComparisonService`，统一组合治理侧 `MetadataQualityInboundPort.compare(...)` 和检索侧 `RetrievalEvaluationInboundPort.compare(...)`。
+- 新增 `VersionQualityComparisonRequest` 与 `SeahorseVersionQualityComparisonController`，暴露 `POST /knowledge-base/{kb-id}/version-quality/compare`；Web 层继续复用现有检索评测请求模型，把 ACL / metadata 条件构造成强类型过滤对象后交给 kernel。
+- starter 自动装配在同时存在 `MetadataQualityInboundPort` 与 `RetrievalEvaluationInboundPort` 时暴露 `VersionQualityComparisonInboundPort`，避免控制器或管理端自行拼接两套口径。
+- 组合对比服务补充低基数字段观测 `version.quality.compare.generated`，只记录 schema 版本与策略/样本数量，不记录策略名或问题内容，避免提前放大标签基数风险。
+- 校正计划漂移：确认 `MetadataBackfillInboundPort.overview(...)` 与 `/knowledge-base/{kb-id}/metadata-backfill/overview` 已经存在并通过测试，因此将 `task_plan.md` 中的 C2 状态改为 complete。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelVersionQualityComparisonServiceTests,SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，38 个测试成功，reactor `BUILD SUCCESS`。
