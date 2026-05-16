@@ -223,3 +223,10 @@
 - 单策略运行历史和 compare 批次历史应分开保存：前者服务策略趋势，后者服务单次上线前比对复盘，二者查询粒度不同。
 - 对比批次摘要只需要保留 baseline、winner、strategyCount、caseCount 等轻量字段；完整 winner/delta/报告列表留在 `report_json`，避免列表接口解析大对象。
 - 当前 compare 历史仍按“单次调用”保存快照，没有做标签化发布、审批单号或版本候选关联；如果后续要接入正式上线流程，再补外部 release/change 关联键更合适。
+
+## 2026-05-16 E1 Lucene 低优先级适配器发现
+
+- Lucene Embedded 更适合测试、单机和私有化极简部署，不应替代生产默认 Elasticsearch；因此必须通过 `keyword-search.type=lucene` / `keyword-index.type=lucene` 显式启用。
+- Lucene 适配器没有外部数据库可用于重建历史数据，可靠性边界应放在入库快照写入、Outbox 重试和管理端重新触发文档重建上，不在 adapter 内新增仓储依赖。
+- 动态 metadata 字段仍必须来自 `CompiledMetadataFilter` AST；Lucene 只把 canonical metadata 展开成可过滤字段和原始 `metadata_json`，不接收也不解释用户原始过滤 Map。
+- Outbox delegate 选择应优先生产级 Elasticsearch，再选择显式配置的 Lucene，最后回退 JDBC；这样不会改变现有默认部署行为。

@@ -324,3 +324,13 @@
 - `JdbcRetrievalEvaluationDatasetRepositoryAdapter` 新增 `t_retrieval_evaluation_comparison` 的写入、列表和详情查询。
 - `SeahorseRetrievalEvaluationDatasetController` 新增 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons` 和 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons/{comparison-id}`。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 E1 Lucene 低优先级可插拔适配器
+
+- 新增 `seahorse-agent-adapter-search-lucene` Maven 模块，依赖 Lucene core、analysis-common 和 queryparser，实现嵌入式关键词 BM25 检索。
+- `LuceneKeywordIndexAdapter` 实现 `KeywordIndexPort`，按文档级快照先删旧分片再写入当前分片，存储 `metadata_json` 并为系统字段和动态 metadata 生成 Lucene 可过滤字段。
+- `LuceneKeywordSearchAdapter` 实现 `KeywordSearchPort`，基于 `MultiFieldQueryParser` 执行关键词检索，并只消费 `CompiledMetadataFilter` AST 下推系统过滤与动态 metadata 条件；空索引返回空结果。
+- Spring Boot Starter 新增 `lucene` 显式选择：`seahorse-agent.adapters.keyword-search.type=lucene`、`seahorse-agent.adapters.keyword-index.type=lucene`，索引目录通过 `*.lucene.index-directory` 配置；Outbox 消费端 delegate 选择顺序扩展为 Elasticsearch -> Lucene -> JDBC。
+- 其他剩余增强不继续写代码，已在 `task_plan.md` 规划为评测集导入/导出、样本明细表、发布单/版本候选关联、趋势报表和 OpenSearch 后续适配器。
+- 验证通过：`mvn -pl seahorse-agent-adapter-search-lucene -am test`，Lucene 模块 2 个测试成功，reactor `BUILD SUCCESS`。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-spring-boot-starter -am "-Dtest=SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，starter 自动装配 8 个测试成功，reactor `BUILD SUCCESS`。

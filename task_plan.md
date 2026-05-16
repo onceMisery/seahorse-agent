@@ -283,3 +283,22 @@
 - 版本维度扩展优先复用现有 `schemaVersion`、`extractorVersion`、`llmPromptVersion` 字段，避免新增一套并行治理模型。
 - Schema 联动补偿必须坚持“先观测、再补偿、最后重建”的顺序，避免字段变更直接阻断线上检索。
 - 报表与运维接口优先做查询聚合，不先引入新前端或外部 BI 依赖，避免把下一阶段目标扩散为平台重构。
+
+### 阶段 E：低优先级搜索适配器与后续规划
+
+目标：按设计文档补齐 Lucene Embedded 低优先级可插拔实现，其余平台化增强只进入规划，不继续扩展本轮代码范围。
+
+实施切片：
+
+- [complete] E1 新增 `seahorse-agent-adapter-search-lucene`，实现 `KeywordSearchPort` / `KeywordIndexPort`，支持显式配置为嵌入式 Lucene BM25 后端。
+- [complete] E2 Spring Boot Starter 支持 `seahorse-agent.adapters.keyword-search.type=lucene` 与 `seahorse-agent.adapters.keyword-index.type=lucene`，Outbox 消费端 delegate 可选择 Lucene。
+- [planned] E3 检索评测集 JSON 导入/导出：复用强类型 `RetrievalEvaluationCase`，导入后仍在运行时走 Filter Compiler，不允许原始动态 metadata 绕过 Schema。
+- [planned] E4 检索评测样本明细表：当需要样本级检索、批量标注、审核、启停时，再从当前 `cases_json` 拆出 `t_retrieval_evaluation_case`。
+- [planned] E5 评测 run/comparison 与发布单或版本候选关联：可通过 `release_id/change_id/schema_version/extractor_version/retrieval_profile_version` 或外部关联表实现。
+- [planned] E6 趋势报表：基于 `t_retrieval_evaluation_run` 聚合近 N 次 Recall@K、MRR、nDCG@K、P95 和空召回率趋势。
+- [planned] E7 OpenSearch 适配器：继续保持低优先级，仅在企业已有 OpenSearch 基础设施时按同一端口契约引入。
+
+验证方式：
+
+- `mvn -pl seahorse-agent-adapter-search-lucene -am test`
+- `mvn -pl seahorse-agent-tests,seahorse-agent-spring-boot-starter -am "-Dtest=SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
