@@ -28,9 +28,10 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 元数据治理质量报表 Web adapter。
+ * 元数据治理质量报表 Web 适配器。
  *
- * <p>控制器只暴露报表查询契约，字段覆盖率、低置信度和待处理隔离项的统计口径由 kernel 入站端口统一约束。
+ * <p>控制器只暴露报表查询契约，字段覆盖率、低置信度和待处理隔离项的统计口径
+ * 由 kernel 入站端口统一约束。
  */
 @RestController
 @ConditionalOnBean(MetadataQualityInboundPort.class)
@@ -51,8 +52,31 @@ public class SeahorseMetadataQualityController {
                                       @RequestParam String tenantId,
                                       @RequestParam(value = "schemaVersion", required = false) Integer schemaVersion,
                                       @RequestParam(value = "extractorVersion", required = false) String extractorVersion,
+                                      @RequestParam(value = "llmPromptVersion", required = false) String llmPromptVersion,
                                       @RequestParam(defaultValue = "5") int topN) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                qualityPort.report(tenantId, kbId, topN, schemaVersion, extractorVersion));
+                qualityPort.report(tenantId, kbId, topN, schemaVersion, extractorVersion, llmPromptVersion));
+    }
+
+    @GetMapping("/knowledge-base/{kb-id}/metadata-quality/compare")
+    public Map<String, Object> compare(@PathVariable("kb-id") String kbId,
+                                       @RequestParam String tenantId,
+                                       @RequestParam(value = "baselineSchemaVersion", required = false) Integer baselineSchemaVersion,
+                                       @RequestParam(value = "baselineExtractorVersion", required = false) String baselineExtractorVersion,
+                                       @RequestParam(value = "baselineLlmPromptVersion", required = false) String baselineLlmPromptVersion,
+                                       @RequestParam(value = "candidateSchemaVersion", required = false) Integer candidateSchemaVersion,
+                                       @RequestParam(value = "candidateExtractorVersion", required = false) String candidateExtractorVersion,
+                                       @RequestParam(value = "candidateLlmPromptVersion", required = false) String candidateLlmPromptVersion,
+                                       @RequestParam(defaultValue = "5") int topN) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, qualityPort.compare(
+                tenantId,
+                kbId,
+                topN,
+                baselineSchemaVersion,
+                baselineExtractorVersion,
+                baselineLlmPromptVersion,
+                candidateSchemaVersion,
+                candidateExtractorVersion,
+                candidateLlmPromptVersion));
     }
 }

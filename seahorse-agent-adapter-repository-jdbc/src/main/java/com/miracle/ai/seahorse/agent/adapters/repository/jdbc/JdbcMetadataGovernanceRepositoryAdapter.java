@@ -56,6 +56,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRetry;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewFeedbackSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
@@ -76,6 +77,8 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -882,7 +885,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public MetadataQualityReport report(String tenantId, String knowledgeBaseId, int quarantineTopN) {
-        return report(tenantId, knowledgeBaseId, quarantineTopN, null, "");
+        return report(tenantId, knowledgeBaseId, quarantineTopN, null, "", "");
     }
 
     @Override
@@ -891,40 +894,63 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                                         int quarantineTopN,
                                         Integer schemaVersion,
                                         String extractorVersion) {
+        return report(tenantId, knowledgeBaseId, quarantineTopN, schemaVersion, extractorVersion, "");
+    }
+
+    @Override
+    public MetadataQualityReport report(String tenantId,
+                                        String knowledgeBaseId,
+                                        int quarantineTopN,
+                                        Integer schemaVersion,
+                                        String extractorVersion,
+                                        String llmPromptVersion) {
         String safeTenantId = Objects.requireNonNullElse(tenantId, "");
         String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
         int safeTopN = Math.max(1, Math.min(quarantineTopN, 50));
         Integer safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? null : schemaVersion;
         String safeExtractorVersion = Objects.requireNonNullElse(extractorVersion, "");
+        String safeLlmPromptVersion = Objects.requireNonNullElse(llmPromptVersion, "");
         MetadataSchema schema = loadSchema(safeTenantId, safeKbId);
         List<ExtractionSnapshot> snapshots = latestExtractionSnapshots(
-                safeTenantId, safeKbId, safeSchemaVersion, safeExtractorVersion);
-        int totalDocuments = Math.max(countDocuments(safeKbId), snapshots.size());
-        List<MetadataFieldCoverage> fieldCoverages = fieldCoverages(schema, snapshots, totalDocuments);
+                safeTenantId, safeKbId, safeSchemaVersion, safeExtractorVersion, safeLlmPromptVersion);
+        List<ReviewSnapshot> reviewSnapshots = reviewSnapshots(
+                safeTenantId, safeKbId, safeSchemaVersion, safeExtractorVersion, safeLlmPromptVersion);
+        int totalDocuments = totalDocuments(safeKbId, snapshots, reviewSnapshots,
+                hasVersionScope(safeSchemaVersion, safeExtractorVersion, safeLlmPromptVersion));
+        Map<String, ReviewFieldAggregate> reviewFieldAggregates = reviewFieldAggregates(reviewSnapshots);
+        List<MetadataFieldCoverage> fieldCoverages = fieldCoverages(
+                schema, snapshots, totalDocuments, reviewFieldAggregates);
         LowConfidenceStats lowConfidenceStats = lowConfidenceStats(fieldCoverages);
-        int pendingReviewCount = countPendingReviews(safeTenantId, safeKbId);
+        int pendingReviewCount = pendingReviewCount(reviewSnapshots);
         int unresolvedQuarantineCount = countUnresolvedQuarantines(safeTenantId, safeKbId);
         int indexSyncFailureCount = countIndexSyncFailures(safeTenantId, safeKbId);
         List<MetadataQuarantineReasonCount> reasonTopN = quarantineReasonTopN(safeTenantId, safeKbId, safeTopN);
+        List<MetadataReviewFeedbackSummary> feedbackSummaries = reviewFeedbackSummaries(reviewSnapshots, safeTopN);
         return new MetadataQualityReport(
                 safeTenantId,
                 safeKbId,
+                safeSchemaVersion,
+                safeExtractorVersion,
+                safeLlmPromptVersion,
                 totalDocuments,
                 snapshots.size(),
                 averageCoverage(fieldCoverages),
                 ratio(lowConfidenceStats.lowConfidenceFields(), lowConfidenceStats.evaluatedFields()),
-                reviewPassRate(safeTenantId, safeKbId),
+                reviewPassRate(reviewSnapshots),
+                reviewCorrectionRate(reviewSnapshots),
                 pendingReviewCount,
                 unresolvedQuarantineCount,
                 indexSyncFailureCount,
                 fieldCoverages,
+                feedbackSummaries,
                 reasonTopN,
                 Instant.now());
     }
 
     private List<MetadataFieldCoverage> fieldCoverages(MetadataSchema schema,
                                                        List<ExtractionSnapshot> snapshots,
-                                                       int totalDocuments) {
+                                                       int totalDocuments,
+                                                       Map<String, ReviewFieldAggregate> reviewFieldAggregates) {
         List<MetadataFieldCoverage> coverages = new ArrayList<>();
         // 覆盖率以 Schema 字段为基准，避免动态 metadata 任意扩张影响治理报表口径。
         for (MetadataFieldDescriptor field : schema.fields()) {
@@ -938,6 +964,8 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     }
                 }
             }
+            ReviewFieldAggregate aggregate = reviewFieldAggregates.getOrDefault(
+                    field.fieldKey(), ReviewFieldAggregate.empty());
             coverages.add(new MetadataFieldCoverage(
                     field.fieldKey(),
                     field.displayName(),
@@ -946,7 +974,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     totalDocuments,
                     ratio(covered, totalDocuments),
                     lowConfidence,
-                    ratio(lowConfidence, covered)));
+                    ratio(lowConfidence, covered),
+                    aggregate.reviewedDocuments(),
+                    aggregate.correctedDocuments(),
+                    ratio(aggregate.correctedDocuments(), aggregate.reviewedDocuments())));
         }
         return List.copyOf(coverages);
     }
@@ -972,12 +1003,15 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     private List<ExtractionSnapshot> latestExtractionSnapshots(String tenantId,
                                                                String knowledgeBaseId,
                                                                Integer schemaVersion,
-                                                               String extractorVersion) {
+                                                               String extractorVersion,
+                                                               String llmPromptVersion) {
         try {
-            return jdbcTemplate.query("""
-                    SELECT doc_id, normalized_metadata, approved_metadata, field_quality
+            List<ExtractionSnapshot> snapshots = jdbcTemplate.query("""
+                    SELECT doc_id, schema_version, extractor_version, normalized_metadata,
+                           approved_metadata, field_quality, raw_candidates
                     FROM (
-                        SELECT doc_id, normalized_metadata, approved_metadata, field_quality,
+                        SELECT doc_id, schema_version, extractor_version, normalized_metadata,
+                               approved_metadata, field_quality, raw_candidates,
                                ROW_NUMBER() OVER (
                                    PARTITION BY doc_id
                                    ORDER BY update_time DESC, create_time DESC, id DESC
@@ -991,6 +1025,12 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     WHERE rn = 1
                     """, this::toExtractionSnapshot, tenantId, knowledgeBaseId, knowledgeBaseId,
                     schemaVersion, schemaVersion, extractorVersion, extractorVersion);
+            if (blank(llmPromptVersion)) {
+                return snapshots;
+            }
+            return snapshots.stream()
+                    .filter(snapshot -> llmPromptVersion.equals(snapshot.llmPromptVersion()))
+                    .toList();
         } catch (DataAccessException ex) {
             return List.of();
         }
@@ -1009,40 +1049,77 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
     }
 
-    private int countPendingReviews(String tenantId, String knowledgeBaseId) {
+    private List<ReviewSnapshot> reviewSnapshots(String tenantId,
+                                                 String knowledgeBaseId,
+                                                 Integer schemaVersion,
+                                                 String extractorVersion,
+                                                 String llmPromptVersion) {
         try {
-            return count("""
-                    SELECT COUNT(1)
-                    FROM t_metadata_review_item
-                    WHERE tenant_id = ?
-                      AND (? = '' OR kb_id = ?)
-                      AND review_status = 'PENDING'
-                    """, tenantId, knowledgeBaseId, knowledgeBaseId);
+            return jdbcTemplate.query("""
+                    SELECT ri.id,
+                           ri.doc_id,
+                           ri.result_id,
+                           ri.reason_code,
+                           ri.review_status,
+                           ri.suggested_metadata,
+                           ri.corrected_metadata,
+                           er.job_id,
+                           er.schema_version,
+                           er.extractor_version,
+                           er.raw_candidates
+                    FROM t_metadata_review_item ri
+                    LEFT JOIN t_metadata_extraction_result er ON er.id = ri.result_id
+                    WHERE ri.tenant_id = ?
+                      AND (? = '' OR ri.kb_id = ?)
+                    """, this::toReviewSnapshot, tenantId, knowledgeBaseId, knowledgeBaseId).stream()
+                    // promptVersion 存在于抽取结果 raw_candidates 中，因此这里统一在 Java 侧做最终版本过滤。
+                    .filter(snapshot -> matchesReviewScope(snapshot, schemaVersion, extractorVersion, llmPromptVersion))
+                    .toList();
         } catch (DataAccessException ex) {
-            return 0;
+            return List.of();
         }
     }
 
-    private double reviewPassRate(String tenantId, String knowledgeBaseId) {
-        try {
-            int passed = count("""
-                    SELECT COUNT(1)
-                    FROM t_metadata_review_item
-                    WHERE tenant_id = ?
-                      AND (? = '' OR kb_id = ?)
-                      AND review_status IN ('APPROVED', 'CORRECTED')
-                    """, tenantId, knowledgeBaseId, knowledgeBaseId);
-            int completed = count("""
-                    SELECT COUNT(1)
-                    FROM t_metadata_review_item
-                    WHERE tenant_id = ?
-                      AND (? = '' OR kb_id = ?)
-                      AND review_status IN ('APPROVED', 'CORRECTED', 'REJECTED', 'QUARANTINED')
-                    """, tenantId, knowledgeBaseId, knowledgeBaseId);
-            return ratio(passed, completed);
-        } catch (DataAccessException ex) {
-            return 0D;
+    private int pendingReviewCount(List<ReviewSnapshot> reviewSnapshots) {
+        return (int) reviewSnapshots.stream()
+                .filter(snapshot -> snapshot.reviewStatus() == MetadataReviewStatus.PENDING)
+                .count();
+    }
+
+    private double reviewPassRate(List<ReviewSnapshot> reviewSnapshots) {
+        int passed = 0;
+        int completed = 0;
+        for (ReviewSnapshot snapshot : reviewSnapshots) {
+            if (snapshot.reviewStatus() == MetadataReviewStatus.APPROVED
+                    || snapshot.reviewStatus() == MetadataReviewStatus.CORRECTED) {
+                passed++;
+                completed++;
+                continue;
+            }
+            if (snapshot.reviewStatus() == MetadataReviewStatus.REJECTED
+                    || snapshot.reviewStatus() == MetadataReviewStatus.QUARANTINED) {
+                completed++;
+            }
         }
+        return ratio(passed, completed);
+    }
+
+    private double reviewCorrectionRate(List<ReviewSnapshot> reviewSnapshots) {
+        int corrected = 0;
+        int completed = 0;
+        for (ReviewSnapshot snapshot : reviewSnapshots) {
+            if (snapshot.reviewStatus() == MetadataReviewStatus.CORRECTED) {
+                corrected++;
+                completed++;
+                continue;
+            }
+            if (snapshot.reviewStatus() == MetadataReviewStatus.APPROVED
+                    || snapshot.reviewStatus() == MetadataReviewStatus.REJECTED
+                    || snapshot.reviewStatus() == MetadataReviewStatus.QUARANTINED) {
+                completed++;
+            }
+        }
+        return ratio(corrected, completed);
     }
 
     private int countUnresolvedQuarantines(String tenantId, String knowledgeBaseId) {
@@ -1101,9 +1178,222 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     private ExtractionSnapshot toExtractionSnapshot(ResultSet rs, int rowNum) throws SQLException {
         return new ExtractionSnapshot(
                 rs.getString("doc_id"),
+                number(rs.getObject("schema_version"), 1),
+                rs.getString("extractor_version"),
                 readMap(rs.getString("normalized_metadata")),
                 readMap(rs.getString("approved_metadata")),
-                readMapList(rs.getString("field_quality")));
+                readMapList(rs.getString("field_quality")),
+                promptVersion(readMapList(rs.getString("raw_candidates"))));
+    }
+
+    private ReviewSnapshot toReviewSnapshot(ResultSet rs, int rowNum) throws SQLException {
+        return new ReviewSnapshot(
+                rs.getString("id"),
+                rs.getString("doc_id"),
+                rs.getString("result_id"),
+                rs.getString("job_id"),
+                rs.getString("reason_code"),
+                enumValue(MetadataReviewStatus.class, rs.getString("review_status"), MetadataReviewStatus.PENDING),
+                readMap(rs.getString("suggested_metadata")),
+                readMap(rs.getString("corrected_metadata")),
+                nullableInteger(rs.getObject("schema_version")),
+                rs.getString("extractor_version"),
+                promptVersion(readMapList(rs.getString("raw_candidates"))));
+    }
+
+    private boolean matchesReviewScope(ReviewSnapshot snapshot,
+                                       Integer schemaVersion,
+                                       String extractorVersion,
+                                       String llmPromptVersion) {
+        if (schemaVersion != null && !Objects.equals(schemaVersion, snapshot.schemaVersion())) {
+            return false;
+        }
+        if (!blank(extractorVersion) && !extractorVersion.equals(snapshot.extractorVersion())) {
+            return false;
+        }
+        return blank(llmPromptVersion) || llmPromptVersion.equals(snapshot.llmPromptVersion());
+    }
+
+    private int totalDocuments(String knowledgeBaseId,
+                               List<ExtractionSnapshot> snapshots,
+                               List<ReviewSnapshot> reviewSnapshots,
+                               boolean versionScoped) {
+        if (!versionScoped) {
+            return Math.max(countDocuments(knowledgeBaseId), snapshots.size());
+        }
+        LinkedHashSet<String> documentIds = new LinkedHashSet<>();
+        snapshots.stream().map(ExtractionSnapshot::documentId).filter(id -> !blank(id)).forEach(documentIds::add);
+        reviewSnapshots.stream().map(ReviewSnapshot::documentId).filter(id -> !blank(id)).forEach(documentIds::add);
+        return documentIds.size();
+    }
+
+    private boolean hasVersionScope(Integer schemaVersion, String extractorVersion, String llmPromptVersion) {
+        return schemaVersion != null || !blank(extractorVersion) || !blank(llmPromptVersion);
+    }
+
+    private Map<String, ReviewFieldAggregate> reviewFieldAggregates(List<ReviewSnapshot> reviewSnapshots) {
+        Map<String, MutableReviewFieldAggregate> aggregates = new LinkedHashMap<>();
+        for (ReviewSnapshot snapshot : reviewSnapshots) {
+            for (String fieldKey : feedbackFieldKeys(snapshot)) {
+                if ("_document".equals(fieldKey)) {
+                    continue;
+                }
+                MutableReviewFieldAggregate aggregate = aggregates.computeIfAbsent(
+                        fieldKey, ignored -> new MutableReviewFieldAggregate());
+                aggregate.reviewedDocuments.add(snapshot.documentId());
+                if (snapshot.reviewStatus() == MetadataReviewStatus.CORRECTED
+                        && fieldCorrected(snapshot, fieldKey)) {
+                    aggregate.correctedDocuments.add(snapshot.documentId());
+                }
+            }
+        }
+        return aggregates.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().freeze(),
+                        (left, right) -> left,
+                        LinkedHashMap::new));
+    }
+
+    private boolean fieldCorrected(ReviewSnapshot snapshot, String fieldKey) {
+        Object suggested = snapshot.suggestedMetadata().get(fieldKey);
+        if (snapshot.correctedMetadata().containsKey(fieldKey)) {
+            return !Objects.equals(suggested, snapshot.correctedMetadata().get(fieldKey));
+        }
+        return snapshot.suggestedMetadata().containsKey(fieldKey);
+    }
+
+    private List<MetadataReviewFeedbackSummary> reviewFeedbackSummaries(List<ReviewSnapshot> reviewSnapshots, int topN) {
+        Map<FeedbackKey, MutableFeedbackAggregate> aggregates = new LinkedHashMap<>();
+        for (ReviewSnapshot snapshot : reviewSnapshots) {
+            for (String fieldKey : feedbackFieldKeys(snapshot)) {
+                FeedbackKey key = new FeedbackKey(
+                        fieldKey,
+                        text(snapshot.reasonCode(), "UNKNOWN"),
+                        snapshot.reviewStatus().name());
+                MutableFeedbackAggregate aggregate = aggregates.computeIfAbsent(
+                        key, ignored -> new MutableFeedbackAggregate());
+                aggregate.reviewCount++;
+                aggregate.documentIds.add(snapshot.documentId());
+                addSampleId(aggregate.reviewItemIds, snapshot.reviewItemId());
+                addSampleId(aggregate.resultIds, snapshot.resultId());
+                addSampleId(aggregate.jobIds, snapshot.jobId());
+            }
+        }
+        List<Map.Entry<FeedbackKey, MutableFeedbackAggregate>> topEntries = aggregates.entrySet().stream()
+                .sorted((left, right) -> {
+                    int countCompare = Integer.compare(right.getValue().reviewCount, left.getValue().reviewCount);
+                    if (countCompare != 0) {
+                        return countCompare;
+                    }
+                    int docCompare = Integer.compare(right.getValue().documentIds.size(), left.getValue().documentIds.size());
+                    if (docCompare != 0) {
+                        return docCompare;
+                    }
+                    int fieldCompare = left.getKey().fieldKey.compareTo(right.getKey().fieldKey);
+                    if (fieldCompare != 0) {
+                        return fieldCompare;
+                    }
+                    int reasonCompare = left.getKey().reasonCode.compareTo(right.getKey().reasonCode);
+                    if (reasonCompare != 0) {
+                        return reasonCompare;
+                    }
+                    return left.getKey().decisionAction.compareTo(right.getKey().decisionAction);
+                })
+                .limit(topN)
+                .toList();
+        Map<String, List<String>> auditIdsByReviewItem = reviewAuditIdsByReviewItems(topEntries.stream()
+                .flatMap(entry -> entry.getValue().reviewItemIds.stream())
+                .collect(Collectors.toCollection(LinkedHashSet::new)));
+        return topEntries.stream()
+                .map(entry -> new MetadataReviewFeedbackSummary(
+                        entry.getKey().fieldKey,
+                        entry.getKey().reasonCode,
+                        entry.getKey().decisionAction,
+                        entry.getValue().reviewCount,
+                        entry.getValue().documentIds.size(),
+                        List.copyOf(entry.getValue().reviewItemIds),
+                        List.copyOf(entry.getValue().resultIds),
+                        sampleAuditIds(entry.getValue().reviewItemIds, auditIdsByReviewItem),
+                        List.copyOf(entry.getValue().jobIds)))
+                .toList();
+    }
+
+    /**
+     * 批量预取审计轨迹，避免反馈摘要在映射阶段逐条查库。
+     */
+    private Map<String, List<String>> reviewAuditIdsByReviewItems(Set<String> reviewItemIds) {
+        if (reviewItemIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = reviewItemIds.stream().map(ignored -> "?").collect(Collectors.joining(", "));
+        try {
+            List<Map.Entry<String, String>> rows = jdbcTemplate.query("""
+                            SELECT review_item_id, id
+                            FROM t_metadata_review_audit
+                            WHERE review_item_id IN (%s)
+                            ORDER BY create_time DESC, id DESC
+                            """.formatted(placeholders),
+                    (rs, rowNum) -> Map.entry(rs.getString("review_item_id"), rs.getString("id")),
+                    reviewItemIds.toArray());
+            Map<String, LinkedHashSet<String>> grouped = new LinkedHashMap<>();
+            for (Map.Entry<String, String> row : rows) {
+                if (blank(row.getKey()) || blank(row.getValue())) {
+                    continue;
+                }
+                LinkedHashSet<String> auditIds = grouped.computeIfAbsent(row.getKey(), ignored -> new LinkedHashSet<>());
+                if (auditIds.size() < 5) {
+                    auditIds.add(row.getValue());
+                }
+            }
+            return grouped.entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            entry -> List.copyOf(entry.getValue()),
+                            (left, right) -> left,
+                            LinkedHashMap::new));
+        } catch (DataAccessException ex) {
+            return Map.of();
+        }
+    }
+
+    private List<String> sampleAuditIds(LinkedHashSet<String> reviewItemIds, Map<String, List<String>> auditIdsByReviewItem) {
+        LinkedHashSet<String> sampleAuditIds = new LinkedHashSet<>();
+        for (String reviewItemId : reviewItemIds) {
+            for (String auditId : auditIdsByReviewItem.getOrDefault(reviewItemId, List.of())) {
+                addSampleId(sampleAuditIds, auditId);
+                if (sampleAuditIds.size() >= 5) {
+                    return List.copyOf(sampleAuditIds);
+                }
+            }
+        }
+        return List.copyOf(sampleAuditIds);
+    }
+
+    private List<String> feedbackFieldKeys(ReviewSnapshot snapshot) {
+        LinkedHashSet<String> keys = new LinkedHashSet<>();
+        snapshot.suggestedMetadata().keySet().stream().filter(fieldKey -> !blank(fieldKey)).forEach(keys::add);
+        snapshot.correctedMetadata().keySet().stream().filter(fieldKey -> !blank(fieldKey)).forEach(keys::add);
+        if (keys.isEmpty()) {
+            keys.add("_document");
+        }
+        return List.copyOf(keys);
+    }
+
+    private void addSampleId(LinkedHashSet<String> target, String value) {
+        if (!blank(value) && target.size() < 5) {
+            target.add(value);
+        }
+    }
+
+    private String promptVersion(List<Map<String, Object>> rawCandidates) {
+        for (Map<String, Object> candidate : rawCandidates) {
+            String promptVersion = text(candidate.get("promptVersion"), "");
+            if (!promptVersion.isBlank()) {
+                return promptVersion;
+            }
+        }
+        return "";
     }
 
     private MetadataReviewRecord toReviewRecord(ResultSet rs, int rowNum) throws SQLException {
@@ -1699,6 +1989,14 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         return timestamp == null ? null : timestamp.toInstant();
     }
 
+    private Integer nullableInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        int number = number(value, 0);
+        return number <= 0 ? null : number;
+    }
+
     private long pages(long total, long size) {
         return total <= 0L ? 0L : (total + Math.max(1L, size) - 1L) / Math.max(1L, size);
     }
@@ -1709,21 +2007,62 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     private record ExtractionSnapshot(
             String documentId,
+            int schemaVersion,
+            String extractorVersion,
             Map<String, Object> normalizedMetadata,
             Map<String, Object> acceptedMetadata,
-            List<Map<String, Object>> fieldQualities
+            List<Map<String, Object>> fieldQualities,
+            String llmPromptVersion
     ) {
 
         private ExtractionSnapshot {
             documentId = Objects.requireNonNullElse(documentId, "");
+            schemaVersion = Math.max(1, schemaVersion);
+            extractorVersion = Objects.requireNonNullElse(extractorVersion, "");
             normalizedMetadata = Map.copyOf(Objects.requireNonNullElse(normalizedMetadata, Map.of()));
             acceptedMetadata = Map.copyOf(Objects.requireNonNullElse(acceptedMetadata, Map.of()));
             fieldQualities = List.copyOf(Objects.requireNonNullElse(fieldQualities, List.of()));
+            llmPromptVersion = Objects.requireNonNullElse(llmPromptVersion, "");
         }
 
         private Map<String, Object> coveredMetadata() {
             // 人工复核修正后的 approved metadata 是更可信的 canonical 结果，质量报表应优先使用它。
             return acceptedMetadata.isEmpty() ? normalizedMetadata : acceptedMetadata;
+        }
+    }
+
+    private record ReviewSnapshot(
+            String reviewItemId,
+            String documentId,
+            String resultId,
+            String jobId,
+            String reasonCode,
+            MetadataReviewStatus reviewStatus,
+            Map<String, Object> suggestedMetadata,
+            Map<String, Object> correctedMetadata,
+            Integer schemaVersion,
+            String extractorVersion,
+            String llmPromptVersion
+    ) {
+
+        private ReviewSnapshot {
+            reviewItemId = Objects.requireNonNullElse(reviewItemId, "");
+            documentId = Objects.requireNonNullElse(documentId, "");
+            resultId = Objects.requireNonNullElse(resultId, "");
+            jobId = Objects.requireNonNullElse(jobId, "");
+            reasonCode = Objects.requireNonNullElse(reasonCode, "");
+            reviewStatus = Objects.requireNonNullElse(reviewStatus, MetadataReviewStatus.PENDING);
+            suggestedMetadata = Map.copyOf(Objects.requireNonNullElse(suggestedMetadata, Map.of()));
+            correctedMetadata = Map.copyOf(Objects.requireNonNullElse(correctedMetadata, Map.of()));
+            extractorVersion = Objects.requireNonNullElse(extractorVersion, "");
+            llmPromptVersion = Objects.requireNonNullElse(llmPromptVersion, "");
+        }
+    }
+
+    private record ReviewFieldAggregate(int reviewedDocuments, int correctedDocuments) {
+
+        private static ReviewFieldAggregate empty() {
+            return new ReviewFieldAggregate(0, 0);
         }
     }
 
@@ -1733,11 +2072,37 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     private record ChunkMetadataRow(String id, String metadataJson) {
     }
 
+    private record FeedbackKey(String fieldKey, String reasonCode, String decisionAction) {
+
+        private FeedbackKey {
+            fieldKey = Objects.requireNonNullElse(fieldKey, "");
+            reasonCode = Objects.requireNonNullElse(reasonCode, "");
+            decisionAction = Objects.requireNonNullElse(decisionAction, "");
+        }
+    }
+
     private record SqlWhere(String sql, List<Object> args) {
 
         private SqlWhere {
             sql = Objects.requireNonNullElse(sql, "");
             args = List.copyOf(Objects.requireNonNullElse(args, List.of()));
         }
+    }
+
+    private static final class MutableReviewFieldAggregate {
+        private final LinkedHashSet<String> reviewedDocuments = new LinkedHashSet<>();
+        private final LinkedHashSet<String> correctedDocuments = new LinkedHashSet<>();
+
+        private ReviewFieldAggregate freeze() {
+            return new ReviewFieldAggregate(reviewedDocuments.size(), correctedDocuments.size());
+        }
+    }
+
+    private static final class MutableFeedbackAggregate {
+        private int reviewCount;
+        private final LinkedHashSet<String> documentIds = new LinkedHashSet<>();
+        private final LinkedHashSet<String> reviewItemIds = new LinkedHashSet<>();
+        private final LinkedHashSet<String> resultIds = new LinkedHashSet<>();
+        private final LinkedHashSet<String> jobIds = new LinkedHashSet<>();
     }
 }

@@ -62,19 +62,27 @@ class JdbcMetadataQualityReportAdapterTests {
 
         assertThat(report.totalDocuments()).isEqualTo(3);
         assertThat(report.extractedDocuments()).isEqualTo(2);
+        assertThat(report.schemaVersion()).isNull();
+        assertThat(report.extractorVersion()).isBlank();
+        assertThat(report.llmPromptVersion()).isBlank();
         assertThat(report.averageFieldCoverage()).isCloseTo(4D / 9D, offset(0.0001D));
         assertThat(report.lowConfidenceRatio()).isCloseTo(0.25D, offset(0.0001D));
         assertThat(report.reviewPassRate()).isCloseTo(2D / 3D, offset(0.0001D));
+        assertThat(report.reviewCorrectionRate()).isCloseTo(1D / 3D, offset(0.0001D));
         assertThat(report.pendingReviewCount()).isEqualTo(2);
         assertThat(report.unresolvedQuarantineCount()).isEqualTo(3);
         assertThat(report.indexSyncFailureCount()).isEqualTo(1);
         assertThat(coverage(report, "department").coverageRate()).isCloseTo(2D / 3D, offset(0.0001D));
         assertThat(coverage(report, "department").lowConfidenceDocuments()).isEqualTo(1);
         assertThat(coverage(report, "department").lowConfidenceRate()).isCloseTo(1D / 2D, offset(0.0001D));
+        assertThat(coverage(report, "department").reviewedDocuments()).isEqualTo(2);
+        assertThat(coverage(report, "department").correctedDocuments()).isEqualTo(1);
+        assertThat(coverage(report, "department").correctionRate()).isCloseTo(0.5D, offset(0.0001D));
         assertThat(coverage(report, "securityLevel").coverageRate()).isCloseTo(1D / 3D, offset(0.0001D));
         assertThat(coverage(report, "securityLevel").lowConfidenceRate()).isZero();
         assertThat(coverage(report, "owner").coverageRate()).isCloseTo(1D / 3D, offset(0.0001D));
         assertThat(coverage(report, "owner").lowConfidenceRate()).isZero();
+        assertThat(report.reviewFeedbackSummaries()).isNotEmpty();
         assertThat(report.quarantineReasons()).hasSize(1);
         assertThat(report.quarantineReasons().get(0).reasonCode()).isEqualTo("SCHEMA_MISSING");
         assertThat(report.quarantineReasons().get(0).count()).isEqualTo(2);
@@ -118,9 +126,55 @@ class JdbcMetadataQualityReportAdapterTests {
 
         MetadataQualityReport report = adapter.report("tenant-1", "kb-1", 1, 2, "extractor-v2");
 
+        assertThat(report.schemaVersion()).isEqualTo(2);
+        assertThat(report.extractorVersion()).isEqualTo("extractor-v2");
         assertThat(report.extractedDocuments()).isEqualTo(2);
         assertThat(coverage(report, "department").coverageRate()).isEqualTo(1D);
         assertThat(coverage(report, "owner").coverageRate()).isEqualTo(0.5D);
+    }
+
+    @Test
+    void shouldFilterQualityReportByLlmPromptVersionAndAggregateReviewFeedback() {
+        jdbcTemplate.update("INSERT INTO t_knowledge_document(id, kb_id, deleted) VALUES ('doc-1', 'kb-1', 0)");
+        jdbcTemplate.update("INSERT INTO t_knowledge_document(id, kb_id, deleted) VALUES ('doc-2', 'kb-1', 0)");
+        insertExtraction("result-p2-1", "doc-1", 2, "extractor-v2",
+                Map.of("department", "Finance"),
+                Map.of(),
+                List.of(quality("department", 0.91D)),
+                List.of(rawCandidate("department", "prompt-v2")),
+                Instant.parse("2026-05-13T09:00:00Z"));
+        insertExtraction("result-p3-2", "doc-2", 2, "extractor-v2",
+                Map.of("department", "Legal"),
+                Map.of(),
+                List.of(quality("department", 0.93D)),
+                List.of(rawCandidate("department", "prompt-v3")),
+                Instant.parse("2026-05-13T10:00:00Z"));
+        insertReviewRow("review-p2", "doc-1", "result-p2-1", "CORRECTED", "LOW_CONFIDENCE",
+                Map.of("department", "Finance"), Map.of("department", "Legal"));
+        insertReviewRow("review-p3", "doc-2", "result-p3-2", "APPROVED", "LOW_CONFIDENCE",
+                Map.of("department", "Legal"), Map.of("department", "Legal"));
+        insertReviewAudit("audit-p2", "review-p2", "doc-1", "result-p2-1");
+
+        MetadataQualityReport report = adapter.report("tenant-1", "kb-1", 5, 2, "extractor-v2", "prompt-v2");
+
+        assertThat(report.schemaVersion()).isEqualTo(2);
+        assertThat(report.extractorVersion()).isEqualTo("extractor-v2");
+        assertThat(report.llmPromptVersion()).isEqualTo("prompt-v2");
+        assertThat(report.totalDocuments()).isEqualTo(1);
+        assertThat(report.extractedDocuments()).isEqualTo(1);
+        assertThat(report.reviewCorrectionRate()).isEqualTo(1D);
+        assertThat(coverage(report, "department").reviewedDocuments()).isEqualTo(1);
+        assertThat(coverage(report, "department").correctedDocuments()).isEqualTo(1);
+        assertThat(report.reviewFeedbackSummaries()).singleElement().satisfies(summary -> {
+            assertThat(summary.fieldKey()).isEqualTo("department");
+            assertThat(summary.reasonCode()).isEqualTo("LOW_CONFIDENCE");
+            assertThat(summary.decisionAction()).isEqualTo("CORRECTED");
+            assertThat(summary.reviewCount()).isEqualTo(1);
+            assertThat(summary.sampleReviewItemIds()).containsExactly("review-p2");
+            assertThat(summary.sampleResultIds()).containsExactly("result-p2-1");
+            assertThat(summary.sampleAuditIds()).containsExactly("audit-p2");
+            assertThat(summary.sampleJobIds()).containsExactly("job-1");
+        });
     }
 
     @Test
@@ -207,7 +261,7 @@ class JdbcMetadataQualityReportAdapterTests {
                     normalized_metadata, raw_candidates, field_quality, validation_issues, approved_metadata,
                     create_time, update_time
                 ) VALUES ('review-1', 'tenant-1', 'kb-1', 'doc-2', 'job-1', 1, 'extractor-v1', 'REVIEW_REQUIRED',
-                          '{}', '{}', '[]', '[]', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                          '{}', '[]', '[]', '[]', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """);
 
         assertThat(adapter.hasAcceptedResult("tenant-1", "kb-1", "doc-1", 1, "extractor-v1")).isTrue();
@@ -225,6 +279,7 @@ class JdbcMetadataQualityReportAdapterTests {
 
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_metadata_quarantine_item");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_metadata_review_audit");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_metadata_review_item");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_metadata_extraction_result");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_metadata_field_schema");
@@ -283,7 +338,30 @@ class JdbcMetadataQualityReportAdapterTests {
                     id VARCHAR(64) PRIMARY KEY,
                     tenant_id VARCHAR(64) NOT NULL,
                     kb_id VARCHAR(64),
-                    review_status VARCHAR(32) NOT NULL
+                    doc_id VARCHAR(64),
+                    result_id VARCHAR(64),
+                    review_status VARCHAR(32) NOT NULL,
+                    reason_code VARCHAR(64),
+                    suggested_metadata VARCHAR(4096),
+                    corrected_metadata VARCHAR(4096)
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_metadata_review_audit (
+                    id VARCHAR(64) PRIMARY KEY,
+                    review_item_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL,
+                    kb_id VARCHAR(64),
+                    doc_id VARCHAR(64),
+                    result_id VARCHAR(64),
+                    from_status VARCHAR(32),
+                    to_status VARCHAR(32),
+                    reviewer_id VARCHAR(64),
+                    review_comment VARCHAR(512),
+                    previous_metadata VARCHAR(4096),
+                    updated_metadata VARCHAR(4096),
+                    decision_metadata VARCHAR(4096),
+                    create_time TIMESTAMP
                 )
                 """);
         jdbcTemplate.execute("""
@@ -325,16 +403,16 @@ class JdbcMetadataQualityReportAdapterTests {
                 Map.of("department", "Sales"),
                 List.of(quality("department", 0.7D)),
                 Instant.parse("2026-05-13T09:00:00Z"));
-        jdbcTemplate.update("INSERT INTO t_metadata_review_item(id, tenant_id, kb_id, review_status) "
-                + "VALUES ('review-1', 'tenant-1', 'kb-1', 'PENDING')");
-        jdbcTemplate.update("INSERT INTO t_metadata_review_item(id, tenant_id, kb_id, review_status) "
-                + "VALUES ('review-2', 'tenant-1', 'kb-1', 'PENDING')");
-        jdbcTemplate.update("INSERT INTO t_metadata_review_item(id, tenant_id, kb_id, review_status) "
-                + "VALUES ('review-3', 'tenant-1', 'kb-1', 'APPROVED')");
-        jdbcTemplate.update("INSERT INTO t_metadata_review_item(id, tenant_id, kb_id, review_status) "
-                + "VALUES ('review-4', 'tenant-1', 'kb-1', 'CORRECTED')");
-        jdbcTemplate.update("INSERT INTO t_metadata_review_item(id, tenant_id, kb_id, review_status) "
-                + "VALUES ('review-5', 'tenant-1', 'kb-1', 'REJECTED')");
+        insertReviewRow("review-1", "doc-2", "result-2", "PENDING", "LOW_CONFIDENCE",
+                Map.of("department", "Sales"), Map.of());
+        insertReviewRow("review-2", "doc-3", "", "PENDING", "MISSING_OWNER",
+                Map.of("owner", ""), Map.of());
+        insertReviewRow("review-3", "doc-1", "result-1", "APPROVED", "LOW_CONFIDENCE",
+                Map.of("department", "Sales"), Map.of("department", "Sales"));
+        insertReviewRow("review-4", "doc-2", "result-2", "CORRECTED", "LOW_CONFIDENCE",
+                Map.of("department", "Sales"), Map.of("department", "Legal"));
+        insertReviewRow("review-5", "doc-3", "", "REJECTED", "INVALID_SECURITY",
+                Map.of("securityLevel", "secret"), Map.of());
         insertQuarantine("q-1", "VALIDATE", "SCHEMA_MISSING", "缺少 Schema", 0);
         insertQuarantine("q-2", "VALIDATE", "SCHEMA_MISSING", "缺少 Schema", 0);
         insertQuarantine("q-3", "PARSE", "PARSE_FAILED", "解析失败", 0);
@@ -358,7 +436,7 @@ class JdbcMetadataQualityReportAdapterTests {
                                   Map<String, Object> metadata,
                                   List<Map<String, Object>> qualities,
                                   Instant updateTime) {
-        insertExtraction(id, docId, metadata, metadata, qualities, updateTime);
+        insertExtraction(id, docId, 1, "extractor-v1", metadata, metadata, qualities, List.of(), updateTime);
     }
 
     private void insertExtraction(String id,
@@ -367,7 +445,7 @@ class JdbcMetadataQualityReportAdapterTests {
                                   Map<String, Object> approvedMetadata,
                                   List<Map<String, Object>> qualities,
                                   Instant updateTime) {
-        insertExtraction(id, docId, 1, "extractor-v1", metadata, approvedMetadata, qualities, updateTime);
+        insertExtraction(id, docId, 1, "extractor-v1", metadata, approvedMetadata, qualities, List.of(), updateTime);
     }
 
     private void insertExtraction(String id,
@@ -378,15 +456,44 @@ class JdbcMetadataQualityReportAdapterTests {
                                   Map<String, Object> approvedMetadata,
                                   List<Map<String, Object>> qualities,
                                   Instant updateTime) {
+        insertExtraction(id, docId, schemaVersion, extractorVersion,
+                metadata, approvedMetadata, qualities, List.of(), updateTime);
+    }
+
+    private void insertExtraction(String id,
+                                  String docId,
+                                  int schemaVersion,
+                                  String extractorVersion,
+                                  Map<String, Object> metadata,
+                                  Map<String, Object> approvedMetadata,
+                                  List<Map<String, Object>> qualities,
+                                  List<Map<String, Object>> rawCandidates,
+                                  Instant updateTime) {
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_extraction_result(
                     id, tenant_id, kb_id, doc_id, job_id, schema_version, extractor_version, status,
                     normalized_metadata, raw_candidates, field_quality, validation_issues, approved_metadata,
                     create_time, update_time
                 ) VALUES (?, 'tenant-1', 'kb-1', ?, 'job-1', ?, ?, 'ACCEPT',
-                          ?, '{}', ?, '[]', ?, ?, ?)
-                """, id, docId, schemaVersion, extractorVersion, json(metadata), json(qualities), json(approvedMetadata),
+                          ?, ?, ?, '[]', ?, ?, ?)
+                """, id, docId, schemaVersion, extractorVersion, json(metadata), json(rawCandidates), json(qualities), json(approvedMetadata),
                 Timestamp.from(updateTime), Timestamp.from(updateTime));
+    }
+
+    private void insertReviewRow(String id,
+                                 String docId,
+                                 String resultId,
+                                 String reviewStatus,
+                                 String reasonCode,
+                                 Map<String, Object> suggestedMetadata,
+                                 Map<String, Object> correctedMetadata) {
+        jdbcTemplate.update("""
+                INSERT INTO t_metadata_review_item(
+                    id, tenant_id, kb_id, doc_id, result_id, review_status, reason_code,
+                    suggested_metadata, corrected_metadata
+                ) VALUES (?, 'tenant-1', 'kb-1', ?, ?, ?, ?, ?, ?)
+                """, id, docId, resultId, reviewStatus, reasonCode,
+                json(suggestedMetadata), json(correctedMetadata));
     }
 
     private void insertQuarantine(String id, String stage, String reasonCode, String reasonMessage, int resolved) {
@@ -396,6 +503,16 @@ class JdbcMetadataQualityReportAdapterTests {
                 """, id, stage, reasonCode, reasonMessage, resolved);
     }
 
+    private void insertReviewAudit(String id, String reviewItemId, String docId, String resultId) {
+        jdbcTemplate.update("""
+                INSERT INTO t_metadata_review_audit(
+                    id, review_item_id, tenant_id, kb_id, doc_id, result_id, from_status, to_status,
+                    reviewer_id, review_comment, previous_metadata, updated_metadata, decision_metadata, create_time
+                ) VALUES (?, ?, 'tenant-1', 'kb-1', ?, ?, 'PENDING', 'CORRECTED',
+                          'auditor', 'ok', '{}', '{}', '{}', CURRENT_TIMESTAMP)
+                """, id, reviewItemId, docId, resultId);
+    }
+
     private Map<String, Object> quality(String fieldKey, double confidence) {
         return Map.of(
                 "fieldKey", fieldKey,
@@ -403,6 +520,13 @@ class JdbcMetadataQualityReportAdapterTests {
                 "sourceType", "rule",
                 "extractorName", "extractor",
                 "normalized", true);
+    }
+
+    private Map<String, Object> rawCandidate(String fieldKey, String promptVersion) {
+        return Map.of(
+                "fieldKey", fieldKey,
+                "promptVersion", promptVersion,
+                "extractorVersion", "extractor-v2");
     }
 
     private String json(Object value) {

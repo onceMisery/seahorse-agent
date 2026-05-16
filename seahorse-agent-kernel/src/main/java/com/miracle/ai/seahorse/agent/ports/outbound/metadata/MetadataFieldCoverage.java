@@ -13,7 +13,10 @@ public record MetadataFieldCoverage(
         int totalDocuments,
         double coverageRate,
         int lowConfidenceDocuments,
-        double lowConfidenceRate
+        double lowConfidenceRate,
+        int reviewedDocuments,
+        int correctedDocuments,
+        double correctionRate
 ) {
 
     public MetadataFieldCoverage {
@@ -24,6 +27,9 @@ public record MetadataFieldCoverage(
         coverageRate = clamp(coverageRate);
         lowConfidenceDocuments = Math.max(0, lowConfidenceDocuments);
         lowConfidenceRate = clamp(lowConfidenceRate);
+        reviewedDocuments = Math.max(0, reviewedDocuments);
+        correctedDocuments = Math.max(0, correctedDocuments);
+        correctionRate = clamp(correctionRate);
     }
 
     public MetadataFieldCoverage(String fieldKey,
@@ -32,7 +38,20 @@ public record MetadataFieldCoverage(
                                  int coveredDocuments,
                                  int totalDocuments,
                                  double coverageRate) {
-        this(fieldKey, displayName, required, coveredDocuments, totalDocuments, coverageRate, 0, 0D);
+        this(fieldKey, displayName, required, coveredDocuments, totalDocuments, coverageRate,
+                0, 0D, 0, 0, 0D);
+    }
+
+    public MetadataFieldCoverage(String fieldKey,
+                                 String displayName,
+                                 boolean required,
+                                 int coveredDocuments,
+                                 int totalDocuments,
+                                 double coverageRate,
+                                 int lowConfidenceDocuments,
+                                 double lowConfidenceRate) {
+        this(fieldKey, displayName, required, coveredDocuments, totalDocuments, coverageRate,
+                lowConfidenceDocuments, lowConfidenceRate, 0, 0, 0D);
     }
 
     private static double clamp(double value) {

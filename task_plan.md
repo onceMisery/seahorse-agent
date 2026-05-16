@@ -122,3 +122,149 @@
 - [complete] 新增无 DDL 的默认检索策略模板端口与内核服务，提供向量召回、混合 RRF、混合精排三类模板。
 - [complete] starter 自动暴露 `RetrievalStrategyTemplateInboundPort`，后续可替换为持久化或知识库级覆盖实现。
 - [complete] Web 新增 `GET /knowledge-base/{kb-id}/retrieval-strategy-templates`，管理端可直接读取模板中的强类型 `RetrievalOptions`。
+
+## 2026-05-15 合并到 `main` 后的下一阶段开发方案
+
+### 计划依据
+
+- 基线分支：`main`
+- 合并基线：`3b64c75 Merge branch 'codex/metadata-review-audit-history'`
+- 参考文档：
+  - `handoff-frnn1m.md`
+  - `findings.md`
+  - `progress.md`
+  - `docs/zh/content/架构设计/企业级元数据抽取与治理管道设计.md`
+  - `docs/zh/content/架构设计/混合检索与重排完善设计方案.md`
+
+### 当前差距判断
+
+- 总体完成度约 `75% ~ 85%`，已完成“可用最小闭环”，但离设计文档中的企业级闭环还有最后一段平台化收口。
+- 检索侧完成度约 `85% ~ 90%`，主要差距不在召回链路，而在 Schema 联动补偿、使用观测沉淀和版本化运营能力。
+- 元数据治理侧完成度约 `65% ~ 75%`，主要差距在 LLM 抽取效果闭环、跨版本质量对比、复核反馈反哺和运维报表。
+
+### 范围边界
+
+- 继续遵守现有微内核边界：`seahorse-agent-kernel` 只扩展领域模型、端口、Feature 与编排，不引入外部搜索或模型 SDK。
+- 动态 metadata 在进入 Elasticsearch / PostgreSQL / Milvus / PGVector 前，仍必须先经过 `MetadataSchemaRegistryPort` 与 `MetadataFilterCompiler`。
+- 本阶段先做内核、JDBC、Web API、观测与报表闭环，不新增前端页面工程。
+- 不恢复 `docs/zh/content/架构设计/混合检索.txt`，不处理 `.claude/` 未跟踪目录。
+
+### 阶段 A：LLM 抽取治理闭环
+
+目标：把现有 `LLM 抽取 -> Review/Quarantine -> Re-Extract` 能力，从“能跑”收口为“可比较、可反哺、可运营”。
+
+现状缺口：
+
+- 已有 `extractorVersion`、`llmPromptVersion`、复核审计和重抽取入口，但缺少按字段、原因码、版本维度的效果聚合。
+- 复核结果已经写回 canonical metadata，但还没有形成“哪些字段被人工修正最多、哪些 prompt/extractor 版本效果更差”的统一报表。
+- 设计文档要求的“基于 review 结果持续优化规则、字典、prompt”的闭环，目前仍主要依赖人工读明细。
+
+实施切片：
+
+- [complete] A1 扩展元数据质量报表，支持按 `schemaVersion`、`extractorVersion`、`llmPromptVersion` 输出字段级通过率、低置信度率、复核修正率。
+- [complete] A2 新增抽取效果对比报表接口，支持比较不同 `schemaVersion/extractorVersion/llmPromptVersion` 的质量差异，而不是只看单次快照。
+- [complete] A3 新增复核反馈聚合能力，按 `fieldKey`、`reasonCode`、`decisionAction` 聚合“最常被修正/拒绝/转隔离”的字段与原因。
+- [complete] A4 将复核反馈与重抽取任务关联，支持从反馈聚合结果直接定位对应抽取结果、审计轨迹和回填任务。
+
+涉及模块 / 文件：
+
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/metadata/KernelMetadataQualityService.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/metadata/KernelMetadataReviewService.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/metadata/KernelMetadataExtractionResultService.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports/inbound/metadata/*`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports/outbound/metadata/*`
+- `seahorse-agent-adapter-repository-jdbc/src/main/java/com/miracle/ai/seahorse/agent/adapters/repository/jdbc/JdbcMetadataGovernanceRepositoryAdapter.java`
+- `seahorse-agent-adapter-web/src/main/java/com/miracle/ai/seahorse/agent/adapters/web/SeahorseMetadataQualityController.java`
+- `seahorse-agent-adapter-web/src/main/java/com/miracle/ai/seahorse/agent/adapters/web/SeahorseMetadataReviewController.java`
+- `seahorse-agent-adapter-web/src/main/java/com/miracle/ai/seahorse/agent/adapters/web/SeahorseMetadataExtractionResultController.java`
+
+验证方式：
+
+- `mvn -pl seahorse-agent-tests -am "-Dtest=KernelMetadataQualityServiceTests,KernelMetadataReviewServiceTests,SeahorseWebApiContractTests,JdbcMetadataQualityReportAdapterTests,JdbcMetadataReviewQuarantineAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+- 报表接口至少覆盖：版本筛选、字段聚合、原因码聚合、空数据降级和审计链路定位。
+
+### 阶段 B：Schema 驱动索引联动深化
+
+目标：把当前“字段创建/更新时同步 mapping/索引”的最小能力，升级为“Schema 变更 -> 索引结构 -> 补偿重建 -> 下推边界”完整联动。
+
+现状缺口：
+
+- 当前 `MetadataSchemaIndexSyncPort` 已能处理创建/更新，但删除、禁用、`indexed/filterable/pushdown` 能力变化后的补偿策略还不完整。
+- Elasticsearch mapping 已接通，JDBC 表达式索引已接通，但“Schema 变更后需要重建哪些关键词/向量数据”的编排还没有统一出口。
+- 向量侧虽然支持过滤下推，但缺少一份明确的“哪些字段允许下推到向量库、哪些字段只能 guard-only”的运维视图。
+
+实施切片：
+
+- [pending] B1 扩展 `MetadataSchemaIndexSyncPort` 语义，覆盖字段软删除、禁用、索引能力降级和 guard-only 切换。
+- [pending] B2 新增 Schema 变更补偿编排，统一触发关键词索引重建、向量 metadata 补偿和必要的 canonical metadata 重放。
+- [pending] B3 为 Elasticsearch / JDBC / 向量适配器补齐 Schema 变更后的兼容策略和失败观测，明确哪些失败只记观测，哪些失败需要补偿任务。
+- [pending] B4 新增“字段索引能力视图”，展示 `indexed / pushdownToKeyword / pushdownToVector / guardOnly` 的当前生效状态和最近一次同步结果。
+
+涉及模块 / 文件：
+
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/metadata/KernelMetadataSchemaService.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports/outbound/metadata/MetadataSchemaIndexSyncPort.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports/outbound/metadata/MetadataIndexCompensationPort.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/metadata/KernelMetadataBackfillService.java`
+- `seahorse-agent-adapter-search-elasticsearch/src/main/java/com/miracle/ai/seahorse/agent/adapters/search/elasticsearch/ElasticsearchMetadataSchemaIndexAdapter.java`
+- `seahorse-agent-adapter-repository-jdbc/src/main/java/com/miracle/ai/seahorse/agent/adapters/repository/jdbc/JdbcMetadataSchemaIndexAdapter.java`
+- `seahorse-agent-adapter-repository-jdbc/src/main/java/com/miracle/ai/seahorse/agent/adapters/repository/jdbc/JdbcMetadataGovernanceRepositoryAdapter.java`
+- `seahorse-agent-spring-boot-starter/src/main/java/com/miracle/ai/seahorse/agent/adapters/spring/SeahorseAgentKernelAutoConfiguration.java`
+- `seahorse-agent-spring-boot-starter/src/main/java/com/miracle/ai/seahorse/agent/adapters/spring/SeahorseAgentNativeAdapterAutoConfiguration.java`
+
+验证方式：
+
+- `mvn -pl seahorse-agent-tests -am "-Dtest=KernelMetadataSchemaServiceTests,KernelMetadataBackfillServiceTests,SeahorseAgentKernelAutoConfigurationTests,JdbcMetadataSchemaIndexAdapterTests,ElasticsearchMetadataSchemaIndexAdapterTests,MetadataRetrievalFilterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+- 至少覆盖：字段删除/禁用后的补偿、guard-only 字段不下推、mapping 同步失败观测、Schema 版本切换后的重建入口。
+
+### 阶段 C：治理报表与平台化运维
+
+目标：把当前零散的质量报表、回填任务、抽取结果和检索观测，收敛成可用于日常运营和上线决策的平台化接口。
+
+现状缺口：
+
+- 设计文档中提到的 Schema 使用情况报表，当前只有 `retrieval.metadata.filter.compiled` 观测事件，还没有聚合查询出口。
+- 已支持回填任务列表、质量报表和评测接口，但缺少“跨版本对比”和“失败画像”两类管理视角。
+- 检索侧与治理侧已有丰富观测事件，但还没有统一沉淀成面向管理端的查询模型。
+
+实施切片：
+
+- [pending] C1 新增 Schema 使用情况报表，基于 `retrieval.metadata.filter.compiled` 和相关治理事件统计字段使用频次、guard-only 命中率、拒绝率。
+- [pending] C2 新增回填运维视图，聚合任务状态、失败原因、待补偿文档数、Review/Quarantine 流向和最近一次重抽取结果。
+- [pending] C3 新增跨版本质量对比接口，支持把治理报表与检索评测结果并列输出，服务上线前对比 `baseline` 与候选版本。
+- [pending] C4 为关键观测补充低基数标签约束与统一命名，避免后续 Micrometer/日志平台接入时标签爆炸。
+
+涉及模块 / 文件：
+
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/retrieval/KernelMultiChannelRetrievalEngine.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/retrieval/KernelRetrievalEvaluationService.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/metadata/KernelMetadataBackfillService.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/metadata/KernelMetadataQualityService.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports/outbound/observation/*`
+- `seahorse-agent-adapter-repository-jdbc/src/main/java/com/miracle/ai/seahorse/agent/adapters/repository/jdbc/JdbcMetadataGovernanceRepositoryAdapter.java`
+- `seahorse-agent-adapter-web/src/main/java/com/miracle/ai/seahorse/agent/adapters/web/SeahorseMetadataBackfillController.java`
+- `seahorse-agent-adapter-web/src/main/java/com/miracle/ai/seahorse/agent/adapters/web/SeahorseMetadataQualityController.java`
+- `seahorse-agent-adapter-web/src/main/java/com/miracle/ai/seahorse/agent/adapters/web/SeahorseRetrievalEvaluationController.java`
+
+验证方式：
+
+- `mvn -pl seahorse-agent-tests -am "-Dtest=MetadataRetrievalFilterTests,KernelRetrievalEvaluationServiceTests,KernelMetadataBackfillServiceTests,KernelMetadataQualityServiceTests,SeahorseWebApiContractTests,JdbcMetadataQualityReportAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+- 至少覆盖：Schema 使用统计、版本对比报表、失败画像聚合、低基数观测字段约束。
+
+### 建议执行顺序
+
+1. 先做阶段 A，优先把 `review -> feedback -> re-extract` 的数据闭环补齐。
+2. 再做阶段 B，把 Schema 变更对 Elasticsearch / JDBC / 向量侧的补偿编排统一起来。
+3. 最后做阶段 C，把已有观测和质量数据平台化，形成管理 API 收口。
+
+### 每阶段完成标准
+
+- 阶段 A 完成标准：能按 `schemaVersion/extractorVersion/llmPromptVersion` 比较抽取治理效果，并能定位到字段和审计轨迹。
+- 阶段 B 完成标准：Schema 字段的增删改与 `indexed/pushdown/guardOnly` 变化都能触发明确的同步或补偿动作。
+- 阶段 C 完成标准：管理端可查询 Schema 使用情况、回填失败画像、跨版本质量对比，并能复用现有检索评测接口做上线前比对。
+
+### 风险与兼容性说明
+
+- 版本维度扩展优先复用现有 `schemaVersion`、`extractorVersion`、`llmPromptVersion` 字段，避免新增一套并行治理模型。
+- Schema 联动补偿必须坚持“先观测、再补偿、最后重建”的顺序，避免字段变更直接阻断线上检索。
+- 报表与运维接口优先做查询聚合，不先引入新前端或外部 BI 依赖，避免把下一阶段目标扩散为平台重构。

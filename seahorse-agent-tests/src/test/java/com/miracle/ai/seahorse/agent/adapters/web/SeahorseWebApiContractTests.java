@@ -96,11 +96,15 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryI
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataFieldCoverage;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataFieldCoverageDelta;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityComparisonDelta;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineReasonCount;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewFeedbackSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
@@ -653,28 +657,60 @@ class SeahorseWebApiContractTests {
     @Test
     void shouldKeepMetadataQualityReportContract() throws Exception {
         MetadataQualityInboundPort qualityPort = mock(MetadataQualityInboundPort.class);
-        when(qualityPort.report("tenant-1", "kb-1", 3, 2, "extractor-v2"))
+        when(qualityPort.report("tenant-1", "kb-1", 3, 2, "extractor-v2", "prompt-v3"))
                 .thenReturn(metadataQualityReport());
+        when(qualityPort.compare(
+                "tenant-1", "kb-1", 3,
+                1, "extractor-v1", "prompt-v1",
+                2, "extractor-v2", "prompt-v3"))
+                .thenReturn(metadataQualityComparisonReport());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMetadataQualityController(qualityPort)).build();
 
-        mvc.perform(get("/knowledge-base/kb-1/metadata-quality/report")
+                mvc.perform(get("/knowledge-base/kb-1/metadata-quality/report")
                         .param("tenantId", "tenant-1")
                         .param("schemaVersion", "2")
                         .param("extractorVersion", "extractor-v2")
+                        .param("llmPromptVersion", "prompt-v3")
                         .param("topN", "3"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.schemaVersion").value(2))
+                .andExpect(jsonPath("$.data.extractorVersion").value("extractor-v2"))
+                .andExpect(jsonPath("$.data.llmPromptVersion").value("prompt-v3"))
                 .andExpect(jsonPath("$.data.averageFieldCoverage").value(0.75))
                 .andExpect(jsonPath("$.data.lowConfidenceRatio").value(0.25))
                 .andExpect(jsonPath("$.data.reviewPassRate").value(0.8))
+                .andExpect(jsonPath("$.data.reviewCorrectionRate").value(0.25))
                 .andExpect(jsonPath("$.data.pendingReviewCount").value(2))
                 .andExpect(jsonPath("$.data.indexSyncFailureCount").value(1))
                 .andExpect(jsonPath("$.data.fieldCoverages[0].fieldKey").value("department"))
                 .andExpect(jsonPath("$.data.fieldCoverages[0].lowConfidenceDocuments").value(1))
                 .andExpect(jsonPath("$.data.fieldCoverages[0].lowConfidenceRate").value(1D / 3D))
+                .andExpect(jsonPath("$.data.fieldCoverages[0].reviewedDocuments").value(2))
+                .andExpect(jsonPath("$.data.fieldCoverages[0].correctedDocuments").value(1))
+                .andExpect(jsonPath("$.data.fieldCoverages[0].correctionRate").value(0.5))
+                .andExpect(jsonPath("$.data.reviewFeedbackSummaries[0].fieldKey").value("department"))
+                .andExpect(jsonPath("$.data.reviewFeedbackSummaries[0].decisionAction").value("CORRECTED"))
+                .andExpect(jsonPath("$.data.reviewFeedbackSummaries[0].sampleAuditIds[0]").value("audit-1"))
                 .andExpect(jsonPath("$.data.quarantineReasons[0].reasonCode").value("SCHEMA_MISSING"));
+
+        mvc.perform(get("/knowledge-base/kb-1/metadata-quality/compare")
+                        .param("tenantId", "tenant-1")
+                        .param("baselineSchemaVersion", "1")
+                        .param("baselineExtractorVersion", "extractor-v1")
+                        .param("baselineLlmPromptVersion", "prompt-v1")
+                        .param("candidateSchemaVersion", "2")
+                        .param("candidateExtractorVersion", "extractor-v2")
+                        .param("candidateLlmPromptVersion", "prompt-v3")
+                        .param("topN", "3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.delta.extractedDocumentsDelta").value(1))
+                .andExpect(jsonPath("$.data.delta.reviewCorrectionRateDelta").value(0.1))
+                .andExpect(jsonPath("$.data.fieldDeltas[0].fieldKey").value("department"))
+                .andExpect(jsonPath("$.data.fieldDeltas[0].correctionRateDelta").value(0.2));
     }
 
     @Test
@@ -1226,17 +1262,45 @@ class SeahorseWebApiContractTests {
         return new MetadataQualityReport(
                 "tenant-1",
                 "kb-1",
+                2,
+                "extractor-v2",
+                "prompt-v3",
                 4,
                 3,
                 0.75D,
                 0.25D,
                 0.8D,
+                0.25D,
                 2,
                 1,
                 1,
-                List.of(new MetadataFieldCoverage("department", "部门", true, 3, 4, 0.75D, 1, 1D / 3D)),
+                List.of(new MetadataFieldCoverage("department", "部门", true,
+                        3, 4, 0.75D, 1, 1D / 3D, 2, 1, 0.5D)),
+                List.of(new MetadataReviewFeedbackSummary(
+                        "department", "LOW_CONFIDENCE", "CORRECTED", 2, 2,
+                        List.of("review-1"), List.of("result-1"), List.of("audit-1"), List.of("job-1"))),
                 List.of(new MetadataQuarantineReasonCount("SCHEMA_MISSING", "缺少 Schema", 1)),
                 Instant.EPOCH);
+    }
+
+    private static MetadataQualityComparisonReport metadataQualityComparisonReport() {
+        MetadataQualityReport baseline = new MetadataQualityReport(
+                "tenant-1", "kb-1", 1, "extractor-v1", "prompt-v1",
+                4, 2, 0.65D, 0.3D, 0.7D, 0.1D, 2, 1, 1,
+                List.of(new MetadataFieldCoverage("department", "部门", true,
+                        2, 4, 0.5D, 1, 0.5D, 1, 0, 0D)),
+                List.of(),
+                List.of(new MetadataQuarantineReasonCount("SCHEMA_MISSING", "缺少 Schema", 1)),
+                Instant.EPOCH);
+        MetadataQualityReport candidate = metadataQualityReport();
+        return new MetadataQualityComparisonReport(
+                "tenant-1",
+                "kb-1",
+                baseline,
+                candidate,
+                new MetadataQualityComparisonDelta(0, 1, 0.1D, -0.05D, 0.1D, 0.1D, 0, 0, 0),
+                List.of(new MetadataFieldCoverageDelta("department", "部门",
+                        1, 0, 1, 1, 0.25D, -0.16666666666666669D, 0.2D)));
     }
 
     private static MetadataReviewRecord metadataReview(String id, MetadataReviewStatus status) {
