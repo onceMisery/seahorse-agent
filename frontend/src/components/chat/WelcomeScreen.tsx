@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowUpRight, BookOpen, BrainCircuit, Brain, Check, Lightbulb, Send, Square } from "lucide-react";
+import { ArrowUpRight, BookOpen, Brain, Check, Lightbulb, Send, Square } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { listSampleQuestions } from "@/services/sampleQuestionService";
@@ -143,17 +143,19 @@ export function WelcomeScreen() {
       />
 
       <div className="relative w-full max-w-[860px]">
-        {/* Floating BrainCircuit Logo */}
+        {/* Floating Seahorse Logo */}
         <div
           className="flex flex-col items-center text-center mb-16 opacity-0 animate-fade-up"
           style={{ animationFillMode: "both" }}
         >
           <div className="relative mb-10">
             <div className="absolute inset-0 rounded-full blur-3xl scale-110" style={{ backgroundColor: "var(--theme-accent-alpha-20)" }} />
-            <div
-              className="relative glass glow-border p-10 rounded-[4rem] shadow-2xl animate-float"
-            >
-              <BrainCircuit style={{ color: "var(--theme-accent)" }} size={100} />
+            <div className="relative animate-float">
+              <img
+                src="/seahorse-logo.png"
+                alt="Seahorse AI"
+                className="w-[200px] h-[200px] object-contain drop-shadow-[0_0_30px_rgba(6,182,212,0.4)]"
+              />
             </div>
           </div>
           <h2 className="font-display text-5xl font-bold tracking-tight glow-text" style={{ color: "var(--theme-text-primary)" }}>

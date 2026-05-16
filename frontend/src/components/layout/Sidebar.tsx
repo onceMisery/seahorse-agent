@@ -2,7 +2,6 @@ import * as React from "react";
 import { differenceInCalendarDays, isValid } from "date-fns";
 import {
   BookOpen,
-  Bot,
   LogOut,
   MessageSquare,
   MoreHorizontal,
@@ -173,9 +172,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       >
         <div className="pb-3" style={{ borderColor: "var(--theme-glass-border)", borderBottomWidth: 1, borderBottomStyle: "solid" }}>
           <div className="flex items-center gap-3">
-            <div className="relative flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: "var(--theme-accent-alpha-20)" }}>
-              <div className="absolute inset-0 rounded-lg blur-lg" style={{ backgroundColor: "var(--theme-accent-alpha-20)" }} />
-              <Bot className="relative h-5 w-5" style={{ color: "var(--theme-accent)" }} />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg overflow-hidden">
+              <img src="/seahorse-logo.png" alt="Seahorse" className="h-10 w-10 object-contain" />
             </div>
             <div style={{ fontFamily: sessionTitleFont }}>
               <p className="text-base font-semibold glow-text" style={{ color: "var(--theme-text-primary)" }}>Seahorse Agent</p>

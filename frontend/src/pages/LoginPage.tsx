@@ -1,5 +1,5 @@
 import * as React from "react";
-import { BrainCircuit, Eye, EyeOff, Lock, User } from "lucide-react";
+import { Eye, EyeOff, Lock, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -55,8 +55,12 @@ export function LoginPage() {
         <div className="flex flex-col items-center text-center mb-8">
           <div className="relative mb-6">
             <div className="absolute inset-0 rounded-full blur-3xl scale-110" style={{ backgroundColor: "var(--theme-accent-alpha-20)" }} />
-            <div className="relative glass glow-border p-8 rounded-[3rem] shadow-2xl animate-float">
-              <BrainCircuit style={{ color: "var(--theme-accent)" }} size={72} />
+            <div className="relative animate-float">
+              <img
+                src="/seahorse-logo.png"
+                alt="Seahorse Agent"
+                className="w-[140px] h-[140px] object-contain drop-shadow-[0_0_30px_rgba(6,182,212,0.4)]"
+              />
             </div>
           </div>
           <h1 className="font-display text-3xl font-bold tracking-tight glow-text" style={{ color: "var(--theme-text-primary)" }}>
