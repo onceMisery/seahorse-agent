@@ -334,3 +334,9 @@
 - 其他剩余增强不继续写代码，已在 `task_plan.md` 规划为评测集导入/导出、样本明细表、发布单/版本候选关联、趋势报表和 OpenSearch 后续适配器。
 - 验证通过：`mvn -pl seahorse-agent-adapter-search-lucene -am test`，Lucene 模块 2 个测试成功，reactor `BUILD SUCCESS`。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-spring-boot-starter -am "-Dtest=SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，starter 自动装配 8 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 同步设计文档状态
+
+- 核对并更新《混合检索与重排完善设计方案》《混合检索与重排详细设计》《企业级元数据抽取与治理管道设计》，统一为：Elasticsearch 生产默认、PostgreSQL FTS 轻量 fallback、Lucene Embedded 已落地且需显式启用、OpenSearch 保留后续规划。
+- 补充详细设计当前实现状态，明确关键词索引 Outbox delegate 顺序为 Elasticsearch -> Lucene -> JDBC，剩余平台化增强只进入规划。
+- 同步 `task_plan.md` 的当前差距判断：核心闭环已完成并可交付，剩余为 OpenSearch、评测集导入/导出、样本明细表、发布/版本关联和趋势报表等后续增强。

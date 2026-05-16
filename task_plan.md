@@ -18,7 +18,7 @@
 
 - M1 已完成：元数据治理领域模型、入库节点、Tika parser metadata、JDBC 治理仓储、chunk metadata 写入、starter 自动装配和基础测试。
 - M2 已完成：`RetrievalFilter`、`RetrievalOptions`、Filter AST、`MetadataFilterCompiler`、`MetadataGuardPostProcessorFeature`、query embedding、向量适配器 metadata 返回和基础过滤下推，并接入多通道检索入口与 starter 自动装配。
-- M3 已完成：新增 `KeywordSearchPort`、`KeywordIndexPort`、`KeywordSearchRequest` 和 `KeywordSearchChannelFeature`，starter 在存在 `KeywordSearchPort` 时注册关键词通道；已提供 JDBC/PostgreSQL FTS 轻量关键词 fallback、关键词索引 Outbox 异步化、Elasticsearch 生产适配器、kernel 级重建编排入口、Web 管理触发入口、索引失败观测和计划型 Job 触发入口。
+- M3 已完成：新增 `KeywordSearchPort`、`KeywordIndexPort`、`KeywordSearchRequest` 和 `KeywordSearchChannelFeature`，starter 在存在 `KeywordSearchPort` 时注册关键词通道；已提供 JDBC/PostgreSQL FTS 轻量关键词 fallback、关键词索引 Outbox 异步化、Elasticsearch 生产适配器、Lucene Embedded 低优先级显式可选适配器、kernel 级重建编排入口、Web 管理触发入口、索引失败观测和计划型 Job 触发入口。
 - M3 尚未完成：无。
 - M4 已完成最小闭环：新增 `RrfFusionPostProcessorFeature`、`RerankPostProcessorFeature` 和 `FinalTruncatePostProcessorFeature`，支持通道排名融合、重复 chunk 去重、融合分记录、Rerank 候选截断、异常/空结果降级、`rerankScore` 回写和 finalTopK 截断。
 - M4 后续增强进入 M6 收口：Rerank 超时隔离、通道权重配置化和观测指标。
@@ -138,9 +138,9 @@
 
 ### 当前差距判断
 
-- 总体完成度约 `75% ~ 85%`，已完成“可用最小闭环”，但离设计文档中的企业级闭环还有最后一段平台化收口。
-- 检索侧完成度约 `85% ~ 90%`，主要差距不在召回链路，而在 Schema 联动补偿、使用观测沉淀和版本化运营能力。
-- 元数据治理侧完成度约 `65% ~ 75%`，主要差距在 LLM 抽取效果闭环、跨版本质量对比、复核反馈反哺和运维报表。
+- 总体完成度约 `90% ~ 95%`，核心检索与元数据治理闭环已达到可用交付状态；剩余不再继续扩展本轮代码范围，作为平台化增强和低优先级扩展规划。
+- 检索侧完成度约 `95%`，召回、过滤、RRF、Rerank、评测、Elasticsearch、PostgreSQL FTS 和 Lucene Embedded 主链路已完成；主要剩余为 OpenSearch 适配器、评测集导入/导出、样本明细表、发布/版本关联和趋势报表。
+- 元数据治理侧完成度约 `85% ~ 90%`，抽取、标准化、校验、Review/Quarantine、回填、报表和索引联动已完成核心闭环；剩余为更完整的平台化运营增强。
 
 ### 范围边界
 
