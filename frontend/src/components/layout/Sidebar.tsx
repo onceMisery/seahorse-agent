@@ -501,6 +501,7 @@ function ThemeColorSwitcher() {
 
   const themeColors: Record<ColorThemeKey, string> = {
     marine: "#06b6d4",
+    white: "#e2e8f0",
     purple: "#a855f7",
     emerald: "#10b981",
     amber: "#f59e0b"
@@ -519,6 +520,7 @@ function ThemeColorSwitcher() {
             className="h-5 w-5 rounded-full transition-all duration-200"
             style={{
               backgroundColor: themeColors[key],
+              border: key === "white" ? "1px solid #94a3b8" : "none",
               boxShadow: colorTheme === key ? `0 0 0 2px var(--theme-bg-deep), 0 0 0 3px ${themeColors[key]}` : "none",
               transform: colorTheme === key ? "scale(1.15)" : "scale(1)"
             }}

@@ -252,6 +252,39 @@
   --theme-text-glow: 0 0 8px rgba(245, 158, 11, 0.6);
 }
 
+/* ===== 皓白主题 ===== */
+.theme-white {
+  --theme-bg-deep: #f8fafc;
+  --theme-bg-base: #f1f5f9;
+  --theme-bg-elevated: #ffffff;
+  --theme-bg-surface: #f8fafc;
+  --theme-bg-gradient-1: #e2e8f0;
+  --theme-bg-gradient-2: #f1f5f9;
+
+  --theme-accent: #3b82f6;
+  --theme-accent-light: #60a5fa;
+  --theme-accent-dim: #2563eb;
+  --theme-accent-alpha-10: rgba(59, 130, 246, 0.1);
+  --theme-accent-alpha-20: rgba(59, 130, 246, 0.2);
+  --theme-accent-alpha-30: rgba(59, 130, 246, 0.3);
+  --theme-accent-alpha-40: rgba(59, 130, 246, 0.4);
+  --theme-accent-alpha-60: rgba(59, 130, 246, 0.6);
+
+  --theme-text-primary: #0f172a;
+  --theme-text-secondary: #475569;
+  --theme-text-muted: #94a3b8;
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.7);
+  --theme-glass-bg-hover: rgba(255, 255, 255, 0.9);
+  --theme-glass-border: rgba(59, 130, 246, 0.15);
+  --theme-glass-border-hover: rgba(59, 130, 246, 0.3);
+  --theme-glass-glow: rgba(59, 130, 246, 0.1);
+
+  --theme-gradient: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  --theme-shadow-glow: 0 0 20px rgba(59, 130, 246, 0.1);
+  --theme-text-glow: 0 0 8px rgba(59, 130, 246, 0.4);
+}
+
 .dark {
   color-scheme: light;
 }

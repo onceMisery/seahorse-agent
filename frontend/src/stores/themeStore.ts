@@ -6,6 +6,7 @@ export type ThemeMode = "light" | "dark";
 
 export const COLOR_THEMES = {
   marine: { label: "海洋", class: "" },
+  white: { label: "皓白", class: "theme-white" },
   purple: { label: "星云", class: "theme-purple" },
   emerald: { label: "翡翠", class: "theme-emerald" },
   amber: { label: "琥珀", class: "theme-amber" }
