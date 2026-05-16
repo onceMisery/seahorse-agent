@@ -6,6 +6,7 @@ import {
   LogOut,
   MessageSquare,
   MoreHorizontal,
+  Palette,
   Pencil,
   Plus,
   Search,
@@ -34,6 +35,7 @@ import { Loading } from "@/components/common/Loading";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
+import { COLOR_THEMES, useThemeStore, type ColorThemeKey } from "@/stores/themeStore";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -156,66 +158,67 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       <div
         className={cn(
-          "fixed inset-0 z-30 bg-slate-900/30 backdrop-blur-sm transition-opacity lg:hidden",
+          "fixed inset-0 z-30 backdrop-blur-sm transition-opacity lg:hidden",
           isOpen ? "opacity-100" : "pointer-events-none opacity-0"
         )}
+        style={{ backgroundColor: "rgba(2, 6, 23, 0.7)" }}
         onClick={onClose}
       />
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 flex h-screen w-[280px] flex-shrink-0 flex-col bg-[#FAFAFA] p-3 transition-transform lg:static lg:h-screen lg:translate-x-0",
+          "fixed left-0 top-0 z-40 flex h-screen w-[280px] flex-shrink-0 flex-col glass p-3 transition-transform lg:static lg:h-screen lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
+        style={{ borderColor: "var(--theme-glass-border)" }}
       >
-        <div className="border-b border-[#F0F0F0] pb-3">
+        <div className="pb-3" style={{ borderColor: "var(--theme-glass-border)", borderBottomWidth: 1, borderBottomStyle: "solid" }}>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#3B82F6]">
-              <Bot className="h-5 w-5 text-white" />
+            <div className="relative flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: "var(--theme-accent-alpha-20)" }}>
+              <div className="absolute inset-0 rounded-lg blur-lg" style={{ backgroundColor: "var(--theme-accent-alpha-20)" }} />
+              <Bot className="relative h-5 w-5" style={{ color: "var(--theme-accent)" }} />
             </div>
             <div style={{ fontFamily: sessionTitleFont }}>
-              <p className="text-base font-semibold text-[#1A1A1A]">Seahorse Agent</p>
-              <p className="text-xs text-[#999999]">Powered by AI</p>
+              <p className="text-base font-semibold glow-text" style={{ color: "var(--theme-text-primary)" }}>Seahorse Agent</p>
+              <p className="text-xs" style={{ color: "var(--theme-text-muted)" }}>Powered by AI</p>
             </div>
           </div>
         </div>
         <div className="py-3 space-y-4">
-          <div className="relative overflow-hidden rounded-2xl border border-[#E6EEF6] bg-gradient-to-br from-[#F0F9FF] via-white to-[#FEF3C7] p-3 shadow-[0_14px_30px_rgba(15,23,42,0.08)]">
+          <div className="relative overflow-hidden rounded-2xl p-3 glass glow-border">
             <span
               aria-hidden="true"
-              className="absolute -right-10 -top-10 h-24 w-24 rounded-full bg-[#BAE6FD]/70 blur-2xl"
-            />
-            <span
-              aria-hidden="true"
-              className="absolute -left-12 -bottom-10 h-28 w-28 rounded-full bg-[#FDE68A]/70 blur-2xl"
+              className="absolute -right-10 -top-10 h-24 w-24 rounded-full blur-2xl"
+              style={{ backgroundColor: "var(--theme-accent-alpha-20)" }}
             />
             <div className="relative">
               <div className="flex items-center justify-between px-1">
-                <span className="text-[11px] font-semibold text-[#94A3B8]">快速开始</span>
-                <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-[#2563EB]">
+                <span className="text-[11px] font-semibold" style={{ color: "var(--theme-text-muted)" }}>快速开始</span>
+                <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ backgroundColor: "var(--theme-accent-alpha-10)", color: "var(--theme-accent)" }}>
                   新内容
                 </span>
               </div>
               <button
                 type="button"
-                className="mt-2 flex w-full items-center gap-3 rounded-2xl bg-white/90 px-4 py-3 text-left shadow-[0_10px_20px_rgba(15,23,42,0.08)] transition-all hover:-translate-y-[1px] hover:shadow-[0_16px_30px_rgba(15,23,42,0.12)]"
+                className="mt-2 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left glass-hover transition-all hover:-translate-y-[1px]"
                 onClick={() => {
                   createSession().catch(() => null);
                   navigate("/chat");
                   onClose();
                 }}
               >
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#60A5FA] to-[#2563EB] text-white shadow-[0_6px_14px_rgba(37,99,235,0.3)]">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl text-white shadow-lg" style={{ background: "var(--theme-gradient)", boxShadow: "0 6px 14px var(--theme-accent-alpha-30)" }}>
                   <Plus className="h-4 w-4" />
                 </span>
                 <span className="flex-1">
-                  <span className="block text-sm font-semibold text-[#1F2937]">新建对话</span>
-                  <span className="block text-xs text-[#94A3B8]">从空白开始</span>
+                  <span className="block text-sm font-semibold" style={{ color: "var(--theme-text-primary)" }}>新建对话</span>
+                  <span className="block text-xs" style={{ color: "var(--theme-text-muted)" }}>从空白开始</span>
                 </span>
               </button>
               {user?.role === "admin" ? (
                 <button
                   type="button"
-                  className="mt-2 inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/70 px-3 py-1.5 text-xs font-semibold text-[#1D4ED8] transition-colors hover:bg-white"
+                  className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors glass-hover"
+                  style={{ color: "var(--theme-accent)" }}
                   onClick={() => {
                     window.open("/admin", "_blank");
                     onClose();
@@ -227,19 +230,23 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               ) : null}
             </div>
           </div>
-          <div className="rounded-2xl border border-[#E6EEF6] bg-white p-3 shadow-[0_12px_26px_rgba(15,23,42,0.06)]">
+          <div className="rounded-2xl p-3 glass">
             <div className="flex items-center justify-between px-1">
-              <span className="text-[11px] font-semibold text-[#94A3B8]">搜索对话</span>
-              <span className="text-[10px] text-[#CBD5F5]">Ctrl / Cmd + K</span>
+              <span className="text-[11px] font-semibold" style={{ color: "var(--theme-text-muted)" }}>搜索对话</span>
             </div>
             <div className="mt-2">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--theme-text-muted)" }} />
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="搜索对话..."
-                  className="h-10 w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] pl-9 pr-3 text-sm text-[#1F2937] placeholder:text-[#9CA3AF] focus:border-[#93C5FD] focus:outline-none transition-colors"
+                  className="h-10 w-full rounded-xl pl-9 pr-3 text-sm focus:outline-none transition-colors"
+                  style={{
+                    backgroundColor: "var(--theme-bg-elevated)",
+                    border: "1px solid var(--theme-glass-border)",
+                    color: "var(--theme-text-primary)"
+                  }}
                 />
               </div>
             </div>
@@ -249,15 +256,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className="h-full overflow-y-auto sidebar-scroll">
             {sessions.length === 0 && (!sessionsLoaded || isLoading) ? (
               <div
-                className="flex h-full items-center justify-center text-[#999999]"
-                style={{ fontFamily: sessionTitleFont }}
+                className="flex h-full items-center justify-center"
+                style={{ fontFamily: sessionTitleFont, color: "var(--theme-text-muted)" }}
               >
                 <Loading label="加载会话中" />
               </div>
             ) : filteredSessions.length === 0 ? (
               <div
-                className="flex h-full flex-col items-center justify-center text-[#999999]"
-                style={{ fontFamily: sessionTitleFont }}
+                className="flex h-full flex-col items-center justify-center"
+                style={{ fontFamily: sessionTitleFont, color: "var(--theme-text-muted)" }}
               >
                 <MessageSquare className="h-16 w-16" />
                 <p className="mt-2 text-[14px]">暂无对话记录</p>
@@ -266,7 +273,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <div>
                 {groupedSessions.map((group, index) => (
                   <div key={group.label} className={cn("flex flex-col", index === 0 ? "mt-0" : "mt-4")}>
-                    <p className="mb-1.5 pl-3 text-[12px] font-normal leading-[18px] text-[#999999]">
+                    <p className="mb-1.5 pl-3 text-[12px] font-normal leading-[18px]" style={{ color: "var(--theme-text-muted)" }}>
                       {group.label}
                     </p>
                     {group.items.map((session) => (
@@ -275,9 +282,23 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         className={cn(
                           "group my-[1px] flex min-h-[40px] cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-[14px] leading-[22px] transition-colors duration-200",
                           currentSessionId === session.id
-                            ? "bg-[#DBEAFE] text-[#2563EB]"
-                            : "text-[#333333] hover:bg-[#F5F5F5]"
+                            ? ""
+                            : ""
                         )}
+                        style={{
+                          backgroundColor: currentSessionId === session.id ? "var(--theme-accent-alpha-10)" : "transparent",
+                          color: currentSessionId === session.id ? "var(--theme-accent)" : "var(--theme-text-secondary)"
+                        }}
+                        onMouseEnter={(e) => {
+                          if (currentSessionId !== session.id) {
+                            e.currentTarget.style.backgroundColor = "var(--theme-glass-bg)";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (currentSessionId !== session.id) {
+                            e.currentTarget.style.backgroundColor = "transparent";
+                          }
+                        }}
                         role="button"
                         tabIndex={0}
                         onClick={() => {
@@ -316,7 +337,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             onBlur={() => {
                               commitRename().catch(() => null);
                             }}
-                            className="h-6 flex-1 rounded-md border border-[#E5E5E5] bg-white px-2 text-[14px] leading-[22px] text-[#333333] focus:border-[#2563EB] focus:outline-none"
+                            className="h-6 flex-1 rounded-md px-2 text-[14px] leading-[22px] focus:outline-none"
+                            style={{
+                              border: "1px solid var(--theme-accent-alpha-30)",
+                              backgroundColor: "var(--theme-bg-elevated)",
+                              color: "var(--theme-text-primary)"
+                            }}
                           />
                         ) : (
                           <span className="min-w-0 flex-1 truncate font-normal">
@@ -328,11 +354,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             <button
                               type="button"
                               className={cn(
-                                "flex h-6 w-6 items-center justify-center rounded text-[#666666] transition-opacity duration-150 hover:bg-[rgba(0,0,0,0.06)]",
+                                "flex h-6 w-6 items-center justify-center rounded transition-opacity duration-150",
                                 currentSessionId === session.id
-                                  ? "pointer-events-auto opacity-100 text-[#2563EB]"
+                                  ? "pointer-events-auto opacity-100"
                                   : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
                               )}
+                              style={{ color: currentSessionId === session.id ? "var(--theme-accent)" : "var(--theme-text-muted)" }}
                               onClick={(event) => event.stopPropagation()}
                               aria-label="会话操作"
                             >
@@ -377,18 +404,20 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </div>
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-5 bg-gradient-to-b from-transparent to-[#FAFAFA]"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-5"
+            style={{ background: "linear-gradient(to bottom, transparent, var(--theme-glass-bg))" }}
           />
         </div>
+        <ThemeColorSwitcher />
         <div className="mt-auto pt-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors hover:bg-[#F5F5F5] data-[state=open]:bg-[#EEEEEE]"
+                className="flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors glass-hover"
                 aria-label="用户菜单"
               >
-                <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[#3B82F6] text-white">
+                <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-white" style={{ backgroundColor: "var(--theme-accent-alpha-20)" }}>
                   {showAvatar ? (
                     <img
                       src={avatarUrl}
@@ -397,16 +426,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       onError={() => setAvatarFailed(true)}
                     />
                   ) : (
-                    <span className="text-sm font-medium">{avatarFallback}</span>
+                    <span className="text-sm font-medium" style={{ color: "var(--theme-accent)" }}>{avatarFallback}</span>
                   )}
                 </div>
-                <span className="flex-1 truncate text-sm font-medium text-[#1A1A1A]">
+                <span className="flex-1 truncate text-sm font-medium" style={{ color: "var(--theme-text-primary)" }}>
                   {(() => {
                     const fallback = user?.username || user?.userId || "用户";
                     return /^\d+$/.test(fallback) ? "用户" : fallback;
                   })()}
                 </span>
-                <MoreHorizontal className="h-4 w-4 text-[#999999]" />
+                <MoreHorizontal className="h-4 w-4" style={{ color: "var(--theme-text-muted)" }} />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top" sideOffset={8} className="w-48">
@@ -464,5 +493,40 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+function ThemeColorSwitcher() {
+  const { colorTheme, setColorTheme } = useThemeStore();
+
+  const themeColors: Record<ColorThemeKey, string> = {
+    marine: "#06b6d4",
+    white: "#e2e8f0",
+    purple: "#a855f7",
+    emerald: "#10b981",
+    amber: "#f59e0b"
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-2 py-2">
+      <Palette className="h-3.5 w-3.5 flex-shrink-0" style={{ color: "var(--theme-text-muted)" }} />
+      <div className="flex items-center gap-1.5">
+        {(Object.keys(COLOR_THEMES) as ColorThemeKey[]).map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setColorTheme(key)}
+            title={COLOR_THEMES[key].label}
+            className="h-5 w-5 rounded-full transition-all duration-200"
+            style={{
+              backgroundColor: themeColors[key],
+              border: key === "white" ? "1px solid #94a3b8" : "none",
+              boxShadow: colorTheme === key ? `0 0 0 2px var(--theme-bg-deep), 0 0 0 3px ${themeColors[key]}` : "none",
+              transform: colorTheme === key ? "scale(1.15)" : "scale(1)"
+            }}
+          />
+        ))}
+      </div>
+    </div>
   );
 }

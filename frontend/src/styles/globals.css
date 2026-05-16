@@ -132,6 +132,157 @@
   --gradient-light: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
   --dsw-alias-brand-primary-invert: #93c5fd;
   --dsw-specific-sidebar-nav-item-active-accent: #eff6ff;
+
+  /* ===== 主题色系统（可通过 class 覆盖）===== */
+  --theme-bg-deep: #020617;
+  --theme-bg-base: #04101e;
+  --theme-bg-elevated: #06182c;
+  --theme-bg-surface: #0a243e;
+  --theme-bg-gradient-1: #0a243e;
+  --theme-bg-gradient-2: #04101e;
+
+  --theme-accent: #06b6d4;
+  --theme-accent-light: #22d3ee;
+  --theme-accent-dim: #0891b2;
+  --theme-accent-alpha-10: rgba(6, 182, 212, 0.1);
+  --theme-accent-alpha-20: rgba(6, 182, 212, 0.2);
+  --theme-accent-alpha-30: rgba(6, 182, 212, 0.3);
+  --theme-accent-alpha-40: rgba(6, 182, 212, 0.4);
+  --theme-accent-alpha-60: rgba(6, 182, 212, 0.6);
+
+  --theme-text-primary: #e2e8f0;
+  --theme-text-secondary: #94a3b8;
+  --theme-text-muted: #64748b;
+
+  --theme-glass-bg: rgba(10, 36, 62, 0.4);
+  --theme-glass-bg-hover: rgba(10, 36, 62, 0.6);
+  --theme-glass-border: rgba(6, 182, 212, 0.1);
+  --theme-glass-border-hover: rgba(6, 182, 212, 0.3);
+  --theme-glass-glow: rgba(6, 182, 212, 0.15);
+
+  --theme-gradient: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+  --theme-shadow-glow: 0 0 20px rgba(6, 182, 212, 0.15);
+  --theme-text-glow: 0 0 8px rgba(6, 182, 212, 0.6);
+}
+
+/* ===== 紫色主题 ===== */
+.theme-purple {
+  --theme-bg-deep: #0c0015;
+  --theme-bg-base: #130022;
+  --theme-bg-elevated: #1a0033;
+  --theme-bg-surface: #220044;
+  --theme-bg-gradient-1: #220044;
+  --theme-bg-gradient-2: #130022;
+
+  --theme-accent: #a855f7;
+  --theme-accent-light: #c084fc;
+  --theme-accent-dim: #9333ea;
+  --theme-accent-alpha-10: rgba(168, 85, 247, 0.1);
+  --theme-accent-alpha-20: rgba(168, 85, 247, 0.2);
+  --theme-accent-alpha-30: rgba(168, 85, 247, 0.3);
+  --theme-accent-alpha-40: rgba(168, 85, 247, 0.4);
+  --theme-accent-alpha-60: rgba(168, 85, 247, 0.6);
+
+  --theme-glass-bg: rgba(34, 0, 68, 0.4);
+  --theme-glass-bg-hover: rgba(34, 0, 68, 0.6);
+  --theme-glass-border: rgba(168, 85, 247, 0.1);
+  --theme-glass-border-hover: rgba(168, 85, 247, 0.3);
+  --theme-glass-glow: rgba(168, 85, 247, 0.15);
+
+  --theme-gradient: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+  --theme-shadow-glow: 0 0 20px rgba(168, 85, 247, 0.15);
+  --theme-text-glow: 0 0 8px rgba(168, 85, 247, 0.6);
+}
+
+/* ===== 翡翠主题 ===== */
+.theme-emerald {
+  --theme-bg-deep: #000d08;
+  --theme-bg-base: #001a10;
+  --theme-bg-elevated: #002618;
+  --theme-bg-surface: #003320;
+  --theme-bg-gradient-1: #003320;
+  --theme-bg-gradient-2: #001a10;
+
+  --theme-accent: #10b981;
+  --theme-accent-light: #34d399;
+  --theme-accent-dim: #059669;
+  --theme-accent-alpha-10: rgba(16, 185, 129, 0.1);
+  --theme-accent-alpha-20: rgba(16, 185, 129, 0.2);
+  --theme-accent-alpha-30: rgba(16, 185, 129, 0.3);
+  --theme-accent-alpha-40: rgba(16, 185, 129, 0.4);
+  --theme-accent-alpha-60: rgba(16, 185, 129, 0.6);
+
+  --theme-glass-bg: rgba(0, 51, 32, 0.4);
+  --theme-glass-bg-hover: rgba(0, 51, 32, 0.6);
+  --theme-glass-border: rgba(16, 185, 129, 0.1);
+  --theme-glass-border-hover: rgba(16, 185, 129, 0.3);
+  --theme-glass-glow: rgba(16, 185, 129, 0.15);
+
+  --theme-gradient: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+  --theme-shadow-glow: 0 0 20px rgba(16, 185, 129, 0.15);
+  --theme-text-glow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+/* ===== 琥珀主题 ===== */
+.theme-amber {
+  --theme-bg-deep: #0d0800;
+  --theme-bg-base: #1a1000;
+  --theme-bg-elevated: #261800;
+  --theme-bg-surface: #332000;
+  --theme-bg-gradient-1: #332000;
+  --theme-bg-gradient-2: #1a1000;
+
+  --theme-accent: #f59e0b;
+  --theme-accent-light: #fbbf24;
+  --theme-accent-dim: #d97706;
+  --theme-accent-alpha-10: rgba(245, 158, 11, 0.1);
+  --theme-accent-alpha-20: rgba(245, 158, 11, 0.2);
+  --theme-accent-alpha-30: rgba(245, 158, 11, 0.3);
+  --theme-accent-alpha-40: rgba(245, 158, 11, 0.4);
+  --theme-accent-alpha-60: rgba(245, 158, 11, 0.6);
+
+  --theme-glass-bg: rgba(51, 32, 0, 0.4);
+  --theme-glass-bg-hover: rgba(51, 32, 0, 0.6);
+  --theme-glass-border: rgba(245, 158, 11, 0.1);
+  --theme-glass-border-hover: rgba(245, 158, 11, 0.3);
+  --theme-glass-glow: rgba(245, 158, 11, 0.15);
+
+  --theme-gradient: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+  --theme-shadow-glow: 0 0 20px rgba(245, 158, 11, 0.15);
+  --theme-text-glow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+/* ===== 皓白主题 ===== */
+.theme-white {
+  --theme-bg-deep: #f8fafc;
+  --theme-bg-base: #f1f5f9;
+  --theme-bg-elevated: #ffffff;
+  --theme-bg-surface: #f8fafc;
+  --theme-bg-gradient-1: #e2e8f0;
+  --theme-bg-gradient-2: #f1f5f9;
+
+  --theme-accent: #3b82f6;
+  --theme-accent-light: #60a5fa;
+  --theme-accent-dim: #2563eb;
+  --theme-accent-alpha-10: rgba(59, 130, 246, 0.1);
+  --theme-accent-alpha-20: rgba(59, 130, 246, 0.2);
+  --theme-accent-alpha-30: rgba(59, 130, 246, 0.3);
+  --theme-accent-alpha-40: rgba(59, 130, 246, 0.4);
+  --theme-accent-alpha-60: rgba(59, 130, 246, 0.6);
+
+  --theme-text-primary: #0f172a;
+  --theme-text-secondary: #475569;
+  --theme-text-muted: #94a3b8;
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.7);
+  --theme-glass-bg-hover: rgba(255, 255, 255, 0.9);
+  --theme-glass-border: rgba(59, 130, 246, 0.15);
+  --theme-glass-border-hover: rgba(59, 130, 246, 0.3);
+  --theme-glass-glow: rgba(59, 130, 246, 0.1);
+
+  --theme-gradient: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  --theme-shadow-glow: 0 0 20px rgba(59, 130, 246, 0.1);
+  --theme-text-glow: 0 0 8px rgba(59, 130, 246, 0.4);
 }
 
 .dark {
@@ -149,8 +300,12 @@ body {
 }
 
 body {
-  @apply bg-[#FAFAFA] text-gray-900 font-body antialiased min-h-screen;
-  background-color: var(--bg-secondary);
+  @apply font-body antialiased min-h-screen;
+  color: var(--theme-text-primary);
+  background-color: var(--theme-bg-deep);
+  background-image:
+    radial-gradient(circle at 50% -20%, var(--theme-bg-gradient-1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, var(--theme-bg-gradient-2) 0%, transparent 40%);
   overflow: hidden;
 }
 
@@ -173,7 +328,7 @@ select:focus:not(:focus-visible),
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
+  background: var(--theme-accent-alpha-20);
   border-radius: 999px;
 }
 
@@ -182,11 +337,11 @@ select:focus:not(:focus-visible),
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: var(--theme-accent-alpha-40);
 }
 
 .text-gradient {
-  background: var(--gradient-primary);
+  background: var(--theme-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -194,9 +349,28 @@ select:focus:not(:focus-visible),
 }
 
 .glass {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid #e2e8f0;
-  backdrop-filter: blur(20px);
+  background: var(--theme-glass-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--theme-glass-border);
+}
+
+.glass-hover {
+  transition: all 0.3s ease;
+}
+
+.glass-hover:hover {
+  background: var(--theme-glass-bg-hover);
+  border-color: var(--theme-glass-border-hover);
+  box-shadow: var(--theme-shadow-glow);
+}
+
+.glow-border {
+  border: 1px solid var(--theme-accent-alpha-30);
+  box-shadow: inset 0 0 10px var(--theme-accent-alpha-10), 0 0 10px var(--theme-accent-alpha-10);
+}
+
+.glow-text {
+  text-shadow: var(--theme-text-glow);
 }
 
 .prose code {
@@ -204,7 +378,7 @@ select:focus:not(:focus-visible),
 }
 
 .prose pre {
-  @apply bg-gray-50 text-gray-800;
+  @apply bg-marine-800 text-slate-200;
 }
 
 /* 缩小 Markdown 元素之间的间距 */
@@ -2048,7 +2222,9 @@ select:focus:not(:focus-visible),
 }
 
 .chat-surface {
-  @apply bg-white/80 backdrop-blur-xl border border-border/60 shadow-soft;
+  background: var(--theme-glass-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--theme-glass-border);
 }
 
 textarea {
@@ -2096,7 +2272,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #999999;
+  color: var(--theme-accent-alpha-60);
   font-size: 13px;
 }
 
@@ -2111,7 +2287,7 @@ textarea {
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: #cccccc;
+  background: var(--theme-accent);
   animation: ai-wait-bounce 1.2s ease-in-out infinite;
 }
 
@@ -2146,7 +2322,7 @@ textarea {
 }
 
 .sidebar-scroll::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--theme-accent-alpha-20);
   border-radius: 2px;
 }
 
@@ -2212,9 +2388,10 @@ textarea {
 }
 
 .user-message {
-  background: #f5f5f5;
-  color: #333333;
-  padding: 10px 16px;
+  background: var(--theme-accent-alpha-10);
+  border: 1px solid var(--theme-accent-alpha-30);
+  color: var(--theme-text-primary);
+  padding: 12px 18px;
   border-radius: 16px 16px 4px 16px;
   max-width: 80%;
   width: fit-content;
