@@ -19,21 +19,19 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTracePageCommand;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Seahorse 原生 RAG Trace 查询 Web adapter。
  *
  */
 @RestController
-@ConditionalOnBean(RagTraceInboundPort.class)
 public class SeahorseRagTraceController {
 
     private static final String KEY_CODE = "code";
@@ -42,8 +40,8 @@ public class SeahorseRagTraceController {
 
     private final RagTraceInboundPort traceInboundPort;
 
-    public SeahorseRagTraceController(RagTraceInboundPort traceInboundPort) {
-        this.traceInboundPort = Objects.requireNonNull(traceInboundPort, "traceInboundPort must not be null");
+    public SeahorseRagTraceController(ObjectProvider<RagTraceInboundPort> traceInboundPortProvider) {
+        this.traceInboundPort = traceInboundPortProvider.getIfAvailable();
     }
 
     @GetMapping("/rag/traces/runs")

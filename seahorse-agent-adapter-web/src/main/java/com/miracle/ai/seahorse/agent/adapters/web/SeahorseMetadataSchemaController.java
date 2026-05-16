@@ -23,7 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataOperator;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldPayload;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -42,7 +42,6 @@ import java.util.stream.Collectors;
  * Metadata Schema 字段管理 Web adapter。
  */
 @RestController
-@ConditionalOnBean(MetadataSchemaInboundPort.class)
 public class SeahorseMetadataSchemaController {
 
     private static final String KEY_CODE = "code";
@@ -51,8 +50,8 @@ public class SeahorseMetadataSchemaController {
 
     private final MetadataSchemaInboundPort schemaPort;
 
-    public SeahorseMetadataSchemaController(MetadataSchemaInboundPort schemaPort) {
-        this.schemaPort = Objects.requireNonNull(schemaPort, "schemaPort must not be null");
+    public SeahorseMetadataSchemaController(ObjectProvider<MetadataSchemaInboundPort> schemaPortProvider) {
+        this.schemaPort = schemaPortProvider.getIfAvailable();
     }
 
     @GetMapping("/knowledge-base/{kb-id}/metadata-schema/fields")

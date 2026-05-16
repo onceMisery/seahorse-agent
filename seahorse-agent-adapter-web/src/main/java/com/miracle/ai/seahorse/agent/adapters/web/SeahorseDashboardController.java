@@ -18,21 +18,19 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.dashboard.DashboardInboundPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Seahorse 原生 Dashboard Web adapter。
  */
 @RestController
 @RequestMapping("/admin/dashboard")
-@ConditionalOnBean(DashboardInboundPort.class)
 public class SeahorseDashboardController {
 
     private static final String KEY_CODE = "code";
@@ -41,8 +39,8 @@ public class SeahorseDashboardController {
 
     private final DashboardInboundPort dashboardPort;
 
-    public SeahorseDashboardController(DashboardInboundPort dashboardPort) {
-        this.dashboardPort = Objects.requireNonNull(dashboardPort, "dashboardPort must not be null");
+    public SeahorseDashboardController(ObjectProvider<DashboardInboundPort> dashboardPortProvider) {
+        this.dashboardPort = dashboardPortProvider.getIfAvailable();
     }
 
     @GetMapping("/overview")

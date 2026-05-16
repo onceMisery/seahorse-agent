@@ -17,15 +17,20 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import cn.dev33.satoken.exception.NotLoginException;
 import cn.dev33.satoken.interceptor.SaInterceptor;
 import cn.dev33.satoken.stp.StpUtil;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 @Configuration(proxyBeanMethods = false)
 public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
@@ -38,7 +43,24 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
                         return;
                     }
                     StpUtil.checkLogin();
-                }))
+                }) {
+                    @Override
+                    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
+                            throws Exception {
+                        try {
+                            return super.preHandle(request, response, handler);
+                        } catch (NotLoginException e) {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+                            try {
+                                response.getWriter().write("{\"code\":\"1\",\"message\":\"" + e.getMessage() + "\"}");
+                            } catch (IOException ignored) {
+                            }
+                            return false;
+                        }
+                    }
+                })
                 .addPathPatterns("/**")
                 .excludePathPatterns("/auth/**", "/error");
     }

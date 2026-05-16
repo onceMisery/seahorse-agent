@@ -18,7 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,7 +37,6 @@ import java.util.Objects;
  * <p>用户 ID 可从请求参数或 {@code X-User-Id} 请求头传入。
  */
 @RestController
-@ConditionalOnBean(ConversationManagementInboundPort.class)
 public class SeahorseConversationController {
 
     private static final String DEFAULT_USER_ID = "default";
@@ -47,8 +46,8 @@ public class SeahorseConversationController {
 
     private final ConversationManagementInboundPort conversationPort;
 
-    public SeahorseConversationController(ConversationManagementInboundPort conversationPort) {
-        this.conversationPort = Objects.requireNonNull(conversationPort, "conversationPort must not be null");
+    public SeahorseConversationController(ObjectProvider<ConversationManagementInboundPort> conversationPortProvider) {
+        this.conversationPort = conversationPortProvider.getIfAvailable();
     }
 
     @GetMapping("/conversations")

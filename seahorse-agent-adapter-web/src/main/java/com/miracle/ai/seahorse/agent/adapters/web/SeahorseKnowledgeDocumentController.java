@@ -24,8 +24,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UploadFileContent;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UploadKnowledgeDocumentCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UploadProcessOptions;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRecord;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -48,7 +48,6 @@ import java.util.Objects;
  * Seahorse 原生知识库文档 Web adapter。
  */
 @RestController
-@ConditionalOnBean(KnowledgeDocumentInboundPort.class)
 public class SeahorseKnowledgeDocumentController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
@@ -59,8 +58,8 @@ public class SeahorseKnowledgeDocumentController {
 
     private final KnowledgeDocumentInboundPort documentPort;
 
-    public SeahorseKnowledgeDocumentController(KnowledgeDocumentInboundPort documentPort) {
-        this.documentPort = Objects.requireNonNull(documentPort, "documentPort must not be null");
+    public SeahorseKnowledgeDocumentController(ObjectProvider<KnowledgeDocumentInboundPort> documentPortProvider) {
+        this.documentPort = documentPortProvider.getIfAvailable();
     }
 
     @PostMapping(value = "/knowledge-base/{kb-id}/docs/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

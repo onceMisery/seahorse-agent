@@ -20,7 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelinePayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineNodePayload;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,7 +39,6 @@ import java.util.Objects;
  * Seahorse 原生入库 Pipeline 管理 Web adapter。
  */
 @RestController
-@ConditionalOnBean(IngestionPipelineInboundPort.class)
 public class SeahorseIngestionPipelineController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
@@ -50,13 +49,14 @@ public class SeahorseIngestionPipelineController {
 
     private final IngestionPipelineInboundPort pipelinePort;
 
-    public SeahorseIngestionPipelineController(IngestionPipelineInboundPort pipelinePort) {
-        this.pipelinePort = Objects.requireNonNull(pipelinePort, "pipelinePort must not be null");
+    public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider) {
+        this.pipelinePort = pipelinePortProvider.getIfAvailable();
     }
 
     @PostMapping("/ingestion/pipelines")
     public Map<String, Object> create(@RequestBody IngestionPipelineRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        if (pipelinePort == null) return Map.of("code", "1", "message", "Service not available");
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePort.create(toPayload(request, operator(userId))));
     }
 
@@ -64,11 +64,13 @@ public class SeahorseIngestionPipelineController {
     public Map<String, Object> update(@PathVariable String id,
                                       @RequestBody IngestionPipelineRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        if (pipelinePort == null) return Map.of("code", "1", "message", "Service not available");
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePort.update(id, toPayload(request, operator(userId))));
     }
 
     @GetMapping("/ingestion/pipelines/{id}")
     public Map<String, Object> get(@PathVariable String id) {
+        if (pipelinePort == null) return Map.of("code", "1", "message", "Service not available");
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePort.get(id));
     }
 
@@ -76,12 +78,14 @@ public class SeahorseIngestionPipelineController {
     public Map<String, Object> page(@RequestParam(value = "pageNo", defaultValue = "1") long pageNo,
                                     @RequestParam(value = "pageSize", defaultValue = "10") long pageSize,
                                     @RequestParam(value = "keyword", required = false) String keyword) {
+        if (pipelinePort == null) return Map.of("code", "1", "message", "Service not available");
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePort.page(pageNo, pageSize, keyword));
     }
 
     @DeleteMapping("/ingestion/pipelines/{id}")
     public Map<String, Object> delete(@PathVariable String id,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        if (pipelinePort == null) return Map.of("code", "1", "message", "Service not available");
         pipelinePort.delete(id, operator(userId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }

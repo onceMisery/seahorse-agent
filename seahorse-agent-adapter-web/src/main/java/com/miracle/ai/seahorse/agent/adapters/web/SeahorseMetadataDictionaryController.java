@@ -19,7 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataDictionaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemPayload;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,13 +30,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 元数据标准化字典管理 Web adapter。
  */
 @RestController
-@ConditionalOnBean(MetadataDictionaryInboundPort.class)
 public class SeahorseMetadataDictionaryController {
 
     private static final String KEY_CODE = "code";
@@ -45,8 +43,8 @@ public class SeahorseMetadataDictionaryController {
 
     private final MetadataDictionaryInboundPort dictionaryPort;
 
-    public SeahorseMetadataDictionaryController(MetadataDictionaryInboundPort dictionaryPort) {
-        this.dictionaryPort = Objects.requireNonNull(dictionaryPort, "dictionaryPort must not be null");
+    public SeahorseMetadataDictionaryController(ObjectProvider<MetadataDictionaryInboundPort> dictionaryPortProvider) {
+        this.dictionaryPort = dictionaryPortProvider.getIfAvailable();
     }
 
     @GetMapping("/metadata-dictionaries/items")

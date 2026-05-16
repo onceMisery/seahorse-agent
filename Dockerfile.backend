@@ -1,0 +1,51 @@
+# Stage 1: Build
+FROM docker.m.daocloud.io/eclipse-temurin:17-jdk AS builder
+
+WORKDIR /app
+
+# Copy Maven wrapper and pom files first for better layer caching
+COPY .mvn/ .mvn/
+COPY mvnw pom.xml ./
+COPY seahorse-agent-bootstrap/pom.xml seahorse-agent-bootstrap/
+COPY seahorse-agent-spring-boot-starter/pom.xml seahorse-agent-spring-boot-starter/
+COPY seahorse-agent-kernel/pom.xml seahorse-agent-kernel/
+COPY seahorse-agent-adapter-web/pom.xml seahorse-agent-adapter-web/
+COPY seahorse-agent-adapter-ai-openai-compatible/pom.xml seahorse-agent-adapter-ai-openai-compatible/
+COPY seahorse-agent-adapter-cache-local/pom.xml seahorse-agent-adapter-cache-local/
+COPY seahorse-agent-adapter-mq-direct/pom.xml seahorse-agent-adapter-mq-direct/
+COPY seahorse-agent-adapter-observation-noop/pom.xml seahorse-agent-adapter-observation-noop/
+COPY seahorse-agent-adapter-parser-tika/pom.xml seahorse-agent-adapter-parser-tika/
+COPY seahorse-agent-adapter-repository-jdbc/pom.xml seahorse-agent-adapter-repository-jdbc/
+COPY seahorse-agent-adapter-storage-local/pom.xml seahorse-agent-adapter-storage-local/
+COPY seahorse-agent-adapter-vector-pgvector/pom.xml seahorse-agent-adapter-vector-pgvector/
+COPY seahorse-agent-adapter-vector-noop/pom.xml seahorse-agent-adapter-vector-noop/
+COPY seahorse-agent-adapter-mcp-http/pom.xml seahorse-agent-adapter-mcp-http/
+COPY seahorse-agent-adapter-observation-micrometer/pom.xml seahorse-agent-adapter-observation-micrometer/
+COPY seahorse-agent-adapter-cache-redis/pom.xml seahorse-agent-adapter-cache-redis/
+COPY seahorse-agent-adapter-mq-pulsar/pom.xml seahorse-agent-adapter-mq-pulsar/
+COPY seahorse-agent-adapter-source-feishu/pom.xml seahorse-agent-adapter-source-feishu/
+COPY seahorse-agent-adapter-storage-s3/pom.xml seahorse-agent-adapter-storage-s3/
+COPY seahorse-agent-adapter-vector-milvus/pom.xml seahorse-agent-adapter-vector-milvus/
+COPY seahorse-agent-adapter-search-elasticsearch/pom.xml seahorse-agent-adapter-search-elasticsearch/
+COPY seahorse-agent-mcp-server/pom.xml seahorse-agent-mcp-server/
+COPY seahorse-agent-tests/pom.xml seahorse-agent-tests/
+
+# Fix Windows line endings and download dependencies
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw dependency:go-offline -B -pl seahorse-agent-bootstrap -am -DskipTests || true
+
+# Copy source code
+COPY . .
+
+# Fix line endings for full source copy and build
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw package -B -pl seahorse-agent-bootstrap -am -DskipTests -Dspotless.check.skip=true
+
+# Stage 2: Run
+FROM docker.m.daocloud.io/eclipse-temurin:17-jre
+
+WORKDIR /app
+
+COPY --from=builder /app/seahorse-agent-bootstrap/target/seahorse-agent-bootstrap-0.0.1-SNAPSHOT-exec.jar app.jar
+
+EXPOSE 9090
+
+ENTRYPOINT ["java", "-jar", "app.jar"]

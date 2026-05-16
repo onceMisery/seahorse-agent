@@ -21,7 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillComm
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,7 +32,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 元数据历史回填管理 Web adapter。
@@ -41,7 +40,6 @@ import java.util.Objects;
  * 统计都由 kernel 回填服务统一处理，避免控制器绕过治理边界。
  */
 @RestController
-@ConditionalOnBean(MetadataBackfillInboundPort.class)
 public class SeahorseMetadataBackfillController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
@@ -52,8 +50,8 @@ public class SeahorseMetadataBackfillController {
 
     private final MetadataBackfillInboundPort backfillPort;
 
-    public SeahorseMetadataBackfillController(MetadataBackfillInboundPort backfillPort) {
-        this.backfillPort = Objects.requireNonNull(backfillPort, "backfillPort must not be null");
+    public SeahorseMetadataBackfillController(ObjectProvider<MetadataBackfillInboundPort> backfillPortProvider) {
+        this.backfillPort = backfillPortProvider.getIfAvailable();
     }
 
     @PostMapping("/knowledge-base/{kb-id}/metadata-backfill/jobs")

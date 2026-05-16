@@ -7,7 +7,6 @@ import {
   MessageSquare,
   MoreHorizontal,
   Pencil,
-  PlayCircle,
   Plus,
   Search,
   Settings,
@@ -413,24 +412,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <DropdownMenuContent align="start" side="top" sideOffset={8} className="w-48">
               <DropdownMenuItem asChild>
                 <a
-                  href="https://github.com/miracle-ai/seahorse-agent"
+                  href="https://github.com/onceMisery/seahorse-agent"
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center"
                 >
                   <BookOpen className="mr-2 h-4 w-4" />
                   官方文档
-                </a>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <a
-                  href="https://space.bilibili.com/352177376"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center"
-                >
-                  <PlayCircle className="mr-2 h-4 w-4" />
-                  哔哩哔哩
                 </a>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => logout()} className="text-rose-600 focus:text-rose-600">

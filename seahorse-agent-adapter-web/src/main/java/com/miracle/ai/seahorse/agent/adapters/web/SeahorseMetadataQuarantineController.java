@@ -19,7 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineRetryCommand;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,13 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 元数据隔离区管理 Web adapter。
  */
 @RestController
-@ConditionalOnBean(MetadataQuarantineInboundPort.class)
 public class SeahorseMetadataQuarantineController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
@@ -48,8 +46,8 @@ public class SeahorseMetadataQuarantineController {
 
     private final MetadataQuarantineInboundPort quarantinePort;
 
-    public SeahorseMetadataQuarantineController(MetadataQuarantineInboundPort quarantinePort) {
-        this.quarantinePort = Objects.requireNonNull(quarantinePort, "quarantinePort must not be null");
+    public SeahorseMetadataQuarantineController(ObjectProvider<MetadataQuarantineInboundPort> quarantinePortProvider) {
+        this.quarantinePort = quarantinePortProvider.getIfAvailable();
     }
 
     @GetMapping("/metadata-quarantine/items")

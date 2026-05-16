@@ -18,14 +18,13 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 检索质量评测 Web adapter。
@@ -33,7 +32,6 @@ import java.util.Objects;
  * <p>控制器只接收临时评测集并转交 kernel 计算指标，不在 Web 层执行检索策略。
  */
 @RestController
-@ConditionalOnBean(RetrievalEvaluationInboundPort.class)
 public class SeahorseRetrievalEvaluationController {
 
     private static final String KEY_CODE = "code";
@@ -42,8 +40,8 @@ public class SeahorseRetrievalEvaluationController {
 
     private final RetrievalEvaluationInboundPort evaluationPort;
 
-    public SeahorseRetrievalEvaluationController(RetrievalEvaluationInboundPort evaluationPort) {
-        this.evaluationPort = Objects.requireNonNull(evaluationPort, "evaluationPort must not be null");
+    public SeahorseRetrievalEvaluationController(ObjectProvider<RetrievalEvaluationInboundPort> evaluationPortProvider) {
+        this.evaluationPort = evaluationPortProvider.getIfAvailable();
     }
 
     @PostMapping("/knowledge-base/{kb-id}/retrieval-quality/evaluate")

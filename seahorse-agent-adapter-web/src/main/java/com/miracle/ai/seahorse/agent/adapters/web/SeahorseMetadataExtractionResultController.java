@@ -18,20 +18,18 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataExtractionResultInboundPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 元数据抽取结果只读查询 Web adapter。
  */
 @RestController
-@ConditionalOnBean(MetadataExtractionResultInboundPort.class)
 public class SeahorseMetadataExtractionResultController {
 
     private static final String KEY_CODE = "code";
@@ -40,8 +38,8 @@ public class SeahorseMetadataExtractionResultController {
 
     private final MetadataExtractionResultInboundPort resultPort;
 
-    public SeahorseMetadataExtractionResultController(MetadataExtractionResultInboundPort resultPort) {
-        this.resultPort = Objects.requireNonNull(resultPort, "resultPort must not be null");
+    public SeahorseMetadataExtractionResultController(ObjectProvider<MetadataExtractionResultInboundPort> resultPortProvider) {
+        this.resultPort = resultPortProvider.getIfAvailable();
     }
 
     @GetMapping("/metadata-extraction/results")

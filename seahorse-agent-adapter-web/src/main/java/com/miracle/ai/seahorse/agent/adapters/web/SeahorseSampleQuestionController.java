@@ -21,7 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.sample.CreateSampleQuestionCo
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionPageCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.UpdateSampleQuestionCommand;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,7 +40,6 @@ import java.util.Objects;
  * <p>支撑欢迎页随机问题和管理端分页维护。
  */
 @RestController
-@ConditionalOnBean(SampleQuestionInboundPort.class)
 public class SeahorseSampleQuestionController {
 
     private static final String KEY_CODE = "code";
@@ -49,8 +48,8 @@ public class SeahorseSampleQuestionController {
 
     private final SampleQuestionInboundPort sampleQuestionPort;
 
-    public SeahorseSampleQuestionController(SampleQuestionInboundPort sampleQuestionPort) {
-        this.sampleQuestionPort = Objects.requireNonNull(sampleQuestionPort, "sampleQuestionPort must not be null");
+    public SeahorseSampleQuestionController(ObjectProvider<SampleQuestionInboundPort> sampleQuestionPortProvider) {
+        this.sampleQuestionPort = sampleQuestionPortProvider.getIfAvailable();
     }
 
     @GetMapping("/rag/sample-questions")

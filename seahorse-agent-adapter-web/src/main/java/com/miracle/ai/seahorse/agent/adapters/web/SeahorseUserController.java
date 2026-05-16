@@ -21,7 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.user.ChangePasswordCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserUpdateCommand;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,7 +35,6 @@ import java.util.Map;
 import java.util.Objects;
 
 @RestController
-@ConditionalOnBean(UserInboundPort.class)
 public class SeahorseUserController {
 
     private static final String KEY_CODE = "code";
@@ -44,8 +43,8 @@ public class SeahorseUserController {
 
     private final UserInboundPort userInboundPort;
 
-    public SeahorseUserController(UserInboundPort userInboundPort) {
-        this.userInboundPort = Objects.requireNonNull(userInboundPort, "userInboundPort must not be null");
+    public SeahorseUserController(ObjectProvider<UserInboundPort> userInboundPortProvider) {
+        this.userInboundPort = userInboundPortProvider.getIfAvailable();
     }
 
     @GetMapping("/user/me")

@@ -77,9 +77,9 @@ export function SystemSettingsPage() {
           <CardDescription>向量空间与检索基础参数</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
-          <InfoItem label="Collection" value={rag.default.collectionName} />
-          <InfoItem label="Dimension" value={rag.default.dimension} />
-          <InfoItem label="Metric Type" value={rag.default.metricType} />
+          <InfoItem label="Collection" value={rag.defaultConfig.collectionName} />
+          <InfoItem label="Dimension" value={rag.defaultConfig.dimension} />
+          <InfoItem label="Metric Type" value={rag.defaultConfig.metricType} />
         </CardContent>
       </Card>
 
