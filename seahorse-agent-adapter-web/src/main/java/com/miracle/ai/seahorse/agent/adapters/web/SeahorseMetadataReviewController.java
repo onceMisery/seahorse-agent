@@ -20,7 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,7 +39,6 @@ import java.util.Objects;
  * <p>控制器只调用入站端口；审核状态、写回文档元数据和转隔离由 kernel 服务统一处理。
  */
 @RestController
-@ConditionalOnBean(MetadataReviewInboundPort.class)
 public class SeahorseMetadataReviewController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
@@ -50,8 +49,8 @@ public class SeahorseMetadataReviewController {
 
     private final MetadataReviewInboundPort reviewPort;
 
-    public SeahorseMetadataReviewController(MetadataReviewInboundPort reviewPort) {
-        this.reviewPort = Objects.requireNonNull(reviewPort, "reviewPort must not be null");
+    public SeahorseMetadataReviewController(ObjectProvider<MetadataReviewInboundPort> reviewPortProvider) {
+        this.reviewPort = reviewPortProvider.getIfAvailable();
     }
 
     @GetMapping("/metadata-review/items")

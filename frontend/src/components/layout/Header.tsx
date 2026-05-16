@@ -18,7 +18,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
   React.useEffect(() => {
     let active = true;
-    fetch("https://api.github.com/repos/miracle-ai/seahorse-agent")
+    fetch("https://api.github.com/repos/onceMisery/seahorse-agent")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!active) return;

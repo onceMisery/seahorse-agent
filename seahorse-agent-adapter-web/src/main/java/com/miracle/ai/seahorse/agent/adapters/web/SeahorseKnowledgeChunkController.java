@@ -21,7 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.CreateKnowledgeChun
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeChunkInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeChunkPageCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UpdateKnowledgeChunkCommand;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -41,7 +41,6 @@ import java.util.Objects;
  * Seahorse 原生知识库 Chunk 管理 Web adapter。
  */
 @RestController
-@ConditionalOnBean(KnowledgeChunkInboundPort.class)
 public class SeahorseKnowledgeChunkController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
@@ -52,8 +51,8 @@ public class SeahorseKnowledgeChunkController {
 
     private final KnowledgeChunkInboundPort chunkPort;
 
-    public SeahorseKnowledgeChunkController(KnowledgeChunkInboundPort chunkPort) {
-        this.chunkPort = Objects.requireNonNull(chunkPort, "chunkPort must not be null");
+    public SeahorseKnowledgeChunkController(ObjectProvider<KnowledgeChunkInboundPort> chunkPortProvider) {
+        this.chunkPort = chunkPortProvider.getIfAvailable();
     }
 
     @GetMapping("/knowledge-base/docs/{doc-id}/chunks")

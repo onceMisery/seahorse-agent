@@ -18,7 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.DocumentRefreshInboundPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -27,13 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Seahorse 原生文档刷新 Web adapter。
  */
 @RestController
-@ConditionalOnBean(DocumentRefreshInboundPort.class)
 public class SeahorseDocumentRefreshController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
@@ -44,19 +42,25 @@ public class SeahorseDocumentRefreshController {
 
     private final DocumentRefreshInboundPort refreshPort;
 
-    public SeahorseDocumentRefreshController(DocumentRefreshInboundPort refreshPort) {
-        this.refreshPort = Objects.requireNonNull(refreshPort, "refreshPort must not be null");
+    public SeahorseDocumentRefreshController(ObjectProvider<DocumentRefreshInboundPort> refreshPortProvider) {
+        this.refreshPort = refreshPortProvider.getIfAvailable();
     }
 
     @PostMapping("/knowledge-base/docs/{doc-id}/refresh")
     public Map<String, Object> refresh(@PathVariable("doc-id") String docId,
                                        @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        if (refreshPort == null) {
+            return Map.of(KEY_CODE, "1", "message", "Document refresh service is not available");
+        }
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, refreshPort.refreshDocument(docId, operator(userId)));
     }
 
     @PostMapping("/knowledge-base/docs/refresh-due")
     public Map<String, Object> refreshDue(@RequestParam(defaultValue = "20") int limit,
                                           @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        if (refreshPort == null) {
+            return Map.of(KEY_CODE, "1", "message", "Document refresh service is not available");
+        }
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
                 refreshPort.refreshDueSchedules(Instant.now(), limit, operator(userId)));
     }

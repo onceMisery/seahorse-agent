@@ -19,7 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,10 +30,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
-import java.util.Objects;
 
 @RestController
-@ConditionalOnBean({MemoryManagementInboundPort.class, MemoryGovernanceInboundPort.class})
 public class SeahorseMemoryController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
@@ -45,10 +43,10 @@ public class SeahorseMemoryController {
     private final MemoryManagementInboundPort managementPort;
     private final MemoryGovernanceInboundPort governancePort;
 
-    public SeahorseMemoryController(MemoryManagementInboundPort managementPort,
-                                    MemoryGovernanceInboundPort governancePort) {
-        this.managementPort = Objects.requireNonNull(managementPort, "managementPort must not be null");
-        this.governancePort = Objects.requireNonNull(governancePort, "governancePort must not be null");
+    public SeahorseMemoryController(ObjectProvider<MemoryManagementInboundPort> managementPortProvider,
+                                    ObjectProvider<MemoryGovernanceInboundPort> governancePortProvider) {
+        this.managementPort = managementPortProvider.getIfAvailable();
+        this.governancePort = governancePortProvider.getIfAvailable();
     }
 
     @GetMapping("/memories")

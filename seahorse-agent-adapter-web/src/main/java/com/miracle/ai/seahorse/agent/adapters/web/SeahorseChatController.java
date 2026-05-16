@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -53,16 +54,16 @@ public class SeahorseChatController {
     private final int chatRateLimitPermits;
     private final Duration chatRateLimitWindow;
 
-    public SeahorseChatController(ChatInboundPort chatInboundPort,
+    public SeahorseChatController(ObjectProvider<ChatInboundPort> chatInboundPortProvider,
                                   ChatStreamCallbackFactoryPort callbackFactory,
                                   StreamTaskPort streamTaskPort,
                                   long sseTimeoutMs) {
-        this(chatInboundPort, callbackFactory, streamTaskPort, RateLimiterPort.noop(), sseTimeoutMs, 60,
+        this(chatInboundPortProvider, callbackFactory, streamTaskPort, RateLimiterPort.noop(), sseTimeoutMs, 60,
                 Duration.ofMinutes(1).toMillis());
     }
 
     @Autowired
-    public SeahorseChatController(ChatInboundPort chatInboundPort,
+    public SeahorseChatController(ObjectProvider<ChatInboundPort> chatInboundPortProvider,
                                   ChatStreamCallbackFactoryPort callbackFactory,
                                   StreamTaskPort streamTaskPort,
                                   RateLimiterPort rateLimiterPort,
@@ -71,7 +72,7 @@ public class SeahorseChatController {
                                   @Value("${seahorse-agent.web.chat-rate-limit.permits:60}") int chatRateLimitPermits,
                                   @Value("${seahorse-agent.web.chat-rate-limit.window-ms:60000}")
                                   long chatRateLimitWindowMs) {
-        this.chatInboundPort = Objects.requireNonNull(chatInboundPort, "chatInboundPort must not be null");
+        this.chatInboundPort = chatInboundPortProvider.getIfAvailable();
         this.callbackFactory = Objects.requireNonNull(callbackFactory, "callbackFactory must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPort, RateLimiterPort.noop());

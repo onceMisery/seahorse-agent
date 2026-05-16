@@ -20,7 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelinePayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineNodePayload;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,7 +39,6 @@ import java.util.Objects;
  * Seahorse 原生入库 Pipeline 管理 Web adapter。
  */
 @RestController
-@ConditionalOnBean(IngestionPipelineInboundPort.class)
 public class SeahorseIngestionPipelineController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
@@ -50,8 +49,8 @@ public class SeahorseIngestionPipelineController {
 
     private final IngestionPipelineInboundPort pipelinePort;
 
-    public SeahorseIngestionPipelineController(IngestionPipelineInboundPort pipelinePort) {
-        this.pipelinePort = Objects.requireNonNull(pipelinePort, "pipelinePort must not be null");
+    public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider) {
+        this.pipelinePort = pipelinePortProvider.getIfAvailable();
     }
 
     @PostMapping("/ingestion/pipelines")

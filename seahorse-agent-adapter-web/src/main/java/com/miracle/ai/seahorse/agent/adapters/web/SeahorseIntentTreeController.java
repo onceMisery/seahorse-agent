@@ -19,7 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.intent.IntentTreeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentNodePayload;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,7 +35,6 @@ import java.util.Objects;
  * Seahorse 原生意图树 Web adapter。
  */
 @RestController
-@ConditionalOnBean(IntentTreeInboundPort.class)
 public class SeahorseIntentTreeController {
 
     private static final String KEY_CODE = "code";
@@ -44,8 +43,8 @@ public class SeahorseIntentTreeController {
 
     private final IntentTreeInboundPort intentTreePort;
 
-    public SeahorseIntentTreeController(IntentTreeInboundPort intentTreePort) {
-        this.intentTreePort = Objects.requireNonNull(intentTreePort, "intentTreePort must not be null");
+    public SeahorseIntentTreeController(ObjectProvider<IntentTreeInboundPort> intentTreePortProvider) {
+        this.intentTreePort = intentTreePortProvider.getIfAvailable();
     }
 
     @GetMapping("/intent-tree/trees")

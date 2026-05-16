@@ -18,14 +18,13 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 元数据治理质量报表 Web 适配器。
@@ -34,7 +33,6 @@ import java.util.Objects;
  * 由 kernel 入站端口统一约束。
  */
 @RestController
-@ConditionalOnBean(MetadataQualityInboundPort.class)
 public class SeahorseMetadataQualityController {
 
     private static final String KEY_CODE = "code";
@@ -43,8 +41,8 @@ public class SeahorseMetadataQualityController {
 
     private final MetadataQualityInboundPort qualityPort;
 
-    public SeahorseMetadataQualityController(MetadataQualityInboundPort qualityPort) {
-        this.qualityPort = Objects.requireNonNull(qualityPort, "qualityPort must not be null");
+    public SeahorseMetadataQualityController(ObjectProvider<MetadataQualityInboundPort> qualityPortProvider) {
+        this.qualityPort = qualityPortProvider.getIfAvailable();
     }
 
     @GetMapping("/knowledge-base/{kb-id}/metadata-quality/report")

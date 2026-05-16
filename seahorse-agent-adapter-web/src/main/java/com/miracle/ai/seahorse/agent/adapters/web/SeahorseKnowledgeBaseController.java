@@ -21,7 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.CreateKnowledgeBase
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeBaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeBasePageCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UpdateKnowledgeBaseCommand;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -42,7 +42,6 @@ import java.util.Objects;
  * {@code KnowledgeBaseService}。
  */
 @RestController
-@ConditionalOnBean(KnowledgeBaseInboundPort.class)
 public class SeahorseKnowledgeBaseController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
@@ -53,8 +52,8 @@ public class SeahorseKnowledgeBaseController {
 
     private final KnowledgeBaseInboundPort knowledgeBasePort;
 
-    public SeahorseKnowledgeBaseController(KnowledgeBaseInboundPort knowledgeBasePort) {
-        this.knowledgeBasePort = Objects.requireNonNull(knowledgeBasePort, "knowledgeBasePort must not be null");
+    public SeahorseKnowledgeBaseController(ObjectProvider<KnowledgeBaseInboundPort> knowledgeBasePortProvider) {
+        this.knowledgeBasePort = knowledgeBasePortProvider.getIfAvailable();
     }
 
     @PostMapping("/knowledge-base")

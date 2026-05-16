@@ -19,7 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.mapping.QueryTermMappingInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingPayload;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,7 +36,6 @@ import java.util.Objects;
  * Seahorse 原生术语映射 Web adapter。
  */
 @RestController
-@ConditionalOnBean(QueryTermMappingInboundPort.class)
 public class SeahorseQueryTermMappingController {
 
     private static final String KEY_CODE = "code";
@@ -45,8 +44,8 @@ public class SeahorseQueryTermMappingController {
 
     private final QueryTermMappingInboundPort mappingPort;
 
-    public SeahorseQueryTermMappingController(QueryTermMappingInboundPort mappingPort) {
-        this.mappingPort = Objects.requireNonNull(mappingPort, "mappingPort must not be null");
+    public SeahorseQueryTermMappingController(ObjectProvider<QueryTermMappingInboundPort> mappingPortProvider) {
+        this.mappingPort = mappingPortProvider.getIfAvailable();
     }
 
     @GetMapping("/mappings")

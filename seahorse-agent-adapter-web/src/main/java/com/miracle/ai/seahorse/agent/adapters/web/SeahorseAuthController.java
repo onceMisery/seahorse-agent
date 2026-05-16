@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginCommand;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,8 +36,8 @@ public class SeahorseAuthController {
 
     private final AuthInboundPort authInboundPort;
 
-    public SeahorseAuthController(AuthInboundPort authInboundPort) {
-        this.authInboundPort = Objects.requireNonNull(authInboundPort, "authInboundPort must not be null");
+    public SeahorseAuthController(ObjectProvider<AuthInboundPort> authInboundPortProvider) {
+        this.authInboundPort = authInboundPortProvider.getIfAvailable();
     }
 
     @PostMapping("/auth/login")

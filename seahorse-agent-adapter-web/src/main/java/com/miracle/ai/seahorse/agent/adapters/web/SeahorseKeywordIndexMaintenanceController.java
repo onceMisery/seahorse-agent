@@ -18,14 +18,13 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Seahorse 关键词索引运维 Web adapter。
@@ -33,7 +32,6 @@ import java.util.Objects;
  * <p>这里只负责暴露管理触发入口，重建数据来源和后端写入仍由 kernel 入站端口统一编排。
  */
 @RestController
-@ConditionalOnBean(KeywordIndexMaintenanceInboundPort.class)
 public class SeahorseKeywordIndexMaintenanceController {
 
     private static final String KEY_CODE = "code";
@@ -42,8 +40,8 @@ public class SeahorseKeywordIndexMaintenanceController {
 
     private final KeywordIndexMaintenanceInboundPort maintenancePort;
 
-    public SeahorseKeywordIndexMaintenanceController(KeywordIndexMaintenanceInboundPort maintenancePort) {
-        this.maintenancePort = Objects.requireNonNull(maintenancePort, "maintenancePort must not be null");
+    public SeahorseKeywordIndexMaintenanceController(ObjectProvider<KeywordIndexMaintenanceInboundPort> maintenancePortProvider) {
+        this.maintenancePort = maintenancePortProvider.getIfAvailable();
     }
 
     @PostMapping("/knowledge-base/docs/{doc-id}/keyword-index/rebuild")

@@ -25,8 +25,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimitDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,7 +46,6 @@ import java.util.Objects;
  * Seahorse 原生入库任务 Web adapter。
  */
 @RestController
-@ConditionalOnBean(IngestionTaskInboundPort.class)
 public class SeahorseIngestionTaskController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
@@ -60,18 +59,18 @@ public class SeahorseIngestionTaskController {
     private final int uploadRateLimitPermits;
     private final Duration uploadRateLimitWindow;
 
-    public SeahorseIngestionTaskController(IngestionTaskInboundPort taskPort) {
-        this(taskPort, RateLimiterPort.noop(), 20, Duration.ofMinutes(1).toMillis());
+    public SeahorseIngestionTaskController(ObjectProvider<IngestionTaskInboundPort> taskPortProvider) {
+        this(taskPortProvider, RateLimiterPort.noop(), 20, Duration.ofMinutes(1).toMillis());
     }
 
     @Autowired
-    public SeahorseIngestionTaskController(IngestionTaskInboundPort taskPort,
+    public SeahorseIngestionTaskController(ObjectProvider<IngestionTaskInboundPort> taskPortProvider,
                                            RateLimiterPort rateLimiterPort,
                                            @Value("${seahorse-agent.web.upload-rate-limit.permits:20}")
                                            int uploadRateLimitPermits,
                                            @Value("${seahorse-agent.web.upload-rate-limit.window-ms:60000}")
                                            long uploadRateLimitWindowMs) {
-        this.taskPort = Objects.requireNonNull(taskPort, "taskPort must not be null");
+        this.taskPort = taskPortProvider.getIfAvailable();
         this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPort, RateLimiterPort.noop());
         this.uploadRateLimitPermits = Math.max(1, uploadRateLimitPermits);
         this.uploadRateLimitWindow = Duration.ofMillis(Math.max(1L, uploadRateLimitWindowMs));

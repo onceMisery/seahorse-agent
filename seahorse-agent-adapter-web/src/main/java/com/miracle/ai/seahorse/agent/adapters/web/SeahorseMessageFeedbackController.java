@@ -19,7 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.MessageFeedbackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.SubmitMessageFeedbackCommand;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -36,15 +36,14 @@ import java.util.Objects;
  * <p> 用户 ID 可从请求参数或 {@code X-User-Id} 请求头传入。
  */
 @RestController
-@ConditionalOnBean(MessageFeedbackInboundPort.class)
 public class SeahorseMessageFeedbackController {
 
     private static final String DEFAULT_USER_ID = "default";
 
     private final MessageFeedbackInboundPort feedbackInboundPort;
 
-    public SeahorseMessageFeedbackController(MessageFeedbackInboundPort feedbackInboundPort) {
-        this.feedbackInboundPort = Objects.requireNonNull(feedbackInboundPort, "feedbackInboundPort must not be null");
+    public SeahorseMessageFeedbackController(ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider) {
+        this.feedbackInboundPort = feedbackInboundPortProvider.getIfAvailable();
     }
 
     @PostMapping("/conversations/messages/{messageId}/feedback")

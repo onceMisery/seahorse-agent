@@ -19,7 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplatePayload;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,7 +35,6 @@ import java.util.Objects;
  * 知识库检索策略模板 Web adapter。
  */
 @RestController
-@ConditionalOnBean(RetrievalStrategyTemplateInboundPort.class)
 public class SeahorseRetrievalStrategyTemplateController {
 
     private static final String KEY_CODE = "code";
@@ -44,8 +43,8 @@ public class SeahorseRetrievalStrategyTemplateController {
 
     private final RetrievalStrategyTemplateInboundPort templatePort;
 
-    public SeahorseRetrievalStrategyTemplateController(RetrievalStrategyTemplateInboundPort templatePort) {
-        this.templatePort = Objects.requireNonNull(templatePort, "templatePort must not be null");
+    public SeahorseRetrievalStrategyTemplateController(ObjectProvider<RetrievalStrategyTemplateInboundPort> templatePortProvider) {
+        this.templatePort = templatePortProvider.getIfAvailable();
     }
 
     @GetMapping("/knowledge-base/{kb-id}/retrieval-strategy-templates")
