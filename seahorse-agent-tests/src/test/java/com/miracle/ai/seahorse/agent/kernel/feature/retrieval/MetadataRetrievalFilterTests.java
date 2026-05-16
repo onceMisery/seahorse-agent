@@ -106,10 +106,11 @@ class MetadataRetrievalFilterTests {
                 .satisfies(event -> assertThat(event.attributes())
                         .containsEntry("tenantId", "tenant-a")
                         .containsEntry("knowledgeBaseId", "kb-a")
-                        .containsEntry("fieldKeys", "unknown")
+                        .containsEntry("fieldCount", "1")
                         .containsEntry("reason", "UNREGISTERED_FIELD")
                         .containsEntry("success", "false")
-                        .containsEntry("exception", "IllegalArgumentException"));
+                        .containsEntry("exception", "IllegalArgumentException")
+                        .doesNotContainKeys("fieldKeys", "guardOnlyFieldKeys"));
         assertThat(schemaUsageRepository.rejectedFieldKeys).containsExactly("unknown");
         assertThat(schemaUsageRepository.rejectedReason).isEqualTo("UNREGISTERED_FIELD");
     }
@@ -268,8 +269,9 @@ class MetadataRetrievalFilterTests {
             assertThat(event.attributes())
                     .containsEntry("tenantId", "tenant-a")
                     .containsEntry("knowledgeBaseId", "kb-a")
-                    .containsEntry("fieldKeys", "department")
-                    .containsEntry("guardOnlyFieldKeys", "department");
+                    .containsEntry("fieldCount", "1")
+                    .containsEntry("guardOnlyCount", "1")
+                    .doesNotContainKeys("fieldKeys", "guardOnlyFieldKeys");
         });
         assertThat(observationPort.events)
                 .filteredOn(event -> event.name().equals("retrieval.channel.completed"))

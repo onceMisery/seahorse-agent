@@ -723,12 +723,9 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
             return null;
         }
         try {
+            // scope 级观测会被 Micrometer 直接转成 tag，这里只保留低基数上下文。
             return observationPort.start(new ObservationCommand(OBSERVATION_BACKFILL, "",
-                    Map.of(
-                            "tenantId", job.tenantId(),
-                            "knowledgeBaseId", job.knowledgeBaseId(),
-                            "jobId", job.jobId(),
-                            "status", job.status().name())));
+                    lowCardinalityBackfillAttributes(job)));
         } catch (RuntimeException ex) {
             return null;
         }
@@ -737,7 +734,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     private void recordBackfillResult(ObservationScope scope, MetadataBackfillJobRecord job) {
         boolean hasFailures = hasBackfillFailures(job);
         String eventName = hasFailures ? EVENT_BACKFILL_FAILURE : EVENT_BACKFILL_SUCCESS;
-        Map<String, String> attributes = backfillAttributes(job);
+        Map<String, String> attributes = backfillBatchAttributes(job);
         attributes.put("hasFailures", String.valueOf(hasFailures));
         recordObservationEvent(scope, eventName, attributes);
     }
@@ -748,7 +745,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         if (observationPort == null) {
             return;
         }
-        Map<String, String> attributes = backfillAttributes(job);
+        Map<String, String> attributes = new LinkedHashMap<>(lowCardinalityBackfillAttributes(job));
         attributes.putAll(Objects.requireNonNullElse(extraAttributes, Map.of()));
         try {
             observationPort.recordEvent(new ObservationEvent(eventName, null, attributes));
@@ -757,23 +754,11 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         }
     }
 
-    private Map<String, String> backfillAttributes(MetadataBackfillJobRecord job) {
+    private Map<String, String> lowCardinalityBackfillAttributes(MetadataBackfillJobRecord job) {
         Map<String, String> attributes = new LinkedHashMap<>();
         attributes.put("tenantId", job.tenantId());
         attributes.put("knowledgeBaseId", job.knowledgeBaseId());
-        attributes.put("jobId", job.jobId());
-        attributes.put("pipelineId", job.pipelineId());
         attributes.put("status", job.status().name());
-        attributes.put("currentPage", String.valueOf(job.currentPage()));
-        attributes.put("batchSize", String.valueOf(job.batchSize()));
-        attributes.put("processedDocuments", String.valueOf(job.processedDocuments()));
-        attributes.put("succeededDocuments", String.valueOf(job.succeededDocuments()));
-        attributes.put("failedDocuments", String.valueOf(job.failedDocuments()));
-        attributes.put("skippedDocuments", String.valueOf(job.skippedDocuments()));
-        attributes.put("reviewDocuments", String.valueOf(job.reviewDocuments()));
-        attributes.put("quarantineDocuments", String.valueOf(job.quarantineDocuments()));
-        attributes.put("failureCount", String.valueOf(job.failures().size()));
-        attributes.put("hasFailures", String.valueOf(hasBackfillFailures(job)));
         putCheckpointAttribute(attributes, job, "schemaVersion");
         putCheckpointAttribute(attributes, job, "extractorVersion");
         putCheckpointAttribute(attributes, job, "llmExtractorVersion");
@@ -785,7 +770,23 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         putCheckpointAttribute(attributes, job, KEY_SCHEMA_COMPENSATION);
         putCheckpointAttribute(attributes, job, KEY_SCHEMA_COMPENSATION_REASON);
         putCheckpointAttribute(attributes, job, KEY_SCHEMA_TRIGGER_ACTION);
-        putCheckpointAttribute(attributes, job, KEY_SCHEMA_TRIGGER_FIELD_KEY);
+        attributes.put("schemaTriggerFieldSpecified",
+                Boolean.toString(hasCheckpointValue(job, KEY_SCHEMA_TRIGGER_FIELD_KEY)));
+        return attributes;
+    }
+
+    private Map<String, String> backfillBatchAttributes(MetadataBackfillJobRecord job) {
+        Map<String, String> attributes = new LinkedHashMap<>(lowCardinalityBackfillAttributes(job));
+        attributes.put("currentPage", String.valueOf(job.currentPage()));
+        attributes.put("batchSize", String.valueOf(job.batchSize()));
+        attributes.put("processedDocuments", String.valueOf(job.processedDocuments()));
+        attributes.put("succeededDocuments", String.valueOf(job.succeededDocuments()));
+        attributes.put("failedDocuments", String.valueOf(job.failedDocuments()));
+        attributes.put("skippedDocuments", String.valueOf(job.skippedDocuments()));
+        attributes.put("reviewDocuments", String.valueOf(job.reviewDocuments()));
+        attributes.put("quarantineDocuments", String.valueOf(job.quarantineDocuments()));
+        attributes.put("failureCount", String.valueOf(job.failures().size()));
+        attributes.put("hasFailures", String.valueOf(hasBackfillFailures(job)));
         return attributes;
     }
 
@@ -799,6 +800,13 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         if (!value.isBlank()) {
             attributes.put(key, value);
         }
+    }
+
+    private boolean hasCheckpointValue(MetadataBackfillJobRecord job, String key) {
+        if (job == null || job.checkpoint() == null || !job.checkpoint().containsKey(key)) {
+            return false;
+        }
+        return !Objects.toString(job.checkpoint().get(key), "").isBlank();
     }
 
     private boolean hasBackfillFailures(MetadataBackfillJobRecord job) {

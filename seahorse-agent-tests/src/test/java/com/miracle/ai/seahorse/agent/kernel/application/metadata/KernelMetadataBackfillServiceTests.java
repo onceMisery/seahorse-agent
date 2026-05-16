@@ -331,7 +331,8 @@ class KernelMetadataBackfillServiceTests {
                         .containsEntry("schemaCompensation", "true")
                         .containsEntry("schemaCompensationReason", "SCHEMA_CHANGE")
                         .containsEntry("schemaTriggerAction", "UPDATE")
-                        .containsEntry("schemaTriggerFieldKey", "department"));
+                        .containsEntry("schemaTriggerFieldSpecified", "true")
+                        .doesNotContainKey("schemaTriggerFieldKey"));
     }
 
     @Test

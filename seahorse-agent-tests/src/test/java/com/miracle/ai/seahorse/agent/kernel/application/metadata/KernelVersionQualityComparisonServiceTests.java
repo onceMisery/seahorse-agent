@@ -101,8 +101,8 @@ class KernelVersionQualityComparisonServiceTests {
         assertThat(observationPort.lastEvent).isNotNull();
         assertThat(observationPort.lastEvent.name()).isEqualTo("version.quality.compare.generated");
         assertThat(observationPort.lastEvent.attributes())
-                .containsEntry("retrievalStrategyCount", "2")
-                .containsEntry("retrievalCaseCount", "1")
+                .containsEntry("strategyCount", "2")
+                .containsEntry("caseCount", "1")
                 .containsEntry("metadataFieldDeltaCount", "1");
     }
 

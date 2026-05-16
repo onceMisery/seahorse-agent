@@ -274,3 +274,13 @@
 - 组合对比服务补充低基数字段观测 `version.quality.compare.generated`，只记录 schema 版本与策略/样本数量，不记录策略名或问题内容，避免提前放大标签基数风险。
 - 校正计划漂移：确认 `MetadataBackfillInboundPort.overview(...)` 与 `/knowledge-base/{kb-id}/metadata-backfill/overview` 已经存在并通过测试，因此将 `task_plan.md` 中的 C2 状态改为 complete。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelVersionQualityComparisonServiceTests,SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，38 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 C4 关键观测低基数标签约束
+
+- 收口 `retrieval.metadata.filter.compiled/rejected` 观测属性：不再把 `fieldKeys`、`guardOnlyFieldKeys` 作为 tag 输出，只保留 `fieldCount`、`guardOnlyCount`、`warningCount`、拒绝原因和异常类型；字段清单继续写入专用 Schema usage 日志。
+- 收口回填观测 scope 标签：`metadata.backfill` 不再暴露 `jobId`、`pipelineId` 与具体 `schemaTriggerFieldKey`，改为 `schemaTriggerFieldSpecified` 布尔摘要；批次级事件保留页码、计数和失败数量。
+- 统一检索后处理观测命名：RRF、Rerank、FinalTruncate 从 `tenant` 改为 `tenantId`，并补充 `knowledgeBaseId`；RRF 不再输出权重摘要，改为 `customWeightsConfigured`；Rerank 不再输出模型名、耗时和超时毫秒，改为 `modelConfigured` 与 `timeoutEnabled`。
+- 跨版本质量对比观测字段从 `retrievalStrategyCount/retrievalCaseCount` 收敛为 `strategyCount/caseCount`，保持统一短命名。
+- 补充并更新定向测试断言，覆盖高基数字段不再出现在观测属性、统一标签名和低基数摘要字段。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-spring-boot-starter -am "-Dtest=MetadataRetrievalFilterTests,KernelMetadataBackfillServiceTests,RerankPostProcessorFeatureTests,RrfFusionPostProcessorFeatureTests,FinalTruncatePostProcessorFeatureTests,KernelVersionQualityComparisonServiceTests,KernelMetadataQualityServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，45 个测试成功，reactor `BUILD SUCCESS`。
+- 验证通过：`git diff --check` 无空白错误；仅提示部分 Java 文件下一次 Git 触碰时 LF 会替换为 CRLF。

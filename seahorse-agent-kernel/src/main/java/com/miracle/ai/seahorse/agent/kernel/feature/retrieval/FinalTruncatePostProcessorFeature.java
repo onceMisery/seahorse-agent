@@ -68,7 +68,8 @@ public class FinalTruncatePostProcessorFeature implements SearchResultPostProces
         try {
             // 最终截断只记录规模类低基数字段，避免 chunkId/docId 进入指标标签。
             observationPort.recordEvent(new ObservationEvent(EVENT_FINAL, null, Map.of(
-                    "tenant", tenantId(context),
+                    "tenantId", tenantId(context),
+                    "knowledgeBaseId", knowledgeBaseId(context),
                     "inputCount", String.valueOf(inputCount),
                     "outputCount", String.valueOf(outputCount),
                     "finalTopK", String.valueOf(finalTopK),
@@ -84,5 +85,16 @@ public class FinalTruncatePostProcessorFeature implements SearchResultPostProces
         }
         String tenantId = context.getFilter().system().tenantId();
         return tenantId == null ? "" : tenantId;
+    }
+
+    private String knowledgeBaseId(SearchContext context) {
+        if (context == null || context.getFilter() == null || context.getFilter().system() == null) {
+            return "";
+        }
+        List<String> knowledgeBaseIds = context.getFilter().system().knowledgeBaseIds();
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            return "";
+        }
+        return knowledgeBaseIds.get(0) == null ? "" : knowledgeBaseIds.get(0);
     }
 }

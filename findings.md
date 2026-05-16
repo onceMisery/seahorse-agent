@@ -185,3 +185,11 @@
 - 组合接口应依赖 `MetadataQualityInboundPort` 和 `RetrievalEvaluationInboundPort` 两个入站端口，而不是直接下探 repository；这样可以复用既有版本筛选、字段 delta 和评测 winner 口径。
 - 检索评测部分继续复用 `RetrievalEvaluationComparisonRequest` 最稳妥；若顶层请求已经给出 `tenantId`，则应自动回填到嵌套评测请求，避免管理端重复填写同一租户上下文。
 - `task_plan.md` 中的 C2 状态与代码实际已漂移：`MetadataBackfillInboundPort.overview(...)`、`KernelMetadataBackfillService.overview(...)` 和 `/metadata-backfill/overview` 契约已经存在并有测试覆盖，因此本轮顺手修正为 complete。
+
+## 2026-05-16 C4 关键观测低基数标签约束发现
+
+- `ObservationPort.recordEvent(...)` 的属性在 Micrometer 适配器里会直接变成 tag，不能把字段清单、模型名、权重摘要、任务 ID 或流水线 ID 放进通用观测事件。
+- `ObservationScope.recordEvent(...)` 只继承 scope 启动时的标签，不消费单次事件属性；因此回填任务的低基数约束必须优先落在 `ObservationCommand.start(...)` 的 attributes 上。
+- Schema usage 报表已经有专用持久化端口保存字段清单，因此通用观测事件只需要保留字段数量、guard-only 数量和拒绝原因，避免同一份信息在指标系统中形成高基数标签。
+- 检索链路的观测标签统一使用 `tenantId/knowledgeBaseId`，比早期 `tenant` 命名更容易和治理、回填、版本对比报表对齐。
+- Rerank 的耗时、超时阈值和模型名适合留在 trace 或日志明细中；指标标签层只保留是否配置模型、是否启用超时、输入输出规模和降级状态。

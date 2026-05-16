@@ -112,8 +112,8 @@ public class KernelVersionQualityComparisonService implements VersionQualityComp
                 attributes.put("candidateSchemaVersion", Integer.toString(command.candidateSchemaVersion()));
             }
             // 只记录数量型低基数字段，避免把策略名或样本内容带入标签。
-            attributes.put("retrievalStrategyCount", Integer.toString(retrievalCommand.strategies().size()));
-            attributes.put("retrievalCaseCount", Integer.toString(retrievalCommand.cases().size()));
+            attributes.put("strategyCount", Integer.toString(retrievalCommand.strategies().size()));
+            attributes.put("caseCount", Integer.toString(retrievalCommand.cases().size()));
             attributes.put("metadataFieldDeltaCount",
                     Integer.toString(report.metadataQuality().fieldDeltas().size()));
             observationPort.recordEvent(new ObservationEvent(EVENT_VERSION_COMPARE, null, attributes));

@@ -309,15 +309,15 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
             // 只记录低基数运维字段，避免把候选 chunk 明细写入指标标签。
             RetrievalOptions options = options(context);
             Map<String, String> attributes = new LinkedHashMap<>();
-            attributes.put("tenant", tenantId(context));
+            attributes.put("tenantId", tenantId(context));
+            attributes.put("knowledgeBaseId", knowledgeBaseId(context));
             attributes.put("status", status);
-            attributes.put("model", rerankModel(options));
+            attributes.put("modelConfigured", Boolean.toString(hasText(rerankModel(options))));
             attributes.put("inputCount", String.valueOf(inputCount));
             attributes.put("outputCount", String.valueOf(outputCount));
             attributes.put("inputTopK", String.valueOf(rerankInputTopK(options)));
             attributes.put("outputTopK", String.valueOf(rerankOutputTopK(options)));
-            attributes.put("durationMs", String.valueOf(durationMs));
-            attributes.put("timeoutMs", String.valueOf(timeoutMs));
+            attributes.put("timeoutEnabled", Boolean.toString(timeoutMs > 0L));
             attributes.put("fallback", String.valueOf(isFallbackStatus(status)));
             attributes.put("exception", Objects.requireNonNullElse(exception, ""));
             observationPort.recordEvent(new ObservationEvent(EVENT_RERANK, null, attributes));
@@ -347,6 +347,17 @@ public class RerankPostProcessorFeature implements SearchResultPostProcessorFeat
             return "";
         }
         return context.getFilter().system().tenantId();
+    }
+
+    private String knowledgeBaseId(SearchContext context) {
+        if (context == null || context.getFilter() == null || context.getFilter().system() == null) {
+            return "";
+        }
+        List<String> knowledgeBaseIds = context.getFilter().system().knowledgeBaseIds();
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            return "";
+        }
+        return Objects.requireNonNullElse(knowledgeBaseIds.get(0), "");
     }
 
     private boolean hasText(String value) {
