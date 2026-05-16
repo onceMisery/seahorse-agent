@@ -284,3 +284,10 @@
 - 补充并更新定向测试断言，覆盖高基数字段不再出现在观测属性、统一标签名和低基数摘要字段。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-spring-boot-starter -am "-Dtest=MetadataRetrievalFilterTests,KernelMetadataBackfillServiceTests,RerankPostProcessorFeatureTests,RrfFusionPostProcessorFeatureTests,FinalTruncatePostProcessorFeatureTests,KernelVersionQualityComparisonServiceTests,KernelMetadataQualityServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，45 个测试成功，reactor `BUILD SUCCESS`。
 - 验证通过：`git diff --check` 无空白错误；仅提示部分 Java 文件下一次 Git 触碰时 LF 会替换为 CRLF。
+
+## 2026-05-16 继续推进阶段 B Schema 索引联动收口
+
+- 同步计划状态：确认 `6802ef1 feat: complete metadata schema compensation and capability view` 已完成 B1-B4，包括 `MetadataSchemaIndexSyncPort` 删除/更新语义、Schema 变更补偿编排、JDBC/Elasticsearch 索引兼容策略和字段索引能力视图。
+- 继续收口 Schema 索引同步观测：JDBC 与 Elasticsearch 的 `metadata.schema.index.sync.*` 事件不再输出 `fieldKey` 和 `errorMessage`，只保留 backend、action、租户/知识库、schemaVersion、valueType、索引能力布尔值、outcome 和 errorType。
+- 字段名与错误详情仍保存在 `MetadataSchemaIndexStatusPort` 的同步状态记录里，供字段能力视图查询，避免在 Micrometer tag 中放大基数。
+- 验证通过：`mvn -pl seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-search-elasticsearch -am "-Dtest=JdbcMetadataSchemaIndexAdapterTests,ElasticsearchMetadataSchemaIndexAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，14 个测试成功，reactor `BUILD SUCCESS`。

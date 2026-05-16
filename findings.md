@@ -193,3 +193,9 @@
 - Schema usage 报表已经有专用持久化端口保存字段清单，因此通用观测事件只需要保留字段数量、guard-only 数量和拒绝原因，避免同一份信息在指标系统中形成高基数标签。
 - 检索链路的观测标签统一使用 `tenantId/knowledgeBaseId`，比早期 `tenant` 命名更容易和治理、回填、版本对比报表对齐。
 - Rerank 的耗时、超时阈值和模型名适合留在 trace 或日志明细中；指标标签层只保留是否配置模型、是否启用超时、输入输出规模和降级状态。
+
+## 2026-05-16 阶段 B Schema 索引联动收口发现
+
+- 阶段 B 的主体代码已经在 `6802ef1` 落地，计划文件未同步状态；继续开发前需要把计划从 pending 校正为 complete，避免重复实现已完成能力。
+- Schema 索引同步失败需要同时服务两个消费者：观测系统只需要低基数状态，字段能力视图需要字段名与错误详情；因此应把 `fieldKey/errorMessage` 留在 `MetadataSchemaIndexStatusPort`，不要放进通用观测事件。
+- Elasticsearch mapping 删除无法真正删除已存在字段映射，适配器应以 `NO_CHANGE` 或状态记录表达限制；JDBC 表达式索引则可以在字段禁用、guard-only 或策略变化时显式 drop 旧索引。

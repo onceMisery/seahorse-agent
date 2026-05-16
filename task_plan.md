@@ -195,10 +195,10 @@
 
 实施切片：
 
-- [pending] B1 扩展 `MetadataSchemaIndexSyncPort` 语义，覆盖字段软删除、禁用、索引能力降级和 guard-only 切换。
-- [pending] B2 新增 Schema 变更补偿编排，统一触发关键词索引重建、向量 metadata 补偿和必要的 canonical metadata 重放。
-- [pending] B3 为 Elasticsearch / JDBC / 向量适配器补齐 Schema 变更后的兼容策略和失败观测，明确哪些失败只记观测，哪些失败需要补偿任务。
-- [pending] B4 新增“字段索引能力视图”，展示 `indexed / pushdownToKeyword / pushdownToVector / guardOnly` 的当前生效状态和最近一次同步结果。
+- [complete] B1 扩展 `MetadataSchemaIndexSyncPort` 语义，覆盖字段软删除、禁用、索引能力降级和 guard-only 切换。
+- [complete] B2 新增 Schema 变更补偿编排，统一触发关键词索引重建、向量 metadata 补偿和必要的 canonical metadata 重放。
+- [complete] B3 为 Elasticsearch / JDBC / 向量适配器补齐 Schema 变更后的兼容策略和失败观测，明确哪些失败只记观测，哪些失败需要补偿任务。
+- [complete] B4 新增“字段索引能力视图”，展示 `indexed / pushdownToKeyword / pushdownToVector / guardOnly` 的当前生效状态和最近一次同步结果。
 
 涉及模块 / 文件：
 

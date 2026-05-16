@@ -279,8 +279,9 @@ public class JdbcMetadataSchemaIndexAdapter implements MetadataSchemaIndexSyncPo
             attributes.put("action", Objects.requireNonNullElse(action, ""));
             attributes.put("tenantId", field.tenantId());
             attributes.put("knowledgeBaseId", field.knowledgeBaseId());
-            attributes.put("fieldKey", field.fieldKey());
+            // 字段名和错误详情写入同步状态仓储；观测标签只保留低基数状态。
             attributes.put("schemaVersion", Integer.toString(field.schemaVersion()));
+            attributes.put("valueType", field.valueType().name());
             attributes.put("indexed", Boolean.toString(field.indexed()));
             attributes.put("indexPolicy", Objects.requireNonNullElse(field.indexPolicy(), MetadataIndexPolicy.NONE).name());
             attributes.put("pushdownToKeyword", Boolean.toString(field.backendMapping().pushdownToKeyword()));
@@ -289,7 +290,6 @@ public class JdbcMetadataSchemaIndexAdapter implements MetadataSchemaIndexSyncPo
             attributes.put("outcome", Objects.requireNonNullElse(outcome, ""));
             if (error != null) {
                 attributes.put("errorType", error.getClass().getSimpleName());
-                attributes.put("errorMessage", Objects.requireNonNullElse(error.getMessage(), ""));
             }
             observationPort.recordEvent(new ObservationEvent(eventName, null, attributes));
         } catch (RuntimeException ignored) {

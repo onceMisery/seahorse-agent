@@ -167,14 +167,16 @@ class JdbcMetadataSchemaIndexAdapterTests {
             assertThat(event.name()).isEqualTo("metadata.schema.index.sync.failed");
             assertThat(event.attributes()).containsEntry("backend", "jdbc");
             assertThat(event.attributes()).containsEntry("action", "CREATE");
-            assertThat(event.attributes()).containsEntry("fieldKey", "department");
+            assertThat(event.attributes()).containsEntry("valueType", "STRING");
             assertThat(event.attributes()).containsEntry("errorType", "IllegalStateException");
-            assertThat(event.attributes()).containsEntry("errorMessage", "ddl failed");
+            assertThat(event.attributes()).doesNotContainKeys("fieldKey", "errorMessage");
         });
         assertThat(statusPort.statuses()).singleElement().satisfies(status -> {
             assertThat(status.backend()).isEqualTo("jdbc");
             assertThat(status.action()).isEqualTo("CREATE");
             assertThat(status.outcome()).isEqualTo("FAILED");
+            assertThat(status.fieldKey()).isEqualTo("department");
+            assertThat(status.errorMessage()).isEqualTo("ddl failed");
         });
     }
 
