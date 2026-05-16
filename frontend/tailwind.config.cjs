@@ -25,7 +25,17 @@ module.exports = {
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         "chat-user": "hsl(var(--chat-user))",
-        "chat-assistant": "hsl(var(--chat-assistant))"
+        "chat-assistant": "hsl(var(--chat-assistant))",
+        marine: {
+          950: "#020617",
+          900: "#04101e",
+          800: "#06182c",
+          700: "#0a243e"
+        },
+        glow: {
+          cyan: "#06b6d4",
+          blue: "#3b82f6"
+        }
       },
       fontFamily: {
         display: ["'Space Grotesk'", "ui-sans-serif", "system-ui"],
@@ -34,8 +44,8 @@ module.exports = {
       },
       boxShadow: {
         soft: "0 24px 60px -30px rgba(10, 10, 15, 0.65)",
-        glow: "0 0 0 1px rgba(59, 130, 246, 0.2), 0 16px 40px rgba(59, 130, 246, 0.25)",
-        neon: "0 0 30px rgba(59, 130, 246, 0.35)"
+        glow: "0 0 0 1px var(--theme-accent-alpha-20), 0 16px 40px var(--theme-accent-alpha-30)",
+        neon: "0 0 30px var(--theme-accent-alpha-40)"
       },
       keyframes: {
         "fade-up": {
@@ -74,7 +84,7 @@ module.exports = {
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
         "grid-pattern":
-          "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)"
+          "linear-gradient(rgba(6,182,212,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,0.06) 1px, transparent 1px)"
       }
     }
   },
