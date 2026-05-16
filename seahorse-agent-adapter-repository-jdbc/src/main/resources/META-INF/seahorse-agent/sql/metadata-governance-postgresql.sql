@@ -38,6 +38,24 @@ CREATE TABLE IF NOT EXISTS t_metadata_field_schema (
     deleted           SMALLINT NOT NULL DEFAULT 0
 );
 
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_backend VARCHAR(32);
+
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_action VARCHAR(32);
+
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_outcome VARCHAR(32);
+
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_error_type VARCHAR(64);
+
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_error_message VARCHAR(1024);
+
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_time TIMESTAMP;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uk_metadata_schema_field
 ON t_metadata_field_schema (tenant_id, kb_id, field_key)
 WHERE deleted = 0;
@@ -64,6 +82,44 @@ COMMENT ON COLUMN t_metadata_field_schema.schema_version IS 'Schema 版本号';
 COMMENT ON COLUMN t_metadata_field_schema.create_time IS '创建时间';
 COMMENT ON COLUMN t_metadata_field_schema.update_time IS '更新时间';
 COMMENT ON COLUMN t_metadata_field_schema.deleted IS '是否删除，0 表示正常，1 表示删除';
+
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_backend IS '最近一次 Schema 索引同步后端';
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_action IS '最近一次 Schema 索引同步动作';
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_outcome IS '最近一次 Schema 索引同步结果';
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_error_type IS '最近一次 Schema 索引同步失败类型';
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_error_message IS '最近一次 Schema 索引同步失败摘要';
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_time IS '最近一次 Schema 索引同步时间';
+
+CREATE TABLE IF NOT EXISTS t_metadata_schema_usage_log (
+    id                VARCHAR(64) PRIMARY KEY,
+    request_id        VARCHAR(64) NOT NULL,
+    tenant_id         VARCHAR(64) NOT NULL,
+    kb_id             VARCHAR(64) NOT NULL,
+    schema_version    INTEGER NOT NULL DEFAULT 1,
+    field_key         VARCHAR(128) NOT NULL,
+    event_type        VARCHAR(32) NOT NULL,
+    guard_only        SMALLINT NOT NULL DEFAULT 0,
+    reject_reason     VARCHAR(64),
+    create_time       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_metadata_schema_usage_scope
+ON t_metadata_schema_usage_log (tenant_id, kb_id, schema_version, event_type, create_time);
+
+CREATE INDEX IF NOT EXISTS idx_metadata_schema_usage_request
+ON t_metadata_schema_usage_log (request_id);
+
+COMMENT ON TABLE t_metadata_schema_usage_log IS '检索 Metadata Schema 使用情况事件表';
+COMMENT ON COLUMN t_metadata_schema_usage_log.id IS '事件行 ID';
+COMMENT ON COLUMN t_metadata_schema_usage_log.request_id IS '同一次过滤编译或拒绝请求的聚合 ID';
+COMMENT ON COLUMN t_metadata_schema_usage_log.tenant_id IS '租户 ID';
+COMMENT ON COLUMN t_metadata_schema_usage_log.kb_id IS '知识库 ID';
+COMMENT ON COLUMN t_metadata_schema_usage_log.schema_version IS '过滤编译时使用的 Schema 版本';
+COMMENT ON COLUMN t_metadata_schema_usage_log.field_key IS '参与过滤的字段逻辑名';
+COMMENT ON COLUMN t_metadata_schema_usage_log.event_type IS '事件类型：COMPILED/REJECTED';
+COMMENT ON COLUMN t_metadata_schema_usage_log.guard_only IS '是否只能走 guard 后处理，0 表示否，1 表示是';
+COMMENT ON COLUMN t_metadata_schema_usage_log.reject_reason IS '过滤编译拒绝原因编码';
+COMMENT ON COLUMN t_metadata_schema_usage_log.create_time IS '事件写入时间';
 
 CREATE TABLE IF NOT EXISTS t_metadata_extraction_job (
     id                  VARCHAR(64) PRIMARY KEY,

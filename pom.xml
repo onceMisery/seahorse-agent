@@ -29,6 +29,7 @@
         <redisson.version>4.0.0</redisson.version>
         <pulsar.version>3.1.3</pulsar.version>
         <okhttp.version>4.12.0</okhttp.version>
+        <lucene.version>9.12.2</lucene.version>
         <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
         <spotless-maven-plugin.version>2.22.1</spotless-maven-plugin.version>
@@ -48,6 +49,7 @@
         <module>seahorse-agent-adapter-vector-pgvector</module>
         <module>seahorse-agent-adapter-vector-noop</module>
         <module>seahorse-agent-adapter-search-elasticsearch</module>
+        <module>seahorse-agent-adapter-search-lucene</module>
         <module>seahorse-agent-adapter-repository-jdbc</module>
         <module>seahorse-agent-adapter-cache-local</module>
         <module>seahorse-agent-adapter-cache-redis</module>
@@ -161,6 +163,24 @@
                 <groupId>com.squareup.okhttp3</groupId>
                 <artifactId>okhttp</artifactId>
                 <version>${okhttp.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-core</artifactId>
+                <version>${lucene.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-analysis-common</artifactId>
+                <version>${lucene.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-queryparser</artifactId>
+                <version>${lucene.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

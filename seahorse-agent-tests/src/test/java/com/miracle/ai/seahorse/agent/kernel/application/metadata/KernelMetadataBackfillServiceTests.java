@@ -37,6 +37,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillOperationsOverview;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
@@ -289,6 +290,52 @@ class KernelMetadataBackfillServiceTests {
     }
 
     @Test
+    void shouldPreserveSchemaCompensationMetadataInCheckpointAndObservation() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        KernelMetadataBackfillService service = new KernelMetadataBackfillService(
+                documents,
+                new InMemoryObjectStorage(),
+                pipelineRepository(),
+                acceptingEngine(),
+                jobs,
+                MetadataExtractionResultRepositoryPort.noop(),
+                MetadataQuarantinePort.noop(),
+                observationPort);
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "", 10, "schema-ops",
+                Map.of(
+                        "schemaVersion", 6,
+                        "schemaCompensation", true,
+                        "schemaCompensationReason", "SCHEMA_CHANGE",
+                        "schemaTriggerAction", "UPDATE",
+                        "schemaTriggerFieldKey", "department",
+                        "forceRerun", true,
+                        "overwriteApproved", true)));
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+        MetadataBackfillJobRecord stored = jobs.findById(job.jobId()).orElseThrow();
+
+        assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
+        assertThat(stored.checkpoint())
+                .containsEntry("schemaCompensation", true)
+                .containsEntry("schemaCompensationReason", "SCHEMA_CHANGE")
+                .containsEntry("schemaTriggerAction", "UPDATE")
+                .containsEntry("schemaTriggerFieldKey", "department");
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.backfill.batch.success"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("schemaCompensation", "true")
+                        .containsEntry("schemaCompensationReason", "SCHEMA_CHANGE")
+                        .containsEntry("schemaTriggerAction", "UPDATE")
+                        .containsEntry("schemaTriggerFieldSpecified", "true")
+                        .doesNotContainKey("schemaTriggerFieldKey"));
+    }
+
+    @Test
     void shouldPageBackfillJobsForManagement() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
@@ -301,6 +348,24 @@ class KernelMetadataBackfillServiceTests {
 
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.records()).extracting(MetadataBackfillJobRecord::jobId).containsExactly(job.jobId());
+    }
+
+    @Test
+    void shouldDelegateBackfillOperationsOverviewToRepository() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        jobs.overview = new MetadataBackfillOperationsOverview(
+                "tenant-1", "kb-1",
+                2, 8, 6, 1, 1, 2, 1,
+                3, 1, 2, 1, 1, 2,
+                List.of(), List.of(), List.of(), null, null, Instant.EPOCH);
+        KernelMetadataBackfillService service = service(documents, jobs, Map.of());
+
+        MetadataBackfillOperationsOverview overview = service.overview("tenant-1", "kb-1");
+
+        assertThat(overview.totalJobs()).isEqualTo(2);
+        assertThat(overview.pendingReviewItems()).isEqualTo(3);
+        assertThat(overview.pendingSchemaCompensationDocuments()).isEqualTo(2);
     }
 
     @Test
@@ -611,6 +676,7 @@ class KernelMetadataBackfillServiceTests {
     private static final class InMemoryBackfillJobRepository implements MetadataBackfillJobRepositoryPort {
 
         private final Map<String, MetadataBackfillJobRecord> records = new LinkedHashMap<>();
+        private MetadataBackfillOperationsOverview overview;
 
         @Override
         public String create(MetadataBackfillJobRecord job) {
@@ -648,6 +714,14 @@ class KernelMetadataBackfillServiceTests {
             long pages = matched.isEmpty() ? 0 : (matched.size() + query.size() - 1) / query.size();
             return new MetadataBackfillJobPage(matched.subList(from, to), matched.size(), query.size(),
                     query.current(), pages);
+        }
+
+        @Override
+        public MetadataBackfillOperationsOverview overview(String tenantId, String knowledgeBaseId) {
+            if (overview != null) {
+                return overview;
+            }
+            return MetadataBackfillOperationsOverview.empty(tenantId, knowledgeBaseId);
         }
 
         @Override

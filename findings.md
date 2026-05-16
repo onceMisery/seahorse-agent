@@ -172,3 +172,61 @@
 - 当前没有知识库级检索策略持久化边界，先用内核默认模板端口完成管理端可读闭环，比直接改具体检索后端更稳。
 - 模板只应表达 `RetrievalOptions`，不应该携带原始 metadata Map；实际过滤条件仍由请求侧构造 `RetrievalFilter` 并进入 Filter Compiler。
 - 混合精排模板可以启用 `enableRerank`，但具体 `rerankModel` 应由管理端或知识库配置补齐，避免内置模板绑定某个外部模型提供方。
+
+## 2026-05-16 C1 Schema 使用情况报表发现
+
+- 直接复用 `ObservationPort` 不足以支撑 Schema 使用情况管理查询，因为当前观测适配器只有 noop/micrometer，没有可查询的事件持久化。
+- 更稳妥的做法是保留 `retrieval.metadata.filter.compiled/rejected` 作为观测证据，同时增加专用 `MetadataSchemaUsageReportRepositoryPort` 写入轻量事件快照，避免污染通用观测契约。
+- 使用“每个字段一行、按 requestId 聚合”的轻量事件表，可以在 PostgreSQL 与 H2 上稳定统计字段使用频次、guard-only 命中率和拒绝率，不依赖 JSON 拆分或数据库方言特性。
+
+## 2026-05-16 C3 跨版本质量对比接口发现
+
+- 现有代码已经分别具备 `metadata-quality/compare` 与 `retrieval-quality/compare` 两条对比链路，C3 的关键不是新建统计，而是提供统一编排与统一响应模型。
+- 组合接口应依赖 `MetadataQualityInboundPort` 和 `RetrievalEvaluationInboundPort` 两个入站端口，而不是直接下探 repository；这样可以复用既有版本筛选、字段 delta 和评测 winner 口径。
+- 检索评测部分继续复用 `RetrievalEvaluationComparisonRequest` 最稳妥；若顶层请求已经给出 `tenantId`，则应自动回填到嵌套评测请求，避免管理端重复填写同一租户上下文。
+- `task_plan.md` 中的 C2 状态与代码实际已漂移：`MetadataBackfillInboundPort.overview(...)`、`KernelMetadataBackfillService.overview(...)` 和 `/metadata-backfill/overview` 契约已经存在并有测试覆盖，因此本轮顺手修正为 complete。
+
+## 2026-05-16 C4 关键观测低基数标签约束发现
+
+- `ObservationPort.recordEvent(...)` 的属性在 Micrometer 适配器里会直接变成 tag，不能把字段清单、模型名、权重摘要、任务 ID 或流水线 ID 放进通用观测事件。
+- `ObservationScope.recordEvent(...)` 只继承 scope 启动时的标签，不消费单次事件属性；因此回填任务的低基数约束必须优先落在 `ObservationCommand.start(...)` 的 attributes 上。
+- Schema usage 报表已经有专用持久化端口保存字段清单，因此通用观测事件只需要保留字段数量、guard-only 数量和拒绝原因，避免同一份信息在指标系统中形成高基数标签。
+- 检索链路的观测标签统一使用 `tenantId/knowledgeBaseId`，比早期 `tenant` 命名更容易和治理、回填、版本对比报表对齐。
+- Rerank 的耗时、超时阈值和模型名适合留在 trace 或日志明细中；指标标签层只保留是否配置模型、是否启用超时、输入输出规模和降级状态。
+
+## 2026-05-16 阶段 B Schema 索引联动收口发现
+
+- 阶段 B 的主体代码已经在 `6802ef1` 落地，计划文件未同步状态；继续开发前需要把计划从 pending 校正为 complete，避免重复实现已完成能力。
+- Schema 索引同步失败需要同时服务两个消费者：观测系统只需要低基数状态，字段能力视图需要字段名与错误详情；因此应把 `fieldKey/errorMessage` 留在 `MetadataSchemaIndexStatusPort`，不要放进通用观测事件。
+- Elasticsearch mapping 删除无法真正删除已存在字段映射，适配器应以 `NO_CHANGE` 或状态记录表达限制；JDBC 表达式索引则可以在字段禁用、guard-only 或策略变化时显式 drop 旧索引。
+
+## 2026-05-16 D1 检索评测集管理发现
+
+- 现有检索评测接口只支持临时请求体，无法沉淀知识库级回归集；这会让策略模板和版本对比每次都依赖外部调用方重复提交样本。
+- 评测集持久化应保存 `RetrievalEvaluationCase` 强类型结构，而不是保存任意原始查询 Map；动态 metadata 仍必须在实际评测运行时走现有 Filter Compiler。
+- 本轮先用单表 `cases_json` 完成最小闭环，后续若需要样本级检索、标注审核或批量导入，再拆出 case 明细表更合适。
+
+## 2026-05-16 D2 检索评测运行历史发现
+
+- 评测集运行历史应保存汇总指标列和完整报告 JSON：列表查询走指标列避免反复解析报告，详情查询再读取 `RetrievalEvaluationReport` 明细。
+- 运行历史写入不能阻断即时评测报告返回；生产旧库未执行新增 DDL 时，评测集运行仍应保持可用，历史查询自然返回空。
+- 单策略运行历史先服务趋势回看和上线前验收；多策略 A/B 历史可在同一表结构上后续扩展 `comparison_id` 或新增对比运行表。
+
+## 2026-05-16 D3 已保存评测集 A/B 对比发现
+
+- 已保存评测集的多策略对比应复用既有 `RetrievalEvaluationComparisonCommand`，不要在数据集层再复制一套指标计算逻辑。
+- 对比结果里的每个单策略报告都值得继续沉淀到 D2 运行历史，这样趋势分析和上线前验收都能按策略维度复用同一套历史查询。
+- 当前仍缺少“单次对比批次”这个聚合视角；如果后续需要回看某次 compare 的完整 winner/delta 快照，再补 `comparison_id` 或独立对比历史表更合适。
+
+## 2026-05-16 D4 对比批次历史发现
+
+- 单策略运行历史和 compare 批次历史应分开保存：前者服务策略趋势，后者服务单次上线前比对复盘，二者查询粒度不同。
+- 对比批次摘要只需要保留 baseline、winner、strategyCount、caseCount 等轻量字段；完整 winner/delta/报告列表留在 `report_json`，避免列表接口解析大对象。
+- 当前 compare 历史仍按“单次调用”保存快照，没有做标签化发布、审批单号或版本候选关联；如果后续要接入正式上线流程，再补外部 release/change 关联键更合适。
+
+## 2026-05-16 E1 Lucene 低优先级适配器发现
+
+- Lucene Embedded 更适合测试、单机和私有化极简部署，不应替代生产默认 Elasticsearch；因此必须通过 `keyword-search.type=lucene` / `keyword-index.type=lucene` 显式启用。
+- Lucene 适配器没有外部数据库可用于重建历史数据，可靠性边界应放在入库快照写入、Outbox 重试和管理端重新触发文档重建上，不在 adapter 内新增仓储依赖。
+- 动态 metadata 字段仍必须来自 `CompiledMetadataFilter` AST；Lucene 只把 canonical metadata 展开成可过滤字段和原始 `metadata_json`，不接收也不解释用户原始过滤 Map。
+- Outbox delegate 选择应优先生产级 Elasticsearch，再选择显式配置的 Lucene，最后回退 JDBC；这样不会改变现有默认部署行为。

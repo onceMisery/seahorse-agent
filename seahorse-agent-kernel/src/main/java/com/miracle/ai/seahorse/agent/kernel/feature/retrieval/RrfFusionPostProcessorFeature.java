@@ -239,14 +239,15 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
         try {
             // 只记录低基数字段，避免把 chunkId/docId 写入指标标签。
             observationPort.recordEvent(new ObservationEvent(EVENT_RRF, null, Map.of(
-                    "tenant", tenantId(context),
+                    "tenantId", tenantId(context),
+                    "knowledgeBaseId", knowledgeBaseId(context),
                     "status", status,
                     "channelCount", String.valueOf(channelCount),
                     "candidateCount", String.valueOf(candidateCount),
                     "outputCount", String.valueOf(outputCount),
                     "fusionTopK", String.valueOf(fusionTopK),
                     "rrfK", String.valueOf(rrfK),
-                    "channelWeights", Objects.requireNonNullElse(channelWeights, ""))));
+                    "customWeightsConfigured", Boolean.toString(hasText(channelWeights)))));
         } catch (RuntimeException ex) {
             // 观测失败不能影响检索结果。
         }
@@ -257,6 +258,17 @@ public class RrfFusionPostProcessorFeature implements SearchResultPostProcessorF
             return "";
         }
         return context.getFilter().system().tenantId();
+    }
+
+    private String knowledgeBaseId(SearchContext context) {
+        if (context == null || context.getFilter() == null || context.getFilter().system() == null) {
+            return "";
+        }
+        List<String> knowledgeBaseIds = context.getFilter().system().knowledgeBaseIds();
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            return "";
+        }
+        return Objects.requireNonNullElse(knowledgeBaseIds.get(0), "");
     }
 
     private String dedupeKey(RetrievedChunk chunk) {

@@ -52,6 +52,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaUsageInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
@@ -88,10 +91,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentR
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillCountItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillOperationsOverview;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRecord;
@@ -109,6 +114,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldCapabilityRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.VersionQualityComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRecord;
@@ -583,6 +592,8 @@ class SeahorseWebApiContractTests {
         when(backfillPort.pageJobs(any(MetadataBackfillJobQuery.class)))
                 .thenReturn(new MetadataBackfillJobPage(
                         List.of(metadataBackfillJob(MetadataBackfillJobStatus.PENDING)), 1, 10, 1, 1));
+        when(backfillPort.overview("tenant-1", "kb-1"))
+                .thenReturn(metadataBackfillOverview());
         when(backfillPort.runNextBatch("job-1"))
                 .thenReturn(new MetadataBackfillRunResult(
                         "job-1", MetadataBackfillJobStatus.COMPLETED, 1, 50,
@@ -633,6 +644,17 @@ class SeahorseWebApiContractTests {
         assertThat(capturedBackfillQuery.failureKeyword()).isEqualTo("boom");
         assertThat(capturedBackfillQuery.hasFailures()).isTrue();
         assertThat(capturedBackfillQuery.reExtract()).isTrue();
+
+        mvc.perform(get("/knowledge-base/kb-1/metadata-backfill/overview")
+                        .param("tenantId", "tenant-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.totalJobs").value(2))
+                .andExpect(jsonPath("$.data.pendingReviewItems").value(2))
+                .andExpect(jsonPath("$.data.pendingSchemaCompensationJobs").value(1))
+                .andExpect(jsonPath("$.data.statusCounts[0].key").value("PENDING"))
+                .andExpect(jsonPath("$.data.latestReExtractJob.jobId").value("job-1"));
+        verify(backfillPort).overview("tenant-1", "kb-1");
 
         mvc.perform(get("/metadata-backfill/jobs/job-1"))
                 .andExpect(status().isOk())
@@ -711,6 +733,27 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.delta.reviewCorrectionRateDelta").value(0.1))
                 .andExpect(jsonPath("$.data.fieldDeltas[0].fieldKey").value("department"))
                 .andExpect(jsonPath("$.data.fieldDeltas[0].correctionRateDelta").value(0.2));
+    }
+
+    @Test
+    void shouldKeepMetadataSchemaUsageReportContract() throws Exception {
+        MetadataSchemaUsageInboundPort usagePort = mock(MetadataSchemaUsageInboundPort.class);
+        when(usagePort.report("tenant-1", "kb-1", 2)).thenReturn(metadataSchemaUsageReport());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMetadataSchemaUsageController(usagePort)).build();
+
+        mvc.perform(get("/knowledge-base/kb-1/metadata-schema/usage-report")
+                        .param("tenantId", "tenant-1")
+                        .param("schemaVersion", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.schemaVersion").value(2))
+                .andExpect(jsonPath("$.data.totalCompiledRequests").value(4))
+                .andExpect(jsonPath("$.data.totalRejectedRequests").value(1))
+                .andExpect(jsonPath("$.data.guardOnlyRequestCount").value(1))
+                .andExpect(jsonPath("$.data.fields[0].fieldKey").value("department"))
+                .andExpect(jsonPath("$.data.fields[0].usageCount").value(3));
     }
 
     @Test
@@ -814,6 +857,59 @@ class SeahorseWebApiContractTests {
         assertThat(captor.getValue().cases().get(0).filter().system().tenantId()).isEqualTo("tenant-1");
         assertThat(captor.getValue().cases().get(0).filter().system().knowledgeBaseIds()).containsExactly("kb-1");
         assertThat(captor.getValue().cases().get(0).filter().system().aclSubjectIds()).containsExactly("dept-a");
+    }
+
+    @Test
+    void shouldKeepVersionQualityComparisonContract() throws Exception {
+        VersionQualityComparisonInboundPort comparisonPort = mock(VersionQualityComparisonInboundPort.class);
+        when(comparisonPort.compare(any())).thenReturn(versionQualityComparisonReport());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseVersionQualityComparisonController(comparisonPort)).build();
+
+        mvc.perform(post("/knowledge-base/kb-1/version-quality/compare")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-1",
+                                "quarantineTopN", 3,
+                                "baselineSchemaVersion", 1,
+                                "baselineExtractorVersion", "extractor-v1",
+                                "baselineLlmPromptVersion", "prompt-v1",
+                                "candidateSchemaVersion", 2,
+                                "candidateExtractorVersion", "extractor-v2",
+                                "candidateLlmPromptVersion", "prompt-v3",
+                                "retrievalComparison", Map.of(
+                                        "baselineStrategyName", "baseline",
+                                        "topK", 2,
+                                        "strategies", List.of(
+                                                Map.of("strategyName", "baseline", "topK", 2),
+                                                Map.of("strategyName", "candidate", "topK", 2,
+                                                        "options", Map.of("enableKeyword", true, "finalTopK", 2))),
+                                        "cases", List.of(Map.of(
+                                                "caseId", "case-1",
+                                                "question", "question-a",
+                                                "expectedDocIds", List.of("doc-1"),
+                                                "aclSubjectIds", List.of("dept-a"))))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.metadataQuality.delta.averageFieldCoverageDelta").value(0.1D))
+                .andExpect(jsonPath("$.data.retrievalQuality.winnerStrategyName").value("candidate"))
+                .andExpect(jsonPath("$.data.retrievalQuality.deltas[1].recallAtKDelta").value(1.0D));
+
+        ArgumentCaptor<VersionQualityComparisonCommand> captor =
+                ArgumentCaptor.forClass(VersionQualityComparisonCommand.class);
+        verify(comparisonPort).compare(captor.capture());
+        assertThat(captor.getValue().tenantId()).isEqualTo("tenant-1");
+        assertThat(captor.getValue().knowledgeBaseId()).isEqualTo("kb-1");
+        assertThat(captor.getValue().quarantineTopN()).isEqualTo(3);
+        assertThat(captor.getValue().baselineSchemaVersion()).isEqualTo(1);
+        assertThat(captor.getValue().candidateSchemaVersion()).isEqualTo(2);
+        assertThat(captor.getValue().retrievalComparison().baselineStrategyName()).isEqualTo("baseline");
+        assertThat(captor.getValue().retrievalComparison().strategies()).hasSize(2);
+        assertThat(captor.getValue().retrievalComparison().cases().get(0).filter().system().tenantId())
+                .isEqualTo("tenant-1");
+        assertThat(captor.getValue().retrievalComparison().cases().get(0).filter().system().knowledgeBaseIds())
+                .containsExactly("kb-1");
     }
 
     @Test
@@ -1015,6 +1111,8 @@ class SeahorseWebApiContractTests {
         MetadataSchemaInboundPort schemaPort = mock(MetadataSchemaInboundPort.class);
         when(schemaPort.listFields("tenant-1", "kb-1"))
                 .thenReturn(List.of(metadataSchemaField("field-1")));
+        when(schemaPort.listFieldCapabilities("tenant-1", "kb-1"))
+                .thenReturn(List.of(metadataSchemaFieldCapability("field-1")));
         when(schemaPort.createField(eq("kb-1"), any()))
                 .thenReturn(metadataSchemaField("field-1"));
         when(schemaPort.updateField(eq("field-1"), any()))
@@ -1029,6 +1127,13 @@ class SeahorseWebApiContractTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data[0].fieldKey").value("department"));
+        mvc.perform(get("/knowledge-base/kb-1/metadata-schema/field-capabilities")
+                        .param("tenantId", "tenant-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data[0].fieldKey").value("department"))
+                .andExpect(jsonPath("$.data[0].pushdownToKeyword").value(true))
+                .andExpect(jsonPath("$.data[0].lastSyncOutcome").value("FAILED"));
         mvc.perform(post("/knowledge-base/kb-1/metadata-schema/fields")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
@@ -1258,6 +1363,33 @@ class SeahorseWebApiContractTests {
                 Instant.EPOCH);
     }
 
+    private static MetadataBackfillOperationsOverview metadataBackfillOverview() {
+        return new MetadataBackfillOperationsOverview(
+                "tenant-1",
+                "kb-1",
+                2,
+                8,
+                6,
+                1,
+                1,
+                2,
+                1,
+                2,
+                1,
+                1,
+                1,
+                1,
+                2,
+                List.of(
+                        new MetadataBackfillCountItem("PENDING", 1),
+                        new MetadataBackfillCountItem("PAUSED", 1)),
+                List.of(new MetadataBackfillCountItem("SCHEMA_MISSING", 1)),
+                List.of(new MetadataBackfillCountItem("SCHEMA_MISSING", 1)),
+                metadataBackfillJob(MetadataBackfillJobStatus.PENDING),
+                metadataBackfillJob(MetadataBackfillJobStatus.PAUSED),
+                Instant.EPOCH);
+    }
+
     private static MetadataQualityReport metadataQualityReport() {
         return new MetadataQualityReport(
                 "tenant-1",
@@ -1301,6 +1433,43 @@ class SeahorseWebApiContractTests {
                 new MetadataQualityComparisonDelta(0, 1, 0.1D, -0.05D, 0.1D, 0.1D, 0, 0, 0),
                 List.of(new MetadataFieldCoverageDelta("department", "部门",
                         1, 0, 1, 1, 0.25D, -0.16666666666666669D, 0.2D)));
+    }
+
+    private static MetadataSchemaUsageReport metadataSchemaUsageReport() {
+        return new MetadataSchemaUsageReport(
+                "tenant-1",
+                "kb-1",
+                2,
+                4L,
+                1L,
+                1L,
+                0.25D,
+                0.2D,
+                List.of(
+                        new MetadataSchemaUsageFieldRecord("department", "部门", 3L, 0L, 0L, 0D, 0D),
+                        new MetadataSchemaUsageFieldRecord("owner", "负责人", 1L, 1L, 1L, 1D, 0.5D)),
+                Instant.parse("2026-05-16T10:00:00Z"));
+    }
+
+    private static VersionQualityComparisonReport versionQualityComparisonReport() {
+        return new VersionQualityComparisonReport(
+                "tenant-1",
+                "kb-1",
+                metadataQualityComparisonReport(),
+                new RetrievalEvaluationComparisonReport(
+                        "baseline",
+                        "candidate",
+                        List.of(
+                                new RetrievalEvaluationReport("baseline", 2, 1, 1,
+                                        0.0D, 0.0D, 0.0D, 1.0D,
+                                        20.0D, 20.0D, List.of()),
+                                new RetrievalEvaluationReport("candidate", 2, 1, 1,
+                                        1.0D, 1.0D, 1.0D, 0.0D,
+                                        15.0D, 15.0D, List.of())),
+                        List.of(
+                                new RetrievalEvaluationStrategyDelta("baseline", 0D, 0D, 0D, 0D, 0D, 0D),
+                                new RetrievalEvaluationStrategyDelta("candidate", 1D, 1D, 1D, -1D, -5D, -5D))),
+                Instant.EPOCH);
     }
 
     private static MetadataReviewRecord metadataReview(String id, MetadataReviewStatus status) {
@@ -1380,6 +1549,32 @@ class SeahorseWebApiContractTests {
                 Map.of("sourceKeys", List.of("department")),
                 BackendFieldMapping.defaults("department"),
                 1,
+                Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataSchemaFieldCapabilityRecord metadataSchemaFieldCapability(String id) {
+        return new MetadataSchemaFieldCapabilityRecord(
+                id,
+                "tenant-1",
+                "kb-1",
+                "department",
+                "閮ㄩ棬",
+                MetadataValueType.STRING,
+                true,
+                false,
+                true,
+                true,
+                MetadataIndexPolicy.SEARCH_KEYWORD,
+                true,
+                false,
+                false,
+                2,
+                "elasticsearch",
+                "UPDATE",
+                "FAILED",
+                "IllegalStateException",
+                "mapping failed",
                 Instant.EPOCH,
                 Instant.EPOCH);
     }

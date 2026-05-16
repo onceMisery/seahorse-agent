@@ -26,11 +26,13 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataOperator;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillCountItem;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillOperationsOverview;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemPayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemRecord;
@@ -65,9 +67,15 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueue
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldPayload;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldCapabilityRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexStatusPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncStatusRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -92,7 +100,8 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         MetadataQuarantinePort, MetadataCanonicalWritePort, MetadataBackfillJobRepositoryPort,
         MetadataQualityReportRepositoryPort, MetadataReviewManagementRepositoryPort,
         MetadataQuarantineManagementRepositoryPort, MetadataSchemaManagementRepositoryPort,
-        MetadataDictionaryManagementRepositoryPort, MetadataExtractionResultManagementRepositoryPort {
+        MetadataDictionaryManagementRepositoryPort, MetadataExtractionResultManagementRepositoryPort,
+        MetadataSchemaIndexStatusPort, MetadataSchemaUsageReportRepositoryPort {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
@@ -100,6 +109,8 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     };
     private static final TypeReference<List<Map<String, Object>>> MAP_LIST_TYPE = new TypeReference<>() {
     };
+    private static final String SCHEMA_USAGE_EVENT_COMPILED = "COMPILED";
+    private static final String SCHEMA_USAGE_EVENT_REJECTED = "REJECTED";
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -155,6 +166,32 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                       AND deleted = 0
                     ORDER BY CASE WHEN kb_id = ? THEN 0 ELSE 1 END, field_key
                     """, this::toSchemaFieldRecord, safeTenantId, safeKbId, safeKbId, safeKbId);
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
+    @Override
+    public List<MetadataSchemaFieldCapabilityRecord> listSchemaFieldCapabilities(String tenantId,
+                                                                                 String knowledgeBaseId) {
+        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
+        String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
+        if (blank(safeTenantId)) {
+            return List.of();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, kb_id, field_key, display_name, value_type,
+                           filterable, sortable, facetable, indexed, index_policy,
+                           backend_mapping, schema_version, last_sync_backend, last_sync_action,
+                           last_sync_outcome, last_sync_error_type, last_sync_error_message,
+                           last_sync_time, update_time
+                    FROM t_metadata_field_schema
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ? OR kb_id IS NULL OR kb_id = '')
+                      AND deleted = 0
+                    ORDER BY CASE WHEN kb_id = ? THEN 0 ELSE 1 END, field_key
+                    """, this::toSchemaFieldCapabilityRecord, safeTenantId, safeKbId, safeKbId, safeKbId);
         } catch (DataAccessException ex) {
             return List.of();
         }
@@ -247,6 +284,34 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     update_time = CURRENT_TIMESTAMP
                 WHERE id = ? AND deleted = 0
                 """, fieldId) > 0;
+    }
+
+    @Override
+    public void recordSyncResult(MetadataSchemaIndexSyncStatusRecord status) {
+        MetadataSchemaIndexSyncStatusRecord safeStatus = Objects.requireNonNull(status, "status must not be null");
+        if (blank(safeStatus.fieldId())) {
+            return;
+        }
+        try {
+            jdbcTemplate.update("""
+                    UPDATE t_metadata_field_schema
+                    SET last_sync_backend = ?,
+                        last_sync_action = ?,
+                        last_sync_outcome = ?,
+                        last_sync_error_type = ?,
+                        last_sync_error_message = ?,
+                        last_sync_time = ?
+                    WHERE id = ?
+                    """,
+                    trimToLength(safeStatus.backend(), 32),
+                    trimToLength(safeStatus.action(), 32),
+                    trimToLength(safeStatus.outcome(), 32),
+                    trimToLength(safeStatus.errorType(), 64),
+                    trimToLength(safeStatus.errorMessage(), 1024),
+                    Timestamp.from(safeStatus.syncTime()),
+                    safeStatus.fieldId());
+        } catch (DataAccessException ignored) {
+        }
     }
 
     @Override
@@ -858,6 +923,54 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     @Override
+    public MetadataBackfillOperationsOverview overview(String tenantId, String knowledgeBaseId) {
+        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
+        String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
+        if (blank(safeTenantId)) {
+            return MetadataBackfillOperationsOverview.empty(safeTenantId, safeKbId);
+        }
+        List<MetadataBackfillJobRecord> jobs = listBackfillJobs(safeTenantId, safeKbId);
+        long processedDocuments = jobs.stream().mapToLong(MetadataBackfillJobRecord::processedDocuments).sum();
+        long succeededDocuments = jobs.stream().mapToLong(MetadataBackfillJobRecord::succeededDocuments).sum();
+        long failedDocuments = jobs.stream().mapToLong(MetadataBackfillJobRecord::failedDocuments).sum();
+        long skippedDocuments = jobs.stream().mapToLong(MetadataBackfillJobRecord::skippedDocuments).sum();
+        long reviewDocuments = jobs.stream().mapToLong(MetadataBackfillJobRecord::reviewDocuments).sum();
+        long quarantineDocuments = jobs.stream().mapToLong(MetadataBackfillJobRecord::quarantineDocuments).sum();
+        long pendingSchemaCompensationJobs = jobs.stream()
+                .filter(this::isPendingSchemaCompensationJob)
+                .count();
+        long pendingSchemaCompensationDocuments = jobs.stream()
+                .filter(this::isPendingSchemaCompensationJob)
+                .mapToLong(job -> checkpointDocumentCount(job.checkpoint()))
+                .sum();
+
+        Map<String, Long> reviewStatusCounts = reviewStatusCounts(safeTenantId, safeKbId);
+        Map<Boolean, Long> quarantineResolvedCounts = quarantineResolvedCounts(safeTenantId, safeKbId);
+        return new MetadataBackfillOperationsOverview(
+                safeTenantId,
+                safeKbId,
+                jobs.size(),
+                processedDocuments,
+                succeededDocuments,
+                failedDocuments,
+                skippedDocuments,
+                reviewDocuments,
+                quarantineDocuments,
+                reviewStatusCounts.getOrDefault(MetadataReviewStatus.PENDING.name(), 0L),
+                reviewStatusCounts.getOrDefault(MetadataReviewStatus.RE_EXTRACTING.name(), 0L),
+                quarantineResolvedCounts.getOrDefault(Boolean.FALSE, 0L),
+                quarantineResolvedCounts.getOrDefault(Boolean.TRUE, 0L),
+                pendingSchemaCompensationJobs,
+                pendingSchemaCompensationDocuments,
+                statusCounts(jobs),
+                failureReasonCounts(safeTenantId, safeKbId),
+                pauseReasonCounts(jobs),
+                latestMatchingJob(jobs, "reExtract"),
+                latestMatchingJob(jobs, "schemaCompensation"),
+                Instant.now());
+    }
+
+    @Override
     public void save(MetadataBackfillJobRecord job) {
         MetadataBackfillJobRecord safeJob = Objects.requireNonNull(job, "job must not be null");
         jdbcTemplate.update("""
@@ -881,6 +994,110 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 safeJob.skippedDocuments(), safeJob.reviewDocuments(), safeJob.quarantineDocuments(),
                 json(safeJob.failures()), safeJob.operator(), Timestamp.from(safeJob.updateTime()),
                 safeJob.jobId());
+    }
+
+    @Override
+    public void recordCompiled(String tenantId,
+                               String knowledgeBaseId,
+                               Integer schemaVersion,
+                               List<String> fieldKeys,
+                               List<String> guardOnlyFieldKeys) {
+        recordSchemaUsage(tenantId, knowledgeBaseId, schemaVersion, fieldKeys, guardOnlyFieldKeys,
+                SCHEMA_USAGE_EVENT_COMPILED, "");
+    }
+
+    @Override
+    public void recordRejected(String tenantId,
+                               String knowledgeBaseId,
+                               Integer schemaVersion,
+                               List<String> fieldKeys,
+                               String rejectReason) {
+        recordSchemaUsage(tenantId, knowledgeBaseId, schemaVersion, fieldKeys, List.of(),
+                SCHEMA_USAGE_EVENT_REJECTED, rejectReason);
+    }
+
+    @Override
+    public MetadataSchemaUsageReport report(String tenantId, String knowledgeBaseId, Integer schemaVersion) {
+        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
+        String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
+        Integer safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? null : schemaVersion;
+        if (blank(safeTenantId) || blank(safeKbId)) {
+            return MetadataSchemaUsageReport.empty(safeTenantId, safeKbId, safeSchemaVersion);
+        }
+        try {
+            SqlWhere where = schemaUsageWhere(safeTenantId, safeKbId, safeSchemaVersion);
+            long totalCompiledRequests = countLong("""
+                    SELECT COUNT(DISTINCT request_id)
+                    FROM t_metadata_schema_usage_log
+                    """ + where.sql() + """
+                    AND event_type = 'COMPILED'
+                    """, where.args());
+            long totalRejectedRequests = countLong("""
+                    SELECT COUNT(DISTINCT request_id)
+                    FROM t_metadata_schema_usage_log
+                    """ + where.sql() + """
+                    AND event_type = 'REJECTED'
+                    """, where.args());
+            long guardOnlyRequestCount = countLong("""
+                    SELECT COUNT(DISTINCT request_id)
+                    FROM t_metadata_schema_usage_log
+                    """ + where.sql() + """
+                    AND event_type = 'COMPILED'
+                    AND guard_only = 1
+                    """, where.args());
+
+            List<MetadataSchemaUsageAggregate> aggregates = jdbcTemplate.query("""
+                    SELECT field_key,
+                           SUM(CASE WHEN event_type = 'COMPILED' THEN 1 ELSE 0 END) AS usage_count,
+                           SUM(CASE WHEN event_type = 'COMPILED' AND guard_only = 1 THEN 1 ELSE 0 END)
+                               AS guard_only_count,
+                           SUM(CASE WHEN event_type = 'REJECTED' THEN 1 ELSE 0 END) AS rejected_count
+                    FROM t_metadata_schema_usage_log
+                    """ + where.sql() + """
+                    GROUP BY field_key
+                    """, (rs, rowNum) -> new MetadataSchemaUsageAggregate(
+                            rs.getString("field_key"),
+                            rs.getLong("usage_count"),
+                            rs.getLong("guard_only_count"),
+                            rs.getLong("rejected_count")),
+                    where.args().toArray());
+            Map<String, MetadataSchemaUsageAggregate> aggregateByField = new LinkedHashMap<>();
+            for (MetadataSchemaUsageAggregate aggregate : aggregates) {
+                aggregateByField.put(aggregate.fieldKey(), aggregate);
+            }
+
+            LinkedHashMap<String, String> displayNames = new LinkedHashMap<>();
+            for (MetadataSchemaFieldRecord field : listSchemaFields(safeTenantId, safeKbId)) {
+                displayNames.putIfAbsent(field.fieldKey(), field.displayName());
+            }
+            for (String fieldKey : aggregateByField.keySet()) {
+                displayNames.putIfAbsent(fieldKey, fieldKey);
+            }
+
+            List<MetadataSchemaUsageFieldRecord> fields = displayNames.entrySet().stream()
+                    .map(entry -> toSchemaUsageFieldRecord(entry.getKey(), entry.getValue(),
+                            aggregateByField.get(entry.getKey())))
+                    .sorted(java.util.Comparator
+                            .comparingLong(MetadataSchemaUsageFieldRecord::usageCount).reversed()
+                            .thenComparingLong(MetadataSchemaUsageFieldRecord::rejectedCount).reversed()
+                            .thenComparingLong(MetadataSchemaUsageFieldRecord::guardOnlyCount).reversed()
+                            .thenComparing(MetadataSchemaUsageFieldRecord::fieldKey))
+                    .toList();
+
+            return new MetadataSchemaUsageReport(
+                    safeTenantId,
+                    safeKbId,
+                    safeSchemaVersion,
+                    totalCompiledRequests,
+                    totalRejectedRequests,
+                    guardOnlyRequestCount,
+                    ratio(guardOnlyRequestCount, totalCompiledRequests),
+                    ratio(totalRejectedRequests, totalCompiledRequests + totalRejectedRequests),
+                    fields,
+                    Instant.now());
+        } catch (DataAccessException ex) {
+            return MetadataSchemaUsageReport.empty(safeTenantId, safeKbId, safeSchemaVersion);
+        }
     }
 
     @Override
@@ -1212,6 +1429,163 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             return false;
         }
         return blank(llmPromptVersion) || llmPromptVersion.equals(snapshot.llmPromptVersion());
+    }
+
+    private List<MetadataBackfillJobRecord> listBackfillJobs(String tenantId, String knowledgeBaseId) {
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, kb_id, pipeline_id, status, checkpoint_json, batch_size,
+                           current_page,
+                           processed_count, success_count, failed_count, skipped_count, review_count,
+                           quarantine_count, failure_summary, operator, create_time, update_time
+                    FROM t_metadata_extraction_job
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ?)
+                    ORDER BY update_time DESC, create_time DESC, id DESC
+                    """, this::toBackfillJobRecord, tenantId, knowledgeBaseId, knowledgeBaseId);
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
+    private Map<String, Long> reviewStatusCounts(String tenantId, String knowledgeBaseId) {
+        try {
+            List<MetadataBackfillCountItem> counts = jdbcTemplate.query("""
+                    SELECT review_status, COUNT(1) AS item_count
+                    FROM t_metadata_review_item
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ?)
+                    GROUP BY review_status
+                    """, (rs, rowNum) -> new MetadataBackfillCountItem(
+                            text(rs.getString("review_status"), ""),
+                            rs.getLong("item_count")),
+                    tenantId, knowledgeBaseId, knowledgeBaseId);
+            Map<String, Long> indexed = new LinkedHashMap<>();
+            for (MetadataBackfillCountItem count : counts) {
+                indexed.put(count.key(), count.count());
+            }
+            return indexed;
+        } catch (DataAccessException ex) {
+            return Map.of();
+        }
+    }
+
+    private Map<Boolean, Long> quarantineResolvedCounts(String tenantId, String knowledgeBaseId) {
+        try {
+            List<MetadataBackfillCountItem> counts = jdbcTemplate.query("""
+                    SELECT resolved, COUNT(1) AS item_count
+                    FROM t_metadata_quarantine_item
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ?)
+                    GROUP BY resolved
+                    """, (rs, rowNum) -> new MetadataBackfillCountItem(
+                            rs.getInt("resolved") == 1 ? "true" : "false",
+                            rs.getLong("item_count")),
+                    tenantId, knowledgeBaseId, knowledgeBaseId);
+            Map<Boolean, Long> indexed = new LinkedHashMap<>();
+            for (MetadataBackfillCountItem count : counts) {
+                indexed.put(Boolean.parseBoolean(count.key()), count.count());
+            }
+            return indexed;
+        } catch (DataAccessException ex) {
+            return Map.of();
+        }
+    }
+
+    private List<MetadataBackfillCountItem> failureReasonCounts(String tenantId, String knowledgeBaseId) {
+        try {
+            return jdbcTemplate.query("""
+                    SELECT COALESCE(NULLIF(reason_code, ''), 'UNKNOWN') AS reason_code,
+                           COUNT(1) AS item_count
+                    FROM t_metadata_quarantine_item
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ?)
+                    GROUP BY COALESCE(NULLIF(reason_code, ''), 'UNKNOWN')
+                    ORDER BY item_count DESC, reason_code ASC
+                    """, (rs, rowNum) -> new MetadataBackfillCountItem(
+                            rs.getString("reason_code"),
+                            rs.getLong("item_count")),
+                    tenantId, knowledgeBaseId, knowledgeBaseId);
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
+    private List<MetadataBackfillCountItem> statusCounts(List<MetadataBackfillJobRecord> jobs) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (MetadataBackfillJobStatus status : MetadataBackfillJobStatus.values()) {
+            counts.put(status.name(), 0L);
+        }
+        for (MetadataBackfillJobRecord job : jobs) {
+            counts.computeIfPresent(job.status().name(), (key, value) -> value + 1L);
+        }
+        return counts.entrySet().stream()
+                .map(entry -> new MetadataBackfillCountItem(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
+    private List<MetadataBackfillCountItem> pauseReasonCounts(List<MetadataBackfillJobRecord> jobs) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (MetadataBackfillJobRecord job : jobs) {
+            String pauseReason = text(job.checkpoint().get("pauseReason"), "");
+            if (!blank(pauseReason)) {
+                counts.merge(pauseReason, 1L, Long::sum);
+            }
+        }
+        return sortCountItems(counts);
+    }
+
+    private List<MetadataBackfillCountItem> sortCountItems(Map<String, Long> counts) {
+        return counts.entrySet().stream()
+                .sorted((left, right) -> {
+                    int byCount = Long.compare(right.getValue(), left.getValue());
+                    return byCount != 0 ? byCount : left.getKey().compareTo(right.getKey());
+                })
+                .map(entry -> new MetadataBackfillCountItem(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
+    private MetadataBackfillJobRecord latestMatchingJob(List<MetadataBackfillJobRecord> jobs, String checkpointKey) {
+        return jobs.stream()
+                .filter(job -> bool(job.checkpoint().get(checkpointKey)))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean isPendingSchemaCompensationJob(MetadataBackfillJobRecord job) {
+        return bool(job.checkpoint().get("schemaCompensation"))
+                && job.status() != MetadataBackfillJobStatus.COMPLETED
+                && job.status() != MetadataBackfillJobStatus.CANCELLED;
+    }
+
+    private long checkpointDocumentCount(Map<String, Object> checkpoint) {
+        if (checkpoint == null || !checkpoint.containsKey("documentIds")) {
+            return 0L;
+        }
+        Object value = checkpoint.get("documentIds");
+        LinkedHashSet<String> documentIds = new LinkedHashSet<>();
+        if (value instanceof Iterable<?> iterable) {
+            for (Object item : iterable) {
+                addCheckpointDocumentId(documentIds, item);
+            }
+            return documentIds.size();
+        }
+        // KB 级补偿没有 documentIds 时返回 0，避免把未知范围伪装成精确待处理量。
+        String text = text(value, "");
+        if (blank(text)) {
+            return 0L;
+        }
+        for (String item : text.split(",")) {
+            addCheckpointDocumentId(documentIds, item);
+        }
+        return documentIds.size();
+    }
+
+    private void addCheckpointDocumentId(Set<String> documentIds, Object value) {
+        String text = text(value, "");
+        if (!blank(text)) {
+            documentIds.add(text.trim());
+        }
     }
 
     private int totalDocuments(String knowledgeBaseId,
@@ -1681,6 +2055,90 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
     }
 
+    private void recordSchemaUsage(String tenantId,
+                                   String knowledgeBaseId,
+                                   Integer schemaVersion,
+                                   List<String> fieldKeys,
+                                   List<String> guardOnlyFieldKeys,
+                                   String eventType,
+                                   String rejectReason) {
+        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
+        String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
+        if (blank(safeTenantId) || blank(safeKbId)) {
+            return;
+        }
+        List<String> safeFieldKeys = normalizedFieldKeys(fieldKeys);
+        if (safeFieldKeys.isEmpty()) {
+            return;
+        }
+        Set<String> safeGuardOnlyFieldKeys = Set.copyOf(normalizedFieldKeys(guardOnlyFieldKeys));
+        int safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? 1 : schemaVersion;
+        String requestId = UUID.randomUUID().toString();
+        Instant now = Instant.now();
+        List<Object[]> batchArgs = new ArrayList<>(safeFieldKeys.size());
+        for (String fieldKey : safeFieldKeys) {
+            batchArgs.add(new Object[]{
+                    UUID.randomUUID().toString(),
+                    requestId,
+                    safeTenantId,
+                    safeKbId,
+                    safeSchemaVersion,
+                    fieldKey,
+                    Objects.requireNonNullElse(eventType, SCHEMA_USAGE_EVENT_COMPILED),
+                    flag(safeGuardOnlyFieldKeys.contains(fieldKey)),
+                    Objects.requireNonNullElse(rejectReason, ""),
+                    Timestamp.from(now)
+            });
+        }
+        jdbcTemplate.batchUpdate("""
+                INSERT INTO t_metadata_schema_usage_log(
+                    id, request_id, tenant_id, kb_id, schema_version, field_key,
+                    event_type, guard_only, reject_reason, create_time
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, batchArgs);
+    }
+
+    private SqlWhere schemaUsageWhere(String tenantId, String knowledgeBaseId, Integer schemaVersion) {
+        StringBuilder sql = new StringBuilder("""
+                WHERE tenant_id = ?
+                  AND kb_id = ?
+                """);
+        List<Object> args = new ArrayList<>();
+        args.add(tenantId);
+        args.add(knowledgeBaseId);
+        if (schemaVersion != null && schemaVersion > 0) {
+            sql.append(" AND schema_version = ?");
+            args.add(schemaVersion);
+        }
+        return new SqlWhere(sql.toString(), args);
+    }
+
+    private MetadataSchemaUsageFieldRecord toSchemaUsageFieldRecord(String fieldKey,
+                                                                    String displayName,
+                                                                    MetadataSchemaUsageAggregate aggregate) {
+        MetadataSchemaUsageAggregate safeAggregate = aggregate == null
+                ? new MetadataSchemaUsageAggregate(fieldKey, 0L, 0L, 0L)
+                : aggregate;
+        long usageCount = safeAggregate.usageCount();
+        long rejectedCount = safeAggregate.rejectedCount();
+        return new MetadataSchemaUsageFieldRecord(
+                fieldKey,
+                displayName,
+                usageCount,
+                safeAggregate.guardOnlyCount(),
+                rejectedCount,
+                ratio(safeAggregate.guardOnlyCount(), usageCount),
+                ratio(rejectedCount, usageCount + rejectedCount));
+    }
+
+    private List<String> normalizedFieldKeys(List<String> fieldKeys) {
+        return Objects.requireNonNullElse(fieldKeys, List.<String>of()).stream()
+                .map(value -> Objects.requireNonNullElse(value, "").trim())
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
+    }
+
     private MetadataSchemaFieldRecord toSchemaFieldRecord(ResultSet rs, int rowNum) throws SQLException {
         return new MetadataSchemaFieldRecord(
                 rs.getString("id"),
@@ -1702,6 +2160,34 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 backendMapping(rs.getString("backend_mapping"), rs.getString("field_key")),
                 rs.getInt("schema_version"),
                 instant(rs.getTimestamp("create_time")),
+                instant(rs.getTimestamp("update_time")));
+    }
+
+    private MetadataSchemaFieldCapabilityRecord toSchemaFieldCapabilityRecord(ResultSet rs, int rowNum)
+            throws SQLException {
+        BackendFieldMapping mapping = backendMapping(rs.getString("backend_mapping"), rs.getString("field_key"));
+        return new MetadataSchemaFieldCapabilityRecord(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getString("kb_id"),
+                rs.getString("field_key"),
+                rs.getString("display_name"),
+                enumValue(MetadataValueType.class, rs.getString("value_type"), MetadataValueType.STRING),
+                bool(rs, "filterable"),
+                bool(rs, "sortable"),
+                bool(rs, "facetable"),
+                bool(rs, "indexed"),
+                enumValue(MetadataIndexPolicy.class, rs.getString("index_policy"), MetadataIndexPolicy.NONE),
+                mapping.pushdownToKeyword(),
+                mapping.pushdownToVector(),
+                mapping.guardOnly(),
+                rs.getInt("schema_version"),
+                rs.getString("last_sync_backend"),
+                rs.getString("last_sync_action"),
+                rs.getString("last_sync_outcome"),
+                rs.getString("last_sync_error_type"),
+                rs.getString("last_sync_error_message"),
+                nullableInstant(rs.getTimestamp("last_sync_time")),
                 instant(rs.getTimestamp("update_time")));
     }
 
@@ -1965,9 +2451,21 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         return denominator <= 0 ? 0D : (double) numerator / (double) denominator;
     }
 
+    private double ratio(long numerator, long denominator) {
+        return denominator <= 0L ? 0D : (double) numerator / (double) denominator;
+    }
+
     private String text(Object value, String defaultValue) {
         String text = Objects.toString(value, "");
         return text.isBlank() ? defaultValue : text;
+    }
+
+    private String trimToLength(String value, int maxLength) {
+        String safeValue = Objects.requireNonNullElse(value, "");
+        if (maxLength <= 0 || safeValue.length() <= maxLength) {
+            return safeValue;
+        }
+        return safeValue.substring(0, maxLength);
     }
 
     private <E extends Enum<E>> E enumValue(Class<E> type, String value, E defaultValue) {
@@ -2067,6 +2565,21 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     private record LowConfidenceStats(int lowConfidenceFields, int evaluatedFields) {
+    }
+
+    private record MetadataSchemaUsageAggregate(
+            String fieldKey,
+            long usageCount,
+            long guardOnlyCount,
+            long rejectedCount
+    ) {
+
+        private MetadataSchemaUsageAggregate {
+            fieldKey = Objects.requireNonNullElse(fieldKey, "");
+            usageCount = Math.max(0L, usageCount);
+            guardOnlyCount = Math.max(0L, guardOnlyCount);
+            rejectedCount = Math.max(0L, rejectedCount);
+        }
     }
 
     private record ChunkMetadataRow(String id, String metadataJson) {

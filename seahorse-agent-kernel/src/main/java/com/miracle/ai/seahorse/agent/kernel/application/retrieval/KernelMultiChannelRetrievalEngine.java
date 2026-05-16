@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchResultPostPr
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
@@ -74,6 +75,7 @@ public class KernelMultiChannelRetrievalEngine {
     private final MetadataFilterCompiler metadataFilterCompiler;
     private final KernelRagTraceRecorder traceRecorder;
     private final ObservationPort observationPort;
+    private final MetadataSchemaUsageReportRepositoryPort schemaUsageRepositoryPort;
 
     public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
                                              Executor retrievalExecutor,
@@ -108,6 +110,18 @@ public class KernelMultiChannelRetrievalEngine {
                                              MetadataFilterCompiler metadataFilterCompiler,
                                              KernelRagTraceRecorder traceRecorder,
                                              ObservationPort observationPort) {
+        this(extensionRegistry, retrievalExecutor, activationContext, schemaRegistryPort, metadataFilterCompiler,
+                traceRecorder, observationPort, MetadataSchemaUsageReportRepositoryPort.empty());
+    }
+
+    public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
+                                             Executor retrievalExecutor,
+                                             FeatureActivationContext activationContext,
+                                             MetadataSchemaRegistryPort schemaRegistryPort,
+                                             MetadataFilterCompiler metadataFilterCompiler,
+                                             KernelRagTraceRecorder traceRecorder,
+                                             ObservationPort observationPort,
+                                             MetadataSchemaUsageReportRepositoryPort schemaUsageRepositoryPort) {
         this.extensionRegistry = Objects.requireNonNull(extensionRegistry, "extensionRegistry must not be null");
         this.retrievalExecutor = Objects.requireNonNull(retrievalExecutor, "retrievalExecutor must not be null");
         this.activationContext = Objects.requireNonNullElse(activationContext, FeatureActivationContext.empty());
@@ -116,6 +130,8 @@ public class KernelMultiChannelRetrievalEngine {
                 DefaultMetadataFilterCompiler::new);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
         this.observationPort = observationPort;
+        this.schemaUsageRepositoryPort = Objects.requireNonNullElseGet(schemaUsageRepositoryPort,
+                MetadataSchemaUsageReportRepositoryPort::empty);
     }
 
     /**
@@ -242,7 +258,6 @@ public class KernelMultiChannelRetrievalEngine {
             attributes.put("status", ex == null ? "success" : "failure");
             attributes.put("success", Boolean.toString(ex == null));
             attributes.put("hitCount", Integer.toString(safeChunks(result).size()));
-            attributes.put("latencyMs", Long.toString(elapsedMs));
             if (ex != null) {
                 attributes.put("exception", ex.getClass().getSimpleName());
             }
@@ -399,7 +414,7 @@ public class KernelMultiChannelRetrievalEngine {
                                               MetadataSchema schema,
                                               RetrievalFilter filter,
                                               RuntimeException ex) {
-        if (observationPort == null || filter == null || filter.metadataConditions().isEmpty()) {
+        if (filter == null || filter.metadataConditions().isEmpty()) {
             return;
         }
         try {
@@ -408,16 +423,24 @@ public class KernelMultiChannelRetrievalEngine {
                     .filter(fieldKey -> !fieldKey.isBlank())
                     .distinct()
                     .toList();
+            schemaUsageRepositoryPort.recordRejected(
+                    tenantId,
+                    knowledgeBaseId,
+                    schema == null ? null : schema.schemaVersion(),
+                    fieldKeys,
+                    metadataFilterRejectReason(ex));
+            if (observationPort == null) {
+                return;
+            }
             Map<String, String> attributes = new java.util.LinkedHashMap<>();
             attributes.put("tenantId", Objects.requireNonNullElse(tenantId, ""));
             attributes.put("knowledgeBaseId", Objects.requireNonNullElse(knowledgeBaseId, ""));
             attributes.put("schemaVersion", Integer.toString(schema == null ? 0 : schema.schemaVersion()));
-            attributes.put("fieldKeys", String.join(",", fieldKeys));
             attributes.put("fieldCount", Integer.toString(fieldKeys.size()));
             attributes.put("success", "false");
             attributes.put("reason", metadataFilterRejectReason(ex));
             attributes.put("exception", ex.getClass().getSimpleName());
-            // 只记录字段名和拒绝原因，不记录过滤值，避免把业务查询条件写入观测事件。
+            // 具体字段清单写入专用 usage 日志，这里只保留数量摘要，避免 tag 基数膨胀。
             observationPort.recordEvent(new ObservationEvent(EVENT_METADATA_FILTER_REJECTED, null, attributes));
         } catch (RuntimeException ignored) {
             // 观测失败不能改变 Filter Compiler 的拒绝语义。
@@ -445,8 +468,7 @@ public class KernelMultiChannelRetrievalEngine {
                                            String knowledgeBaseId,
                                            MetadataSchema schema,
                                            CompiledMetadataFilter compiledFilter) {
-        if (observationPort == null || compiledFilter == null
-                || compiledFilter.sourceFilter().metadataConditions().isEmpty()) {
+        if (compiledFilter == null || compiledFilter.sourceFilter().metadataConditions().isEmpty()) {
             return;
         }
         try {
@@ -460,14 +482,21 @@ public class KernelMultiChannelRetrievalEngine {
                     .filter(fieldKey -> !fieldKey.isBlank())
                     .distinct()
                     .toList();
-            // 该事件为后续 Schema 使用情况报表提供原始证据，不影响检索下推和兜底过滤语义。
+            schemaUsageRepositoryPort.recordCompiled(
+                    tenantId,
+                    knowledgeBaseId,
+                    schema == null ? null : schema.schemaVersion(),
+                    fieldKeys,
+                    guardOnlyFieldKeys);
+            if (observationPort == null) {
+                return;
+            }
+            // 具体字段清单已落专用 usage 日志；观测事件只保留低基数摘要。
             observationPort.recordEvent(new ObservationEvent(EVENT_METADATA_FILTER_COMPILED, null, Map.of(
                     "tenantId", Objects.requireNonNullElse(tenantId, ""),
                     "knowledgeBaseId", Objects.requireNonNullElse(knowledgeBaseId, ""),
                     "schemaVersion", Integer.toString(schema == null ? 0 : schema.schemaVersion()),
-                    "fieldKeys", String.join(",", fieldKeys),
                     "fieldCount", Integer.toString(fieldKeys.size()),
-                    "guardOnlyFieldKeys", String.join(",", guardOnlyFieldKeys),
                     "guardOnlyCount", Integer.toString(guardOnlyFieldKeys.size()),
                     "warningCount", Integer.toString(compiledFilter.warnings().size()))));
         } catch (RuntimeException ignored) {
@@ -494,7 +523,6 @@ public class KernelMultiChannelRetrievalEngine {
             attributes.put("outputCount", Integer.toString(outputCount));
             attributes.put("filteredCount", Integer.toString(filteredCount));
             attributes.put("reason", filteredCount > 0 ? "metadata_or_acl_filtered" : "none");
-            attributes.put("durationMs", Long.toString(elapsedMs));
             attributes.put("success", Boolean.toString(ex == null));
             if (ex != null) {
                 attributes.put("exception", ex.getClass().getSimpleName());

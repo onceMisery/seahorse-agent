@@ -63,6 +63,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRep
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPipelineDefinitionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRagTraceRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRetrievalEvaluationDatasetRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRetrievalStrategyTemplateRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSampleQuestionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSemanticMemoryRepositoryAdapter;
@@ -72,6 +73,9 @@ import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.Elasticsearch
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordProperties;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordSearchAdapter;
+import com.miracle.ai.seahorse.agent.adapters.search.lucene.LuceneKeywordIndexAdapter;
+import com.miracle.ai.seahorse.agent.adapters.search.lucene.LuceneKeywordProperties;
+import com.miracle.ai.seahorse.agent.adapters.search.lucene.LuceneKeywordSearchAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.SeahorseOutboxRelayJob;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexMessageSubscriber;
@@ -132,8 +136,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineP
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelHealthPort;
@@ -147,6 +153,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
@@ -449,6 +456,28 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(ObjectMapper.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-search", name = "type",
+            havingValue = "lucene")
+    @ConditionalOnMissingBean(LuceneKeywordSearchAdapter.class)
+    public LuceneKeywordSearchAdapter seahorseLuceneKeywordSearchAdapter(
+            ObjectMapper objectMapper,
+            @Value("${seahorse-agent.adapters.keyword-search.lucene.index-directory:${java.io.tmpdir}/seahorse-agent-lucene-keyword}")
+            String indexDirectory,
+            @Value("${seahorse-agent.adapters.keyword-search.lucene.search-fields:content^3}")
+            String searchFields) {
+        return new LuceneKeywordSearchAdapter(objectMapper,
+                new LuceneKeywordProperties(Path.of(indexDirectory), csv(searchFields)));
+    }
+
+    @Bean
+    @ConditionalOnBean(LuceneKeywordSearchAdapter.class)
+    @ConditionalOnMissingBean(KeywordSearchPort.class)
+    public KeywordSearchPort seahorseLuceneKeywordSearchPort(LuceneKeywordSearchAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(KeywordSearchPort.class)
@@ -492,6 +521,28 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(ObjectMapper.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "type",
+            havingValue = "lucene")
+    @ConditionalOnMissingBean(LuceneKeywordIndexAdapter.class)
+    public LuceneKeywordIndexAdapter seahorseLuceneKeywordIndexAdapter(
+            ObjectMapper objectMapper,
+            @Value("${seahorse-agent.adapters.keyword-index.lucene.index-directory:${java.io.tmpdir}/seahorse-agent-lucene-keyword}")
+            String indexDirectory,
+            @Value("${seahorse-agent.adapters.keyword-index.lucene.search-fields:content^3}")
+            String searchFields) {
+        return new LuceneKeywordIndexAdapter(objectMapper,
+                new LuceneKeywordProperties(Path.of(indexDirectory), csv(searchFields)));
+    }
+
+    @Bean
+    @ConditionalOnBean(LuceneKeywordIndexAdapter.class)
+    @ConditionalOnMissingBean(value = KeywordIndexPort.class, ignored = KeywordIndexOutboxAdapter.class)
+    public KeywordIndexPort seahorseLuceneKeywordIndexPort(LuceneKeywordIndexAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
     @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.metadata-schema-index", name = "type",
             havingValue = "elasticsearch")
@@ -499,6 +550,8 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     public ElasticsearchMetadataSchemaIndexAdapter seahorseElasticsearchMetadataSchemaIndexAdapter(
             OkHttpClient httpClient,
             ObjectMapper objectMapper,
+            ObjectProvider<ObservationPort> observationPort,
+            ObjectProvider<MetadataSchemaIndexStatusPort> indexStatusPort,
             @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.base-url:http://localhost:9200}")
             String baseUrl,
             @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.index-name:seahorse_keyword_chunk}")
@@ -515,7 +568,9 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
             String timeout) {
         return new ElasticsearchMetadataSchemaIndexAdapter(httpClient, objectMapper,
                 new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields), apiKey, username, password,
-                        duration(timeout)));
+                        duration(timeout)),
+                observationPort.getIfAvailable(),
+                indexStatusPort.getIfAvailable());
     }
 
     @Bean
@@ -531,8 +586,21 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.metadata-schema-index", name = "type",
             havingValue = "jdbc")
     @ConditionalOnMissingBean(MetadataSchemaIndexSyncPort.class)
-    public JdbcMetadataSchemaIndexAdapter seahorseJdbcMetadataSchemaIndexAdapter(DataSource dataSource) {
-        return new JdbcMetadataSchemaIndexAdapter(dataSource);
+    public JdbcMetadataSchemaIndexAdapter seahorseJdbcMetadataSchemaIndexAdapter(
+            DataSource dataSource,
+            ObjectProvider<ObservationPort> observationPort,
+            ObjectProvider<MetadataSchemaIndexStatusPort> indexStatusPort) {
+        return new JdbcMetadataSchemaIndexAdapter(dataSource,
+                observationPort.getIfAvailable(),
+                indexStatusPort.getIfAvailable());
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
+    @ConditionalOnMissingBean(MetadataSchemaIndexStatusPort.class)
+    public MetadataSchemaIndexStatusPort seahorseMetadataSchemaIndexStatusPort(
+            JdbcMetadataGovernanceRepositoryAdapter adapter) {
+        return adapter;
     }
 
     @Bean
@@ -550,6 +618,15 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     public JdbcRetrievalStrategyTemplateRepositoryAdapter seahorseJdbcRetrievalStrategyTemplateRepositoryAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
         return new JdbcRetrievalStrategyTemplateRepositoryAdapter(dataSource, objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(RetrievalEvaluationDatasetRepositoryPort.class)
+    public JdbcRetrievalEvaluationDatasetRepositoryAdapter seahorseJdbcRetrievalEvaluationDatasetRepositoryAdapter(
+            DataSource dataSource, ObjectMapper objectMapper) {
+        return new JdbcRetrievalEvaluationDatasetRepositoryAdapter(dataSource, objectMapper);
     }
 
     @Bean
@@ -571,6 +648,7 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     public KeywordIndexMessageSubscriber seahorseKeywordIndexMessageSubscriber(
             MessageSubscriptionPort subscriptionPort,
             ObjectProvider<ElasticsearchKeywordIndexAdapter> elasticsearchKeywordIndexAdapter,
+            ObjectProvider<LuceneKeywordIndexAdapter> luceneKeywordIndexAdapter,
             ObjectProvider<JdbcKeywordIndexAdapter> jdbcKeywordIndexAdapter,
             ObjectProvider<ObservationPort> observationPort,
             @Value("${seahorse-agent.adapters.keyword-index.topic:" + KeywordIndexOutboxAdapter.DEFAULT_TOPIC + "}")
@@ -578,6 +656,9 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
             @Value("${seahorse-agent.adapters.keyword-index.subscription:seahorse-keyword-index}")
             String subscriptionName) {
         KeywordIndexPort delegate = elasticsearchKeywordIndexAdapter.getIfAvailable();
+        if (delegate == null) {
+            delegate = luceneKeywordIndexAdapter.getIfAvailable();
+        }
         if (delegate == null) {
             delegate = jdbcKeywordIndexAdapter.getIfAvailable();
         }
@@ -728,6 +809,14 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
     @ConditionalOnMissingBean(MetadataQualityReportRepositoryPort.class)
     public MetadataQualityReportRepositoryPort seahorseMetadataQualityReportRepositoryPort(
+            JdbcMetadataGovernanceRepositoryAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
+    @ConditionalOnMissingBean(MetadataSchemaUsageReportRepositoryPort.class)
+    public MetadataSchemaUsageReportRepositoryPort seahorseMetadataSchemaUsageReportRepositoryPort(
             JdbcMetadataGovernanceRepositoryAdapter adapter) {
         return adapter;
     }

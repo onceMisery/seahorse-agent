@@ -108,6 +108,11 @@
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-search-lucene</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-repository-jdbc</artifactId>
             <version>${project.version}</version>
         </dependency>

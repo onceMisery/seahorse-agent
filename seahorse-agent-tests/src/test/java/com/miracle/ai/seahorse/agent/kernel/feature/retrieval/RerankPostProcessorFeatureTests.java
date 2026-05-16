@@ -212,11 +212,11 @@ class RerankPostProcessorFeatureTests {
         assertThat(reranked).isSameAs(chunks);
         assertThat(observation.events).anySatisfy(event -> {
             assertThat(event.name()).isEqualTo("retrieval.rerank");
-            assertThat(event.attributes()).containsEntry("tenant", "tenant-1");
+            assertThat(event.attributes()).containsEntry("tenantId", "tenant-1");
             assertThat(event.attributes()).containsEntry("status", "timeout");
-            assertThat(event.attributes()).containsEntry("model", "rerank-a");
+            assertThat(event.attributes()).containsEntry("modelConfigured", "true");
             assertThat(event.attributes()).containsEntry("outputTopK", "2");
-            assertThat(event.attributes()).containsEntry("timeoutMs", "20");
+            assertThat(event.attributes()).containsEntry("timeoutEnabled", "true");
             assertThat(event.attributes()).containsEntry("fallback", "true");
         });
     }

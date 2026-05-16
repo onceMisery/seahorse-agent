@@ -59,6 +59,8 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcWorkingMemoryR
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchMetadataSchemaIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordSearchAdapter;
+import com.miracle.ai.seahorse.agent.adapters.search.lucene.LuceneKeywordIndexAdapter;
+import com.miracle.ai.seahorse.agent.adapters.search.lucene.LuceneKeywordSearchAdapter;
 import com.miracle.ai.seahorse.agent.adapters.mq.direct.DirectMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexMessageSubscriber;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexOutboxAdapter;
@@ -102,7 +104,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
@@ -122,9 +126,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import okhttp3.OkHttpClient;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -132,6 +139,9 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(SeahorseAgentNativeAdapterAutoConfiguration.class));
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void shouldRegisterLocalAndNoopAdaptersWhenExplicitlySelected() {
@@ -244,9 +254,11 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryConflictLogRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataBackfillJobRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataQualityReportRepositoryPort.class);
+                    assertThat(context).hasSingleBean(MetadataSchemaUsageReportRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataReviewManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataQuarantineManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataSchemaManagementRepositoryPort.class);
+                    assertThat(context).hasSingleBean(MetadataSchemaIndexStatusPort.class);
                     assertThat(context).hasSingleBean(MetadataDictionaryManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataExtractionResultManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(RetrievalStrategyTemplateRepositoryPort.class);
@@ -284,6 +296,27 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
     }
 
     @Test
+    void shouldRegisterLuceneKeywordAdaptersWhenSelected() {
+        contextRunner.withBean(ObjectMapper.class, ObjectMapper::new)
+                .withPropertyValues(
+                        "seahorse-agent.adapters.keyword-search.type=lucene",
+                        "seahorse-agent.adapters.keyword-index.type=lucene",
+                        "seahorse-agent.adapters.keyword-search.lucene.index-directory=" + lucenePath("adapters"),
+                        "seahorse-agent.adapters.keyword-index.lucene.index-directory=" + lucenePath("adapters"))
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(LuceneKeywordSearchAdapter.class);
+                    assertThat(context).hasSingleBean(LuceneKeywordIndexAdapter.class);
+                    assertThat(context).doesNotHaveBean(JdbcKeywordSearchAdapter.class);
+                    assertThat(context).doesNotHaveBean(JdbcKeywordIndexAdapter.class);
+                    assertThat(context.getBean(KeywordSearchPort.class))
+                            .isInstanceOf(LuceneKeywordSearchAdapter.class);
+                    assertThat(context.getBean(KeywordIndexPort.class))
+                            .isInstanceOf(LuceneKeywordIndexAdapter.class);
+                });
+    }
+
+    @Test
     void shouldWrapKeywordIndexPortWithOutboxWhenConfigured() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:native-keyword-outbox;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
@@ -299,6 +332,26 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(KeywordIndexOutboxAdapter.class);
                     assertThat(context).hasSingleBean(KeywordIndexMessageSubscriber.class);
                     // outbox 作为主端口拦截入库链路，真实索引写入由订阅端选择 JDBC/ES delegate。
+                    assertThat(context.getBean(KeywordIndexPort.class))
+                            .isInstanceOf(KeywordIndexOutboxAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldAllowLuceneKeywordIndexDelegateWhenOutboxConfigured() {
+        DirectMessageQueueAdapter queue = new DirectMessageQueueAdapter();
+
+        contextRunner.withBean(ObjectMapper.class, ObjectMapper::new)
+                .withBean(DirectMessageQueueAdapter.class, () -> queue)
+                .withPropertyValues(
+                        "seahorse-agent.adapters.keyword-index.type=lucene",
+                        "seahorse-agent.adapters.keyword-index.mode=outbox",
+                        "seahorse-agent.adapters.keyword-index.lucene.index-directory=" + lucenePath("outbox"))
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(LuceneKeywordIndexAdapter.class);
+                    assertThat(context).hasSingleBean(KeywordIndexOutboxAdapter.class);
+                    assertThat(context).hasSingleBean(KeywordIndexMessageSubscriber.class);
                     assertThat(context.getBean(KeywordIndexPort.class))
                             .isInstanceOf(KeywordIndexOutboxAdapter.class);
                 });
@@ -332,5 +385,9 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context.getBean(MetadataSchemaIndexSyncPort.class))
                             .isInstanceOf(JdbcMetadataSchemaIndexAdapter.class);
                 });
+    }
+
+    private String lucenePath(String name) {
+        return tempDir.resolve(name).toString().replace('\\', '/');
     }
 }

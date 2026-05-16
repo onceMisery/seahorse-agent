@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentAdapterProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentKernelProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentPluginProperties;
+import com.miracle.ai.seahorse.agent.adapters.spring.metadata.MetadataIndexCompensationAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
@@ -62,8 +63,11 @@ import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQ
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQuarantineService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataReviewService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataSchemaService;
+import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataSchemaUsageService;
+import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelVersionQualityComparisonService;
 import com.miracle.ai.seahorse.agent.kernel.application.model.KernelModelRoutingService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
+import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationDatasetService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine.KernelRetrievalEnginePorts;
@@ -125,6 +129,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaUsageInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
@@ -194,6 +201,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExt
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelHealthPort;
@@ -207,6 +215,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AdapterHealthIndicatorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationComparisonRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
@@ -528,13 +539,15 @@ public class SeahorseAgentKernelAutoConfiguration {
             ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
             ObjectProvider<MetadataFilterCompiler> metadataFilterCompiler,
             ObjectProvider<KernelRagTraceRecorder> traceRecorder,
-            ObjectProvider<ObservationPort> observationPort) {
+            ObjectProvider<ObservationPort> observationPort,
+            ObjectProvider<MetadataSchemaUsageReportRepositoryPort> schemaUsageReportRepositoryPort) {
         return new KernelMultiChannelRetrievalEngine(extensionRegistry,
                 retrievalExecutor.getIfAvailable(() -> Runnable::run), activationContext,
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
                 metadataFilterCompiler.getIfAvailable(DefaultMetadataFilterCompiler::new),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
-                observationPort.getIfAvailable());
+                observationPort.getIfAvailable(),
+                schemaUsageReportRepositoryPort.getIfAvailable(MetadataSchemaUsageReportRepositoryPort::empty));
     }
 
     @Bean
@@ -584,6 +597,21 @@ public class SeahorseAgentKernelAutoConfiguration {
             ObjectProvider<RetrievalStrategyTemplateRepositoryPort> repositoryPort) {
         return new KernelRetrievalStrategyTemplateService(
                 repositoryPort.getIfAvailable(RetrievalStrategyTemplateRepositoryPort::empty));
+    }
+
+    @Bean
+    @ConditionalOnBean(RetrievalEvaluationDatasetRepositoryPort.class)
+    @ConditionalOnMissingBean(RetrievalEvaluationDatasetInboundPort.class)
+    public KernelRetrievalEvaluationDatasetService seahorseRetrievalEvaluationDatasetInboundPort(
+            RetrievalEvaluationDatasetRepositoryPort repositoryPort,
+            ObjectProvider<RetrievalEvaluationComparisonRepositoryPort> comparisonRepositoryPort,
+            ObjectProvider<RetrievalEvaluationRunRepositoryPort> runRepositoryPort,
+            ObjectProvider<RetrievalEvaluationInboundPort> evaluationPort) {
+        return new KernelRetrievalEvaluationDatasetService(
+                repositoryPort,
+                comparisonRepositoryPort.getIfAvailable(RetrievalEvaluationComparisonRepositoryPort::empty),
+                runRepositoryPort.getIfAvailable(RetrievalEvaluationRunRepositoryPort::empty),
+                evaluationPort.getIfAvailable());
     }
 
     @Bean
@@ -889,6 +917,27 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(MetadataSchemaUsageReportRepositoryPort.class)
+    @ConditionalOnMissingBean(MetadataSchemaUsageInboundPort.class)
+    public KernelMetadataSchemaUsageService seahorseMetadataSchemaUsageInboundPort(
+            MetadataSchemaUsageReportRepositoryPort reportRepositoryPort) {
+        return new KernelMetadataSchemaUsageService(reportRepositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({MetadataQualityInboundPort.class, RetrievalEvaluationInboundPort.class})
+    @ConditionalOnMissingBean(VersionQualityComparisonInboundPort.class)
+    public KernelVersionQualityComparisonService seahorseVersionQualityComparisonInboundPort(
+            MetadataQualityInboundPort metadataQualityInboundPort,
+            RetrievalEvaluationInboundPort retrievalEvaluationInboundPort,
+            ObjectProvider<ObservationPort> observationPort) {
+        return new KernelVersionQualityComparisonService(
+                metadataQualityInboundPort,
+                retrievalEvaluationInboundPort,
+                observationPort.getIfAvailable());
+    }
+
+    @Bean
     @ConditionalOnBean(MetadataReviewManagementRepositoryPort.class)
     @ConditionalOnMissingBean(MetadataReviewInboundPort.class)
     public KernelMetadataReviewService seahorseMetadataReviewInboundPort(
@@ -908,15 +957,21 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(KeywordIndexMaintenanceInboundPort.class)
+    @ConditionalOnBean({KeywordIndexMaintenanceInboundPort.class, KnowledgeDocumentRepositoryPort.class,
+            KnowledgeDocumentVectorPorts.class})
     @ConditionalOnMissingBean(MetadataIndexCompensationPort.class)
     public MetadataIndexCompensationPort seahorseMetadataIndexCompensationPort(
-            KeywordIndexMaintenanceInboundPort keywordIndexMaintenanceInboundPort) {
-        return documentId -> {
-            if (documentId != null && !documentId.isBlank()) {
-                keywordIndexMaintenanceInboundPort.rebuildDocument(documentId);
-            }
-        };
+            KnowledgeDocumentRepositoryPort documentRepositoryPort,
+            KeywordIndexMaintenanceInboundPort keywordIndexMaintenanceInboundPort,
+            KnowledgeDocumentVectorPorts documentVectorPorts,
+            ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
+            ObjectProvider<MetadataBackfillInboundPort> backfillInboundPort) {
+        return new MetadataIndexCompensationAdapter(
+                documentRepositoryPort,
+                keywordIndexMaintenanceInboundPort,
+                documentVectorPorts,
+                schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
+                backfillInboundPort.getIfAvailable());
     }
 
     @Bean
@@ -935,9 +990,11 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnMissingBean(MetadataSchemaInboundPort.class)
     public KernelMetadataSchemaService seahorseMetadataSchemaInboundPort(
             MetadataSchemaManagementRepositoryPort repositoryPort,
-            ObjectProvider<MetadataSchemaIndexSyncPort> indexSyncPort) {
+            ObjectProvider<MetadataSchemaIndexSyncPort> indexSyncPort,
+            ObjectProvider<MetadataIndexCompensationPort> indexCompensationPort) {
         return new KernelMetadataSchemaService(repositoryPort,
-                indexSyncPort.getIfAvailable(MetadataSchemaIndexSyncPort::noop));
+                indexSyncPort.getIfAvailable(MetadataSchemaIndexSyncPort::noop),
+                indexCompensationPort.getIfAvailable(MetadataIndexCompensationPort::noop));
     }
 
     @Bean

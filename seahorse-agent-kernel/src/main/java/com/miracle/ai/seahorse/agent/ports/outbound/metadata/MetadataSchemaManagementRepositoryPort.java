@@ -10,6 +10,8 @@ public interface MetadataSchemaManagementRepositoryPort {
 
     List<MetadataSchemaFieldRecord> listSchemaFields(String tenantId, String knowledgeBaseId);
 
+    List<MetadataSchemaFieldCapabilityRecord> listSchemaFieldCapabilities(String tenantId, String knowledgeBaseId);
+
     Optional<MetadataSchemaFieldRecord> findSchemaField(String fieldId);
 
     String createSchemaField(MetadataSchemaFieldPayload payload);
@@ -22,6 +24,12 @@ public interface MetadataSchemaManagementRepositoryPort {
         return new MetadataSchemaManagementRepositoryPort() {
             @Override
             public List<MetadataSchemaFieldRecord> listSchemaFields(String tenantId, String knowledgeBaseId) {
+                return List.of();
+            }
+
+            @Override
+            public List<MetadataSchemaFieldCapabilityRecord> listSchemaFieldCapabilities(String tenantId,
+                                                                                         String knowledgeBaseId) {
                 return List.of();
             }
 

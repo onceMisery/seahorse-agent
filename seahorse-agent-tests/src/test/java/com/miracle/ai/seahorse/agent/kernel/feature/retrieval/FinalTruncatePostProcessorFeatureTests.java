@@ -54,7 +54,7 @@ class FinalTruncatePostProcessorFeatureTests {
         assertThat(output).extracting(RetrievedChunk::getId).containsExactly("a", "b");
         assertThat(observation.events).singleElement().satisfies(event -> {
             assertThat(event.name()).isEqualTo("retrieval.final");
-            assertThat(event.attributes()).containsEntry("tenant", "tenant-1");
+            assertThat(event.attributes()).containsEntry("tenantId", "tenant-1");
             assertThat(event.attributes()).containsEntry("inputCount", "3");
             assertThat(event.attributes()).containsEntry("outputCount", "2");
             assertThat(event.attributes()).containsEntry("finalTopK", "2");
@@ -75,7 +75,8 @@ class FinalTruncatePostProcessorFeatureTests {
         assertThat(output).extracting(RetrievedChunk::getId).containsExactly("a");
         assertThat(observation.events).singleElement().satisfies(event -> {
             assertThat(event.name()).isEqualTo("retrieval.final");
-            assertThat(event.attributes()).containsEntry("tenant", "");
+            assertThat(event.attributes()).containsEntry("tenantId", "");
+            assertThat(event.attributes()).containsEntry("knowledgeBaseId", "");
             assertThat(event.attributes()).containsEntry("inputCount", "1");
             assertThat(event.attributes()).containsEntry("outputCount", "1");
             assertThat(event.attributes()).containsEntry("finalTopK", "3");

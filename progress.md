@@ -255,3 +255,82 @@
 - starter 自动装配 `KernelRetrievalStrategyTemplateService` 并暴露 `RetrievalStrategyTemplateInboundPort`。
 - 补充 `KernelRetrievalStrategyTemplateServiceTests`、`SeahorseWebApiContractTests` 和 `SeahorseAgentKernelAutoConfigurationTests` 覆盖模板内容、Web 契约和自动装配。
 - 首次验证因沙箱无法写入 `C:\user-data\.m2\repo\org\bouncycastle\bcutil-jdk18on\resolver-status.properties` 失败；提升权限后同一 Maven 命令通过，32 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 C1 Schema 使用情况报表
+
+- 新增 `MetadataSchemaUsageInboundPort`、`KernelMetadataSchemaUsageService`、`MetadataSchemaUsageReportRepositoryPort` 以及字段级/总览报表模型，作为管理端查询 Schema 使用情况的统一入口。
+- `KernelMultiChannelRetrievalEngine` 在 metadata filter 编译成功或拒绝时，除保留原有 `ObservationPort` 事件外，同步写入专用 Schema 使用快照；统计写入失败不会反向影响检索主链路。
+- `JdbcMetadataGovernanceRepositoryAdapter` 新增 `t_metadata_schema_usage_log` 写入与聚合查询实现，按请求维度统计总编译次数、拒绝次数、guard-only 请求数，并按字段输出使用频次、guard-only 比例和拒绝率。
+- `metadata-governance-postgresql.sql` 新增 `t_metadata_schema_usage_log` 表、索引以及完整 `COMMENT ON TABLE/COLUMN` 注释，满足治理 DDL 约束。
+- 新增 `SeahorseMetadataSchemaUsageController`，暴露 `GET /knowledge-base/{kb-id}/metadata-schema/usage-report?tenantId=...&schemaVersion=...`。
+- 补充 `MetadataRetrievalFilterTests`、`KernelMetadataSchemaUsageServiceTests`、`JdbcMetadataSchemaUsageReportAdapterTests`、`SeahorseWebApiContractTests`、`SeahorseAgentKernelAutoConfigurationTests`、`SeahorseAgentNativeAdapterAutoConfigurationTests`，覆盖快照写入、JDBC 聚合、Web 契约和 starter 自动装配。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=MetadataRetrievalFilterTests,KernelMetadataSchemaUsageServiceTests,JdbcMetadataSchemaUsageReportAdapterTests,SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，53 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 C3 跨版本质量对比接口
+
+- 新增 `VersionQualityComparisonInboundPort`、`VersionQualityComparisonCommand`、`VersionQualityComparisonReport` 与 `KernelVersionQualityComparisonService`，统一组合治理侧 `MetadataQualityInboundPort.compare(...)` 和检索侧 `RetrievalEvaluationInboundPort.compare(...)`。
+- 新增 `VersionQualityComparisonRequest` 与 `SeahorseVersionQualityComparisonController`，暴露 `POST /knowledge-base/{kb-id}/version-quality/compare`；Web 层继续复用现有检索评测请求模型，把 ACL / metadata 条件构造成强类型过滤对象后交给 kernel。
+- starter 自动装配在同时存在 `MetadataQualityInboundPort` 与 `RetrievalEvaluationInboundPort` 时暴露 `VersionQualityComparisonInboundPort`，避免控制器或管理端自行拼接两套口径。
+- 组合对比服务补充低基数字段观测 `version.quality.compare.generated`，只记录 schema 版本与策略/样本数量，不记录策略名或问题内容，避免提前放大标签基数风险。
+- 校正计划漂移：确认 `MetadataBackfillInboundPort.overview(...)` 与 `/knowledge-base/{kb-id}/metadata-backfill/overview` 已经存在并通过测试，因此将 `task_plan.md` 中的 C2 状态改为 complete。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelVersionQualityComparisonServiceTests,SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，38 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 C4 关键观测低基数标签约束
+
+- 收口 `retrieval.metadata.filter.compiled/rejected` 观测属性：不再把 `fieldKeys`、`guardOnlyFieldKeys` 作为 tag 输出，只保留 `fieldCount`、`guardOnlyCount`、`warningCount`、拒绝原因和异常类型；字段清单继续写入专用 Schema usage 日志。
+- 收口回填观测 scope 标签：`metadata.backfill` 不再暴露 `jobId`、`pipelineId` 与具体 `schemaTriggerFieldKey`，改为 `schemaTriggerFieldSpecified` 布尔摘要；批次级事件保留页码、计数和失败数量。
+- 统一检索后处理观测命名：RRF、Rerank、FinalTruncate 从 `tenant` 改为 `tenantId`，并补充 `knowledgeBaseId`；RRF 不再输出权重摘要，改为 `customWeightsConfigured`；Rerank 不再输出模型名、耗时和超时毫秒，改为 `modelConfigured` 与 `timeoutEnabled`。
+- 跨版本质量对比观测字段从 `retrievalStrategyCount/retrievalCaseCount` 收敛为 `strategyCount/caseCount`，保持统一短命名。
+- 补充并更新定向测试断言，覆盖高基数字段不再出现在观测属性、统一标签名和低基数摘要字段。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-spring-boot-starter -am "-Dtest=MetadataRetrievalFilterTests,KernelMetadataBackfillServiceTests,RerankPostProcessorFeatureTests,RrfFusionPostProcessorFeatureTests,FinalTruncatePostProcessorFeatureTests,KernelVersionQualityComparisonServiceTests,KernelMetadataQualityServiceTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，45 个测试成功，reactor `BUILD SUCCESS`。
+- 验证通过：`git diff --check` 无空白错误；仅提示部分 Java 文件下一次 Git 触碰时 LF 会替换为 CRLF。
+
+## 2026-05-16 继续推进阶段 B Schema 索引联动收口
+
+- 同步计划状态：确认 `6802ef1 feat: complete metadata schema compensation and capability view` 已完成 B1-B4，包括 `MetadataSchemaIndexSyncPort` 删除/更新语义、Schema 变更补偿编排、JDBC/Elasticsearch 索引兼容策略和字段索引能力视图。
+- 继续收口 Schema 索引同步观测：JDBC 与 Elasticsearch 的 `metadata.schema.index.sync.*` 事件不再输出 `fieldKey` 和 `errorMessage`，只保留 backend、action、租户/知识库、schemaVersion、valueType、索引能力布尔值、outcome 和 errorType。
+- 字段名与错误详情仍保存在 `MetadataSchemaIndexStatusPort` 的同步状态记录里，供字段能力视图查询，避免在 Micrometer tag 中放大基数。
+- 验证通过：`mvn -pl seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-search-elasticsearch -am "-Dtest=JdbcMetadataSchemaIndexAdapterTests,ElasticsearchMetadataSchemaIndexAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，14 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 D1 检索评测集管理
+
+- 新增 `RetrievalEvaluationDatasetInboundPort`、评测集记录/摘要/载荷/运行命令模型和 `KernelRetrievalEvaluationDatasetService`，支持知识库维度评测集列表、详情、保存、删除和按已保存样本运行既有 `RetrievalEvaluationInboundPort`。
+- 新增 `RetrievalEvaluationDatasetRepositoryPort` 与 `JdbcRetrievalEvaluationDatasetRepositoryAdapter`，以 `t_retrieval_evaluation_dataset.cases_json` 保存强类型 `RetrievalEvaluationCase` 列表，避免 Web 或仓储层绕过 Filter Compiler 直接操作动态 metadata。
+- `retrieval-governance-postgresql.sql` 新增 `t_retrieval_evaluation_dataset` 表、索引和完整 COMMENT，满足新增 DDL 注释约束。
+- 新增 `SeahorseRetrievalEvaluationDatasetController`，暴露评测集 CRUD 与 `POST /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/evaluate`，运行时复用现有评测指标口径。
+- Spring Boot 自动装配 JDBC 仓储和内核评测集服务；无仓储时不暴露管理入口。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，3 个新测试类通过，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 D2 检索评测运行历史
+
+- 新增 `RetrievalEvaluationRunRecord`、`RetrievalEvaluationRunSummary` 和 `RetrievalEvaluationRunRepositoryPort`，保存已运行评测的汇总指标与完整 `RetrievalEvaluationReport`。
+- `KernelRetrievalEvaluationDatasetService` 在按评测集运行后写入运行历史，并新增运行列表/详情查询；历史写入失败不会反向阻断即时评测报告返回。
+- `JdbcRetrievalEvaluationDatasetRepositoryAdapter` 同时实现评测集仓储与运行历史仓储，新增 `t_retrieval_evaluation_run` 写入、列表和详情查询。
+- `retrieval-governance-postgresql.sql` 新增 `t_retrieval_evaluation_run` 表、索引和完整 COMMENT，保留 Recall@K、MRR、nDCG@K、空召回率与延迟指标列，完整明细保存在 `report_json`。
+- `SeahorseRetrievalEvaluationDatasetController` 新增 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs` 和 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs/{run-id}`。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，JDBC 1 个、Web 1 个、Kernel 1 个测试类通过，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 D3 已保存评测集 A/B 对比
+
+- 新增 `RetrievalEvaluationDatasetComparisonCommand`，支持基于已保存评测集直接复用既有 `RetrievalEvaluationInboundPort.compare(...)` 口径。
+- `KernelRetrievalEvaluationDatasetService.compareDataset(...)` 会读取已保存 `RetrievalEvaluationCase` 列表组装多策略对比命令，并将对比结果中的每个单策略 `RetrievalEvaluationReport` 继续写入运行历史。
+- `SeahorseRetrievalEvaluationDatasetController` 新增 `POST /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/compare`，管理端无需重复上传完整评测样本即可做策略对比。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 D4 对比批次历史
+
+- 新增 `RetrievalEvaluationComparisonRecord`、`RetrievalEvaluationComparisonSummary` 和 `RetrievalEvaluationComparisonRepositoryPort`，保存基于已保存评测集做 compare 后的 winner/delta 快照。
+- `KernelRetrievalEvaluationDatasetService.compareDataset(...)` 除了继续沉淀单策略运行历史，还会额外保存一次完整 `RetrievalEvaluationComparisonReport`。
+- `JdbcRetrievalEvaluationDatasetRepositoryAdapter` 新增 `t_retrieval_evaluation_comparison` 的写入、列表和详情查询。
+- `SeahorseRetrievalEvaluationDatasetController` 新增 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons` 和 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons/{comparison-id}`。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 E1 Lucene 低优先级可插拔适配器
+
+- 新增 `seahorse-agent-adapter-search-lucene` Maven 模块，依赖 Lucene core、analysis-common 和 queryparser，实现嵌入式关键词 BM25 检索。
+- `LuceneKeywordIndexAdapter` 实现 `KeywordIndexPort`，按文档级快照先删旧分片再写入当前分片，存储 `metadata_json` 并为系统字段和动态 metadata 生成 Lucene 可过滤字段。
+- `LuceneKeywordSearchAdapter` 实现 `KeywordSearchPort`，基于 `MultiFieldQueryParser` 执行关键词检索，并只消费 `CompiledMetadataFilter` AST 下推系统过滤与动态 metadata 条件；空索引返回空结果。
+- Spring Boot Starter 新增 `lucene` 显式选择：`seahorse-agent.adapters.keyword-search.type=lucene`、`seahorse-agent.adapters.keyword-index.type=lucene`，索引目录通过 `*.lucene.index-directory` 配置；Outbox 消费端 delegate 选择顺序扩展为 Elasticsearch -> Lucene -> JDBC。
+- 其他剩余增强不继续写代码，已在 `task_plan.md` 规划为评测集导入/导出、样本明细表、发布单/版本候选关联、趋势报表和 OpenSearch 后续适配器。
+- 验证通过：`mvn -pl seahorse-agent-adapter-search-lucene -am test`，Lucene 模块 2 个测试成功，reactor `BUILD SUCCESS`。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-spring-boot-starter -am "-Dtest=SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，starter 自动装配 8 个测试成功，reactor `BUILD SUCCESS`。

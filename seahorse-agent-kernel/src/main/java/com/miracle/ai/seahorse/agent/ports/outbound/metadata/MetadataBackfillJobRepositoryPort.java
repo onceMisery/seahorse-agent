@@ -35,5 +35,10 @@ public interface MetadataBackfillJobRepositoryPort {
         return MetadataBackfillJobPage.empty(safeQuery.current(), safeQuery.size());
     }
 
+    default MetadataBackfillOperationsOverview overview(String tenantId, String knowledgeBaseId) {
+        // 兼容外部旧仓储实现：未覆盖运维总览时返回空视图，不阻断 backfill 主流程。
+        return MetadataBackfillOperationsOverview.empty(tenantId, knowledgeBaseId);
+    }
+
     void save(MetadataBackfillJobRecord job);
 }
