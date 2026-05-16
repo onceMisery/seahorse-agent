@@ -109,6 +109,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldCapabilityRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRecord;
@@ -1015,6 +1016,8 @@ class SeahorseWebApiContractTests {
         MetadataSchemaInboundPort schemaPort = mock(MetadataSchemaInboundPort.class);
         when(schemaPort.listFields("tenant-1", "kb-1"))
                 .thenReturn(List.of(metadataSchemaField("field-1")));
+        when(schemaPort.listFieldCapabilities("tenant-1", "kb-1"))
+                .thenReturn(List.of(metadataSchemaFieldCapability("field-1")));
         when(schemaPort.createField(eq("kb-1"), any()))
                 .thenReturn(metadataSchemaField("field-1"));
         when(schemaPort.updateField(eq("field-1"), any()))
@@ -1029,6 +1032,13 @@ class SeahorseWebApiContractTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data[0].fieldKey").value("department"));
+        mvc.perform(get("/knowledge-base/kb-1/metadata-schema/field-capabilities")
+                        .param("tenantId", "tenant-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data[0].fieldKey").value("department"))
+                .andExpect(jsonPath("$.data[0].pushdownToKeyword").value(true))
+                .andExpect(jsonPath("$.data[0].lastSyncOutcome").value("FAILED"));
         mvc.perform(post("/knowledge-base/kb-1/metadata-schema/fields")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
@@ -1380,6 +1390,32 @@ class SeahorseWebApiContractTests {
                 Map.of("sourceKeys", List.of("department")),
                 BackendFieldMapping.defaults("department"),
                 1,
+                Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataSchemaFieldCapabilityRecord metadataSchemaFieldCapability(String id) {
+        return new MetadataSchemaFieldCapabilityRecord(
+                id,
+                "tenant-1",
+                "kb-1",
+                "department",
+                "閮ㄩ棬",
+                MetadataValueType.STRING,
+                true,
+                false,
+                true,
+                true,
+                MetadataIndexPolicy.SEARCH_KEYWORD,
+                true,
+                false,
+                false,
+                2,
+                "elasticsearch",
+                "UPDATE",
+                "FAILED",
+                "IllegalStateException",
+                "mapping failed",
                 Instant.EPOCH,
                 Instant.EPOCH);
     }

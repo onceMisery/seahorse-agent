@@ -3,15 +3,42 @@ package com.miracle.ai.seahorse.agent.ports.outbound.metadata;
 /**
  * 元数据索引补偿端口。
  *
- * <p>Review 通过或修正后，canonical metadata 已经写回关系库，需要通过该端口请求搜索索引重建。
- * 默认实现为空，生产环境可以绑定关键词索引重建、outbox 或补偿任务表。
+ * <p>复核通过或修正后，需要重建文档检索索引；Schema 变更后，需要触发异步回填补偿。
  */
 public interface MetadataIndexCompensationPort {
 
     void rebuildDocument(String documentId);
 
+    /**
+     * 允许调用方显式携带租户和知识库上下文，兼容需要按 schema 重算向量元数据的实现。
+     */
+    default void rebuildDocument(String tenantId, String knowledgeBaseId, String documentId) {
+        rebuildDocument(documentId);
+    }
+
+    /**
+     * 字段新增时触发 schema 补偿。
+     */
+    default void compensateSchemaChange(MetadataSchemaFieldRecord field) {
+        if (field == null) {
+            return;
+        }
+        compensateSchemaChange(null, field);
+    }
+
+    /**
+     * 字段新增、更新、删除时触发 schema 补偿。
+     */
+    default void compensateSchemaChange(MetadataSchemaFieldRecord previousField,
+                                        MetadataSchemaFieldRecord currentField) {
+        // 默认空实现，避免影响只需要文档级补偿的旧适配器。
+    }
+
     static MetadataIndexCompensationPort noop() {
-        return documentId -> {
+        return new MetadataIndexCompensationPort() {
+            @Override
+            public void rebuildDocument(String documentId) {
+            }
         };
     }
 }

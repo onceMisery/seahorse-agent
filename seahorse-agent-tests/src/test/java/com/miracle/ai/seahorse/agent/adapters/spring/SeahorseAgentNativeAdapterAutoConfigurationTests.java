@@ -102,6 +102,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
@@ -247,6 +248,7 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MetadataReviewManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataQuarantineManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataSchemaManagementRepositoryPort.class);
+                    assertThat(context).hasSingleBean(MetadataSchemaIndexStatusPort.class);
                     assertThat(context).hasSingleBean(MetadataDictionaryManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataExtractionResultManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(RetrievalStrategyTemplateRepositoryPort.class);

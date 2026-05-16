@@ -132,6 +132,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineP
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
@@ -496,6 +497,8 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     public ElasticsearchMetadataSchemaIndexAdapter seahorseElasticsearchMetadataSchemaIndexAdapter(
             OkHttpClient httpClient,
             ObjectMapper objectMapper,
+            ObjectProvider<ObservationPort> observationPort,
+            ObjectProvider<MetadataSchemaIndexStatusPort> indexStatusPort,
             @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.base-url:http://localhost:9200}")
             String baseUrl,
             @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.index-name:seahorse_keyword_chunk}")
@@ -512,7 +515,9 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
             String timeout) {
         return new ElasticsearchMetadataSchemaIndexAdapter(httpClient, objectMapper,
                 new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields), apiKey, username, password,
-                        duration(timeout)));
+                        duration(timeout)),
+                observationPort.getIfAvailable(),
+                indexStatusPort.getIfAvailable());
     }
 
     @Bean
@@ -528,8 +533,21 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.metadata-schema-index", name = "type",
             havingValue = "jdbc")
     @ConditionalOnMissingBean(MetadataSchemaIndexSyncPort.class)
-    public JdbcMetadataSchemaIndexAdapter seahorseJdbcMetadataSchemaIndexAdapter(DataSource dataSource) {
-        return new JdbcMetadataSchemaIndexAdapter(dataSource);
+    public JdbcMetadataSchemaIndexAdapter seahorseJdbcMetadataSchemaIndexAdapter(
+            DataSource dataSource,
+            ObjectProvider<ObservationPort> observationPort,
+            ObjectProvider<MetadataSchemaIndexStatusPort> indexStatusPort) {
+        return new JdbcMetadataSchemaIndexAdapter(dataSource,
+                observationPort.getIfAvailable(),
+                indexStatusPort.getIfAvailable());
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryAdapter.class)
+    @ConditionalOnMissingBean(MetadataSchemaIndexStatusPort.class)
+    public MetadataSchemaIndexStatusPort seahorseMetadataSchemaIndexStatusPort(
+            JdbcMetadataGovernanceRepositoryAdapter adapter) {
+        return adapter;
     }
 
     @Bean

@@ -75,6 +75,10 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     private static final String EVENT_BACKFILL_JOB_RESUMED = "metadata.backfill.job.resumed";
     private static final String EVENT_BACKFILL_JOB_CANCELLED = "metadata.backfill.job.cancelled";
     private static final String PAUSE_REASON_SCHEMA_MISSING = "SCHEMA_MISSING";
+    private static final String KEY_SCHEMA_COMPENSATION = "schemaCompensation";
+    private static final String KEY_SCHEMA_COMPENSATION_REASON = "schemaCompensationReason";
+    private static final String KEY_SCHEMA_TRIGGER_ACTION = "schemaTriggerAction";
+    private static final String KEY_SCHEMA_TRIGGER_FIELD_KEY = "schemaTriggerFieldKey";
 
     private final KnowledgeDocumentRepositoryPort documentRepositoryPort;
     private final ObjectStoragePort objectStoragePort;
@@ -475,6 +479,10 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         copyCheckpointMetadata(job.checkpoint(), metadata, "llmExtractorVersion");
         copyCheckpointMetadata(job.checkpoint(), metadata, "llmPromptVersion");
         copyCheckpointMetadata(job.checkpoint(), metadata, "reExtract");
+        copyCheckpointMetadata(job.checkpoint(), metadata, KEY_SCHEMA_COMPENSATION);
+        copyCheckpointMetadata(job.checkpoint(), metadata, KEY_SCHEMA_COMPENSATION_REASON);
+        copyCheckpointMetadata(job.checkpoint(), metadata, KEY_SCHEMA_TRIGGER_ACTION);
+        copyCheckpointMetadata(job.checkpoint(), metadata, KEY_SCHEMA_TRIGGER_FIELD_KEY);
         return IngestionContext.builder()
                 .taskId(document.getId())
                 .pipelineId(defaultText(job.pipelineId(), document.getPipelineId()))
@@ -571,6 +579,10 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         copyCheckpointOption(metadata, checkpoint, "documentIds");
         copyCheckpointOption(metadata, checkpoint, "sourceReviewItemId");
         copyCheckpointOption(metadata, checkpoint, "reExtract");
+        copyCheckpointOption(metadata, checkpoint, KEY_SCHEMA_COMPENSATION);
+        copyCheckpointOption(metadata, checkpoint, KEY_SCHEMA_COMPENSATION_REASON);
+        copyCheckpointOption(metadata, checkpoint, KEY_SCHEMA_TRIGGER_ACTION);
+        copyCheckpointOption(metadata, checkpoint, KEY_SCHEMA_TRIGGER_FIELD_KEY);
         return checkpoint;
     }
 
@@ -592,6 +604,10 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         copyCheckpointOption(previous, checkpoint, "documentIds");
         copyCheckpointOption(previous, checkpoint, "sourceReviewItemId");
         copyCheckpointOption(previous, checkpoint, "reExtract");
+        copyCheckpointOption(previous, checkpoint, KEY_SCHEMA_COMPENSATION);
+        copyCheckpointOption(previous, checkpoint, KEY_SCHEMA_COMPENSATION_REASON);
+        copyCheckpointOption(previous, checkpoint, KEY_SCHEMA_TRIGGER_ACTION);
+        copyCheckpointOption(previous, checkpoint, KEY_SCHEMA_TRIGGER_FIELD_KEY);
         return checkpoint;
     }
 
@@ -760,6 +776,10 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         putCheckpointAttribute(attributes, job, "overwriteApproved");
         putCheckpointAttribute(attributes, job, "reExtract");
         putCheckpointAttribute(attributes, job, "pauseReason");
+        putCheckpointAttribute(attributes, job, KEY_SCHEMA_COMPENSATION);
+        putCheckpointAttribute(attributes, job, KEY_SCHEMA_COMPENSATION_REASON);
+        putCheckpointAttribute(attributes, job, KEY_SCHEMA_TRIGGER_ACTION);
+        putCheckpointAttribute(attributes, job, KEY_SCHEMA_TRIGGER_FIELD_KEY);
         return attributes;
     }
 

@@ -38,6 +38,24 @@ CREATE TABLE IF NOT EXISTS t_metadata_field_schema (
     deleted           SMALLINT NOT NULL DEFAULT 0
 );
 
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_backend VARCHAR(32);
+
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_action VARCHAR(32);
+
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_outcome VARCHAR(32);
+
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_error_type VARCHAR(64);
+
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_error_message VARCHAR(1024);
+
+ALTER TABLE t_metadata_field_schema
+ADD COLUMN IF NOT EXISTS last_sync_time TIMESTAMP;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uk_metadata_schema_field
 ON t_metadata_field_schema (tenant_id, kb_id, field_key)
 WHERE deleted = 0;
@@ -64,6 +82,13 @@ COMMENT ON COLUMN t_metadata_field_schema.schema_version IS 'Schema 版本号';
 COMMENT ON COLUMN t_metadata_field_schema.create_time IS '创建时间';
 COMMENT ON COLUMN t_metadata_field_schema.update_time IS '更新时间';
 COMMENT ON COLUMN t_metadata_field_schema.deleted IS '是否删除，0 表示正常，1 表示删除';
+
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_backend IS '最近一次 Schema 索引同步后端';
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_action IS '最近一次 Schema 索引同步动作';
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_outcome IS '最近一次 Schema 索引同步结果';
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_error_type IS '最近一次 Schema 索引同步失败类型';
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_error_message IS '最近一次 Schema 索引同步失败摘要';
+COMMENT ON COLUMN t_metadata_field_schema.last_sync_time IS '最近一次 Schema 索引同步时间';
 
 CREATE TABLE IF NOT EXISTS t_metadata_extraction_job (
     id                  VARCHAR(64) PRIMARY KEY,

@@ -268,7 +268,8 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
             return;
         }
         try {
-            indexCompensationPort.rebuildDocument(documentId);
+            // 复核补偿需要带上租户和知识库上下文，便于适配器按当前 schema 重建向量 metadata。
+            indexCompensationPort.rebuildDocument(record.tenantId(), record.knowledgeBaseId(), documentId);
         } catch (RuntimeException ex) {
             quarantineIndexFailure(record, ex);
         }

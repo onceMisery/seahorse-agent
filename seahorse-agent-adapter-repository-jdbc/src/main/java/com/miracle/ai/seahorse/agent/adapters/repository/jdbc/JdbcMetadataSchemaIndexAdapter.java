@@ -20,37 +20,68 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncStatusRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
+import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Objects;
 
-/**
- * PostgreSQL Metadata Schema 索引同步适配器。
- *
- * <p>该 adapter 只根据已注册 Schema 生成固定 DDL，避免动态 metadata 字段绕过治理后直接拼接 SQL。
- */
 public class JdbcMetadataSchemaIndexAdapter implements MetadataSchemaIndexSyncPort {
 
     private static final String CHUNK_TABLE = "t_knowledge_chunk";
     private static final String METADATA_COLUMN = "metadata_json";
+    private static final String BACKEND = "jdbc";
+    private static final String EVENT_SCHEMA_INDEX_SYNC_COMPLETED = "metadata.schema.index.sync.completed";
+    private static final String EVENT_SCHEMA_INDEX_SYNC_FAILED = "metadata.schema.index.sync.failed";
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObservationPort observationPort;
+    private final MetadataSchemaIndexStatusPort indexStatusPort;
     private Boolean metadataColumnExists;
 
     public JdbcMetadataSchemaIndexAdapter(DataSource dataSource) {
+        this(dataSource, null);
+    }
+
+    public JdbcMetadataSchemaIndexAdapter(DataSource dataSource, ObservationPort observationPort) {
+        this(dataSource, observationPort, null);
+    }
+
+    public JdbcMetadataSchemaIndexAdapter(DataSource dataSource,
+                                          ObservationPort observationPort,
+                                          MetadataSchemaIndexStatusPort indexStatusPort) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
+        this.observationPort = observationPort;
+        this.indexStatusPort = indexStatusPort;
     }
 
     @Override
     public void syncField(MetadataSchemaFieldRecord field) {
         MetadataSchemaFieldRecord safeField = Objects.requireNonNull(field, "field must not be null");
-        if (!shouldSync(safeField) || !metadataColumnExists()) {
-            return;
-        }
-        jdbcTemplate.execute(indexSql(safeField));
+        observeIndexSync("CREATE", safeField, () -> syncFieldInternal(safeField));
+    }
+
+    @Override
+    public void syncFieldChange(MetadataSchemaFieldRecord previousField, MetadataSchemaFieldRecord currentField) {
+        MetadataSchemaFieldRecord safePreviousField =
+                Objects.requireNonNull(previousField, "previousField must not be null");
+        MetadataSchemaFieldRecord safeCurrentField =
+                Objects.requireNonNull(currentField, "currentField must not be null");
+        observeIndexSync("UPDATE", safeCurrentField,
+                () -> syncFieldChangeInternal(safePreviousField, safeCurrentField));
+    }
+
+    @Override
+    public void deleteField(MetadataSchemaFieldRecord field) {
+        MetadataSchemaFieldRecord safeField = Objects.requireNonNull(field, "field must not be null");
+        observeIndexSync("DELETE", safeField, () -> deleteFieldInternal(safeField));
     }
 
     String indexSql(MetadataSchemaFieldRecord field) {
@@ -66,8 +97,66 @@ public class JdbcMetadataSchemaIndexAdapter implements MetadataSchemaIndexSyncPo
                 + " ON " + CHUNK_TABLE + " ((" + valueExpression + "))";
     }
 
+    String dropIndexSql(MetadataSchemaFieldRecord field) {
+        MetadataSchemaFieldRecord safeField = Objects.requireNonNull(field, "field must not be null");
+        MetadataIndexPolicy policy = Objects.requireNonNullElse(safeField.indexPolicy(), MetadataIndexPolicy.NONE);
+        if (MetadataIndexPolicy.JSON_GIN.equals(policy)) {
+            return "";
+        }
+        return "DROP INDEX IF EXISTS " + expressionIndexName(fieldKey(safeField), policy, safeField.valueType());
+    }
+
+    void executeSql(String sql) {
+        jdbcTemplate.execute(sql);
+    }
+
+    private String syncFieldInternal(MetadataSchemaFieldRecord field) {
+        if (!shouldSync(field)) {
+            return "SKIPPED";
+        }
+        if (!metadataColumnExists()) {
+            return "UNSUPPORTED";
+        }
+        executeSql(indexSql(field));
+        return "APPLIED";
+    }
+
+    private String syncFieldChangeInternal(MetadataSchemaFieldRecord previousField,
+                                           MetadataSchemaFieldRecord currentField) {
+        boolean previousSyncable = shouldSync(previousField);
+        boolean currentSyncable = shouldSync(currentField);
+        boolean sameDefinition = previousSyncable
+                && currentSyncable
+                && sameIndexDefinition(previousField, currentField);
+        if (!metadataColumnExists()) {
+            return previousSyncable || currentSyncable ? "UNSUPPORTED" : "SKIPPED";
+        }
+        boolean applied = false;
+        if (previousSyncable && (!currentSyncable || !sameDefinition)) {
+            applied = dropFieldIndex(previousField);
+        }
+        if (currentSyncable && !sameDefinition) {
+            executeSql(indexSql(currentField));
+            applied = true;
+        }
+        return applied ? "APPLIED" : "NO_CHANGE";
+    }
+
+    private String deleteFieldInternal(MetadataSchemaFieldRecord field) {
+        if (!shouldSync(field)) {
+            return "SKIPPED";
+        }
+        if (!metadataColumnExists()) {
+            return "UNSUPPORTED";
+        }
+        return dropFieldIndex(field) ? "APPLIED" : "NO_CHANGE";
+    }
+
     private boolean shouldSync(MetadataSchemaFieldRecord field) {
         if (!field.indexed()) {
+            return false;
+        }
+        if (field.backendMapping().guardOnly() || !field.backendMapping().pushdownToKeyword()) {
             return false;
         }
         MetadataIndexPolicy policy = Objects.requireNonNullElse(field.indexPolicy(), MetadataIndexPolicy.NONE);
@@ -104,10 +193,16 @@ public class JdbcMetadataSchemaIndexAdapter implements MetadataSchemaIndexSyncPo
         return "idx_kc_metadata_json_gin";
     }
 
-    private String expressionIndexName(String key, MetadataIndexPolicy policy, MetadataValueType valueType) {
-        Object hashScope = isTextLike(valueType) ? policy : Objects.hash(policy, valueType);
-        String rawName = "idx_kc_meta_" + key + "_" + Integer.toHexString(Objects.hash(key, hashScope));
-        return safeIdentifier(rawName);
+    private boolean sameIndexDefinition(MetadataSchemaFieldRecord previousField, MetadataSchemaFieldRecord currentField) {
+        MetadataIndexPolicy previousPolicy =
+                Objects.requireNonNullElse(previousField.indexPolicy(), MetadataIndexPolicy.NONE);
+        MetadataIndexPolicy currentPolicy =
+                Objects.requireNonNullElse(currentField.indexPolicy(), MetadataIndexPolicy.NONE);
+        if (MetadataIndexPolicy.JSON_GIN.equals(previousPolicy) && MetadataIndexPolicy.JSON_GIN.equals(currentPolicy)) {
+            return true;
+        }
+        return expressionIndexName(fieldKey(previousField), previousPolicy, previousField.valueType())
+                .equals(expressionIndexName(fieldKey(currentField), currentPolicy, currentField.valueType()));
     }
 
     private boolean isTextLike(MetadataValueType valueType) {
@@ -118,13 +213,102 @@ public class JdbcMetadataSchemaIndexAdapter implements MetadataSchemaIndexSyncPo
         };
     }
 
+    private String expressionIndexName(String key, MetadataIndexPolicy policy, MetadataValueType valueType) {
+        Object hashScope = isTextLike(valueType) ? policy : Objects.hash(policy, valueType);
+        String rawName = "idx_kc_meta_" + key + "_" + Integer.toHexString(Objects.hash(key, hashScope));
+        return safeIdentifier(rawName);
+    }
+
+    private boolean dropFieldIndex(MetadataSchemaFieldRecord field) {
+        String sql = dropIndexSql(field);
+        if (sql.isBlank()) {
+            return false;
+        }
+        executeSql(sql);
+        return true;
+    }
+
+    private void observeIndexSync(String action,
+                                  MetadataSchemaFieldRecord field,
+                                  IndexSyncOperation operation) {
+        try {
+            String outcome = operation.run();
+            recordSyncStatus(action, field, outcome, null);
+            recordObservationEvent(EVENT_SCHEMA_INDEX_SYNC_COMPLETED, action, field, outcome, null);
+        } catch (RuntimeException ex) {
+            recordSyncStatus(action, field, "FAILED", ex);
+            recordObservationEvent(EVENT_SCHEMA_INDEX_SYNC_FAILED, action, field, "FAILED", ex);
+        }
+    }
+
+    private void recordSyncStatus(String action,
+                                  MetadataSchemaFieldRecord field,
+                                  String outcome,
+                                  RuntimeException error) {
+        if (indexStatusPort == null) {
+            return;
+        }
+        try {
+            indexStatusPort.recordSyncResult(new MetadataSchemaIndexSyncStatusRecord(
+                    field.id(),
+                    field.tenantId(),
+                    field.knowledgeBaseId(),
+                    field.fieldKey(),
+                    field.schemaVersion(),
+                    BACKEND,
+                    Objects.requireNonNullElse(action, ""),
+                    Objects.requireNonNullElse(outcome, ""),
+                    error == null ? "" : error.getClass().getSimpleName(),
+                    error == null ? "" : Objects.requireNonNullElse(error.getMessage(), ""),
+                    null));
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private void recordObservationEvent(String eventName,
+                                        String action,
+                                        MetadataSchemaFieldRecord field,
+                                        String outcome,
+                                        RuntimeException error) {
+        if (observationPort == null) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> attributes = new LinkedHashMap<>();
+            attributes.put("backend", BACKEND);
+            attributes.put("action", Objects.requireNonNullElse(action, ""));
+            attributes.put("tenantId", field.tenantId());
+            attributes.put("knowledgeBaseId", field.knowledgeBaseId());
+            attributes.put("fieldKey", field.fieldKey());
+            attributes.put("schemaVersion", Integer.toString(field.schemaVersion()));
+            attributes.put("indexed", Boolean.toString(field.indexed()));
+            attributes.put("indexPolicy", Objects.requireNonNullElse(field.indexPolicy(), MetadataIndexPolicy.NONE).name());
+            attributes.put("pushdownToKeyword", Boolean.toString(field.backendMapping().pushdownToKeyword()));
+            attributes.put("pushdownToVector", Boolean.toString(field.backendMapping().pushdownToVector()));
+            attributes.put("guardOnly", Boolean.toString(field.backendMapping().guardOnly()));
+            attributes.put("outcome", Objects.requireNonNullElse(outcome, ""));
+            if (error != null) {
+                attributes.put("errorType", error.getClass().getSimpleName());
+                attributes.put("errorMessage", Objects.requireNonNullElse(error.getMessage(), ""));
+            }
+            observationPort.recordEvent(new ObservationEvent(eventName, null, attributes));
+        } catch (RuntimeException ignored) {
+        }
+    }
+
     private String safeIdentifier(String value) {
         String safe = Objects.requireNonNullElse(value, "")
-                .toLowerCase(java.util.Locale.ROOT)
+                .toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9_]", "_");
         if (safe.length() > 63) {
             return safe.substring(0, 63);
         }
         return safe;
+    }
+
+    @FunctionalInterface
+    private interface IndexSyncOperation {
+
+        String run();
     }
 }

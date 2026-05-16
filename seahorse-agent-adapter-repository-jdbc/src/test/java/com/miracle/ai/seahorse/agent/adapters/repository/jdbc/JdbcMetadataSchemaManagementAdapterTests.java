@@ -23,14 +23,17 @@ import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataOperator;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldCapabilityRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldPayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncStatusRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import javax.sql.DataSource;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,6 +74,38 @@ class JdbcMetadataSchemaManagementAdapterTests {
 
         assertThat(deleted).isTrue();
         assertThat(adapter.listSchemaFields("tenant-1", "kb-1")).isEmpty();
+    }
+
+    @Test
+    void shouldExposeFieldCapabilitiesWithLastSyncResult() {
+        String id = adapter.createSchemaField(payload("department", "閮ㄩ棬"));
+        Instant syncTime = Instant.parse("2026-05-16T00:00:00Z");
+        adapter.recordSyncResult(new MetadataSchemaIndexSyncStatusRecord(
+                id,
+                "tenant-1",
+                "kb-1",
+                "department",
+                2,
+                "elasticsearch",
+                "UPDATE",
+                "FAILED",
+                "IllegalStateException",
+                "mapping failed",
+                syncTime));
+
+        assertThat(adapter.listSchemaFieldCapabilities("tenant-1", "kb-1"))
+                .singleElement()
+                .satisfies(capability -> {
+                    assertThat(capability).isInstanceOf(MetadataSchemaFieldCapabilityRecord.class);
+                    assertThat(capability.fieldKey()).isEqualTo("department");
+                    assertThat(capability.pushdownToKeyword()).isTrue();
+                    assertThat(capability.pushdownToVector()).isFalse();
+                    assertThat(capability.guardOnly()).isFalse();
+                    assertThat(capability.lastSyncBackend()).isEqualTo("elasticsearch");
+                    assertThat(capability.lastSyncOutcome()).isEqualTo("FAILED");
+                    assertThat(capability.lastSyncErrorType()).isEqualTo("IllegalStateException");
+                    assertThat(capability.lastSyncTime()).isEqualTo(syncTime);
+                });
     }
 
     private MetadataSchemaFieldPayload payload(String fieldKey, String displayName) {
@@ -124,6 +159,12 @@ class JdbcMetadataSchemaManagementAdapterTests {
                     extraction_hints VARCHAR(2048),
                     backend_mapping VARCHAR(2048),
                     schema_version INTEGER NOT NULL DEFAULT 1,
+                    last_sync_backend VARCHAR(32),
+                    last_sync_action VARCHAR(32),
+                    last_sync_outcome VARCHAR(32),
+                    last_sync_error_type VARCHAR(64),
+                    last_sync_error_message VARCHAR(1024),
+                    last_sync_time TIMESTAMP,
                     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     deleted SMALLINT NOT NULL DEFAULT 0

@@ -61,6 +61,8 @@ class KernelMetadataReviewServiceTests {
                 new MetadataReviewDecisionCommand("auditor", "通过", Map.of()));
 
         assertThat(approved.reviewStatus()).isEqualTo(MetadataReviewStatus.APPROVED);
+        assertThat(compensationPort.tenantId).isEqualTo("tenant-1");
+        assertThat(compensationPort.knowledgeBaseId).isEqualTo("kb-1");
         assertThat(canonicalWritePort.documentId).isEqualTo("doc-1");
         assertThat(canonicalWritePort.metadata).containsEntry("department", "hr");
         assertThat(compensationPort.documentId).isEqualTo("doc-1");
@@ -101,6 +103,25 @@ class KernelMetadataReviewServiceTests {
     }
 
     @Test
+    void shouldRequestCompensationWithTenantAndKnowledgeBaseAfterCorrect() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-1", MetadataReviewStatus.PENDING, Map.of()));
+        CapturingCanonicalWritePort canonicalWritePort = new CapturingCanonicalWritePort();
+        CapturingIndexCompensationPort compensationPort = new CapturingIndexCompensationPort();
+        KernelMetadataReviewService service = new KernelMetadataReviewService(
+                repository, canonicalWritePort, MetadataQuarantinePort.noop(), compensationPort);
+
+        MetadataReviewRecord corrected = service.correct("review-1",
+                new MetadataReviewDecisionCommand("auditor", "修正", Map.of("department", "legal")));
+
+        assertThat(corrected.reviewStatus()).isEqualTo(MetadataReviewStatus.CORRECTED);
+        assertThat(canonicalWritePort.metadata).containsEntry("department", "legal");
+        assertThat(compensationPort.tenantId).isEqualTo("tenant-1");
+        assertThat(compensationPort.knowledgeBaseId).isEqualTo("kb-1");
+        assertThat(compensationPort.documentId).isEqualTo("doc-1");
+    }
+
+    @Test
     void shouldMoveReviewItemToQuarantineWithoutCanonicalWrite() {
         InMemoryReviewRepository repository = new InMemoryReviewRepository();
         repository.put(review("review-1", MetadataReviewStatus.PENDING, Map.of()));
@@ -135,6 +156,8 @@ class KernelMetadataReviewServiceTests {
         assertThat(corrected.correctedMetadata()).doesNotContainKey("owner");
         assertThat(canonicalWritePort.metadata).containsEntry("department", "hr");
         assertThat(canonicalWritePort.metadata).doesNotContainKey("owner");
+        assertThat(compensationPort.tenantId).isEqualTo("tenant-1");
+        assertThat(compensationPort.knowledgeBaseId).isEqualTo("kb-1");
         assertThat(compensationPort.documentId).isEqualTo("doc-1");
     }
 
@@ -327,10 +350,19 @@ class KernelMetadataReviewServiceTests {
 
     private static final class CapturingIndexCompensationPort implements MetadataIndexCompensationPort {
 
+        private String tenantId = "";
+        private String knowledgeBaseId = "";
         private String documentId = "";
 
         @Override
         public void rebuildDocument(String documentId) {
+            this.documentId = documentId;
+        }
+
+        @Override
+        public void rebuildDocument(String tenantId, String knowledgeBaseId, String documentId) {
+            this.tenantId = tenantId;
+            this.knowledgeBaseId = knowledgeBaseId;
             this.documentId = documentId;
         }
     }

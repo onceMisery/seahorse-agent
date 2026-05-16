@@ -289,6 +289,51 @@ class KernelMetadataBackfillServiceTests {
     }
 
     @Test
+    void shouldPreserveSchemaCompensationMetadataInCheckpointAndObservation() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        documents.add(document("doc-1", true, "pipe-1"));
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        KernelMetadataBackfillService service = new KernelMetadataBackfillService(
+                documents,
+                new InMemoryObjectStorage(),
+                pipelineRepository(),
+                acceptingEngine(),
+                jobs,
+                MetadataExtractionResultRepositoryPort.noop(),
+                MetadataQuarantinePort.noop(),
+                observationPort);
+
+        MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
+                "tenant-1", "kb-1", "", 10, "schema-ops",
+                Map.of(
+                        "schemaVersion", 6,
+                        "schemaCompensation", true,
+                        "schemaCompensationReason", "SCHEMA_CHANGE",
+                        "schemaTriggerAction", "UPDATE",
+                        "schemaTriggerFieldKey", "department",
+                        "forceRerun", true,
+                        "overwriteApproved", true)));
+        MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
+        MetadataBackfillJobRecord stored = jobs.findById(job.jobId()).orElseThrow();
+
+        assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
+        assertThat(stored.checkpoint())
+                .containsEntry("schemaCompensation", true)
+                .containsEntry("schemaCompensationReason", "SCHEMA_CHANGE")
+                .containsEntry("schemaTriggerAction", "UPDATE")
+                .containsEntry("schemaTriggerFieldKey", "department");
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals("metadata.backfill.batch.success"))
+                .singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry("schemaCompensation", "true")
+                        .containsEntry("schemaCompensationReason", "SCHEMA_CHANGE")
+                        .containsEntry("schemaTriggerAction", "UPDATE")
+                        .containsEntry("schemaTriggerFieldKey", "department"));
+    }
+
+    @Test
     void shouldPageBackfillJobsForManagement() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();

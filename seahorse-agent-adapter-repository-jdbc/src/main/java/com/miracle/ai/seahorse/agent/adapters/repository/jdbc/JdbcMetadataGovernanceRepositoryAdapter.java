@@ -65,7 +65,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueue
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldPayload;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldCapabilityRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexStatusPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncStatusRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import org.springframework.dao.DataAccessException;
@@ -92,7 +95,8 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         MetadataQuarantinePort, MetadataCanonicalWritePort, MetadataBackfillJobRepositoryPort,
         MetadataQualityReportRepositoryPort, MetadataReviewManagementRepositoryPort,
         MetadataQuarantineManagementRepositoryPort, MetadataSchemaManagementRepositoryPort,
-        MetadataDictionaryManagementRepositoryPort, MetadataExtractionResultManagementRepositoryPort {
+        MetadataDictionaryManagementRepositoryPort, MetadataExtractionResultManagementRepositoryPort,
+        MetadataSchemaIndexStatusPort {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
@@ -155,6 +159,32 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                       AND deleted = 0
                     ORDER BY CASE WHEN kb_id = ? THEN 0 ELSE 1 END, field_key
                     """, this::toSchemaFieldRecord, safeTenantId, safeKbId, safeKbId, safeKbId);
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
+    @Override
+    public List<MetadataSchemaFieldCapabilityRecord> listSchemaFieldCapabilities(String tenantId,
+                                                                                 String knowledgeBaseId) {
+        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
+        String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
+        if (blank(safeTenantId)) {
+            return List.of();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, kb_id, field_key, display_name, value_type,
+                           filterable, sortable, facetable, indexed, index_policy,
+                           backend_mapping, schema_version, last_sync_backend, last_sync_action,
+                           last_sync_outcome, last_sync_error_type, last_sync_error_message,
+                           last_sync_time, update_time
+                    FROM t_metadata_field_schema
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ? OR kb_id IS NULL OR kb_id = '')
+                      AND deleted = 0
+                    ORDER BY CASE WHEN kb_id = ? THEN 0 ELSE 1 END, field_key
+                    """, this::toSchemaFieldCapabilityRecord, safeTenantId, safeKbId, safeKbId, safeKbId);
         } catch (DataAccessException ex) {
             return List.of();
         }
@@ -247,6 +277,34 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     update_time = CURRENT_TIMESTAMP
                 WHERE id = ? AND deleted = 0
                 """, fieldId) > 0;
+    }
+
+    @Override
+    public void recordSyncResult(MetadataSchemaIndexSyncStatusRecord status) {
+        MetadataSchemaIndexSyncStatusRecord safeStatus = Objects.requireNonNull(status, "status must not be null");
+        if (blank(safeStatus.fieldId())) {
+            return;
+        }
+        try {
+            jdbcTemplate.update("""
+                    UPDATE t_metadata_field_schema
+                    SET last_sync_backend = ?,
+                        last_sync_action = ?,
+                        last_sync_outcome = ?,
+                        last_sync_error_type = ?,
+                        last_sync_error_message = ?,
+                        last_sync_time = ?
+                    WHERE id = ?
+                    """,
+                    trimToLength(safeStatus.backend(), 32),
+                    trimToLength(safeStatus.action(), 32),
+                    trimToLength(safeStatus.outcome(), 32),
+                    trimToLength(safeStatus.errorType(), 64),
+                    trimToLength(safeStatus.errorMessage(), 1024),
+                    Timestamp.from(safeStatus.syncTime()),
+                    safeStatus.fieldId());
+        } catch (DataAccessException ignored) {
+        }
     }
 
     @Override
@@ -1705,6 +1763,34 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 instant(rs.getTimestamp("update_time")));
     }
 
+    private MetadataSchemaFieldCapabilityRecord toSchemaFieldCapabilityRecord(ResultSet rs, int rowNum)
+            throws SQLException {
+        BackendFieldMapping mapping = backendMapping(rs.getString("backend_mapping"), rs.getString("field_key"));
+        return new MetadataSchemaFieldCapabilityRecord(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getString("kb_id"),
+                rs.getString("field_key"),
+                rs.getString("display_name"),
+                enumValue(MetadataValueType.class, rs.getString("value_type"), MetadataValueType.STRING),
+                bool(rs, "filterable"),
+                bool(rs, "sortable"),
+                bool(rs, "facetable"),
+                bool(rs, "indexed"),
+                enumValue(MetadataIndexPolicy.class, rs.getString("index_policy"), MetadataIndexPolicy.NONE),
+                mapping.pushdownToKeyword(),
+                mapping.pushdownToVector(),
+                mapping.guardOnly(),
+                rs.getInt("schema_version"),
+                rs.getString("last_sync_backend"),
+                rs.getString("last_sync_action"),
+                rs.getString("last_sync_outcome"),
+                rs.getString("last_sync_error_type"),
+                rs.getString("last_sync_error_message"),
+                nullableInstant(rs.getTimestamp("last_sync_time")),
+                instant(rs.getTimestamp("update_time")));
+    }
+
     private MetadataDictionaryItemRecord toDictionaryItemRecord(ResultSet rs, int rowNum) throws SQLException {
         return new MetadataDictionaryItemRecord(
                 rs.getString("id"),
@@ -1968,6 +2054,14 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     private String text(Object value, String defaultValue) {
         String text = Objects.toString(value, "");
         return text.isBlank() ? defaultValue : text;
+    }
+
+    private String trimToLength(String value, int maxLength) {
+        String safeValue = Objects.requireNonNullElse(value, "");
+        if (maxLength <= 0 || safeValue.length() <= maxLength) {
+            return safeValue;
+        }
+        return safeValue.substring(0, maxLength);
     }
 
     private <E extends Enum<E>> E enumValue(Class<E> type, String value, E defaultValue) {

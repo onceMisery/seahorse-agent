@@ -61,6 +61,12 @@ public class SeahorseMetadataSchemaController {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, schemaPort.listFields(tenantId, kbId));
     }
 
+    @GetMapping("/knowledge-base/{kb-id}/metadata-schema/field-capabilities")
+    public Map<String, Object> listFieldCapabilities(@PathVariable("kb-id") String kbId,
+                                                     @RequestParam String tenantId) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, schemaPort.listFieldCapabilities(tenantId, kbId));
+    }
+
     @PostMapping("/knowledge-base/{kb-id}/metadata-schema/fields")
     public Map<String, Object> createField(@PathVariable("kb-id") String kbId,
                                            @RequestBody MetadataSchemaFieldRequest request) {

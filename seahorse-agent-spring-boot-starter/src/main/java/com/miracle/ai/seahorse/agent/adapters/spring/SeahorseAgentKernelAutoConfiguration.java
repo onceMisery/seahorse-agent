@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentAdapterProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentKernelProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentPluginProperties;
+import com.miracle.ai.seahorse.agent.adapters.spring.metadata.MetadataIndexCompensationAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
@@ -906,15 +907,21 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(KeywordIndexMaintenanceInboundPort.class)
+    @ConditionalOnBean({KeywordIndexMaintenanceInboundPort.class, KnowledgeDocumentRepositoryPort.class,
+            KnowledgeDocumentVectorPorts.class})
     @ConditionalOnMissingBean(MetadataIndexCompensationPort.class)
     public MetadataIndexCompensationPort seahorseMetadataIndexCompensationPort(
-            KeywordIndexMaintenanceInboundPort keywordIndexMaintenanceInboundPort) {
-        return documentId -> {
-            if (documentId != null && !documentId.isBlank()) {
-                keywordIndexMaintenanceInboundPort.rebuildDocument(documentId);
-            }
-        };
+            KnowledgeDocumentRepositoryPort documentRepositoryPort,
+            KeywordIndexMaintenanceInboundPort keywordIndexMaintenanceInboundPort,
+            KnowledgeDocumentVectorPorts documentVectorPorts,
+            ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
+            ObjectProvider<MetadataBackfillInboundPort> backfillInboundPort) {
+        return new MetadataIndexCompensationAdapter(
+                documentRepositoryPort,
+                keywordIndexMaintenanceInboundPort,
+                documentVectorPorts,
+                schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
+                backfillInboundPort.getIfAvailable());
     }
 
     @Bean
@@ -933,9 +940,11 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnMissingBean(MetadataSchemaInboundPort.class)
     public KernelMetadataSchemaService seahorseMetadataSchemaInboundPort(
             MetadataSchemaManagementRepositoryPort repositoryPort,
-            ObjectProvider<MetadataSchemaIndexSyncPort> indexSyncPort) {
+            ObjectProvider<MetadataSchemaIndexSyncPort> indexSyncPort,
+            ObjectProvider<MetadataIndexCompensationPort> indexCompensationPort) {
         return new KernelMetadataSchemaService(repositoryPort,
-                indexSyncPort.getIfAvailable(MetadataSchemaIndexSyncPort::noop));
+                indexSyncPort.getIfAvailable(MetadataSchemaIndexSyncPort::noop),
+                indexCompensationPort.getIfAvailable(MetadataIndexCompensationPort::noop));
     }
 
     @Bean
