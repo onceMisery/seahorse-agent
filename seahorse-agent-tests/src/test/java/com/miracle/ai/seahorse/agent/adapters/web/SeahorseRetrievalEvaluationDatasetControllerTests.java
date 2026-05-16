@@ -24,9 +24,11 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetSummary;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunSummary;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategy;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
@@ -63,6 +65,7 @@ class SeahorseRetrievalEvaluationDatasetControllerTests {
         when(datasetPort.upsertDataset(eq("kb-1"), any())).thenReturn(dataset());
         when(datasetPort.deleteDataset("kb-1", "dataset-1")).thenReturn(true);
         when(datasetPort.evaluateDataset(eq("kb-1"), any())).thenReturn(report());
+        when(datasetPort.compareDataset(eq("kb-1"), any())).thenReturn(comparisonReport());
         when(datasetPort.listRuns("kb-1", "dataset-1", 20)).thenReturn(List.of(runSummary()));
         when(datasetPort.getRun("kb-1", "dataset-1", "run-1")).thenReturn(runRecord());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
@@ -100,6 +103,18 @@ class SeahorseRetrievalEvaluationDatasetControllerTests {
                         .content(json(Map.of("strategyName", "hybrid", "topK", 3))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.strategyName").value("hybrid"));
+
+        mvc.perform(post("/knowledge-base/kb-1/retrieval-evaluation-datasets/dataset-1/compare")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "baselineStrategyName", "baseline",
+                                "topK", 3,
+                                "strategies", List.of(
+                                        Map.of("strategyName", "baseline", "topK", 3),
+                                        Map.of("strategyName", "candidate", "topK", 3))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.winnerStrategyName").value("candidate"))
+                .andExpect(jsonPath("$.data.reports[1].strategyName").value("candidate"));
 
         mvc.perform(get("/knowledge-base/kb-1/retrieval-evaluation-datasets/dataset-1/runs"))
                 .andExpect(status().isOk())
@@ -161,5 +176,15 @@ class SeahorseRetrievalEvaluationDatasetControllerTests {
 
     private RetrievalEvaluationRunRecord runRecord() {
         return new RetrievalEvaluationRunRecord("run-1", "kb-1", "dataset-1", report(), Instant.EPOCH);
+    }
+
+    private RetrievalEvaluationComparisonReport comparisonReport() {
+        return new RetrievalEvaluationComparisonReport(
+                "baseline",
+                "candidate",
+                List.of(
+                        new RetrievalEvaluationReport("baseline", 3, 1, 1, 0.8D, 0.8D, 0.8D, 0D, 10D, 10D, List.of()),
+                        new RetrievalEvaluationReport("candidate", 3, 1, 1, 0.9D, 0.9D, 0.9D, 0D, 11D, 11D, List.of())),
+                List.of());
     }
 }

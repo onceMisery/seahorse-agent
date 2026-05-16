@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDataset;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetComparisonCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetSummary;
@@ -29,6 +30,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunSummary;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategy;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 import org.junit.jupiter.api.Test;
@@ -80,6 +82,18 @@ class KernelRetrievalEvaluationDatasetServiceTests {
                 .isEqualTo("hybrid");
         assertThat(evaluationPort.lastCommand.cases()).extracting(RetrievalEvaluationCase::caseId)
                 .containsExactly("case-1");
+
+        RetrievalEvaluationComparisonReport comparison = service.compareDataset("kb-1",
+                new RetrievalEvaluationDatasetComparisonCommand(
+                        dataset.datasetId(),
+                        "baseline",
+                        3,
+                        List.of(
+                                new RetrievalEvaluationStrategy("baseline", 3, null),
+                                new RetrievalEvaluationStrategy("candidate", 3, null))));
+        assertThat(comparison.reports()).extracting(RetrievalEvaluationReport::strategyName)
+                .containsExactly("baseline", "candidate");
+        assertThat(service.listRuns("kb-1", dataset.datasetId(), 10)).hasSize(3);
     }
 
     private RetrievalEvaluationCase caseRecord(String caseId) {
@@ -100,7 +114,15 @@ class KernelRetrievalEvaluationDatasetServiceTests {
 
         @Override
         public RetrievalEvaluationComparisonReport compare(RetrievalEvaluationComparisonCommand command) {
-            throw new UnsupportedOperationException();
+            return new RetrievalEvaluationComparisonReport(
+                    "baseline",
+                    "candidate",
+                    List.of(
+                            new RetrievalEvaluationReport("baseline", command.topK(), command.cases().size(),
+                                    command.cases().size(), 0.8D, 0.8D, 0.8D, 0D, 10D, 10D, List.of()),
+                            new RetrievalEvaluationReport("candidate", command.topK(), command.cases().size(),
+                                    command.cases().size(), 0.9D, 0.9D, 0.9D, 0D, 11D, 11D, List.of())),
+                    List.of());
         }
     }
 

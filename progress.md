@@ -309,3 +309,10 @@
 - `retrieval-governance-postgresql.sql` 新增 `t_retrieval_evaluation_run` 表、索引和完整 COMMENT，保留 Recall@K、MRR、nDCG@K、空召回率与延迟指标列，完整明细保存在 `report_json`。
 - `SeahorseRetrievalEvaluationDatasetController` 新增 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs` 和 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs/{run-id}`。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，JDBC 1 个、Web 1 个、Kernel 1 个测试类通过，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 D3 已保存评测集 A/B 对比
+
+- 新增 `RetrievalEvaluationDatasetComparisonCommand`，支持基于已保存评测集直接复用既有 `RetrievalEvaluationInboundPort.compare(...)` 口径。
+- `KernelRetrievalEvaluationDatasetService.compareDataset(...)` 会读取已保存 `RetrievalEvaluationCase` 列表组装多策略对比命令，并将对比结果中的每个单策略 `RetrievalEvaluationReport` 继续写入运行历史。
+- `SeahorseRetrievalEvaluationDatasetController` 新增 `POST /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/compare`，管理端无需重复上传完整评测样本即可做策略对比。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，reactor `BUILD SUCCESS`。

@@ -18,7 +18,10 @@
 package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDataset;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetComparisonCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetRunCommand;
@@ -109,6 +112,30 @@ public class KernelRetrievalEvaluationDatasetService implements RetrievalEvaluat
         }
         RetrievalEvaluationReport report = evaluationPort.evaluate(evaluationCommand);
         recordRun(safeKnowledgeBaseId, safeCommand.datasetId(), report);
+        return report;
+    }
+
+    @Override
+    public RetrievalEvaluationComparisonReport compareDataset(String knowledgeBaseId,
+                                                              RetrievalEvaluationDatasetComparisonCommand command) {
+        String safeKnowledgeBaseId = requireText(knowledgeBaseId, "knowledgeBaseId must not be blank");
+        RetrievalEvaluationDatasetComparisonCommand safeCommand = command == null
+                ? new RetrievalEvaluationDatasetComparisonCommand("", "", 5, List.of())
+                : command;
+        RetrievalEvaluationDataset dataset = getDataset(safeKnowledgeBaseId, safeCommand.datasetId());
+        RetrievalEvaluationComparisonCommand comparisonCommand = new RetrievalEvaluationComparisonCommand(
+                safeCommand.baselineStrategyName(),
+                safeCommand.topK(),
+                safeCommand.strategies(),
+                dataset.cases());
+        if (evaluationPort == null) {
+            return new RetrievalEvaluationComparisonReport("", "", List.of(), List.of());
+        }
+        RetrievalEvaluationComparisonReport report = Objects.requireNonNullElse(
+                evaluationPort.compare(comparisonCommand),
+                new RetrievalEvaluationComparisonReport("", "", List.of(), List.of()));
+        Objects.requireNonNullElse(report.reports(), List.<RetrievalEvaluationReport>of())
+                .forEach(strategyReport -> recordRun(safeKnowledgeBaseId, safeCommand.datasetId(), strategyReport));
         return report;
     }
 

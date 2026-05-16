@@ -97,6 +97,18 @@ public class SeahorseRetrievalEvaluationDatasetController {
                 datasetPort.evaluateDataset(kbId, safeRequest.toCommand(datasetId)));
     }
 
+    @PostMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/compare")
+    public Map<String, Object> compareDataset(@PathVariable("kb-id") String kbId,
+                                              @PathVariable("dataset-id") String datasetId,
+                                              @RequestBody(required = false)
+                                              RetrievalEvaluationDatasetComparisonRequest request) {
+        RetrievalEvaluationDatasetComparisonRequest safeRequest = request == null
+                ? new RetrievalEvaluationDatasetComparisonRequest("", 5, java.util.List.of())
+                : request;
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                datasetPort.compareDataset(kbId, safeRequest.toCommand(datasetId)));
+    }
+
     @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs")
     public Map<String, Object> listRuns(@PathVariable("kb-id") String kbId,
                                         @PathVariable("dataset-id") String datasetId,

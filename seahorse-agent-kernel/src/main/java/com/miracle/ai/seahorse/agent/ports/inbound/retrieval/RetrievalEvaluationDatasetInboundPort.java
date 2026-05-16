@@ -34,6 +34,9 @@ public interface RetrievalEvaluationDatasetInboundPort {
 
     RetrievalEvaluationReport evaluateDataset(String knowledgeBaseId, RetrievalEvaluationDatasetRunCommand command);
 
+    RetrievalEvaluationComparisonReport compareDataset(String knowledgeBaseId,
+                                                       RetrievalEvaluationDatasetComparisonCommand command);
+
     List<RetrievalEvaluationRunSummary> listRuns(String knowledgeBaseId, String datasetId, int limit);
 
     RetrievalEvaluationRunRecord getRun(String knowledgeBaseId, String datasetId, String runId);
