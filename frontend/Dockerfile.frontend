@@ -9,7 +9,7 @@ RUN npm ci
 COPY . .
 
 # Build with empty API base URL (nginx will proxy /api)
-RUN VITE_API_BASE_URL= npm run build
+RUN VITE_API_BASE_URL=/api npm run build
 
 # Stage 2: Serve
 FROM docker.m.daocloud.io/library/nginx:alpine
