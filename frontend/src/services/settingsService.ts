@@ -6,7 +6,7 @@ export interface SystemSettings {
     maxRequestSize: number;
   };
   rag: {
-    default: {
+    defaultConfig: {
       collectionName: string;
       dimension: number;
       metricType: string;

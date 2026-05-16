@@ -49,41 +49,48 @@ public class SeahorseIntentTreeController {
 
     @GetMapping("/intent-tree/trees")
     public Map<String, Object> tree() {
+        if (intentTreePort == null) return Map.of("code", "1", "message", "Service not available");
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, intentTreePort.tree());
     }
 
     @PostMapping("/intent-tree")
     public Map<String, Object> createNode(@RequestBody IntentNodePayload request) {
+        if (intentTreePort == null) return Map.of("code", "1", "message", "Service not available");
         String id = intentTreePort.create(Objects.requireNonNull(request, "request must not be null"));
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, id);
     }
 
     @PutMapping("/intent-tree/{id}")
     public Map<String, Object> updateNode(@PathVariable String id, @RequestBody IntentNodePayload request) {
+        if (intentTreePort == null) return Map.of("code", "1", "message", "Service not available");
         intentTreePort.update(id, Objects.requireNonNull(request, "request must not be null"));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @DeleteMapping("/intent-tree/{id}")
     public Map<String, Object> deleteNode(@PathVariable String id) {
+        if (intentTreePort == null) return Map.of("code", "1", "message", "Service not available");
         intentTreePort.delete(id);
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @PostMapping("/intent-tree/batch/enable")
     public Map<String, Object> batchEnable(@RequestBody IntentNodeBatchRequest request) {
+        if (intentTreePort == null) return Map.of("code", "1", "message", "Service not available");
         intentTreePort.batchEnable(Objects.requireNonNull(request, "request must not be null").ids());
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @PostMapping("/intent-tree/batch/disable")
     public Map<String, Object> batchDisable(@RequestBody IntentNodeBatchRequest request) {
+        if (intentTreePort == null) return Map.of("code", "1", "message", "Service not available");
         intentTreePort.batchDisable(Objects.requireNonNull(request, "request must not be null").ids());
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @PostMapping("/intent-tree/batch/delete")
     public Map<String, Object> batchDelete(@RequestBody IntentNodeBatchRequest request) {
+        if (intentTreePort == null) return Map.of("code", "1", "message", "Service not available");
         intentTreePort.batchDelete(Objects.requireNonNull(request, "request must not be null").ids());
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }

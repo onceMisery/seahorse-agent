@@ -50,7 +50,7 @@ public class SeahorseDocumentRefreshController {
     public Map<String, Object> refresh(@PathVariable("doc-id") String docId,
                                        @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         if (refreshPort == null) {
-            return Map.of(KEY_CODE, "1", "message", "Document refresh service is not available");
+            return Map.of(KEY_CODE, "1", "message", "Service not available");
         }
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, refreshPort.refreshDocument(docId, operator(userId)));
     }
@@ -59,7 +59,7 @@ public class SeahorseDocumentRefreshController {
     public Map<String, Object> refreshDue(@RequestParam(defaultValue = "20") int limit,
                                           @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         if (refreshPort == null) {
-            return Map.of(KEY_CODE, "1", "message", "Document refresh service is not available");
+            return Map.of(KEY_CODE, "1", "message", "Service not available");
         }
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
                 refreshPort.refreshDueSchedules(Instant.now(), limit, operator(userId)));
