@@ -19,7 +19,6 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginCommand;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,7 +27,6 @@ import java.util.Map;
 import java.util.Objects;
 
 @RestController
-@ConditionalOnBean(AuthInboundPort.class)
 public class SeahorseAuthController {
 
     private static final String KEY_CODE = "code";
