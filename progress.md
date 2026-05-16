@@ -300,3 +300,12 @@
 - 新增 `SeahorseRetrievalEvaluationDatasetController`，暴露评测集 CRUD 与 `POST /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/evaluate`，运行时复用现有评测指标口径。
 - Spring Boot 自动装配 JDBC 仓储和内核评测集服务；无仓储时不暴露管理入口。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，3 个新测试类通过，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 D2 检索评测运行历史
+
+- 新增 `RetrievalEvaluationRunRecord`、`RetrievalEvaluationRunSummary` 和 `RetrievalEvaluationRunRepositoryPort`，保存已运行评测的汇总指标与完整 `RetrievalEvaluationReport`。
+- `KernelRetrievalEvaluationDatasetService` 在按评测集运行后写入运行历史，并新增运行列表/详情查询；历史写入失败不会反向阻断即时评测报告返回。
+- `JdbcRetrievalEvaluationDatasetRepositoryAdapter` 同时实现评测集仓储与运行历史仓储，新增 `t_retrieval_evaluation_run` 写入、列表和详情查询。
+- `retrieval-governance-postgresql.sql` 新增 `t_retrieval_evaluation_run` 表、索引和完整 COMMENT，保留 Recall@K、MRR、nDCG@K、空召回率与延迟指标列，完整明细保存在 `report_json`。
+- `SeahorseRetrievalEvaluationDatasetController` 新增 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs` 和 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs/{run-id}`。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，JDBC 1 个、Web 1 个、Kernel 1 个测试类通过，reactor `BUILD SUCCESS`。

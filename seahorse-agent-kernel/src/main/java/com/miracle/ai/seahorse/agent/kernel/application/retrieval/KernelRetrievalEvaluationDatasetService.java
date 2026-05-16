@@ -25,7 +25,10 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 
 import java.util.List;
 import java.util.Objects;
@@ -38,12 +41,21 @@ import java.util.Objects;
 public class KernelRetrievalEvaluationDatasetService implements RetrievalEvaluationDatasetInboundPort {
 
     private final RetrievalEvaluationDatasetRepositoryPort repositoryPort;
+    private final RetrievalEvaluationRunRepositoryPort runRepositoryPort;
     private final RetrievalEvaluationInboundPort evaluationPort;
 
     public KernelRetrievalEvaluationDatasetService(RetrievalEvaluationDatasetRepositoryPort repositoryPort,
                                                    RetrievalEvaluationInboundPort evaluationPort) {
+        this(repositoryPort, RetrievalEvaluationRunRepositoryPort.empty(), evaluationPort);
+    }
+
+    public KernelRetrievalEvaluationDatasetService(RetrievalEvaluationDatasetRepositoryPort repositoryPort,
+                                                   RetrievalEvaluationRunRepositoryPort runRepositoryPort,
+                                                   RetrievalEvaluationInboundPort evaluationPort) {
         this.repositoryPort = Objects.requireNonNullElse(repositoryPort,
                 RetrievalEvaluationDatasetRepositoryPort.empty());
+        this.runRepositoryPort = Objects.requireNonNullElse(runRepositoryPort,
+                RetrievalEvaluationRunRepositoryPort.empty());
         this.evaluationPort = evaluationPort;
     }
 
@@ -90,10 +102,32 @@ public class KernelRetrievalEvaluationDatasetService implements RetrievalEvaluat
                 safeCommand.options(),
                 dataset.cases());
         if (evaluationPort == null) {
-            return new RetrievalEvaluationReport(evaluationCommand.strategyName(), safeCommand.topK(),
+            RetrievalEvaluationReport fallbackReport = new RetrievalEvaluationReport(evaluationCommand.strategyName(), safeCommand.topK(),
                     dataset.cases().size(), 0, 0D, 0D, 0D, 1D, 0D, 0D, List.of());
+            recordRun(safeKnowledgeBaseId, safeCommand.datasetId(), fallbackReport);
+            return fallbackReport;
         }
-        return evaluationPort.evaluate(evaluationCommand);
+        RetrievalEvaluationReport report = evaluationPort.evaluate(evaluationCommand);
+        recordRun(safeKnowledgeBaseId, safeCommand.datasetId(), report);
+        return report;
+    }
+
+    @Override
+    public List<RetrievalEvaluationRunSummary> listRuns(String knowledgeBaseId, String datasetId, int limit) {
+        String safeKnowledgeBaseId = requireText(knowledgeBaseId, "knowledgeBaseId must not be blank");
+        String safeDatasetId = requireText(datasetId, "datasetId must not be blank");
+        getDataset(safeKnowledgeBaseId, safeDatasetId);
+        return runRepositoryPort.listRuns(safeKnowledgeBaseId, safeDatasetId, normalizeLimit(limit));
+    }
+
+    @Override
+    public RetrievalEvaluationRunRecord getRun(String knowledgeBaseId, String datasetId, String runId) {
+        String safeKnowledgeBaseId = requireText(knowledgeBaseId, "knowledgeBaseId must not be blank");
+        String safeDatasetId = requireText(datasetId, "datasetId must not be blank");
+        String safeRunId = requireText(runId, "runId must not be blank");
+        getDataset(safeKnowledgeBaseId, safeDatasetId);
+        return runRepositoryPort.findRun(safeKnowledgeBaseId, safeDatasetId, safeRunId)
+                .orElseThrow(() -> new IllegalArgumentException("retrieval evaluation run not found: " + safeRunId));
     }
 
     private RetrievalEvaluationDatasetPayload validate(RetrievalEvaluationDatasetPayload payload) {
@@ -104,6 +138,22 @@ public class KernelRetrievalEvaluationDatasetService implements RetrievalEvaluat
 
     private String defaultText(String value, String fallback) {
         return value == null || value.isBlank() ? Objects.requireNonNullElse(fallback, "") : value.trim();
+    }
+
+    private void recordRun(String knowledgeBaseId, String datasetId, RetrievalEvaluationReport report) {
+        try {
+            // 评测历史不能反向阻断实时评测，旧库未迁移或历史表短暂不可用时保留主链路返回。
+            runRepositoryPort.saveRun(knowledgeBaseId, datasetId, report);
+        } catch (RuntimeException ex) {
+            // 当前内核无日志端口，后续可接入低基数 observation 记录持久化失败类型。
+        }
+    }
+
+    private int normalizeLimit(int limit) {
+        if (limit <= 0) {
+            return 20;
+        }
+        return Math.min(limit, 100);
     }
 
     private String requireText(String value, String message) {

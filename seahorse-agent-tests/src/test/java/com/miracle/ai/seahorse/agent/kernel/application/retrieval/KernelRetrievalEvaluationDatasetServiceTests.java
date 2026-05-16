@@ -27,9 +27,13 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,9 +47,10 @@ class KernelRetrievalEvaluationDatasetServiceTests {
     @Test
     void shouldManageAndRunSavedEvaluationDataset() {
         InMemoryDatasetRepository repository = new InMemoryDatasetRepository();
+        InMemoryRunRepository runRepository = new InMemoryRunRepository();
         RecordingEvaluationPort evaluationPort = new RecordingEvaluationPort();
         KernelRetrievalEvaluationDatasetService service =
-                new KernelRetrievalEvaluationDatasetService(repository, evaluationPort);
+                new KernelRetrievalEvaluationDatasetService(repository, runRepository, evaluationPort);
 
         RetrievalEvaluationDataset dataset = service.upsertDataset("kb-1", new RetrievalEvaluationDatasetPayload(
                 "",
@@ -64,6 +69,15 @@ class KernelRetrievalEvaluationDatasetServiceTests {
                 });
         assertThat(service.getDataset("kb-1", dataset.datasetId()).cases()).hasSize(1);
         assertThat(report.strategyName()).isEqualTo("hybrid");
+        assertThat(service.listRuns("kb-1", dataset.datasetId(), 10))
+                .singleElement()
+                .satisfies(run -> {
+                    assertThat(run.datasetId()).isEqualTo(dataset.datasetId());
+                    assertThat(run.strategyName()).isEqualTo("hybrid");
+                    assertThat(run.recallAtK()).isEqualTo(1D);
+                });
+        assertThat(service.getRun("kb-1", dataset.datasetId(), "run-1").report().strategyName())
+                .isEqualTo("hybrid");
         assertThat(evaluationPort.lastCommand.cases()).extracting(RetrievalEvaluationCase::caseId)
                 .containsExactly("case-1");
     }
@@ -132,6 +146,39 @@ class KernelRetrievalEvaluationDatasetServiceTests {
         @Override
         public boolean deleteDataset(String knowledgeBaseId, String datasetId) {
             return datasets.remove(datasetId) != null;
+        }
+    }
+
+    private static final class InMemoryRunRepository implements RetrievalEvaluationRunRepositoryPort {
+
+        private final List<RetrievalEvaluationRunRecord> runs = new ArrayList<>();
+
+        @Override
+        public RetrievalEvaluationRunRecord saveRun(String knowledgeBaseId, String datasetId,
+                                                    RetrievalEvaluationReport report) {
+            RetrievalEvaluationRunRecord record = new RetrievalEvaluationRunRecord(
+                    "run-" + (runs.size() + 1), knowledgeBaseId, datasetId, report, Instant.EPOCH);
+            runs.add(record);
+            return record;
+        }
+
+        @Override
+        public List<RetrievalEvaluationRunSummary> listRuns(String knowledgeBaseId, String datasetId, int limit) {
+            return runs.stream()
+                    .filter(run -> run.knowledgeBaseId().equals(knowledgeBaseId))
+                    .filter(run -> run.datasetId().equals(datasetId))
+                    .limit(limit)
+                    .map(RetrievalEvaluationRunRecord::summary)
+                    .toList();
+        }
+
+        @Override
+        public Optional<RetrievalEvaluationRunRecord> findRun(String knowledgeBaseId, String datasetId, String runId) {
+            return runs.stream()
+                    .filter(run -> run.knowledgeBaseId().equals(knowledgeBaseId))
+                    .filter(run -> run.datasetId().equals(datasetId))
+                    .filter(run -> run.runId().equals(runId))
+                    .findFirst();
         }
     }
 }

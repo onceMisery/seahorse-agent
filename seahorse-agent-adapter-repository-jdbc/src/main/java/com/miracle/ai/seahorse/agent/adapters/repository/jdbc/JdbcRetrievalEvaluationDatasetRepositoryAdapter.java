@@ -24,7 +24,11 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDataset;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetSummary;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -44,17 +48,19 @@ import java.util.UUID;
  * <p>评测样本以强类型 JSON 保存，读取后仍交给内核评测服务执行，避免 Web 或仓储层直接构造检索链路。
  */
 public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
-        implements RetrievalEvaluationDatasetRepositoryPort {
+        implements RetrievalEvaluationDatasetRepositoryPort, RetrievalEvaluationRunRepositoryPort {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final JavaType caseListType;
+    private final JavaType reportType;
 
     public JdbcRetrievalEvaluationDatasetRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.caseListType = this.objectMapper.getTypeFactory()
                 .constructCollectionType(List.class, RetrievalEvaluationCase.class);
+        this.reportType = this.objectMapper.getTypeFactory().constructType(RetrievalEvaluationReport.class);
     }
 
     @Override
@@ -144,6 +150,88 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
                 """, safeKnowledgeBaseId, safeDatasetId) > 0;
     }
 
+    @Override
+    public RetrievalEvaluationRunRecord saveRun(String knowledgeBaseId, String datasetId,
+                                                RetrievalEvaluationReport report) {
+        String safeKnowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, "").trim();
+        String safeDatasetId = Objects.requireNonNullElse(datasetId, "").trim();
+        RetrievalEvaluationReport safeReport = report == null
+                ? emptyReport()
+                : report;
+        String runId = UUID.randomUUID().toString();
+        try {
+            jdbcTemplate.update("""
+                    INSERT INTO t_retrieval_evaluation_run(
+                        id, kb_id, dataset_id, strategy_name, top_k, case_count, evaluable_case_count,
+                        recall_at_k, mrr, ndcg_at_k, empty_recall_rate, avg_latency_ms, p95_latency_ms,
+                        report_json, create_time
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    runId,
+                    safeKnowledgeBaseId,
+                    safeDatasetId,
+                    safeReport.strategyName(),
+                    safeReport.topK(),
+                    safeReport.caseCount(),
+                    safeReport.evaluableCaseCount(),
+                    safeReport.recallAtK(),
+                    safeReport.mrr(),
+                    safeReport.ndcgAtK(),
+                    safeReport.emptyRecallRate(),
+                    safeReport.averageLatencyMs(),
+                    safeReport.p95LatencyMs(),
+                    reportJson(safeReport));
+        } catch (DataAccessException ex) {
+            // 历史表尚未迁移时不阻断评测链路，调用方仍可拿到本次即时报告。
+            return new RetrievalEvaluationRunRecord(runId, safeKnowledgeBaseId, safeDatasetId,
+                    safeReport, Instant.now());
+        }
+        return findRun(safeKnowledgeBaseId, safeDatasetId, runId)
+                .orElseGet(() -> new RetrievalEvaluationRunRecord(runId, safeKnowledgeBaseId, safeDatasetId,
+                        safeReport, Instant.now()));
+    }
+
+    @Override
+    public List<RetrievalEvaluationRunSummary> listRuns(String knowledgeBaseId, String datasetId, int limit) {
+        String safeKnowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, "").trim();
+        String safeDatasetId = Objects.requireNonNullElse(datasetId, "").trim();
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, kb_id, dataset_id, strategy_name, top_k, case_count, evaluable_case_count,
+                           recall_at_k, mrr, ndcg_at_k, empty_recall_rate, avg_latency_ms, p95_latency_ms,
+                           create_time
+                    FROM t_retrieval_evaluation_run
+                    WHERE kb_id = ?
+                      AND dataset_id = ?
+                    ORDER BY create_time DESC, id DESC
+                    LIMIT ?
+                    """, this::toRunSummary, safeKnowledgeBaseId, safeDatasetId, Math.max(1, limit));
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
+    @Override
+    public Optional<RetrievalEvaluationRunRecord> findRun(String knowledgeBaseId, String datasetId, String runId) {
+        String safeKnowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, "").trim();
+        String safeDatasetId = Objects.requireNonNullElse(datasetId, "").trim();
+        String safeRunId = Objects.requireNonNullElse(runId, "").trim();
+        if (safeKnowledgeBaseId.isBlank() || safeDatasetId.isBlank() || safeRunId.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, kb_id, dataset_id, report_json, create_time
+                    FROM t_retrieval_evaluation_run
+                    WHERE kb_id = ?
+                      AND dataset_id = ?
+                      AND id = ?
+                    """, this::toRunRecord, safeKnowledgeBaseId, safeDatasetId, safeRunId).stream().findFirst();
+        } catch (DataAccessException ex) {
+            return Optional.empty();
+        }
+    }
+
     private RetrievalEvaluationDatasetSummary toSummary(ResultSet rs, int rowNum) throws SQLException {
         return new RetrievalEvaluationDatasetSummary(
                 rs.getString("id"),
@@ -168,6 +256,33 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
                 instant(rs.getTimestamp("update_time")));
     }
 
+    private RetrievalEvaluationRunSummary toRunSummary(ResultSet rs, int rowNum) throws SQLException {
+        return new RetrievalEvaluationRunSummary(
+                rs.getString("id"),
+                rs.getString("kb_id"),
+                rs.getString("dataset_id"),
+                rs.getString("strategy_name"),
+                rs.getInt("top_k"),
+                rs.getInt("case_count"),
+                rs.getInt("evaluable_case_count"),
+                rs.getDouble("recall_at_k"),
+                rs.getDouble("mrr"),
+                rs.getDouble("ndcg_at_k"),
+                rs.getDouble("empty_recall_rate"),
+                rs.getDouble("avg_latency_ms"),
+                rs.getDouble("p95_latency_ms"),
+                instant(rs.getTimestamp("create_time")));
+    }
+
+    private RetrievalEvaluationRunRecord toRunRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new RetrievalEvaluationRunRecord(
+                rs.getString("id"),
+                rs.getString("kb_id"),
+                rs.getString("dataset_id"),
+                report(rs.getString("report_json")),
+                instant(rs.getTimestamp("create_time")));
+    }
+
     private List<RetrievalEvaluationCase> cases(String casesJson) {
         if (casesJson == null || casesJson.isBlank()) {
             return List.of();
@@ -186,6 +301,29 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
         } catch (JsonProcessingException ex) {
             throw new IllegalArgumentException("serialize retrieval evaluation cases failed", ex);
         }
+    }
+
+    private RetrievalEvaluationReport report(String reportJson) {
+        if (reportJson == null || reportJson.isBlank()) {
+            return emptyReport();
+        }
+        try {
+            return objectMapper.readValue(reportJson, reportType);
+        } catch (JsonProcessingException ex) {
+            return emptyReport();
+        }
+    }
+
+    private String reportJson(RetrievalEvaluationReport report) {
+        try {
+            return objectMapper.writeValueAsString(Objects.requireNonNullElse(report, emptyReport()));
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("serialize retrieval evaluation report failed", ex);
+        }
+    }
+
+    private RetrievalEvaluationReport emptyReport() {
+        return new RetrievalEvaluationReport("", 0, 0, 0, 0D, 0D, 0D, 0D, 0D, 0D, List.of());
     }
 
     private Instant instant(Timestamp timestamp) {

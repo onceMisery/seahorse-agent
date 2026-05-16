@@ -19,8 +19,11 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDataset;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -57,6 +60,18 @@ class JdbcRetrievalEvaluationDatasetRepositoryAdapterTests {
                 .get()
                 .satisfies(dataset -> assertThat(dataset.cases()).extracting(RetrievalEvaluationCase::caseId)
                         .containsExactly("case-2"));
+        RetrievalEvaluationRunRecord run = adapter.saveRun("kb-1", "dataset-1", report("hybrid"));
+        assertThat(adapter.listRuns("kb-1", "dataset-1", 10))
+                .singleElement()
+                .satisfies(summary -> {
+                    assertThat(summary.runId()).isEqualTo(run.runId());
+                    assertThat(summary.strategyName()).isEqualTo("hybrid");
+                    assertThat(summary.recallAtK()).isEqualTo(1D);
+                });
+        assertThat(adapter.findRun("kb-1", "dataset-1", run.runId()))
+                .get()
+                .satisfies(record -> assertThat(record.report().cases()).extracting(RetrievalEvaluationCaseResult::caseId)
+                        .containsExactly("case-1"));
 
         assertThat(adapter.deleteDataset("kb-1", "dataset-1")).isTrue();
         assertThat(adapter.findDataset("kb-1", "dataset-1")).isEmpty();
@@ -73,6 +88,13 @@ class JdbcRetrievalEvaluationDatasetRepositoryAdapterTests {
                 List.of("chunk-1"), null, null);
     }
 
+    private RetrievalEvaluationReport report(String strategyName) {
+        return new RetrievalEvaluationReport(strategyName, 3, 1, 1, 1D, 1D, 1D, 0D, 12D, 12D,
+                List.of(new RetrievalEvaluationCaseResult(
+                        "case-1", "问题", List.of("chunk-1"), List.of("doc-1"), 1, 1,
+                        1D, 1D, 1D, 12L, "SUCCESS", "")));
+    }
+
     private DriverManagerDataSource dataSource() {
         return new DriverManagerDataSource(
                 "jdbc:h2:mem:retrieval-evaluation-dataset;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
@@ -81,6 +103,7 @@ class JdbcRetrievalEvaluationDatasetRepositoryAdapterTests {
     private void createTable(DriverManagerDataSource dataSource) {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_retrieval_evaluation_dataset");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_retrieval_evaluation_run");
         jdbcTemplate.execute("""
                 CREATE TABLE t_retrieval_evaluation_dataset (
                     id VARCHAR(64) PRIMARY KEY,
@@ -92,6 +115,25 @@ class JdbcRetrievalEvaluationDatasetRepositoryAdapterTests {
                     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     deleted SMALLINT NOT NULL DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_retrieval_evaluation_run (
+                    id VARCHAR(64) PRIMARY KEY,
+                    kb_id VARCHAR(64) NOT NULL,
+                    dataset_id VARCHAR(64) NOT NULL,
+                    strategy_name VARCHAR(128) NOT NULL,
+                    top_k INTEGER NOT NULL DEFAULT 0,
+                    case_count INTEGER NOT NULL DEFAULT 0,
+                    evaluable_case_count INTEGER NOT NULL DEFAULT 0,
+                    recall_at_k DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    mrr DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    ndcg_at_k DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    empty_recall_rate DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    avg_latency_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    p95_latency_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    report_json CLOB NOT NULL,
+                    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """);
     }

@@ -25,6 +25,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunSummary;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
@@ -61,6 +63,8 @@ class SeahorseRetrievalEvaluationDatasetControllerTests {
         when(datasetPort.upsertDataset(eq("kb-1"), any())).thenReturn(dataset());
         when(datasetPort.deleteDataset("kb-1", "dataset-1")).thenReturn(true);
         when(datasetPort.evaluateDataset(eq("kb-1"), any())).thenReturn(report());
+        when(datasetPort.listRuns("kb-1", "dataset-1", 20)).thenReturn(List.of(runSummary()));
+        when(datasetPort.getRun("kb-1", "dataset-1", "run-1")).thenReturn(runRecord());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseRetrievalEvaluationDatasetController(datasetPort)).build();
 
@@ -96,6 +100,16 @@ class SeahorseRetrievalEvaluationDatasetControllerTests {
                         .content(json(Map.of("strategyName", "hybrid", "topK", 3))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.strategyName").value("hybrid"));
+
+        mvc.perform(get("/knowledge-base/kb-1/retrieval-evaluation-datasets/dataset-1/runs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].runId").value("run-1"))
+                .andExpect(jsonPath("$.data[0].recallAtK").value(1D));
+
+        mvc.perform(get("/knowledge-base/kb-1/retrieval-evaluation-datasets/dataset-1/runs/run-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.runId").value("run-1"))
+                .andExpect(jsonPath("$.data.report.strategyName").value("hybrid"));
 
         mvc.perform(delete("/knowledge-base/kb-1/retrieval-evaluation-datasets/dataset-1"))
                 .andExpect(status().isOk())
@@ -139,5 +153,13 @@ class SeahorseRetrievalEvaluationDatasetControllerTests {
 
     private RetrievalEvaluationReport report() {
         return new RetrievalEvaluationReport("hybrid", 3, 1, 1, 1D, 1D, 1D, 0D, 10D, 10D, List.of());
+    }
+
+    private RetrievalEvaluationRunSummary runSummary() {
+        return runRecord().summary();
+    }
+
+    private RetrievalEvaluationRunRecord runRecord() {
+        return new RetrievalEvaluationRunRecord("run-1", "kb-1", "dataset-1", report(), Instant.EPOCH);
     }
 }

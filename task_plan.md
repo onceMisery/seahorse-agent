@@ -22,7 +22,7 @@
 - M3 尚未完成：无。
 - M4 已完成最小闭环：新增 `RrfFusionPostProcessorFeature`、`RerankPostProcessorFeature` 和 `FinalTruncatePostProcessorFeature`，支持通道排名融合、重复 chunk 去重、融合分记录、Rerank 候选截断、异常/空结果降级、`rerankScore` 回写和 finalTopK 截断。
 - M4 后续增强进入 M6 收口：Rerank 超时隔离、通道权重配置化和观测指标。
-- P5 已完成最小闭环：新增检索评测入站端口、内核评测服务和 Web 触发接口，支持临时评测集计算 Recall@K、MRR、nDCG@K、空召回率和延迟指标。
+- P5 已完成最小闭环：新增检索评测入站端口、内核评测服务和 Web 触发接口，支持临时评测集计算 Recall@K、MRR、nDCG@K、空召回率和延迟指标；评测集与评测运行历史已具备知识库级持久化入口。
 
 ## 硬约束
 
@@ -270,6 +270,7 @@
 实施切片：
 
 - [complete] D1 新增检索评测集管理最小闭环：内核端口/服务、JDBC 持久化、Web 管理 API 和按评测集运行既有评测服务。
+- [complete] D2 新增评测运行历史持久化：按已保存评测集运行后沉淀 `RetrievalEvaluationReport`，提供运行列表/详情 API 和 JDBC 汇总指标查询。
 
 验证方式：
 

@@ -33,4 +33,8 @@ public interface RetrievalEvaluationDatasetInboundPort {
     boolean deleteDataset(String knowledgeBaseId, String datasetId);
 
     RetrievalEvaluationReport evaluateDataset(String knowledgeBaseId, RetrievalEvaluationDatasetRunCommand command);
+
+    List<RetrievalEvaluationRunSummary> listRuns(String knowledgeBaseId, String datasetId, int limit);
+
+    RetrievalEvaluationRunRecord getRun(String knowledgeBaseId, String datasetId, String runId);
 }
