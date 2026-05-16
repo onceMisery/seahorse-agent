@@ -47,6 +47,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
@@ -80,6 +81,7 @@ class MetadataRetrievalFilterTests {
     void shouldRecordRejectedMetadataFilterObservationBeforeThrowing() {
         DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
         RecordingObservationPort observationPort = new RecordingObservationPort();
+        RecordingSchemaUsageReportRepository schemaUsageRepository = new RecordingSchemaUsageReportRepository();
         KernelMultiChannelRetrievalEngine engine = new KernelMultiChannelRetrievalEngine(
                 registry,
                 Runnable::run,
@@ -87,7 +89,8 @@ class MetadataRetrievalFilterTests {
                 (tenantId, knowledgeBaseId) -> schema(true),
                 new DefaultMetadataFilterCompiler(),
                 KernelRagTraceRecorder.noop(),
-                observationPort);
+                observationPort,
+                schemaUsageRepository);
         RetrievalFilter filter = RetrievalFilter.builder()
                 .system(SystemRetrievalFilter.builder().tenantId("tenant-a").knowledgeBaseIds(List.of("kb-a")).build())
                 .metadataConditions(List.of(new MetadataCondition("unknown", MetadataOperator.EQ, "HR")))
@@ -107,6 +110,8 @@ class MetadataRetrievalFilterTests {
                         .containsEntry("reason", "UNREGISTERED_FIELD")
                         .containsEntry("success", "false")
                         .containsEntry("exception", "IllegalArgumentException"));
+        assertThat(schemaUsageRepository.rejectedFieldKeys).containsExactly("unknown");
+        assertThat(schemaUsageRepository.rejectedReason).isEqualTo("UNREGISTERED_FIELD");
     }
 
     @Test
@@ -226,6 +231,7 @@ class MetadataRetrievalFilterTests {
         RecordingSearchChannelFeature channel = new RecordingSearchChannelFeature();
         MetadataGuardPostProcessorFeature guard = new MetadataGuardPostProcessorFeature();
         RecordingObservationPort observationPort = new RecordingObservationPort();
+        RecordingSchemaUsageReportRepository schemaUsageRepository = new RecordingSchemaUsageReportRepository();
         registry.register(new ExtensionDescriptor(channel.name(), SearchChannelFeature.class,
                 FeatureType.SEARCH_CHANNEL, 1, true), channel);
         registry.register(new ExtensionDescriptor(guard.name(), SearchResultPostProcessorFeature.class,
@@ -237,7 +243,8 @@ class MetadataRetrievalFilterTests {
                 (tenantId, knowledgeBaseId) -> schema(false),
                 new DefaultMetadataFilterCompiler(),
                 KernelRagTraceRecorder.noop(),
-                observationPort);
+                observationPort,
+                schemaUsageRepository);
         RetrievalFilter filter = RetrievalFilter.builder()
                 .system(SystemRetrievalFilter.builder().tenantId("tenant-a").knowledgeBaseIds(List.of("kb-a")).build())
                 .metadataConditions(List.of(new MetadataCondition("department", MetadataOperator.EQ, "HR")))
@@ -282,6 +289,9 @@ class MetadataRetrievalFilterTests {
                         .containsEntry("outputCount", "1")
                         .containsEntry("filteredCount", "1")
                         .containsEntry("success", "true"));
+        assertThat(schemaUsageRepository.compiledFieldKeys).containsExactly("department");
+        assertThat(schemaUsageRepository.guardOnlyFieldKeys).containsExactly("department");
+        assertThat(schemaUsageRepository.schemaVersion).isEqualTo(1);
     }
 
     @Test
@@ -451,6 +461,38 @@ class MetadataRetrievalFilterTests {
         @Override
         public void recordEvent(ObservationEvent event) {
             events.add(event);
+        }
+    }
+
+    private static final class RecordingSchemaUsageReportRepository
+            implements MetadataSchemaUsageReportRepositoryPort {
+
+        private List<String> compiledFieldKeys = List.of();
+        private List<String> guardOnlyFieldKeys = List.of();
+        private List<String> rejectedFieldKeys = List.of();
+        private Integer schemaVersion;
+        private String rejectedReason = "";
+
+        @Override
+        public void recordCompiled(String tenantId,
+                                   String knowledgeBaseId,
+                                   Integer schemaVersion,
+                                   List<String> fieldKeys,
+                                   List<String> guardOnlyFieldKeys) {
+            this.schemaVersion = schemaVersion;
+            this.compiledFieldKeys = List.copyOf(fieldKeys);
+            this.guardOnlyFieldKeys = List.copyOf(guardOnlyFieldKeys);
+        }
+
+        @Override
+        public void recordRejected(String tenantId,
+                                   String knowledgeBaseId,
+                                   Integer schemaVersion,
+                                   List<String> fieldKeys,
+                                   String rejectReason) {
+            this.schemaVersion = schemaVersion;
+            this.rejectedFieldKeys = List.copyOf(fieldKeys);
+            this.rejectedReason = rejectReason;
         }
     }
 

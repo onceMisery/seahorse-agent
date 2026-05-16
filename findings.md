@@ -172,3 +172,9 @@
 - 当前没有知识库级检索策略持久化边界，先用内核默认模板端口完成管理端可读闭环，比直接改具体检索后端更稳。
 - 模板只应表达 `RetrievalOptions`，不应该携带原始 metadata Map；实际过滤条件仍由请求侧构造 `RetrievalFilter` 并进入 Filter Compiler。
 - 混合精排模板可以启用 `enableRerank`，但具体 `rerankModel` 应由管理端或知识库配置补齐，避免内置模板绑定某个外部模型提供方。
+
+## 2026-05-16 C1 Schema 使用情况报表发现
+
+- 直接复用 `ObservationPort` 不足以支撑 Schema 使用情况管理查询，因为当前观测适配器只有 noop/micrometer，没有可查询的事件持久化。
+- 更稳妥的做法是保留 `retrieval.metadata.filter.compiled/rejected` 作为观测证据，同时增加专用 `MetadataSchemaUsageReportRepositoryPort` 写入轻量事件快照，避免污染通用观测契约。
+- 使用“每个字段一行、按 requestId 聚合”的轻量事件表，可以在 PostgreSQL 与 H2 上稳定统计字段使用频次、guard-only 命中率和拒绝率，不依赖 JSON 拆分或数据库方言特性。

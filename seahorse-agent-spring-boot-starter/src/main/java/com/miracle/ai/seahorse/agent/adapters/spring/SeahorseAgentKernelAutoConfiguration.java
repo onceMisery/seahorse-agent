@@ -63,6 +63,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQ
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQuarantineService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataReviewService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataSchemaService;
+import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataSchemaUsageService;
 import com.miracle.ai.seahorse.agent.kernel.application.model.KernelModelRoutingService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationService;
@@ -126,6 +127,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaUsageInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
@@ -195,6 +197,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExt
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelHealthPort;
@@ -527,13 +530,15 @@ public class SeahorseAgentKernelAutoConfiguration {
             ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
             ObjectProvider<MetadataFilterCompiler> metadataFilterCompiler,
             ObjectProvider<KernelRagTraceRecorder> traceRecorder,
-            ObjectProvider<ObservationPort> observationPort) {
+            ObjectProvider<ObservationPort> observationPort,
+            ObjectProvider<MetadataSchemaUsageReportRepositoryPort> schemaUsageReportRepositoryPort) {
         return new KernelMultiChannelRetrievalEngine(extensionRegistry,
                 retrievalExecutor.getIfAvailable(() -> Runnable::run), activationContext,
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
                 metadataFilterCompiler.getIfAvailable(DefaultMetadataFilterCompiler::new),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
-                observationPort.getIfAvailable());
+                observationPort.getIfAvailable(),
+                schemaUsageReportRepositoryPort.getIfAvailable(MetadataSchemaUsageReportRepositoryPort::empty));
     }
 
     @Bean
@@ -885,6 +890,14 @@ public class SeahorseAgentKernelAutoConfiguration {
             MetadataQualityReportRepositoryPort reportRepositoryPort,
             ObjectProvider<ObservationPort> observationPort) {
         return new KernelMetadataQualityService(reportRepositoryPort, observationPort.getIfAvailable());
+    }
+
+    @Bean
+    @ConditionalOnBean(MetadataSchemaUsageReportRepositoryPort.class)
+    @ConditionalOnMissingBean(MetadataSchemaUsageInboundPort.class)
+    public KernelMetadataSchemaUsageService seahorseMetadataSchemaUsageInboundPort(
+            MetadataSchemaUsageReportRepositoryPort reportRepositoryPort) {
+        return new KernelMetadataSchemaUsageService(reportRepositoryPort);
     }
 
     @Bean

@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchResultPostPr
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
@@ -74,6 +75,7 @@ public class KernelMultiChannelRetrievalEngine {
     private final MetadataFilterCompiler metadataFilterCompiler;
     private final KernelRagTraceRecorder traceRecorder;
     private final ObservationPort observationPort;
+    private final MetadataSchemaUsageReportRepositoryPort schemaUsageRepositoryPort;
 
     public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
                                              Executor retrievalExecutor,
@@ -108,6 +110,18 @@ public class KernelMultiChannelRetrievalEngine {
                                              MetadataFilterCompiler metadataFilterCompiler,
                                              KernelRagTraceRecorder traceRecorder,
                                              ObservationPort observationPort) {
+        this(extensionRegistry, retrievalExecutor, activationContext, schemaRegistryPort, metadataFilterCompiler,
+                traceRecorder, observationPort, MetadataSchemaUsageReportRepositoryPort.empty());
+    }
+
+    public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
+                                             Executor retrievalExecutor,
+                                             FeatureActivationContext activationContext,
+                                             MetadataSchemaRegistryPort schemaRegistryPort,
+                                             MetadataFilterCompiler metadataFilterCompiler,
+                                             KernelRagTraceRecorder traceRecorder,
+                                             ObservationPort observationPort,
+                                             MetadataSchemaUsageReportRepositoryPort schemaUsageRepositoryPort) {
         this.extensionRegistry = Objects.requireNonNull(extensionRegistry, "extensionRegistry must not be null");
         this.retrievalExecutor = Objects.requireNonNull(retrievalExecutor, "retrievalExecutor must not be null");
         this.activationContext = Objects.requireNonNullElse(activationContext, FeatureActivationContext.empty());
@@ -116,6 +130,8 @@ public class KernelMultiChannelRetrievalEngine {
                 DefaultMetadataFilterCompiler::new);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
         this.observationPort = observationPort;
+        this.schemaUsageRepositoryPort = Objects.requireNonNullElseGet(schemaUsageRepositoryPort,
+                MetadataSchemaUsageReportRepositoryPort::empty);
     }
 
     /**
@@ -399,7 +415,7 @@ public class KernelMultiChannelRetrievalEngine {
                                               MetadataSchema schema,
                                               RetrievalFilter filter,
                                               RuntimeException ex) {
-        if (observationPort == null || filter == null || filter.metadataConditions().isEmpty()) {
+        if (filter == null || filter.metadataConditions().isEmpty()) {
             return;
         }
         try {
@@ -408,6 +424,15 @@ public class KernelMultiChannelRetrievalEngine {
                     .filter(fieldKey -> !fieldKey.isBlank())
                     .distinct()
                     .toList();
+            schemaUsageRepositoryPort.recordRejected(
+                    tenantId,
+                    knowledgeBaseId,
+                    schema == null ? null : schema.schemaVersion(),
+                    fieldKeys,
+                    metadataFilterRejectReason(ex));
+            if (observationPort == null) {
+                return;
+            }
             Map<String, String> attributes = new java.util.LinkedHashMap<>();
             attributes.put("tenantId", Objects.requireNonNullElse(tenantId, ""));
             attributes.put("knowledgeBaseId", Objects.requireNonNullElse(knowledgeBaseId, ""));
@@ -445,8 +470,7 @@ public class KernelMultiChannelRetrievalEngine {
                                            String knowledgeBaseId,
                                            MetadataSchema schema,
                                            CompiledMetadataFilter compiledFilter) {
-        if (observationPort == null || compiledFilter == null
-                || compiledFilter.sourceFilter().metadataConditions().isEmpty()) {
+        if (compiledFilter == null || compiledFilter.sourceFilter().metadataConditions().isEmpty()) {
             return;
         }
         try {
@@ -460,6 +484,15 @@ public class KernelMultiChannelRetrievalEngine {
                     .filter(fieldKey -> !fieldKey.isBlank())
                     .distinct()
                     .toList();
+            schemaUsageRepositoryPort.recordCompiled(
+                    tenantId,
+                    knowledgeBaseId,
+                    schema == null ? null : schema.schemaVersion(),
+                    fieldKeys,
+                    guardOnlyFieldKeys);
+            if (observationPort == null) {
+                return;
+            }
             // 该事件为后续 Schema 使用情况报表提供原始证据，不影响检索下推和兜底过滤语义。
             observationPort.recordEvent(new ObservationEvent(EVENT_METADATA_FILTER_COMPILED, null, Map.of(
                     "tenantId", Objects.requireNonNullElse(tenantId, ""),

@@ -52,6 +52,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaUsageInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
@@ -112,6 +113,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecor
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldCapabilityRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRecord;
@@ -727,6 +730,27 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.delta.reviewCorrectionRateDelta").value(0.1))
                 .andExpect(jsonPath("$.data.fieldDeltas[0].fieldKey").value("department"))
                 .andExpect(jsonPath("$.data.fieldDeltas[0].correctionRateDelta").value(0.2));
+    }
+
+    @Test
+    void shouldKeepMetadataSchemaUsageReportContract() throws Exception {
+        MetadataSchemaUsageInboundPort usagePort = mock(MetadataSchemaUsageInboundPort.class);
+        when(usagePort.report("tenant-1", "kb-1", 2)).thenReturn(metadataSchemaUsageReport());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMetadataSchemaUsageController(usagePort)).build();
+
+        mvc.perform(get("/knowledge-base/kb-1/metadata-schema/usage-report")
+                        .param("tenantId", "tenant-1")
+                        .param("schemaVersion", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.schemaVersion").value(2))
+                .andExpect(jsonPath("$.data.totalCompiledRequests").value(4))
+                .andExpect(jsonPath("$.data.totalRejectedRequests").value(1))
+                .andExpect(jsonPath("$.data.guardOnlyRequestCount").value(1))
+                .andExpect(jsonPath("$.data.fields[0].fieldKey").value("department"))
+                .andExpect(jsonPath("$.data.fields[0].usageCount").value(3));
     }
 
     @Test
@@ -1353,6 +1377,22 @@ class SeahorseWebApiContractTests {
                 new MetadataQualityComparisonDelta(0, 1, 0.1D, -0.05D, 0.1D, 0.1D, 0, 0, 0),
                 List.of(new MetadataFieldCoverageDelta("department", "部门",
                         1, 0, 1, 1, 0.25D, -0.16666666666666669D, 0.2D)));
+    }
+
+    private static MetadataSchemaUsageReport metadataSchemaUsageReport() {
+        return new MetadataSchemaUsageReport(
+                "tenant-1",
+                "kb-1",
+                2,
+                4L,
+                1L,
+                1L,
+                0.25D,
+                0.2D,
+                List.of(
+                        new MetadataSchemaUsageFieldRecord("department", "部门", 3L, 0L, 0L, 0D, 0D),
+                        new MetadataSchemaUsageFieldRecord("owner", "负责人", 1L, 1L, 1L, 1D, 0.5D)),
+                Instant.parse("2026-05-16T10:00:00Z"));
     }
 
     private static MetadataReviewRecord metadataReview(String id, MetadataReviewStatus status) {

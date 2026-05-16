@@ -255,3 +255,13 @@
 - starter 自动装配 `KernelRetrievalStrategyTemplateService` 并暴露 `RetrievalStrategyTemplateInboundPort`。
 - 补充 `KernelRetrievalStrategyTemplateServiceTests`、`SeahorseWebApiContractTests` 和 `SeahorseAgentKernelAutoConfigurationTests` 覆盖模板内容、Web 契约和自动装配。
 - 首次验证因沙箱无法写入 `C:\user-data\.m2\repo\org\bouncycastle\bcutil-jdk18on\resolver-status.properties` 失败；提升权限后同一 Maven 命令通过，32 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 C1 Schema 使用情况报表
+
+- 新增 `MetadataSchemaUsageInboundPort`、`KernelMetadataSchemaUsageService`、`MetadataSchemaUsageReportRepositoryPort` 以及字段级/总览报表模型，作为管理端查询 Schema 使用情况的统一入口。
+- `KernelMultiChannelRetrievalEngine` 在 metadata filter 编译成功或拒绝时，除保留原有 `ObservationPort` 事件外，同步写入专用 Schema 使用快照；统计写入失败不会反向影响检索主链路。
+- `JdbcMetadataGovernanceRepositoryAdapter` 新增 `t_metadata_schema_usage_log` 写入与聚合查询实现，按请求维度统计总编译次数、拒绝次数、guard-only 请求数，并按字段输出使用频次、guard-only 比例和拒绝率。
+- `metadata-governance-postgresql.sql` 新增 `t_metadata_schema_usage_log` 表、索引以及完整 `COMMENT ON TABLE/COLUMN` 注释，满足治理 DDL 约束。
+- 新增 `SeahorseMetadataSchemaUsageController`，暴露 `GET /knowledge-base/{kb-id}/metadata-schema/usage-report?tenantId=...&schemaVersion=...`。
+- 补充 `MetadataRetrievalFilterTests`、`KernelMetadataSchemaUsageServiceTests`、`JdbcMetadataSchemaUsageReportAdapterTests`、`SeahorseWebApiContractTests`、`SeahorseAgentKernelAutoConfigurationTests`、`SeahorseAgentNativeAdapterAutoConfigurationTests`，覆盖快照写入、JDBC 聚合、Web 契约和 starter 自动装配。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=MetadataRetrievalFilterTests,KernelMetadataSchemaUsageServiceTests,JdbcMetadataSchemaUsageReportAdapterTests,SeahorseWebApiContractTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，53 个测试成功，reactor `BUILD SUCCESS`。

@@ -73,6 +73,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndex
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncStatusRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageFieldRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -98,7 +101,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         MetadataQualityReportRepositoryPort, MetadataReviewManagementRepositoryPort,
         MetadataQuarantineManagementRepositoryPort, MetadataSchemaManagementRepositoryPort,
         MetadataDictionaryManagementRepositoryPort, MetadataExtractionResultManagementRepositoryPort,
-        MetadataSchemaIndexStatusPort {
+        MetadataSchemaIndexStatusPort, MetadataSchemaUsageReportRepositoryPort {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
@@ -106,6 +109,8 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     };
     private static final TypeReference<List<Map<String, Object>>> MAP_LIST_TYPE = new TypeReference<>() {
     };
+    private static final String SCHEMA_USAGE_EVENT_COMPILED = "COMPILED";
+    private static final String SCHEMA_USAGE_EVENT_REJECTED = "REJECTED";
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -989,6 +994,110 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 safeJob.skippedDocuments(), safeJob.reviewDocuments(), safeJob.quarantineDocuments(),
                 json(safeJob.failures()), safeJob.operator(), Timestamp.from(safeJob.updateTime()),
                 safeJob.jobId());
+    }
+
+    @Override
+    public void recordCompiled(String tenantId,
+                               String knowledgeBaseId,
+                               Integer schemaVersion,
+                               List<String> fieldKeys,
+                               List<String> guardOnlyFieldKeys) {
+        recordSchemaUsage(tenantId, knowledgeBaseId, schemaVersion, fieldKeys, guardOnlyFieldKeys,
+                SCHEMA_USAGE_EVENT_COMPILED, "");
+    }
+
+    @Override
+    public void recordRejected(String tenantId,
+                               String knowledgeBaseId,
+                               Integer schemaVersion,
+                               List<String> fieldKeys,
+                               String rejectReason) {
+        recordSchemaUsage(tenantId, knowledgeBaseId, schemaVersion, fieldKeys, List.of(),
+                SCHEMA_USAGE_EVENT_REJECTED, rejectReason);
+    }
+
+    @Override
+    public MetadataSchemaUsageReport report(String tenantId, String knowledgeBaseId, Integer schemaVersion) {
+        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
+        String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
+        Integer safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? null : schemaVersion;
+        if (blank(safeTenantId) || blank(safeKbId)) {
+            return MetadataSchemaUsageReport.empty(safeTenantId, safeKbId, safeSchemaVersion);
+        }
+        try {
+            SqlWhere where = schemaUsageWhere(safeTenantId, safeKbId, safeSchemaVersion);
+            long totalCompiledRequests = countLong("""
+                    SELECT COUNT(DISTINCT request_id)
+                    FROM t_metadata_schema_usage_log
+                    """ + where.sql() + """
+                    AND event_type = 'COMPILED'
+                    """, where.args());
+            long totalRejectedRequests = countLong("""
+                    SELECT COUNT(DISTINCT request_id)
+                    FROM t_metadata_schema_usage_log
+                    """ + where.sql() + """
+                    AND event_type = 'REJECTED'
+                    """, where.args());
+            long guardOnlyRequestCount = countLong("""
+                    SELECT COUNT(DISTINCT request_id)
+                    FROM t_metadata_schema_usage_log
+                    """ + where.sql() + """
+                    AND event_type = 'COMPILED'
+                    AND guard_only = 1
+                    """, where.args());
+
+            List<MetadataSchemaUsageAggregate> aggregates = jdbcTemplate.query("""
+                    SELECT field_key,
+                           SUM(CASE WHEN event_type = 'COMPILED' THEN 1 ELSE 0 END) AS usage_count,
+                           SUM(CASE WHEN event_type = 'COMPILED' AND guard_only = 1 THEN 1 ELSE 0 END)
+                               AS guard_only_count,
+                           SUM(CASE WHEN event_type = 'REJECTED' THEN 1 ELSE 0 END) AS rejected_count
+                    FROM t_metadata_schema_usage_log
+                    """ + where.sql() + """
+                    GROUP BY field_key
+                    """, (rs, rowNum) -> new MetadataSchemaUsageAggregate(
+                            rs.getString("field_key"),
+                            rs.getLong("usage_count"),
+                            rs.getLong("guard_only_count"),
+                            rs.getLong("rejected_count")),
+                    where.args().toArray());
+            Map<String, MetadataSchemaUsageAggregate> aggregateByField = new LinkedHashMap<>();
+            for (MetadataSchemaUsageAggregate aggregate : aggregates) {
+                aggregateByField.put(aggregate.fieldKey(), aggregate);
+            }
+
+            LinkedHashMap<String, String> displayNames = new LinkedHashMap<>();
+            for (MetadataSchemaFieldRecord field : listSchemaFields(safeTenantId, safeKbId)) {
+                displayNames.putIfAbsent(field.fieldKey(), field.displayName());
+            }
+            for (String fieldKey : aggregateByField.keySet()) {
+                displayNames.putIfAbsent(fieldKey, fieldKey);
+            }
+
+            List<MetadataSchemaUsageFieldRecord> fields = displayNames.entrySet().stream()
+                    .map(entry -> toSchemaUsageFieldRecord(entry.getKey(), entry.getValue(),
+                            aggregateByField.get(entry.getKey())))
+                    .sorted(java.util.Comparator
+                            .comparingLong(MetadataSchemaUsageFieldRecord::usageCount).reversed()
+                            .thenComparingLong(MetadataSchemaUsageFieldRecord::rejectedCount).reversed()
+                            .thenComparingLong(MetadataSchemaUsageFieldRecord::guardOnlyCount).reversed()
+                            .thenComparing(MetadataSchemaUsageFieldRecord::fieldKey))
+                    .toList();
+
+            return new MetadataSchemaUsageReport(
+                    safeTenantId,
+                    safeKbId,
+                    safeSchemaVersion,
+                    totalCompiledRequests,
+                    totalRejectedRequests,
+                    guardOnlyRequestCount,
+                    ratio(guardOnlyRequestCount, totalCompiledRequests),
+                    ratio(totalRejectedRequests, totalCompiledRequests + totalRejectedRequests),
+                    fields,
+                    Instant.now());
+        } catch (DataAccessException ex) {
+            return MetadataSchemaUsageReport.empty(safeTenantId, safeKbId, safeSchemaVersion);
+        }
     }
 
     @Override
@@ -1946,6 +2055,90 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
     }
 
+    private void recordSchemaUsage(String tenantId,
+                                   String knowledgeBaseId,
+                                   Integer schemaVersion,
+                                   List<String> fieldKeys,
+                                   List<String> guardOnlyFieldKeys,
+                                   String eventType,
+                                   String rejectReason) {
+        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
+        String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
+        if (blank(safeTenantId) || blank(safeKbId)) {
+            return;
+        }
+        List<String> safeFieldKeys = normalizedFieldKeys(fieldKeys);
+        if (safeFieldKeys.isEmpty()) {
+            return;
+        }
+        Set<String> safeGuardOnlyFieldKeys = Set.copyOf(normalizedFieldKeys(guardOnlyFieldKeys));
+        int safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? 1 : schemaVersion;
+        String requestId = UUID.randomUUID().toString();
+        Instant now = Instant.now();
+        List<Object[]> batchArgs = new ArrayList<>(safeFieldKeys.size());
+        for (String fieldKey : safeFieldKeys) {
+            batchArgs.add(new Object[]{
+                    UUID.randomUUID().toString(),
+                    requestId,
+                    safeTenantId,
+                    safeKbId,
+                    safeSchemaVersion,
+                    fieldKey,
+                    Objects.requireNonNullElse(eventType, SCHEMA_USAGE_EVENT_COMPILED),
+                    flag(safeGuardOnlyFieldKeys.contains(fieldKey)),
+                    Objects.requireNonNullElse(rejectReason, ""),
+                    Timestamp.from(now)
+            });
+        }
+        jdbcTemplate.batchUpdate("""
+                INSERT INTO t_metadata_schema_usage_log(
+                    id, request_id, tenant_id, kb_id, schema_version, field_key,
+                    event_type, guard_only, reject_reason, create_time
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, batchArgs);
+    }
+
+    private SqlWhere schemaUsageWhere(String tenantId, String knowledgeBaseId, Integer schemaVersion) {
+        StringBuilder sql = new StringBuilder("""
+                WHERE tenant_id = ?
+                  AND kb_id = ?
+                """);
+        List<Object> args = new ArrayList<>();
+        args.add(tenantId);
+        args.add(knowledgeBaseId);
+        if (schemaVersion != null && schemaVersion > 0) {
+            sql.append(" AND schema_version = ?");
+            args.add(schemaVersion);
+        }
+        return new SqlWhere(sql.toString(), args);
+    }
+
+    private MetadataSchemaUsageFieldRecord toSchemaUsageFieldRecord(String fieldKey,
+                                                                    String displayName,
+                                                                    MetadataSchemaUsageAggregate aggregate) {
+        MetadataSchemaUsageAggregate safeAggregate = aggregate == null
+                ? new MetadataSchemaUsageAggregate(fieldKey, 0L, 0L, 0L)
+                : aggregate;
+        long usageCount = safeAggregate.usageCount();
+        long rejectedCount = safeAggregate.rejectedCount();
+        return new MetadataSchemaUsageFieldRecord(
+                fieldKey,
+                displayName,
+                usageCount,
+                safeAggregate.guardOnlyCount(),
+                rejectedCount,
+                ratio(safeAggregate.guardOnlyCount(), usageCount),
+                ratio(rejectedCount, usageCount + rejectedCount));
+    }
+
+    private List<String> normalizedFieldKeys(List<String> fieldKeys) {
+        return Objects.requireNonNullElse(fieldKeys, List.<String>of()).stream()
+                .map(value -> Objects.requireNonNullElse(value, "").trim())
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
+    }
+
     private MetadataSchemaFieldRecord toSchemaFieldRecord(ResultSet rs, int rowNum) throws SQLException {
         return new MetadataSchemaFieldRecord(
                 rs.getString("id"),
@@ -2258,6 +2451,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         return denominator <= 0 ? 0D : (double) numerator / (double) denominator;
     }
 
+    private double ratio(long numerator, long denominator) {
+        return denominator <= 0L ? 0D : (double) numerator / (double) denominator;
+    }
+
     private String text(Object value, String defaultValue) {
         String text = Objects.toString(value, "");
         return text.isBlank() ? defaultValue : text;
@@ -2368,6 +2565,21 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     private record LowConfidenceStats(int lowConfidenceFields, int evaluatedFields) {
+    }
+
+    private record MetadataSchemaUsageAggregate(
+            String fieldKey,
+            long usageCount,
+            long guardOnlyCount,
+            long rejectedCount
+    ) {
+
+        private MetadataSchemaUsageAggregate {
+            fieldKey = Objects.requireNonNullElse(fieldKey, "");
+            usageCount = Math.max(0L, usageCount);
+            guardOnlyCount = Math.max(0L, guardOnlyCount);
+            rejectedCount = Math.max(0L, rejectedCount);
+        }
     }
 
     private record ChunkMetadataRow(String id, String metadataJson) {
