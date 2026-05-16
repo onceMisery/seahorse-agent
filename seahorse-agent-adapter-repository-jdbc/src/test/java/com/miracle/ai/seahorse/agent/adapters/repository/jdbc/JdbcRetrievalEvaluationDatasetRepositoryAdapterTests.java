@@ -20,10 +20,13 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCaseResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDataset;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategyDelta;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -72,6 +75,18 @@ class JdbcRetrievalEvaluationDatasetRepositoryAdapterTests {
                 .get()
                 .satisfies(record -> assertThat(record.report().cases()).extracting(RetrievalEvaluationCaseResult::caseId)
                         .containsExactly("case-1"));
+        RetrievalEvaluationComparisonRecord comparison = adapter.saveComparison("kb-1", "dataset-1",
+                comparisonReport());
+        assertThat(adapter.listComparisons("kb-1", "dataset-1", 10))
+                .singleElement()
+                .satisfies(summary -> {
+                    assertThat(summary.comparisonId()).isEqualTo(comparison.comparisonId());
+                    assertThat(summary.winnerStrategyName()).isEqualTo("candidate");
+                });
+        assertThat(adapter.findComparison("kb-1", "dataset-1", comparison.comparisonId()))
+                .get()
+                .satisfies(record -> assertThat(record.report().deltas()).extracting(
+                        RetrievalEvaluationStrategyDelta::strategyName).containsExactly("candidate"));
 
         assertThat(adapter.deleteDataset("kb-1", "dataset-1")).isTrue();
         assertThat(adapter.findDataset("kb-1", "dataset-1")).isEmpty();
@@ -95,6 +110,15 @@ class JdbcRetrievalEvaluationDatasetRepositoryAdapterTests {
                         1D, 1D, 1D, 12L, "SUCCESS", "")));
     }
 
+    private RetrievalEvaluationComparisonReport comparisonReport() {
+        return new RetrievalEvaluationComparisonReport(
+                "baseline",
+                "candidate",
+                List.of(report("baseline"), report("candidate")),
+                List.of(new RetrievalEvaluationStrategyDelta("candidate", 0.1D, 0.1D, 0.1D,
+                        0D, 1D, 1D)));
+    }
+
     private DriverManagerDataSource dataSource() {
         return new DriverManagerDataSource(
                 "jdbc:h2:mem:retrieval-evaluation-dataset;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
@@ -104,6 +128,7 @@ class JdbcRetrievalEvaluationDatasetRepositoryAdapterTests {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_retrieval_evaluation_dataset");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_retrieval_evaluation_run");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_retrieval_evaluation_comparison");
         jdbcTemplate.execute("""
                 CREATE TABLE t_retrieval_evaluation_dataset (
                     id VARCHAR(64) PRIMARY KEY,
@@ -132,6 +157,19 @@ class JdbcRetrievalEvaluationDatasetRepositoryAdapterTests {
                     empty_recall_rate DOUBLE PRECISION NOT NULL DEFAULT 0,
                     avg_latency_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
                     p95_latency_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    report_json CLOB NOT NULL,
+                    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_retrieval_evaluation_comparison (
+                    id VARCHAR(64) PRIMARY KEY,
+                    kb_id VARCHAR(64) NOT NULL,
+                    dataset_id VARCHAR(64) NOT NULL,
+                    baseline_strategy_name VARCHAR(128) NOT NULL,
+                    winner_strategy_name VARCHAR(128) NOT NULL,
+                    strategy_count INTEGER NOT NULL DEFAULT 0,
+                    case_count INTEGER NOT NULL DEFAULT 0,
                     report_json CLOB NOT NULL,
                     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )

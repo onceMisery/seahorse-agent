@@ -21,12 +21,16 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDataset;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunSummary;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationComparisonRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 import org.springframework.dao.DataAccessException;
@@ -48,11 +52,13 @@ import java.util.UUID;
  * <p>评测样本以强类型 JSON 保存，读取后仍交给内核评测服务执行，避免 Web 或仓储层直接构造检索链路。
  */
 public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
-        implements RetrievalEvaluationDatasetRepositoryPort, RetrievalEvaluationRunRepositoryPort {
+        implements RetrievalEvaluationDatasetRepositoryPort, RetrievalEvaluationRunRepositoryPort,
+        RetrievalEvaluationComparisonRepositoryPort {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final JavaType caseListType;
+    private final JavaType comparisonReportType;
     private final JavaType reportType;
 
     public JdbcRetrievalEvaluationDatasetRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
@@ -60,6 +66,8 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.caseListType = this.objectMapper.getTypeFactory()
                 .constructCollectionType(List.class, RetrievalEvaluationCase.class);
+        this.comparisonReportType = this.objectMapper.getTypeFactory()
+                .constructType(RetrievalEvaluationComparisonReport.class);
         this.reportType = this.objectMapper.getTypeFactory().constructType(RetrievalEvaluationReport.class);
     }
 
@@ -232,6 +240,84 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
         }
     }
 
+    @Override
+    public RetrievalEvaluationComparisonRecord saveComparison(String knowledgeBaseId, String datasetId,
+                                                              RetrievalEvaluationComparisonReport report) {
+        String safeKnowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, "").trim();
+        String safeDatasetId = Objects.requireNonNullElse(datasetId, "").trim();
+        RetrievalEvaluationComparisonReport safeReport = report == null
+                ? emptyComparisonReport()
+                : report;
+        String comparisonId = UUID.randomUUID().toString();
+        int strategyCount = safeReport.reports().size();
+        int caseCount = safeReport.reports().isEmpty() ? 0 : safeReport.reports().get(0).caseCount();
+        try {
+            jdbcTemplate.update("""
+                    INSERT INTO t_retrieval_evaluation_comparison(
+                        id, kb_id, dataset_id, baseline_strategy_name, winner_strategy_name,
+                        strategy_count, case_count, report_json, create_time
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    comparisonId,
+                    safeKnowledgeBaseId,
+                    safeDatasetId,
+                    safeReport.baselineStrategyName(),
+                    safeReport.winnerStrategyName(),
+                    strategyCount,
+                    caseCount,
+                    comparisonReportJson(safeReport));
+        } catch (DataAccessException ex) {
+            return new RetrievalEvaluationComparisonRecord(comparisonId, safeKnowledgeBaseId, safeDatasetId,
+                    safeReport, Instant.now());
+        }
+        return findComparison(safeKnowledgeBaseId, safeDatasetId, comparisonId)
+                .orElseGet(() -> new RetrievalEvaluationComparisonRecord(comparisonId,
+                        safeKnowledgeBaseId, safeDatasetId, safeReport, Instant.now()));
+    }
+
+    @Override
+    public List<RetrievalEvaluationComparisonSummary> listComparisons(String knowledgeBaseId, String datasetId,
+                                                                      int limit) {
+        String safeKnowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, "").trim();
+        String safeDatasetId = Objects.requireNonNullElse(datasetId, "").trim();
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, kb_id, dataset_id, baseline_strategy_name, winner_strategy_name,
+                           strategy_count, case_count, create_time
+                    FROM t_retrieval_evaluation_comparison
+                    WHERE kb_id = ?
+                      AND dataset_id = ?
+                    ORDER BY create_time DESC, id DESC
+                    LIMIT ?
+                    """, this::toComparisonSummary, safeKnowledgeBaseId, safeDatasetId, Math.max(1, limit));
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
+    @Override
+    public Optional<RetrievalEvaluationComparisonRecord> findComparison(String knowledgeBaseId, String datasetId,
+                                                                        String comparisonId) {
+        String safeKnowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, "").trim();
+        String safeDatasetId = Objects.requireNonNullElse(datasetId, "").trim();
+        String safeComparisonId = Objects.requireNonNullElse(comparisonId, "").trim();
+        if (safeKnowledgeBaseId.isBlank() || safeDatasetId.isBlank() || safeComparisonId.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, kb_id, dataset_id, report_json, create_time
+                    FROM t_retrieval_evaluation_comparison
+                    WHERE kb_id = ?
+                      AND dataset_id = ?
+                      AND id = ?
+                    """, this::toComparisonRecord, safeKnowledgeBaseId, safeDatasetId, safeComparisonId)
+                    .stream().findFirst();
+        } catch (DataAccessException ex) {
+            return Optional.empty();
+        }
+    }
+
     private RetrievalEvaluationDatasetSummary toSummary(ResultSet rs, int rowNum) throws SQLException {
         return new RetrievalEvaluationDatasetSummary(
                 rs.getString("id"),
@@ -283,6 +369,27 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
                 instant(rs.getTimestamp("create_time")));
     }
 
+    private RetrievalEvaluationComparisonSummary toComparisonSummary(ResultSet rs, int rowNum) throws SQLException {
+        return new RetrievalEvaluationComparisonSummary(
+                rs.getString("id"),
+                rs.getString("kb_id"),
+                rs.getString("dataset_id"),
+                rs.getString("baseline_strategy_name"),
+                rs.getString("winner_strategy_name"),
+                rs.getInt("strategy_count"),
+                rs.getInt("case_count"),
+                instant(rs.getTimestamp("create_time")));
+    }
+
+    private RetrievalEvaluationComparisonRecord toComparisonRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new RetrievalEvaluationComparisonRecord(
+                rs.getString("id"),
+                rs.getString("kb_id"),
+                rs.getString("dataset_id"),
+                comparisonReport(rs.getString("report_json")),
+                instant(rs.getTimestamp("create_time")));
+    }
+
     private List<RetrievalEvaluationCase> cases(String casesJson) {
         if (casesJson == null || casesJson.isBlank()) {
             return List.of();
@@ -314,6 +421,17 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
         }
     }
 
+    private RetrievalEvaluationComparisonReport comparisonReport(String reportJson) {
+        if (reportJson == null || reportJson.isBlank()) {
+            return emptyComparisonReport();
+        }
+        try {
+            return objectMapper.readValue(reportJson, comparisonReportType);
+        } catch (JsonProcessingException ex) {
+            return emptyComparisonReport();
+        }
+    }
+
     private String reportJson(RetrievalEvaluationReport report) {
         try {
             return objectMapper.writeValueAsString(Objects.requireNonNullElse(report, emptyReport()));
@@ -322,8 +440,20 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
         }
     }
 
+    private String comparisonReportJson(RetrievalEvaluationComparisonReport report) {
+        try {
+            return objectMapper.writeValueAsString(Objects.requireNonNullElse(report, emptyComparisonReport()));
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("serialize retrieval evaluation comparison report failed", ex);
+        }
+    }
+
     private RetrievalEvaluationReport emptyReport() {
         return new RetrievalEvaluationReport("", 0, 0, 0, 0D, 0D, 0D, 0D, 0D, 0D, List.of());
+    }
+
+    private RetrievalEvaluationComparisonReport emptyComparisonReport() {
+        return new RetrievalEvaluationComparisonReport("", "", List.of(), List.of());
     }
 
     private Instant instant(Timestamp timestamp) {

@@ -272,6 +272,7 @@
 - [complete] D1 新增检索评测集管理最小闭环：内核端口/服务、JDBC 持久化、Web 管理 API 和按评测集运行既有评测服务。
 - [complete] D2 新增评测运行历史持久化：按已保存评测集运行后沉淀 `RetrievalEvaluationReport`，提供运行列表/详情 API 和 JDBC 汇总指标查询。
 - [complete] D3 新增按已保存评测集做多策略 A/B 对比：复用既有 compare 口径，并将对比中的单策略报告继续沉淀到运行历史。
+- [complete] D4 新增对比批次历史：沉淀 winner/delta 快照并提供 comparison 列表/详情查询，支撑上线前多策略比对复盘。
 
 验证方式：
 

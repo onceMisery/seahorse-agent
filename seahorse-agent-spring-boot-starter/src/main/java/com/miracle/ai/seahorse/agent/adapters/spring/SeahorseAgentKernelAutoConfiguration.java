@@ -215,6 +215,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AdapterHealthIndicatorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationComparisonRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
@@ -601,10 +602,12 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnMissingBean(RetrievalEvaluationDatasetInboundPort.class)
     public KernelRetrievalEvaluationDatasetService seahorseRetrievalEvaluationDatasetInboundPort(
             RetrievalEvaluationDatasetRepositoryPort repositoryPort,
+            ObjectProvider<RetrievalEvaluationComparisonRepositoryPort> comparisonRepositoryPort,
             ObjectProvider<RetrievalEvaluationRunRepositoryPort> runRepositoryPort,
             ObjectProvider<RetrievalEvaluationInboundPort> evaluationPort) {
         return new KernelRetrievalEvaluationDatasetService(
                 repositoryPort,
+                comparisonRepositoryPort.getIfAvailable(RetrievalEvaluationComparisonRepositoryPort::empty),
                 runRepositoryPort.getIfAvailable(RetrievalEvaluationRunRepositoryPort::empty),
                 evaluationPort.getIfAvailable());
     }

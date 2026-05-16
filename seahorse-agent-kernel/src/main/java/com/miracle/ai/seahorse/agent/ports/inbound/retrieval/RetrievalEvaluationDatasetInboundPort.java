@@ -37,6 +37,10 @@ public interface RetrievalEvaluationDatasetInboundPort {
     RetrievalEvaluationComparisonReport compareDataset(String knowledgeBaseId,
                                                        RetrievalEvaluationDatasetComparisonCommand command);
 
+    List<RetrievalEvaluationComparisonSummary> listComparisons(String knowledgeBaseId, String datasetId, int limit);
+
+    RetrievalEvaluationComparisonRecord getComparison(String knowledgeBaseId, String datasetId, String comparisonId);
+
     List<RetrievalEvaluationRunSummary> listRuns(String knowledgeBaseId, String datasetId, int limit);
 
     RetrievalEvaluationRunRecord getRun(String knowledgeBaseId, String datasetId, String runId);

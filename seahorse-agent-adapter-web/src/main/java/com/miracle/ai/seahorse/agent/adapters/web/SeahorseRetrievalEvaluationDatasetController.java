@@ -109,6 +109,22 @@ public class SeahorseRetrievalEvaluationDatasetController {
                 datasetPort.compareDataset(kbId, safeRequest.toCommand(datasetId)));
     }
 
+    @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons")
+    public Map<String, Object> listComparisons(@PathVariable("kb-id") String kbId,
+                                               @PathVariable("dataset-id") String datasetId,
+                                               @RequestParam(name = "limit", defaultValue = "20") int limit) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                datasetPort.listComparisons(kbId, datasetId, limit));
+    }
+
+    @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons/{comparison-id}")
+    public Map<String, Object> getComparison(@PathVariable("kb-id") String kbId,
+                                             @PathVariable("dataset-id") String datasetId,
+                                             @PathVariable("comparison-id") String comparisonId) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                datasetPort.getComparison(kbId, datasetId, comparisonId));
+    }
+
     @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs")
     public Map<String, Object> listRuns(@PathVariable("kb-id") String kbId,
                                         @PathVariable("dataset-id") String datasetId,

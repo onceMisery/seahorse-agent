@@ -95,3 +95,29 @@ COMMENT ON COLUMN t_retrieval_evaluation_run.avg_latency_ms IS '平均检索耗�
 COMMENT ON COLUMN t_retrieval_evaluation_run.p95_latency_ms IS 'P95 检索耗时毫秒';
 COMMENT ON COLUMN t_retrieval_evaluation_run.report_json IS '完整强类型评测报告 JSON，对应 RetrievalEvaluationReport';
 COMMENT ON COLUMN t_retrieval_evaluation_run.create_time IS '创建时间';
+
+CREATE TABLE IF NOT EXISTS t_retrieval_evaluation_comparison (
+    id VARCHAR(64) PRIMARY KEY,
+    kb_id VARCHAR(64) NOT NULL,
+    dataset_id VARCHAR(64) NOT NULL,
+    baseline_strategy_name VARCHAR(128) NOT NULL,
+    winner_strategy_name VARCHAR(128) NOT NULL,
+    strategy_count INTEGER NOT NULL DEFAULT 0,
+    case_count INTEGER NOT NULL DEFAULT 0,
+    report_json JSONB NOT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_retrieval_evaluation_comparison_dataset
+ON t_retrieval_evaluation_comparison (kb_id, dataset_id, create_time);
+
+COMMENT ON TABLE t_retrieval_evaluation_comparison IS '检索质量评测对比历史表';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.id IS '对比批次 ID';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.kb_id IS '知识库 ID';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.dataset_id IS '评测集 ID';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.baseline_strategy_name IS '基线策略名称';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.winner_strategy_name IS '本次对比胜出策略名称';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.strategy_count IS '本次参与对比的策略数量';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.case_count IS '本次对比复用的评测样本数量';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.report_json IS '完整多策略对比报告 JSON，对应 RetrievalEvaluationComparisonReport';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.create_time IS '创建时间';

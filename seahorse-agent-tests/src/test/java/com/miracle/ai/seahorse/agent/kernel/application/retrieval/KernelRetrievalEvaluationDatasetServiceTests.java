@@ -20,7 +20,9 @@ package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCase;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDataset;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetComparisonCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
@@ -31,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategy;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationComparisonRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 import org.junit.jupiter.api.Test;
@@ -49,10 +52,12 @@ class KernelRetrievalEvaluationDatasetServiceTests {
     @Test
     void shouldManageAndRunSavedEvaluationDataset() {
         InMemoryDatasetRepository repository = new InMemoryDatasetRepository();
+        InMemoryComparisonRepository comparisonRepository = new InMemoryComparisonRepository();
         InMemoryRunRepository runRepository = new InMemoryRunRepository();
         RecordingEvaluationPort evaluationPort = new RecordingEvaluationPort();
         KernelRetrievalEvaluationDatasetService service =
-                new KernelRetrievalEvaluationDatasetService(repository, runRepository, evaluationPort);
+                new KernelRetrievalEvaluationDatasetService(
+                        repository, comparisonRepository, runRepository, evaluationPort);
 
         RetrievalEvaluationDataset dataset = service.upsertDataset("kb-1", new RetrievalEvaluationDatasetPayload(
                 "",
@@ -94,6 +99,14 @@ class KernelRetrievalEvaluationDatasetServiceTests {
         assertThat(comparison.reports()).extracting(RetrievalEvaluationReport::strategyName)
                 .containsExactly("baseline", "candidate");
         assertThat(service.listRuns("kb-1", dataset.datasetId(), 10)).hasSize(3);
+        assertThat(service.listComparisons("kb-1", dataset.datasetId(), 10))
+                .singleElement()
+                .satisfies(summary -> {
+                    assertThat(summary.baselineStrategyName()).isEqualTo("baseline");
+                    assertThat(summary.winnerStrategyName()).isEqualTo("candidate");
+                });
+        assertThat(service.getComparison("kb-1", dataset.datasetId(), "comparison-1").report().winnerStrategyName())
+                .isEqualTo("candidate");
     }
 
     private RetrievalEvaluationCase caseRecord(String caseId) {
@@ -200,6 +213,41 @@ class KernelRetrievalEvaluationDatasetServiceTests {
                     .filter(run -> run.knowledgeBaseId().equals(knowledgeBaseId))
                     .filter(run -> run.datasetId().equals(datasetId))
                     .filter(run -> run.runId().equals(runId))
+                    .findFirst();
+        }
+    }
+
+    private static final class InMemoryComparisonRepository implements RetrievalEvaluationComparisonRepositoryPort {
+
+        private final List<RetrievalEvaluationComparisonRecord> comparisons = new ArrayList<>();
+
+        @Override
+        public RetrievalEvaluationComparisonRecord saveComparison(String knowledgeBaseId, String datasetId,
+                                                                 RetrievalEvaluationComparisonReport report) {
+            RetrievalEvaluationComparisonRecord record = new RetrievalEvaluationComparisonRecord(
+                    "comparison-" + (comparisons.size() + 1), knowledgeBaseId, datasetId, report, Instant.EPOCH);
+            comparisons.add(record);
+            return record;
+        }
+
+        @Override
+        public List<RetrievalEvaluationComparisonSummary> listComparisons(String knowledgeBaseId, String datasetId,
+                                                                          int limit) {
+            return comparisons.stream()
+                    .filter(record -> record.knowledgeBaseId().equals(knowledgeBaseId))
+                    .filter(record -> record.datasetId().equals(datasetId))
+                    .limit(limit)
+                    .map(RetrievalEvaluationComparisonRecord::summary)
+                    .toList();
+        }
+
+        @Override
+        public Optional<RetrievalEvaluationComparisonRecord> findComparison(String knowledgeBaseId, String datasetId,
+                                                                            String comparisonId) {
+            return comparisons.stream()
+                    .filter(record -> record.knowledgeBaseId().equals(knowledgeBaseId))
+                    .filter(record -> record.datasetId().equals(datasetId))
+                    .filter(record -> record.comparisonId().equals(comparisonId))
                     .findFirst();
         }
     }

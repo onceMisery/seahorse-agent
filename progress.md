@@ -316,3 +316,11 @@
 - `KernelRetrievalEvaluationDatasetService.compareDataset(...)` 会读取已保存 `RetrievalEvaluationCase` 列表组装多策略对比命令，并将对比结果中的每个单策略 `RetrievalEvaluationReport` 继续写入运行历史。
 - `SeahorseRetrievalEvaluationDatasetController` 新增 `POST /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/compare`，管理端无需重复上传完整评测样本即可做策略对比。
 - 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 D4 对比批次历史
+
+- 新增 `RetrievalEvaluationComparisonRecord`、`RetrievalEvaluationComparisonSummary` 和 `RetrievalEvaluationComparisonRepositoryPort`，保存基于已保存评测集做 compare 后的 winner/delta 快照。
+- `KernelRetrievalEvaluationDatasetService.compareDataset(...)` 除了继续沉淀单策略运行历史，还会额外保存一次完整 `RetrievalEvaluationComparisonReport`。
+- `JdbcRetrievalEvaluationDatasetRepositoryAdapter` 新增 `t_retrieval_evaluation_comparison` 的写入、列表和详情查询。
+- `SeahorseRetrievalEvaluationDatasetController` 新增 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons` 和 `GET /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons/{comparison-id}`。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，reactor `BUILD SUCCESS`。

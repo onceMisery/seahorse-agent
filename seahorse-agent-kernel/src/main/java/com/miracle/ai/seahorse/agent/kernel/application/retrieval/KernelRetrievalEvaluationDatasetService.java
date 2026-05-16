@@ -19,7 +19,9 @@ package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonSummary;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDataset;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetComparisonCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
@@ -31,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationComparisonRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 
 import java.util.List;
@@ -44,19 +47,30 @@ import java.util.Objects;
 public class KernelRetrievalEvaluationDatasetService implements RetrievalEvaluationDatasetInboundPort {
 
     private final RetrievalEvaluationDatasetRepositoryPort repositoryPort;
+    private final RetrievalEvaluationComparisonRepositoryPort comparisonRepositoryPort;
     private final RetrievalEvaluationRunRepositoryPort runRepositoryPort;
     private final RetrievalEvaluationInboundPort evaluationPort;
 
     public KernelRetrievalEvaluationDatasetService(RetrievalEvaluationDatasetRepositoryPort repositoryPort,
                                                    RetrievalEvaluationInboundPort evaluationPort) {
-        this(repositoryPort, RetrievalEvaluationRunRepositoryPort.empty(), evaluationPort);
+        this(repositoryPort, RetrievalEvaluationComparisonRepositoryPort.empty(),
+                RetrievalEvaluationRunRepositoryPort.empty(), evaluationPort);
     }
 
     public KernelRetrievalEvaluationDatasetService(RetrievalEvaluationDatasetRepositoryPort repositoryPort,
                                                    RetrievalEvaluationRunRepositoryPort runRepositoryPort,
                                                    RetrievalEvaluationInboundPort evaluationPort) {
+        this(repositoryPort, RetrievalEvaluationComparisonRepositoryPort.empty(), runRepositoryPort, evaluationPort);
+    }
+
+    public KernelRetrievalEvaluationDatasetService(RetrievalEvaluationDatasetRepositoryPort repositoryPort,
+                                                   RetrievalEvaluationComparisonRepositoryPort comparisonRepositoryPort,
+                                                   RetrievalEvaluationRunRepositoryPort runRepositoryPort,
+                                                   RetrievalEvaluationInboundPort evaluationPort) {
         this.repositoryPort = Objects.requireNonNullElse(repositoryPort,
                 RetrievalEvaluationDatasetRepositoryPort.empty());
+        this.comparisonRepositoryPort = Objects.requireNonNullElse(comparisonRepositoryPort,
+                RetrievalEvaluationComparisonRepositoryPort.empty());
         this.runRepositoryPort = Objects.requireNonNullElse(runRepositoryPort,
                 RetrievalEvaluationRunRepositoryPort.empty());
         this.evaluationPort = evaluationPort;
@@ -134,9 +148,31 @@ public class KernelRetrievalEvaluationDatasetService implements RetrievalEvaluat
         RetrievalEvaluationComparisonReport report = Objects.requireNonNullElse(
                 evaluationPort.compare(comparisonCommand),
                 new RetrievalEvaluationComparisonReport("", "", List.of(), List.of()));
+        recordComparison(safeKnowledgeBaseId, safeCommand.datasetId(), report);
         Objects.requireNonNullElse(report.reports(), List.<RetrievalEvaluationReport>of())
                 .forEach(strategyReport -> recordRun(safeKnowledgeBaseId, safeCommand.datasetId(), strategyReport));
         return report;
+    }
+
+    @Override
+    public List<RetrievalEvaluationComparisonSummary> listComparisons(String knowledgeBaseId, String datasetId,
+                                                                      int limit) {
+        String safeKnowledgeBaseId = requireText(knowledgeBaseId, "knowledgeBaseId must not be blank");
+        String safeDatasetId = requireText(datasetId, "datasetId must not be blank");
+        getDataset(safeKnowledgeBaseId, safeDatasetId);
+        return comparisonRepositoryPort.listComparisons(safeKnowledgeBaseId, safeDatasetId, normalizeLimit(limit));
+    }
+
+    @Override
+    public RetrievalEvaluationComparisonRecord getComparison(String knowledgeBaseId, String datasetId,
+                                                             String comparisonId) {
+        String safeKnowledgeBaseId = requireText(knowledgeBaseId, "knowledgeBaseId must not be blank");
+        String safeDatasetId = requireText(datasetId, "datasetId must not be blank");
+        String safeComparisonId = requireText(comparisonId, "comparisonId must not be blank");
+        getDataset(safeKnowledgeBaseId, safeDatasetId);
+        return comparisonRepositoryPort.findComparison(safeKnowledgeBaseId, safeDatasetId, safeComparisonId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "retrieval evaluation comparison not found: " + safeComparisonId));
     }
 
     @Override
@@ -173,6 +209,14 @@ public class KernelRetrievalEvaluationDatasetService implements RetrievalEvaluat
             runRepositoryPort.saveRun(knowledgeBaseId, datasetId, report);
         } catch (RuntimeException ex) {
             // 当前内核无日志端口，后续可接入低基数 observation 记录持久化失败类型。
+        }
+    }
+
+    private void recordComparison(String knowledgeBaseId, String datasetId, RetrievalEvaluationComparisonReport report) {
+        try {
+            comparisonRepositoryPort.saveComparison(knowledgeBaseId, datasetId, report);
+        } catch (RuntimeException ex) {
+            // 与运行历史相同：对比历史失败不阻断本次 compare 返回。
         }
     }
 
