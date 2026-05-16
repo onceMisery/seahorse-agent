@@ -84,6 +84,12 @@ public class SeahorseMetadataBackfillController {
                         failureKeyword, hasFailures, reExtract, current, size)));
     }
 
+    @GetMapping("/knowledge-base/{kb-id}/metadata-backfill/overview")
+    public Map<String, Object> overview(@PathVariable("kb-id") String kbId,
+                                        @RequestParam(value = "tenantId", required = false) String tenantId) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort.overview(tenantId, kbId));
+    }
+
     @GetMapping("/metadata-backfill/jobs/{job-id}")
     public Map<String, Object> getJob(@PathVariable("job-id") String jobId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort.getJob(jobId));

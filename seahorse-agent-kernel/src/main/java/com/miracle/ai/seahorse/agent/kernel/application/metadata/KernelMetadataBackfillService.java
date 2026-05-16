@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillOperationsOverview;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
@@ -205,6 +206,11 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                 ? new MetadataBackfillJobQuery("", "", null, 1, 20)
                 : query;
         return jobRepositoryPort.page(safeQuery);
+    }
+
+    @Override
+    public MetadataBackfillOperationsOverview overview(String tenantId, String knowledgeBaseId) {
+        return jobRepositoryPort.overview(tenantId, knowledgeBaseId);
     }
 
     @Override

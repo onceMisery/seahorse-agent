@@ -88,10 +88,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentR
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillCountItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillOperationsOverview;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRecord;
@@ -584,6 +586,8 @@ class SeahorseWebApiContractTests {
         when(backfillPort.pageJobs(any(MetadataBackfillJobQuery.class)))
                 .thenReturn(new MetadataBackfillJobPage(
                         List.of(metadataBackfillJob(MetadataBackfillJobStatus.PENDING)), 1, 10, 1, 1));
+        when(backfillPort.overview("tenant-1", "kb-1"))
+                .thenReturn(metadataBackfillOverview());
         when(backfillPort.runNextBatch("job-1"))
                 .thenReturn(new MetadataBackfillRunResult(
                         "job-1", MetadataBackfillJobStatus.COMPLETED, 1, 50,
@@ -634,6 +638,17 @@ class SeahorseWebApiContractTests {
         assertThat(capturedBackfillQuery.failureKeyword()).isEqualTo("boom");
         assertThat(capturedBackfillQuery.hasFailures()).isTrue();
         assertThat(capturedBackfillQuery.reExtract()).isTrue();
+
+        mvc.perform(get("/knowledge-base/kb-1/metadata-backfill/overview")
+                        .param("tenantId", "tenant-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.totalJobs").value(2))
+                .andExpect(jsonPath("$.data.pendingReviewItems").value(2))
+                .andExpect(jsonPath("$.data.pendingSchemaCompensationJobs").value(1))
+                .andExpect(jsonPath("$.data.statusCounts[0].key").value("PENDING"))
+                .andExpect(jsonPath("$.data.latestReExtractJob.jobId").value("job-1"));
+        verify(backfillPort).overview("tenant-1", "kb-1");
 
         mvc.perform(get("/metadata-backfill/jobs/job-1"))
                 .andExpect(status().isOk())
@@ -1265,6 +1280,33 @@ class SeahorseWebApiContractTests {
                 List.of(),
                 "admin",
                 Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MetadataBackfillOperationsOverview metadataBackfillOverview() {
+        return new MetadataBackfillOperationsOverview(
+                "tenant-1",
+                "kb-1",
+                2,
+                8,
+                6,
+                1,
+                1,
+                2,
+                1,
+                2,
+                1,
+                1,
+                1,
+                1,
+                2,
+                List.of(
+                        new MetadataBackfillCountItem("PENDING", 1),
+                        new MetadataBackfillCountItem("PAUSED", 1)),
+                List.of(new MetadataBackfillCountItem("SCHEMA_MISSING", 1)),
+                List.of(new MetadataBackfillCountItem("SCHEMA_MISSING", 1)),
+                metadataBackfillJob(MetadataBackfillJobStatus.PENDING),
+                metadataBackfillJob(MetadataBackfillJobStatus.PAUSED),
                 Instant.EPOCH);
     }
 

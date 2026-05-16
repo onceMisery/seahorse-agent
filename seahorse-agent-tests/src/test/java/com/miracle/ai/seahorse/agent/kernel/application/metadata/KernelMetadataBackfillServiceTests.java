@@ -37,6 +37,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillOperationsOverview;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
@@ -349,6 +350,24 @@ class KernelMetadataBackfillServiceTests {
     }
 
     @Test
+    void shouldDelegateBackfillOperationsOverviewToRepository() {
+        InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
+        InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
+        jobs.overview = new MetadataBackfillOperationsOverview(
+                "tenant-1", "kb-1",
+                2, 8, 6, 1, 1, 2, 1,
+                3, 1, 2, 1, 1, 2,
+                List.of(), List.of(), List.of(), null, null, Instant.EPOCH);
+        KernelMetadataBackfillService service = service(documents, jobs, Map.of());
+
+        MetadataBackfillOperationsOverview overview = service.overview("tenant-1", "kb-1");
+
+        assertThat(overview.totalJobs()).isEqualTo(2);
+        assertThat(overview.pendingReviewItems()).isEqualTo(3);
+        assertThat(overview.pendingSchemaCompensationDocuments()).isEqualTo(2);
+    }
+
+    @Test
     void shouldPageBackfillJobsByGovernanceFilters() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
@@ -656,6 +675,7 @@ class KernelMetadataBackfillServiceTests {
     private static final class InMemoryBackfillJobRepository implements MetadataBackfillJobRepositoryPort {
 
         private final Map<String, MetadataBackfillJobRecord> records = new LinkedHashMap<>();
+        private MetadataBackfillOperationsOverview overview;
 
         @Override
         public String create(MetadataBackfillJobRecord job) {
@@ -693,6 +713,14 @@ class KernelMetadataBackfillServiceTests {
             long pages = matched.isEmpty() ? 0 : (matched.size() + query.size() - 1) / query.size();
             return new MetadataBackfillJobPage(matched.subList(from, to), matched.size(), query.size(),
                     query.current(), pages);
+        }
+
+        @Override
+        public MetadataBackfillOperationsOverview overview(String tenantId, String knowledgeBaseId) {
+            if (overview != null) {
+                return overview;
+            }
+            return MetadataBackfillOperationsOverview.empty(tenantId, knowledgeBaseId);
         }
 
         @Override
