@@ -6,6 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuthStore } from "@/stores/authStore";
+import { SeahorseLogo } from "@/components/common/SeahorseLogo";
+
+const BUBBLES = [
+  { size: 10, left: "7%",  delay: "0s",   dur: "9s"  },
+  { size: 18, left: "16%", delay: "1.8s", dur: "12s" },
+  { size: 7,  left: "28%", delay: "3.2s", dur: "7s"  },
+  { size: 14, left: "43%", delay: "0.6s", dur: "14s" },
+  { size: 22, left: "58%", delay: "2.5s", dur: "10s" },
+  { size: 9,  left: "70%", delay: "4.1s", dur: "11s" },
+  { size: 16, left: "80%", delay: "1.2s", dur: "13s" },
+  { size: 5,  left: "91%", delay: "3.8s", dur: "8s"  },
+  { size: 12, left: "52%", delay: "5.2s", dur: "15s" },
+  { size: 20, left: "23%", delay: "2.1s", dur: "11s" },
+];
+
+// 随机闪现的海马：位置、大小、闪现时机各不相同
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -14,6 +30,7 @@ export function LoginPage() {
   const [remember, setRemember] = React.useState(true);
   const [form, setForm] = React.useState({ username: "admin", password: "admin" });
   const [error, setError] = React.useState<string | null>(null);
+  const [focusedField, setFocusedField] = React.useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -24,9 +41,6 @@ export function LoginPage() {
     }
     try {
       await login(form.username.trim(), form.password.trim());
-      if (!remember) {
-        // 如需仅在内存中保存登录态，可在此扩展。
-      }
       navigate("/chat");
     } catch (err) {
       setError((err as Error).message || "登录失败，请稍后重试。");
@@ -34,125 +48,229 @@ export function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-4">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-grid-pattern opacity-20 [background-size:40px_40px]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-32 right-[-40px] h-72 w-72 rounded-full blur-3xl animate-float"
-        style={{ background: "radial-gradient(var(--theme-accent-alpha-20), transparent 70%)" }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-36 left-[-80px] h-80 w-80 rounded-full blur-3xl animate-float"
-        style={{ background: "radial-gradient(var(--theme-accent-alpha-10), transparent 70%)", animationDelay: "3s" }}
-      />
+    <div className="relative flex min-h-screen items-center justify-center px-4 overflow-hidden">
+
+
+
+
+      {/* Corner brackets */}
+      {[
+        "top-6 left-6 border-t-2 border-l-2",
+        "top-6 right-6 border-t-2 border-r-2",
+        "bottom-6 left-6 border-b-2 border-l-2",
+        "bottom-6 right-6 border-b-2 border-r-2",
+      ].map((cls, i) => (
+        <div key={i} aria-hidden="true" className={`pointer-events-none absolute w-8 h-8 ${cls}`}
+          style={{ borderColor: "var(--theme-accent-alpha-60)" }} />
+      ))}
+
+      {/* Ambient glows */}
+      <div aria-hidden="true" className="pointer-events-none absolute -top-40 right-0 h-96 w-96 rounded-full blur-3xl animate-float"
+        style={{ background: "radial-gradient(var(--theme-accent-alpha-20), transparent 70%)" }} />
+      <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-20 h-96 w-96 rounded-full blur-3xl animate-float"
+        style={{ background: "radial-gradient(var(--theme-accent-alpha-10), transparent 70%)", animationDelay: "3s" }} />
+
+      {/* Bubbles */}
+      {BUBBLES.map((b, i) => (
+        <div key={i} aria-hidden="true" className="pointer-events-none absolute bottom-0 rounded-full"
+          style={{
+            width: b.size, height: b.size, left: b.left,
+            border: "1px solid var(--theme-accent-alpha-40)",
+            background: "var(--theme-accent-alpha-10)",
+            animation: `bubble-rise ${b.dur} ${b.delay} ease-in infinite`,
+          }} />
+      ))}
+
 
       <div className="relative z-10 w-full max-w-md">
-        {/* Logo */}
+        {/* Logo area */}
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="relative mb-6">
-            <div className="absolute inset-0 rounded-full blur-3xl scale-110" style={{ backgroundColor: "var(--theme-accent-alpha-20)" }} />
+          <div className="relative mb-4">
+            {/* Rotating ring */}
+            <div aria-hidden="true" className="absolute inset-0 rounded-full"
+              style={{
+                width: 160, height: 160, top: -10, left: -10,
+                border: "1px solid var(--theme-accent-alpha-40)",
+                animation: "spin-slow 12s linear infinite",
+                backgroundImage: "conic-gradient(from 0deg, transparent 70%, var(--theme-accent-alpha-60) 100%)",
+                borderRadius: "50%",
+              }} />
+            <div aria-hidden="true" className="absolute inset-0 rounded-full"
+              style={{
+                width: 180, height: 180, top: -20, left: -20,
+                border: "1px dashed var(--theme-accent-alpha-20)",
+                animation: "spin-slow 20s linear infinite reverse",
+                borderRadius: "50%",
+              }} />
             <div className="relative animate-float">
-              <img
-                src="/seahorse-logo.png"
-                alt="Seahorse Agent"
-                className="w-[140px] h-[140px] object-contain drop-shadow-[0_0_30px_rgba(6,182,212,0.4)]"
-              />
+              <SeahorseLogo size={140} />
             </div>
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight glow-text" style={{ color: "var(--theme-text-primary)" }}>
-            Seahorse Agent
+          <h1 className="font-display text-3xl font-bold tracking-widest glow-text mt-2"
+            style={{ color: "var(--theme-text-primary)", letterSpacing: "0.15em" }}>
+            SEAHORSE
           </h1>
-          <p className="mt-2 text-sm" style={{ color: "var(--theme-accent)" }}>
-            RAG 智能问答助手
-          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <div className="h-px w-8" style={{ background: "var(--theme-accent-alpha-60)" }} />
+            <p className="text-xs tracking-widest uppercase" style={{ color: "var(--theme-accent)" }}>
+              RAG Intelligence System
+            </p>
+            <div className="h-px w-8" style={{ background: "var(--theme-accent-alpha-60)" }} />
+          </div>
         </div>
 
-        <div className="glass glow-border rounded-3xl p-8">
-          <div className="mb-6">
-            <p className="font-display text-2xl font-semibold" style={{ color: "var(--theme-text-primary)" }}>欢迎回来</p>
-            <p className="mt-1 text-sm" style={{ color: "var(--theme-text-muted)" }}>
-              登录后继续你的检索增强对话。
+        {/* Card */}
+        <div className="relative rounded-2xl p-8 overflow-hidden"
+          style={{
+            background: "var(--theme-glass-bg)",
+            backdropFilter: "blur(20px)",
+            border: "1px solid var(--theme-accent-alpha-40)",
+            boxShadow: "0 0 40px var(--theme-accent-alpha-10), inset 0 1px 0 var(--theme-accent-alpha-20)",
+          }}>
+
+          {/* Card top accent line */}
+          <div aria-hidden="true" className="absolute top-0 left-8 right-8 h-px"
+            style={{ background: "linear-gradient(90deg, transparent, var(--theme-accent), transparent)" }} />
+
+          <div className="mb-6 flex items-center gap-3">
+            <div className="h-4 w-1 rounded-full" style={{ background: "var(--theme-accent)" }} />
+            <p className="text-lg font-semibold tracking-wide" style={{ color: "var(--theme-text-primary)" }}>
+              身份验证
             </p>
+            <div className="ml-auto flex items-center gap-1.5">
+              <div className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: "var(--theme-accent)" }} />
+              <span className="text-xs" style={{ color: "var(--theme-accent)" }}>ONLINE</span>
+            </div>
           </div>
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--theme-text-muted)" }}>
-                用户名
+
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {/* Username */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono tracking-widest uppercase" style={{ color: "var(--theme-text-muted)" }}>
+                // USER_ID
               </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--theme-text-muted)" }} />
+              <div className="relative group">
+                {/* Focus left bar */}
+                <div className="absolute left-0 top-0 bottom-0 w-0.5 rounded-full transition-all duration-300"
+                  style={{
+                    background: focusedField === "username" ? "var(--theme-accent)" : "transparent",
+                    boxShadow: focusedField === "username" ? "0 0 8px var(--theme-accent)" : "none",
+                  }} />
+                <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 transition-colors duration-200"
+                  style={{ color: focusedField === "username" ? "var(--theme-accent)" : "var(--theme-text-muted)" }} />
                 <Input
-                  placeholder="请输入用户名"
+                  placeholder="输入用户名"
                   value={form.username}
-                  onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))}
-                  className="pl-10"
+                  onChange={(e) => setForm((p) => ({ ...p, username: e.target.value }))}
+                  onFocus={() => setFocusedField("username")}
+                  onBlur={() => setFocusedField(null)}
+                  className="pl-10 font-mono transition-all duration-200"
                   style={{
                     backgroundColor: "var(--theme-bg-elevated)",
-                    borderColor: "var(--theme-glass-border)",
-                    color: "var(--theme-text-primary)"
+                    borderColor: focusedField === "username" ? "var(--theme-accent)" : "var(--theme-glass-border)",
+                    color: "var(--theme-text-primary)",
+                    boxShadow: focusedField === "username" ? "0 0 12px var(--theme-accent-alpha-20)" : "none",
                   }}
                   autoComplete="username"
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--theme-text-muted)" }}>
-                密码
+
+            {/* Password */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono tracking-widest uppercase" style={{ color: "var(--theme-text-muted)" }}>
+                // PASSWORD
               </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--theme-text-muted)" }} />
+              <div className="relative group">
+                <div className="absolute left-0 top-0 bottom-0 w-0.5 rounded-full transition-all duration-300"
+                  style={{
+                    background: focusedField === "password" ? "var(--theme-accent)" : "transparent",
+                    boxShadow: focusedField === "password" ? "0 0 8px var(--theme-accent)" : "none",
+                  }} />
+                <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 transition-colors duration-200"
+                  style={{ color: focusedField === "password" ? "var(--theme-accent)" : "var(--theme-text-muted)" }} />
                 <Input
                   type={showPassword ? "text" : "password"}
-                  placeholder="请输入密码"
+                  placeholder="输入密码"
                   value={form.password}
-                  onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-                  className="pl-10 pr-10"
+                  onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
+                  onFocus={() => setFocusedField("password")}
+                  onBlur={() => setFocusedField(null)}
+                  className="pl-10 pr-10 font-mono transition-all duration-200"
                   style={{
                     backgroundColor: "var(--theme-bg-elevated)",
-                    borderColor: "var(--theme-glass-border)",
-                    color: "var(--theme-text-primary)"
+                    borderColor: focusedField === "password" ? "var(--theme-accent)" : "var(--theme-glass-border)",
+                    color: "var(--theme-text-primary)",
+                    boxShadow: focusedField === "password" ? "0 0 12px var(--theme-accent-alpha-20)" : "none",
                   }}
                   autoComplete="current-password"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: "var(--theme-text-muted)" }}
-                  aria-label="显示或隐藏密码"
-                >
+                <button type="button" onClick={() => setShowPassword((p) => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors duration-200"
+                  style={{ color: "var(--theme-text-muted)" }} aria-label="显示或隐藏密码">
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
+
             <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2" style={{ color: "var(--theme-text-muted)" }}>
-                <Checkbox checked={remember} onCheckedChange={(value) => setRemember(Boolean(value))} />
-                记住我
+              <label className="flex items-center gap-2 cursor-pointer" style={{ color: "var(--theme-text-muted)" }}>
+                <Checkbox checked={remember} onCheckedChange={(v) => setRemember(Boolean(v))} />
+                <span className="text-xs font-mono">记住会话</span>
               </label>
-              <span className="text-xs" style={{ color: "var(--theme-text-muted)" }}>账号由管理员初始化</span>
+              <span className="text-xs font-mono" style={{ color: "var(--theme-text-muted)" }}>
+                v1.0 · admin init
+              </span>
             </div>
-            {error ? <p className="text-sm text-rose-400">{error}</p> : null}
-            <Button
-              type="submit"
-              className="w-full rounded-xl py-6 text-base font-semibold"
-              disabled={isLoading}
-              style={{
-                background: "var(--theme-gradient)",
-                color: "var(--theme-bg-deep)",
-                boxShadow: "0 0 20px var(--theme-accent-alpha-30)"
-              }}
-            >
-              {isLoading ? "正在登录..." : "登录"}
-            </Button>
+
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg px-3 py-2"
+                style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)" }}>
+                <div className="h-1.5 w-1.5 rounded-full bg-rose-400 animate-pulse" />
+                <p className="text-sm text-rose-400 font-mono">{error}</p>
+              </div>
+            )}
+
+            {/* Submit button with sweep effect */}
+            <div className="relative overflow-hidden rounded-xl">
+              <Button
+                type="submit"
+                className="relative w-full py-6 text-base font-mono font-semibold tracking-widest overflow-hidden"
+                disabled={isLoading}
+                style={{
+                  background: "var(--theme-gradient)",
+                  color: "var(--theme-bg-deep)",
+                  boxShadow: "0 0 30px var(--theme-accent-alpha-30)",
+                }}
+              >
+                {/* Sweep shine */}
+                <span aria-hidden="true" className="absolute inset-0 pointer-events-none"
+                  style={{ animation: "btn-sweep 3s ease-in-out infinite",
+                    background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.25) 50%, transparent 60%)",
+                  }} />
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="flex gap-1">
+                      {[0,1,2].map(i => (
+                        <span key={i} className="h-1.5 w-1.5 rounded-full bg-current animate-bounce"
+                          style={{ animationDelay: `${i * 0.15}s` }} />
+                      ))}
+                    </span>
+                    AUTHENTICATING
+                  </span>
+                ) : "[ ENTER SYSTEM ]"}
+              </Button>
+            </div>
           </form>
-          <p className="mt-4 text-center text-xs" style={{ color: "var(--theme-text-muted)" }}>
-            默认账号: admin / admin
-          </p>
+
+          {/* Card bottom */}
+          <div className="mt-5 flex items-center justify-center gap-2">
+            <div className="h-px flex-1" style={{ background: "var(--theme-glass-border)" }} />
+            <p className="text-xs font-mono px-2" style={{ color: "var(--theme-text-muted)" }}>
+              SYS::AUTH_MODULE_v2
+            </p>
+            <div className="h-px flex-1" style={{ background: "var(--theme-glass-border)" }} />
+          </div>
         </div>
       </div>
     </div>

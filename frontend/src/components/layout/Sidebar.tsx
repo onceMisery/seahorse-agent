@@ -1,4 +1,5 @@
 import * as React from "react";
+import { SeahorseLogo } from "@/components/common/SeahorseLogo";
 import { differenceInCalendarDays, isValid } from "date-fns";
 import {
   BookOpen,
@@ -173,7 +174,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="pb-3" style={{ borderColor: "var(--theme-glass-border)", borderBottomWidth: 1, borderBottomStyle: "solid" }}>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg overflow-hidden">
-              <img src="/seahorse-logo.png" alt="Seahorse" className="h-10 w-10 object-contain" />
+              <SeahorseLogo size={40} />
             </div>
             <div style={{ fontFamily: sessionTitleFont }}>
               <p className="text-base font-semibold glow-text" style={{ color: "var(--theme-text-primary)" }}>Seahorse Agent</p>

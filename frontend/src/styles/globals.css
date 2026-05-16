@@ -163,6 +163,8 @@
   --theme-gradient: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
   --theme-shadow-glow: 0 0 20px rgba(6, 182, 212, 0.15);
   --theme-text-glow: 0 0 8px rgba(6, 182, 212, 0.6);
+  /* logo filter: cyan, no shift needed */
+  --theme-logo-filter: hue-rotate(0deg) saturate(1);
 }
 
 /* ===== 紫色主题 ===== */
@@ -192,6 +194,7 @@
   --theme-gradient: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
   --theme-shadow-glow: 0 0 20px rgba(168, 85, 247, 0.15);
   --theme-text-glow: 0 0 8px rgba(168, 85, 247, 0.6);
+  --theme-logo-filter: hue-rotate(85deg) saturate(1.2);
 }
 
 /* ===== 翡翠主题 ===== */
@@ -221,6 +224,7 @@
   --theme-gradient: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
   --theme-shadow-glow: 0 0 20px rgba(16, 185, 129, 0.15);
   --theme-text-glow: 0 0 8px rgba(16, 185, 129, 0.6);
+  --theme-logo-filter: hue-rotate(-25deg) saturate(0.9);
 }
 
 /* ===== 琥珀主题 ===== */
@@ -250,6 +254,7 @@
   --theme-gradient: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
   --theme-shadow-glow: 0 0 20px rgba(245, 158, 11, 0.15);
   --theme-text-glow: 0 0 8px rgba(245, 158, 11, 0.6);
+  --theme-logo-filter: hue-rotate(-147deg) saturate(1.3) brightness(1.1);
 }
 
 /* ===== 皓白主题 ===== */
@@ -283,6 +288,7 @@
   --theme-gradient: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   --theme-shadow-glow: 0 0 20px rgba(59, 130, 246, 0.1);
   --theme-text-glow: 0 0 8px rgba(59, 130, 246, 0.4);
+  --theme-logo-filter: hue-rotate(32deg) saturate(0.9) brightness(1.05);
 }
 
 .dark {
@@ -2401,4 +2407,45 @@ textarea {
   word-break: break-word;
   overflow-wrap: break-word;
   white-space: pre-wrap;
+}
+
+@keyframes bubble-rise {
+  0%   { transform: translateY(0) scale(1); opacity: 0.7; }
+  50%  { opacity: 0.4; }
+  100% { transform: translateY(-100vh) scale(1.1); opacity: 0; }
+}
+
+@keyframes scan-beam {
+  0%   { top: -2px; opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { top: 100vh; opacity: 0; }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes btn-sweep {
+  0%   { transform: translateX(-100%); }
+  60%  { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes particle-pulse {
+  0%, 100% { opacity: 0.2; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(2); }
+}
+
+@keyframes ghost-flicker {
+  0%,100% { opacity: 0; }
+  10%      { opacity: 0; }
+  15%      { opacity: 0.12; }
+  20%      { opacity: 0.04; }
+  25%      { opacity: 0.15; }
+  30%      { opacity: 0; }
+  60%      { opacity: 0; }
+  65%      { opacity: 0.08; }
+  70%      { opacity: 0; }
 }
