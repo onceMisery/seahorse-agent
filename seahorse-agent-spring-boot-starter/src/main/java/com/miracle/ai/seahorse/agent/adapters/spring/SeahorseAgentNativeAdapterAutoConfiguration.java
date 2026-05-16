@@ -63,6 +63,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRep
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPipelineDefinitionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRagTraceRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRetrievalEvaluationDatasetRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRetrievalStrategyTemplateRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSampleQuestionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSemanticMemoryRepositoryAdapter;
@@ -149,6 +150,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
@@ -566,6 +568,15 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     public JdbcRetrievalStrategyTemplateRepositoryAdapter seahorseJdbcRetrievalStrategyTemplateRepositoryAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
         return new JdbcRetrievalStrategyTemplateRepositoryAdapter(dataSource, objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(RetrievalEvaluationDatasetRepositoryPort.class)
+    public JdbcRetrievalEvaluationDatasetRepositoryAdapter seahorseJdbcRetrievalEvaluationDatasetRepositoryAdapter(
+            DataSource dataSource, ObjectMapper objectMapper) {
+        return new JdbcRetrievalEvaluationDatasetRepositoryAdapter(dataSource, objectMapper);
     }
 
     @Bean

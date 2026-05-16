@@ -291,3 +291,12 @@
 - 继续收口 Schema 索引同步观测：JDBC 与 Elasticsearch 的 `metadata.schema.index.sync.*` 事件不再输出 `fieldKey` 和 `errorMessage`，只保留 backend、action、租户/知识库、schemaVersion、valueType、索引能力布尔值、outcome 和 errorType。
 - 字段名与错误详情仍保存在 `MetadataSchemaIndexStatusPort` 的同步状态记录里，供字段能力视图查询，避免在 Micrometer tag 中放大基数。
 - 验证通过：`mvn -pl seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-search-elasticsearch -am "-Dtest=JdbcMetadataSchemaIndexAdapterTests,ElasticsearchMetadataSchemaIndexAdapterTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，14 个测试成功，reactor `BUILD SUCCESS`。
+
+## 2026-05-16 继续推进 D1 检索评测集管理
+
+- 新增 `RetrievalEvaluationDatasetInboundPort`、评测集记录/摘要/载荷/运行命令模型和 `KernelRetrievalEvaluationDatasetService`，支持知识库维度评测集列表、详情、保存、删除和按已保存样本运行既有 `RetrievalEvaluationInboundPort`。
+- 新增 `RetrievalEvaluationDatasetRepositoryPort` 与 `JdbcRetrievalEvaluationDatasetRepositoryAdapter`，以 `t_retrieval_evaluation_dataset.cases_json` 保存强类型 `RetrievalEvaluationCase` 列表，避免 Web 或仓储层绕过 Filter Compiler 直接操作动态 metadata。
+- `retrieval-governance-postgresql.sql` 新增 `t_retrieval_evaluation_dataset` 表、索引和完整 COMMENT，满足新增 DDL 注释约束。
+- 新增 `SeahorseRetrievalEvaluationDatasetController`，暴露评测集 CRUD 与 `POST /knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/evaluate`，运行时复用现有评测指标口径。
+- Spring Boot 自动装配 JDBC 仓储和内核评测集服务；无仓储时不暴露管理入口。
+- 验证通过：`mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`，3 个新测试类通过，reactor `BUILD SUCCESS`。

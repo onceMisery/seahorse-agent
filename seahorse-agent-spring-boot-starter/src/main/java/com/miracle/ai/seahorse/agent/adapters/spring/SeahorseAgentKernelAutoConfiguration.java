@@ -67,6 +67,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataS
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelVersionQualityComparisonService;
 import com.miracle.ai.seahorse.agent.kernel.application.model.KernelModelRoutingService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
+import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationDatasetService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine.KernelRetrievalEnginePorts;
@@ -130,6 +131,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaUsageInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
@@ -213,6 +215,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AdapterHealthIndicatorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
@@ -590,6 +593,15 @@ public class SeahorseAgentKernelAutoConfiguration {
             ObjectProvider<RetrievalStrategyTemplateRepositoryPort> repositoryPort) {
         return new KernelRetrievalStrategyTemplateService(
                 repositoryPort.getIfAvailable(RetrievalStrategyTemplateRepositoryPort::empty));
+    }
+
+    @Bean
+    @ConditionalOnBean(RetrievalEvaluationDatasetRepositoryPort.class)
+    @ConditionalOnMissingBean(RetrievalEvaluationDatasetInboundPort.class)
+    public KernelRetrievalEvaluationDatasetService seahorseRetrievalEvaluationDatasetInboundPort(
+            RetrievalEvaluationDatasetRepositoryPort repositoryPort,
+            ObjectProvider<RetrievalEvaluationInboundPort> evaluationPort) {
+        return new KernelRetrievalEvaluationDatasetService(repositoryPort, evaluationPort.getIfAvailable());
     }
 
     @Bean

@@ -199,3 +199,9 @@
 - 阶段 B 的主体代码已经在 `6802ef1` 落地，计划文件未同步状态；继续开发前需要把计划从 pending 校正为 complete，避免重复实现已完成能力。
 - Schema 索引同步失败需要同时服务两个消费者：观测系统只需要低基数状态，字段能力视图需要字段名与错误详情；因此应把 `fieldKey/errorMessage` 留在 `MetadataSchemaIndexStatusPort`，不要放进通用观测事件。
 - Elasticsearch mapping 删除无法真正删除已存在字段映射，适配器应以 `NO_CHANGE` 或状态记录表达限制；JDBC 表达式索引则可以在字段禁用、guard-only 或策略变化时显式 drop 旧索引。
+
+## 2026-05-16 D1 检索评测集管理发现
+
+- 现有检索评测接口只支持临时请求体，无法沉淀知识库级回归集；这会让策略模板和版本对比每次都依赖外部调用方重复提交样本。
+- 评测集持久化应保存 `RetrievalEvaluationCase` 强类型结构，而不是保存任意原始查询 Map；动态 metadata 仍必须在实际评测运行时走现有 Filter Compiler。
+- 本轮先用单表 `cases_json` 完成最小闭环，后续若需要样本级检索、标注审核或批量导入，再拆出 case 明细表更合适。

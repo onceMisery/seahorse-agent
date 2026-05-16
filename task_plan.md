@@ -263,6 +263,18 @@
 - 阶段 B 完成标准：Schema 字段的增删改与 `indexed/pushdown/guardOnly` 变化都能触发明确的同步或补偿动作。
 - 阶段 C 完成标准：管理端可查询 Schema 使用情况、回填失败画像、跨版本质量对比，并能复用现有检索评测接口做上线前比对。
 
+### 阶段 D：检索质量评测集平台化
+
+目标：把临时评测请求升级为可复用、可持久化的知识库评测集，支撑长期策略回归和上线前验收。
+
+实施切片：
+
+- [complete] D1 新增检索评测集管理最小闭环：内核端口/服务、JDBC 持久化、Web 管理 API 和按评测集运行既有评测服务。
+
+验证方式：
+
+- `mvn -pl seahorse-agent-tests,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am "-Dtest=KernelRetrievalEvaluationDatasetServiceTests,JdbcRetrievalEvaluationDatasetRepositoryAdapterTests,SeahorseRetrievalEvaluationDatasetControllerTests" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+
 ### 风险与兼容性说明
 
 - 版本维度扩展优先复用现有 `schemaVersion`、`extractorVersion`、`llmPromptVersion` 字段，避免新增一套并行治理模型。
