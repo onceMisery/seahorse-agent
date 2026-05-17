@@ -57,11 +57,6 @@ import com.miracle.ai.seahorse.agent.adapters.search.lucene.LuceneKeywordSearchA
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.SeahorseOutboxRelayJob;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexMessageSubscriber;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexOutboxAdapter;
-import com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorAdapter;
-import com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorProperties;
-import com.miracle.ai.seahorse.agent.adapters.vector.noop.NoopVectorStoreAdapter;
-import com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorAdapter;
-import com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorProperties;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
@@ -110,10 +105,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluatio
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
-import io.milvus.v2.client.MilvusClientV2;
 import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -150,7 +141,8 @@ import java.util.Locale;
         SeahorseAgentLocalAdapterAutoConfiguration.class,
         SeahorseAgentMqAdapterAutoConfiguration.class,
         SeahorseAgentObservationAdapterAutoConfiguration.class,
-        SeahorseAgentStorageAdapterAutoConfiguration.class
+        SeahorseAgentStorageAdapterAutoConfiguration.class,
+        SeahorseAgentVectorAdapterAutoConfiguration.class
 })
 public class SeahorseAgentNativeAdapterAutoConfiguration {
 
@@ -743,108 +735,6 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
         return new SeahorseOutboxRelayJob(outboxEventRepositoryPort, messageQueuePort, objectMapper,
                 lockPort.getIfAvailable(DistributedLockPort::noop),
                 quarantinePort.getIfAvailable(MetadataQuarantinePort::noop), batchSize);
-    }
-
-    @Bean
-    @ConditionalOnBean(MilvusClientV2.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.vector", name = "type", havingValue = "milvus", matchIfMissing = true)
-    @ConditionalOnMissingBean(MilvusVectorAdapter.class)
-    public MilvusVectorAdapter seahorseMilvusVectorAdapter(
-            MilvusClientV2 milvusClient,
-            @Value("${seahorse-agent.adapters.vector.collection-name:}")
-            String collectionName,
-            @Value("${seahorse-agent.adapters.vector.dimension:1024}") int dimension,
-            @Value("${seahorse-agent.adapters.vector.metric-type:COSINE}")
-            String metricType,
-            @Value("${seahorse-agent.adapters.vector.milvus.content-max-length:65535}") int contentMaxLength,
-            @Value("${seahorse-agent.adapters.vector.milvus.hnsw.m:48}") int hnswM,
-            @Value("${seahorse-agent.adapters.vector.milvus.hnsw.ef-construction:200}") int hnswEfConstruction,
-            @Value("${seahorse-agent.adapters.vector.milvus.mmap-enabled:false}") boolean mmapEnabled,
-            @Value("${seahorse-agent.adapters.vector.milvus.search-ef:128}") int searchEf) {
-        return new MilvusVectorAdapter(milvusClient, new MilvusVectorProperties(
-                collectionName, dimension, metricType, contentMaxLength,
-                hnswM, hnswEfConstruction, mmapEnabled, searchEf));
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.vector", name = "type", havingValue = "pgvector")
-    @ConditionalOnMissingBean(PgVectorAdapter.class)
-    public PgVectorAdapter seahorsePgVectorAdapter(
-            DataSource dataSource,
-            ObjectMapper objectMapper,
-            @Value("${seahorse-agent.adapters.vector.dimension:1024}") int dimension) {
-        return new PgVectorAdapter(dataSource, objectMapper, new PgVectorProperties("t_knowledge_vector", dimension));
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.vector", name = "type", havingValue = "noop")
-    @ConditionalOnMissingBean(NoopVectorStoreAdapter.class)
-    public NoopVectorStoreAdapter seahorseNoopVectorStoreAdapter() {
-        return new NoopVectorStoreAdapter();
-    }
-
-    @Bean
-    @ConditionalOnBean(MilvusVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorSearchPort.class)
-    public VectorSearchPort seahorseNativeMilvusVectorSearchPort(MilvusVectorAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(MilvusVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorIndexPort.class)
-    public VectorIndexPort seahorseNativeMilvusVectorIndexPort(MilvusVectorAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(MilvusVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorCollectionAdminPort.class)
-    public VectorCollectionAdminPort seahorseNativeMilvusVectorAdminPort(MilvusVectorAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(PgVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorSearchPort.class)
-    public VectorSearchPort seahorseNativePgVectorSearchPort(PgVectorAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(PgVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorIndexPort.class)
-    public VectorIndexPort seahorseNativePgVectorIndexPort(PgVectorAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(PgVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorCollectionAdminPort.class)
-    public VectorCollectionAdminPort seahorseNativePgVectorAdminPort(PgVectorAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(NoopVectorStoreAdapter.class)
-    @ConditionalOnMissingBean(VectorSearchPort.class)
-    public VectorSearchPort seahorseNativeNoopVectorSearchPort(NoopVectorStoreAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(NoopVectorStoreAdapter.class)
-    @ConditionalOnMissingBean(VectorIndexPort.class)
-    public VectorIndexPort seahorseNativeNoopVectorIndexPort(NoopVectorStoreAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(NoopVectorStoreAdapter.class)
-    @ConditionalOnMissingBean(VectorCollectionAdminPort.class)
-    public VectorCollectionAdminPort seahorseNativeNoopVectorAdminPort(NoopVectorStoreAdapter adapter) {
-        return adapter;
     }
 
     private static List<String> csv(String value) {
