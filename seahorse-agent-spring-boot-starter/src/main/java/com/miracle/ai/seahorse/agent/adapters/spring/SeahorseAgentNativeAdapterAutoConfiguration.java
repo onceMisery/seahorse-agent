@@ -20,11 +20,6 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelProperties;
-import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalCacheAdapter;
-import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalSemaphoreAdapter;
-import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisCacheAdapter;
-import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisSemaphoreAdapter;
-import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.local.ClasspathPromptTemplateAdapter;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalIntentGuidanceAdapter;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalIntentResolutionAdapter;
@@ -87,7 +82,6 @@ import com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorProperti
 import com.miracle.ai.seahorse.agent.adapters.vector.noop.NoopVectorStoreAdapter;
 import com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorAdapter;
 import com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorProperties;
-import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
@@ -95,7 +89,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedSemaphorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.dashboard.DashboardRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
@@ -154,7 +147,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyT
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
@@ -166,7 +158,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import io.milvus.v2.client.MilvusClientV2;
 import okhttp3.OkHttpClient;
 import org.apache.pulsar.client.api.PulsarClient;
-import org.redisson.api.RedissonClient;
 import cn.dev33.satoken.stp.StpInterface;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -200,6 +191,7 @@ import java.util.concurrent.Executor;
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
+        SeahorseAgentCacheAdapterAutoConfiguration.class,
         SeahorseAgentObservationAdapterAutoConfiguration.class,
         SeahorseAgentStorageAdapterAutoConfiguration.class
 })
@@ -227,44 +219,6 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
         PulsarMessageQueueAdapter delegate = new PulsarMessageQueueAdapter(
                 pulsarClient, objectMapper, new PulsarMessageQueueProperties());
         return new ReliableMessageQueueAdapter(delegate, delegate, outboxRepositoryPort::getIfAvailable, () -> objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean(RedissonClient.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type", havingValue = "redis", matchIfMissing = true)
-    @ConditionalOnMissingBean(RedisCacheAdapter.class)
-    public RedisCacheAdapter seahorseRedisCacheAdapter(RedissonClient redissonClient) {
-        return new RedisCacheAdapter(redissonClient);
-    }
-
-    @Bean
-    @ConditionalOnBean(RedissonClient.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type", havingValue = "redis", matchIfMissing = true)
-    @ConditionalOnMissingBean(DistributedSemaphorePort.class)
-    public RedisSemaphoreAdapter seahorseRedisSemaphoreAdapter(RedissonClient redissonClient) {
-        return new RedisSemaphoreAdapter(redissonClient);
-    }
-
-    @Bean
-    @ConditionalOnBean(RedissonClient.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.stream-task", name = "type", havingValue = "redis")
-    @ConditionalOnMissingBean(StreamTaskPort.class)
-    public RedisStreamTaskPort seahorseRedisStreamTaskPort(RedissonClient redissonClient) {
-        return new RedisStreamTaskPort(redissonClient);
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type", havingValue = "local")
-    @ConditionalOnMissingBean(KeyValueCachePort.class)
-    public LocalCacheAdapter seahorseLocalCacheAdapter() {
-        return new LocalCacheAdapter();
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type", havingValue = "local")
-    @ConditionalOnMissingBean(DistributedSemaphorePort.class)
-    public LocalSemaphoreAdapter seahorseLocalSemaphoreAdapter() {
-        return new LocalSemaphoreAdapter();
     }
 
     @Bean
