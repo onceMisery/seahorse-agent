@@ -17,18 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFactory;
-import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentAdapterProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentKernelProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentPluginProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.metadata.MetadataIndexCompensationAdapter;
-import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
-import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPorts;
-import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
-import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService;
-import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionPipelineService;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionTaskService;
@@ -67,7 +59,6 @@ import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrieva
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceService;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.RagTraceRecorderOptions;
-import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ChunkerNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.EmbedderNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.EnhancerNodeFeature;
@@ -97,7 +88,6 @@ import com.miracle.ai.seahorse.agent.kernel.plugin.AgentFeature;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureHealthAggregator;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureType;
-import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionTaskInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeBaseInboundPort;
@@ -124,9 +114,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
-import com.miracle.ai.seahorse.agent.adapters.ai.openai.LlmQueryOptimizerAdapter;
-import com.miracle.ai.seahorse.agent.kernel.application.chat.RuleBasedQueryOptimizerPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryOptimizerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermExpansionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
@@ -194,7 +181,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluatio
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
@@ -234,6 +220,7 @@ import java.util.concurrent.Executor;
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
         SeahorseAgentKernelAuthAutoConfiguration.class,
+        SeahorseAgentKernelChatAutoConfiguration.class,
         SeahorseAgentKernelDocumentRefreshAutoConfiguration.class,
         SeahorseAgentKernelKeywordAutoConfiguration.class,
         SeahorseAgentKernelMemoryAutoConfiguration.class,
@@ -534,21 +521,6 @@ public class SeahorseAgentKernelAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public StreamTaskPort seahorseLocalStreamTaskPort() {
-        return new LocalStreamTaskPort();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public ChatStreamCallbackFactoryPort seahorseLocalChatStreamCallbackFactoryPort(
-            StreamTaskPort streamTaskPort,
-            ObjectProvider<ConversationMemoryPort> memoryPort) {
-        return new LocalChatStreamCallbackFactory(streamTaskPort,
-                memoryPort.getIfAvailable(ConversationMemoryPort::noop));
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
     public KernelMultiChannelRetrievalEngine seahorseKernelMultiChannelRetrievalEngine(
             ExtensionRegistry extensionRegistry,
             @Qualifier("ragRetrievalThreadPoolExecutor") ObjectProvider<Executor> retrievalExecutor,
@@ -629,79 +601,6 @@ public class SeahorseAgentKernelAutoConfiguration {
                 comparisonRepositoryPort.getIfAvailable(RetrievalEvaluationComparisonRepositoryPort::empty),
                 runRepositoryPort.getIfAvailable(RetrievalEvaluationRunRepositoryPort::empty),
                 evaluationPort.getIfAvailable());
-    }
-
-    @Bean
-    @ConditionalOnBean(ChatModelPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.query-optimizer", name = "llm-enabled", havingValue = "true")
-    @ConditionalOnMissingBean(QueryOptimizerPort.class)
-    public QueryOptimizerPort seahorseLlmQueryOptimizer(
-            ChatModelPort chatModelPort,
-            PromptTemplatePort promptTemplatePort,
-            ObjectMapper objectMapper) {
-        return new LlmQueryOptimizerAdapter(chatModelPort, promptTemplatePort, objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(QueryOptimizerPort.class)
-    public QueryOptimizerPort seahorseRuleBasedQueryOptimizer(
-            ObjectProvider<QueryTermExpansionPort> termExpansionPort) {
-        return new RuleBasedQueryOptimizerPort(
-                termExpansionPort.getIfAvailable(QueryTermExpansionPort::noop));
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public ChatPreparationPorts seahorseChatPreparationPorts(ObjectProvider<ConversationMemoryPort> memoryPort,
-                                                             ObjectProvider<MemoryEnginePort> memoryEnginePort,
-                                                             ObjectProvider<QueryOptimizerPort> queryOptimizerPort,
-                                                             ObjectProvider<QueryRewritePort> queryRewritePort,
-                                                             ObjectProvider<IntentResolutionPort> intentResolutionPort,
-                                                             ObjectProvider<IntentGuidancePort> intentGuidancePort,
-                                                             ObjectProvider<RetrievalContextPort> retrievalContextPort) {
-        return new ChatPreparationPorts(
-                memoryPort.getIfAvailable(ConversationMemoryPort::noop),
-                memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
-                queryOptimizerPort.getIfAvailable(QueryOptimizerPort::passthrough),
-                queryRewritePort.getIfAvailable(QueryRewritePort::passthrough),
-                intentResolutionPort.getIfAvailable(IntentResolutionPort::empty),
-                intentGuidancePort.getIfAvailable(IntentGuidancePort::none),
-                retrievalContextPort.getIfAvailable(() -> (subIntents, topK) ->
-                        RetrievalContext.builder()
-                                .intentChunks(Map.of())
-                                .build()));
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public ChatResponsePorts seahorseChatResponsePorts(ObjectProvider<RagPromptPort> ragPromptPort,
-                                                       ObjectProvider<PromptTemplatePort> promptTemplatePort,
-                                                       ObjectProvider<StreamingChatModelPort> streamingChatModelPort,
-                                                       ObjectProvider<StreamTaskPort> streamTaskPort) {
-        return new ChatResponsePorts(
-                ragPromptPort.getIfAvailable(RagPromptPort::simple),
-                promptTemplatePort.getIfAvailable(PromptTemplatePort::empty),
-                streamingChatModelPort.getIfAvailable(StreamingChatModelPort::noop),
-                streamTaskPort.getIfAvailable(StreamTaskPort::noop));
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public KernelChatPipeline seahorseKernelChatPipeline(ChatPreparationPorts preparationPorts,
-                                                         ChatResponsePorts responsePorts,
-                                                         ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
-        return new KernelChatPipeline(preparationPorts, responsePorts,
-                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
-    }
-
-    @Bean
-    @ConditionalOnBean({KernelChatPipeline.class, StreamTaskPort.class})
-    @ConditionalOnMissingBean
-    public ChatInboundPort seahorseChatInboundPort(KernelChatPipeline chatPipeline,
-                                                   StreamTaskPort streamTaskPort,
-                                                   ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
-        return new KernelChatInboundService(chatPipeline, streamTaskPort,
-                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
     }
 
     @Bean

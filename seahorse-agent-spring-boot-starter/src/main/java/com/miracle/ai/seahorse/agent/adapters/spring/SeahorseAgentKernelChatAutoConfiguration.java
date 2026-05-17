@@ -1,0 +1,150 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.adapters.spring;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.ai.openai.LlmQueryOptimizerAdapter;
+import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFactory;
+import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
+import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPorts;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.RuleBasedQueryOptimizerPort;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryOptimizerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermExpansionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
+import java.util.Map;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * 聊天链路自动配置。
+ *
+ * <p>该配置收拢查询优化、流任务默认实现、聊天管线与入口装配，避免主 kernel 配置继续承担聊天主链路细节。
+ */
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+public class SeahorseAgentKernelChatAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean
+    public StreamTaskPort seahorseLocalStreamTaskPort() {
+        return new LocalStreamTaskPort();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ChatStreamCallbackFactoryPort seahorseLocalChatStreamCallbackFactoryPort(
+            StreamTaskPort streamTaskPort,
+            ObjectProvider<ConversationMemoryPort> memoryPort) {
+        return new LocalChatStreamCallbackFactory(streamTaskPort,
+                memoryPort.getIfAvailable(ConversationMemoryPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnBean(ChatModelPort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.query-optimizer", name = "llm-enabled", havingValue = "true")
+    @ConditionalOnMissingBean(QueryOptimizerPort.class)
+    public QueryOptimizerPort seahorseLlmQueryOptimizer(
+            ChatModelPort chatModelPort,
+            PromptTemplatePort promptTemplatePort,
+            ObjectMapper objectMapper) {
+        return new LlmQueryOptimizerAdapter(chatModelPort, promptTemplatePort, objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(QueryOptimizerPort.class)
+    public QueryOptimizerPort seahorseRuleBasedQueryOptimizer(
+            ObjectProvider<QueryTermExpansionPort> termExpansionPort) {
+        return new RuleBasedQueryOptimizerPort(
+                termExpansionPort.getIfAvailable(QueryTermExpansionPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ChatPreparationPorts seahorseChatPreparationPorts(ObjectProvider<ConversationMemoryPort> memoryPort,
+                                                             ObjectProvider<MemoryEnginePort> memoryEnginePort,
+                                                             ObjectProvider<QueryOptimizerPort> queryOptimizerPort,
+                                                             ObjectProvider<QueryRewritePort> queryRewritePort,
+                                                             ObjectProvider<IntentResolutionPort> intentResolutionPort,
+                                                             ObjectProvider<IntentGuidancePort> intentGuidancePort,
+                                                             ObjectProvider<RetrievalContextPort> retrievalContextPort) {
+        return new ChatPreparationPorts(
+                memoryPort.getIfAvailable(ConversationMemoryPort::noop),
+                memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
+                queryOptimizerPort.getIfAvailable(QueryOptimizerPort::passthrough),
+                queryRewritePort.getIfAvailable(QueryRewritePort::passthrough),
+                intentResolutionPort.getIfAvailable(IntentResolutionPort::empty),
+                intentGuidancePort.getIfAvailable(IntentGuidancePort::none),
+                retrievalContextPort.getIfAvailable(() -> (subIntents, topK) ->
+                        RetrievalContext.builder()
+                                .intentChunks(Map.of())
+                                .build()));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ChatResponsePorts seahorseChatResponsePorts(ObjectProvider<RagPromptPort> ragPromptPort,
+                                                       ObjectProvider<PromptTemplatePort> promptTemplatePort,
+                                                       ObjectProvider<StreamingChatModelPort> streamingChatModelPort,
+                                                       ObjectProvider<StreamTaskPort> streamTaskPort) {
+        return new ChatResponsePorts(
+                ragPromptPort.getIfAvailable(RagPromptPort::simple),
+                promptTemplatePort.getIfAvailable(PromptTemplatePort::empty),
+                streamingChatModelPort.getIfAvailable(StreamingChatModelPort::noop),
+                streamTaskPort.getIfAvailable(StreamTaskPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public KernelChatPipeline seahorseKernelChatPipeline(ChatPreparationPorts preparationPorts,
+                                                         ChatResponsePorts responsePorts,
+                                                         ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
+        return new KernelChatPipeline(preparationPorts, responsePorts,
+                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
+    }
+
+    @Bean
+    @ConditionalOnBean({KernelChatPipeline.class, StreamTaskPort.class})
+    @ConditionalOnMissingBean
+    public ChatInboundPort seahorseChatInboundPort(KernelChatPipeline chatPipeline,
+                                                   StreamTaskPort streamTaskPort,
+                                                   ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
+        return new KernelChatInboundService(chatPipeline, streamTaskPort,
+                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
+    }
+}
