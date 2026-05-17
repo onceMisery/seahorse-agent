@@ -22,14 +22,12 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationRe
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationMemoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDashboardRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentExtensionStatusAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcIngestionTaskRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcIntentTreeRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLongTermMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflictLogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryQualitySnapshotRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMessageFeedbackRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPipelineDefinitionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRagTraceRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRetrievalEvaluationDatasetRepositoryAdapter;
@@ -44,8 +42,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLock
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.dashboard.DashboardRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.PipelineDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
@@ -88,6 +84,7 @@ import javax.sql.DataSource;
         SeahorseAgentAiAdapterAutoConfiguration.class,
         SeahorseAgentAuthAdapterAutoConfiguration.class,
         SeahorseAgentCacheAdapterAutoConfiguration.class,
+        SeahorseAgentIngestionRepositoryAutoConfiguration.class,
         SeahorseAgentKeywordAdapterAutoConfiguration.class,
         SeahorseAgentKnowledgeRepositoryAutoConfiguration.class,
         SeahorseAgentLocalAdapterAutoConfiguration.class,
@@ -115,24 +112,6 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     public JdbcRetrievalEvaluationDatasetRepositoryAdapter seahorseJdbcRetrievalEvaluationDatasetRepositoryAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
         return new JdbcRetrievalEvaluationDatasetRepositoryAdapter(dataSource, objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(PipelineDefinitionRepositoryPort.class)
-    public JdbcPipelineDefinitionRepositoryAdapter seahorseJdbcPipelineDefinitionRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcPipelineDefinitionRepositoryAdapter(dataSource, objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(IngestionTaskRepositoryPort.class)
-    public JdbcIngestionTaskRepositoryAdapter seahorseJdbcIngestionTaskRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcIngestionTaskRepositoryAdapter(dataSource, objectMapper);
     }
 
     @Bean
