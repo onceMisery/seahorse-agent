@@ -112,6 +112,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     private final JdbcMetadataQuarantineSupport quarantineSupport;
     private final JdbcMetadataBackfillSupport backfillSupport;
     private final JdbcMetadataSchemaUsageReportSupport schemaUsageReportSupport;
+    private final JdbcMetadataQualityReportSupport qualityReportSupport;
 
     public JdbcMetadataGovernanceRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
@@ -123,6 +124,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         this.quarantineSupport = new JdbcMetadataQuarantineSupport(jdbcTemplate, jsonSupport);
         this.backfillSupport = new JdbcMetadataBackfillSupport(jdbcTemplate, jsonSupport);
         this.schemaUsageReportSupport = new JdbcMetadataSchemaUsageReportSupport(jdbcTemplate, this::listSchemaFields);
+        this.qualityReportSupport = new JdbcMetadataQualityReportSupport(jdbcTemplate, jsonSupport, this::loadSchema);
     }
 
     @Override
@@ -1014,6 +1016,11 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                                         Integer schemaVersion,
                                         String extractorVersion,
                                         String llmPromptVersion) {
+        // quality report 已收敛到独立统计协作者，主适配器仅保留兼容门面。
+        if (qualityReportSupport != null) {
+            return qualityReportSupport.report(tenantId, knowledgeBaseId, quarantineTopN, schemaVersion,
+                    extractorVersion, llmPromptVersion);
+        }
         String safeTenantId = Objects.requireNonNullElse(tenantId, "");
         String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
         int safeTopN = Math.max(1, Math.min(quarantineTopN, 50));

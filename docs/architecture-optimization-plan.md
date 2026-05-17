@@ -115,7 +115,7 @@ P2 是清理、命名、低风险维护性优化或前端体验增强。
 | 4 | P1 | 部署与适配器治理 | starter 依赖拆分策略、OpenAI streaming executor、Milvus 配置 | 2-4 个代码提交 |
 | 5 | P1 | 数据库补偿 | `t_knowledge_chunk(kb_id, doc_id)` 索引与迁移说明 | 1 个代码/SQL 提交 |
 | 6 | P2 | 清理与前端运营 | wrapper 占位已显式暴露 passThrough；storage 可靠上传默认语义已收敛；cache-local 命名已澄清；chatStore 已完成第一步门面式拆分；元数据治理 UI 已新增最小管理页 | 多个独立提交 |
-| 7 | P1/P2 | 架构瘦身与职责治理 | 自动配置已开始按技术域拆分；JDBC 元数据治理适配器已抽离 JSON、Schema Usage 参数组包、Schema Usage Report、列探测、review、quarantine、backfill 协作者，主类降至约 2209 行；端口准入规则、聊天/检索阶段边界收敛仍待推进 | 多个独立提交 |
+| 7 | P1/P2 | 架构瘦身与职责治理 | 自动配置已开始按技术域拆分；JDBC 元数据治理适配器已抽离 JSON、Schema Usage 参数组包、Schema Usage Report、quality report、列探测、review、quarantine、backfill 协作者，主类降至约 2216 行；端口准入规则、聊天/检索阶段边界收敛仍待推进 | 多个独立提交 |
 
 ---
 
@@ -851,7 +851,7 @@ npm run build
 | Native 自动配置 | `SeahorseAgentNativeAdapterAutoConfiguration.java` 已降至约 53 行，主配置不再直接声明 `@Bean`，仅作为旧外部入口聚合 16 个子配置类 | P1 已完成主要治理，后续关注 starter 依赖边界 |
 | starter 依赖 | `seahorse-agent-spring-boot-starter` 直接依赖 web、MQ、AI、MCP、Tika、Feishu、Milvus、PgVector、Redis、S3、ES、Lucene、JDBC 等适配器 | P1，最小部署和新增适配器成本偏高 |
 | 出站端口 | `ports/outbound` 当前约 231 个 Java 文件，其中约 103 个接口；`metadata` 包约 58 个文件、18 个接口 | P2，数量高但包含大量 DTO，不能按总文件数判定 |
-| JDBC 适配器 | JDBC 主代码约 35 个 Java 文件、30 个 `*Adapter.java`；其中 `JdbcMetadataGovernanceRepositoryAdapter.java` 已抽离 `JdbcMetadataJsonSupport`、`JdbcMetadataSchemaUsageSupport`、`JdbcMetadataSchemaUsageReportSupport`、`JdbcMetadataColumnDetector`、`JdbcMetadataReviewSupport`、`JdbcMetadataQuarantineSupport`、`JdbcMetadataBackfillSupport` 七个协作者，主类降至约 2209 行，但仍实现 14 个 metadata 端口 | P1，元数据治理 JDBC owner 仍偏重，但已进入可渐进拆分状态 |
+| JDBC 适配器 | JDBC 主代码约 35 个 Java 文件、30 个 `*Adapter.java`；其中 `JdbcMetadataGovernanceRepositoryAdapter.java` 已抽离 `JdbcMetadataJsonSupport`、`JdbcMetadataSchemaUsageSupport`、`JdbcMetadataSchemaUsageReportSupport`、`JdbcMetadataQualityReportSupport`、`JdbcMetadataColumnDetector`、`JdbcMetadataReviewSupport`、`JdbcMetadataQuarantineSupport`、`JdbcMetadataBackfillSupport` 八个协作者，主类降至约 2216 行，但仍实现 14 个 metadata 端口 | P1，元数据治理 JDBC owner 仍偏重，但已进入可渐进拆分状态 |
 | 检索编排 | `KernelMultiChannelRetrievalEngine.java` 约 557 行，负责通道发现、并发执行、metadata filter、后处理、trace、observation、空结果事件 | P1，后续扩展检索策略会继续堆叠职责 |
 | 聊天主链路 | `KernelChatPipeline.java` 约 352 行，串联会话历史、记忆激活、查询优化、改写、意图、检索、响应、降级和 trace | P1，记忆写入和更多 guardrail 加入后会变成主链路瓶颈 |
 | 记忆集成 | 主链路已 `activateMemory()` 读取；`MemoryCaptureStage` 已触发显式记忆写入；短期记忆维护端口已支持过期/低衰减清理；working memory 在主链路中为空，`PromptContext.hasMemory()` 未纳入 working memory | P1，四层记忆已形成最小闭环，预算和质量治理仍需增强 |
@@ -925,7 +925,7 @@ npm run build
 
 问题：
 
-`JdbcMetadataGovernanceRepositoryAdapter` 当前约 2209 行，实现 schema registry、dictionary、extraction result、review queue、quarantine、canonical write、backfill、quality report、review management、quarantine management、schema management、dictionary management、extraction management、schema index status、schema usage report 等 14 个端口。当前已先把 JSON 解析、Schema Usage 参数组包、Schema Usage Report、表结构列探测、review、quarantine、backfill 抽离到独立协作者，但主类仍承担多个事务语义、SQL 映射、统计报表和运营写入职责。
+`JdbcMetadataGovernanceRepositoryAdapter` 当前约 2216 行，实现 schema registry、dictionary、extraction result、review queue、quarantine、canonical write、backfill、quality report、review management、quarantine management、schema management、dictionary management、extraction management、schema index status、schema usage report 等 14 个端口。当前已先把 JSON 解析、Schema Usage 参数组包、Schema Usage Report、quality report、表结构列探测、review、quarantine、backfill 抽离到独立协作者，但主类仍承担多个事务语义、SQL 映射、统计报表和运营写入职责。
 
 方案：
 
