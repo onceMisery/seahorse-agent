@@ -38,4 +38,9 @@ public class AuditPortWrapper<T> implements PortWrapper<T> {
     public int order() {
         return 20;
     }
+
+    @Override
+    public boolean passThrough() {
+        return true;
+    }
 }

@@ -40,7 +40,7 @@ public record PortWrapperChainSnapshot(
         return diagnostics.stream().noneMatch(diagnostic -> "ERROR".equals(diagnostic.level()));
     }
 
-    public record PortWrapperDescriptor(String name, int order, String type) {
+    public record PortWrapperDescriptor(String name, int order, String type, boolean passThrough) {
 
         public PortWrapperDescriptor {
             name = Objects.requireNonNullElse(name, "");

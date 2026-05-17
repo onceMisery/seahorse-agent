@@ -40,4 +40,9 @@ public class ObservationPortWrapper<T> implements PortWrapper<T> {
     public int order() {
         return 10;
     }
+
+    @Override
+    public boolean passThrough() {
+        return true;
+    }
 }

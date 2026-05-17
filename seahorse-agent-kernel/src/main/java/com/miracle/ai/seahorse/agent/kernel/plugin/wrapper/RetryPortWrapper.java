@@ -38,4 +38,9 @@ public class RetryPortWrapper<T> implements PortWrapper<T> {
     public int order() {
         return 40;
     }
+
+    @Override
+    public boolean passThrough() {
+        return true;
+    }
 }

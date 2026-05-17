@@ -55,6 +55,16 @@ class PortWrapperChainTests {
         Assertions.assertEquals(2, chain.snapshot().diagnostics().size());
     }
 
+    @Test
+    void shouldExposePassThroughWrappersInSnapshot() {
+        PortWrapperChain<SamplePort> chain = new PortWrapperChain<>(List.of(new RetryPortWrapper<>()));
+
+        PortWrapperChainSnapshot.PortWrapperDescriptor descriptor = chain.snapshot().wrappers().get(0);
+
+        Assertions.assertEquals("retry", descriptor.name());
+        Assertions.assertTrue(descriptor.passThrough());
+    }
+
     private PortWrapper<SamplePort> wrapper(String name, int order, List<String> calls) {
         return new PortWrapper<>() {
             @Override

@@ -38,4 +38,9 @@ public class CircuitBreakerPortWrapper<T> implements PortWrapper<T> {
     public int order() {
         return 50;
     }
+
+    @Override
+    public boolean passThrough() {
+        return true;
+    }
 }

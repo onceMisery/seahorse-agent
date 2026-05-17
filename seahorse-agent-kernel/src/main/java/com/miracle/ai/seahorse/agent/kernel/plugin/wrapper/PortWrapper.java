@@ -54,4 +54,13 @@ public interface PortWrapper<T> {
     default String type() {
         return name();
     }
+
+    /**
+     * 是否只是透传占位实现。
+     *
+     * @return true 表示未提供真实横切能力
+     */
+    default boolean passThrough() {
+        return false;
+    }
 }

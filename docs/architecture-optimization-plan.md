@@ -113,7 +113,7 @@ P2 是清理、命名、低风险维护性优化或前端体验增强。
 | 3 | P1 | 生产可观测治理 | RAG Trace 采样/TTL 已完成；关键业务指标后续增强 | 1-2 个代码提交 |
 | 4 | P1 | 部署与适配器治理 | starter 依赖拆分策略、OpenAI streaming executor、Milvus 配置 | 2-4 个代码提交 |
 | 5 | P1 | 数据库补偿 | `t_knowledge_chunk(kb_id, doc_id)` 索引与迁移说明 | 1 个代码/SQL 提交 |
-| 6 | P2 | 清理与前端运营 | wrapper、storage、命名、chatStore、元数据治理 UI | 多个独立提交 |
+| 6 | P2 | 清理与前端运营 | wrapper 占位已显式暴露 passThrough；storage、命名、chatStore、元数据治理 UI 仍待拆分推进 | 多个独立提交 |
 | 7 | P1/P2 | 架构瘦身与职责治理 | 自动配置拆分、JDBC 元数据适配器拆分、端口准入规则、聊天/检索阶段边界收敛 | 多个独立提交 |
 
 ---
@@ -631,6 +631,8 @@ git diff --check
 ## 12. 阶段 6：P2 清理与前端运营
 
 ### 12.1 Wrapper 占位实现
+
+当前状态：已完成最小语义澄清。`PortWrapper` 增加 `passThrough()`，五个占位 wrapper 在快照中显式标记为透传，避免被误读为真实审计、限流、熔断、重试或观测实现。
 
 方案二选一：
 

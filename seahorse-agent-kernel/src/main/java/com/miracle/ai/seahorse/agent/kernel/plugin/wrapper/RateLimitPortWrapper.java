@@ -38,4 +38,9 @@ public class RateLimitPortWrapper<T> implements PortWrapper<T> {
     public int order() {
         return 30;
     }
+
+    @Override
+    public boolean passThrough() {
+        return true;
+    }
 }

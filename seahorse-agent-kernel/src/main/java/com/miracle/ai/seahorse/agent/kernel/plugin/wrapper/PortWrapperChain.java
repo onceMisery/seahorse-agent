@@ -65,7 +65,7 @@ public class PortWrapperChain<T> {
         return new PortWrapperChainSnapshot(
                 wrappers.stream()
                         .map(wrapper -> new PortWrapperChainSnapshot.PortWrapperDescriptor(
-                                wrapper.name(), wrapper.order(), wrapper.type()))
+                                wrapper.name(), wrapper.order(), wrapper.type(), wrapper.passThrough()))
                         .toList(),
                 diagnostics);
     }
