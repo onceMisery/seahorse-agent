@@ -264,6 +264,7 @@ import java.util.concurrent.Executor;
 })
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
+        SeahorseAgentKernelAuthAutoConfiguration.class,
         SeahorseAgentKernelMemoryAutoConfiguration.class,
         SeahorseAgentKernelModelAutoConfiguration.class,
         SeahorseAgentKernelTraceAutoConfiguration.class
@@ -729,24 +730,6 @@ public class SeahorseAgentKernelAutoConfiguration {
                                                    ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
-    }
-
-    @Bean
-    @ConditionalOnBean({UserRepositoryPort.class, PasswordHasherPort.class, TokenServicePort.class})
-    @ConditionalOnMissingBean(AuthInboundPort.class)
-    public KernelAuthService seahorseAuthInboundPort(UserRepositoryPort userRepositoryPort,
-                                                     PasswordHasherPort passwordHasherPort,
-                                                     TokenServicePort tokenServicePort) {
-        return new KernelAuthService(userRepositoryPort, passwordHasherPort, tokenServicePort);
-    }
-
-    @Bean
-    @ConditionalOnBean({UserRepositoryPort.class, PasswordHasherPort.class, CurrentUserPort.class})
-    @ConditionalOnMissingBean(UserInboundPort.class)
-    public KernelUserService seahorseUserInboundPort(UserRepositoryPort userRepositoryPort,
-                                                     PasswordHasherPort passwordHasherPort,
-                                                     CurrentUserPort currentUserPort) {
-        return new KernelUserService(userRepositoryPort, passwordHasherPort, currentUserPort);
     }
 
     @Bean
