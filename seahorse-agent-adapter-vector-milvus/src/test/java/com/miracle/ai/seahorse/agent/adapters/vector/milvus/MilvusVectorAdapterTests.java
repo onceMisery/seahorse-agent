@@ -29,7 +29,11 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldContain
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FieldNe;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.FilterAnd;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.MetadataFilterExpr;
+import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchRequest;
+import io.milvus.v2.service.collection.request.CreateCollectionReq;
+import io.milvus.v2.service.collection.request.HasCollectionReq;
+import io.milvus.v2.service.vector.request.InsertReq;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.response.SearchResp;
@@ -109,6 +113,57 @@ class MilvusVectorAdapterTests {
         assertThat(requestCaptor.getValue().getFilter())
                 .doesNotContain("metadata[\"title\"] == \"policy\"")
                 .doesNotContain("json_contains(metadata[\"title\"]");
+    }
+
+    @Test
+    void shouldApplyConfigurableSearchEf() {
+        MilvusClientV2 client = mock(MilvusClientV2.class);
+        when(client.search(any(SearchReq.class))).thenReturn(SearchResp.builder().searchResults(List.of()).build());
+        MilvusVectorAdapter adapter = new MilvusVectorAdapter(client,
+                new MilvusVectorProperties("default_collection", 2, "COSINE", 32, 16, 96, true, 64));
+
+        adapter.search(searchRequest());
+
+        ArgumentCaptor<SearchReq> requestCaptor = ArgumentCaptor.forClass(SearchReq.class);
+        verify(client).search(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getSearchParams()).containsEntry("ef", 64);
+    }
+
+    @Test
+    void shouldApplyConfigurableSchemaAndIndexParams() {
+        MilvusClientV2 client = mock(MilvusClientV2.class);
+        when(client.hasCollection(any(HasCollectionReq.class))).thenReturn(false);
+        MilvusVectorAdapter adapter = new MilvusVectorAdapter(client,
+                new MilvusVectorProperties("default_collection", 2, "COSINE", 32, 16, 96, true, 64));
+
+        adapter.ensureCollection("collection-a");
+
+        ArgumentCaptor<CreateCollectionReq> requestCaptor = ArgumentCaptor.forClass(CreateCollectionReq.class);
+        verify(client).createCollection(requestCaptor.capture());
+        CreateCollectionReq request = requestCaptor.getValue();
+        assertThat(request.getCollectionSchema().getField("content").getMaxLength()).isEqualTo(32);
+        assertThat(request.getIndexParams().get(0).getExtraParams())
+                .containsEntry("M", "16")
+                .containsEntry("efConstruction", "96")
+                .containsEntry("mmap.enabled", "true");
+    }
+
+    @Test
+    void shouldTruncateContentByConfiguredMaxLength() {
+        MilvusClientV2 client = mock(MilvusClientV2.class);
+        MilvusVectorAdapter adapter = new MilvusVectorAdapter(client,
+                new MilvusVectorProperties("default_collection", 2, "COSINE", 5, 16, 96, false, 64));
+
+        adapter.indexDocumentChunks("collection-a", "doc-1", List.of(VectorChunk.builder()
+                .chunkId("chunk-1")
+                .index(0)
+                .content("123456789")
+                .embedding(new float[] {0.1F, 0.2F})
+                .build()));
+
+        ArgumentCaptor<InsertReq> requestCaptor = ArgumentCaptor.forClass(InsertReq.class);
+        verify(client).insert(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getData().get(0).get("content").getAsString()).isEqualTo("12345");
     }
 
     private VectorSearchRequest searchRequest() {

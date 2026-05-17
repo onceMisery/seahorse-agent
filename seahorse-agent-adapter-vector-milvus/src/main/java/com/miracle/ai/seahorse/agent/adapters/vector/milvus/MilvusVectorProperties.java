@@ -23,10 +23,32 @@ import java.util.Objects;
  * Milvus adapter 配置契约。
  *
  * @param defaultCollection 默认 collection
- * @param dimension         向量维度
- * @param metricType        Milvus 度量类型，默认 COSINE
+ * @param dimension 向量维度
+ * @param metricType Milvus 度量类型，默认 COSINE
+ * @param contentMaxLength content 字段最大长度
+ * @param hnswM HNSW M 参数
+ * @param hnswEfConstruction HNSW efConstruction 参数
+ * @param mmapEnabled 是否启用 mmap
+ * @param searchEf 搜索 ef 参数
  */
-public record MilvusVectorProperties(String defaultCollection, int dimension, String metricType) {
+public record MilvusVectorProperties(String defaultCollection,
+                                     int dimension,
+                                     String metricType,
+                                     int contentMaxLength,
+                                     int hnswM,
+                                     int hnswEfConstruction,
+                                     boolean mmapEnabled,
+                                     int searchEf) {
+
+    private static final int DEFAULT_CONTENT_MAX_LENGTH = 65535;
+    private static final int DEFAULT_HNSW_M = 48;
+    private static final int DEFAULT_HNSW_EF_CONSTRUCTION = 200;
+    private static final int DEFAULT_SEARCH_EF = 128;
+
+    public MilvusVectorProperties(String defaultCollection, int dimension, String metricType) {
+        this(defaultCollection, dimension, metricType,
+                DEFAULT_CONTENT_MAX_LENGTH, DEFAULT_HNSW_M, DEFAULT_HNSW_EF_CONSTRUCTION, false, DEFAULT_SEARCH_EF);
+    }
 
     public MilvusVectorProperties {
         defaultCollection = Objects.requireNonNullElse(defaultCollection, "");
@@ -34,5 +56,13 @@ public record MilvusVectorProperties(String defaultCollection, int dimension, St
         if (dimension <= 0) {
             throw new IllegalArgumentException("dimension must be positive");
         }
+        contentMaxLength = positiveOrDefault(contentMaxLength, DEFAULT_CONTENT_MAX_LENGTH);
+        hnswM = positiveOrDefault(hnswM, DEFAULT_HNSW_M);
+        hnswEfConstruction = positiveOrDefault(hnswEfConstruction, DEFAULT_HNSW_EF_CONSTRUCTION);
+        searchEf = positiveOrDefault(searchEf, DEFAULT_SEARCH_EF);
+    }
+
+    private static int positiveOrDefault(int value, int defaultValue) {
+        return value <= 0 ? defaultValue : value;
     }
 }

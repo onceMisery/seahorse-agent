@@ -67,6 +67,7 @@ import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexMessage
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexOutboxAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.storage.local.LocalObjectStorageAdapter;
+import com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorAdapter;
 import com.miracle.ai.seahorse.agent.adapters.vector.noop.NoopVectorStoreAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
@@ -125,6 +126,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
+import io.milvus.v2.client.MilvusClientV2;
 import okhttp3.OkHttpClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -135,6 +137,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class SeahorseAgentNativeAdapterAutoConfigurationTests {
 
@@ -331,6 +334,26 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                             .isInstanceOf(LuceneKeywordSearchAdapter.class);
                     assertThat(context.getBean(KeywordIndexPort.class))
                             .isInstanceOf(LuceneKeywordIndexAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterMilvusVectorAdapterWithConfigurableProperties() {
+        contextRunner.withBean(MilvusClientV2.class, () -> mock(MilvusClientV2.class))
+                .withPropertyValues(
+                        "seahorse-agent.adapters.vector.type=milvus",
+                        "seahorse-agent.adapters.vector.collection-name=kb_chunks",
+                        "seahorse-agent.adapters.vector.dimension=8",
+                        "seahorse-agent.adapters.vector.metric-type=COSINE",
+                        "seahorse-agent.adapters.vector.milvus.content-max-length=2048",
+                        "seahorse-agent.adapters.vector.milvus.hnsw.m=16",
+                        "seahorse-agent.adapters.vector.milvus.hnsw.ef-construction=96",
+                        "seahorse-agent.adapters.vector.milvus.mmap-enabled=true",
+                        "seahorse-agent.adapters.vector.milvus.search-ef=64")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MilvusVectorAdapter.class);
+                    assertThat(context.getBean(VectorSearchPort.class)).isInstanceOf(MilvusVectorAdapter.class);
                 });
     }
 

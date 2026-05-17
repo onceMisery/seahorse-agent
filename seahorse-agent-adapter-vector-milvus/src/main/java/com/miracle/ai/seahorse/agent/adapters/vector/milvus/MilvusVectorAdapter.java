@@ -80,7 +80,6 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
     private static final String META_CHUNK_INDEX = "chunk_index";
     private static final String META_ENABLED = "enabled";
     private static final String META_ACL_SUBJECTS = "acl_subjects";
-    private static final int CONTENT_MAX_LENGTH = 65535;
 
     private final MilvusClientV2 milvusClient;
     private final MilvusVectorProperties properties;
@@ -192,7 +191,7 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
                 .annsField(FIELD_EMBEDDING)
                 .data(List.of(new FloatVec(vectorArray(request.vector()))))
                 .topK(topK(request.topK()))
-                .searchParams(Map.of("metric_type", properties.metricType(), "ef", 128))
+                .searchParams(Map.of("metric_type", properties.metricType(), "ef", properties.searchEf()))
                 .outputFields(List.of(FIELD_ID, FIELD_CONTENT, FIELD_METADATA));
         String filter = metadataFilter(request);
         if (!filter.isBlank()) {
@@ -229,7 +228,7 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
         fields.add(CreateCollectionReq.FieldSchema.builder()
                 .name(FIELD_CONTENT)
                 .dataType(DataType.VarChar)
-                .maxLength(CONTENT_MAX_LENGTH)
+                .maxLength(properties.contentMaxLength())
                 .build());
         fields.add(CreateCollectionReq.FieldSchema.builder()
                 .name(FIELD_METADATA)
@@ -251,7 +250,10 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
                 .indexType(IndexParam.IndexType.HNSW)
                 .metricType(IndexParam.MetricType.valueOf(properties.metricType()))
                 .indexName(FIELD_EMBEDDING)
-                .extraParams(Map.of("M", "48", "efConstruction", "200", "mmap.enabled", "false"))
+                .extraParams(Map.of(
+                        "M", Integer.toString(properties.hnswM()),
+                        "efConstruction", Integer.toString(properties.hnswEfConstruction()),
+                        "mmap.enabled", Boolean.toString(properties.mmapEnabled())))
                 .build();
     }
 
@@ -323,10 +325,10 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
 
     private String truncate(String value) {
         String content = Objects.requireNonNullElse(value, "");
-        if (content.length() <= CONTENT_MAX_LENGTH) {
+        if (content.length() <= properties.contentMaxLength()) {
             return content;
         }
-        return content.substring(0, CONTENT_MAX_LENGTH);
+        return content.substring(0, properties.contentMaxLength());
     }
 
     private String resolveCollection(String collectionName) {

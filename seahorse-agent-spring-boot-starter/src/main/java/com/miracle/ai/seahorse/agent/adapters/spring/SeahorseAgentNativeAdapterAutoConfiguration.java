@@ -1028,8 +1028,15 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
             String collectionName,
             @Value("${seahorse-agent.adapters.vector.dimension:1024}") int dimension,
             @Value("${seahorse-agent.adapters.vector.metric-type:COSINE}")
-            String metricType) {
-        return new MilvusVectorAdapter(milvusClient, new MilvusVectorProperties(collectionName, dimension, metricType));
+            String metricType,
+            @Value("${seahorse-agent.adapters.vector.milvus.content-max-length:65535}") int contentMaxLength,
+            @Value("${seahorse-agent.adapters.vector.milvus.hnsw.m:48}") int hnswM,
+            @Value("${seahorse-agent.adapters.vector.milvus.hnsw.ef-construction:200}") int hnswEfConstruction,
+            @Value("${seahorse-agent.adapters.vector.milvus.mmap-enabled:false}") boolean mmapEnabled,
+            @Value("${seahorse-agent.adapters.vector.milvus.search-ef:128}") int searchEf) {
+        return new MilvusVectorAdapter(milvusClient, new MilvusVectorProperties(
+                collectionName, dimension, metricType, contentMaxLength,
+                hnswM, hnswEfConstruction, mmapEnabled, searchEf));
     }
 
     @Bean
