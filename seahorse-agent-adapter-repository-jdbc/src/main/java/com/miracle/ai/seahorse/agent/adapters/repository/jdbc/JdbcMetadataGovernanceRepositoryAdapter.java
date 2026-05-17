@@ -17,8 +17,6 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.BackendFieldMapping;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataFieldDescriptor;
@@ -103,23 +101,20 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         MetadataDictionaryManagementRepositoryPort, MetadataExtractionResultManagementRepositoryPort,
         MetadataSchemaIndexStatusPort, MetadataSchemaUsageReportRepositoryPort {
 
-    private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
-    };
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
-    private static final TypeReference<List<Map<String, Object>>> MAP_LIST_TYPE = new TypeReference<>() {
-    };
     private static final String SCHEMA_USAGE_EVENT_COMPILED = "COMPILED";
     private static final String SCHEMA_USAGE_EVENT_REJECTED = "REJECTED";
 
     private final JdbcTemplate jdbcTemplate;
-    private final ObjectMapper objectMapper;
-    private Boolean documentMetadataJsonColumnExists;
-    private Boolean chunkMetadataJsonColumnExists;
+    private final JdbcMetadataJsonSupport jsonSupport;
+    private final JdbcMetadataSchemaUsageSupport schemaUsageSupport;
+    private final JdbcMetadataColumnDetector columnDetector;
 
     public JdbcMetadataGovernanceRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
-        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        // 把 JSON 协议、Schema Usage 组包和列探测拆给协作者，收敛主适配器职责。
+        this.jsonSupport = new JdbcMetadataJsonSupport(objectMapper);
+        this.schemaUsageSupport = new JdbcMetadataSchemaUsageSupport();
+        this.columnDetector = new JdbcMetadataColumnDetector(jdbcTemplate);
     }
 
     @Override
@@ -2062,40 +2057,17 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                                    List<String> guardOnlyFieldKeys,
                                    String eventType,
                                    String rejectReason) {
-        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
-        String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
-        if (blank(safeTenantId) || blank(safeKbId)) {
+        JdbcMetadataSchemaUsageSupport.SchemaUsageBatch batch = schemaUsageSupport.buildBatch(
+                tenantId, knowledgeBaseId, schemaVersion, fieldKeys, guardOnlyFieldKeys, eventType, rejectReason);
+        if (batch.isEmpty()) {
             return;
-        }
-        List<String> safeFieldKeys = normalizedFieldKeys(fieldKeys);
-        if (safeFieldKeys.isEmpty()) {
-            return;
-        }
-        Set<String> safeGuardOnlyFieldKeys = Set.copyOf(normalizedFieldKeys(guardOnlyFieldKeys));
-        int safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? 1 : schemaVersion;
-        String requestId = UUID.randomUUID().toString();
-        Instant now = Instant.now();
-        List<Object[]> batchArgs = new ArrayList<>(safeFieldKeys.size());
-        for (String fieldKey : safeFieldKeys) {
-            batchArgs.add(new Object[]{
-                    UUID.randomUUID().toString(),
-                    requestId,
-                    safeTenantId,
-                    safeKbId,
-                    safeSchemaVersion,
-                    fieldKey,
-                    Objects.requireNonNullElse(eventType, SCHEMA_USAGE_EVENT_COMPILED),
-                    flag(safeGuardOnlyFieldKeys.contains(fieldKey)),
-                    Objects.requireNonNullElse(rejectReason, ""),
-                    Timestamp.from(now)
-            });
         }
         jdbcTemplate.batchUpdate("""
                 INSERT INTO t_metadata_schema_usage_log(
                     id, request_id, tenant_id, kb_id, schema_version, field_key,
                     event_type, guard_only, reject_reason, create_time
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, batchArgs);
+                """, batch.args());
     }
 
     private SqlWhere schemaUsageWhere(String tenantId, String knowledgeBaseId, Integer schemaVersion) {
@@ -2132,11 +2104,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     private List<String> normalizedFieldKeys(List<String> fieldKeys) {
-        return Objects.requireNonNullElse(fieldKeys, List.<String>of()).stream()
-                .map(value -> Objects.requireNonNullElse(value, "").trim())
-                .filter(value -> !value.isBlank())
-                .distinct()
-                .toList();
+        return schemaUsageSupport.normalizedFieldKeys(fieldKeys);
     }
 
     private MetadataSchemaFieldRecord toSchemaFieldRecord(ResultSet rs, int rowNum) throws SQLException {
@@ -2247,19 +2215,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     private BackendFieldMapping backendMapping(String json, String fieldKey) {
-        Map<String, Object> values = readMap(json);
-        if (values.isEmpty()) {
-            return BackendFieldMapping.defaults(fieldKey);
-        }
-        return new BackendFieldMapping(
-                text(values.get("canonicalName"), fieldKey),
-                text(values.get("milvusPath"), ""),
-                text(values.get("pgJsonPath"), ""),
-                text(values.get("searchFieldName"), fieldKey),
-                bool(values.get("pushdownToVector")),
-                bool(values.get("pushdownToKeyword")),
-                bool(values.get("guardOnly")),
-                values);
+        return jsonSupport.backendMapping(json, fieldKey);
     }
 
     private MetadataBackfillJobRecord toBackfillJobRecord(ResultSet rs, int rowNum) throws SQLException {
@@ -2285,99 +2241,39 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     private Set<MetadataOperator> operators(String json) {
-        List<String> values = readList(json);
-        if (values.isEmpty()) {
-            return Set.of(MetadataOperator.EQ, MetadataOperator.IN);
-        }
-        return values.stream()
-                .map(value -> enumValue(MetadataOperator.class, value, null))
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+        return jsonSupport.operators(json);
     }
 
     private Set<String> trustedSources(String json) {
-        return Set.copyOf(readList(json));
+        return jsonSupport.trustedSources(json);
     }
 
     private List<String> readList(String json) {
-        if (blank(json)) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(json, STRING_LIST);
-        } catch (Exception ex) {
-            return List.of();
-        }
+        return jsonSupport.readList(json);
     }
 
     private Map<String, Object> readMap(String json) {
-        if (blank(json)) {
-            return Map.of();
-        }
-        try {
-            return objectMapper.readValue(json, MAP_TYPE);
-        } catch (Exception ex) {
-            return Map.of();
-        }
+        return jsonSupport.readMap(json);
     }
 
     private List<Map<String, Object>> readMapList(String json) {
-        if (blank(json)) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(json, MAP_LIST_TYPE);
-        } catch (Exception ex) {
-            return List.of();
-        }
+        return jsonSupport.readMapList(json);
     }
 
     private Map<String, Object> mutableMap(String json) {
-        return new java.util.LinkedHashMap<>(readMap(json));
+        return jsonSupport.mutableMap(json);
     }
 
     private String json(Object value) {
-        try {
-            return objectMapper.writeValueAsString(Objects.requireNonNullElse(value, Map.of()));
-        } catch (JsonProcessingException ex) {
-            throw new IllegalArgumentException("serialize metadata json failed", ex);
-        }
+        return jsonSupport.json(value);
     }
 
     private boolean documentMetadataJsonColumnExists() {
-        if (documentMetadataJsonColumnExists != null) {
-            return documentMetadataJsonColumnExists;
-        }
-        try {
-            Integer count = jdbcTemplate.queryForObject("""
-                    SELECT COUNT(1)
-                    FROM information_schema.columns
-                    WHERE lower(table_name) = 't_knowledge_document'
-                      AND lower(column_name) = 'metadata_json'
-                    """, Integer.class);
-            documentMetadataJsonColumnExists = count != null && count > 0;
-        } catch (RuntimeException ex) {
-            documentMetadataJsonColumnExists = false;
-        }
-        return documentMetadataJsonColumnExists;
+        return columnDetector.hasDocumentMetadataJsonColumn();
     }
 
     private boolean chunkMetadataJsonColumnExists() {
-        if (chunkMetadataJsonColumnExists != null) {
-            return chunkMetadataJsonColumnExists;
-        }
-        try {
-            Integer count = jdbcTemplate.queryForObject("""
-                    SELECT COUNT(1)
-                    FROM information_schema.columns
-                    WHERE lower(table_name) = 't_knowledge_chunk'
-                      AND lower(column_name) = 'metadata_json'
-                    """, Integer.class);
-            chunkMetadataJsonColumnExists = count != null && count > 0;
-        } catch (RuntimeException ex) {
-            chunkMetadataJsonColumnExists = false;
-        }
-        return chunkMetadataJsonColumnExists;
+        return columnDetector.hasChunkMetadataJsonColumn();
     }
 
     private boolean bool(ResultSet rs, String column) throws SQLException {
