@@ -265,6 +265,7 @@ import java.util.concurrent.Executor;
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
         SeahorseAgentKernelMemoryAutoConfiguration.class,
+        SeahorseAgentKernelModelAutoConfiguration.class,
         SeahorseAgentKernelTraceAutoConfiguration.class
 })
 public class SeahorseAgentKernelAutoConfiguration {
@@ -1129,27 +1130,6 @@ public class SeahorseAgentKernelAutoConfiguration {
         return subscriptionPort.subscribe(chunkTopic, "seahorse-knowledge-document-chunk",
                 com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentChunkEvent.class,
                 chunkHandler::handle);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public KernelModelRoutingService seahorseKernelModelRoutingService(ObjectProvider<ChatModelPort> chatModelPort,
-                                                                       ObjectProvider<StreamingChatModelPort> streamingChatModelPort,
-                                                                       ObjectProvider<ModelProviderPort> modelProviderPort,
-                                                                       ObjectProvider<EmbeddingModelPort> embeddingModelPort,
-                                                                       ObjectProvider<RerankModelPort> rerankModelPort,
-                                                                       ObjectProvider<TokenCounterPort> tokenCounterPort,
-                                                                       ObjectProvider<ModelHealthPort> modelHealthPort,
-                                                                       ObjectProvider<ModelRoutingStatePort> routingStatePort) {
-        return new KernelModelRoutingService(
-                chatModelPort.getIfAvailable(ChatModelPort::noop),
-                streamingChatModelPort.getIfAvailable(StreamingChatModelPort::noop),
-                modelProviderPort.getIfAvailable(ModelProviderPort::noop),
-                embeddingModelPort.getIfAvailable(EmbeddingModelPort::noop),
-                rerankModelPort.getIfAvailable(RerankModelPort::noop),
-                tokenCounterPort.getIfAvailable(TokenCounterPort::approximate),
-                modelHealthPort.getIfAvailable(ModelHealthPort::noop),
-                routingStatePort.getIfAvailable(ModelRoutingStatePort::firstAvailable));
     }
 
     private static KeyValueCachePort noopCachePort() {
