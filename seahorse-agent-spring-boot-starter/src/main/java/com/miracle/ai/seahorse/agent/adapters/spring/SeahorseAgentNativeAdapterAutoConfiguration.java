@@ -20,18 +20,9 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelProperties;
-import com.miracle.ai.seahorse.agent.adapters.local.ClasspathPromptTemplateAdapter;
-import com.miracle.ai.seahorse.agent.adapters.local.LocalIntentGuidanceAdapter;
-import com.miracle.ai.seahorse.agent.adapters.local.LocalIntentResolutionAdapter;
-import com.miracle.ai.seahorse.agent.adapters.local.LocalDocumentFetcherAdapter;
-import com.miracle.ai.seahorse.agent.adapters.local.LocalIngestionNodeLogAdapter;
-import com.miracle.ai.seahorse.agent.adapters.local.LocalQueryRewriteAdapter;
-import com.miracle.ai.seahorse.agent.adapters.local.LocalRagPromptAdapter;
-import com.miracle.ai.seahorse.agent.adapters.local.LocalRetrievalContextFormatAdapter;
 import com.miracle.ai.seahorse.agent.adapters.mq.direct.DirectMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.mq.pulsar.PulsarMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.mq.pulsar.PulsarMessageQueueProperties;
-import com.miracle.ai.seahorse.agent.adapters.parser.tika.TikaDocumentParserAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcUserRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationMemoryAdapter;
@@ -83,18 +74,10 @@ import com.miracle.ai.seahorse.agent.adapters.vector.noop.NoopVectorStoreAdapter
 import com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorAdapter;
 import com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorProperties;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.dashboard.DashboardRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentFetcherPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionNodeLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.PipelineDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryPort;
@@ -141,12 +124,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
@@ -192,6 +172,7 @@ import java.util.concurrent.Executor;
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
         SeahorseAgentCacheAdapterAutoConfiguration.class,
+        SeahorseAgentLocalAdapterAutoConfiguration.class,
         SeahorseAgentObservationAdapterAutoConfiguration.class,
         SeahorseAgentStorageAdapterAutoConfiguration.class
 })
@@ -219,89 +200,6 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
         PulsarMessageQueueAdapter delegate = new PulsarMessageQueueAdapter(
                 pulsarClient, objectMapper, new PulsarMessageQueueProperties());
         return new ReliableMessageQueueAdapter(delegate, delegate, outboxRepositoryPort::getIfAvailable, () -> objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.parser", name = "type", havingValue = "tika",
-            matchIfMissing = true)
-    @ConditionalOnMissingBean(DocumentParserPort.class)
-    public TikaDocumentParserAdapter seahorseTikaDocumentParserAdapter() {
-        return new TikaDocumentParserAdapter();
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.chat.rewrite", name = "type", havingValue = "local",
-            matchIfMissing = true)
-    @ConditionalOnMissingBean(QueryRewritePort.class)
-    public LocalQueryRewriteAdapter seahorseLocalQueryRewriteAdapter() {
-        return new LocalQueryRewriteAdapter();
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.chat.intent", name = "type", havingValue = "local",
-            matchIfMissing = true)
-    @ConditionalOnMissingBean(IntentResolutionPort.class)
-    public LocalIntentResolutionAdapter seahorseLocalIntentResolutionAdapter() {
-        return new LocalIntentResolutionAdapter();
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.chat.guidance", name = "type", havingValue = "local",
-            matchIfMissing = true)
-    @ConditionalOnMissingBean(IntentGuidancePort.class)
-    public LocalIntentGuidanceAdapter seahorseLocalIntentGuidanceAdapter() {
-        return new LocalIntentGuidanceAdapter();
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.prompt", name = "type", havingValue = "classpath",
-            matchIfMissing = true)
-    @ConditionalOnMissingBean(PromptTemplatePort.class)
-    public ClasspathPromptTemplateAdapter seahorseClasspathPromptTemplateAdapter() {
-        return new ClasspathPromptTemplateAdapter();
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.rag-prompt", name = "type", havingValue = "local",
-            matchIfMissing = true)
-    @ConditionalOnMissingBean(RagPromptPort.class)
-    public LocalRagPromptAdapter seahorseLocalRagPromptAdapter() {
-        return new LocalRagPromptAdapter();
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.retrieval-context", name = "type", havingValue = "local",
-            matchIfMissing = true)
-    @ConditionalOnMissingBean(RetrievalContextFormatPort.class)
-    public LocalRetrievalContextFormatAdapter seahorseLocalRetrievalContextFormatAdapter() {
-        return new LocalRetrievalContextFormatAdapter();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(IngestionNodeLogPort.class)
-    public LocalIngestionNodeLogAdapter seahorseLocalIngestionNodeLogAdapter() {
-        return new LocalIngestionNodeLogAdapter();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(SchedulerPort.class)
-    public SpringCronSchedulerPort seahorseSpringCronSchedulerPort() {
-        return new SpringCronSchedulerPort();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(LocalDocumentFetcherAdapter.class)
-    public LocalDocumentFetcherAdapter seahorseLocalDocumentFetcherAdapter(
-            ObjectProvider<ObjectStoragePort> objectStoragePort) {
-        return new LocalDocumentFetcherAdapter(objectStoragePort.getIfAvailable());
-    }
-
-    @Bean
-    @Primary
-    @ConditionalOnMissingBean(CompositeDocumentFetcherPort.class)
-    public CompositeDocumentFetcherPort seahorseCompositeDocumentFetcherPort(
-            List<DocumentFetcherPort> documentFetcherPorts) {
-        return new CompositeDocumentFetcherPort(documentFetcherPorts);
     }
 
     @Bean
