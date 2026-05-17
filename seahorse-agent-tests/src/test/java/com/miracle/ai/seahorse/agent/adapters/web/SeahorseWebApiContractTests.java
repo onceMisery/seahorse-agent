@@ -172,8 +172,8 @@ class SeahorseWebApiContractTests {
         when(userPort.create(any())).thenReturn("2");
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseAuthController(authPort),
-                new SeahorseUserController(userPort)).build();
+                new SeahorseAuthController(provider(AuthInboundPort.class, authPort)),
+                new SeahorseUserController(provider(UserInboundPort.class, userPort))).build();
 
         mvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -224,7 +224,8 @@ class SeahorseWebApiContractTests {
         StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseChatController(chatPort, callbackFactory, streamTaskPort, 1_000L)).build();
+                new SeahorseChatController(provider(ChatInboundPort.class, chatPort), callbackFactory,
+                        streamTaskPort, 1_000L)).build();
 
         mvc.perform(get("/rag/v3/chat")
                         .param("question", "hello")
@@ -274,10 +275,11 @@ class SeahorseWebApiContractTests {
         when(statusPort.listStatuses()).thenReturn(List.of());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseRagTraceController(tracePort),
-                new SeahorseKnowledgeBaseController(knowledgeBasePort),
-                new SeahorseMemoryController(memoryManagementPort, governancePort),
-                new SeahorseIngestionTaskController(ingestionTaskPort),
+                new SeahorseRagTraceController(provider(RagTraceInboundPort.class, tracePort)),
+                new SeahorseKnowledgeBaseController(provider(KnowledgeBaseInboundPort.class, knowledgeBasePort)),
+                new SeahorseMemoryController(provider(MemoryManagementInboundPort.class, memoryManagementPort),
+                        provider(MemoryGovernanceInboundPort.class, governancePort)),
+                new SeahorseIngestionTaskController(provider(IngestionTaskInboundPort.class, ingestionTaskPort)),
                 new SeahorsePluginController(
                         emptyProvider(FeatureHealthAggregator.class),
                         provider(AgentExtensionStatusPort.class, statusPort),
@@ -359,9 +361,9 @@ class SeahorseWebApiContractTests {
         MessageFeedbackInboundPort feedbackPort = mock(MessageFeedbackInboundPort.class);
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseDashboardController(dashboardPort),
-                new SeahorseConversationController(conversationPort),
-                new SeahorseMessageFeedbackController(feedbackPort)).build();
+                new SeahorseDashboardController(provider(DashboardInboundPort.class, dashboardPort)),
+                new SeahorseConversationController(provider(ConversationManagementInboundPort.class, conversationPort)),
+                new SeahorseMessageFeedbackController(provider(MessageFeedbackInboundPort.class, feedbackPort))).build();
 
         mvc.perform(get("/admin/dashboard/overview").param("window", "24h"))
                 .andExpect(status().isOk())
@@ -417,9 +419,9 @@ class SeahorseWebApiContractTests {
                 .withProperty("seahorse-agent.plugins.memory.history-keep-turns", "8");
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseIntentTreeController(intentPort),
-                new SeahorseQueryTermMappingController(mappingPort),
-                new SeahorseSampleQuestionController(samplePort),
+                new SeahorseIntentTreeController(provider(IntentTreeInboundPort.class, intentPort)),
+                new SeahorseQueryTermMappingController(provider(QueryTermMappingInboundPort.class, mappingPort)),
+                new SeahorseSampleQuestionController(provider(SampleQuestionInboundPort.class, samplePort)),
                 new SeahorseRagSettingsController(environment)).build();
 
         mvc.perform(get("/intent-tree/trees"))
@@ -498,8 +500,8 @@ class SeahorseWebApiContractTests {
         when(chunkPort.create(eq("doc-1"), any())).thenReturn(knowledgeChunk("chunk-1"));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseKnowledgeDocumentController(documentPort),
-                new SeahorseKnowledgeChunkController(chunkPort)).build();
+                new SeahorseKnowledgeDocumentController(provider(KnowledgeDocumentInboundPort.class, documentPort)),
+                new SeahorseKnowledgeChunkController(provider(KnowledgeChunkInboundPort.class, chunkPort))).build();
 
         mvc.perform(multipart("/knowledge-base/kb-1/docs/upload").file("file", "hello".getBytes()))
                 .andExpect(status().isOk())
@@ -567,7 +569,8 @@ class SeahorseWebApiContractTests {
                 .thenReturn(new KeywordIndexRebuildResult("knowledge_base", "kb-1", 3, 2, 8, 3, 1, 0, List.of()));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseKeywordIndexMaintenanceController(maintenancePort)).build();
+                new SeahorseKeywordIndexMaintenanceController(
+                        provider(KeywordIndexMaintenanceInboundPort.class, maintenancePort))).build();
 
         mvc.perform(post("/knowledge-base/docs/doc-1/keyword-index/rebuild"))
                 .andExpect(status().isOk())
@@ -606,7 +609,7 @@ class SeahorseWebApiContractTests {
                 .thenReturn(metadataBackfillJob(MetadataBackfillJobStatus.CANCELLED));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseMetadataBackfillController(backfillPort)).build();
+                new SeahorseMetadataBackfillController(provider(MetadataBackfillInboundPort.class, backfillPort))).build();
 
         mvc.perform(post("/knowledge-base/kb-1/metadata-backfill/jobs")
                         .header("X-User-Id", "admin")
@@ -688,7 +691,7 @@ class SeahorseWebApiContractTests {
                 .thenReturn(metadataQualityComparisonReport());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseMetadataQualityController(qualityPort)).build();
+                new SeahorseMetadataQualityController(provider(MetadataQualityInboundPort.class, qualityPort))).build();
 
                 mvc.perform(get("/knowledge-base/kb-1/metadata-quality/report")
                         .param("tenantId", "tenant-1")
@@ -767,7 +770,8 @@ class SeahorseWebApiContractTests {
                         "case-1", "question-a", List.of("chunk-1"), List.of("doc-1"),
                         1, 1, 1.0D, 0.5D, 0.63D, 12L, "SUCCESS", ""))));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseRetrievalEvaluationController(evaluationPort)).build();
+                new SeahorseRetrievalEvaluationController(
+                        provider(RetrievalEvaluationInboundPort.class, evaluationPort))).build();
 
         mvc.perform(post("/knowledge-base/kb-1/retrieval-quality/evaluate")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -814,7 +818,8 @@ class SeahorseWebApiContractTests {
                         new RetrievalEvaluationStrategyDelta("baseline", 0D, 0D, 0D, 0D, 0D, 0D),
                         new RetrievalEvaluationStrategyDelta("keyword", 1D, 1D, 1D, -1D, -5D, -5D))));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseRetrievalEvaluationController(evaluationPort)).build();
+                new SeahorseRetrievalEvaluationController(
+                        provider(RetrievalEvaluationInboundPort.class, evaluationPort))).build();
 
         mvc.perform(post("/knowledge-base/kb-1/retrieval-quality/compare")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -937,7 +942,8 @@ class SeahorseWebApiContractTests {
                         .build()));
         when(templatePort.deleteTemplate("kb-1", "keyword_precise")).thenReturn(true);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseRetrievalStrategyTemplateController(templatePort)).build();
+                new SeahorseRetrievalStrategyTemplateController(
+                        provider(RetrievalStrategyTemplateInboundPort.class, templatePort))).build();
 
         mvc.perform(get("/knowledge-base/kb-1/retrieval-strategy-templates"))
                 .andExpect(status().isOk())
@@ -1014,8 +1020,9 @@ class SeahorseWebApiContractTests {
                 .thenReturn(metadataQuarantine("q-1", false, 2));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseMetadataReviewController(reviewPort),
-                new SeahorseMetadataQuarantineController(quarantinePort)).build();
+                new SeahorseMetadataReviewController(provider(MetadataReviewInboundPort.class, reviewPort)),
+                new SeahorseMetadataQuarantineController(
+                        provider(MetadataQuarantineInboundPort.class, quarantinePort))).build();
 
         mvc.perform(get("/metadata-review/items")
                         .param("tenantId", "tenant-1")
@@ -1120,7 +1127,7 @@ class SeahorseWebApiContractTests {
         when(schemaPort.deleteField("field-1")).thenReturn(true);
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseMetadataSchemaController(schemaPort)).build();
+                new SeahorseMetadataSchemaController(provider(MetadataSchemaInboundPort.class, schemaPort))).build();
 
         mvc.perform(get("/knowledge-base/kb-1/metadata-schema/fields")
                         .param("tenantId", "tenant-1"))
@@ -1178,7 +1185,8 @@ class SeahorseWebApiContractTests {
         when(dictionaryPort.deleteItem("dict-1")).thenReturn(true);
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseMetadataDictionaryController(dictionaryPort)).build();
+                new SeahorseMetadataDictionaryController(
+                        provider(MetadataDictionaryInboundPort.class, dictionaryPort))).build();
 
         mvc.perform(get("/metadata-dictionaries/items")
                         .param("tenantId", "tenant-1")
@@ -1222,7 +1230,8 @@ class SeahorseWebApiContractTests {
         when(resultPort.queryById("result-1")).thenReturn(metadataExtractionResult("result-1"));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseMetadataExtractionResultController(resultPort)).build();
+                new SeahorseMetadataExtractionResultController(
+                        provider(MetadataExtractionResultInboundPort.class, resultPort))).build();
 
         mvc.perform(get("/metadata-extraction/results")
                         .param("tenantId", "tenant-1")

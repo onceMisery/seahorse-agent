@@ -42,6 +42,7 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
     private final MemoryGovernanceServicePorts ports;
     private final double promotionThreshold;
     private final boolean inferenceEnabled;
+    private final MemoryDecayOptions decayOptions;
 
     public KernelMemoryGovernanceService(MemoryGovernanceServicePorts ports, double promotionThreshold) {
         this(ports, promotionThreshold, false);
@@ -50,9 +51,17 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
     public KernelMemoryGovernanceService(MemoryGovernanceServicePorts ports,
                                          double promotionThreshold,
                                          boolean inferenceEnabled) {
+        this(ports, promotionThreshold, inferenceEnabled, MemoryDecayOptions.defaults());
+    }
+
+    public KernelMemoryGovernanceService(MemoryGovernanceServicePorts ports,
+                                         double promotionThreshold,
+                                         boolean inferenceEnabled,
+                                         MemoryDecayOptions decayOptions) {
         this.ports = Objects.requireNonNull(ports, "ports must not be null");
         this.promotionThreshold = promotionThreshold <= 0D ? DEFAULT_PROMOTION_THRESHOLD : promotionThreshold;
         this.inferenceEnabled = inferenceEnabled;
+        this.decayOptions = Objects.requireNonNullElseGet(decayOptions, MemoryDecayOptions::defaults);
     }
 
     @Override
@@ -147,7 +156,15 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
     public MemoryGovernanceRunResult runDecay(String reason) {
         List<String> errors = new ArrayList<>();
         try {
-            ports.memoryEnginePort().executeMemoryDecay();
+            List<MemoryRecord> candidates = ports.shortTermMemoryMaintenancePort().scanExpiredOrDecayed(
+                    Instant.now(), decayOptions.decayThreshold(), decayOptions.scanLimit());
+            if (!candidates.isEmpty() && !decayOptions.dryRun()) {
+                // 维护端口负责批量软删，避免治理服务了解具体数据库更新细节。
+                ports.shortTermMemoryMaintenancePort().markDeleted(candidates.stream()
+                        .map(MemoryRecord::id)
+                        .filter(this::hasText)
+                        .toList());
+            }
         } catch (RuntimeException ex) {
             errors.add(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
         }

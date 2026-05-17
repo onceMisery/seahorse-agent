@@ -18,10 +18,12 @@
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
@@ -102,6 +104,36 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldUseConfiguredLayerLimitsWhenLoadingMemory() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(
+                record("stm-1", "SUMMARY", "A", 0.5D),
+                record("stm-2", "SUMMARY", "B", 0.5D)));
+        StubLongTermMemoryPort longTermPort = new StubLongTermMemoryPort(List.of(
+                record("ltm-1", "PROFILE", "C", 0.8D),
+                record("ltm-2", "PROFILE", "D", 0.8D)));
+        StubSemanticMemoryPort semanticPort = new StubSemanticMemoryPort(List.of(
+                record("sem-1", "PROFILE", "E", 0.9D),
+                record("sem-2", "PROFILE", "F", 0.9D)));
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                longTermPort,
+                semanticPort,
+                OBJECT_MAPPER,
+                new MemoryEngineOptions(1, 1, 1, true));
+
+        MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
+                .userId(USER_ID)
+                .build());
+
+        Assertions.assertEquals(1, shortTermPort.lastListByUserLimit);
+        Assertions.assertEquals(1, longTermPort.lastListByUserLimit);
+        Assertions.assertEquals(1, semanticPort.lastListByUserLimit);
+        Assertions.assertEquals(1, context.getShortTermMemories().size());
+        Assertions.assertEquals(1, context.getLongTermMemories().size());
+        Assertions.assertEquals(1, context.getSemanticMemories().size());
+    }
+
+    @Test
     void shouldDeduplicateLongTermMemoriesById() {
         StubLongTermMemoryPort longTermPort = new StubLongTermMemoryPort(List.of(
                 record("ltm-1", "PROFILE", "内容A", 0.8D),
@@ -144,15 +176,68 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
-    void shouldNotWriteMemoryInPhaseOne() {
+    void shouldWriteExplicitUserMemoryToShortTermLayer() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
-                new StubShortTermMemoryPort(List.of()),
+                shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
                 OBJECT_MAPPER);
 
-        // writeMemory 应该是 no-op，不抛异常
-        engine.writeMemory(null);
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-1")
+                .messageId("msg-1")
+                .message(ChatMessage.user("请记住：我喜欢使用 Java 编写后端服务"))
+                .build());
+
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        MemoryRecord saved = shortTermPort.savedRecords.get(0);
+        Assertions.assertEquals("stm-msg-1", saved.id());
+        Assertions.assertEquals("SHORT_TERM", saved.layer());
+        Assertions.assertEquals("PREFERENCE", saved.type());
+        Assertions.assertEquals("我喜欢使用 Java 编写后端服务", saved.content());
+        Assertions.assertEquals(USER_ID, saved.metadata().get("userId"));
+        Assertions.assertEquals("explicit_user_memory", saved.metadata().get("capturePolicy"));
+    }
+
+    @Test
+    void shouldSkipNoisyQuestionWhenWritingMemory() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER);
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-1")
+                .messageId("msg-2")
+                .message(ChatMessage.user("入职流程是什么？"))
+                .build());
+
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+    }
+
+    @Test
+    void shouldSkipMemoryCaptureWhenDisabled() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                new MemoryEngineOptions(5, 3, 10, false));
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-1")
+                .messageId("msg-3")
+                .message(ChatMessage.user("请记住：我喜欢 Java"))
+                .build());
+
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
     }
 
     @Test
@@ -202,6 +287,8 @@ class DefaultMemoryEnginePortTests {
 
     private static class StubShortTermMemoryPort implements ShortTermMemoryPort {
         private final List<MemoryRecord> records;
+        private final List<MemoryRecord> savedRecords = new java.util.ArrayList<>();
+        private int lastListByUserLimit;
 
         StubShortTermMemoryPort(List<MemoryRecord> records) {
             this.records = records;
@@ -219,11 +306,13 @@ class DefaultMemoryEnginePortTests {
 
         @Override
         public List<MemoryRecord> listByUser(String userId, int limit) {
-            return records;
+            lastListByUserLimit = limit;
+            return records.stream().limit(limit).toList();
         }
 
         @Override
         public void save(MemoryRecord record) {
+            savedRecords.add(record);
         }
 
         @Override
@@ -234,6 +323,7 @@ class DefaultMemoryEnginePortTests {
 
     private static class StubLongTermMemoryPort implements LongTermMemoryPort {
         private final List<MemoryRecord> records;
+        private int lastListByUserLimit;
 
         StubLongTermMemoryPort(List<MemoryRecord> records) {
             this.records = records;
@@ -251,7 +341,8 @@ class DefaultMemoryEnginePortTests {
 
         @Override
         public List<MemoryRecord> listByUser(String userId, int limit) {
-            return records;
+            lastListByUserLimit = limit;
+            return records.stream().limit(limit).toList();
         }
 
         @Override
@@ -266,6 +357,7 @@ class DefaultMemoryEnginePortTests {
 
     private static class StubSemanticMemoryPort implements SemanticMemoryPort {
         private final List<MemoryRecord> records;
+        private int lastListByUserLimit;
 
         StubSemanticMemoryPort(List<MemoryRecord> records) {
             this.records = records;
@@ -283,7 +375,8 @@ class DefaultMemoryEnginePortTests {
 
         @Override
         public List<MemoryRecord> listByUser(String userId, int limit) {
-            return records;
+            lastListByUserLimit = limit;
+            return records.stream().limit(limit).toList();
         }
 
         @Override

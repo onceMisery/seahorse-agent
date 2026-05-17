@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
@@ -42,12 +43,16 @@ import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -66,7 +71,9 @@ public class KernelMultiChannelRetrievalEngine {
     private static final String EVENT_RETRIEVAL_EMPTY = "retrieval.empty";
     private static final String PROCESSOR_METADATA_GUARD = "MetadataGuard";
     private static final String LOG_MSG_CHANNEL_FAILED = "检索通道 {} 执行失败，按空结果降级";
+    private static final String LOG_MSG_CHANNEL_TIMEOUT = "检索通道 {} 执行超时，按空结果降级";
     private static final String LOG_MSG_PROCESSOR_FAILED = "检索后处理器 {} 执行失败，跳过该处理器";
+    private static final Duration DEFAULT_CHANNEL_TIMEOUT = Duration.ofSeconds(5);
 
     private final ExtensionRegistry extensionRegistry;
     private final Executor retrievalExecutor;
@@ -204,8 +211,7 @@ public class KernelMultiChannelRetrievalEngine {
         }
 
         List<CompletableFuture<SearchChannelResult>> futures = enabledChannels.stream()
-                .map(channel -> CompletableFuture.supplyAsync(() -> executeSingleChannel(channel, context),
-                        retrievalExecutor))
+                .map(channel -> executeSingleChannelWithTimeout(channel, context))
                 .toList();
 
         return futures.stream()
@@ -214,22 +220,68 @@ public class KernelMultiChannelRetrievalEngine {
                 .toList();
     }
 
-    private SearchChannelResult executeSingleChannel(SearchChannelFeature channel, SearchContext context) {
+    private CompletableFuture<SearchChannelResult> executeSingleChannelWithTimeout(SearchChannelFeature channel,
+                                                                                   SearchContext context) {
         TraceNodeScope nodeScope = traceRecorder.startNode(traceRunScope(context), channelTraceCommand(channel));
         long startedAt = System.currentTimeMillis();
-        try {
-            SearchChannelResult result = channel.search(context);
-            recordChannelCompleted(channel, context, result, null, System.currentTimeMillis() - startedAt);
+        long timeoutMs = channelTimeout(context, channel).toMillis();
+        // 单个检索通道超时只降级当前通道，避免慢后端阻塞整个多通道检索。
+        return CompletableFuture.supplyAsync(() -> channel.search(context), retrievalExecutor)
+                .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .handle((result, throwable) -> completeSingleChannel(
+                        channel, context, nodeScope, startedAt, timeoutMs, result, throwable));
+    }
+
+    private SearchChannelResult completeSingleChannel(SearchChannelFeature channel,
+                                                      SearchContext context,
+                                                      TraceNodeScope nodeScope,
+                                                      long startedAt,
+                                                      long timeoutMs,
+                                                      SearchChannelResult result,
+                                                      Throwable throwable) {
+        long elapsedMs = System.currentTimeMillis() - startedAt;
+        Throwable cause = unwrap(throwable);
+        if (cause == null) {
+            SearchChannelResult safeResult = result == null ? emptyResult(channel, elapsedMs) : result;
+            recordChannelCompleted(channel, context, safeResult, null, elapsedMs, timeoutMs, false);
             traceRecorder.finishNode(nodeScope);
-            return result;
-        } catch (Exception ex) {
-            long latencyMs = System.currentTimeMillis() - startedAt;
-            SearchChannelResult result = emptyResult(channel, latencyMs);
-            recordChannelCompleted(channel, context, result, ex, latencyMs);
-            traceRecorder.finishNode(nodeScope, ex);
-            LOG.error(LOG_MSG_CHANNEL_FAILED, channel.name(), ex);
-            return result;
+            return safeResult;
         }
+        SearchChannelResult fallback = emptyResult(channel, elapsedMs);
+        boolean timedOut = cause instanceof TimeoutException;
+        recordChannelCompleted(channel, context, fallback, cause, elapsedMs, timeoutMs, timedOut);
+        traceRecorder.finishNode(nodeScope, cause);
+        if (timedOut) {
+            LOG.warn(LOG_MSG_CHANNEL_TIMEOUT, channel.name(), cause);
+        } else {
+            LOG.error(LOG_MSG_CHANNEL_FAILED, channel.name(), cause);
+        }
+        return fallback;
+    }
+
+    private Throwable unwrap(Throwable throwable) {
+        if (throwable instanceof CompletionException completionException && completionException.getCause() != null) {
+            return completionException.getCause();
+        }
+        return throwable;
+    }
+
+    private Duration channelTimeout(SearchContext context, SearchChannelFeature channel) {
+        RetrievalOptions options = context == null ? null : context.effectiveOptions();
+        SearchChannelType type = channel == null ? null : channel.channelType();
+        Duration configured = switch (type == null ? SearchChannelType.HYBRID : type) {
+            case VECTOR_GLOBAL, INTENT_DIRECTED -> options == null ? null : options.vectorTimeout();
+            case KEYWORD_BM25, KEYWORD_ES -> options == null ? null : options.keywordTimeout();
+            case HYBRID -> null;
+        };
+        return positiveDuration(configured, DEFAULT_CHANNEL_TIMEOUT);
+    }
+
+    private Duration positiveDuration(Duration value, Duration fallback) {
+        if (value == null || value.isZero() || value.isNegative()) {
+            return fallback;
+        }
+        return value;
     }
 
     private SearchChannelResult emptyResult(SearchChannelFeature channel, long latencyMs) {
@@ -246,6 +298,16 @@ public class KernelMultiChannelRetrievalEngine {
                                         SearchChannelResult result,
                                         Exception ex,
                                         long elapsedMs) {
+        recordChannelCompleted(channel, context, result, ex, elapsedMs, 0, false);
+    }
+
+    private void recordChannelCompleted(SearchChannelFeature channel,
+                                        SearchContext context,
+                                        SearchChannelResult result,
+                                        Throwable ex,
+                                        long elapsedMs,
+                                        long timeoutMs,
+                                        boolean timedOut) {
         if (observationPort == null) {
             return;
         }
@@ -255,9 +317,12 @@ public class KernelMultiChannelRetrievalEngine {
             attributes.put("knowledgeBaseId", knowledgeBaseId(context));
             attributes.put("channelName", Objects.requireNonNullElse(channel.name(), ""));
             attributes.put("channelType", channel.channelType() == null ? "" : channel.channelType().name());
-            attributes.put("status", ex == null ? "success" : "failure");
+            attributes.put("status", timedOut ? "timeout" : (ex == null ? "success" : "failure"));
             attributes.put("success", Boolean.toString(ex == null));
             attributes.put("hitCount", Integer.toString(safeChunks(result).size()));
+            attributes.put("elapsedMs", Long.toString(elapsedMs));
+            attributes.put("timeoutMs", Long.toString(timeoutMs));
+            attributes.put("timedOut", Boolean.toString(timedOut));
             if (ex != null) {
                 attributes.put("exception", ex.getClass().getSimpleName());
             }

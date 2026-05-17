@@ -15,34 +15,33 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.outbound.trace;
+package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 
 /**
- * RAG Trace DB 仓储端口。
+ * 短期记忆后台维护端口。
  *
- * <p>DB Trace 是管理后台产品功能，不能被指标观测端口替代。
+ * <p>该端口只负责治理任务需要的扫描和清理能力，避免把后台批处理职责塞进常规读写端口。</p>
  */
-public interface RagTraceRepositoryPort {
+public interface ShortTermMemoryMaintenancePort {
 
-    RagTracePage<RagTraceRun> pageRuns(RagTracePageRequest request);
+    List<MemoryRecord> scanExpiredOrDecayed(Instant now, double decayThreshold, int limit);
 
-    Optional<RagTraceRun> findRun(String traceId);
+    int markDeleted(List<String> memoryIds);
 
-    List<RagTraceNode> listNodes(String traceId);
+    static ShortTermMemoryMaintenancePort noop() {
+        return new ShortTermMemoryMaintenancePort() {
+            @Override
+            public List<MemoryRecord> scanExpiredOrDecayed(Instant now, double decayThreshold, int limit) {
+                return List.of();
+            }
 
-    void startRun(RagTraceRun run);
-
-    void finishRun(RagTraceRunFinish finish);
-
-    void startNode(RagTraceNode node);
-
-    void finishNode(RagTraceNodeFinish finish);
-
-    default int deleteRunsBefore(Instant before, int limit) {
-        return 0;
+            @Override
+            public int markDeleted(List<String> memoryIds) {
+                return 0;
+            }
+        };
     }
 }

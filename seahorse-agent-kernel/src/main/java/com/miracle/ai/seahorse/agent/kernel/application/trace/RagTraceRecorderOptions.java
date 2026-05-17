@@ -15,34 +15,18 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.outbound.trace;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
+package com.miracle.ai.seahorse.agent.kernel.application.trace;
 
 /**
- * RAG Trace DB 仓储端口。
- *
- * <p>DB Trace 是管理后台产品功能，不能被指标观测端口替代。
+ * RAG Trace 记录策略。
  */
-public interface RagTraceRepositoryPort {
+public record RagTraceRecorderOptions(double sampleRate) {
 
-    RagTracePage<RagTraceRun> pageRuns(RagTracePageRequest request);
+    public RagTraceRecorderOptions {
+        sampleRate = Math.max(0D, Math.min(1D, sampleRate));
+    }
 
-    Optional<RagTraceRun> findRun(String traceId);
-
-    List<RagTraceNode> listNodes(String traceId);
-
-    void startRun(RagTraceRun run);
-
-    void finishRun(RagTraceRunFinish finish);
-
-    void startNode(RagTraceNode node);
-
-    void finishNode(RagTraceNodeFinish finish);
-
-    default int deleteRunsBefore(Instant before, int limit) {
-        return 0;
+    public static RagTraceRecorderOptions always() {
+        return new RagTraceRecorderOptions(1D);
     }
 }

@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
@@ -43,11 +44,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFo
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 内核检索引擎契约测试。
@@ -125,6 +129,31 @@ class KernelRetrievalEngineTests {
         Assertions.assertTrue(context.getMcpContext().contains("杭州：晴天"));
     }
 
+    @Test
+    void shouldTimeoutSlowChannelAndKeepFastChannelResult() {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+            registerChannel(registry, slowKeywordChannel(), 1);
+            registerChannel(registry, workingChannel(), 2);
+            KernelRetrievalEngine engine = new KernelRetrievalEngine(registry, executor, activationContext());
+            RetrievalOptions options = RetrievalOptions.builder()
+                    .keywordTimeout(Duration.ofMillis(100))
+                    .vectorTimeout(Duration.ofSeconds(2))
+                    .build();
+
+            long startedAt = System.currentTimeMillis();
+            List<RetrievedChunk> chunks = engine.retrieveKnowledgeChannels(singleQuestionIntent(), TOP_K, null, options);
+            long elapsedMs = System.currentTimeMillis() - startedAt;
+
+            Assertions.assertTrue(elapsedMs < 800, "慢通道应被通道级超时截断");
+            Assertions.assertEquals(1, chunks.size());
+            Assertions.assertEquals("chunk-1", chunks.get(0).getId());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private void registerChannel(DefaultExtensionRegistry registry, SearchChannelFeature feature, int order) {
         registry.register(new ExtensionDescriptor(feature.name(), SearchChannelFeature.class,
                 FeatureType.SEARCH_CHANNEL, order, order == 1), feature);
@@ -173,6 +202,44 @@ class KernelRetrievalEngineTests {
 
     private SearchChannelFeature workingChannel() {
         return new ContractSearchChannelFeature(WORKING_CHANNEL, SearchChannelType.VECTOR_GLOBAL, false);
+    }
+
+    private SearchChannelFeature slowKeywordChannel() {
+        return new SearchChannelFeature() {
+            @Override
+            public String name() {
+                return "slow-keyword-channel";
+            }
+
+            @Override
+            public SearchChannelType channelType() {
+                return SearchChannelType.KEYWORD_BM25;
+            }
+
+            @Override
+            public boolean enabled(SearchContext context) {
+                return true;
+            }
+
+            @Override
+            public SearchChannelResult search(SearchContext context) {
+                try {
+                    Thread.sleep(1_000L);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+                return SearchChannelResult.builder()
+                        .channelType(channelType())
+                        .channelName(name())
+                        .chunks(List.of(RetrievedChunk.builder()
+                                .id("slow-chunk")
+                                .text("慢关键词结果")
+                                .score(0.1F)
+                                .build()))
+                        .latencyMs(1_000L)
+                        .build();
+            }
+        };
     }
 
     private SearchResultPostProcessorFeature recordingPostProcessor(List<SearchChannelResult> observedResults) {

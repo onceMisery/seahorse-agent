@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMaintenancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 
 import java.util.Objects;
@@ -30,7 +31,8 @@ public record MemoryGovernanceServicePorts(
         LongTermMemoryPort longTermMemoryPort,
         SemanticMemoryPort semanticMemoryPort,
         MemoryEnginePort memoryEnginePort,
-        MemoryInferencePort memoryInferencePort
+        MemoryInferencePort memoryInferencePort,
+        ShortTermMemoryMaintenancePort shortTermMemoryMaintenancePort
 ) {
 
     public MemoryGovernanceServicePorts(ShortTermMemoryPort shortTermMemoryPort,
@@ -38,7 +40,16 @@ public record MemoryGovernanceServicePorts(
                                         SemanticMemoryPort semanticMemoryPort,
                                         MemoryEnginePort memoryEnginePort) {
         this(shortTermMemoryPort, longTermMemoryPort, semanticMemoryPort, memoryEnginePort,
-                MemoryInferencePort.noop());
+                MemoryInferencePort.noop(), ShortTermMemoryMaintenancePort.noop());
+    }
+
+    public MemoryGovernanceServicePorts(ShortTermMemoryPort shortTermMemoryPort,
+                                        LongTermMemoryPort longTermMemoryPort,
+                                        SemanticMemoryPort semanticMemoryPort,
+                                        MemoryEnginePort memoryEnginePort,
+                                        MemoryInferencePort memoryInferencePort) {
+        this(shortTermMemoryPort, longTermMemoryPort, semanticMemoryPort, memoryEnginePort,
+                memoryInferencePort, ShortTermMemoryMaintenancePort.noop());
     }
 
     public MemoryGovernanceServicePorts {
@@ -47,5 +58,6 @@ public record MemoryGovernanceServicePorts(
         Objects.requireNonNull(semanticMemoryPort, "semanticMemoryPort must not be null");
         Objects.requireNonNull(memoryEnginePort, "memoryEnginePort must not be null");
         Objects.requireNonNull(memoryInferencePort, "memoryInferencePort must not be null");
+        Objects.requireNonNull(shortTermMemoryMaintenancePort, "shortTermMemoryMaintenancePort must not be null");
     }
 }

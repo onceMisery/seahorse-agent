@@ -174,6 +174,7 @@ import org.apache.pulsar.client.api.PulsarClient;
 import org.redisson.api.RedissonClient;
 import cn.dev33.satoken.stp.StpInterface;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -183,6 +184,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import software.amazon.awssdk.services.s3.S3Client;
 
 import javax.sql.DataSource;
@@ -191,6 +193,7 @@ import java.util.Arrays;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.Executor;
 
 /**
  * Seahorse 原生 L3 adapter 自动装配。
@@ -1048,12 +1051,31 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.ai", name = "type", havingValue = "openai-compatible")
+    @ConditionalOnMissingBean(name = "openAiStreamingExecutor")
+    public ThreadPoolTaskExecutor openAiStreamingExecutor(
+            @Value("${seahorse-agent.adapters.ai.streaming-executor.core-size:4}") int coreSize,
+            @Value("${seahorse-agent.adapters.ai.streaming-executor.max-size:32}") int maxSize,
+            @Value("${seahorse-agent.adapters.ai.streaming-executor.queue-capacity:200}") int queueCapacity,
+            @Value("${seahorse-agent.adapters.ai.streaming-executor.thread-name-prefix:seahorse-openai-stream-}")
+            String threadNamePrefix) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(Math.max(1, coreSize));
+        executor.setMaxPoolSize(Math.max(Math.max(1, coreSize), maxSize));
+        executor.setQueueCapacity(Math.max(0, queueCapacity));
+        executor.setThreadNamePrefix(threadNamePrefix);
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean
     @ConditionalOnBean(OkHttpClient.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.ai", name = "type", havingValue = "openai-compatible")
     @ConditionalOnMissingBean(OpenAiCompatibleModelAdapter.class)
     public OpenAiCompatibleModelAdapter seahorseOpenAiCompatibleModelAdapter(
             OkHttpClient httpClient,
             ObjectMapper objectMapper,
+            @Qualifier("openAiStreamingExecutor") Executor streamingExecutor,
             @Value("${seahorse-agent.adapters.ai.base-url:https://api.openai.com/v1}") String baseUrl,
             @Value("${seahorse-agent.adapters.ai.api-key:}") String apiKey,
             @Value("${seahorse-agent.adapters.ai.chat-model:}") String chatModel,
@@ -1061,7 +1083,7 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
             @Value("${seahorse-agent.adapters.ai.rerank-model:}") String rerankModel) {
         OpenAiCompatibleModelProperties properties = new OpenAiCompatibleModelProperties(
                 baseUrl, apiKey, chatModel, embeddingModel, rerankModel, List.of());
-        return new OpenAiCompatibleModelAdapter(httpClient, objectMapper, properties);
+        return new OpenAiCompatibleModelAdapter(httpClient, objectMapper, properties, streamingExecutor);
     }
 
     @Bean

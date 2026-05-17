@@ -171,6 +171,8 @@ CREATE TABLE t_knowledge_chunk (
     deleted      SMALLINT    NOT NULL DEFAULT 0
 );
 CREATE INDEX idx_doc_id ON t_knowledge_chunk (doc_id);
+-- 文档分块维护、关键词补偿和元数据写回经常按 kb_id + doc_id 定位，保留 doc_id 单列索引用于兼容旧查询。
+CREATE INDEX idx_knowledge_chunk_kb_doc ON t_knowledge_chunk (kb_id, doc_id);
 COMMENT ON TABLE t_knowledge_chunk IS '知识库文档分块表';
 
 CREATE TABLE t_knowledge_document_chunk_log (

@@ -33,6 +33,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 
 /**
@@ -49,14 +50,26 @@ public class KernelRagTraceRecorder {
 
     private final RagTraceRepositoryPort repositoryPort;
     private final boolean enabled;
+    private final RagTraceRecorderOptions options;
 
     public KernelRagTraceRecorder(RagTraceRepositoryPort repositoryPort) {
-        this(Objects.requireNonNull(repositoryPort, "repositoryPort must not be null"), true);
+        this(repositoryPort, RagTraceRecorderOptions.always());
+    }
+
+    public KernelRagTraceRecorder(RagTraceRepositoryPort repositoryPort, RagTraceRecorderOptions options) {
+        this(Objects.requireNonNull(repositoryPort, "repositoryPort must not be null"), true, options);
     }
 
     private KernelRagTraceRecorder(RagTraceRepositoryPort repositoryPort, boolean enabled) {
+        this(repositoryPort, enabled, RagTraceRecorderOptions.always());
+    }
+
+    private KernelRagTraceRecorder(RagTraceRepositoryPort repositoryPort,
+                                   boolean enabled,
+                                   RagTraceRecorderOptions options) {
         this.repositoryPort = repositoryPort;
         this.enabled = enabled;
+        this.options = Objects.requireNonNullElseGet(options, RagTraceRecorderOptions::always);
     }
 
     public static KernelRagTraceRecorder noop() {
@@ -64,7 +77,7 @@ public class KernelRagTraceRecorder {
     }
 
     public TraceRunScope startRun(TraceRunStartCommand command) {
-        if (!enabled || command == null) {
+        if (!enabled || command == null || !sampled()) {
             return TraceRunScope.disabled();
         }
         Instant startTime = Instant.now();
@@ -206,5 +219,17 @@ public class KernelRagTraceRecorder {
 
     private String newTraceId() {
         return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private boolean sampled() {
+        double sampleRate = options.sampleRate();
+        if (sampleRate >= 1D) {
+            return true;
+        }
+        if (sampleRate <= 0D) {
+            return false;
+        }
+        // 采样只在 run 入口判定一次，后续 node 通过 TraceRunScope 继承该结果。
+        return ThreadLocalRandom.current().nextDouble() < sampleRate;
     }
 }

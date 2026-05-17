@@ -90,6 +90,37 @@ class JdbcMemoryRepositoryAdapterTests {
         assertThat(conflictAdapter.listByUser("user-1", "RESOLVED", 10)).hasSize(1);
     }
 
+    @Test
+    void shouldScanAndDeleteExpiredOrDecayedShortTermMemories() {
+        jdbcTemplate.update("""
+                INSERT INTO t_short_term_memory
+                (id, user_id, conversation_id, memory_type, content, metadata_json, source_message_ids,
+                 importance_score, access_count, last_access_time, decay_score, expires_time,
+                 create_time, update_time, deleted)
+                VALUES ('expired-1', 'user-1', 'conv-1', 'FACT', 'expired', '{}', '[]',
+                        0.2, 0, CURRENT_TIMESTAMP, 0.5, ?,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """, java.sql.Timestamp.from(Instant.now().minusSeconds(60)));
+        jdbcTemplate.update("""
+                INSERT INTO t_short_term_memory
+                (id, user_id, conversation_id, memory_type, content, metadata_json, source_message_ids,
+                 importance_score, access_count, last_access_time, decay_score, expires_time,
+                 create_time, update_time, deleted)
+                VALUES ('decayed-1', 'user-1', 'conv-1', 'FACT', 'decayed', '{}', '[]',
+                        0.2, 0, CURRENT_TIMESTAMP, 0.05, ?,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """, java.sql.Timestamp.from(Instant.now().plusSeconds(3600)));
+
+        var candidates = shortTermAdapter.scanExpiredOrDecayed(Instant.now(), 0.1D, 10);
+
+        assertThat(candidates).extracting(MemoryRecord::id)
+                .containsExactly("expired-1", "decayed-1");
+        assertThat(shortTermAdapter.markDeleted(candidates.stream().map(MemoryRecord::id).toList()))
+                .isEqualTo(2);
+        assertThat(shortTermAdapter.findById("expired-1")).isEmpty();
+        assertThat(shortTermAdapter.findById("decayed-1")).isEmpty();
+    }
+
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_short_term_memory");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_long_term_memory");

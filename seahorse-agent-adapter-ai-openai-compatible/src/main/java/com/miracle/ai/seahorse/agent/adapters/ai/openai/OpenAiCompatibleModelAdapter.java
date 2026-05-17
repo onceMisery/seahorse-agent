@@ -50,6 +50,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 
 /**
  * OpenAI-compatible HTTP 模型 adapter。
@@ -73,12 +75,22 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
     private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final OpenAiCompatibleModelProperties properties;
+    private final Executor streamingExecutor;
 
     public OpenAiCompatibleModelAdapter(
             OkHttpClient httpClient, ObjectMapper objectMapper, OpenAiCompatibleModelProperties properties) {
+        this(httpClient, objectMapper, properties, ForkJoinPool.commonPool());
+    }
+
+    public OpenAiCompatibleModelAdapter(
+            OkHttpClient httpClient,
+            ObjectMapper objectMapper,
+            OpenAiCompatibleModelProperties properties,
+            Executor streamingExecutor) {
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
+        this.streamingExecutor = Objects.requireNonNull(streamingExecutor, "streamingExecutor must not be null");
     }
 
     @Override
@@ -93,7 +105,8 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         StreamCallback safeCallback = Objects.requireNonNull(callback, "callback must not be null");
         Map<String, Object> payload = chatPayload(request, null, true);
         Call call = httpClient.newCall(httpRequest("/chat/completions", payload));
-        CompletableFuture.runAsync(() -> consumeStream(call, safeCallback));
+        // SSE readLine 是阻塞 I/O，必须交给可治理的专用 executor，避免占用公共 ForkJoinPool。
+        CompletableFuture.runAsync(() -> consumeStream(call, safeCallback), streamingExecutor);
         return call::cancel;
     }
 

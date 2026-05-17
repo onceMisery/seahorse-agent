@@ -21,6 +21,11 @@ import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceReco
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentGroup;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
@@ -28,8 +33,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryOptimizerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNode;
@@ -79,6 +86,26 @@ class KernelChatPipelineTests {
         Assertions.assertTrue(callback.completed);
         Assertions.assertFalse(ports.retrieved);
         Assertions.assertNull(ports.lastChatRequest);
+    }
+
+    @Test
+    void shouldCaptureMemoryWhenResponseCompletes() {
+        RecordingChatPorts ports = new RecordingChatPorts(GuidanceDecision.prompt(GUIDANCE_PROMPT),
+                RetrievalContext.builder().build());
+        RecordingMemoryEnginePort memoryEnginePort = new RecordingMemoryEnginePort();
+        KernelChatPipeline pipeline = pipeline(ports, memoryEnginePort);
+        RecordingCallback callback = new RecordingCallback();
+        StreamChatContext context = context(callback);
+        context.setQuestion("请记住：我喜欢 Java 后端开发");
+
+        pipeline.execute(context);
+
+        Assertions.assertTrue(callback.completed);
+        Assertions.assertNotNull(memoryEnginePort.lastWriteRequest);
+        Assertions.assertEquals("conversation-1", memoryEnginePort.lastWriteRequest.conversationId());
+        Assertions.assertEquals("user-1", memoryEnginePort.lastWriteRequest.userId());
+        Assertions.assertEquals("请记住：我喜欢 Java 后端开发",
+                memoryEnginePort.lastWriteRequest.message().getContent());
     }
 
     @Test
@@ -132,6 +159,13 @@ class KernelChatPipelineTests {
         ChatPreparationPorts preparationPorts = new ChatPreparationPorts(ports, ports, ports, ports, ports);
         ChatResponsePorts responsePorts = new ChatResponsePorts(ports, ports, ports, ports);
         return new KernelChatPipeline(preparationPorts, responsePorts, traceRecorder);
+    }
+
+    private KernelChatPipeline pipeline(RecordingChatPorts ports, MemoryEnginePort memoryEnginePort) {
+        ChatPreparationPorts preparationPorts = new ChatPreparationPorts(ports, memoryEnginePort,
+                QueryOptimizerPort.passthrough(), ports, ports, ports, ports);
+        ChatResponsePorts responsePorts = new ChatResponsePorts(ports, ports, ports, ports);
+        return new KernelChatPipeline(preparationPorts, responsePorts, KernelRagTraceRecorder.noop());
     }
 
     private StreamChatContext context(StreamCallback callback) {
@@ -263,6 +297,41 @@ class KernelChatPipelineTests {
 
         @Override
         public void onError(Throwable error) {
+        }
+    }
+
+    private static final class RecordingMemoryEnginePort implements MemoryEnginePort {
+
+        private MemoryWriteRequest lastWriteRequest;
+
+        @Override
+        public MemoryContext loadMemory(MemoryLoadRequest request) {
+            return MemoryContext.builder()
+                    .workingMemory(List.of())
+                    .shortTermMemories(List.of())
+                    .longTermMemories(List.of())
+                    .semanticMemories(List.of())
+                    .promptMessages(List.of())
+                    .build();
+        }
+
+        @Override
+        public void writeMemory(MemoryWriteRequest request) {
+            lastWriteRequest = request;
+        }
+
+        @Override
+        public List<MemoryItem> retrieveMemories(MemoryLoadRequest request) {
+            return List.of();
+        }
+
+        @Override
+        public void executeMemoryDecay() {
+        }
+
+        @Override
+        public MemoryQualityReport assessMemoryQuality(String userId) {
+            return MemoryQualityReport.builder().userId(userId).build();
         }
     }
 

@@ -52,6 +52,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryEngi
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryDecayOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryEngineOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryGovernanceServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.RuleBasedMemoryCandidateExtractor;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
@@ -75,6 +77,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrieva
 import com.miracle.ai.seahorse.agent.kernel.application.sample.KernelSampleQuestionService;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceService;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.RagTraceRecorderOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.user.KernelUserService;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ChunkerNodeFeature;
@@ -183,6 +186,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMaintenancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
@@ -238,6 +242,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.Map;
 import java.util.List;
@@ -258,6 +263,39 @@ import java.util.concurrent.Executor;
 })
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean(name = "ragRetrievalThreadPoolExecutor")
+    public Executor ragRetrievalThreadPoolExecutor(
+            @Value("${seahorse-agent.retrieval.executor.core-size:4}") int coreSize,
+            @Value("${seahorse-agent.retrieval.executor.max-size:16}") int maxSize,
+            @Value("${seahorse-agent.retrieval.executor.queue-capacity:200}") int queueCapacity,
+            @Value("${seahorse-agent.retrieval.executor.thread-name-prefix:seahorse-rag-retrieval-}")
+            String threadNamePrefix) {
+        return threadPoolExecutor(coreSize, maxSize, queueCapacity, threadNamePrefix);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(name = "ragInnerRetrievalThreadPoolExecutor")
+    public Executor ragInnerRetrievalThreadPoolExecutor(
+            @Value("${seahorse-agent.retrieval.inner-executor.core-size:4}") int coreSize,
+            @Value("${seahorse-agent.retrieval.inner-executor.max-size:16}") int maxSize,
+            @Value("${seahorse-agent.retrieval.inner-executor.queue-capacity:200}") int queueCapacity,
+            @Value("${seahorse-agent.retrieval.inner-executor.thread-name-prefix:seahorse-rag-inner-}")
+            String threadNamePrefix) {
+        return threadPoolExecutor(coreSize, maxSize, queueCapacity, threadNamePrefix);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(name = "ragContextThreadPoolExecutor")
+    public Executor ragContextThreadPoolExecutor(
+            @Value("${seahorse-agent.retrieval.context-executor.core-size:2}") int coreSize,
+            @Value("${seahorse-agent.retrieval.context-executor.max-size:8}") int maxSize,
+            @Value("${seahorse-agent.retrieval.context-executor.queue-capacity:100}") int queueCapacity,
+            @Value("${seahorse-agent.retrieval.context-executor.thread-name-prefix:seahorse-rag-context-}")
+            String threadNamePrefix) {
+        return threadPoolExecutor(coreSize, maxSize, queueCapacity, threadNamePrefix);
+    }
 
     @Bean
     @ConditionalOnMissingBean
@@ -724,8 +762,10 @@ public class SeahorseAgentKernelAutoConfiguration {
     @Bean
     @ConditionalOnBean(RagTraceRepositoryPort.class)
     @ConditionalOnMissingBean
-    public KernelRagTraceRecorder seahorseRagTraceRecorder(RagTraceRepositoryPort traceRepositoryPort) {
-        return new KernelRagTraceRecorder(traceRepositoryPort);
+    public KernelRagTraceRecorder seahorseRagTraceRecorder(
+            RagTraceRepositoryPort traceRepositoryPort,
+            @Value("${seahorse-agent.rag-trace.sample-rate:1.0}") double sampleRate) {
+        return new KernelRagTraceRecorder(traceRepositoryPort, new RagTraceRecorderOptions(sampleRate));
     }
 
     @Bean
@@ -733,6 +773,20 @@ public class SeahorseAgentKernelAutoConfiguration {
     @ConditionalOnMissingBean(RagTraceInboundPort.class)
     public KernelRagTraceService seahorseRagTraceInboundPort(RagTraceRepositoryPort traceRepositoryPort) {
         return new KernelRagTraceService(traceRepositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnBean(RagTraceRepositoryPort.class)
+    @ConditionalOnMissingBean(SeahorseRagTraceCleanupJob.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.rag-trace.cleanup", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    public SeahorseRagTraceCleanupJob seahorseRagTraceCleanupJob(
+            RagTraceRepositoryPort traceRepositoryPort,
+            ObjectProvider<DistributedLockPort> lockPort,
+            @Value("${seahorse-agent.rag-trace.ttl-days:30}") int ttlDays,
+            @Value("${seahorse-agent.rag-trace.cleanup-batch-size:1000}") int batchSize) {
+        return new SeahorseRagTraceCleanupJob(traceRepositoryPort,
+                lockPort.getIfAvailable(DistributedLockPort::noop), ttlDays, batchSize);
     }
 
     @Bean
@@ -1109,13 +1163,23 @@ public class SeahorseAgentKernelAutoConfiguration {
             ShortTermMemoryPort shortTermMemoryPort,
             LongTermMemoryPort longTermMemoryPort,
             SemanticMemoryPort semanticMemoryPort,
-            ObjectProvider<ObjectMapper> objectMapperProvider) {
+            ObjectProvider<ObjectMapper> objectMapperProvider,
+            @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
+            @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
+            @Value("${seahorse-agent.memory.semantic-limit:10}") int semanticLimit,
+            @Value("${seahorse-agent.memory.capture-enabled:true}") boolean captureEnabled) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        MemoryEngineOptions options = new MemoryEngineOptions(
+                shortTermLimit,
+                longTermLimit,
+                semanticLimit,
+                captureEnabled);
         return new DefaultMemoryEnginePort(
                 shortTermMemoryPort,
                 longTermMemoryPort,
                 semanticMemoryPort,
-                objectMapper);
+                objectMapper,
+                options);
     }
 
     @Bean
@@ -1166,13 +1230,15 @@ public class SeahorseAgentKernelAutoConfiguration {
             LongTermMemoryPort longTermMemoryPort,
             SemanticMemoryPort semanticMemoryPort,
             ObjectProvider<MemoryEnginePort> memoryEnginePort,
-            ObjectProvider<MemoryInferencePort> memoryInferencePort) {
+            ObjectProvider<MemoryInferencePort> memoryInferencePort,
+            ObjectProvider<ShortTermMemoryMaintenancePort> shortTermMemoryMaintenancePort) {
         return new MemoryGovernanceServicePorts(
                 shortTermMemoryPort,
                 longTermMemoryPort,
                 semanticMemoryPort,
                 memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
-                memoryInferencePort.getIfAvailable(MemoryInferencePort::noop));
+                memoryInferencePort.getIfAvailable(MemoryInferencePort::noop),
+                shortTermMemoryMaintenancePort.getIfAvailable(ShortTermMemoryMaintenancePort::noop));
     }
 
     @Bean
@@ -1183,8 +1249,12 @@ public class SeahorseAgentKernelAutoConfiguration {
             @Value("${seahorse-agent.memory.long-term-importance-threshold:0.6}")
             double promotionThreshold,
             @Value("${seahorse-agent.memory.inference-enabled:false}")
-            boolean inferenceEnabled) {
-        return new KernelMemoryGovernanceService(servicePorts, promotionThreshold, inferenceEnabled);
+            boolean inferenceEnabled,
+            @Value("${seahorse-agent.memory.decay.scan-limit:500}") int decayScanLimit,
+            @Value("${seahorse-agent.memory.decay.threshold:0.1}") double decayThreshold,
+            @Value("${seahorse-agent.memory.decay.dry-run:false}") boolean decayDryRun) {
+        return new KernelMemoryGovernanceService(servicePorts, promotionThreshold, inferenceEnabled,
+                new MemoryDecayOptions(decayScanLimit, decayThreshold, decayDryRun));
     }
 
     @Bean
@@ -1236,6 +1306,23 @@ public class SeahorseAgentKernelAutoConfiguration {
                 return false;
             }
         };
+    }
+
+    private static Executor threadPoolExecutor(int coreSize,
+                                               int maxSize,
+                                               int queueCapacity,
+                                               String threadNamePrefix) {
+        int safeCoreSize = Math.max(coreSize, 1);
+        int safeMaxSize = Math.max(maxSize, safeCoreSize);
+        int safeQueueCapacity = Math.max(queueCapacity, 1);
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(safeCoreSize);
+        executor.setMaxPoolSize(safeMaxSize);
+        executor.setQueueCapacity(safeQueueCapacity);
+        executor.setThreadNamePrefix(threadNamePrefix == null || threadNamePrefix.isBlank()
+                ? "seahorse-rag-" : threadNamePrefix);
+        executor.initialize();
+        return executor;
     }
 
     private static VectorIndexPort noopVectorIndexPort() {

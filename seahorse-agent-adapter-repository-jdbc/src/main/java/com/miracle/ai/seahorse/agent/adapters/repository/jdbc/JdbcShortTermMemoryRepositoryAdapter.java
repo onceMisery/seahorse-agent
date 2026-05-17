@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMaintenancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -31,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort {
+public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort, ShortTermMemoryMaintenancePort {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -96,6 +97,34 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
     @Override
     public boolean deleteById(String id) {
         return jdbcTemplate.update("UPDATE t_short_term_memory SET deleted = 1 WHERE id = ? AND deleted = 0", id) > 0;
+    }
+
+    @Override
+    public List<MemoryRecord> scanExpiredOrDecayed(Instant now, double decayThreshold, int limit) {
+        return jdbcTemplate.query("""
+                SELECT * FROM t_short_term_memory
+                WHERE deleted = 0
+                  AND (expires_time < ? OR decay_score <= ?)
+                ORDER BY expires_time ASC, decay_score ASC, create_time ASC
+                LIMIT ?
+                """, this::mapRecord, JdbcMemorySupport.timestamp(now), decayThreshold, safeLimit(limit));
+    }
+
+    @Override
+    public int markDeleted(List<String> memoryIds) {
+        if (memoryIds == null || memoryIds.isEmpty()) {
+            return 0;
+        }
+        int deleted = 0;
+        for (String memoryId : memoryIds) {
+            if (!JdbcMemorySupport.hasText(memoryId)) {
+                continue;
+            }
+            deleted += jdbcTemplate.update(
+                    "UPDATE t_short_term_memory SET deleted = 1, update_time = ? WHERE id = ? AND deleted = 0",
+                    JdbcMemorySupport.timestamp(Instant.now()), memoryId);
+        }
+        return deleted;
     }
 
     private MemoryRecord mapRecord(ResultSet rs, int rowNum) throws SQLException {

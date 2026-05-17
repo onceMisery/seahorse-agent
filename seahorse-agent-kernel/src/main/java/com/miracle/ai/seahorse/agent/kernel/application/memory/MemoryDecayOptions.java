@@ -15,34 +15,24 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.outbound.trace;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
+package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 /**
- * RAG Trace DB 仓储端口。
- *
- * <p>DB Trace 是管理后台产品功能，不能被指标观测端口替代。
+ * 短期记忆衰减维护策略。
  */
-public interface RagTraceRepositoryPort {
+public record MemoryDecayOptions(int scanLimit,
+                                 double decayThreshold,
+                                 boolean dryRun) {
 
-    RagTracePage<RagTraceRun> pageRuns(RagTracePageRequest request);
+    private static final int DEFAULT_SCAN_LIMIT = 500;
+    private static final double DEFAULT_DECAY_THRESHOLD = 0.1D;
 
-    Optional<RagTraceRun> findRun(String traceId);
+    public MemoryDecayOptions {
+        scanLimit = scanLimit > 0 ? scanLimit : DEFAULT_SCAN_LIMIT;
+        decayThreshold = decayThreshold >= 0D ? decayThreshold : DEFAULT_DECAY_THRESHOLD;
+    }
 
-    List<RagTraceNode> listNodes(String traceId);
-
-    void startRun(RagTraceRun run);
-
-    void finishRun(RagTraceRunFinish finish);
-
-    void startNode(RagTraceNode node);
-
-    void finishNode(RagTraceNodeFinish finish);
-
-    default int deleteRunsBefore(Instant before, int limit) {
-        return 0;
+    public static MemoryDecayOptions defaults() {
+        return new MemoryDecayOptions(DEFAULT_SCAN_LIMIT, DEFAULT_DECAY_THRESHOLD, false);
     }
 }

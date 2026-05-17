@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalCacheAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalSemaphoreAdapter;
 import com.miracle.ai.seahorse.agent.adapters.local.ClasspathPromptTemplateAdapter;
@@ -292,6 +293,23 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                             .isInstanceOf(ElasticsearchKeywordSearchAdapter.class);
                     assertThat(context.getBean(KeywordIndexPort.class))
                             .isInstanceOf(ElasticsearchKeywordIndexAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterOpenAiStreamingExecutorWhenOpenAiAdapterSelected() {
+        contextRunner.withBean(OkHttpClient.class, OkHttpClient::new)
+                .withBean(ObjectMapper.class, ObjectMapper::new)
+                .withPropertyValues(
+                        "seahorse-agent.adapters.ai.type=openai-compatible",
+                        "seahorse-agent.adapters.ai.chat-model=gpt-test",
+                        "seahorse-agent.adapters.ai.streaming-executor.core-size=1",
+                        "seahorse-agent.adapters.ai.streaming-executor.max-size=2",
+                        "seahorse-agent.adapters.ai.streaming-executor.queue-capacity=4")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(OpenAiCompatibleModelAdapter.class);
+                    assertThat(context).hasBean("openAiStreamingExecutor");
                 });
     }
 

@@ -89,6 +89,7 @@ public class KernelChatPipeline {
      */
     public void execute(StreamChatContext context) {
         StreamChatContext safeContext = Objects.requireNonNull(context, "流式问答上下文不能为空");
+        installMemoryCapture(safeContext);
         TraceRunScope traceRunScope = safeContext.getTraceRunScope();
         traceRecorder.recordNode(traceRunScope, stage("load-memory", "loadMemory"), () -> loadMemory(safeContext));
         traceRecorder.recordNode(traceRunScope, stage("activate-memory", "activateMemory"), () -> activateMemory(safeContext));
@@ -112,6 +113,14 @@ public class KernelChatPipeline {
 
         traceRecorder.recordNode(traceRunScope, stage("stream-response", "streamRagResponse"),
                 () -> streamRagResponse(safeContext, retrievalContext));
+    }
+
+    private void installMemoryCapture(StreamChatContext context) {
+        StreamCallback callback = context.getCallback();
+        if (callback == null) {
+            return;
+        }
+        context.setCallback(MemoryCaptureStage.wrap(callback, preparationPorts.memoryEnginePort(), context));
     }
 
     private void loadMemory(StreamChatContext context) {

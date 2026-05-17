@@ -73,6 +73,29 @@ class JdbcRagTraceRepositoryAdapterTests {
         assertThat(actual.getErrorMessage()).isEqualTo("failed");
     }
 
+    @Test
+    void shouldSoftDeleteExpiredRunsAndNodes() {
+        RagTraceRun oldRun = sampleRun();
+        oldRun.setTraceId("old-trace");
+        oldRun.setStartTime(Instant.now().minusSeconds(3600));
+        adapter.startRun(oldRun);
+        RagTraceNode oldNode = sampleNode();
+        oldNode.setTraceId("old-trace");
+        adapter.startNode(oldNode);
+
+        RagTraceRun freshRun = sampleRun();
+        freshRun.setTraceId("fresh-trace");
+        freshRun.setStartTime(Instant.now());
+        adapter.startRun(freshRun);
+
+        int deleted = adapter.deleteRunsBefore(Instant.now().minusSeconds(60), 10);
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(adapter.findRun("old-trace")).isEmpty();
+        assertThat(adapter.listNodes("old-trace")).isEmpty();
+        assertThat(adapter.findRun("fresh-trace")).isPresent();
+    }
+
     private RagTraceRun sampleRun() {
         RagTraceRun run = new RagTraceRun();
         run.setTraceId("trace-1");

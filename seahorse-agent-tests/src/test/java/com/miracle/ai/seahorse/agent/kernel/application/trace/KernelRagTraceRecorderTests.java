@@ -73,6 +73,35 @@ class KernelRagTraceRecorderTests {
         Assertions.assertFalse(repository.finishedNodes.get(0).errorMessage().contains("\n"));
     }
 
+    @Test
+    void shouldSkipRunAndNodesWhenSampleRateIsZero() {
+        RecordingTraceRepository repository = new RecordingTraceRepository();
+        KernelRagTraceRecorder recorder = new KernelRagTraceRecorder(repository, new RagTraceRecorderOptions(0D));
+
+        TraceRunScope runScope = recorder.startRun(new TraceRunStartCommand(
+                "stream-chat", "KernelChatInboundService#streamChat", "conv-1", "task-1", "user-1"));
+        recorder.recordNode(runScope, new TraceNodeStartCommand(
+                "load-memory", "CHAT_STAGE", "KernelChatPipeline", "loadMemory", null, 0), () -> {
+                });
+        recorder.finishRun(runScope);
+
+        Assertions.assertFalse(runScope.active());
+        Assertions.assertTrue(repository.events.isEmpty());
+    }
+
+    @Test
+    void shouldRecordWhenSampleRateIsOne() {
+        RecordingTraceRepository repository = new RecordingTraceRepository();
+        KernelRagTraceRecorder recorder = new KernelRagTraceRecorder(repository, new RagTraceRecorderOptions(1D));
+
+        TraceRunScope runScope = recorder.startRun(new TraceRunStartCommand(
+                "stream-chat", "KernelChatInboundService#streamChat", "conv-1", "task-1", "user-1"));
+        recorder.finishRun(runScope);
+
+        Assertions.assertTrue(runScope.active());
+        Assertions.assertEquals(List.of("startRun", "finishRun"), repository.events);
+    }
+
     private static final class RecordingTraceRepository implements RagTraceRepositoryPort {
 
         private final List<String> events = new ArrayList<>();

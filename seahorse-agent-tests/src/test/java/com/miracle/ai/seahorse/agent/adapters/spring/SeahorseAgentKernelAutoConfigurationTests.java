@@ -50,6 +50,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrieva
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalStrategyTemplateService;
 import com.miracle.ai.seahorse.agent.kernel.application.sample.KernelSampleQuestionService;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.kernel.application.user.KernelUserService;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ChunkerNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.EmbedderNodeFeature;
@@ -123,6 +125,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSch
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshStateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
@@ -159,8 +163,13 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.concurrent.Executor;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 /**
  * Seahorse 原生内核自动配置契约测试。
@@ -211,6 +220,19 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context.getBean(RetrievalContextPort.class))
                             .isInstanceOf(KernelRetrievalEngine.class);
                 });
+    }
+
+    @Test
+    void shouldProvideDefaultRetrievalExecutors() {
+        contextRunner.run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context).hasBean("ragRetrievalThreadPoolExecutor");
+            assertThat(context).hasBean("ragInnerRetrievalThreadPoolExecutor");
+            assertThat(context).hasBean("ragContextThreadPoolExecutor");
+            assertThat(context.getBean("ragRetrievalThreadPoolExecutor", Executor.class)).isNotNull();
+            assertThat(context.getBean("ragInnerRetrievalThreadPoolExecutor", Executor.class)).isNotNull();
+            assertThat(context.getBean("ragContextThreadPoolExecutor", Executor.class)).isNotNull();
+        });
     }
 
     @Test
@@ -330,6 +352,18 @@ class SeahorseAgentKernelAutoConfigurationTests {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(KernelRagTraceRecorder.class);
+                    assertThat(context).hasSingleBean(SeahorseRagTraceCleanupJob.class);
+                });
+    }
+
+    @Test
+    void shouldDisableRagTraceCleanupJobWhenConfigured() {
+        contextRunner.withUserConfiguration(TraceRepositoryConfiguration.class)
+                .withPropertyValues("seahorse-agent.rag-trace.cleanup.enabled=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(KernelRagTraceRecorder.class);
+                    assertThat(context).doesNotHaveBean(SeahorseRagTraceCleanupJob.class);
                 });
     }
 
@@ -397,11 +431,32 @@ class SeahorseAgentKernelAutoConfigurationTests {
         contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryEnginePort.class);
                     assertThat(context).hasSingleBean(KernelMemoryManagementService.class);
                     assertThat(context).hasSingleBean(KernelMemoryGovernanceService.class);
                     assertThat(context).hasSingleBean(MemoryManagementInboundPort.class);
                     assertThat(context).hasSingleBean(MemoryGovernanceInboundPort.class);
                     assertThat(context).hasSingleBean(SeahorseMemoryGovernanceJob.class);
+                });
+    }
+
+    @Test
+    void shouldApplyMemoryCaptureSwitchFromProperties() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class)
+                .withPropertyValues("seahorse-agent.memory.capture-enabled=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    MemoryEnginePort memoryEnginePort = context.getBean(MemoryEnginePort.class);
+                    ShortTermMemoryPort shortTermMemoryPort = context.getBean(ShortTermMemoryPort.class);
+
+                    memoryEnginePort.writeMemory(MemoryWriteRequest.builder()
+                            .userId("user-1")
+                            .conversationId("conv-1")
+                            .messageId("msg-1")
+                            .message(ChatMessage.user("请记住：我喜欢 Java"))
+                            .build());
+
+                    verify(shortTermMemoryPort, never()).save(any(MemoryRecord.class));
                 });
     }
 

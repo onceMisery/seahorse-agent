@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMaintenancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import org.junit.jupiter.api.Test;
 
@@ -61,21 +62,64 @@ class KernelMemoryGovernanceServiceTests {
     }
 
     @Test
-    void shouldDelegateDecayToMemoryEngine() {
+    void shouldCleanExpiredOrDecayedShortTermMemories() {
         RecordingShortTermMemoryPort shortTerm = new RecordingShortTermMemoryPort();
         RecordingMemoryPort longTerm = new RecordingMemoryPort();
         RecordingMemoryPort semantic = new RecordingMemoryPort();
         RecordingMemoryEnginePort memoryEngine = new RecordingMemoryEnginePort();
+        RecordingShortTermMaintenancePort maintenance = new RecordingShortTermMaintenancePort();
+        maintenance.candidates.add(new MemoryRecord("expired-1", "short_term", "FACT", "old",
+                Map.of("userId", "user-1"), Instant.now()));
         KernelMemoryGovernanceService service = new KernelMemoryGovernanceService(
-                new MemoryGovernanceServicePorts(shortTerm, longTerm, semantic, memoryEngine), 0.6D);
+                new MemoryGovernanceServicePorts(shortTerm, longTerm, semantic, memoryEngine,
+                        com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort.noop(), maintenance),
+                0.6D);
 
         MemoryGovernanceRunResult result = service.runDecay("manual-decay");
 
         assertThat(result.decayExecuted()).isTrue();
-        assertThat(memoryEngine.decayExecuted).isTrue();
+        assertThat(memoryEngine.decayExecuted).isFalse();
+        assertThat(maintenance.deletedIds).containsExactly("expired-1");
+    }
+
+    @Test
+    void shouldNotDeleteWhenDecayDryRunEnabled() {
+        RecordingShortTermMemoryPort shortTerm = new RecordingShortTermMemoryPort();
+        RecordingMemoryPort longTerm = new RecordingMemoryPort();
+        RecordingMemoryPort semantic = new RecordingMemoryPort();
+        RecordingMemoryEnginePort memoryEngine = new RecordingMemoryEnginePort();
+        RecordingShortTermMaintenancePort maintenance = new RecordingShortTermMaintenancePort();
+        maintenance.candidates.add(new MemoryRecord("expired-1", "short_term", "FACT", "old",
+                Map.of("userId", "user-1"), Instant.now()));
+        KernelMemoryGovernanceService service = new KernelMemoryGovernanceService(
+                new MemoryGovernanceServicePorts(shortTerm, longTerm, semantic, memoryEngine,
+                        com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort.noop(), maintenance),
+                0.6D, false, new MemoryDecayOptions(100, 0.2D, true));
+
+        MemoryGovernanceRunResult result = service.runDecay("dry-run");
+
+        assertThat(result.decayExecuted()).isTrue();
+        assertThat(maintenance.deletedIds).isEmpty();
     }
 
     private static class RecordingShortTermMemoryPort extends RecordingMemoryPort implements ShortTermMemoryPort {
+    }
+
+    private static class RecordingShortTermMaintenancePort implements ShortTermMemoryMaintenancePort {
+
+        final List<MemoryRecord> candidates = new ArrayList<>();
+        final List<String> deletedIds = new ArrayList<>();
+
+        @Override
+        public List<MemoryRecord> scanExpiredOrDecayed(Instant now, double decayThreshold, int limit) {
+            return candidates.stream().limit(limit).toList();
+        }
+
+        @Override
+        public int markDeleted(List<String> memoryIds) {
+            deletedIds.addAll(memoryIds);
+            return memoryIds.size();
+        }
     }
 
     private static class RecordingMemoryPort implements LongTermMemoryPort, SemanticMemoryPort {

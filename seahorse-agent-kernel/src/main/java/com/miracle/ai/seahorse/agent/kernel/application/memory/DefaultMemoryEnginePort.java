@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
@@ -36,11 +38,13 @@ import org.slf4j.LoggerFactory;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * 默认记忆引擎端口实现。
@@ -48,11 +52,11 @@ import java.util.Set;
  * <p>编排 {@link ShortTermMemoryPort}、{@link LongTermMemoryPort}、{@link SemanticMemoryPort}
  * 三层记忆的读取和转换，实现 {@link MemoryEnginePort} 契约。
  *
- * <p>第一阶段行为：
+ * <p>当前阶段行为：
  * <ul>
- *   <li>{@link #loadMemory} 多层读取、限量、转换、去重。</li>
- *   <li>{@link #writeMemory} 第一阶段保持 no-op，不无条件写入用户原始问题。</li>
- *   <li>{@link #executeMemoryDecay} 第一阶段不实现全量扫描，委托给治理服务。</li>
+ *   <li>{@link #loadMemory} 多层读取、配置化限量、转换、去重。</li>
+ *   <li>{@link #writeMemory} 只写入显式可信用户声明，不无条件写入原始问题。</li>
+ *   <li>{@link #executeMemoryDecay} 尚不实现全量扫描，委托给后续治理维护端口。</li>
  *   <li>{@link #assessMemoryQuality} 返回基础计数，不声称具备冲突检测能力。</li>
  * </ul>
  */
@@ -60,23 +64,32 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort {
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultMemoryEnginePort.class);
 
-    private static final int DEFAULT_SHORT_TERM_LIMIT = 5;
-    private static final int DEFAULT_LONG_TERM_LIMIT = 3;
-    private static final int DEFAULT_SEMANTIC_LIMIT = 10;
+    private static final double CAPTURE_CONFIDENCE = 0.75D;
+    private static final double CAPTURE_IMPORTANCE = 0.55D;
 
     private final ShortTermMemoryPort shortTermPort;
     private final LongTermMemoryPort longTermPort;
     private final SemanticMemoryPort semanticPort;
     private final ObjectMapper objectMapper;
+    private final MemoryEngineOptions options;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
                                    SemanticMemoryPort semanticPort,
                                    ObjectMapper objectMapper) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, MemoryEngineOptions.defaults());
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        this.options = Objects.requireNonNullElseGet(options, MemoryEngineOptions::defaults);
     }
 
     @Override
@@ -86,9 +99,10 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort {
         }
 
         String userId = request.userId();
-        List<MemoryItem> shortTerm = loadLayer(shortTermPort, userId, DEFAULT_SHORT_TERM_LIMIT, MemoryLayer.SHORT_TERM);
-        List<MemoryItem> longTerm = loadLayer(longTermPort, userId, DEFAULT_LONG_TERM_LIMIT, MemoryLayer.LONG_TERM);
-        List<MemoryItem> semantic = loadLayer(semanticPort, userId, DEFAULT_SEMANTIC_LIMIT, MemoryLayer.SEMANTIC);
+        List<MemoryItem> shortTerm = loadLayer(shortTermPort, userId, options.shortTermLimit(),
+                MemoryLayer.SHORT_TERM);
+        List<MemoryItem> longTerm = loadLayer(longTermPort, userId, options.longTermLimit(), MemoryLayer.LONG_TERM);
+        List<MemoryItem> semantic = loadLayer(semanticPort, userId, options.semanticLimit(), MemoryLayer.SEMANTIC);
 
         return MemoryContext.builder()
                 .conversationId(request.conversationId())
@@ -104,7 +118,28 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort {
 
     @Override
     public void writeMemory(MemoryWriteRequest request) {
-        // 第一阶段不写入。写入闭环在第二阶段实现。
+        if (!options.captureEnabled()) {
+            return;
+        }
+        if (request == null || isBlank(request.userId()) || request.message() == null) {
+            return;
+        }
+        ChatMessage message = request.message();
+        if (message.getRole() != ChatRole.USER || isBlank(message.getContent())) {
+            return;
+        }
+        String content = extractTrustedUserMemory(message.getContent());
+        if (isBlank(content)) {
+            return;
+        }
+        MemoryRecord record = new MemoryRecord(
+                memoryId(request),
+                MemoryLayer.SHORT_TERM.name(),
+                inferMemoryType(content),
+                content,
+                captureMetadata(request, message),
+                java.time.Instant.now());
+        shortTermPort.save(record);
     }
 
     @Override
@@ -141,6 +176,69 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort {
     }
 
     // ========== 内部方法 ==========
+
+    private String extractTrustedUserMemory(String rawContent) {
+        String content = rawContent == null ? "" : rawContent.trim();
+        if (content.isBlank()) {
+            return "";
+        }
+        String normalized = content
+                .replaceFirst("^(请|帮我|麻烦你)?记住[：:，,\\s]*", "")
+                .replaceFirst("^我的", "我的");
+        boolean explicitRemember = !normalized.equals(content);
+        boolean profileStatement = content.startsWith("我是") || content.startsWith("我在")
+                || content.startsWith("我来自") || content.startsWith("我负责") || content.startsWith("我擅长");
+        boolean preferenceStatement = content.startsWith("我喜欢") || content.startsWith("我偏好")
+                || content.startsWith("我习惯") || content.startsWith("我常用");
+        boolean personalFact = content.startsWith("我的") && content.length() <= 80;
+        if (!explicitRemember && !profileStatement && !preferenceStatement && !personalFact) {
+            return "";
+        }
+        String candidate = explicitRemember ? normalized : content;
+        candidate = candidate.replaceFirst("^[：:，,\\s]+", "").trim();
+        if (candidate.length() < 2 || candidate.length() > 120 || looksLikeQuestion(candidate)) {
+            return "";
+        }
+        return candidate;
+    }
+
+    private boolean looksLikeQuestion(String content) {
+        return content.endsWith("?") || content.endsWith("？")
+                || content.contains("是什么") || content.contains("怎么") || content.contains("如何");
+    }
+
+    private String inferMemoryType(String content) {
+        String lower = content.toLowerCase();
+        if (content.contains("喜欢") || content.contains("偏好") || content.contains("习惯")
+                || content.contains("常用") || lower.contains("prefer") || lower.contains("like")) {
+            return "PREFERENCE";
+        }
+        if (content.startsWith("我是") || content.startsWith("我在") || content.startsWith("我来自")
+                || content.startsWith("我负责") || content.startsWith("我擅长")) {
+            return "PROFILE";
+        }
+        return "FACT";
+    }
+
+    private Map<String, Object> captureMetadata(MemoryWriteRequest request, ChatMessage message) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("userId", request.userId());
+        metadata.put("conversationId", Objects.requireNonNullElse(request.conversationId(), ""));
+        metadata.put("messageId", Objects.requireNonNullElse(request.messageId(), ""));
+        metadata.put("role", message.getRole().name().toLowerCase());
+        metadata.put("source", "chat_memory_capture");
+        metadata.put("capturePolicy", "explicit_user_memory");
+        metadata.put("importanceScore", CAPTURE_IMPORTANCE);
+        metadata.put("confidenceLevel", CAPTURE_CONFIDENCE);
+        return metadata;
+    }
+
+    private String memoryId(MemoryWriteRequest request) {
+        if (!isBlank(request.messageId())) {
+            return "stm-" + request.messageId();
+        }
+        return "stm-" + UUID.randomUUID();
+    }
 
     private List<MemoryItem> loadLayer(ShortTermMemoryPort port, String userId, int limit, MemoryLayer layer) {
         return loadLayerInternal(port, userId, limit, layer);

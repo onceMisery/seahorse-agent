@@ -36,9 +36,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
-
 /**
- * 基于旧 RAG Trace 表的 JDBC adapter。
+ * 基于 RAG Trace 表的 JDBC adapter。
  */
 public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
 
@@ -77,6 +76,23 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
             UPDATE t_rag_trace_node
             SET status = ?, error_message = ?, end_time = ?, duration_ms = ?, update_time = ?
             WHERE trace_id = ? AND node_id = ? AND deleted = 0
+            """;
+    private static final String SQL_SELECT_EXPIRED_RUNS = """
+            SELECT trace_id
+            FROM t_rag_trace_run
+            WHERE deleted = 0 AND start_time < ?
+            ORDER BY start_time ASC
+            LIMIT ?
+            """;
+    private static final String SQL_DELETE_EXPIRED_RUNS = """
+            UPDATE t_rag_trace_run
+            SET deleted = 1, update_time = ?
+            WHERE trace_id = ? AND deleted = 0
+            """;
+    private static final String SQL_DELETE_EXPIRED_NODES = """
+            UPDATE t_rag_trace_node
+            SET deleted = 1, update_time = ?
+            WHERE trace_id = ? AND deleted = 0
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -199,6 +215,26 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
                 toTimestamp(Instant.now()),
                 finish.traceId(),
                 finish.nodeId());
+    }
+
+    @Override
+    public int deleteRunsBefore(Instant before, int limit) {
+        if (before == null || limit <= 0) {
+            return 0;
+        }
+        List<String> traceIds = jdbcTemplate.queryForList(SQL_SELECT_EXPIRED_RUNS,
+                String.class, toTimestamp(before), limit);
+        if (traceIds.isEmpty()) {
+            return 0;
+        }
+        Instant now = Instant.now();
+        int deleted = 0;
+        for (String traceId : traceIds) {
+            // run 与 node 同步软删，保留审计痕迹并避免清理任务直接物理删除历史数据。
+            jdbcTemplate.update(SQL_DELETE_EXPIRED_NODES, toTimestamp(now), traceId);
+            deleted += jdbcTemplate.update(SQL_DELETE_EXPIRED_RUNS, toTimestamp(now), traceId);
+        }
+        return deleted;
     }
 
     private QueryParts buildRunFilter(RagTracePageRequest request) {
