@@ -114,7 +114,7 @@ P2 是清理、命名、低风险维护性优化或前端体验增强。
 | 4 | P1 | 部署与适配器治理 | starter 依赖拆分策略、OpenAI streaming executor、Milvus 配置 | 2-4 个代码提交 |
 | 5 | P1 | 数据库补偿 | `t_knowledge_chunk(kb_id, doc_id)` 索引与迁移说明 | 1 个代码/SQL 提交 |
 | 6 | P2 | 清理与前端运营 | wrapper 占位已显式暴露 passThrough；storage 可靠上传默认语义已收敛；cache-local 命名已澄清；chatStore 已完成第一步门面式拆分；元数据治理 UI 已新增最小管理页 | 多个独立提交 |
-| 7 | P1/P2 | 架构瘦身与职责治理 | 自动配置拆分、JDBC 元数据适配器拆分、端口准入规则、聊天/检索阶段边界收敛 | 多个独立提交 |
+| 7 | P1/P2 | 架构瘦身与职责治理 | 自动配置已开始按技术域拆分；JDBC 元数据适配器拆分、端口准入规则、聊天/检索阶段边界收敛仍待推进 | 多个独立提交 |
 
 ---
 
@@ -866,6 +866,8 @@ npm run build
 问题：
 
 `SeahorseAgentKernelAutoConfiguration` 同时装配插件注册、摄取、检索、聊天、认证、知识库、元数据治理、定时任务、记忆和模型路由；`SeahorseAgentNativeAdapterAutoConfiguration` 同时装配缓存、存储、搜索、向量、JDBC、MQ、AI、本地实现和外部 SDK 适配器。新增一个通道、仓储或治理能力时，通常需要触碰千行级配置类，增加合并冲突和条件装配回归风险。
+
+当前状态：已完成第一步兼容拆分。storage 与 observation 两个低耦合技术域已迁移到 `SeahorseAgentStorageAdapterAutoConfiguration`、`SeahorseAgentObservationAdapterAutoConfiguration`，主配置通过 `@Import` 引入，Bean 名称、条件和外部自动配置入口保持不变。
 
 方案：
 

@@ -36,8 +36,6 @@ import com.miracle.ai.seahorse.agent.adapters.local.LocalRetrievalContextFormatA
 import com.miracle.ai.seahorse.agent.adapters.mq.direct.DirectMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.mq.pulsar.PulsarMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.mq.pulsar.PulsarMessageQueueProperties;
-import com.miracle.ai.seahorse.agent.adapters.observation.micrometer.MicrometerObservationAdapter;
-import com.miracle.ai.seahorse.agent.adapters.observation.noop.NoopObservationAdapter;
 import com.miracle.ai.seahorse.agent.adapters.parser.tika.TikaDocumentParserAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcUserRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationRepositoryAdapter;
@@ -80,8 +78,6 @@ import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdap
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.SeahorseOutboxRelayJob;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexMessageSubscriber;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexOutboxAdapter;
-import com.miracle.ai.seahorse.agent.adapters.storage.local.LocalObjectStorageAdapter;
-import com.miracle.ai.seahorse.agent.adapters.storage.s3.S3ObjectStorageAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SaTokenCurrentUserAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SaTokenServiceAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SeahorseSaTokenStpInterface;
@@ -167,7 +163,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.milvus.v2.client.MilvusClientV2;
 import okhttp3.OkHttpClient;
 import org.apache.pulsar.client.api.PulsarClient;
@@ -183,9 +178,9 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-import software.amazon.awssdk.services.s3.S3Client;
 
 import javax.sql.DataSource;
 import java.time.Duration;
@@ -204,6 +199,10 @@ import java.util.concurrent.Executor;
 @AutoConfiguration
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@Import({
+        SeahorseAgentObservationAdapterAutoConfiguration.class,
+        SeahorseAgentStorageAdapterAutoConfiguration.class
+})
 public class SeahorseAgentNativeAdapterAutoConfiguration {
 
     @Bean
@@ -266,23 +265,6 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @ConditionalOnMissingBean(DistributedSemaphorePort.class)
     public LocalSemaphoreAdapter seahorseLocalSemaphoreAdapter() {
         return new LocalSemaphoreAdapter();
-    }
-
-    @Bean
-    @ConditionalOnBean(S3Client.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.storage", name = "type", havingValue = "s3", matchIfMissing = true)
-    @ConditionalOnMissingBean(ObjectStoragePort.class)
-    public S3ObjectStorageAdapter seahorseS3ObjectStorageAdapter(S3Client s3Client) {
-        return new S3ObjectStorageAdapter(s3Client);
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.storage", name = "type", havingValue = "local")
-    @ConditionalOnMissingBean(ObjectStoragePort.class)
-    public LocalObjectStorageAdapter seahorseLocalObjectStorageAdapter(
-            @Value("${seahorse-agent.adapters.storage.local.root:${java.io.tmpdir}/seahorse-agent-storage}")
-            Path rootDirectory) {
-        return new LocalObjectStorageAdapter(rootDirectory);
     }
 
     @Bean
@@ -1001,21 +983,6 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
         return new SeahorseOutboxRelayJob(outboxEventRepositoryPort, messageQueuePort, objectMapper,
                 lockPort.getIfAvailable(DistributedLockPort::noop),
                 quarantinePort.getIfAvailable(MetadataQuarantinePort::noop), batchSize);
-    }
-
-    @Bean
-    @ConditionalOnBean(MeterRegistry.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.observation", name = "type", havingValue = "micrometer")
-    @ConditionalOnMissingBean(ObservationPort.class)
-    public MicrometerObservationAdapter seahorseMicrometerObservationAdapter(MeterRegistry meterRegistry) {
-        return new MicrometerObservationAdapter(meterRegistry);
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.observation", name = "type", havingValue = "noop")
-    @ConditionalOnMissingBean(ObservationPort.class)
-    public NoopObservationAdapter seahorseNoopObservationAdapter() {
-        return new NoopObservationAdapter();
     }
 
     @Bean
