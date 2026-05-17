@@ -19,13 +19,9 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationMemoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDashboardRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentExtensionStatusAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcIntentTreeRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLongTermMemoryRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflictLogRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryQualitySnapshotRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMessageFeedbackRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
@@ -33,23 +29,13 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRagTraceReposi
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRetrievalEvaluationDatasetRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRetrievalStrategyTemplateRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSampleQuestionRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSemanticMemoryRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcShortTermMemoryRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcWorkingMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.SeahorseOutboxRelayJob;
-import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.dashboard.DashboardRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
@@ -88,6 +74,7 @@ import javax.sql.DataSource;
         SeahorseAgentKeywordAdapterAutoConfiguration.class,
         SeahorseAgentKnowledgeRepositoryAutoConfiguration.class,
         SeahorseAgentLocalAdapterAutoConfiguration.class,
+        SeahorseAgentMemoryRepositoryAutoConfiguration.class,
         SeahorseAgentMetadataAdapterAutoConfiguration.class,
         SeahorseAgentMqAdapterAutoConfiguration.class,
         SeahorseAgentObservationAdapterAutoConfiguration.class,
@@ -112,70 +99,6 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     public JdbcRetrievalEvaluationDatasetRepositoryAdapter seahorseJdbcRetrievalEvaluationDatasetRepositoryAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
         return new JdbcRetrievalEvaluationDatasetRepositoryAdapter(dataSource, objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(ConversationMemoryPort.class)
-    public JdbcConversationMemoryAdapter seahorseJdbcConversationMemoryAdapter(
-            DataSource dataSource,
-            @Value("${seahorse-agent.plugins.memory.history-keep-turns:10}")
-            int historyKeepTurns) {
-        return new JdbcConversationMemoryAdapter(dataSource, historyKeepTurns * 2);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(WorkingMemoryPort.class)
-    public JdbcWorkingMemoryRepositoryAdapter seahorseJdbcWorkingMemoryRepositoryAdapter(DataSource dataSource) {
-        return new JdbcWorkingMemoryRepositoryAdapter(dataSource);
-    }
-
-    @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(ShortTermMemoryPort.class)
-    public JdbcShortTermMemoryRepositoryAdapter seahorseJdbcShortTermMemoryRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcShortTermMemoryRepositoryAdapter(dataSource, objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(LongTermMemoryPort.class)
-    public JdbcLongTermMemoryRepositoryAdapter seahorseJdbcLongTermMemoryRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcLongTermMemoryRepositoryAdapter(dataSource, objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(SemanticMemoryPort.class)
-    public JdbcSemanticMemoryRepositoryAdapter seahorseJdbcSemanticMemoryRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcSemanticMemoryRepositoryAdapter(dataSource, objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(MemoryQualitySnapshotRepositoryPort.class)
-    public JdbcMemoryQualitySnapshotRepositoryAdapter seahorseJdbcMemoryQualitySnapshotRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcMemoryQualitySnapshotRepositoryAdapter(dataSource, objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(MemoryConflictLogRepositoryPort.class)
-    public JdbcMemoryConflictLogRepositoryAdapter seahorseJdbcMemoryConflictLogRepositoryAdapter(
-            DataSource dataSource) {
-        return new JdbcMemoryConflictLogRepositoryAdapter(dataSource);
     }
 
     @Bean
