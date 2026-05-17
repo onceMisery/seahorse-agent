@@ -110,6 +110,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     private final JdbcMetadataColumnDetector columnDetector;
     private final JdbcMetadataReviewSupport reviewSupport;
     private final JdbcMetadataQuarantineSupport quarantineSupport;
+    private final JdbcMetadataBackfillSupport backfillSupport;
 
     public JdbcMetadataGovernanceRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
@@ -119,6 +120,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         this.columnDetector = new JdbcMetadataColumnDetector(jdbcTemplate);
         this.reviewSupport = new JdbcMetadataReviewSupport(jdbcTemplate, jsonSupport);
         this.quarantineSupport = new JdbcMetadataQuarantineSupport(jdbcTemplate, jsonSupport);
+        this.backfillSupport = new JdbcMetadataBackfillSupport(jdbcTemplate, jsonSupport);
     }
 
     @Override
@@ -806,6 +808,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public String create(MetadataBackfillJobRecord job) {
+        // 先委派给独立协作者，保留旧实现作为渐进重构期间的兼容回退。
+        if (backfillSupport != null) {
+            return backfillSupport.create(job);
+        }
         MetadataBackfillJobRecord safeJob = Objects.requireNonNull(job, "job must not be null");
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_extraction_job(
@@ -824,6 +830,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public Optional<MetadataBackfillJobRecord> findById(String jobId) {
+        // 先委派给独立协作者，保留旧实现作为渐进重构期间的兼容回退。
+        if (backfillSupport != null) {
+            return backfillSupport.findById(jobId);
+        }
         if (blank(jobId)) {
             return Optional.empty();
         }
@@ -843,6 +853,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public MetadataBackfillJobPage page(MetadataBackfillJobQuery query) {
+        // 先委派给独立协作者，保留旧实现作为渐进重构期间的兼容回退。
+        if (backfillSupport != null) {
+            return backfillSupport.page(query);
+        }
         MetadataBackfillJobQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
         SqlWhere where = backfillJobWhere(safeQuery);
         long total = countLong("SELECT COUNT(1) FROM t_metadata_extraction_job " + where.sql(), where.args());
@@ -916,6 +930,11 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public void save(MetadataBackfillJobRecord job) {
+        // 先委派给独立协作者，保留旧实现作为渐进重构期间的兼容回退。
+        if (backfillSupport != null) {
+            backfillSupport.save(job);
+            return;
+        }
         MetadataBackfillJobRecord safeJob = Objects.requireNonNull(job, "job must not be null");
         jdbcTemplate.update("""
                 UPDATE t_metadata_extraction_job
