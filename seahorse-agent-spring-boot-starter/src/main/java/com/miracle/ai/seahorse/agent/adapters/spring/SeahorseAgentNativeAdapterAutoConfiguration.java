@@ -23,7 +23,6 @@ import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelPro
 import com.miracle.ai.seahorse.agent.adapters.mq.direct.DirectMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.mq.pulsar.PulsarMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.mq.pulsar.PulsarMessageQueueProperties;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcUserRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationMemoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDashboardRepositoryAdapter;
@@ -64,10 +63,6 @@ import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdap
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.SeahorseOutboxRelayJob;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexMessageSubscriber;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexOutboxAdapter;
-import com.miracle.ai.seahorse.agent.adapters.web.SaTokenCurrentUserAdapter;
-import com.miracle.ai.seahorse.agent.adapters.web.SaTokenServiceAdapter;
-import com.miracle.ai.seahorse.agent.adapters.web.SeahorseSaTokenStpInterface;
-import com.miracle.ai.seahorse.agent.adapters.web.SpringCurrentUserAdapter;
 import com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorAdapter;
 import com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorProperties;
 import com.miracle.ai.seahorse.agent.adapters.vector.noop.NoopVectorStoreAdapter;
@@ -128,17 +123,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluatio
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import io.milvus.v2.client.MilvusClientV2;
 import okhttp3.OkHttpClient;
 import org.apache.pulsar.client.api.PulsarClient;
-import cn.dev33.satoken.stp.StpInterface;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -171,6 +161,7 @@ import java.util.concurrent.Executor;
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
+        SeahorseAgentAuthAdapterAutoConfiguration.class,
         SeahorseAgentCacheAdapterAutoConfiguration.class,
         SeahorseAgentLocalAdapterAutoConfiguration.class,
         SeahorseAgentObservationAdapterAutoConfiguration.class,
@@ -200,50 +191,6 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
         PulsarMessageQueueAdapter delegate = new PulsarMessageQueueAdapter(
                 pulsarClient, objectMapper, new PulsarMessageQueueProperties());
         return new ReliableMessageQueueAdapter(delegate, delegate, outboxRepositoryPort::getIfAvailable, () -> objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(UserRepositoryPort.class)
-    public JdbcUserRepositoryAdapter seahorseJdbcUserRepositoryAdapter(DataSource dataSource) {
-        return new JdbcUserRepositoryAdapter(dataSource);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(PasswordHasherPort.class)
-    public PasswordHasherPort seahorsePasswordHasherPort() {
-        return PasswordHasherPort.plainText();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(TokenServicePort.class)
-    public SaTokenServiceAdapter seahorseSaTokenServiceAdapter() {
-        return new SaTokenServiceAdapter();
-    }
-
-    @Bean
-    @ConditionalOnBean(UserRepositoryPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.auth", name = "current-user", havingValue = "sa-token",
-            matchIfMissing = true)
-    @ConditionalOnMissingBean(CurrentUserPort.class)
-    public SaTokenCurrentUserAdapter seahorseSaTokenCurrentUserAdapter(UserRepositoryPort userRepositoryPort) {
-        return new SaTokenCurrentUserAdapter(userRepositoryPort);
-    }
-
-    @Bean
-    @ConditionalOnBean(UserRepositoryPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.auth", name = "current-user", havingValue = "spring-header")
-    @ConditionalOnMissingBean(CurrentUserPort.class)
-    public SpringCurrentUserAdapter seahorseSpringCurrentUserAdapter(UserRepositoryPort userRepositoryPort) {
-        return new SpringCurrentUserAdapter(userRepositoryPort);
-    }
-
-    @Bean
-    @ConditionalOnBean(UserRepositoryPort.class)
-    @ConditionalOnMissingBean(StpInterface.class)
-    public SeahorseSaTokenStpInterface seahorseSaTokenStpInterface(UserRepositoryPort userRepositoryPort) {
-        return new SeahorseSaTokenStpInterface(userRepositoryPort);
     }
 
     @Bean
