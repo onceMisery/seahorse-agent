@@ -80,7 +80,7 @@ P2 是清理、命名、低风险维护性优化或前端体验增强。
 当前 P2：
 
 1. wrapper 占位实现清理或标注。
-2. Gson 统一 Jackson。
+2. Gson 统一 Jackson（Milvus 业务 JSON 已统一到 Jackson，SDK JsonObject 载体保留）。
 3. `ObjectStoragePort.reliableUpload` 语义收敛（已完成）。
 4. `adapter-cache-local` 命名说明或重命名（已补充说明，暂不重命名）。
 5. `chatStore.ts` 拆分。
@@ -558,7 +558,7 @@ mvn -pl seahorse-agent-adapter-ai-openai-compatible,seahorse-agent-spring-boot-s
 
 ### 10.3 Milvus 配置化
 
-当前状态：已完成核心参数配置化。`MilvusVectorProperties` 已承载 `contentMaxLength`、HNSW `M/efConstruction`、`mmapEnabled` 和 `searchEf`，starter 可通过 `seahorse-agent.adapters.vector.milvus.*` 注入。Gson 到 Jackson 的统一仍暂缓，因为当前行数据与 Milvus SDK `JsonObject` 强耦合，需单独评估兼容性。
+当前状态：已完成核心参数配置化。`MilvusVectorProperties` 已承载 `contentMaxLength`、HNSW `M/efConstruction`、`mmapEnabled` 和 `searchEf`，starter 可通过 `seahorse-agent.adapters.vector.milvus.*` 注入。业务侧 metadata 序列化/反序列化已统一使用 Jackson；Milvus SDK 行数据仍保留 `JsonObject/JsonArray` 作为边界载体。
 
 #### 目标
 

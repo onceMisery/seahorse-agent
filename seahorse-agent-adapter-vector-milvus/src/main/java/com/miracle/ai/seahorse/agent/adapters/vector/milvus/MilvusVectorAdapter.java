@@ -17,10 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.adapters.vector.milvus;
 
-import com.google.gson.Gson;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataValueType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SystemRetrievalFilter;
@@ -68,7 +71,9 @@ import java.util.stream.Collectors;
  */
 public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, VectorCollectionAdminPort {
 
-    private static final Gson GSON = new Gson();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final TypeReference<Map<String, Object>> METADATA_TYPE = new TypeReference<>() {
+    };
     private static final String FIELD_ID = "id";
     private static final String FIELD_CONTENT = "content";
     private static final String FIELD_METADATA = "metadata";
@@ -270,12 +275,21 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
     private JsonObject metadata(String collectionName, String docId, VectorChunk chunk) {
         JsonObject metadata = new JsonObject();
         if (chunk.getMetadata() != null) {
-            chunk.getMetadata().forEach((key, value) -> metadata.add(key, GSON.toJsonTree(value)));
+            chunk.getMetadata().forEach((key, value) -> metadata.add(key, jsonElement(value)));
         }
         metadata.addProperty(META_COLLECTION_NAME, resolveCollection(collectionName));
         metadata.addProperty(META_DOC_ID, requireText(docId, "docId"));
         metadata.addProperty(META_CHUNK_INDEX, chunk.getIndex());
         return metadata;
+    }
+
+    private JsonElement jsonElement(Object value) {
+        try {
+            // Milvus SDK 行数据仍使用 Gson JsonElement，业务侧 JSON 编解码统一交给 Jackson。
+            return JsonParser.parseString(OBJECT_MAPPER.writeValueAsString(value));
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("metadata value cannot be serialized: " + value, ex);
+        }
     }
 
     private JsonArray jsonArray(float[] vector) {
@@ -455,7 +469,6 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
         return "\"" + Objects.toString(value, "").replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, Object> metadata(Object value) {
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> metadata = new LinkedHashMap<>();
@@ -463,12 +476,20 @@ public class MilvusVectorAdapter implements VectorSearchPort, VectorIndexPort, V
             return metadata;
         }
         if (value instanceof JsonObject jsonObject) {
-            return GSON.fromJson(jsonObject, Map.class);
+            return readMetadata(jsonObject.toString());
         }
         if (value instanceof JsonElement jsonElement) {
-            return GSON.fromJson(jsonElement, Map.class);
+            return readMetadata(jsonElement.toString());
         }
         return Map.of();
+    }
+
+    private Map<String, Object> readMetadata(String json) {
+        try {
+            return OBJECT_MAPPER.readValue(json, METADATA_TYPE);
+        } catch (JsonProcessingException ex) {
+            return Map.of();
+        }
     }
 
     private String string(Map<String, Object> metadata, String key) {
