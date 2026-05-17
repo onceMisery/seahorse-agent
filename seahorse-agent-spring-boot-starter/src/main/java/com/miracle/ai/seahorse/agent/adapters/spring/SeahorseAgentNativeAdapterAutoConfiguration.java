@@ -18,8 +18,6 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter;
-import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelProperties;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationMemoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDashboardRepositoryAdapter;
@@ -103,13 +101,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndex
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelHealthPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelProviderPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
@@ -125,7 +116,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import io.milvus.v2.client.MilvusClientV2;
 import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -136,7 +126,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import javax.sql.DataSource;
 import java.time.Duration;
@@ -144,7 +133,6 @@ import java.util.Arrays;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.Executor;
 
 /**
  * Seahorse 原生 L3 adapter 自动装配。
@@ -156,6 +144,7 @@ import java.util.concurrent.Executor;
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
+        SeahorseAgentAiAdapterAutoConfiguration.class,
         SeahorseAgentAuthAdapterAutoConfiguration.class,
         SeahorseAgentCacheAdapterAutoConfiguration.class,
         SeahorseAgentLocalAdapterAutoConfiguration.class,
@@ -793,91 +782,6 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     @ConditionalOnMissingBean(NoopVectorStoreAdapter.class)
     public NoopVectorStoreAdapter seahorseNoopVectorStoreAdapter() {
         return new NoopVectorStoreAdapter();
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.ai", name = "type", havingValue = "openai-compatible")
-    @ConditionalOnMissingBean(name = "openAiStreamingExecutor")
-    public ThreadPoolTaskExecutor openAiStreamingExecutor(
-            @Value("${seahorse-agent.adapters.ai.streaming-executor.core-size:4}") int coreSize,
-            @Value("${seahorse-agent.adapters.ai.streaming-executor.max-size:32}") int maxSize,
-            @Value("${seahorse-agent.adapters.ai.streaming-executor.queue-capacity:200}") int queueCapacity,
-            @Value("${seahorse-agent.adapters.ai.streaming-executor.thread-name-prefix:seahorse-openai-stream-}")
-            String threadNamePrefix) {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(Math.max(1, coreSize));
-        executor.setMaxPoolSize(Math.max(Math.max(1, coreSize), maxSize));
-        executor.setQueueCapacity(Math.max(0, queueCapacity));
-        executor.setThreadNamePrefix(threadNamePrefix);
-        executor.initialize();
-        return executor;
-    }
-
-    @Bean
-    @ConditionalOnBean(OkHttpClient.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.ai", name = "type", havingValue = "openai-compatible")
-    @ConditionalOnMissingBean(OpenAiCompatibleModelAdapter.class)
-    public OpenAiCompatibleModelAdapter seahorseOpenAiCompatibleModelAdapter(
-            OkHttpClient httpClient,
-            ObjectMapper objectMapper,
-            @Qualifier("openAiStreamingExecutor") Executor streamingExecutor,
-            @Value("${seahorse-agent.adapters.ai.base-url:https://api.openai.com/v1}") String baseUrl,
-            @Value("${seahorse-agent.adapters.ai.api-key:}") String apiKey,
-            @Value("${seahorse-agent.adapters.ai.chat-model:}") String chatModel,
-            @Value("${seahorse-agent.adapters.ai.embedding-model:}") String embeddingModel,
-            @Value("${seahorse-agent.adapters.ai.rerank-model:}") String rerankModel) {
-        OpenAiCompatibleModelProperties properties = new OpenAiCompatibleModelProperties(
-                baseUrl, apiKey, chatModel, embeddingModel, rerankModel, List.of());
-        return new OpenAiCompatibleModelAdapter(httpClient, objectMapper, properties, streamingExecutor);
-    }
-
-    @Bean
-    @ConditionalOnBean(OpenAiCompatibleModelAdapter.class)
-    @ConditionalOnMissingBean(ChatModelPort.class)
-    public ChatModelPort seahorseNativeChatModelPort(OpenAiCompatibleModelAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(OpenAiCompatibleModelAdapter.class)
-    @ConditionalOnMissingBean(StreamingChatModelPort.class)
-    public StreamingChatModelPort seahorseNativeStreamingChatModelPort(OpenAiCompatibleModelAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(OpenAiCompatibleModelAdapter.class)
-    @ConditionalOnMissingBean(EmbeddingModelPort.class)
-    public EmbeddingModelPort seahorseNativeEmbeddingModelPort(OpenAiCompatibleModelAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(OpenAiCompatibleModelAdapter.class)
-    @ConditionalOnMissingBean(RerankModelPort.class)
-    public RerankModelPort seahorseNativeRerankModelPort(OpenAiCompatibleModelAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(OpenAiCompatibleModelAdapter.class)
-    @ConditionalOnMissingBean(ModelProviderPort.class)
-    public ModelProviderPort seahorseNativeModelProviderPort(OpenAiCompatibleModelAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(OpenAiCompatibleModelAdapter.class)
-    @ConditionalOnMissingBean(TokenCounterPort.class)
-    public TokenCounterPort seahorseNativeTokenCounterPort(OpenAiCompatibleModelAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(OpenAiCompatibleModelAdapter.class)
-    @ConditionalOnMissingBean(ModelHealthPort.class)
-    public ModelHealthPort seahorseNativeModelHealthPort(OpenAiCompatibleModelAdapter adapter) {
-        return adapter;
     }
 
     @Bean
