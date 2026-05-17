@@ -461,6 +461,38 @@ mvn -pl seahorse-agent-adapter-observation-micrometer,seahorse-agent-tests -am "
 
 当前 `seahorse-agent-spring-boot-starter` 直接依赖大量适配器，最小部署也会携带 Milvus、Pulsar、S3、Tika、Elasticsearch、Lucene 等 SDK。
 
+#### 当前风险判断
+
+不能直接把现有 adapter 依赖批量标记为 `optional`。原因是 `SeahorseAgentNativeAdapterAutoConfiguration` 单个自动配置类直接 import 并在 `@Bean` 方法签名里引用了几乎所有 adapter 类型。若消费端只引入 starter 而未显式引入某个 optional adapter，Spring Boot 在解析该自动配置类时可能因为缺少方法签名类型而发生类加载失败，而不是按 `@ConditionalOnClass` 优雅跳过。
+
+因此 starter 依赖治理必须先拆自动配置类，再调整 Maven 依赖传递性。
+
+#### 建议拆分顺序
+
+1. 先把 native adapter 自动配置按技术域拆成多个小配置类，并在每个配置类上使用 `@ConditionalOnClass` 保护外部 SDK 和 adapter 类型：
+
+| 新配置类 | 覆盖范围 | 条件保护 |
+|---------|----------|----------|
+| `SeahorseNativeCoreAdapterAutoConfiguration` | local/noop/direct/JDBC 基础能力 | kernel + JDBC/local 类型 |
+| `SeahorseNativeAiAutoConfiguration` | OpenAI-compatible、query optimizer | `OpenAiCompatibleModelAdapter`、`OkHttpClient` |
+| `SeahorseNativeVectorAutoConfiguration` | Milvus/PGVector/Noop vector | `MilvusClientV2`、`PgVectorAdapter` |
+| `SeahorseNativeSearchAutoConfiguration` | Elasticsearch/Lucene keyword 与 metadata index | ES/Lucene adapter 类型 |
+| `SeahorseNativeStorageAutoConfiguration` | Local/S3 object storage | `S3Client` |
+| `SeahorseNativeMqAutoConfiguration` | Direct/Pulsar/Reliable outbox | `PulsarClient` |
+| `SeahorseNativeSourceParserAutoConfiguration` | Tika/Feishu | Tika/Feishu adapter 类型 |
+
+2. 保持旧 `SeahorseAgentNativeAdapterAutoConfiguration` 一轮兼容：可作为空壳或导入类，避免自动配置导入文件一次性大改导致使用方升级风险。
+
+3. 拆完自动配置后再调整依赖：
+
+| 依赖类别 | 处理策略 |
+|---------|----------|
+| kernel、JDBC、local/noop/direct | 可继续作为核心 starter 默认依赖 |
+| Milvus、Elasticsearch、Pulsar、S3、Feishu、Tika | 移入能力 starter 或标记 optional，并要求部署工程显式选择 |
+| Lucene | 可作为轻量搜索能力 starter，默认不强绑到 core starter |
+
+4. 最后补一个最小依赖启动测试：只引入 core starter，不引入 Milvus/ES/Pulsar/S3/Tika 时，Spring context 仍可启动且不会解析缺失 adapter 类型。
+
 #### 推荐路线
 
 分三步做，避免 optional 化直接改变现有部署的传递依赖行为。
