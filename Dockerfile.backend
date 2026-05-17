@@ -8,6 +8,7 @@ COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 COPY seahorse-agent-bootstrap/pom.xml seahorse-agent-bootstrap/
 COPY seahorse-agent-spring-boot-starter/pom.xml seahorse-agent-spring-boot-starter/
+COPY seahorse-agent-spring-boot-starter-all/pom.xml seahorse-agent-spring-boot-starter-all/
 COPY seahorse-agent-kernel/pom.xml seahorse-agent-kernel/
 COPY seahorse-agent-adapter-web/pom.xml seahorse-agent-adapter-web/
 COPY seahorse-agent-adapter-ai-openai-compatible/pom.xml seahorse-agent-adapter-ai-openai-compatible/

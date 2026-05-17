@@ -42,6 +42,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -78,45 +79,6 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
     @ConditionalOnMissingBean(MetadataSchemaIndexStatusPort.class)
     public MetadataSchemaIndexStatusPort seahorseMetadataSchemaIndexStatusPort(
             JdbcMetadataGovernanceRepositoryAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.metadata-schema-index", name = "type",
-            havingValue = "elasticsearch")
-    @ConditionalOnMissingBean(ElasticsearchMetadataSchemaIndexAdapter.class)
-    public ElasticsearchMetadataSchemaIndexAdapter seahorseElasticsearchMetadataSchemaIndexAdapter(
-            OkHttpClient httpClient,
-            ObjectMapper objectMapper,
-            ObjectProvider<ObservationPort> observationPort,
-            ObjectProvider<MetadataSchemaIndexStatusPort> indexStatusPort,
-            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.base-url:http://localhost:9200}")
-            String baseUrl,
-            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.index-name:seahorse_keyword_chunk}")
-            String indexName,
-            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.search-fields:content^3}")
-            String searchFields,
-            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.api-key:}")
-            String apiKey,
-            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.username:}")
-            String username,
-            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.password:}")
-            String password,
-            @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.timeout:10s}")
-            String timeout) {
-        return new ElasticsearchMetadataSchemaIndexAdapter(httpClient, objectMapper,
-                new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields), apiKey, username, password,
-                        duration(timeout)),
-                observationPort.getIfAvailable(),
-                indexStatusPort.getIfAvailable());
-    }
-
-    @Bean
-    @ConditionalOnBean(ElasticsearchMetadataSchemaIndexAdapter.class)
-    @ConditionalOnMissingBean(MetadataSchemaIndexSyncPort.class)
-    public MetadataSchemaIndexSyncPort seahorseElasticsearchMetadataSchemaIndexSyncPort(
-            ElasticsearchMetadataSchemaIndexAdapter adapter) {
         return adapter;
     }
 
@@ -260,6 +222,49 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
                 return Duration.ofSeconds(Long.parseLong(normalized.substring(0, normalized.length() - 1)));
             }
             return Duration.ofSeconds(Long.parseLong(normalized));
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = {
+            "com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchMetadataSchemaIndexAdapter",
+            "okhttp3.OkHttpClient"
+    })
+    static class ElasticsearchMetadataSchemaIndexAutoConfiguration {
+
+        @Bean
+        @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.metadata-schema-index", name = "type",
+                havingValue = "elasticsearch")
+        @ConditionalOnMissingBean(ElasticsearchMetadataSchemaIndexAdapter.class)
+        public ElasticsearchMetadataSchemaIndexAdapter seahorseElasticsearchMetadataSchemaIndexAdapter(
+                OkHttpClient httpClient,
+                ObjectMapper objectMapper,
+                ObjectProvider<ObservationPort> observationPort,
+                ObjectProvider<MetadataSchemaIndexStatusPort> indexStatusPort,
+                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.base-url:http://localhost:9200}")
+                String baseUrl,
+                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.index-name:seahorse_keyword_chunk}")
+                String indexName,
+                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.search-fields:content^3}")
+                String searchFields,
+                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.api-key:}") String apiKey,
+                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.username:}") String username,
+                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.password:}") String password,
+                @Value("${seahorse-agent.adapters.metadata-schema-index.elasticsearch.timeout:10s}") String timeout) {
+            return new ElasticsearchMetadataSchemaIndexAdapter(httpClient, objectMapper,
+                    new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields),
+                            apiKey, username, password, duration(timeout)),
+                    observationPort.getIfAvailable(),
+                    indexStatusPort.getIfAvailable());
+        }
+
+        @Bean
+        @ConditionalOnBean(ElasticsearchMetadataSchemaIndexAdapter.class)
+        @ConditionalOnMissingBean(MetadataSchemaIndexSyncPort.class)
+        public MetadataSchemaIndexSyncPort seahorseElasticsearchMetadataSchemaIndexSyncPort(
+                ElasticsearchMetadataSchemaIndexAdapter adapter) {
+            return adapter;
         }
     }
 }

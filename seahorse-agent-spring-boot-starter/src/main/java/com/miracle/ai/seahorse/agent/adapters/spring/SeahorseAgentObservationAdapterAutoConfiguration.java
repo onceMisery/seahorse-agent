@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.adapters.observation.micrometer.MicrometerO
 import com.miracle.ai.seahorse.agent.adapters.observation.noop.NoopObservationAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -37,17 +38,25 @@ import org.springframework.context.annotation.Configuration;
 public class SeahorseAgentObservationAdapterAutoConfiguration {
 
     @Bean
-    @ConditionalOnBean(MeterRegistry.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.observation", name = "type", havingValue = "micrometer")
-    @ConditionalOnMissingBean(ObservationPort.class)
-    public MicrometerObservationAdapter seahorseMicrometerObservationAdapter(MeterRegistry meterRegistry) {
-        return new MicrometerObservationAdapter(meterRegistry);
-    }
-
-    @Bean
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.observation", name = "type", havingValue = "noop")
     @ConditionalOnMissingBean(ObservationPort.class)
     public NoopObservationAdapter seahorseNoopObservationAdapter() {
         return new NoopObservationAdapter();
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = {
+            "io.micrometer.core.instrument.MeterRegistry",
+            "com.miracle.ai.seahorse.agent.adapters.observation.micrometer.MicrometerObservationAdapter"
+    })
+    static class MicrometerObservationAutoConfiguration {
+
+        @Bean
+        @ConditionalOnBean(MeterRegistry.class)
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.observation", name = "type", havingValue = "micrometer")
+        @ConditionalOnMissingBean(ObservationPort.class)
+        public MicrometerObservationAdapter seahorseMicrometerObservationAdapter(MeterRegistry meterRegistry) {
+            return new MicrometerObservationAdapter(meterRegistry);
+        }
     }
 }

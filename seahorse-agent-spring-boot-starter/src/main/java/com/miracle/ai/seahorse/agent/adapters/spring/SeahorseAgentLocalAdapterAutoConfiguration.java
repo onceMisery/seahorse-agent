@@ -38,6 +38,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFo
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -54,14 +55,6 @@ import java.util.List;
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentLocalAdapterAutoConfiguration {
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.parser", name = "type", havingValue = "tika",
-            matchIfMissing = true)
-    @ConditionalOnMissingBean(DocumentParserPort.class)
-    public TikaDocumentParserAdapter seahorseTikaDocumentParserAdapter() {
-        return new TikaDocumentParserAdapter();
-    }
 
     @Bean
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.chat.rewrite", name = "type", havingValue = "local",
@@ -136,5 +129,21 @@ public class SeahorseAgentLocalAdapterAutoConfiguration {
     public CompositeDocumentFetcherPort seahorseCompositeDocumentFetcherPort(
             List<DocumentFetcherPort> documentFetcherPorts) {
         return new CompositeDocumentFetcherPort(documentFetcherPorts);
+    }
+
+    /**
+     * Tika 依赖体积较大，单独放在受 classpath 保护的子配置中，避免精简 starter 在缺失 Tika 模块时触发类加载失败。
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "com.miracle.ai.seahorse.agent.adapters.parser.tika.TikaDocumentParserAdapter")
+    static class TikaParserAutoConfiguration {
+
+        @Bean
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.parser", name = "type", havingValue = "tika",
+                matchIfMissing = true)
+        @ConditionalOnMissingBean(DocumentParserPort.class)
+        public TikaDocumentParserAdapter seahorseTikaDocumentParserAdapter() {
+            return new TikaDocumentParserAdapter();
+        }
     }
 }

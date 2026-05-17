@@ -62,7 +62,7 @@ Seahorse Agent 的 AI 能力由内核编排和出站端口共同组成：
 
 ## 系统架构
 
-项目后端以“微内核 + 端口适配器 + 插件扩展”组织。微内核位于 `seahorse-agent-kernel`，负责稳定的业务语义和主流程编排；外部系统对接位于 `seahorse-agent-adapter-*`，以独立模块实现端口；Web 入口位于 `seahorse-agent-adapter-web`，自动装配由 `seahorse-agent-spring-boot-starter` 提供，运行入口由 `seahorse-agent-bootstrap` 提供。
+项目后端以“微内核 + 端口适配器 + 插件扩展”组织。微内核位于 `seahorse-agent-kernel`，负责稳定的业务语义和主流程编排；外部系统对接位于 `seahorse-agent-adapter-*`，以独立模块实现端口；Web 入口位于 `seahorse-agent-adapter-web`。自动装配默认由精简后的 `seahorse-agent-spring-boot-starter` 提供，重型官方适配器聚合入口由 `seahorse-agent-spring-boot-starter-all` 提供，运行入口由 `seahorse-agent-bootstrap` 提供。
 
 ### 微内核与可插拔设计
 

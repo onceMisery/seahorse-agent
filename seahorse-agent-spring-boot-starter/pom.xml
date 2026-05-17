@@ -35,41 +35,49 @@
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-mq-pulsar</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-ai-openai-compatible</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-mcp-http</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-parser-tika</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-source-feishu</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-vector-milvus</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-vector-pgvector</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-cache-redis</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
@@ -80,6 +88,7 @@
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-storage-s3</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
@@ -90,6 +99,7 @@
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-observation-micrometer</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
@@ -105,11 +115,13 @@
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-search-elasticsearch</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-search-lucene</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>

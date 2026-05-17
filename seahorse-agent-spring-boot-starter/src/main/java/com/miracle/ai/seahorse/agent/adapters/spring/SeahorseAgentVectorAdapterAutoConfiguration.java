@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import io.milvus.v2.client.MilvusClientV2;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -44,86 +45,11 @@ import javax.sql.DataSource;
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentVectorAdapterAutoConfiguration {
-
-    @Bean
-    @ConditionalOnBean(MilvusClientV2.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.vector", name = "type", havingValue = "milvus", matchIfMissing = true)
-    @ConditionalOnMissingBean(MilvusVectorAdapter.class)
-    public MilvusVectorAdapter seahorseMilvusVectorAdapter(
-            MilvusClientV2 milvusClient,
-            @Value("${seahorse-agent.adapters.vector.collection-name:}")
-            String collectionName,
-            @Value("${seahorse-agent.adapters.vector.dimension:1024}") int dimension,
-            @Value("${seahorse-agent.adapters.vector.metric-type:COSINE}")
-            String metricType,
-            @Value("${seahorse-agent.adapters.vector.milvus.content-max-length:65535}") int contentMaxLength,
-            @Value("${seahorse-agent.adapters.vector.milvus.hnsw.m:48}") int hnswM,
-            @Value("${seahorse-agent.adapters.vector.milvus.hnsw.ef-construction:200}") int hnswEfConstruction,
-            @Value("${seahorse-agent.adapters.vector.milvus.mmap-enabled:false}") boolean mmapEnabled,
-            @Value("${seahorse-agent.adapters.vector.milvus.search-ef:128}") int searchEf) {
-        return new MilvusVectorAdapter(milvusClient, new MilvusVectorProperties(
-                collectionName, dimension, metricType, contentMaxLength,
-                hnswM, hnswEfConstruction, mmapEnabled, searchEf));
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.vector", name = "type", havingValue = "pgvector")
-    @ConditionalOnMissingBean(PgVectorAdapter.class)
-    public PgVectorAdapter seahorsePgVectorAdapter(
-            DataSource dataSource,
-            ObjectMapper objectMapper,
-            @Value("${seahorse-agent.adapters.vector.dimension:1024}") int dimension) {
-        return new PgVectorAdapter(dataSource, objectMapper, new PgVectorProperties("t_knowledge_vector", dimension));
-    }
-
     @Bean
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.vector", name = "type", havingValue = "noop")
     @ConditionalOnMissingBean(NoopVectorStoreAdapter.class)
     public NoopVectorStoreAdapter seahorseNoopVectorStoreAdapter() {
         return new NoopVectorStoreAdapter();
-    }
-
-    @Bean
-    @ConditionalOnBean(MilvusVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorSearchPort.class)
-    public VectorSearchPort seahorseNativeMilvusVectorSearchPort(MilvusVectorAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(MilvusVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorIndexPort.class)
-    public VectorIndexPort seahorseNativeMilvusVectorIndexPort(MilvusVectorAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(MilvusVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorCollectionAdminPort.class)
-    public VectorCollectionAdminPort seahorseNativeMilvusVectorAdminPort(MilvusVectorAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(PgVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorSearchPort.class)
-    public VectorSearchPort seahorseNativePgVectorSearchPort(PgVectorAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(PgVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorIndexPort.class)
-    public VectorIndexPort seahorseNativePgVectorIndexPort(PgVectorAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(PgVectorAdapter.class)
-    @ConditionalOnMissingBean(VectorCollectionAdminPort.class)
-    public VectorCollectionAdminPort seahorseNativePgVectorAdminPort(PgVectorAdapter adapter) {
-        return adapter;
     }
 
     @Bean
@@ -145,5 +71,92 @@ public class SeahorseAgentVectorAdapterAutoConfiguration {
     @ConditionalOnMissingBean(VectorCollectionAdminPort.class)
     public VectorCollectionAdminPort seahorseNativeNoopVectorAdminPort(NoopVectorStoreAdapter adapter) {
         return adapter;
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = {
+            "io.milvus.v2.client.MilvusClientV2",
+            "com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorAdapter"
+    })
+    static class MilvusVectorAutoConfiguration {
+
+        @Bean
+        @ConditionalOnBean(MilvusClientV2.class)
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.vector", name = "type",
+                havingValue = "milvus", matchIfMissing = true)
+        @ConditionalOnMissingBean(MilvusVectorAdapter.class)
+        public MilvusVectorAdapter seahorseMilvusVectorAdapter(
+                MilvusClientV2 milvusClient,
+                @Value("${seahorse-agent.adapters.vector.collection-name:}") String collectionName,
+                @Value("${seahorse-agent.adapters.vector.dimension:1024}") int dimension,
+                @Value("${seahorse-agent.adapters.vector.metric-type:COSINE}") String metricType,
+                @Value("${seahorse-agent.adapters.vector.milvus.content-max-length:65535}") int contentMaxLength,
+                @Value("${seahorse-agent.adapters.vector.milvus.hnsw.m:48}") int hnswM,
+                @Value("${seahorse-agent.adapters.vector.milvus.hnsw.ef-construction:200}") int hnswEfConstruction,
+                @Value("${seahorse-agent.adapters.vector.milvus.mmap-enabled:false}") boolean mmapEnabled,
+                @Value("${seahorse-agent.adapters.vector.milvus.search-ef:128}") int searchEf) {
+            return new MilvusVectorAdapter(milvusClient, new MilvusVectorProperties(
+                    collectionName, dimension, metricType, contentMaxLength,
+                    hnswM, hnswEfConstruction, mmapEnabled, searchEf));
+        }
+
+        @Bean
+        @ConditionalOnBean(MilvusVectorAdapter.class)
+        @ConditionalOnMissingBean(VectorSearchPort.class)
+        public VectorSearchPort seahorseNativeMilvusVectorSearchPort(MilvusVectorAdapter adapter) {
+            return adapter;
+        }
+
+        @Bean
+        @ConditionalOnBean(MilvusVectorAdapter.class)
+        @ConditionalOnMissingBean(VectorIndexPort.class)
+        public VectorIndexPort seahorseNativeMilvusVectorIndexPort(MilvusVectorAdapter adapter) {
+            return adapter;
+        }
+
+        @Bean
+        @ConditionalOnBean(MilvusVectorAdapter.class)
+        @ConditionalOnMissingBean(VectorCollectionAdminPort.class)
+        public VectorCollectionAdminPort seahorseNativeMilvusVectorAdminPort(MilvusVectorAdapter adapter) {
+            return adapter;
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorAdapter")
+    static class PgVectorAutoConfiguration {
+
+        @Bean
+        @ConditionalOnBean(DataSource.class)
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.vector", name = "type", havingValue = "pgvector")
+        @ConditionalOnMissingBean(PgVectorAdapter.class)
+        public PgVectorAdapter seahorsePgVectorAdapter(
+                DataSource dataSource,
+                ObjectMapper objectMapper,
+                @Value("${seahorse-agent.adapters.vector.dimension:1024}") int dimension) {
+            return new PgVectorAdapter(dataSource, objectMapper,
+                    new PgVectorProperties("t_knowledge_vector", dimension));
+        }
+
+        @Bean
+        @ConditionalOnBean(PgVectorAdapter.class)
+        @ConditionalOnMissingBean(VectorSearchPort.class)
+        public VectorSearchPort seahorseNativePgVectorSearchPort(PgVectorAdapter adapter) {
+            return adapter;
+        }
+
+        @Bean
+        @ConditionalOnBean(PgVectorAdapter.class)
+        @ConditionalOnMissingBean(VectorIndexPort.class)
+        public VectorIndexPort seahorseNativePgVectorIndexPort(PgVectorAdapter adapter) {
+            return adapter;
+        }
+
+        @Bean
+        @ConditionalOnBean(PgVectorAdapter.class)
+        @ConditionalOnMissingBean(VectorCollectionAdminPort.class)
+        public VectorCollectionAdminPort seahorseNativePgVectorAdminPort(PgVectorAdapter adapter) {
+            return adapter;
+        }
     }
 }

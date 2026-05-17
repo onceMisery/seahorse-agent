@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -61,128 +62,12 @@ import java.util.Locale;
 public class SeahorseAgentKeywordAdapterAutoConfiguration {
 
     @Bean
-    @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-search", name = "type",
-            havingValue = "elasticsearch")
-    @ConditionalOnMissingBean(ElasticsearchKeywordSearchAdapter.class)
-    public ElasticsearchKeywordSearchAdapter seahorseElasticsearchKeywordSearchAdapter(
-            OkHttpClient httpClient,
-            ObjectMapper objectMapper,
-            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.base-url:http://localhost:9200}")
-            String baseUrl,
-            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.index-name:seahorse_keyword_chunk}")
-            String indexName,
-            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.search-fields:content^3}")
-            String searchFields,
-            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.analyzer:}")
-            String analyzer,
-            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.minimum-should-match:}")
-            String minimumShouldMatch,
-            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.api-key:}")
-            String apiKey,
-            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.username:}")
-            String username,
-            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.password:}")
-            String password,
-            @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.timeout:10s}")
-            String timeout) {
-        return new ElasticsearchKeywordSearchAdapter(httpClient, objectMapper,
-                new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields), analyzer,
-                        minimumShouldMatch, apiKey, username, password, duration(timeout)));
-    }
-
-    @Bean
-    @ConditionalOnBean(ElasticsearchKeywordSearchAdapter.class)
-    @ConditionalOnMissingBean(KeywordSearchPort.class)
-    public KeywordSearchPort seahorseElasticsearchKeywordSearchPort(ElasticsearchKeywordSearchAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(ObjectMapper.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-search", name = "type",
-            havingValue = "lucene")
-    @ConditionalOnMissingBean(LuceneKeywordSearchAdapter.class)
-    public LuceneKeywordSearchAdapter seahorseLuceneKeywordSearchAdapter(
-            ObjectMapper objectMapper,
-            @Value("${seahorse-agent.adapters.keyword-search.lucene.index-directory:${java.io.tmpdir}/seahorse-agent-lucene-keyword}")
-            String indexDirectory,
-            @Value("${seahorse-agent.adapters.keyword-search.lucene.search-fields:content^3}")
-            String searchFields) {
-        return new LuceneKeywordSearchAdapter(objectMapper,
-                new LuceneKeywordProperties(Path.of(indexDirectory), csv(searchFields)));
-    }
-
-    @Bean
-    @ConditionalOnBean(LuceneKeywordSearchAdapter.class)
-    @ConditionalOnMissingBean(KeywordSearchPort.class)
-    public KeywordSearchPort seahorseLuceneKeywordSearchPort(LuceneKeywordSearchAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(KeywordSearchPort.class)
     public JdbcKeywordSearchAdapter seahorseJdbcKeywordSearchAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
         return new JdbcKeywordSearchAdapter(dataSource, objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "type",
-            havingValue = "elasticsearch")
-    @ConditionalOnMissingBean(ElasticsearchKeywordIndexAdapter.class)
-    public ElasticsearchKeywordIndexAdapter seahorseElasticsearchKeywordIndexAdapter(
-            OkHttpClient httpClient,
-            ObjectMapper objectMapper,
-            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.base-url:http://localhost:9200}")
-            String baseUrl,
-            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.index-name:seahorse_keyword_chunk}")
-            String indexName,
-            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.search-fields:content^3}")
-            String searchFields,
-            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.api-key:}")
-            String apiKey,
-            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.username:}")
-            String username,
-            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.password:}")
-            String password,
-            @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.timeout:10s}")
-            String timeout) {
-        return new ElasticsearchKeywordIndexAdapter(httpClient, objectMapper,
-                new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields), apiKey, username, password,
-                        duration(timeout)));
-    }
-
-    @Bean
-    @ConditionalOnBean(ElasticsearchKeywordIndexAdapter.class)
-    @ConditionalOnMissingBean(value = KeywordIndexPort.class, ignored = KeywordIndexOutboxAdapter.class)
-    public KeywordIndexPort seahorseElasticsearchKeywordIndexPort(ElasticsearchKeywordIndexAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(ObjectMapper.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "type",
-            havingValue = "lucene")
-    @ConditionalOnMissingBean(LuceneKeywordIndexAdapter.class)
-    public LuceneKeywordIndexAdapter seahorseLuceneKeywordIndexAdapter(
-            ObjectMapper objectMapper,
-            @Value("${seahorse-agent.adapters.keyword-index.lucene.index-directory:${java.io.tmpdir}/seahorse-agent-lucene-keyword}")
-            String indexDirectory,
-            @Value("${seahorse-agent.adapters.keyword-index.lucene.search-fields:content^3}")
-            String searchFields) {
-        return new LuceneKeywordIndexAdapter(objectMapper,
-                new LuceneKeywordProperties(Path.of(indexDirectory), csv(searchFields)));
-    }
-
-    @Bean
-    @ConditionalOnBean(LuceneKeywordIndexAdapter.class)
-    @ConditionalOnMissingBean(value = KeywordIndexPort.class, ignored = KeywordIndexOutboxAdapter.class)
-    public KeywordIndexPort seahorseLuceneKeywordIndexPort(LuceneKeywordIndexAdapter adapter) {
-        return adapter;
     }
 
     @Bean
@@ -258,6 +143,126 @@ public class SeahorseAgentKeywordAdapterAutoConfiguration {
                 return Duration.ofSeconds(Long.parseLong(normalized.substring(0, normalized.length() - 1)));
             }
             return Duration.ofSeconds(Long.parseLong(normalized));
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = {
+            "com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.ElasticsearchKeywordSearchAdapter",
+            "okhttp3.OkHttpClient"
+    })
+    static class ElasticsearchKeywordAutoConfiguration {
+
+        @Bean
+        @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-search", name = "type",
+                havingValue = "elasticsearch")
+        @ConditionalOnMissingBean(ElasticsearchKeywordSearchAdapter.class)
+        public ElasticsearchKeywordSearchAdapter seahorseElasticsearchKeywordSearchAdapter(
+                OkHttpClient httpClient,
+                ObjectMapper objectMapper,
+                @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.base-url:http://localhost:9200}")
+                String baseUrl,
+                @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.index-name:seahorse_keyword_chunk}")
+                String indexName,
+                @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.search-fields:content^3}")
+                String searchFields,
+                @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.analyzer:}") String analyzer,
+                @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.minimum-should-match:}")
+                String minimumShouldMatch,
+                @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.api-key:}") String apiKey,
+                @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.username:}") String username,
+                @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.password:}") String password,
+                @Value("${seahorse-agent.adapters.keyword-search.elasticsearch.timeout:10s}") String timeout) {
+            return new ElasticsearchKeywordSearchAdapter(httpClient, objectMapper,
+                    new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields), analyzer,
+                            minimumShouldMatch, apiKey, username, password, duration(timeout)));
+        }
+
+        @Bean
+        @ConditionalOnBean(ElasticsearchKeywordSearchAdapter.class)
+        @ConditionalOnMissingBean(KeywordSearchPort.class)
+        public KeywordSearchPort seahorseElasticsearchKeywordSearchPort(ElasticsearchKeywordSearchAdapter adapter) {
+            return adapter;
+        }
+
+        @Bean
+        @ConditionalOnBean({OkHttpClient.class, ObjectMapper.class})
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "type",
+                havingValue = "elasticsearch")
+        @ConditionalOnMissingBean(ElasticsearchKeywordIndexAdapter.class)
+        public ElasticsearchKeywordIndexAdapter seahorseElasticsearchKeywordIndexAdapter(
+                OkHttpClient httpClient,
+                ObjectMapper objectMapper,
+                @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.base-url:http://localhost:9200}")
+                String baseUrl,
+                @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.index-name:seahorse_keyword_chunk}")
+                String indexName,
+                @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.search-fields:content^3}")
+                String searchFields,
+                @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.api-key:}") String apiKey,
+                @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.username:}") String username,
+                @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.password:}") String password,
+                @Value("${seahorse-agent.adapters.keyword-index.elasticsearch.timeout:10s}") String timeout) {
+            return new ElasticsearchKeywordIndexAdapter(httpClient, objectMapper,
+                    new ElasticsearchKeywordProperties(baseUrl, indexName, csv(searchFields),
+                            apiKey, username, password, duration(timeout)));
+        }
+
+        @Bean
+        @ConditionalOnBean(ElasticsearchKeywordIndexAdapter.class)
+        @ConditionalOnMissingBean(value = KeywordIndexPort.class, ignored = KeywordIndexOutboxAdapter.class)
+        public KeywordIndexPort seahorseElasticsearchKeywordIndexPort(ElasticsearchKeywordIndexAdapter adapter) {
+            return adapter;
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "com.miracle.ai.seahorse.agent.adapters.search.lucene.LuceneKeywordSearchAdapter")
+    static class LuceneKeywordAutoConfiguration {
+
+        @Bean
+        @ConditionalOnBean(ObjectMapper.class)
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-search", name = "type",
+                havingValue = "lucene")
+        @ConditionalOnMissingBean(LuceneKeywordSearchAdapter.class)
+        public LuceneKeywordSearchAdapter seahorseLuceneKeywordSearchAdapter(
+                ObjectMapper objectMapper,
+                @Value("${seahorse-agent.adapters.keyword-search.lucene.index-directory:${java.io.tmpdir}/seahorse-agent-lucene-keyword}")
+                String indexDirectory,
+                @Value("${seahorse-agent.adapters.keyword-search.lucene.search-fields:content^3}")
+                String searchFields) {
+            return new LuceneKeywordSearchAdapter(objectMapper,
+                    new LuceneKeywordProperties(Path.of(indexDirectory), csv(searchFields)));
+        }
+
+        @Bean
+        @ConditionalOnBean(LuceneKeywordSearchAdapter.class)
+        @ConditionalOnMissingBean(KeywordSearchPort.class)
+        public KeywordSearchPort seahorseLuceneKeywordSearchPort(LuceneKeywordSearchAdapter adapter) {
+            return adapter;
+        }
+
+        @Bean
+        @ConditionalOnBean(ObjectMapper.class)
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.keyword-index", name = "type",
+                havingValue = "lucene")
+        @ConditionalOnMissingBean(LuceneKeywordIndexAdapter.class)
+        public LuceneKeywordIndexAdapter seahorseLuceneKeywordIndexAdapter(
+                ObjectMapper objectMapper,
+                @Value("${seahorse-agent.adapters.keyword-index.lucene.index-directory:${java.io.tmpdir}/seahorse-agent-lucene-keyword}")
+                String indexDirectory,
+                @Value("${seahorse-agent.adapters.keyword-index.lucene.search-fields:content^3}")
+                String searchFields) {
+            return new LuceneKeywordIndexAdapter(objectMapper,
+                    new LuceneKeywordProperties(Path.of(indexDirectory), csv(searchFields)));
+        }
+
+        @Bean
+        @ConditionalOnBean(LuceneKeywordIndexAdapter.class)
+        @ConditionalOnMissingBean(value = KeywordIndexPort.class, ignored = KeywordIndexOutboxAdapter.class)
+        public KeywordIndexPort seahorseLuceneKeywordIndexPort(LuceneKeywordIndexAdapter adapter) {
+            return adapter;
         }
     }
 }

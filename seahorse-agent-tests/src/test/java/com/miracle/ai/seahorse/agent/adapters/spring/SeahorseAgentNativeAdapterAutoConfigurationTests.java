@@ -132,6 +132,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.nio.file.Path;
@@ -192,6 +193,40 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(VectorIndexPort.class);
                     assertThat(context).hasSingleBean(VectorCollectionAdminPort.class);
                     assertThat(context).hasSingleBean(SchedulerPort.class);
+                });
+    }
+
+    @Test
+    void shouldStartWithoutOptionalHeavyAdaptersOnClasspath() {
+        contextRunner.withClassLoader(new FilteredClassLoader(
+                        "com.miracle.ai.seahorse.agent.adapters.ai.openai",
+                        "com.miracle.ai.seahorse.agent.adapters.parser.tika",
+                        "com.miracle.ai.seahorse.agent.adapters.search.elasticsearch",
+                        "com.miracle.ai.seahorse.agent.adapters.search.lucene",
+                        "com.miracle.ai.seahorse.agent.adapters.vector.milvus",
+                        "com.miracle.ai.seahorse.agent.adapters.vector.pgvector",
+                        "com.miracle.ai.seahorse.agent.adapters.cache.redis",
+                        "com.miracle.ai.seahorse.agent.adapters.storage.s3",
+                        "com.miracle.ai.seahorse.agent.adapters.mq.pulsar",
+                        "com.miracle.ai.seahorse.agent.adapters.observation.micrometer",
+                        "io.milvus.v2.client",
+                        "org.apache.pulsar.client.api",
+                        "org.redisson.api",
+                        "software.amazon.awssdk.services.s3",
+                        "io.micrometer.core.instrument"))
+                .withPropertyValues(
+                        "seahorse-agent.adapters.cache.type=local",
+                        "seahorse-agent.adapters.mq.type=direct",
+                        "seahorse-agent.adapters.storage.type=local",
+                        "seahorse-agent.adapters.vector.type=noop",
+                        "seahorse-agent.adapters.observation.type=noop")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(TikaDocumentParserAdapter.class);
+                    assertThat(context).doesNotHaveBean(OpenAiCompatibleModelAdapter.class);
+                    assertThat(context).hasSingleBean(LocalObjectStorageAdapter.class);
+                    assertThat(context).hasSingleBean(NoopVectorStoreAdapter.class);
+                    assertThat(context).hasSingleBean(NoopObservationAdapter.class);
                 });
     }
 

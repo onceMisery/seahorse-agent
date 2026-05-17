@@ -456,7 +456,7 @@ mvn -pl seahorse-agent-adapter-observation-micrometer,seahorse-agent-tests -am "
 
 ### 10.1 Starter 依赖治理
 
-当前状态：未开始。OpenAI streaming executor 已先行完成，starter 依赖拆分仍需单独规划发布边界。
+当前状态：已完成第一阶段落地。`seahorse-agent-spring-boot-starter` 已将 OpenAI-compatible、MCP HTTP、Tika、Feishu、Milvus、PgVector、Redis、S3、Micrometer、Elasticsearch、Lucene、Pulsar 等重型适配器依赖改为 `optional`；同时新增 `seahorse-agent-spring-boot-starter-all` 聚合模块承载全量官方适配器依赖，`seahorse-agent-bootstrap` 与测试模块暂切到 `starter-all`，以保留现有默认运行路径。native 子自动配置中混合的重型 adapter 装配已下沉到受 `@ConditionalOnClass(name = "...")` 保护的子配置，最小 classpath 场景下不会再因为缺失类型导致类加载失败。
 
 #### 问题
 
@@ -502,8 +502,8 @@ mvn -pl seahorse-agent-adapter-observation-micrometer,seahorse-agent-tests -am "
 
 | 新 starter | 包含 |
 |------------|------|
-| `seahorse-agent-spring-boot-starter-core` | kernel + web + jdbc + direct/local/noop |
-| `seahorse-agent-spring-boot-starter-all` | 显式聚合所有官方适配器，等价承载当前聚合行为 |
+| `seahorse-agent-spring-boot-starter-core` | 规划名；当前由精简后的 `seahorse-agent-spring-boot-starter` 实际承担 kernel + web + jdbc + direct/local/noop + optional 扩展依赖边界 |
+| `seahorse-agent-spring-boot-starter-all` | 已落地；显式聚合所有官方适配器，承载原有全量 starter 行为 |
 
 第二步：迁移 bootstrap 到 `starter-core` + 显式适配器。
 
@@ -520,12 +520,12 @@ mvn -pl seahorse-agent-adapter-observation-micrometer,seahorse-agent-tests -am "
 | `seahorse-agent-starter-storage-s3` | S3 |
 | `seahorse-agent-starter-mq-pulsar` | Pulsar |
 
-旧 `seahorse-agent-spring-boot-starter` 保留一轮兼容窗口；只有当 `starter-core`、`starter-all` 和 bootstrap 显式依赖路径都验证通过后，才将 Milvus、Pulsar、S3、Elasticsearch、Lucene、Tika、Feishu 等非核心适配器改为 optional。
+当前实现采用折中落地：保留现有 artifactId `seahorse-agent-spring-boot-starter` 作为“精简 starter + optional 扩展依赖”的稳定入口，同时新增 `starter-all` 维持原有聚合体验。后续如需进一步显式化命名，可再引入真正的 `starter-core` 坐标并保留一轮兼容别名。
 
 #### 验证
 
 ```powershell
-mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-bootstrap -am test
+mvn -pl seahorse-agent-spring-boot-starter,seahorse-agent-spring-boot-starter-all,seahorse-agent-bootstrap,seahorse-agent-tests -am "-Dtest=SeahorseAgentNativeAdapterAutoConfigurationTests,SeahorseAgentKernelAutoConfigurationTests" "-Dsurefire.failIfNoSpecifiedTests=false" test
 mvn -pl seahorse-agent-spring-boot-starter -am dependency:tree
 ```
 

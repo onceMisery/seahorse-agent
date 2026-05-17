@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.adapters.storage.local.LocalObjectStorageAd
 import com.miracle.ai.seahorse.agent.adapters.storage.s3.S3ObjectStorageAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -40,19 +41,28 @@ import java.nio.file.Path;
 public class SeahorseAgentStorageAdapterAutoConfiguration {
 
     @Bean
-    @ConditionalOnBean(S3Client.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.storage", name = "type", havingValue = "s3", matchIfMissing = true)
-    @ConditionalOnMissingBean(ObjectStoragePort.class)
-    public S3ObjectStorageAdapter seahorseS3ObjectStorageAdapter(S3Client s3Client) {
-        return new S3ObjectStorageAdapter(s3Client);
-    }
-
-    @Bean
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.storage", name = "type", havingValue = "local")
     @ConditionalOnMissingBean(ObjectStoragePort.class)
     public LocalObjectStorageAdapter seahorseLocalObjectStorageAdapter(
             @Value("${seahorse-agent.adapters.storage.local.root:${java.io.tmpdir}/seahorse-agent-storage}")
             Path rootDirectory) {
         return new LocalObjectStorageAdapter(rootDirectory);
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = {
+            "software.amazon.awssdk.services.s3.S3Client",
+            "com.miracle.ai.seahorse.agent.adapters.storage.s3.S3ObjectStorageAdapter"
+    })
+    static class S3StorageAutoConfiguration {
+
+        @Bean
+        @ConditionalOnBean(S3Client.class)
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.storage", name = "type",
+                havingValue = "s3", matchIfMissing = true)
+        @ConditionalOnMissingBean(ObjectStoragePort.class)
+        public S3ObjectStorageAdapter seahorseS3ObjectStorageAdapter(S3Client s3Client) {
+            return new S3ObjectStorageAdapter(s3Client);
+        }
     }
 }
