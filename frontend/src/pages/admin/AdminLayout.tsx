@@ -18,6 +18,7 @@ import {
   KeyRound,
   Search,
   Settings,
+  ShieldCheck,
   Upload,
   Users,
   FolderKanban,
@@ -117,6 +118,11 @@ const menuGroups: MenuGroup[] = [
             search: "?tab=tasks"
           }
         ]
+      },
+      {
+        path: "/admin/metadata-governance",
+        label: "元数据治理",
+        icon: ShieldCheck
       },
       {
         path: "/admin/mappings",

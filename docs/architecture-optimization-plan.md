@@ -84,7 +84,7 @@ P2 是清理、命名、低风险维护性优化或前端体验增强。
 3. `ObjectStoragePort.reliableUpload` 语义收敛（已完成）。
 4. `adapter-cache-local` 命名说明或重命名（已补充说明，暂不重命名）。
 5. `chatStore.ts` 拆分（已完成第一步门面式拆分）。
-6. 元数据治理 UI。
+6. 元数据治理 UI（已新增最小管理页）。
 
 ---
 
@@ -113,7 +113,7 @@ P2 是清理、命名、低风险维护性优化或前端体验增强。
 | 3 | P1 | 生产可观测治理 | RAG Trace 采样/TTL 已完成；关键业务指标后续增强 | 1-2 个代码提交 |
 | 4 | P1 | 部署与适配器治理 | starter 依赖拆分策略、OpenAI streaming executor、Milvus 配置 | 2-4 个代码提交 |
 | 5 | P1 | 数据库补偿 | `t_knowledge_chunk(kb_id, doc_id)` 索引与迁移说明 | 1 个代码/SQL 提交 |
-| 6 | P2 | 清理与前端运营 | wrapper 占位已显式暴露 passThrough；storage 可靠上传默认语义已收敛；cache-local 命名已澄清；chatStore 已完成第一步门面式拆分；元数据治理 UI 仍待拆分推进 | 多个独立提交 |
+| 6 | P2 | 清理与前端运营 | wrapper 占位已显式暴露 passThrough；storage 可靠上传默认语义已收敛；cache-local 命名已澄清；chatStore 已完成第一步门面式拆分；元数据治理 UI 已新增最小管理页 | 多个独立提交 |
 | 7 | P1/P2 | 架构瘦身与职责治理 | 自动配置拆分、JDBC 元数据适配器拆分、端口准入规则、聊天/检索阶段边界收敛 | 多个独立提交 |
 
 ---
@@ -687,6 +687,8 @@ npm run build
 ```
 
 ### 12.5 元数据治理 UI
+
+当前状态：已新增 `/admin/metadata-governance` 最小管理页和 `metadataGovernanceService.ts`，接入 Schema 字段、Review 队列、Quarantine 隔离区、Quality 报表四类后端 API。页面采用租户/知识库筛选、分段视图、表格和操作按钮，先满足治理闭环可见与基本操作。
 
 按业务价值排序：
 
