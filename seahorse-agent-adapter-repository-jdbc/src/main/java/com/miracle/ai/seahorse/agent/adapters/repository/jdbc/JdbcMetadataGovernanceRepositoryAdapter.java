@@ -108,13 +108,17 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     private final JdbcMetadataJsonSupport jsonSupport;
     private final JdbcMetadataSchemaUsageSupport schemaUsageSupport;
     private final JdbcMetadataColumnDetector columnDetector;
+    private final JdbcMetadataReviewSupport reviewSupport;
+    private final JdbcMetadataQuarantineSupport quarantineSupport;
 
     public JdbcMetadataGovernanceRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
-        // 把 JSON 协议、Schema Usage 组包和列探测拆给协作者，收敛主适配器职责。
+        // 閹?JSON 閸楀繗顔呴妴涓糲hema Usage 缂佸嫬瀵橀崪灞藉灙閹恒垺绁撮幏鍡欑舶閸楀繋缍旈懓鍜冪礉閺€鑸垫殐娑撳鈧倿鍘ら崳銊ㄤ捍鐠愶絻鈧?
         this.jsonSupport = new JdbcMetadataJsonSupport(objectMapper);
         this.schemaUsageSupport = new JdbcMetadataSchemaUsageSupport();
         this.columnDetector = new JdbcMetadataColumnDetector(jdbcTemplate);
+        this.reviewSupport = new JdbcMetadataReviewSupport(jdbcTemplate, jsonSupport);
+        this.quarantineSupport = new JdbcMetadataQuarantineSupport(jdbcTemplate, jsonSupport);
     }
 
     @Override
@@ -262,10 +266,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 safePayload.minConfidence(), json(safePayload.trustedSources()), json(safePayload.extractionHints()),
                 json(safePayload.backendMapping()), safePayload.schemaVersion(), fieldId);
         if (updated <= 0) {
-            throw new IllegalArgumentException("Metadata Schema 字段不存在: " + fieldId);
+            throw new IllegalArgumentException("Metadata Schema 鐎涙顔屾稉宥呯摠閸? " + fieldId);
         }
         return findSchemaField(fieldId)
-                .orElseThrow(() -> new IllegalArgumentException("Metadata Schema 字段不存在: " + fieldId));
+                .orElseThrow(() -> new IllegalArgumentException("Metadata Schema 鐎涙顔屾稉宥呯摠閸? " + fieldId));
     }
 
     @Override
@@ -402,10 +406,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 """, safePayload.tenantId(), safePayload.dictionaryCode(), safePayload.rawValue(),
                 safePayload.canonicalValue(), safePayload.displayName(), flag(safePayload.enabled()), itemId);
         if (updated <= 0) {
-            throw new IllegalArgumentException("Metadata Dictionary 字典项不存在: " + itemId);
+            throw new IllegalArgumentException("Metadata Dictionary 鐎涙鍚€妞ら€涚瑝鐎涙ê婀? " + itemId);
         }
         return findDictionaryItem(itemId)
-                .orElseThrow(() -> new IllegalArgumentException("Metadata Dictionary 字典项不存在: " + itemId));
+                .orElseThrow(() -> new IllegalArgumentException("Metadata Dictionary 鐎涙鍚€妞ら€涚瑝鐎涙ê婀? " + itemId));
     }
 
     @Override
@@ -520,117 +524,50 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public void enqueue(MetadataReviewItem item) {
-        MetadataReviewItem safeItem = Objects.requireNonNull(item, "item must not be null");
-        try {
-            jdbcTemplate.update("""
-                    INSERT INTO t_metadata_review_item(
-                        id, tenant_id, kb_id, doc_id, result_id, review_status, priority, reason_code,
-                        reason_message, suggested_metadata, review_context, create_time, update_time
-                    ) VALUES (?, ?, ?, ?, ?, 'PENDING', 0, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    """, UUID.randomUUID().toString(), safeItem.tenantId(), safeItem.knowledgeBaseId(),
-                    safeItem.documentId(), safeItem.resultId(), safeItem.reasonCode(), safeItem.reasonMessage(),
-                    json(safeItem.suggestedMetadata()), json(safeItem.reviewContext()));
-        } catch (DataAccessException ignored) {
-        }
+        reviewSupport.enqueue(item);
     }
 
     @Override
     public void quarantine(MetadataQuarantineItem item) {
-        MetadataQuarantineItem safeItem = Objects.requireNonNull(item, "item must not be null");
-        try {
-            jdbcTemplate.update("""
-                    INSERT INTO t_metadata_quarantine_item(
-                        id, tenant_id, kb_id, doc_id, job_id, stage, reason_code, reason_message,
-                        source_snapshot, retry_count, resolved, create_time, update_time
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    """, UUID.randomUUID().toString(), safeItem.tenantId(), safeItem.knowledgeBaseId(),
-                    safeItem.documentId(), safeItem.taskId(), safeItem.stage(), safeItem.reasonCode(),
-                    safeItem.reasonMessage(), json(safeItem.sourceSnapshot()));
-        } catch (DataAccessException ignored) {
-        }
+        quarantineSupport.quarantine(item);
     }
 
     @Override
     public MetadataReviewPage pageReviewItems(MetadataReviewQuery query) {
-        MetadataReviewQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
-        SqlWhere where = reviewWhere(safeQuery);
-        long total = countLong("SELECT COUNT(1) FROM t_metadata_review_item " + where.sql(), where.args());
-        if (total <= 0) {
-            return MetadataReviewPage.empty(safeQuery.current(), safeQuery.size());
-        }
-        List<Object> args = new ArrayList<>(where.args());
-        args.add(safeQuery.size());
-        args.add(safeQuery.offset());
-        List<MetadataReviewRecord> records = jdbcTemplate.query("""
-                SELECT id, tenant_id, kb_id, doc_id, result_id, review_status, priority,
-                       reason_code, reason_message, suggested_metadata, review_context, corrected_metadata,
-                       reviewer_id, review_comment, create_time, update_time
-                FROM t_metadata_review_item
-                """ + where.sql() + """
-                ORDER BY priority DESC, update_time DESC, create_time DESC, id DESC
-                LIMIT ? OFFSET ?
-                """, this::toReviewRecord, args.toArray());
-        return new MetadataReviewPage(records, total, safeQuery.size(), safeQuery.current(),
-                pages(total, safeQuery.size()));
+        return reviewSupport.pageReviewItems(query);
     }
 
     @Override
     public Optional<MetadataReviewRecord> findReviewItem(String itemId) {
-        if (blank(itemId)) {
-            return Optional.empty();
-        }
-        try {
-            return jdbcTemplate.query("""
-                    SELECT id, tenant_id, kb_id, doc_id, result_id, review_status, priority,
-                           reason_code, reason_message, suggested_metadata, review_context, corrected_metadata,
-                           reviewer_id, review_comment, create_time, update_time
-                    FROM t_metadata_review_item
-                    WHERE id = ?
-                    """, this::toReviewRecord, itemId).stream().findFirst();
-        } catch (DataAccessException ex) {
-            return Optional.empty();
-        }
+        return reviewSupport.findReviewItem(itemId);
     }
 
     @Override
     public List<MetadataReviewAuditRecord> listReviewAudits(String itemId) {
-        if (blank(itemId)) {
-            return List.of();
-        }
-        try {
-            return jdbcTemplate.query("""
-                    SELECT id, review_item_id, tenant_id, kb_id, doc_id, result_id,
-                           from_status, to_status, reviewer_id, review_comment,
-                           previous_metadata, updated_metadata, decision_metadata, create_time
-                    FROM t_metadata_review_audit
-                    WHERE review_item_id = ?
-                    ORDER BY create_time ASC, id ASC
-                    """, this::toReviewAuditRecord, itemId);
-        } catch (DataAccessException ex) {
-            return listReviewAuditsLegacy(itemId);
-        }
-    }
-
-    private List<MetadataReviewAuditRecord> listReviewAuditsLegacy(String itemId) {
-        try {
-            return jdbcTemplate.query("""
-                    SELECT id, review_item_id, tenant_id, kb_id, doc_id, result_id,
-                           from_status, to_status, reviewer_id, review_comment,
-                           decision_metadata, create_time
-                    FROM t_metadata_review_audit
-                    WHERE review_item_id = ?
-                    ORDER BY create_time ASC, id ASC
-                    """, this::toReviewAuditRecordLegacy, itemId);
-        } catch (DataAccessException ignored) {
-            return List.of();
-        }
+        return reviewSupport.listReviewAudits(itemId);
     }
 
     @Override
     public MetadataReviewRecord applyReviewDecision(MetadataReviewDecision decision) {
+        if (reviewSupport != null) {
+            JdbcMetadataReviewSupport.ReviewDecisionResult result = reviewSupport.applyReviewDecision(decision);
+            // 优先走 review 子域协作者，主适配器只保留跨子域的抽取结果终态同步。
+            if (MetadataReviewStatus.APPROVED.equals(result.reviewStatus())
+                    || MetadataReviewStatus.CORRECTED.equals(result.reviewStatus())) {
+                updateExtractionApproval(result.resultId(), result.approvedMetadata(), result.reviewerId());
+            } else if (MetadataReviewStatus.REJECTED.equals(result.reviewStatus())) {
+                updateExtractionStatus(result.resultId(), "REJECTED");
+            } else if (MetadataReviewStatus.QUARANTINED.equals(result.reviewStatus())) {
+                updateExtractionStatus(result.resultId(), "QUARANTINED");
+            } else if (MetadataReviewStatus.RE_EXTRACTING.equals(result.reviewStatus())) {
+                updateExtractionStatus(result.resultId(), "RE_EXTRACTING");
+            }
+            return reviewSupport.findReviewItem(result.itemId())
+                    .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + result.itemId()));
+        }
         MetadataReviewDecision safeDecision = Objects.requireNonNull(decision, "decision must not be null");
         MetadataReviewRecord current = findReviewItem(safeDecision.itemId())
-                .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId()));
+                .orElseThrow(() -> new IllegalArgumentException("閸忓啯鏆熼幑顔碱槻閺嶆悂銆嶆稉宥呯摠閸? " + safeDecision.itemId()));
         Map<String, Object> approvedMetadata = approvedMetadata(current, safeDecision);
         String correctedJson = MetadataReviewStatus.CORRECTED.equals(safeDecision.reviewStatus())
                 ? json(approvedMetadata)
@@ -646,10 +583,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 """, safeDecision.reviewStatus().name(), correctedJson, safeDecision.reviewerId(),
                 safeDecision.reviewComment(), safeDecision.itemId());
         if (updated <= 0) {
-            throw new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId());
+            throw new IllegalArgumentException("閸忓啯鏆熼幑顔碱槻閺嶆悂銆嶆稉宥呯摠閸? " + safeDecision.itemId());
         }
         insertReviewAudit(current, safeDecision, decisionAuditMetadata(safeDecision, approvedMetadata));
-        // 复核完成后同步抽取结果终态，避免管理端仍把已处理数据视为 REVIEW_REQUIRED。
+        // 婢跺秵鐗崇€瑰本鍨氶崥搴℃倱濮濄儲濞婇崣鏍波閺嬫粎绮撻幀渚婄礉闁灝鍘ょ粻锛勬倞缁旑垯绮涢幎濠傚嚒婢跺嫮鎮婇弫鐗堝祦鐟欏棔璐?REVIEW_REQUIRED閵?
         if (MetadataReviewStatus.APPROVED.equals(safeDecision.reviewStatus())
                 || MetadataReviewStatus.CORRECTED.equals(safeDecision.reviewStatus())) {
             updateExtractionApproval(current.resultId(), approvedMetadata, safeDecision.reviewerId());
@@ -661,13 +598,13 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             updateExtractionStatus(current.resultId(), "RE_EXTRACTING");
         }
         return findReviewItem(safeDecision.itemId())
-                .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + safeDecision.itemId()));
+                .orElseThrow(() -> new IllegalArgumentException("閸忓啯鏆熼幑顔碱槻閺嶆悂銆嶆稉宥呯摠閸? " + safeDecision.itemId()));
     }
 
     private Map<String, Object> decisionAuditMetadata(MetadataReviewDecision decision,
                                                       Map<String, Object> approvedMetadata) {
         if (MetadataReviewStatus.RE_EXTRACTING.equals(decision.reviewStatus())) {
-            // RE_EXTRACT 的 correctedMetadata 承载调度信息，只进入审计，不写 approved_metadata。
+            // RE_EXTRACT 閻?correctedMetadata 閹佃儻娴囩拫鍐ㄥ娣団剝浼呴敍灞藉涧鏉╂稑鍙嗙€孤ゎ吀閿涘奔绗夐崘?approved_metadata閵?
             return decision.correctedMetadata();
         }
         return approvedMetadata;
@@ -733,12 +670,15 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     decision.reviewComment(),
                     json(decisionMetadata));
         } catch (DataAccessException ignored) {
-            // 兼容尚未执行审计表迁移的旧库，复核主流程不能因此中断。
+            // 閸忕厧顔愮亸姘弓閹笛嗩攽鐎孤ゎ吀鐞涖劏绺肩粔鑽ゆ畱閺冄冪氨閿涘苯顦查弽闀愬瘜濞翠胶鈻兼稉宥堝厴閸ョ姵顒濇稉顓熸焽閵?
         }
     }
 
     @Override
     public MetadataQuarantinePage pageQuarantineItems(MetadataQuarantineQuery query) {
+        if (quarantineSupport != null) {
+            return quarantineSupport.pageQuarantineItems(query);
+        }
         MetadataQuarantineQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
         SqlWhere where = quarantineWhere(safeQuery);
         long total = countLong("SELECT COUNT(1) FROM t_metadata_quarantine_item " + where.sql(), where.args());
@@ -763,6 +703,9 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public Optional<MetadataQuarantineRecord> findQuarantineItem(String itemId) {
+        if (quarantineSupport != null) {
+            return quarantineSupport.findQuarantineItem(itemId);
+        }
         if (blank(itemId)) {
             return Optional.empty();
         }
@@ -781,6 +724,9 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public MetadataQuarantineRecord resolveQuarantineItem(MetadataQuarantineResolution resolution) {
+        if (quarantineSupport != null) {
+            return quarantineSupport.resolveQuarantineItem(resolution);
+        }
         MetadataQuarantineResolution safeResolution = Objects.requireNonNull(resolution,
                 "resolution must not be null");
         int updated = jdbcTemplate.update("""
@@ -792,14 +738,17 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 WHERE id = ?
                 """, safeResolution.operator(), safeResolution.itemId());
         if (updated <= 0) {
-            throw new IllegalArgumentException("元数据隔离项不存在: " + safeResolution.itemId());
+            throw new IllegalArgumentException("閸忓啯鏆熼幑顕€娈х粋濠氥€嶆稉宥呯摠閸? " + safeResolution.itemId());
         }
         return findQuarantineItem(safeResolution.itemId())
-                .orElseThrow(() -> new IllegalArgumentException("元数据隔离项不存在: " + safeResolution.itemId()));
+                .orElseThrow(() -> new IllegalArgumentException("閸忓啯鏆熼幑顕€娈х粋濠氥€嶆稉宥呯摠閸? " + safeResolution.itemId()));
     }
 
     @Override
     public MetadataQuarantineRecord scheduleQuarantineRetry(MetadataQuarantineRetry retry) {
+        if (quarantineSupport != null) {
+            return quarantineSupport.scheduleQuarantineRetry(retry);
+        }
         MetadataQuarantineRetry safeRetry = Objects.requireNonNull(retry, "retry must not be null");
         int updated = jdbcTemplate.update("""
                 UPDATE t_metadata_quarantine_item
@@ -812,10 +761,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 WHERE id = ?
                 """, Timestamp.from(safeRetry.nextRetryTime()), safeRetry.itemId());
         if (updated <= 0) {
-            throw new IllegalArgumentException("元数据隔离项不存在: " + safeRetry.itemId());
+            throw new IllegalArgumentException("閸忓啯鏆熼幑顕€娈х粋濠氥€嶆稉宥呯摠閸? " + safeRetry.itemId());
         }
         return findQuarantineItem(safeRetry.itemId())
-                .orElseThrow(() -> new IllegalArgumentException("元数据隔离项不存在: " + safeRetry.itemId()));
+                .orElseThrow(() -> new IllegalArgumentException("閸忓啯鏆熼幑顕€娈х粋濠氥€嶆稉宥呯摠閸? " + safeRetry.itemId()));
     }
 
     @Override
@@ -826,7 +775,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         if (!documentMetadataJsonColumnExists()) {
             return;
         }
-        // 列存在后写入失败必须向上传递，避免 canonical metadata 静默丢失。
+        // 閸掓鐡ㄩ崷銊ユ倵閸愭瑥鍙嗘径杈Е韫囧懘銆忛崥鎴滅瑐娴肩娀鈧帪绱濋柆鍨帳 canonical metadata 闂堟瑩绮稉銏犮亼閵?
         jdbcTemplate.update("UPDATE t_knowledge_document SET metadata_json = ?, update_time = CURRENT_TIMESTAMP "
                 + "WHERE id = ? AND deleted = 0", json(acceptedMetadata), documentId);
         writeChunkMetadata(documentId, acceptedMetadata);
@@ -844,7 +793,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 documentId);
         for (ChunkMetadataRow row : rows) {
             Map<String, Object> merged = new java.util.LinkedHashMap<>(readMap(row.metadataJson()));
-            // 人工复核后的 canonical metadata 覆盖旧业务字段，但保留 chunk 原有的系统字段和来源快照。
+            // 娴滃搫浼愭径宥嗙壋閸氬海娈?canonical metadata 鐟曞棛娲婇弮褌绗熼崝鈥崇摟濞堢绱濇担鍡曠箽閻?chunk 閸樼喐婀侀惃鍕兇缂佺喎鐡у▓闈涙嫲閺夈儲绨箛顐ゅ弾閵?
             merged.putAll(acceptedMetadata);
             jdbcTemplate.update("""
                     UPDATE t_knowledge_chunk
@@ -1164,7 +1113,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                                                        int totalDocuments,
                                                        Map<String, ReviewFieldAggregate> reviewFieldAggregates) {
         List<MetadataFieldCoverage> coverages = new ArrayList<>();
-        // 覆盖率以 Schema 字段为基准，避免动态 metadata 任意扩张影响治理报表口径。
+        // 鐟曞棛娲婇悳鍥︿簰 Schema 鐎涙顔屾稉鍝勭唨閸戝棴绱濋柆鍨帳閸斻劍鈧?metadata 娴犵粯鍓伴幍鈺佺炊瑜板崬鎼峰▽鑽ゆ倞閹躲儴銆冮崣锝呯窞閵?
         for (MetadataFieldDescriptor field : schema.fields()) {
             int covered = 0;
             int lowConfidence = 0;
@@ -1195,7 +1144,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     private boolean lowConfidence(MetadataFieldDescriptor field, List<Map<String, Object>> qualities) {
-        // 低置信度按“字段 + 文档”去重统计，避免同字段多条质量记录重复放大比例。
+        // 娴ｅ海鐤嗘穱鈥冲閹稿鈧粌鐡у▓?+ 閺傚洦銆傞垾婵嗗箵闁插秶绮虹拋鈽呯礉闁灝鍘ら崥灞界摟濞堥潧顦块弶陇宸濋柌蹇氼唶瑜版洟鍣告径宥嗘杹婢堆勭槷娓氬鈧?
         for (Map<String, Object> quality : qualities) {
             String fieldKey = text(quality.get("fieldKey"), "");
             if (field.fieldKey().equals(fieldKey)
@@ -1284,7 +1233,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                     WHERE ri.tenant_id = ?
                       AND (? = '' OR ri.kb_id = ?)
                     """, this::toReviewSnapshot, tenantId, knowledgeBaseId, knowledgeBaseId).stream()
-                    // promptVersion 存在于抽取结果 raw_candidates 中，因此这里统一在 Java 侧做最终版本过滤。
+                    // promptVersion 鐎涙ê婀禍搴㈠▕閸欐牜绮ㄩ弸?raw_candidates 娑擃叏绱濋崶鐘愁劃鏉╂瑩鍣风紒鐔剁閸?Java 娓氀冧粵閺堚偓缂佸牏澧楅張顒冪箖濠娿們鈧?
                     .filter(snapshot -> matchesReviewScope(snapshot, schemaVersion, extractorVersion, llmPromptVersion))
                     .toList();
         } catch (DataAccessException ex) {
@@ -1565,7 +1514,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             }
             return documentIds.size();
         }
-        // KB 级补偿没有 documentIds 时返回 0，避免把未知范围伪装成精确待处理量。
+        // KB 缁狙喫夐崑鎸庣梾閺?documentIds 閺冩儼绻戦崶?0閿涘矂浼╅崗宥嗗Ω閺堫亞鐓￠懠鍐ㄦ纯娴碱亣顥婇幋鎰翱绾喖绶熸径鍕倞闁插繈鈧?
         String text = text(value, "");
         if (blank(text)) {
             return 0L;
@@ -1689,7 +1638,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     }
 
     /**
-     * 批量预取审计轨迹，避免反馈摘要在映射阶段逐条查库。
+     * 閹靛綊鍣烘０鍕絿鐎孤ゎ吀鏉炪劏鎶楅敍宀勪缉閸忓秴寮芥＃鍫熸喅鐟曚礁婀弰鐘茬殸闂冭埖顔岄柅鎰蒋閺屻儱绨遍妴?
      */
     private Map<String, List<String>> reviewAuditIdsByReviewItems(Set<String> reviewItemIds) {
         if (reviewItemIds.isEmpty()) {
@@ -1960,7 +1909,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             args.add(query.operator());
         }
         if (!blank(query.documentId())) {
-            // 回填任务按文档定位依赖 checkpoint_json 中的 documentIds/lastDocumentId，不新增任务明细表。
+            // 閸ョ偛锝炴禒璇插閹稿鏋冨锝呯暰娴ｅ秳绶风挧?checkpoint_json 娑擃厾娈?documentIds/lastDocumentId閿涘奔绗夐弬鏉款杻娴犺濮熼弰搴ｇ矎鐞涖劊鈧?
             appendJsonTextLike(sql, args, "checkpoint_json", query.documentId());
         }
         if (!blank(query.pauseReason())) {
@@ -2420,7 +2369,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
 
         private Map<String, Object> coveredMetadata() {
-            // 人工复核修正后的 approved metadata 是更可信的 canonical 结果，质量报表应优先使用它。
+            // 娴滃搫浼愭径宥嗙壋娣囶喗顒滈崥搴ｆ畱 approved metadata 閺勵垱娲块崣顖欎繆閻?canonical 缂佹挻鐏夐敍宀冨窛闁插繑濮ょ悰銊ョ安娴兼ê鍘涙担璺ㄦ暏鐎瑰啨鈧?
             return acceptedMetadata.isEmpty() ? normalizedMetadata : acceptedMetadata;
         }
     }
