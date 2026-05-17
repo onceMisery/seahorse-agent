@@ -20,9 +20,6 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelProperties;
-import com.miracle.ai.seahorse.agent.adapters.mq.direct.DirectMessageQueueAdapter;
-import com.miracle.ai.seahorse.agent.adapters.mq.pulsar.PulsarMessageQueueAdapter;
-import com.miracle.ai.seahorse.agent.adapters.mq.pulsar.PulsarMessageQueueProperties;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationMemoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDashboardRepositoryAdapter;
@@ -59,7 +56,6 @@ import com.miracle.ai.seahorse.agent.adapters.search.elasticsearch.Elasticsearch
 import com.miracle.ai.seahorse.agent.adapters.search.lucene.LuceneKeywordIndexAdapter;
 import com.miracle.ai.seahorse.agent.adapters.search.lucene.LuceneKeywordProperties;
 import com.miracle.ai.seahorse.agent.adapters.search.lucene.LuceneKeywordSearchAdapter;
-import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.SeahorseOutboxRelayJob;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexMessageSubscriber;
 import com.miracle.ai.seahorse.agent.adapters.spring.keyword.KeywordIndexOutboxAdapter;
@@ -128,7 +124,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import io.milvus.v2.client.MilvusClientV2;
 import okhttp3.OkHttpClient;
-import org.apache.pulsar.client.api.PulsarClient;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -164,34 +159,11 @@ import java.util.concurrent.Executor;
         SeahorseAgentAuthAdapterAutoConfiguration.class,
         SeahorseAgentCacheAdapterAutoConfiguration.class,
         SeahorseAgentLocalAdapterAutoConfiguration.class,
+        SeahorseAgentMqAdapterAutoConfiguration.class,
         SeahorseAgentObservationAdapterAutoConfiguration.class,
         SeahorseAgentStorageAdapterAutoConfiguration.class
 })
 public class SeahorseAgentNativeAdapterAutoConfiguration {
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.mq", name = "type", havingValue = "direct")
-    @ConditionalOnMissingBean(MessageQueuePort.class)
-    public ReliableMessageQueueAdapter seahorseDirectMessageQueueAdapter(
-            ObjectProvider<OutboxEventRepositoryPort> outboxRepositoryPort,
-            ObjectProvider<ObjectMapper> objectMapper) {
-        DirectMessageQueueAdapter delegate = new DirectMessageQueueAdapter();
-        return new ReliableMessageQueueAdapter(delegate, delegate,
-                outboxRepositoryPort::getIfAvailable, objectMapper::getIfAvailable);
-    }
-
-    @Bean
-    @ConditionalOnBean(PulsarClient.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.mq", name = "type", havingValue = "pulsar", matchIfMissing = true)
-    @ConditionalOnMissingBean(MessageQueuePort.class)
-    public ReliableMessageQueueAdapter seahorsePulsarMessageQueueAdapter(
-            PulsarClient pulsarClient,
-            ObjectMapper objectMapper,
-            ObjectProvider<OutboxEventRepositoryPort> outboxRepositoryPort) {
-        PulsarMessageQueueAdapter delegate = new PulsarMessageQueueAdapter(
-                pulsarClient, objectMapper, new PulsarMessageQueueProperties());
-        return new ReliableMessageQueueAdapter(delegate, delegate, outboxRepositoryPort::getIfAvailable, () -> objectMapper);
-    }
 
     @Bean
     @ConditionalOnBean(DataSource.class)
