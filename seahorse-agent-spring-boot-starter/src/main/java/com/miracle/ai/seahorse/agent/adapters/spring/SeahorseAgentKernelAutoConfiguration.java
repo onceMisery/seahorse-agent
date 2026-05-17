@@ -29,7 +29,6 @@ import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledg
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeDocumentService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentVectorPorts;
-import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryEnginePort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
@@ -43,12 +42,6 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryManagementS
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataBackfillService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelVersionQualityComparisonService;
 import com.miracle.ai.seahorse.agent.kernel.application.model.KernelModelRoutingService;
-import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
-import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationDatasetService;
-import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationService;
-import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
-import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine.KernelRetrievalEnginePorts;
-import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalStrategyTemplateService;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceService;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.RagTraceRecorderOptions;
@@ -63,11 +56,9 @@ import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataExtractorN
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataNormalizerNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.MetadataValidatorNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ParserNodeFeature;
-import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.DefaultMetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.FinalTruncatePostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.IntentDirectedSearchFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.KeywordSearchChannelFeature;
-import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataGuardPostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.RerankPostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.RrfFusionPostProcessorFeature;
@@ -93,9 +84,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
@@ -123,8 +112,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSta
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpParameterExtractionPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
@@ -154,11 +141,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AdapterHealthIndicatorPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationComparisonRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
@@ -176,8 +158,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.Map;
 import java.util.List;
@@ -206,42 +186,10 @@ import java.util.concurrent.Executor;
         SeahorseAgentKernelMetadataAutoConfiguration.class,
         SeahorseAgentKernelModelAutoConfiguration.class,
         SeahorseAgentKernelOpsAutoConfiguration.class,
+        SeahorseAgentKernelRetrievalAutoConfiguration.class,
         SeahorseAgentKernelTraceAutoConfiguration.class
 })
 public class SeahorseAgentKernelAutoConfiguration {
-
-    @Bean
-    @ConditionalOnMissingBean(name = "ragRetrievalThreadPoolExecutor")
-    public Executor ragRetrievalThreadPoolExecutor(
-            @Value("${seahorse-agent.retrieval.executor.core-size:4}") int coreSize,
-            @Value("${seahorse-agent.retrieval.executor.max-size:16}") int maxSize,
-            @Value("${seahorse-agent.retrieval.executor.queue-capacity:200}") int queueCapacity,
-            @Value("${seahorse-agent.retrieval.executor.thread-name-prefix:seahorse-rag-retrieval-}")
-            String threadNamePrefix) {
-        return threadPoolExecutor(coreSize, maxSize, queueCapacity, threadNamePrefix);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(name = "ragInnerRetrievalThreadPoolExecutor")
-    public Executor ragInnerRetrievalThreadPoolExecutor(
-            @Value("${seahorse-agent.retrieval.inner-executor.core-size:4}") int coreSize,
-            @Value("${seahorse-agent.retrieval.inner-executor.max-size:16}") int maxSize,
-            @Value("${seahorse-agent.retrieval.inner-executor.queue-capacity:200}") int queueCapacity,
-            @Value("${seahorse-agent.retrieval.inner-executor.thread-name-prefix:seahorse-rag-inner-}")
-            String threadNamePrefix) {
-        return threadPoolExecutor(coreSize, maxSize, queueCapacity, threadNamePrefix);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(name = "ragContextThreadPoolExecutor")
-    public Executor ragContextThreadPoolExecutor(
-            @Value("${seahorse-agent.retrieval.context-executor.core-size:2}") int coreSize,
-            @Value("${seahorse-agent.retrieval.context-executor.max-size:8}") int maxSize,
-            @Value("${seahorse-agent.retrieval.context-executor.queue-capacity:100}") int queueCapacity,
-            @Value("${seahorse-agent.retrieval.context-executor.thread-name-prefix:seahorse-rag-context-}")
-            String threadNamePrefix) {
-        return threadPoolExecutor(coreSize, maxSize, queueCapacity, threadNamePrefix);
-    }
 
     @Bean
     @ConditionalOnMissingBean
@@ -494,96 +442,6 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean
-    public MetadataFilterCompiler seahorseMetadataFilterCompiler() {
-        return new DefaultMetadataFilterCompiler();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public KernelMultiChannelRetrievalEngine seahorseKernelMultiChannelRetrievalEngine(
-            ExtensionRegistry extensionRegistry,
-            @Qualifier("ragRetrievalThreadPoolExecutor") ObjectProvider<Executor> retrievalExecutor,
-            FeatureActivationContext activationContext,
-            ObjectProvider<MetadataSchemaRegistryPort> schemaRegistryPort,
-            ObjectProvider<MetadataFilterCompiler> metadataFilterCompiler,
-            ObjectProvider<KernelRagTraceRecorder> traceRecorder,
-            ObjectProvider<ObservationPort> observationPort,
-            ObjectProvider<MetadataSchemaUsageReportRepositoryPort> schemaUsageReportRepositoryPort) {
-        return new KernelMultiChannelRetrievalEngine(extensionRegistry,
-                retrievalExecutor.getIfAvailable(() -> Runnable::run), activationContext,
-                schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
-                metadataFilterCompiler.getIfAvailable(DefaultMetadataFilterCompiler::new),
-                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
-                observationPort.getIfAvailable(),
-                schemaUsageReportRepositoryPort.getIfAvailable(MetadataSchemaUsageReportRepositoryPort::empty));
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public KernelMcpOrchestrator seahorseKernelMcpOrchestrator(
-            ObjectProvider<McpToolRegistryPort> toolRegistryPort,
-            ObjectProvider<McpParameterExtractionPort> parameterExtractionPort,
-            @Qualifier("mcpBatchThreadPoolExecutor") ObjectProvider<Executor> mcpExecutor) {
-        return new KernelMcpOrchestrator(
-                toolRegistryPort.getIfAvailable(McpToolRegistryPort::empty),
-                parameterExtractionPort.getIfAvailable(McpParameterExtractionPort::noop),
-                mcpExecutor.getIfAvailable(() -> Runnable::run));
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public KernelRetrievalEngine seahorseKernelRetrievalEngine(
-            KernelMultiChannelRetrievalEngine multiChannelRetrievalEngine,
-            KernelMcpOrchestrator mcpOrchestrator,
-            ObjectProvider<RetrievalContextFormatPort> formatPort,
-            @Qualifier("ragContextThreadPoolExecutor") ObjectProvider<Executor> ragContextExecutor) {
-        return new KernelRetrievalEngine(new KernelRetrievalEnginePorts(
-                multiChannelRetrievalEngine,
-                mcpOrchestrator,
-                formatPort.getIfAvailable(RetrievalContextFormatPort::noop),
-                ragContextExecutor.getIfAvailable(() -> Runnable::run)));
-    }
-
-    @Bean
-    @Primary
-    @ConditionalOnBean(KernelRetrievalEngine.class)
-    public RetrievalContextPort seahorseKernelRetrievalContextPort(KernelRetrievalEngine retrievalEngine) {
-        return retrievalEngine;
-    }
-
-    @Bean
-    @ConditionalOnBean(KernelRetrievalEngine.class)
-    @ConditionalOnMissingBean(RetrievalEvaluationInboundPort.class)
-    public KernelRetrievalEvaluationService seahorseRetrievalEvaluationInboundPort(
-            KernelRetrievalEngine retrievalEngine) {
-        return new KernelRetrievalEvaluationService(retrievalEngine);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(RetrievalStrategyTemplateInboundPort.class)
-    public KernelRetrievalStrategyTemplateService seahorseRetrievalStrategyTemplateInboundPort(
-            ObjectProvider<RetrievalStrategyTemplateRepositoryPort> repositoryPort) {
-        return new KernelRetrievalStrategyTemplateService(
-                repositoryPort.getIfAvailable(RetrievalStrategyTemplateRepositoryPort::empty));
-    }
-
-    @Bean
-    @ConditionalOnBean(RetrievalEvaluationDatasetRepositoryPort.class)
-    @ConditionalOnMissingBean(RetrievalEvaluationDatasetInboundPort.class)
-    public KernelRetrievalEvaluationDatasetService seahorseRetrievalEvaluationDatasetInboundPort(
-            RetrievalEvaluationDatasetRepositoryPort repositoryPort,
-            ObjectProvider<RetrievalEvaluationComparisonRepositoryPort> comparisonRepositoryPort,
-            ObjectProvider<RetrievalEvaluationRunRepositoryPort> runRepositoryPort,
-            ObjectProvider<RetrievalEvaluationInboundPort> evaluationPort) {
-        return new KernelRetrievalEvaluationDatasetService(
-                repositoryPort,
-                comparisonRepositoryPort.getIfAvailable(RetrievalEvaluationComparisonRepositoryPort::empty),
-                runRepositoryPort.getIfAvailable(RetrievalEvaluationRunRepositoryPort::empty),
-                evaluationPort.getIfAvailable());
-    }
-
-    @Bean
     @ConditionalOnBean({KnowledgeBaseRepositoryPort.class, VectorCollectionAdminPort.class, ObjectStoragePort.class})
     @ConditionalOnMissingBean(KnowledgeBaseInboundPort.class)
     public KernelKnowledgeBaseService seahorseKnowledgeBaseInboundPort(
@@ -736,23 +594,6 @@ public class SeahorseAgentKernelAutoConfiguration {
                 documentVectorPorts,
                 schemaRegistryPort.getIfAvailable(MetadataSchemaRegistryPort::empty),
                 backfillInboundPort.getIfAvailable());
-    }
-
-    private static Executor threadPoolExecutor(int coreSize,
-                                               int maxSize,
-                                               int queueCapacity,
-                                               String threadNamePrefix) {
-        int safeCoreSize = Math.max(coreSize, 1);
-        int safeMaxSize = Math.max(maxSize, safeCoreSize);
-        int safeQueueCapacity = Math.max(queueCapacity, 1);
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(safeCoreSize);
-        executor.setMaxPoolSize(safeMaxSize);
-        executor.setQueueCapacity(safeQueueCapacity);
-        executor.setThreadNamePrefix(threadNamePrefix == null || threadNamePrefix.isBlank()
-                ? "seahorse-rag-" : threadNamePrefix);
-        executor.initialize();
-        return executor;
     }
 
     private static VectorIndexPort noopVectorIndexPort() {
