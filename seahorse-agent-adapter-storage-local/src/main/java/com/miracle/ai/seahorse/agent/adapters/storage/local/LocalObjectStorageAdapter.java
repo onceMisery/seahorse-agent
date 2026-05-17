@@ -62,12 +62,6 @@ public class LocalObjectStorageAdapter implements ObjectStoragePort {
     }
 
     @Override
-    public StoredObject reliableUpload(String bucketName, InputStream content, long size, String originalFilename,
-                                       String contentType) {
-        return writeObject(bucketName, content, size, originalFilename, contentType);
-    }
-
-    @Override
     public InputStream openStream(String url) {
         try {
             return Files.newInputStream(resolveUrl(url));

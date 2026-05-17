@@ -38,8 +38,16 @@ public interface ObjectStoragePort {
     StoredObject upload(String bucketName, InputStream content, long size, String originalFilename,
                         String contentType);
 
-    StoredObject reliableUpload(String bucketName, InputStream content, long size, String originalFilename,
-                                String contentType);
+    /**
+     * 可靠上传的默认语义与普通上传保持一致。
+     *
+     * <p>只有当具体适配器能够提供幂等、断点续传、内容校验或重试补偿等真实可靠性能力时，
+     * 才需要覆盖该方法，避免端口层暴露“看似可靠但实际等价”的重复契约。
+     */
+    default StoredObject reliableUpload(String bucketName, InputStream content, long size, String originalFilename,
+                                        String contentType) {
+        return upload(bucketName, content, size, originalFilename, contentType);
+    }
 
     InputStream openStream(String url);
 
