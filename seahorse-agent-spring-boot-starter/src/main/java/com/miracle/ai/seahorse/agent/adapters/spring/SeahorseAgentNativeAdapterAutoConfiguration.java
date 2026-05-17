@@ -26,8 +26,6 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMessageFeedbac
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRagTraceRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRetrievalEvaluationDatasetRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRetrievalStrategyTemplateRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSampleQuestionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.SeahorseOutboxRelayJob;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
@@ -40,8 +38,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineP
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -78,28 +74,11 @@ import javax.sql.DataSource;
         SeahorseAgentMetadataAdapterAutoConfiguration.class,
         SeahorseAgentMqAdapterAutoConfiguration.class,
         SeahorseAgentObservationAdapterAutoConfiguration.class,
+        SeahorseAgentRetrievalRepositoryAutoConfiguration.class,
         SeahorseAgentStorageAdapterAutoConfiguration.class,
         SeahorseAgentVectorAdapterAutoConfiguration.class
 })
 public class SeahorseAgentNativeAdapterAutoConfiguration {
-
-    @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(RetrievalStrategyTemplateRepositoryPort.class)
-    public JdbcRetrievalStrategyTemplateRepositoryAdapter seahorseJdbcRetrievalStrategyTemplateRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcRetrievalStrategyTemplateRepositoryAdapter(dataSource, objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(RetrievalEvaluationDatasetRepositoryPort.class)
-    public JdbcRetrievalEvaluationDatasetRepositoryAdapter seahorseJdbcRetrievalEvaluationDatasetRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcRetrievalEvaluationDatasetRepositoryAdapter(dataSource, objectMapper);
-    }
 
     @Bean
     @ConditionalOnBean(DataSource.class)
