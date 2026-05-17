@@ -502,7 +502,7 @@ mvn -pl seahorse-agent-adapter-observation-micrometer,seahorse-agent-tests -am "
 
 | 新 starter | 包含 |
 |------------|------|
-| `seahorse-agent-spring-boot-starter-core` | 规划名；当前由精简后的 `seahorse-agent-spring-boot-starter` 实际承担 kernel + web + jdbc + direct/local/noop + optional 扩展依赖边界 |
+| `seahorse-agent-spring-boot-starter-core` | 已落地；当前作为精简 starter 坐标别名，承载 kernel + web + jdbc + direct/local/noop + optional 扩展依赖边界 |
 | `seahorse-agent-spring-boot-starter-all` | 已落地；显式聚合所有官方适配器，承载原有全量 starter 行为 |
 
 第二步：迁移 bootstrap 到 `starter-core` + 显式适配器。
@@ -520,7 +520,7 @@ mvn -pl seahorse-agent-adapter-observation-micrometer,seahorse-agent-tests -am "
 | `seahorse-agent-starter-storage-s3` | S3 |
 | `seahorse-agent-starter-mq-pulsar` | Pulsar |
 
-当前实现采用折中落地：保留现有 artifactId `seahorse-agent-spring-boot-starter` 作为“精简 starter + optional 扩展依赖”的稳定入口，同时新增 `starter-all` 维持原有聚合体验。后续如需进一步显式化命名，可再引入真正的 `starter-core` 坐标并保留一轮兼容别名。
+当前实现采用兼容落地：保留现有 artifactId `seahorse-agent-spring-boot-starter` 作为稳定实现载体，同时新增 `starter-core` 作为精简坐标别名、`starter-all` 作为全量聚合入口。`bootstrap` 已切到 `starter-core + starter-all` 组合，后续若需要进一步清理命名，可再把自动配置源码整体迁移到 `starter-core`。
 
 #### 验证
 

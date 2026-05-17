@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.miracle.ai</groupId>
+        <artifactId>seahorse-agent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>seahorse-agent-spring-boot-starter-core</artifactId>
+    <packaging>jar</packaging>
+
+    <name>seahorse-agent-spring-boot-starter-core</name>
+    <description>Core Spring Boot starter alias for Seahorse agent slim auto-configuration.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+</project>

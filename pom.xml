@@ -57,6 +57,7 @@
         <module>seahorse-agent-adapter-storage-s3</module>
         <module>seahorse-agent-adapter-observation-noop</module>
         <module>seahorse-agent-adapter-observation-micrometer</module>
+        <module>seahorse-agent-spring-boot-starter-core</module>
         <module>seahorse-agent-spring-boot-starter</module>
         <module>seahorse-agent-spring-boot-starter-all</module>
         <module>seahorse-agent-tests</module>

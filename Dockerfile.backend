@@ -7,6 +7,7 @@ WORKDIR /app
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 COPY seahorse-agent-bootstrap/pom.xml seahorse-agent-bootstrap/
+COPY seahorse-agent-spring-boot-starter-core/pom.xml seahorse-agent-spring-boot-starter-core/
 COPY seahorse-agent-spring-boot-starter/pom.xml seahorse-agent-spring-boot-starter/
 COPY seahorse-agent-spring-boot-starter-all/pom.xml seahorse-agent-spring-boot-starter-all/
 COPY seahorse-agent-kernel/pom.xml seahorse-agent-kernel/
