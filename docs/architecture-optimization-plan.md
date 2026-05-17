@@ -21,7 +21,7 @@
 | 5 | 已完成 | `t_knowledge_chunk(kb_id, doc_id)` 基础复合索引和 PostgreSQL 软删部分索引已补齐 | 迁移发布顺序和大表在线建索引策略需按部署环境规划 |
 | 4 | 部分完成 | OpenAI streaming 已迁移到可注入专用 executor；Milvus content/HNSW/mmap/search ef 已配置化；Milvus 业务 metadata JSON 已统一 Jackson | starter 依赖拆分仍需单独规划发布边界 |
 | 6 | 已完成主要闭环 | wrapper passThrough、storage reliableUpload 默认语义、cache-local 命名说明、chatStore 门面式拆分、元数据治理最小 UI 已完成 | chatStore 深层 slice 化和元数据治理高级编辑体验可作为后续增强 |
-| 7A | 已完成主要目标 | native 自动配置已按 storage、observation、cache、local、auth、MQ、AI、vector、keyword、knowledge repository、ingestion repository、memory repository、retrieval repository、metadata 十四个技术域完成兼容拆分；主配置仍通过 `@Import` 聚合，Bean 名称与条件保持兼容，主 native 配置已降至约 174 行 | 剩余通用 JDBC 仓储可按 ops 业务域继续拆分，但不再阻塞本阶段目标 |
+| 7A | 已完成主要目标 | native 自动配置已按 storage、observation、cache、local、auth、MQ、AI、vector、keyword、knowledge repository、ingestion repository、memory repository、retrieval repository、ops repository、outbox relay、metadata 十六个技术域完成兼容拆分；主配置仍通过 `@Import` 聚合，Bean 名称与条件保持兼容，主 native 配置已降至约 53 行且不再直接声明 `@Bean` | native 主配置拆分目标已完成，后续重点转向 starter 依赖边界和 kernel 自动配置 |
 
 ---
 
@@ -848,7 +848,7 @@ npm run build
 | 维度 | 当前证据 | 判断 |
 |------|----------|------|
 | Kernel 自动配置 | `SeahorseAgentKernelAutoConfiguration.java` 当前 1266 行，82 个 `@Bean`，约 132 个条件装配注解 | P1，装配 owner 过重 |
-| Native 自动配置 | `SeahorseAgentNativeAdapterAutoConfiguration.java` 当前 1209 行，106 个 `@Bean`，约 257 个条件装配注解 | P1，适配器装配 owner 过重 |
+| Native 自动配置 | `SeahorseAgentNativeAdapterAutoConfiguration.java` 已降至约 53 行，主配置不再直接声明 `@Bean`，仅作为旧外部入口聚合 16 个子配置类 | P1 已完成主要治理，后续关注 starter 依赖边界 |
 | starter 依赖 | `seahorse-agent-spring-boot-starter` 直接依赖 web、MQ、AI、MCP、Tika、Feishu、Milvus、PgVector、Redis、S3、ES、Lucene、JDBC 等适配器 | P1，最小部署和新增适配器成本偏高 |
 | 出站端口 | `ports/outbound` 当前约 231 个 Java 文件，其中约 103 个接口；`metadata` 包约 58 个文件、18 个接口 | P2，数量高但包含大量 DTO，不能按总文件数判定 |
 | JDBC 适配器 | JDBC 主代码约 32 个 Java 文件、30 个 `*Adapter.java`；其中 `JdbcMetadataGovernanceRepositoryAdapter.java` 约 2621 行并实现 14 个 metadata 端口 | P1，元数据治理 JDBC owner 明显过重 |
@@ -868,7 +868,7 @@ npm run build
 
 `SeahorseAgentKernelAutoConfiguration` 同时装配插件注册、摄取、检索、聊天、认证、知识库、元数据治理、定时任务、记忆和模型路由；`SeahorseAgentNativeAdapterAutoConfiguration` 同时装配缓存、存储、搜索、向量、JDBC、MQ、AI、本地实现和外部 SDK 适配器。新增一个通道、仓储或治理能力时，通常需要触碰千行级配置类，增加合并冲突和条件装配回归风险。
 
-当前状态：已完成第一批兼容拆分。storage、observation、cache、local、auth、MQ、AI、vector、keyword、knowledge repository、ingestion repository、memory repository、retrieval repository 与 metadata 十四个技术域已迁移到独立自动配置类，主配置通过 `@Import` 引入，Bean 名称、条件和外部自动配置入口保持不变。auth 拆分时将 `JdbcUserRepositoryAdapter` 一并迁入认证配置，原因是它服务认证闭环；knowledge repository 拆分将知识库查询、文档、切片和刷新状态相关 JDBC 仓储集中到独立配置，保持知识库数据域装配边界清晰；ingestion repository 拆分将 pipeline 定义与摄取任务仓储集中到导入链路配置；memory repository 拆分将会话记忆、四层记忆仓储和记忆质量治理仓储集中到记忆数据域配置；retrieval repository 拆分将策略模板与评测数据集仓储集中到检索治理配置；其他通用 JDBC 仓储仍留在 native 主配置中，避免扩大改动面。MQ 拆分仅迁移 direct/pulsar 基础队列 Bean。AI 拆分将 OpenAI-compatible adapter、streaming executor 和模型端口暴露集中到独立配置，便于后续新增模型 provider。vector 拆分将 Milvus、PgVector、Noop 及向量端口暴露集中管理，主配置不再承载向量 SDK 细节。keyword 拆分聚合关键词 search/index、Lucene/Elasticsearch/JDBC fallback 以及 keyword outbox。metadata 拆分将治理仓储、schema index 同步与治理端口暴露放入同一配置类，避免 `@ConditionalOnBean` 顺序变化导致装配回归。主 native 配置已进一步降至约 174 行，本阶段不再以继续压缩主配置为阻塞项。
+当前状态：已完成第一批兼容拆分。storage、observation、cache、local、auth、MQ、AI、vector、keyword、knowledge repository、ingestion repository、memory repository、retrieval repository、ops repository、outbox relay 与 metadata 十六个技术域已迁移到独立自动配置类，主配置通过 `@Import` 引入，Bean 名称、条件和外部自动配置入口保持不变。auth 拆分时将 `JdbcUserRepositoryAdapter` 一并迁入认证配置，原因是它服务认证闭环；knowledge repository 拆分将知识库查询、文档、切片和刷新状态相关 JDBC 仓储集中到独立配置，保持知识库数据域装配边界清晰；ingestion repository 拆分将 pipeline 定义与摄取任务仓储集中到导入链路配置；memory repository 拆分将会话记忆、四层记忆仓储和记忆质量治理仓储集中到记忆数据域配置；retrieval repository 拆分将策略模板与评测数据集仓储集中到检索治理配置；ops repository 拆分将会话、反馈、trace、sample、dashboard、扩展状态、意图树和术语映射等运营仓储集中管理；outbox relay 拆分将跨 outbox 仓储与 MQ 的 relay job 从主配置中移出。MQ 拆分仅迁移 direct/pulsar 基础队列 Bean。AI 拆分将 OpenAI-compatible adapter、streaming executor 和模型端口暴露集中到独立配置，便于后续新增模型 provider。vector 拆分将 Milvus、PgVector、Noop 及向量端口暴露集中管理，主配置不再承载向量 SDK 细节。keyword 拆分聚合关键词 search/index、Lucene/Elasticsearch/JDBC fallback 以及 keyword outbox。metadata 拆分将治理仓储、schema index 同步与治理端口暴露放入同一配置类，避免 `@ConditionalOnBean` 顺序变化导致装配回归。主 native 配置已进一步降至约 53 行，不再直接声明 `@Bean`，本阶段拆分目标完成。
 
 方案：
 
