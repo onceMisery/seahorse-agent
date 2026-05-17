@@ -19,8 +19,8 @@
 | 2b | 部分完成 | 已新增 `ShortTermMemoryMaintenancePort`；`KernelMemoryGovernanceService.runDecay()` 已调用短期记忆维护端口；JDBC 短期记忆适配器已支持过期/低衰减扫描与批量软删；治理 Job 已能触发实际 decay 链路 | Prompt token budget、复杂衰减分更新、高价值记忆自动晋升策略仍待增强 |
 | 3 | 已完成 | RAG Trace sample-rate、TTL 软删端口、JDBC run/node 清理、Spring cleanup job、定向测试 | 异步写入、采样命中率指标和清理指标可作为后续增强 |
 | 5 | 已完成 | `t_knowledge_chunk(kb_id, doc_id)` 基础复合索引和 PostgreSQL 软删部分索引已补齐 | 迁移发布顺序和大表在线建索引策略需按部署环境规划 |
-| 4 | 部分完成 | OpenAI streaming 已迁移到可注入专用 executor；Milvus content/HNSW/mmap/search ef 已配置化 | starter 依赖拆分、Milvus JSON 序列化统一仍待规划实施 |
-| 6+ | 未开始 | 无 | 清理与前端运营等 |
+| 4 | 部分完成 | OpenAI streaming 已迁移到可注入专用 executor；Milvus content/HNSW/mmap/search ef 已配置化；Milvus 业务 metadata JSON 已统一 Jackson | starter 依赖拆分仍需单独规划发布边界 |
+| 6 | 已完成主要闭环 | wrapper passThrough、storage reliableUpload 默认语义、cache-local 命名说明、chatStore 门面式拆分、元数据治理最小 UI 已完成 | chatStore 深层 slice 化和元数据治理高级编辑体验可作为后续增强 |
 
 ---
 
