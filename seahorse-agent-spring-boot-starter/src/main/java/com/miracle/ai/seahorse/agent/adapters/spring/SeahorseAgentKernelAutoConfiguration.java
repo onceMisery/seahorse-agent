@@ -34,9 +34,6 @@ import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestio
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionTaskService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeBaseService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeChunkService;
-import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeDocumentChunkHandler;
-import com.miracle.ai.seahorse.agent.kernel.application.knowledge.DocumentRefreshServicePorts;
-import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelDocumentRefreshService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeDocumentService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentVectorPorts;
@@ -237,6 +234,7 @@ import java.util.concurrent.Executor;
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
         SeahorseAgentKernelAuthAutoConfiguration.class,
+        SeahorseAgentKernelDocumentRefreshAutoConfiguration.class,
         SeahorseAgentKernelKeywordAutoConfiguration.class,
         SeahorseAgentKernelMemoryAutoConfiguration.class,
         SeahorseAgentKernelModelAutoConfiguration.class,
@@ -934,76 +932,6 @@ public class SeahorseAgentKernelAutoConfiguration {
     public KernelMetadataExtractionResultService seahorseMetadataExtractionResultInboundPort(
             MetadataExtractionResultManagementRepositoryPort repositoryPort) {
         return new KernelMetadataExtractionResultService(repositoryPort);
-    }
-
-    @Bean
-    @ConditionalOnBean({DocumentRefreshSchedulePort.class, DocumentRefreshStateRepositoryPort.class,
-            KnowledgeDocumentRepositoryPort.class, DocumentFetcherPort.class, ObjectStoragePort.class,
-            KnowledgeDocumentInboundPort.class, PipelineDefinitionRepositoryPort.class, SchedulerPort.class})
-    @ConditionalOnMissingBean
-    public DocumentRefreshServicePorts seahorseDocumentRefreshServicePorts(
-            DocumentRefreshSchedulePort schedulePort,
-            DocumentRefreshStateRepositoryPort stateRepositoryPort,
-            KnowledgeDocumentRepositoryPort documentRepositoryPort,
-            DocumentFetcherPort documentFetcherPort,
-            ObjectStoragePort objectStoragePort,
-            KnowledgeDocumentInboundPort documentInboundPort,
-            PipelineDefinitionRepositoryPort pipelineRepositoryPort,
-            SchedulerPort schedulerPort,
-            ObjectProvider<DistributedLockPort> lockPort) {
-        return new DocumentRefreshServicePorts(
-                schedulePort,
-                stateRepositoryPort,
-                documentRepositoryPort,
-                documentFetcherPort,
-                objectStoragePort,
-                documentInboundPort,
-                pipelineRepositoryPort,
-                schedulerPort,
-                lockPort.getIfAvailable(DistributedLockPort::noop));
-    }
-
-    @Bean
-    @ConditionalOnBean(DocumentRefreshServicePorts.class)
-    @ConditionalOnMissingBean(DocumentRefreshInboundPort.class)
-    public KernelDocumentRefreshService seahorseDocumentRefreshInboundPort(
-            DocumentRefreshServicePorts servicePorts) {
-        return new KernelDocumentRefreshService(servicePorts);
-    }
-
-    @Bean
-    @ConditionalOnBean(DocumentRefreshInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.document-refresh", name = "scheduler-enabled",
-            havingValue = "true", matchIfMissing = true)
-    @ConditionalOnMissingBean
-    public SeahorseDocumentRefreshJob seahorseDocumentRefreshJob(
-            DocumentRefreshInboundPort refreshInboundPort,
-            ObjectProvider<DistributedLockPort> lockPort,
-            @Value("${seahorse-agent.document-refresh.batch-size:20}") int batchSize) {
-        return new SeahorseDocumentRefreshJob(refreshInboundPort,
-                lockPort.getIfAvailable(DistributedLockPort::noop), batchSize);
-    }
-
-    @Bean
-    @ConditionalOnBean({KnowledgeDocumentInboundPort.class, PipelineDefinitionRepositoryPort.class})
-    @ConditionalOnMissingBean
-    public KernelKnowledgeDocumentChunkHandler seahorseKernelKnowledgeDocumentChunkHandler(
-            KnowledgeDocumentInboundPort documentInboundPort,
-            PipelineDefinitionRepositoryPort pipelineDefinitionRepositoryPort) {
-        return new KernelKnowledgeDocumentChunkHandler(documentInboundPort, pipelineDefinitionRepositoryPort);
-    }
-
-    @Bean
-    @ConditionalOnBean({KernelKnowledgeDocumentChunkHandler.class, MessageSubscriptionPort.class})
-    @ConditionalOnMissingBean(name = "seahorseKnowledgeDocumentChunkSubscription")
-    public AutoCloseable seahorseKnowledgeDocumentChunkSubscription(
-            KernelKnowledgeDocumentChunkHandler chunkHandler,
-            MessageSubscriptionPort subscriptionPort,
-            @Value("${seahorse-agent.adapters.mq.pulsar.topics.knowledge-document-chunk:"
-                    + KernelKnowledgeDocumentService.DEFAULT_CHUNK_TOPIC + "}") String chunkTopic) {
-        return subscriptionPort.subscribe(chunkTopic, "seahorse-knowledge-document-chunk",
-                com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentChunkEvent.class,
-                chunkHandler::handle);
     }
 
     private static Executor threadPoolExecutor(int coreSize,
