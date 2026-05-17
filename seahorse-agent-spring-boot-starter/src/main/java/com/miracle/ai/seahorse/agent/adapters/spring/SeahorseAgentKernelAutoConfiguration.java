@@ -241,6 +241,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
@@ -262,6 +263,7 @@ import java.util.concurrent.Executor;
         AgentAdapterProperties.class
 })
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@Import(SeahorseAgentKernelMemoryAutoConfiguration.class)
 public class SeahorseAgentKernelAutoConfiguration {
 
     @Bean
@@ -1154,119 +1156,6 @@ public class SeahorseAgentKernelAutoConfiguration {
         return subscriptionPort.subscribe(chunkTopic, "seahorse-knowledge-document-chunk",
                 com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentChunkEvent.class,
                 chunkHandler::handle);
-    }
-
-    @Bean
-    @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
-    @ConditionalOnMissingBean(MemoryEnginePort.class)
-    public MemoryEnginePort seahorseDefaultMemoryEnginePort(
-            ShortTermMemoryPort shortTermMemoryPort,
-            LongTermMemoryPort longTermMemoryPort,
-            SemanticMemoryPort semanticMemoryPort,
-            ObjectProvider<ObjectMapper> objectMapperProvider,
-            @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
-            @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
-            @Value("${seahorse-agent.memory.semantic-limit:10}") int semanticLimit,
-            @Value("${seahorse-agent.memory.capture-enabled:true}") boolean captureEnabled) {
-        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
-        MemoryEngineOptions options = new MemoryEngineOptions(
-                shortTermLimit,
-                longTermLimit,
-                semanticLimit,
-                captureEnabled);
-        return new DefaultMemoryEnginePort(
-                shortTermMemoryPort,
-                longTermMemoryPort,
-                semanticMemoryPort,
-                objectMapper,
-                options);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public KernelMemoryEngine seahorseKernelMemoryEngine(ObjectProvider<MemoryEnginePort> memoryEnginePort) {
-        return new KernelMemoryEngine(memoryEnginePort.getIfAvailable(MemoryEnginePort::noop));
-    }
-
-    @Bean
-    @ConditionalOnBean({WorkingMemoryPort.class, ShortTermMemoryPort.class, LongTermMemoryPort.class,
-            SemanticMemoryPort.class})
-    @ConditionalOnMissingBean
-    public MemoryManagementServicePorts seahorseMemoryManagementServicePorts(
-            WorkingMemoryPort workingMemoryPort,
-            ShortTermMemoryPort shortTermMemoryPort,
-            LongTermMemoryPort longTermMemoryPort,
-            SemanticMemoryPort semanticMemoryPort,
-            ObjectProvider<MemoryQualitySnapshotRepositoryPort> qualitySnapshotRepositoryPort,
-            ObjectProvider<MemoryConflictLogRepositoryPort> conflictLogRepositoryPort) {
-        return new MemoryManagementServicePorts(
-                workingMemoryPort,
-                shortTermMemoryPort,
-                longTermMemoryPort,
-                semanticMemoryPort,
-                qualitySnapshotRepositoryPort.getIfAvailable(MemoryQualitySnapshotRepositoryPort::empty),
-                conflictLogRepositoryPort.getIfAvailable(MemoryConflictLogRepositoryPort::empty));
-    }
-
-    @Bean
-    @ConditionalOnBean(MemoryManagementServicePorts.class)
-    @ConditionalOnMissingBean(MemoryManagementInboundPort.class)
-    public KernelMemoryManagementService seahorseMemoryManagementInboundPort(
-            MemoryManagementServicePorts servicePorts) {
-        return new KernelMemoryManagementService(servicePorts);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(MemoryInferencePort.class)
-    public MemoryInferencePort seahorseRuleBasedMemoryCandidateExtractor() {
-        return new RuleBasedMemoryCandidateExtractor();
-    }
-
-    @Bean
-    @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
-    @ConditionalOnMissingBean
-    public MemoryGovernanceServicePorts seahorseMemoryGovernanceServicePorts(
-            ShortTermMemoryPort shortTermMemoryPort,
-            LongTermMemoryPort longTermMemoryPort,
-            SemanticMemoryPort semanticMemoryPort,
-            ObjectProvider<MemoryEnginePort> memoryEnginePort,
-            ObjectProvider<MemoryInferencePort> memoryInferencePort,
-            ObjectProvider<ShortTermMemoryMaintenancePort> shortTermMemoryMaintenancePort) {
-        return new MemoryGovernanceServicePorts(
-                shortTermMemoryPort,
-                longTermMemoryPort,
-                semanticMemoryPort,
-                memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
-                memoryInferencePort.getIfAvailable(MemoryInferencePort::noop),
-                shortTermMemoryMaintenancePort.getIfAvailable(ShortTermMemoryMaintenancePort::noop));
-    }
-
-    @Bean
-    @ConditionalOnBean(MemoryGovernanceServicePorts.class)
-    @ConditionalOnMissingBean(MemoryGovernanceInboundPort.class)
-    public KernelMemoryGovernanceService seahorseMemoryGovernanceInboundPort(
-            MemoryGovernanceServicePorts servicePorts,
-            @Value("${seahorse-agent.memory.long-term-importance-threshold:0.6}")
-            double promotionThreshold,
-            @Value("${seahorse-agent.memory.inference-enabled:false}")
-            boolean inferenceEnabled,
-            @Value("${seahorse-agent.memory.decay.scan-limit:500}") int decayScanLimit,
-            @Value("${seahorse-agent.memory.decay.threshold:0.1}") double decayThreshold,
-            @Value("${seahorse-agent.memory.decay.dry-run:false}") boolean decayDryRun) {
-        return new KernelMemoryGovernanceService(servicePorts, promotionThreshold, inferenceEnabled,
-                new MemoryDecayOptions(decayScanLimit, decayThreshold, decayDryRun));
-    }
-
-    @Bean
-    @ConditionalOnBean(MemoryGovernanceInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.governance", name = "scheduler-enabled",
-            havingValue = "true", matchIfMissing = true)
-    @ConditionalOnMissingBean
-    public SeahorseMemoryGovernanceJob seahorseMemoryGovernanceJob(
-            MemoryGovernanceInboundPort governanceInboundPort,
-            ObjectProvider<DistributedLockPort> lockPort) {
-        return new SeahorseMemoryGovernanceJob(governanceInboundPort,
-                lockPort.getIfAvailable(DistributedLockPort::noop));
     }
 
     @Bean
