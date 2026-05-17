@@ -21,14 +21,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationMemoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDashboardRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDocumentRefreshScheduleAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentExtensionStatusAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcIngestionTaskRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcIntentTreeRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeBaseRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeChunkRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeBaseQueryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeDocumentRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLongTermMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflictLogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryQualitySnapshotRepositoryAdapter;
@@ -52,12 +47,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.PipelineDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQueryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSchedulePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshStateRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
@@ -100,6 +89,7 @@ import javax.sql.DataSource;
         SeahorseAgentAuthAdapterAutoConfiguration.class,
         SeahorseAgentCacheAdapterAutoConfiguration.class,
         SeahorseAgentKeywordAdapterAutoConfiguration.class,
+        SeahorseAgentKnowledgeRepositoryAutoConfiguration.class,
         SeahorseAgentLocalAdapterAutoConfiguration.class,
         SeahorseAgentMetadataAdapterAutoConfiguration.class,
         SeahorseAgentMqAdapterAutoConfiguration.class,
@@ -108,14 +98,6 @@ import javax.sql.DataSource;
         SeahorseAgentVectorAdapterAutoConfiguration.class
 })
 public class SeahorseAgentNativeAdapterAutoConfiguration {
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(KnowledgeBaseQueryPort.class)
-    public JdbcKnowledgeBaseQueryAdapter seahorseJdbcKnowledgeBaseQueryAdapter(DataSource dataSource) {
-        return new JdbcKnowledgeBaseQueryAdapter(dataSource);
-    }
 
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
@@ -133,54 +115,6 @@ public class SeahorseAgentNativeAdapterAutoConfiguration {
     public JdbcRetrievalEvaluationDatasetRepositoryAdapter seahorseJdbcRetrievalEvaluationDatasetRepositoryAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
         return new JdbcRetrievalEvaluationDatasetRepositoryAdapter(dataSource, objectMapper);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(KnowledgeBaseRepositoryPort.class)
-    public JdbcKnowledgeBaseRepositoryAdapter seahorseJdbcKnowledgeBaseRepositoryAdapter(DataSource dataSource) {
-        return new JdbcKnowledgeBaseRepositoryAdapter(dataSource);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(KnowledgeChunkRepositoryPort.class)
-    public JdbcKnowledgeChunkRepositoryAdapter seahorseJdbcKnowledgeChunkRepositoryAdapter(DataSource dataSource) {
-        return new JdbcKnowledgeChunkRepositoryAdapter(dataSource);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(KnowledgeDocumentRepositoryPort.class)
-    public JdbcKnowledgeDocumentRepositoryAdapter seahorseJdbcKnowledgeDocumentRepositoryAdapter(DataSource dataSource) {
-        return new JdbcKnowledgeDocumentRepositoryAdapter(dataSource);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(JdbcDocumentRefreshScheduleAdapter.class)
-    public JdbcDocumentRefreshScheduleAdapter seahorseJdbcDocumentRefreshScheduleAdapter(DataSource dataSource) {
-        return new JdbcDocumentRefreshScheduleAdapter(dataSource);
-    }
-
-    @Bean
-    @ConditionalOnBean(JdbcDocumentRefreshScheduleAdapter.class)
-    @ConditionalOnMissingBean(DocumentRefreshSchedulePort.class)
-    public DocumentRefreshSchedulePort seahorseDocumentRefreshSchedulePort(
-            JdbcDocumentRefreshScheduleAdapter adapter) {
-        return adapter;
-    }
-
-    @Bean
-    @ConditionalOnBean(JdbcDocumentRefreshScheduleAdapter.class)
-    @ConditionalOnMissingBean(DocumentRefreshStateRepositoryPort.class)
-    public DocumentRefreshStateRepositoryPort seahorseDocumentRefreshStateRepositoryPort(
-            JdbcDocumentRefreshScheduleAdapter adapter) {
-        return adapter;
     }
 
     @Bean

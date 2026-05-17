@@ -21,7 +21,7 @@
 | 5 | 已完成 | `t_knowledge_chunk(kb_id, doc_id)` 基础复合索引和 PostgreSQL 软删部分索引已补齐 | 迁移发布顺序和大表在线建索引策略需按部署环境规划 |
 | 4 | 部分完成 | OpenAI streaming 已迁移到可注入专用 executor；Milvus content/HNSW/mmap/search ef 已配置化；Milvus 业务 metadata JSON 已统一 Jackson | starter 依赖拆分仍需单独规划发布边界 |
 | 6 | 已完成主要闭环 | wrapper passThrough、storage reliableUpload 默认语义、cache-local 命名说明、chatStore 门面式拆分、元数据治理最小 UI 已完成 | chatStore 深层 slice 化和元数据治理高级编辑体验可作为后续增强 |
-| 7A | 已完成主要目标 | native 自动配置已按 storage、observation、cache、local、auth、MQ、AI、vector、keyword、metadata 十个技术域完成兼容拆分；主配置仍通过 `@Import` 聚合，Bean 名称与条件保持兼容，主 native 配置已降至约 359 行 | 通用 JDBC 仓储可按业务域继续拆分，但不再阻塞本阶段目标 |
+| 7A | 已完成主要目标 | native 自动配置已按 storage、observation、cache、local、auth、MQ、AI、vector、keyword、knowledge repository、metadata 十一个技术域完成兼容拆分；主配置仍通过 `@Import` 聚合，Bean 名称与条件保持兼容，主 native 配置已降至约 293 行 | 剩余通用 JDBC 仓储可按 ingestion、memory、ops 等业务域继续拆分，但不再阻塞本阶段目标 |
 
 ---
 
@@ -868,7 +868,7 @@ npm run build
 
 `SeahorseAgentKernelAutoConfiguration` 同时装配插件注册、摄取、检索、聊天、认证、知识库、元数据治理、定时任务、记忆和模型路由；`SeahorseAgentNativeAdapterAutoConfiguration` 同时装配缓存、存储、搜索、向量、JDBC、MQ、AI、本地实现和外部 SDK 适配器。新增一个通道、仓储或治理能力时，通常需要触碰千行级配置类，增加合并冲突和条件装配回归风险。
 
-当前状态：已完成第一批兼容拆分。storage、observation、cache、local、auth、MQ、AI、vector、keyword 与 metadata 十个技术域已迁移到独立自动配置类，主配置通过 `@Import` 引入，Bean 名称、条件和外部自动配置入口保持不变。auth 拆分时将 `JdbcUserRepositoryAdapter` 一并迁入认证配置，原因是它服务认证闭环；其他通用 JDBC 仓储仍留在 native 主配置中，避免扩大改动面。MQ 拆分仅迁移 direct/pulsar 基础队列 Bean。AI 拆分将 OpenAI-compatible adapter、streaming executor 和模型端口暴露集中到独立配置，便于后续新增模型 provider。vector 拆分将 Milvus、PgVector、Noop 及向量端口暴露集中管理，主配置不再承载向量 SDK 细节。keyword 拆分聚合关键词 search/index、Lucene/Elasticsearch/JDBC fallback 以及 keyword outbox。metadata 拆分将治理仓储、schema index 同步与治理端口暴露放入同一配置类，避免 `@ConditionalOnBean` 顺序变化导致装配回归。主 native 配置已降至约 359 行，满足本阶段“单配置类 250-400 行”的治理目标。
+当前状态：已完成第一批兼容拆分。storage、observation、cache、local、auth、MQ、AI、vector、keyword、knowledge repository 与 metadata 十一个技术域已迁移到独立自动配置类，主配置通过 `@Import` 引入，Bean 名称、条件和外部自动配置入口保持不变。auth 拆分时将 `JdbcUserRepositoryAdapter` 一并迁入认证配置，原因是它服务认证闭环；knowledge repository 拆分将知识库查询、文档、切片和刷新状态相关 JDBC 仓储集中到独立配置，保持知识库数据域装配边界清晰；其他通用 JDBC 仓储仍留在 native 主配置中，避免扩大改动面。MQ 拆分仅迁移 direct/pulsar 基础队列 Bean。AI 拆分将 OpenAI-compatible adapter、streaming executor 和模型端口暴露集中到独立配置，便于后续新增模型 provider。vector 拆分将 Milvus、PgVector、Noop 及向量端口暴露集中管理，主配置不再承载向量 SDK 细节。keyword 拆分聚合关键词 search/index、Lucene/Elasticsearch/JDBC fallback 以及 keyword outbox。metadata 拆分将治理仓储、schema index 同步与治理端口暴露放入同一配置类，避免 `@ConditionalOnBean` 顺序变化导致装配回归。主 native 配置已降至约 293 行，满足本阶段“单配置类 250-400 行”的治理目标。
 
 方案：
 
