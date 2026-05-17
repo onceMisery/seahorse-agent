@@ -40,7 +40,6 @@ import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelDocument
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeDocumentService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentVectorPorts;
-import com.miracle.ai.seahorse.agent.kernel.application.keyword.KernelKeywordIndexMaintenanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryEnginePort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
@@ -238,6 +237,7 @@ import java.util.concurrent.Executor;
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Import({
         SeahorseAgentKernelAuthAutoConfiguration.class,
+        SeahorseAgentKernelKeywordAutoConfiguration.class,
         SeahorseAgentKernelMemoryAutoConfiguration.class,
         SeahorseAgentKernelModelAutoConfiguration.class,
         SeahorseAgentKernelOpsAutoConfiguration.class,
@@ -806,19 +806,6 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(KnowledgeDocumentRepositoryPort.class)
-    @ConditionalOnMissingBean(KeywordIndexMaintenanceInboundPort.class)
-    public KernelKeywordIndexMaintenanceService seahorseKeywordIndexMaintenanceInboundPort(
-            KnowledgeDocumentRepositoryPort documentRepositoryPort,
-            ObjectProvider<KeywordIndexPort> keywordIndexPort,
-            ObjectProvider<ObservationPort> observationPort) {
-        return new KernelKeywordIndexMaintenanceService(
-                documentRepositoryPort,
-                keywordIndexPort.getIfAvailable(KeywordIndexPort::noop),
-                observationPort.getIfAvailable());
-    }
-
-    @Bean
     @ConditionalOnBean({KnowledgeDocumentRepositoryPort.class, ObjectStoragePort.class,
             PipelineDefinitionRepositoryPort.class, KernelIngestionEngine.class,
             MetadataBackfillJobRepositoryPort.class})
@@ -947,25 +934,6 @@ public class SeahorseAgentKernelAutoConfiguration {
     public KernelMetadataExtractionResultService seahorseMetadataExtractionResultInboundPort(
             MetadataExtractionResultManagementRepositoryPort repositoryPort) {
         return new KernelMetadataExtractionResultService(repositoryPort);
-    }
-
-    @Bean
-    @ConditionalOnBean(KeywordIndexMaintenanceInboundPort.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.keyword-index.maintenance", name = "scheduler-enabled",
-            havingValue = "true")
-    @ConditionalOnMissingBean
-    public SeahorseKeywordIndexMaintenanceJob seahorseKeywordIndexMaintenanceJob(
-            KeywordIndexMaintenanceInboundPort maintenanceInboundPort,
-            ObjectProvider<DistributedLockPort> lockPort,
-            @Value("${seahorse-agent.keyword-index.maintenance.doc-ids:}") String docIds,
-            @Value("${seahorse-agent.keyword-index.maintenance.kb-ids:}") String kbIds,
-            @Value("${seahorse-agent.keyword-index.maintenance.batch-size:50}") int batchSize) {
-        return new SeahorseKeywordIndexMaintenanceJob(
-                maintenanceInboundPort,
-                lockPort.getIfAvailable(DistributedLockPort::noop),
-                docIds,
-                kbIds,
-                batchSize);
     }
 
     @Bean
