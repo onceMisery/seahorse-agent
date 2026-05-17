@@ -29,14 +29,9 @@ import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPort
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline;
-import com.miracle.ai.seahorse.agent.kernel.application.auth.KernelAuthService;
-import com.miracle.ai.seahorse.agent.kernel.application.conversation.KernelConversationManagementService;
-import com.miracle.ai.seahorse.agent.kernel.application.dashboard.KernelDashboardService;
-import com.miracle.ai.seahorse.agent.kernel.application.feedback.KernelMessageFeedbackService;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionPipelineService;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionTaskService;
-import com.miracle.ai.seahorse.agent.kernel.application.intent.KernelIntentTreeService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeBaseService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeChunkService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeDocumentChunkHandler;
@@ -46,7 +41,6 @@ import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledg
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentVectorPorts;
 import com.miracle.ai.seahorse.agent.kernel.application.keyword.KernelKeywordIndexMaintenanceService;
-import com.miracle.ai.seahorse.agent.kernel.application.mapping.KernelQueryTermMappingService;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryEnginePort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
@@ -74,11 +68,9 @@ import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrieva
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine.KernelRetrievalEnginePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalStrategyTemplateService;
-import com.miracle.ai.seahorse.agent.kernel.application.sample.KernelSampleQuestionService;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceService;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.RagTraceRecorderOptions;
-import com.miracle.ai.seahorse.agent.kernel.application.user.KernelUserService;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ChunkerNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.EmbedderNodeFeature;
@@ -110,11 +102,6 @@ import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureHealthAggregator;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureType;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.dashboard.DashboardInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.feedback.MessageFeedbackInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.intent.IntentTreeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionTaskInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeBaseInboundPort;
@@ -122,7 +109,6 @@ import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeChunkInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.DocumentRefreshInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeDocumentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.mapping.QueryTermMappingInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
@@ -137,13 +123,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityCompar
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplateInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
@@ -155,11 +135,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermExpansionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.dashboard.DashboardRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentFetcherPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.EnhancementPromptPort;
@@ -169,7 +145,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionNodeLogPo
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.PipelineDefinitionRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRepositoryPort;
@@ -178,7 +153,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSta
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpParameterExtractionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
@@ -223,7 +197,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluatio
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
@@ -267,6 +240,7 @@ import java.util.concurrent.Executor;
         SeahorseAgentKernelAuthAutoConfiguration.class,
         SeahorseAgentKernelMemoryAutoConfiguration.class,
         SeahorseAgentKernelModelAutoConfiguration.class,
+        SeahorseAgentKernelOpsAutoConfiguration.class,
         SeahorseAgentKernelTraceAutoConfiguration.class
 })
 public class SeahorseAgentKernelAutoConfiguration {
@@ -733,57 +707,6 @@ public class SeahorseAgentKernelAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(MessageFeedbackRepositoryPort.class)
-    @ConditionalOnMissingBean(MessageFeedbackInboundPort.class)
-    public KernelMessageFeedbackService seahorseMessageFeedbackInboundPort(
-            MessageFeedbackRepositoryPort feedbackRepositoryPort) {
-        return new KernelMessageFeedbackService(feedbackRepositoryPort);
-    }
-
-    @Bean
-    @ConditionalOnBean(ConversationRepositoryPort.class)
-    @ConditionalOnMissingBean(ConversationManagementInboundPort.class)
-    public KernelConversationManagementService seahorseConversationManagementInboundPort(
-            ConversationRepositoryPort conversationRepositoryPort) {
-        return new KernelConversationManagementService(conversationRepositoryPort);
-    }
-
-    @Bean
-    @ConditionalOnBean(SampleQuestionRepositoryPort.class)
-    @ConditionalOnMissingBean(SampleQuestionInboundPort.class)
-    public KernelSampleQuestionService seahorseSampleQuestionInboundPort(
-            SampleQuestionRepositoryPort sampleQuestionRepositoryPort) {
-        return new KernelSampleQuestionService(sampleQuestionRepositoryPort);
-    }
-
-    @Bean
-    @ConditionalOnBean(DashboardRepositoryPort.class)
-    @ConditionalOnMissingBean(DashboardInboundPort.class)
-    public KernelDashboardService seahorseDashboardInboundPort(DashboardRepositoryPort dashboardRepositoryPort) {
-        return new KernelDashboardService(dashboardRepositoryPort);
-    }
-
-    @Bean
-    @ConditionalOnBean(IntentTreeRepositoryPort.class)
-    @ConditionalOnMissingBean(IntentTreeInboundPort.class)
-    public KernelIntentTreeService seahorseIntentTreeInboundPort(
-            IntentTreeRepositoryPort intentTreeRepositoryPort,
-            ObjectProvider<KeyValueCachePort> cachePort) {
-        return new KernelIntentTreeService(intentTreeRepositoryPort,
-                cachePort.getIfAvailable(SeahorseAgentKernelAutoConfiguration::noopCachePort));
-    }
-
-    @Bean
-    @ConditionalOnBean(QueryTermMappingRepositoryPort.class)
-    @ConditionalOnMissingBean(QueryTermMappingInboundPort.class)
-    public KernelQueryTermMappingService seahorseQueryTermMappingInboundPort(
-            QueryTermMappingRepositoryPort mappingRepositoryPort,
-            ObjectProvider<KeyValueCachePort> cachePort) {
-        return new KernelQueryTermMappingService(mappingRepositoryPort,
-                cachePort.getIfAvailable(SeahorseAgentKernelAutoConfiguration::noopCachePort));
-    }
-
-    @Bean
     @ConditionalOnBean({KnowledgeBaseRepositoryPort.class, VectorCollectionAdminPort.class, ObjectStoragePort.class})
     @ConditionalOnMissingBean(KnowledgeBaseInboundPort.class)
     public KernelKnowledgeBaseService seahorseKnowledgeBaseInboundPort(
@@ -1113,24 +1036,6 @@ public class SeahorseAgentKernelAutoConfiguration {
         return subscriptionPort.subscribe(chunkTopic, "seahorse-knowledge-document-chunk",
                 com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentChunkEvent.class,
                 chunkHandler::handle);
-    }
-
-    private static KeyValueCachePort noopCachePort() {
-        return new KeyValueCachePort() {
-            @Override
-            public java.util.Optional<String> get(String key) {
-                return java.util.Optional.empty();
-            }
-
-            @Override
-            public void set(String key, String value, java.time.Duration ttl) {
-            }
-
-            @Override
-            public boolean delete(String key) {
-                return false;
-            }
-        };
     }
 
     private static Executor threadPoolExecutor(int coreSize,
