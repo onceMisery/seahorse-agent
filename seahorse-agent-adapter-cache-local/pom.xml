@@ -13,7 +13,7 @@
     <packaging>jar</packaging>
 
     <name>seahorse-agent-adapter-cache-local</name>
-    <description>Local in-memory cache and coordination adapter for Seahorse agent.</description>
+    <description>Seahorse Agent 本地内存缓存与单 JVM 协调适配器。</description>
 
     <dependencies>
         <dependency>

@@ -82,7 +82,7 @@ P2 是清理、命名、低风险维护性优化或前端体验增强。
 1. wrapper 占位实现清理或标注。
 2. Gson 统一 Jackson。
 3. `ObjectStoragePort.reliableUpload` 语义收敛（已完成）。
-4. `adapter-cache-local` 命名说明或重命名。
+4. `adapter-cache-local` 命名说明或重命名（已补充说明，暂不重命名）。
 5. `chatStore.ts` 拆分。
 6. 元数据治理 UI。
 
@@ -659,9 +659,11 @@ rg -n "AuditPortWrapper|CircuitBreakerPortWrapper|RateLimitPortWrapper|RetryPort
 
 ### 12.3 `adapter-cache-local` 命名
 
-短期方案：补充 README 或模块说明，明确它提供本地 `DistributedSemaphorePort`。
+当前状态：已补充模块 README 和 POM 描述，明确该模块是“本地内存缓存 + 单 JVM 协调”适配器，不只是缓存适配器。
 
-长期方案：重命名为 `seahorse-agent-adapter-coordination-local`，并提供迁移说明。
+短期结论：不直接重命名 artifact。`seahorse-agent-adapter-cache-local` 已被 starter 和文档引用，直接改名会破坏 Maven 坐标、自动配置依赖和用户侧显式依赖。
+
+长期方案：如后续确实需要职责拆分，可新增 `seahorse-agent-adapter-coordination-local`，先迁移 `DistributedLockPort`、`DistributedSemaphorePort`、`RateLimiterPort`、`PubSubPort` 等协调类能力，并提供兼容迁移期；当前 artifact 保留 `KeyValueCachePort` 或作为兼容聚合包。
 
 ### 12.4 `chatStore.ts` 拆分
 
