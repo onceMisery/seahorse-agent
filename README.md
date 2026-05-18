@@ -375,10 +375,24 @@ npm run dev
 
 如需指定后端地址，可配置 `VITE_API_BASE_URL`。
 
+## 未来规划
+
+以下内容来自近期架构收敛后的剩余事项，只记录仍需要继续推进的产品化和治理方向：
+
+| 方向 | 规划内容 |
+|------|----------|
+| Starter 依赖治理 | 继续推进 `seahorse-agent-spring-boot-starter-core` 作为轻量入口，`seahorse-agent-spring-boot-starter-all` 作为官方全量适配器聚合入口；后续将 bootstrap 迁移到 core starter + 显式适配器依赖，并逐步 optional 化旧聚合 starter 的重型 SDK。 |
+| 元数据治理 JDBC 拆分 | `JdbcMetadataGovernanceRepositoryAdapter` 已显著瘦身，但仍作为 14 个 metadata 端口的兼容门面。后续应先输出 schema、dictionary、extraction、review、quarantine、backfill、canonical write、quality report 的事务边界清单，再按子域拆成独立端口 Bean。 |
+| 端口准入规则 | 端口文件数不再作为机械合并依据。后续新增端口需说明外部能力边界、独立替换需求、事务生命周期或插件治理理由；不满足时优先使用领域服务、DTO、query object 或现有端口方法。 |
+| 记忆质量治理 | 四层记忆架构保留。后续重点补齐 token budget、复杂衰减分更新、高价值短期记忆晋升、冲突检测和语义记忆向量检索闭环。 |
+| 检索与重排增强 | 检索通道、后处理链和 Lucene 适配器已具备可插拔基础。后续可继续增强 OpenSearch/Elasticsearch 生产检索、RRF 权重策略、业务指标和检索评测闭环。 |
+| 大类治理制度化 | 对超过 500 行且包含多个变更原因的类建立拆分触发器；超过 800 行且跨 3 个以上职责时列为 P1 候选，拆分时保持外部端口、Bean 名称和配置契约兼容。 |
+
 ## 参考文档
 
 - `docs/zh/content/项目概述.md`
 - `docs/zh/content/架构设计/端口适配器模式.md`
+- `docs/zh/content/架构设计/架构设计.md`
 - `docs/zh/content/后端系统/核心内核/核心内核.md`
 - `docs/zh/content/后端系统/适配器模块/适配器模块.md`
 - `docs/zh/content/前端系统/前端系统.md`
