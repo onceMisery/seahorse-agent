@@ -853,7 +853,7 @@ npm run build
 | 出站端口 | `ports/outbound` 当前约 231 个 Java 文件，其中约 103 个接口；`metadata` 包约 58 个文件、18 个接口 | P2，数量高但包含大量 DTO，不能按总文件数判定 |
 | JDBC 适配器 | JDBC 主代码约 35 个 Java 文件、30 个 `*Adapter.java`；其中 `JdbcMetadataGovernanceRepositoryAdapter.java` 已抽离 `JdbcMetadataJsonSupport`、`JdbcMetadataSchemaUsageSupport`、`JdbcMetadataSchemaUsageReportSupport`、`JdbcMetadataQualityReportSupport`、`JdbcMetadataColumnDetector`、`JdbcMetadataReviewSupport`、`JdbcMetadataQuarantineSupport`、`JdbcMetadataBackfillSupport` 八个协作者，主类降至约 2216 行，但仍实现 14 个 metadata 端口 | P1，元数据治理 JDBC owner 仍偏重，但已进入可渐进拆分状态 |
 | 检索编排 | `KernelMultiChannelRetrievalEngine.java` 已降至约 176 行；上下文构建与 metadata filter 编译已下沉到 `KernelSearchContextFactory`，通道发现、并发执行、timeout 降级与通道 trace 已下沉到 `KernelSearchChannelExecutor`，后处理链已下沉到 `KernelRetrievalPostProcessorChain`，观测与 metadata usage 记录已下沉到 `KernelRetrievalObservationSupport`，主类只保留 L1 串联与空结果编排 | P1，检索编排职责收敛目标基本完成 |
-| 聊天主链路 | `KernelChatPipeline.java` 已降至约 206 行；system-only 响应、空检索兜底、RAG prompt 组装与流式返回已下沉到 `KernelChatResponseSupport`，主类保留阶段顺序、降级和 trace 编排 | P1，后续仍需继续抽出 memory/query/retrieval stage 协作者 |
+| 聊天主链路 | `KernelChatPipeline.java` 已降至约 98 行；历史加载、记忆激活、查询优化、改写、意图解析、引导短路和检索接线已下沉到 `KernelChatPreparationSupport`，system-only 响应、空检索兜底、RAG prompt 组装与流式返回已下沉到 `KernelChatResponseSupport`，主类只保留阶段顺序、短路判断和 trace 编排 | P1，聊天主链路阶段边界收敛目标基本完成 |
 | 记忆集成 | 主链路已 `activateMemory()` 读取；`MemoryCaptureStage` 已触发显式记忆写入；短期记忆维护端口已支持过期/低衰减清理；working memory 在主链路中为空，`PromptContext.hasMemory()` 未纳入 working memory | P1，四层记忆已形成最小闭环，预算和质量治理仍需增强 |
 
 ### 18.3 P0 问题
@@ -1015,7 +1015,7 @@ npm run build
 
 问题：
 
-`KernelChatPipeline` 本轮已降至约 206 行，并将 system-only 响应、空检索兜底、RAG prompt 组装和流式返回抽离到 `KernelChatResponseSupport`。但它仍承担主链路顺序、降级策略、trace 节点、记忆激活、查询优化、改写、意图解析和检索接线。记忆写入、工具调用策略、答案安全策略继续增强后，仍可能重新膨胀。
+`KernelChatPipeline` 已降至约 98 行，并将历史加载、记忆激活、查询优化、改写、意图解析、引导短路和检索接线抽离到 `KernelChatPreparationSupport`，将 system-only 响应、空检索兜底、RAG prompt 组装和流式返回抽离到 `KernelChatResponseSupport`。当前主类只保留固定阶段顺序、短路判断和 trace 编排。记忆写入、工具调用策略、答案安全策略继续增强时，应优先新增阶段协作者，而不是回填到主类。
 
 方案：
 
