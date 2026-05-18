@@ -38,7 +38,6 @@ import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,7 +45,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -59,7 +57,7 @@ import java.util.stream.Collectors;
  * L1 多通道检索编排器。
  * <p>
  * 该类只负责稳定编排：构建检索上下文、并行执行已激活通道、合并结果并按顺序执行后处理链。
- * 具体检索策略保留在 L2 Feature，外部向量库和知识库能力通过 L3 outbound port 提供。
+ * 通道实现、过滤编译、观测记录分别委托给 feature、compiler 与 support 协作者。
  */
 public class KernelMultiChannelRetrievalEngine {
 
@@ -81,8 +79,7 @@ public class KernelMultiChannelRetrievalEngine {
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final MetadataFilterCompiler metadataFilterCompiler;
     private final KernelRagTraceRecorder traceRecorder;
-    private final ObservationPort observationPort;
-    private final MetadataSchemaUsageReportRepositoryPort schemaUsageRepositoryPort;
+    private final KernelRetrievalObservationSupport observationSupport;
 
     public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
                                              Executor retrievalExecutor,
@@ -136,9 +133,17 @@ public class KernelMultiChannelRetrievalEngine {
         this.metadataFilterCompiler = Objects.requireNonNullElseGet(metadataFilterCompiler,
                 DefaultMetadataFilterCompiler::new);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
-        this.observationPort = observationPort;
-        this.schemaUsageRepositoryPort = Objects.requireNonNullElseGet(schemaUsageRepositoryPort,
-                MetadataSchemaUsageReportRepositoryPort::empty);
+        // 将观测与 usage 记录下沉到独立协作者，避免主类继续承担统计职责。
+        this.observationSupport = new KernelRetrievalObservationSupport(
+                this.activationContext,
+                observationPort,
+                schemaUsageRepositoryPort,
+                EVENT_METADATA_FILTER_COMPILED,
+                EVENT_METADATA_FILTER_REJECTED,
+                EVENT_CHANNEL_COMPLETED,
+                EVENT_METADATA_GUARD,
+                EVENT_RETRIEVAL_EMPTY,
+                PROCESSOR_METADATA_GUARD);
     }
 
     /**
@@ -160,8 +165,6 @@ public class KernelMultiChannelRetrievalEngine {
 
     /**
      * 执行带治理过滤条件的知识库多通道检索。
-     * <p>
-     * 动态 metadata 过滤会先按 Schema 编译成后端无关 AST，再传递给检索通道和兜底后处理器。
      *
      * @param subIntents 子问题意图列表
      * @param topK       期望返回数量
@@ -184,13 +187,13 @@ public class KernelMultiChannelRetrievalEngine {
         SearchContext context = buildSearchContext(subIntents, topK, filter, options, traceRunScope);
         List<SearchChannelResult> channelResults = executeSearchChannels(context);
         if (channelResults.isEmpty()) {
-            recordRetrievalEmpty(context, "channel", "no_enabled_channels", 0, 0);
+            observationSupport.recordRetrievalEmpty(context, "channel", "no_enabled_channels", 0, 0);
             return List.of();
         }
         List<RetrievedChunk> chunks = executePostProcessors(channelResults, context);
         if (chunks.isEmpty()) {
             int candidateCount = channelCandidateCount(channelResults);
-            recordRetrievalEmpty(context,
+            observationSupport.recordRetrievalEmpty(context,
                     candidateCount == 0 ? "channel" : "post_processor",
                     candidateCount == 0 ? "channels_returned_empty" : "post_processor_filtered_all",
                     channelResults.size(),
@@ -225,7 +228,7 @@ public class KernelMultiChannelRetrievalEngine {
         TraceNodeScope nodeScope = traceRecorder.startNode(traceRunScope(context), channelTraceCommand(channel));
         long startedAt = System.currentTimeMillis();
         long timeoutMs = channelTimeout(context, channel).toMillis();
-        // 单个检索通道超时只降级当前通道，避免慢后端阻塞整个多通道检索。
+        // 单通道超时只影响当前通道，避免慢后端拖垮整个检索流程。
         return CompletableFuture.supplyAsync(() -> channel.search(context), retrievalExecutor)
                 .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
                 .handle((result, throwable) -> completeSingleChannel(
@@ -243,13 +246,13 @@ public class KernelMultiChannelRetrievalEngine {
         Throwable cause = unwrap(throwable);
         if (cause == null) {
             SearchChannelResult safeResult = result == null ? emptyResult(channel, elapsedMs) : result;
-            recordChannelCompleted(channel, context, safeResult, null, elapsedMs, timeoutMs, false);
+            observationSupport.recordChannelCompleted(channel, context, safeResult, null, elapsedMs, timeoutMs, false);
             traceRecorder.finishNode(nodeScope);
             return safeResult;
         }
         SearchChannelResult fallback = emptyResult(channel, elapsedMs);
         boolean timedOut = cause instanceof TimeoutException;
-        recordChannelCompleted(channel, context, fallback, cause, elapsedMs, timeoutMs, timedOut);
+        observationSupport.recordChannelCompleted(channel, context, fallback, cause, elapsedMs, timeoutMs, timedOut);
         traceRecorder.finishNode(nodeScope, cause);
         if (timedOut) {
             LOG.warn(LOG_MSG_CHANNEL_TIMEOUT, channel.name(), cause);
@@ -293,46 +296,6 @@ public class KernelMultiChannelRetrievalEngine {
                 .build();
     }
 
-    private void recordChannelCompleted(SearchChannelFeature channel,
-                                        SearchContext context,
-                                        SearchChannelResult result,
-                                        Exception ex,
-                                        long elapsedMs) {
-        recordChannelCompleted(channel, context, result, ex, elapsedMs, 0, false);
-    }
-
-    private void recordChannelCompleted(SearchChannelFeature channel,
-                                        SearchContext context,
-                                        SearchChannelResult result,
-                                        Throwable ex,
-                                        long elapsedMs,
-                                        long timeoutMs,
-                                        boolean timedOut) {
-        if (observationPort == null) {
-            return;
-        }
-        try {
-            Map<String, String> attributes = new java.util.LinkedHashMap<>();
-            attributes.put("tenantId", tenantId(context));
-            attributes.put("knowledgeBaseId", knowledgeBaseId(context));
-            attributes.put("channelName", Objects.requireNonNullElse(channel.name(), ""));
-            attributes.put("channelType", channel.channelType() == null ? "" : channel.channelType().name());
-            attributes.put("status", timedOut ? "timeout" : (ex == null ? "success" : "failure"));
-            attributes.put("success", Boolean.toString(ex == null));
-            attributes.put("hitCount", Integer.toString(safeChunks(result).size()));
-            attributes.put("elapsedMs", Long.toString(elapsedMs));
-            attributes.put("timeoutMs", Long.toString(timeoutMs));
-            attributes.put("timedOut", Boolean.toString(timedOut));
-            if (ex != null) {
-                attributes.put("exception", ex.getClass().getSimpleName());
-            }
-            // 通道失败会按空结果降级；观测事件保留失败证据，便于识别 ES/关键词通道不可用。
-            observationPort.recordEvent(new ObservationEvent(EVENT_CHANNEL_COMPLETED, null, attributes));
-        } catch (RuntimeException ignored) {
-            // 观测失败不能影响检索通道降级和后处理链。
-        }
-    }
-
     private List<RetrievedChunk> executePostProcessors(List<SearchChannelResult> results, SearchContext context) {
         List<SearchResultPostProcessorFeature> processors = extensionRegistry
                 .getActivatedExtensions(SearchResultPostProcessorFeature.class, activationContext)
@@ -349,20 +312,20 @@ public class KernelMultiChannelRetrievalEngine {
     }
 
     private List<RetrievedChunk> executeSingleProcessor(SearchResultPostProcessorFeature processor,
-                                                       List<RetrievedChunk> chunks,
-                                                       List<SearchChannelResult> results,
-                                                       SearchContext context) {
+                                                        List<RetrievedChunk> chunks,
+                                                        List<SearchChannelResult> results,
+                                                        SearchContext context) {
         TraceNodeScope nodeScope = traceRecorder.startNode(traceRunScope(context), processorTraceCommand(processor));
         long startedAt = System.currentTimeMillis();
         int inputCount = chunkCount(chunks);
         try {
             List<RetrievedChunk> processed = processor.process(chunks, results, context);
-            recordMetadataGuardCompleted(processor, context, inputCount, chunkCount(processed),
+            observationSupport.recordMetadataGuardCompleted(processor, context, inputCount, chunkCount(processed),
                     System.currentTimeMillis() - startedAt, null);
             traceRecorder.finishNode(nodeScope);
             return processed;
         } catch (Exception ex) {
-            recordMetadataGuardCompleted(processor, context, inputCount, inputCount,
+            observationSupport.recordMetadataGuardCompleted(processor, context, inputCount, inputCount,
                     System.currentTimeMillis() - startedAt, ex);
             traceRecorder.finishNode(nodeScope, ex);
             LOG.error(LOG_MSG_PROCESSOR_FAILED, processor.name(), ex);
@@ -412,29 +375,13 @@ public class KernelMultiChannelRetrievalEngine {
                 .build();
     }
 
-    private String tenantId(SearchContext context) {
-        RetrievalFilter filter = context == null ? null : context.getFilter();
-        if (filter != null && filter.system() != null && !filter.system().tenantId().isBlank()) {
-            return filter.system().tenantId();
-        }
-        return Objects.requireNonNullElse(activationContext.tenantId(), "");
-    }
-
-    private String knowledgeBaseId(SearchContext context) {
-        RetrievalFilter filter = context == null ? null : context.getFilter();
-        if (filter == null || filter.system() == null || filter.system().knowledgeBaseIds().isEmpty()) {
-            return "";
-        }
-        return Objects.requireNonNullElse(filter.system().knowledgeBaseIds().get(0), "");
-    }
-
     private TraceRunScope traceRunScope(SearchContext context) {
         TraceRunScope traceRunScope = context == null ? null : context.getTraceRunScope();
         return traceRunScope == null ? TraceRunScope.disabled() : traceRunScope;
     }
 
     private TraceNodeStartCommand channelTraceCommand(SearchChannelFeature channel) {
-        // 检索 Trace 只记录编排节点，不改变通道失败时返回空结果的降级语义。
+        // Trace 只记录编排节点，不改变通道失败时返回空结果的降级语义。
         return new TraceNodeStartCommand(
                 "search-channel:" + Objects.requireNonNullElse(channel.name(), "unknown"),
                 "RETRIEVAL_CHANNEL",
@@ -464,163 +411,13 @@ public class KernelMultiChannelRetrievalEngine {
         String tenantId = !filter.system().tenantId().isBlank() ? filter.system().tenantId() : activationContext.tenantId();
         MetadataSchema schema = schemaRegistryPort.loadSchema(tenantId, knowledgeBaseId);
         try {
-            // 只有通过 Schema 编译后的表达式才能进入向量库或关键词后端，避免原始 Map 直通外部查询。
+            // 只有通过 schema 编译后的过滤条件才能下发到检索通道与后处理器。
             CompiledMetadataFilter compiledFilter = metadataFilterCompiler.compile(filter, schema);
-            recordMetadataFilterUsage(tenantId, knowledgeBaseId, schema, compiledFilter);
+            observationSupport.recordMetadataFilterUsage(tenantId, knowledgeBaseId, schema, compiledFilter);
             return compiledFilter;
         } catch (RuntimeException ex) {
-            recordMetadataFilterRejected(tenantId, knowledgeBaseId, schema, filter, ex);
+            observationSupport.recordMetadataFilterRejected(tenantId, knowledgeBaseId, schema, filter, ex);
             throw ex;
-        }
-    }
-
-    private void recordMetadataFilterRejected(String tenantId,
-                                              String knowledgeBaseId,
-                                              MetadataSchema schema,
-                                              RetrievalFilter filter,
-                                              RuntimeException ex) {
-        if (filter == null || filter.metadataConditions().isEmpty()) {
-            return;
-        }
-        try {
-            List<String> fieldKeys = filter.metadataConditions().stream()
-                    .map(condition -> Objects.requireNonNullElse(condition.fieldKey(), ""))
-                    .filter(fieldKey -> !fieldKey.isBlank())
-                    .distinct()
-                    .toList();
-            schemaUsageRepositoryPort.recordRejected(
-                    tenantId,
-                    knowledgeBaseId,
-                    schema == null ? null : schema.schemaVersion(),
-                    fieldKeys,
-                    metadataFilterRejectReason(ex));
-            if (observationPort == null) {
-                return;
-            }
-            Map<String, String> attributes = new java.util.LinkedHashMap<>();
-            attributes.put("tenantId", Objects.requireNonNullElse(tenantId, ""));
-            attributes.put("knowledgeBaseId", Objects.requireNonNullElse(knowledgeBaseId, ""));
-            attributes.put("schemaVersion", Integer.toString(schema == null ? 0 : schema.schemaVersion()));
-            attributes.put("fieldCount", Integer.toString(fieldKeys.size()));
-            attributes.put("success", "false");
-            attributes.put("reason", metadataFilterRejectReason(ex));
-            attributes.put("exception", ex.getClass().getSimpleName());
-            // 具体字段清单写入专用 usage 日志，这里只保留数量摘要，避免 tag 基数膨胀。
-            observationPort.recordEvent(new ObservationEvent(EVENT_METADATA_FILTER_REJECTED, null, attributes));
-        } catch (RuntimeException ignored) {
-            // 观测失败不能改变 Filter Compiler 的拒绝语义。
-        }
-    }
-
-    private String metadataFilterRejectReason(RuntimeException ex) {
-        String message = Objects.requireNonNullElse(ex.getMessage(), "");
-        if (message.contains("not registered")) {
-            return "UNREGISTERED_FIELD";
-        }
-        if (message.contains("not filterable")) {
-            return "NOT_FILTERABLE";
-        }
-        if (message.contains("not allowed")) {
-            return "OPERATOR_NOT_ALLOWED";
-        }
-        if (message.contains("exceeds limit")) {
-            return "CONDITION_LIMIT_EXCEEDED";
-        }
-        return "INVALID_FILTER";
-    }
-
-    private void recordMetadataFilterUsage(String tenantId,
-                                           String knowledgeBaseId,
-                                           MetadataSchema schema,
-                                           CompiledMetadataFilter compiledFilter) {
-        if (compiledFilter == null || compiledFilter.sourceFilter().metadataConditions().isEmpty()) {
-            return;
-        }
-        try {
-            List<String> fieldKeys = compiledFilter.sourceFilter().metadataConditions().stream()
-                    .map(condition -> Objects.requireNonNullElse(condition.fieldKey(), ""))
-                    .filter(fieldKey -> !fieldKey.isBlank())
-                    .distinct()
-                    .toList();
-            List<String> guardOnlyFieldKeys = compiledFilter.guardOnlyConditions().stream()
-                    .map(condition -> Objects.requireNonNullElse(condition.fieldKey(), ""))
-                    .filter(fieldKey -> !fieldKey.isBlank())
-                    .distinct()
-                    .toList();
-            schemaUsageRepositoryPort.recordCompiled(
-                    tenantId,
-                    knowledgeBaseId,
-                    schema == null ? null : schema.schemaVersion(),
-                    fieldKeys,
-                    guardOnlyFieldKeys);
-            if (observationPort == null) {
-                return;
-            }
-            // 具体字段清单已落专用 usage 日志；观测事件只保留低基数摘要。
-            observationPort.recordEvent(new ObservationEvent(EVENT_METADATA_FILTER_COMPILED, null, Map.of(
-                    "tenantId", Objects.requireNonNullElse(tenantId, ""),
-                    "knowledgeBaseId", Objects.requireNonNullElse(knowledgeBaseId, ""),
-                    "schemaVersion", Integer.toString(schema == null ? 0 : schema.schemaVersion()),
-                    "fieldCount", Integer.toString(fieldKeys.size()),
-                    "guardOnlyCount", Integer.toString(guardOnlyFieldKeys.size()),
-                    "warningCount", Integer.toString(compiledFilter.warnings().size()))));
-        } catch (RuntimeException ignored) {
-            // 观测失败不能影响检索主链路，也不能绕过已编译的 Schema/Filter Compiler 结果。
-        }
-    }
-
-    private void recordMetadataGuardCompleted(SearchResultPostProcessorFeature processor,
-                                              SearchContext context,
-                                              int inputCount,
-                                              int outputCount,
-                                              long elapsedMs,
-                                              Exception ex) {
-        if (observationPort == null
-                || !PROCESSOR_METADATA_GUARD.equals(Objects.requireNonNullElse(processor.name(), ""))) {
-            return;
-        }
-        try {
-            int filteredCount = Math.max(inputCount - outputCount, 0);
-            Map<String, String> attributes = new java.util.LinkedHashMap<>();
-            attributes.put("tenantId", tenantId(context));
-            attributes.put("knowledgeBaseId", knowledgeBaseId(context));
-            attributes.put("inputCount", Integer.toString(inputCount));
-            attributes.put("outputCount", Integer.toString(outputCount));
-            attributes.put("filteredCount", Integer.toString(filteredCount));
-            attributes.put("reason", filteredCount > 0 ? "metadata_or_acl_filtered" : "none");
-            attributes.put("success", Boolean.toString(ex == null));
-            if (ex != null) {
-                attributes.put("exception", ex.getClass().getSimpleName());
-            }
-            // 该事件只记录兜底过滤效果，不能改变后处理器异常时的原有降级行为。
-            observationPort.recordEvent(new ObservationEvent(EVENT_METADATA_GUARD, null, attributes));
-        } catch (RuntimeException ignored) {
-            // 观测失败不能影响权限和动态 metadata 的兜底过滤链路。
-        }
-    }
-
-    private void recordRetrievalEmpty(SearchContext context,
-                                      String stage,
-                                      String reason,
-                                      int channelCount,
-                                      int candidateCount) {
-        if (observationPort == null) {
-            return;
-        }
-        try {
-            Map<String, String> attributes = new java.util.LinkedHashMap<>();
-            attributes.put("tenantId", tenantId(context));
-            attributes.put("knowledgeBaseId", knowledgeBaseId(context));
-            attributes.put("stage", Objects.requireNonNullElse(stage, ""));
-            attributes.put("reason", Objects.requireNonNullElse(reason, ""));
-            attributes.put("channelCount", Integer.toString(channelCount));
-            attributes.put("candidateCount", Integer.toString(candidateCount));
-            attributes.put("topK", Integer.toString(context == null ? 0 : context.getTopK()));
-            attributes.put("filterApplied", Boolean.toString(context != null && context.getFilter() != null));
-            // 空召回事件只提供质量诊断证据，不触发任何检索重试或兜底改写。
-            observationPort.recordEvent(new ObservationEvent(EVENT_RETRIEVAL_EMPTY, null, attributes));
-        } catch (RuntimeException ignored) {
-            // 观测失败不能改变空结果返回语义。
         }
     }
 }

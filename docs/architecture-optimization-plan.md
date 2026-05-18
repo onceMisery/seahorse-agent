@@ -852,7 +852,7 @@ npm run build
 | starter 依赖 | `seahorse-agent-spring-boot-starter` 直接依赖 web、MQ、AI、MCP、Tika、Feishu、Milvus、PgVector、Redis、S3、ES、Lucene、JDBC 等适配器 | P1，最小部署和新增适配器成本偏高 |
 | 出站端口 | `ports/outbound` 当前约 231 个 Java 文件，其中约 103 个接口；`metadata` 包约 58 个文件、18 个接口 | P2，数量高但包含大量 DTO，不能按总文件数判定 |
 | JDBC 适配器 | JDBC 主代码约 35 个 Java 文件、30 个 `*Adapter.java`；其中 `JdbcMetadataGovernanceRepositoryAdapter.java` 已抽离 `JdbcMetadataJsonSupport`、`JdbcMetadataSchemaUsageSupport`、`JdbcMetadataSchemaUsageReportSupport`、`JdbcMetadataQualityReportSupport`、`JdbcMetadataColumnDetector`、`JdbcMetadataReviewSupport`、`JdbcMetadataQuarantineSupport`、`JdbcMetadataBackfillSupport` 八个协作者，主类降至约 2216 行，但仍实现 14 个 metadata 端口 | P1，元数据治理 JDBC owner 仍偏重，但已进入可渐进拆分状态 |
-| 检索编排 | `KernelMultiChannelRetrievalEngine.java` 约 557 行，负责通道发现、并发执行、metadata filter、后处理、trace、observation、空结果事件 | P1，后续扩展检索策略会继续堆叠职责 |
+| 检索编排 | `KernelMultiChannelRetrievalEngine.java` 已降至约 373 行，观测与 metadata usage 记录已下沉到 `KernelRetrievalObservationSupport`，主类保留通道发现、并发执行、metadata filter 编译、后处理与降级编排 | P1，后续仍需继续抽离 channel executor、post-processor chain 与 context factory |
 | 聊天主链路 | `KernelChatPipeline.java` 约 352 行，串联会话历史、记忆激活、查询优化、改写、意图、检索、响应、降级和 trace | P1，记忆写入和更多 guardrail 加入后会变成主链路瓶颈 |
 | 记忆集成 | 主链路已 `activateMemory()` 读取；`MemoryCaptureStage` 已触发显式记忆写入；短期记忆维护端口已支持过期/低衰减清理；working memory 在主链路中为空，`PromptContext.hasMemory()` 未纳入 working memory | P1，四层记忆已形成最小闭环，预算和质量治理仍需增强 |
 
@@ -993,7 +993,7 @@ npm run build
 
 问题：
 
-`KernelMultiChannelRetrievalEngine` 已经通过 `SearchChannelFeature` 和 `SearchResultPostProcessorFeature` 保留了良好的扩展点，但类本身同时负责通道发现、并发执行、metadata filter 编译、usage report、trace、observation、空结果事件、后处理链和异常降级。后续再加入通道超时、熔断、按租户策略、AB 实验和更多观测时，会继续膨胀。
+`KernelMultiChannelRetrievalEngine` 已经通过 `SearchChannelFeature` 和 `SearchResultPostProcessorFeature` 保留了良好的扩展点。本轮已先把 observation、空结果事件和 metadata usage 记录抽离到 `KernelRetrievalObservationSupport`，主类降至约 373 行；但它仍同时负责通道发现、并发执行、metadata filter 编译、后处理链和异常降级。后续再加入通道熔断、按租户策略、AB 实验和更复杂的上下文构建时，仍会继续膨胀。
 
 方案：
 
