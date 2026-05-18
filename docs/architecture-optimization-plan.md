@@ -852,7 +852,7 @@ npm run build
 | starter 依赖 | `seahorse-agent-spring-boot-starter` 直接依赖 web、MQ、AI、MCP、Tika、Feishu、Milvus、PgVector、Redis、S3、ES、Lucene、JDBC 等适配器 | P1，最小部署和新增适配器成本偏高 |
 | 出站端口 | `ports/outbound` 当前约 231 个 Java 文件，其中约 103 个接口；`metadata` 包约 58 个文件、18 个接口 | P2，数量高但包含大量 DTO，不能按总文件数判定 |
 | JDBC 适配器 | JDBC 主代码约 35 个 Java 文件、30 个 `*Adapter.java`；其中 `JdbcMetadataGovernanceRepositoryAdapter.java` 已抽离 `JdbcMetadataJsonSupport`、`JdbcMetadataSchemaUsageSupport`、`JdbcMetadataSchemaUsageReportSupport`、`JdbcMetadataQualityReportSupport`、`JdbcMetadataColumnDetector`、`JdbcMetadataReviewSupport`、`JdbcMetadataQuarantineSupport`、`JdbcMetadataBackfillSupport` 八个协作者，主类降至约 2216 行，但仍实现 14 个 metadata 端口 | P1，元数据治理 JDBC owner 仍偏重，但已进入可渐进拆分状态 |
-| 检索编排 | `KernelMultiChannelRetrievalEngine.java` 已降至约 373 行，观测与 metadata usage 记录已下沉到 `KernelRetrievalObservationSupport`，主类保留通道发现、并发执行、metadata filter 编译、后处理与降级编排 | P1，后续仍需继续抽离 channel executor、post-processor chain 与 context factory |
+| 检索编排 | `KernelMultiChannelRetrievalEngine.java` 已降至约 280 行；通道发现、并发执行、timeout 降级与通道 trace 已下沉到 `KernelSearchChannelExecutor`，观测与 metadata usage 记录已下沉到 `KernelRetrievalObservationSupport`，主类保留上下文构建、metadata filter 编译、后处理与空结果编排 | P1，后续仍需继续抽离 post-processor chain 与 context factory |
 | 聊天主链路 | `KernelChatPipeline.java` 已降至约 206 行；system-only 响应、空检索兜底、RAG prompt 组装与流式返回已下沉到 `KernelChatResponseSupport`，主类保留阶段顺序、降级和 trace 编排 | P1，后续仍需继续抽出 memory/query/retrieval stage 协作者 |
 | 记忆集成 | 主链路已 `activateMemory()` 读取；`MemoryCaptureStage` 已触发显式记忆写入；短期记忆维护端口已支持过期/低衰减清理；working memory 在主链路中为空，`PromptContext.hasMemory()` 未纳入 working memory | P1，四层记忆已形成最小闭环，预算和质量治理仍需增强 |
 
@@ -993,13 +993,13 @@ npm run build
 
 问题：
 
-`KernelMultiChannelRetrievalEngine` 已经通过 `SearchChannelFeature` 和 `SearchResultPostProcessorFeature` 保留了良好的扩展点。本轮已先把 observation、空结果事件和 metadata usage 记录抽离到 `KernelRetrievalObservationSupport`，主类降至约 373 行；但它仍同时负责通道发现、并发执行、metadata filter 编译、后处理链和异常降级。后续再加入通道熔断、按租户策略、AB 实验和更复杂的上下文构建时，仍会继续膨胀。
+`KernelMultiChannelRetrievalEngine` 已经通过 `SearchChannelFeature` 和 `SearchResultPostProcessorFeature` 保留了良好的扩展点。本轮已把 observation、空结果事件和 metadata usage 记录抽离到 `KernelRetrievalObservationSupport`，并进一步把通道发现、并发执行、timeout 降级和通道 trace 抽离到 `KernelSearchChannelExecutor`，主类降至约 280 行；但它仍同时负责 metadata filter 编译、后处理链和上下文构建。后续再加入通道熔断、按租户策略、AB 实验和更复杂的上下文构建时，仍需要继续拆分。
 
 方案：
 
 1. 阶段 1 先补通道级 timeout 和默认线程池，不改变主流程。
 2. 后续拆出内部协作者：
-   - `SearchChannelExecutor`：并发、timeout、异常降级。
+   - `KernelSearchChannelExecutor`：并发、timeout、异常降级。（已完成）
    - `RetrievalPostProcessorChain`：后处理排序、执行、失败跳过。
    - `RetrievalTelemetryReporter`：trace、observation、empty result、metadata usage。
    - `SearchContextFactory`：filter/schema/options/trace 上下文构建。

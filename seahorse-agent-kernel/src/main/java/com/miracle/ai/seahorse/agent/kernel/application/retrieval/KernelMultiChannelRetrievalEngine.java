@@ -24,7 +24,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
-import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelType;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
@@ -32,7 +31,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.DefaultMetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataFilterCompiler;
-import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchChannelFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.SearchResultPostProcessorFeature;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
@@ -46,18 +44,14 @@ import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
  * L1 多通道检索编排器。
  * <p>
- * 该类只负责稳定编排：构建检索上下文、并行执行已激活通道、合并结果并按顺序执行后处理链。
- * 通道实现、过滤编译、观测记录分别委托给 feature、compiler 与 support 协作者。
+ * 主类负责构建检索上下文、编译 metadata filter、串联通道执行与后处理链。
+ * 通道并发、通道降级和观测记录分别由包内协作者承担。
  */
 public class KernelMultiChannelRetrievalEngine {
 
@@ -68,18 +62,16 @@ public class KernelMultiChannelRetrievalEngine {
     private static final String EVENT_METADATA_GUARD = "retrieval.metadata.guard";
     private static final String EVENT_RETRIEVAL_EMPTY = "retrieval.empty";
     private static final String PROCESSOR_METADATA_GUARD = "MetadataGuard";
-    private static final String LOG_MSG_CHANNEL_FAILED = "检索通道 {} 执行失败，按空结果降级";
-    private static final String LOG_MSG_CHANNEL_TIMEOUT = "检索通道 {} 执行超时，按空结果降级";
     private static final String LOG_MSG_PROCESSOR_FAILED = "检索后处理器 {} 执行失败，跳过该处理器";
     private static final Duration DEFAULT_CHANNEL_TIMEOUT = Duration.ofSeconds(5);
 
     private final ExtensionRegistry extensionRegistry;
-    private final Executor retrievalExecutor;
     private final FeatureActivationContext activationContext;
     private final MetadataSchemaRegistryPort schemaRegistryPort;
     private final MetadataFilterCompiler metadataFilterCompiler;
     private final KernelRagTraceRecorder traceRecorder;
     private final KernelRetrievalObservationSupport observationSupport;
+    private final KernelSearchChannelExecutor channelExecutor;
 
     public KernelMultiChannelRetrievalEngine(ExtensionRegistry extensionRegistry,
                                              Executor retrievalExecutor,
@@ -127,13 +119,13 @@ public class KernelMultiChannelRetrievalEngine {
                                              ObservationPort observationPort,
                                              MetadataSchemaUsageReportRepositoryPort schemaUsageRepositoryPort) {
         this.extensionRegistry = Objects.requireNonNull(extensionRegistry, "extensionRegistry must not be null");
-        this.retrievalExecutor = Objects.requireNonNull(retrievalExecutor, "retrievalExecutor must not be null");
+        Executor safeRetrievalExecutor = Objects.requireNonNull(retrievalExecutor, "retrievalExecutor must not be null");
         this.activationContext = Objects.requireNonNullElse(activationContext, FeatureActivationContext.empty());
         this.schemaRegistryPort = Objects.requireNonNullElseGet(schemaRegistryPort, MetadataSchemaRegistryPort::empty);
         this.metadataFilterCompiler = Objects.requireNonNullElseGet(metadataFilterCompiler,
                 DefaultMetadataFilterCompiler::new);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
-        // 将观测与 usage 记录下沉到独立协作者，避免主类继续承担统计职责。
+        // 观测和 usage 记录集中到协作者，主类只决定何时记录。
         this.observationSupport = new KernelRetrievalObservationSupport(
                 this.activationContext,
                 observationPort,
@@ -144,6 +136,13 @@ public class KernelMultiChannelRetrievalEngine {
                 EVENT_METADATA_GUARD,
                 EVENT_RETRIEVAL_EMPTY,
                 PROCESSOR_METADATA_GUARD);
+        this.channelExecutor = new KernelSearchChannelExecutor(
+                this.extensionRegistry,
+                safeRetrievalExecutor,
+                this.activationContext,
+                this.traceRecorder,
+                this.observationSupport,
+                DEFAULT_CHANNEL_TIMEOUT);
     }
 
     /**
@@ -185,7 +184,7 @@ public class KernelMultiChannelRetrievalEngine {
                                                           RetrievalOptions options,
                                                           TraceRunScope traceRunScope) {
         SearchContext context = buildSearchContext(subIntents, topK, filter, options, traceRunScope);
-        List<SearchChannelResult> channelResults = executeSearchChannels(context);
+        List<SearchChannelResult> channelResults = channelExecutor.execute(context);
         if (channelResults.isEmpty()) {
             observationSupport.recordRetrievalEmpty(context, "channel", "no_enabled_channels", 0, 0);
             return List.of();
@@ -200,100 +199,6 @@ public class KernelMultiChannelRetrievalEngine {
                     candidateCount);
         }
         return chunks;
-    }
-
-    private List<SearchChannelResult> executeSearchChannels(SearchContext context) {
-        List<SearchChannelFeature> enabledChannels = extensionRegistry
-                .getActivatedExtensions(SearchChannelFeature.class, activationContext)
-                .stream()
-                .filter(channel -> channel.enabled(context))
-                .toList();
-
-        if (enabledChannels.isEmpty()) {
-            return List.of();
-        }
-
-        List<CompletableFuture<SearchChannelResult>> futures = enabledChannels.stream()
-                .map(channel -> executeSingleChannelWithTimeout(channel, context))
-                .toList();
-
-        return futures.stream()
-                .map(CompletableFuture::join)
-                .filter(Objects::nonNull)
-                .toList();
-    }
-
-    private CompletableFuture<SearchChannelResult> executeSingleChannelWithTimeout(SearchChannelFeature channel,
-                                                                                   SearchContext context) {
-        TraceNodeScope nodeScope = traceRecorder.startNode(traceRunScope(context), channelTraceCommand(channel));
-        long startedAt = System.currentTimeMillis();
-        long timeoutMs = channelTimeout(context, channel).toMillis();
-        // 单通道超时只影响当前通道，避免慢后端拖垮整个检索流程。
-        return CompletableFuture.supplyAsync(() -> channel.search(context), retrievalExecutor)
-                .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                .handle((result, throwable) -> completeSingleChannel(
-                        channel, context, nodeScope, startedAt, timeoutMs, result, throwable));
-    }
-
-    private SearchChannelResult completeSingleChannel(SearchChannelFeature channel,
-                                                      SearchContext context,
-                                                      TraceNodeScope nodeScope,
-                                                      long startedAt,
-                                                      long timeoutMs,
-                                                      SearchChannelResult result,
-                                                      Throwable throwable) {
-        long elapsedMs = System.currentTimeMillis() - startedAt;
-        Throwable cause = unwrap(throwable);
-        if (cause == null) {
-            SearchChannelResult safeResult = result == null ? emptyResult(channel, elapsedMs) : result;
-            observationSupport.recordChannelCompleted(channel, context, safeResult, null, elapsedMs, timeoutMs, false);
-            traceRecorder.finishNode(nodeScope);
-            return safeResult;
-        }
-        SearchChannelResult fallback = emptyResult(channel, elapsedMs);
-        boolean timedOut = cause instanceof TimeoutException;
-        observationSupport.recordChannelCompleted(channel, context, fallback, cause, elapsedMs, timeoutMs, timedOut);
-        traceRecorder.finishNode(nodeScope, cause);
-        if (timedOut) {
-            LOG.warn(LOG_MSG_CHANNEL_TIMEOUT, channel.name(), cause);
-        } else {
-            LOG.error(LOG_MSG_CHANNEL_FAILED, channel.name(), cause);
-        }
-        return fallback;
-    }
-
-    private Throwable unwrap(Throwable throwable) {
-        if (throwable instanceof CompletionException completionException && completionException.getCause() != null) {
-            return completionException.getCause();
-        }
-        return throwable;
-    }
-
-    private Duration channelTimeout(SearchContext context, SearchChannelFeature channel) {
-        RetrievalOptions options = context == null ? null : context.effectiveOptions();
-        SearchChannelType type = channel == null ? null : channel.channelType();
-        Duration configured = switch (type == null ? SearchChannelType.HYBRID : type) {
-            case VECTOR_GLOBAL, INTENT_DIRECTED -> options == null ? null : options.vectorTimeout();
-            case KEYWORD_BM25, KEYWORD_ES -> options == null ? null : options.keywordTimeout();
-            case HYBRID -> null;
-        };
-        return positiveDuration(configured, DEFAULT_CHANNEL_TIMEOUT);
-    }
-
-    private Duration positiveDuration(Duration value, Duration fallback) {
-        if (value == null || value.isZero() || value.isNegative()) {
-            return fallback;
-        }
-        return value;
-    }
-
-    private SearchChannelResult emptyResult(SearchChannelFeature channel, long latencyMs) {
-        return SearchChannelResult.builder()
-                .channelType(channel.channelType())
-                .channelName(channel.name())
-                .chunks(List.of())
-                .latencyMs(latencyMs)
-                .build();
     }
 
     private List<RetrievedChunk> executePostProcessors(List<SearchChannelResult> results, SearchContext context) {
@@ -378,17 +283,6 @@ public class KernelMultiChannelRetrievalEngine {
     private TraceRunScope traceRunScope(SearchContext context) {
         TraceRunScope traceRunScope = context == null ? null : context.getTraceRunScope();
         return traceRunScope == null ? TraceRunScope.disabled() : traceRunScope;
-    }
-
-    private TraceNodeStartCommand channelTraceCommand(SearchChannelFeature channel) {
-        // Trace 只记录编排节点，不改变通道失败时返回空结果的降级语义。
-        return new TraceNodeStartCommand(
-                "search-channel:" + Objects.requireNonNullElse(channel.name(), "unknown"),
-                "RETRIEVAL_CHANNEL",
-                channel.getClass().getName(),
-                "search",
-                null,
-                1);
     }
 
     private TraceNodeStartCommand processorTraceCommand(SearchResultPostProcessorFeature processor) {
