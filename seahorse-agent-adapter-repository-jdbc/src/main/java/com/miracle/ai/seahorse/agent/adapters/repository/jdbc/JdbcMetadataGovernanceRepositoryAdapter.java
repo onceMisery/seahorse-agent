@@ -552,222 +552,40 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public MetadataReviewRecord applyReviewDecision(MetadataReviewDecision decision) {
-        if (reviewSupport != null) {
-            JdbcMetadataReviewSupport.ReviewDecisionResult result = reviewSupport.applyReviewDecision(decision);
-            // 优先走 review 子域协作者，主适配器只保留跨子域的抽取结果终态同步。
-            if (MetadataReviewStatus.APPROVED.equals(result.reviewStatus())
-                    || MetadataReviewStatus.CORRECTED.equals(result.reviewStatus())) {
-                updateExtractionApproval(result.resultId(), result.approvedMetadata(), result.reviewerId());
-            } else if (MetadataReviewStatus.REJECTED.equals(result.reviewStatus())) {
-                updateExtractionStatus(result.resultId(), "REJECTED");
-            } else if (MetadataReviewStatus.QUARANTINED.equals(result.reviewStatus())) {
-                updateExtractionStatus(result.resultId(), "QUARANTINED");
-            } else if (MetadataReviewStatus.RE_EXTRACTING.equals(result.reviewStatus())) {
-                updateExtractionStatus(result.resultId(), "RE_EXTRACTING");
-            }
-            return reviewSupport.findReviewItem(result.itemId())
-                    .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + result.itemId()));
+        JdbcMetadataReviewSupport.ReviewDecisionResult result = reviewSupport.applyReviewDecision(decision);
+        // Review 决策由子域协作者负责，主适配器只同步抽取结果终态。
+        if (MetadataReviewStatus.APPROVED.equals(result.reviewStatus())
+                || MetadataReviewStatus.CORRECTED.equals(result.reviewStatus())) {
+            updateExtractionApproval(result.resultId(), result.approvedMetadata(), result.reviewerId());
+        } else if (MetadataReviewStatus.REJECTED.equals(result.reviewStatus())) {
+            updateExtractionStatus(result.resultId(), "REJECTED");
+        } else if (MetadataReviewStatus.QUARANTINED.equals(result.reviewStatus())) {
+            updateExtractionStatus(result.resultId(), "QUARANTINED");
+        } else if (MetadataReviewStatus.RE_EXTRACTING.equals(result.reviewStatus())) {
+            updateExtractionStatus(result.resultId(), "RE_EXTRACTING");
         }
-        MetadataReviewDecision safeDecision = Objects.requireNonNull(decision, "decision must not be null");
-        MetadataReviewRecord current = findReviewItem(safeDecision.itemId())
-                .orElseThrow(() -> new IllegalArgumentException("閸忓啯鏆熼幑顔碱槻閺嶆悂銆嶆稉宥呯摠閸? " + safeDecision.itemId()));
-        Map<String, Object> approvedMetadata = approvedMetadata(current, safeDecision);
-        String correctedJson = MetadataReviewStatus.CORRECTED.equals(safeDecision.reviewStatus())
-                ? json(approvedMetadata)
-                : null;
-        int updated = jdbcTemplate.update("""
-                UPDATE t_metadata_review_item
-                SET review_status = ?,
-                    corrected_metadata = ?,
-                    reviewer_id = ?,
-                    review_comment = ?,
-                    update_time = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """, safeDecision.reviewStatus().name(), correctedJson, safeDecision.reviewerId(),
-                safeDecision.reviewComment(), safeDecision.itemId());
-        if (updated <= 0) {
-            throw new IllegalArgumentException("閸忓啯鏆熼幑顔碱槻閺嶆悂銆嶆稉宥呯摠閸? " + safeDecision.itemId());
-        }
-        insertReviewAudit(current, safeDecision, decisionAuditMetadata(safeDecision, approvedMetadata));
-        // 婢跺秵鐗崇€瑰本鍨氶崥搴℃倱濮濄儲濞婇崣鏍波閺嬫粎绮撻幀渚婄礉闁灝鍘ょ粻锛勬倞缁旑垯绮涢幎濠傚嚒婢跺嫮鎮婇弫鐗堝祦鐟欏棔璐?REVIEW_REQUIRED閵?
-        if (MetadataReviewStatus.APPROVED.equals(safeDecision.reviewStatus())
-                || MetadataReviewStatus.CORRECTED.equals(safeDecision.reviewStatus())) {
-            updateExtractionApproval(current.resultId(), approvedMetadata, safeDecision.reviewerId());
-        } else if (MetadataReviewStatus.REJECTED.equals(safeDecision.reviewStatus())) {
-            updateExtractionStatus(current.resultId(), "REJECTED");
-        } else if (MetadataReviewStatus.QUARANTINED.equals(safeDecision.reviewStatus())) {
-            updateExtractionStatus(current.resultId(), "QUARANTINED");
-        } else if (MetadataReviewStatus.RE_EXTRACTING.equals(safeDecision.reviewStatus())) {
-            updateExtractionStatus(current.resultId(), "RE_EXTRACTING");
-        }
-        return findReviewItem(safeDecision.itemId())
-                .orElseThrow(() -> new IllegalArgumentException("閸忓啯鏆熼幑顔碱槻閺嶆悂銆嶆稉宥呯摠閸? " + safeDecision.itemId()));
-    }
-
-    private Map<String, Object> decisionAuditMetadata(MetadataReviewDecision decision,
-                                                      Map<String, Object> approvedMetadata) {
-        if (MetadataReviewStatus.RE_EXTRACTING.equals(decision.reviewStatus())) {
-            // RE_EXTRACT 閻?correctedMetadata 閹佃儻娴囩拫鍐ㄥ娣団剝浼呴敍灞藉涧鏉╂稑鍙嗙€孤ゎ吀閿涘奔绗夐崘?approved_metadata閵?
-            return decision.correctedMetadata();
-        }
-        return approvedMetadata;
-    }
-
-    private void insertReviewAudit(MetadataReviewRecord current,
-                                   MetadataReviewDecision decision,
-                                   Map<String, Object> decisionMetadata) {
-        Map<String, Object> previousMetadata = previousAuditMetadata(current);
-        try {
-            jdbcTemplate.update("""
-                    INSERT INTO t_metadata_review_audit(
-                        id, review_item_id, tenant_id, kb_id, doc_id, result_id,
-                        from_status, to_status, reviewer_id, review_comment,
-                        previous_metadata, updated_metadata, decision_metadata, create_time
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    """,
-                    UUID.randomUUID().toString(),
-                    current.id(),
-                    current.tenantId(),
-                    current.knowledgeBaseId(),
-                    current.documentId(),
-                    current.resultId(),
-                    current.reviewStatus().name(),
-                    decision.reviewStatus().name(),
-                    decision.reviewerId(),
-                    decision.reviewComment(),
-                    json(previousMetadata),
-                    json(decisionMetadata),
-                    json(decisionMetadata));
-        } catch (DataAccessException ex) {
-            insertReviewAuditLegacy(current, decision, decisionMetadata);
-        }
-    }
-
-    private Map<String, Object> previousAuditMetadata(MetadataReviewRecord current) {
-        if (current.correctedMetadata() != null && !current.correctedMetadata().isEmpty()) {
-            return current.correctedMetadata();
-        }
-        return current.suggestedMetadata();
-    }
-
-    private void insertReviewAuditLegacy(MetadataReviewRecord current,
-                                         MetadataReviewDecision decision,
-                                         Map<String, Object> decisionMetadata) {
-        try {
-            jdbcTemplate.update("""
-                    INSERT INTO t_metadata_review_audit(
-                        id, review_item_id, tenant_id, kb_id, doc_id, result_id,
-                        from_status, to_status, reviewer_id, review_comment,
-                        decision_metadata, create_time
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    """,
-                    UUID.randomUUID().toString(),
-                    current.id(),
-                    current.tenantId(),
-                    current.knowledgeBaseId(),
-                    current.documentId(),
-                    current.resultId(),
-                    current.reviewStatus().name(),
-                    decision.reviewStatus().name(),
-                    decision.reviewerId(),
-                    decision.reviewComment(),
-                    json(decisionMetadata));
-        } catch (DataAccessException ignored) {
-            // 閸忕厧顔愮亸姘弓閹笛嗩攽鐎孤ゎ吀鐞涖劏绺肩粔鑽ゆ畱閺冄冪氨閿涘苯顦查弽闀愬瘜濞翠胶鈻兼稉宥堝厴閸ョ姵顒濇稉顓熸焽閵?
-        }
+        return reviewSupport.findReviewItem(result.itemId())
+                .orElseThrow(() -> new IllegalArgumentException("元数据复核项不存在: " + result.itemId()));
     }
 
     @Override
     public MetadataQuarantinePage pageQuarantineItems(MetadataQuarantineQuery query) {
-        if (quarantineSupport != null) {
-            return quarantineSupport.pageQuarantineItems(query);
-        }
-        MetadataQuarantineQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
-        SqlWhere where = quarantineWhere(safeQuery);
-        long total = countLong("SELECT COUNT(1) FROM t_metadata_quarantine_item " + where.sql(), where.args());
-        if (total <= 0) {
-            return MetadataQuarantinePage.empty(safeQuery.current(), safeQuery.size());
-        }
-        List<Object> args = new ArrayList<>(where.args());
-        args.add(safeQuery.size());
-        args.add(safeQuery.offset());
-        List<MetadataQuarantineRecord> records = jdbcTemplate.query("""
-                SELECT id, tenant_id, kb_id, doc_id, job_id, stage, reason_code, reason_message,
-                       source_snapshot, retry_count, next_retry_time, resolved, resolved_by,
-                       resolved_time, create_time, update_time
-                FROM t_metadata_quarantine_item
-                """ + where.sql() + """
-                ORDER BY resolved ASC, update_time DESC, create_time DESC, id DESC
-                LIMIT ? OFFSET ?
-                """, this::toQuarantineRecord, args.toArray());
-        return new MetadataQuarantinePage(records, total, safeQuery.size(), safeQuery.current(),
-                pages(total, safeQuery.size()));
+        return quarantineSupport.pageQuarantineItems(query);
     }
 
     @Override
     public Optional<MetadataQuarantineRecord> findQuarantineItem(String itemId) {
-        if (quarantineSupport != null) {
-            return quarantineSupport.findQuarantineItem(itemId);
-        }
-        if (blank(itemId)) {
-            return Optional.empty();
-        }
-        try {
-            return jdbcTemplate.query("""
-                    SELECT id, tenant_id, kb_id, doc_id, job_id, stage, reason_code, reason_message,
-                           source_snapshot, retry_count, next_retry_time, resolved, resolved_by,
-                           resolved_time, create_time, update_time
-                    FROM t_metadata_quarantine_item
-                    WHERE id = ?
-                    """, this::toQuarantineRecord, itemId).stream().findFirst();
-        } catch (DataAccessException ex) {
-            return Optional.empty();
-        }
+        return quarantineSupport.findQuarantineItem(itemId);
     }
 
     @Override
     public MetadataQuarantineRecord resolveQuarantineItem(MetadataQuarantineResolution resolution) {
-        if (quarantineSupport != null) {
-            return quarantineSupport.resolveQuarantineItem(resolution);
-        }
-        MetadataQuarantineResolution safeResolution = Objects.requireNonNull(resolution,
-                "resolution must not be null");
-        int updated = jdbcTemplate.update("""
-                UPDATE t_metadata_quarantine_item
-                SET resolved = 1,
-                    resolved_by = ?,
-                    resolved_time = CURRENT_TIMESTAMP,
-                    update_time = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """, safeResolution.operator(), safeResolution.itemId());
-        if (updated <= 0) {
-            throw new IllegalArgumentException("閸忓啯鏆熼幑顕€娈х粋濠氥€嶆稉宥呯摠閸? " + safeResolution.itemId());
-        }
-        return findQuarantineItem(safeResolution.itemId())
-                .orElseThrow(() -> new IllegalArgumentException("閸忓啯鏆熼幑顕€娈х粋濠氥€嶆稉宥呯摠閸? " + safeResolution.itemId()));
+        return quarantineSupport.resolveQuarantineItem(resolution);
     }
 
     @Override
     public MetadataQuarantineRecord scheduleQuarantineRetry(MetadataQuarantineRetry retry) {
-        if (quarantineSupport != null) {
-            return quarantineSupport.scheduleQuarantineRetry(retry);
-        }
-        MetadataQuarantineRetry safeRetry = Objects.requireNonNull(retry, "retry must not be null");
-        int updated = jdbcTemplate.update("""
-                UPDATE t_metadata_quarantine_item
-                SET retry_count = retry_count + 1,
-                    next_retry_time = ?,
-                    resolved = 0,
-                    resolved_by = NULL,
-                    resolved_time = NULL,
-                    update_time = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """, Timestamp.from(safeRetry.nextRetryTime()), safeRetry.itemId());
-        if (updated <= 0) {
-            throw new IllegalArgumentException("閸忓啯鏆熼幑顕€娈х粋濠氥€嶆稉宥呯摠閸? " + safeRetry.itemId());
-        }
-        return findQuarantineItem(safeRetry.itemId())
-                .orElseThrow(() -> new IllegalArgumentException("閸忓啯鏆熼幑顕€娈х粋濠氥€嶆稉宥呯摠閸? " + safeRetry.itemId()));
+        return quarantineSupport.scheduleQuarantineRetry(retry);
     }
 
     @Override
@@ -1148,26 +966,6 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 instant(rs.getTimestamp("create_time")));
     }
 
-    private MetadataQuarantineRecord toQuarantineRecord(ResultSet rs, int rowNum) throws SQLException {
-        return new MetadataQuarantineRecord(
-                rs.getString("id"),
-                rs.getString("tenant_id"),
-                rs.getString("kb_id"),
-                rs.getString("doc_id"),
-                rs.getString("job_id"),
-                rs.getString("stage"),
-                rs.getString("reason_code"),
-                rs.getString("reason_message"),
-                readMap(rs.getString("source_snapshot")),
-                rs.getInt("retry_count"),
-                nullableInstant(rs.getTimestamp("next_retry_time")),
-                bool(rs, "resolved"),
-                rs.getString("resolved_by"),
-                nullableInstant(rs.getTimestamp("resolved_time")),
-                instant(rs.getTimestamp("create_time")),
-                instant(rs.getTimestamp("update_time")));
-    }
-
     private SqlWhere extractionResultWhere(MetadataExtractionResultQuery query) {
         StringBuilder sql = new StringBuilder(" WHERE 1 = 1");
         List<Object> args = new ArrayList<>();
@@ -1226,50 +1024,6 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             args.add(query.documentId());
         }
         return new SqlWhere(sql.toString(), args);
-    }
-
-    private SqlWhere quarantineWhere(MetadataQuarantineQuery query) {
-        StringBuilder sql = new StringBuilder(" WHERE 1 = 1");
-        List<Object> args = new ArrayList<>();
-        if (!blank(query.tenantId())) {
-            sql.append(" AND tenant_id = ?");
-            args.add(query.tenantId());
-        }
-        if (!blank(query.knowledgeBaseId())) {
-            sql.append(" AND kb_id = ?");
-            args.add(query.knowledgeBaseId());
-        }
-        if (query.resolved() != null) {
-            sql.append(" AND resolved = ?");
-            args.add(Boolean.TRUE.equals(query.resolved()) ? 1 : 0);
-        }
-        if (!blank(query.stage())) {
-            sql.append(" AND stage = ?");
-            args.add(query.stage());
-        }
-        if (!blank(query.reasonCode())) {
-            sql.append(" AND reason_code = ?");
-            args.add(query.reasonCode());
-        }
-        if (!blank(query.documentId())) {
-            sql.append(" AND doc_id = ?");
-            args.add(query.documentId());
-        }
-        if (!blank(query.jobId())) {
-            sql.append(" AND job_id = ?");
-            args.add(query.jobId());
-        }
-        return new SqlWhere(sql.toString(), args);
-    }
-
-    private Map<String, Object> approvedMetadata(MetadataReviewRecord current, MetadataReviewDecision decision) {
-        if (MetadataReviewStatus.APPROVED.equals(decision.reviewStatus())) {
-            return current.suggestedMetadata();
-        }
-        if (MetadataReviewStatus.CORRECTED.equals(decision.reviewStatus())) {
-            return decision.correctedMetadata();
-        }
-        return Map.of();
     }
 
     private void updateExtractionApproval(String resultId, Map<String, Object> approvedMetadata, String reviewerId) {
