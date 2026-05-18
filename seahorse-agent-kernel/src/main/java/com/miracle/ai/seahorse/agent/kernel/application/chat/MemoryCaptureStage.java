@@ -30,8 +30,9 @@ import java.util.Objects;
 /**
  * 问答完成后的轻量记忆捕获阶段。
  *
- * <p>该阶段只负责把可候选内容交给 {@link MemoryEnginePort}，真正的可信过滤和落库策略
- * 仍由记忆引擎负责，避免主链路直接写入原始噪声。</p>
+ * <p>信任边界在 {@link MemoryEnginePort#writeMemory(MemoryWriteRequest)} 及其实现层：
+ * 本阶段会把原始用户问题作为候选记忆提交给记忆引擎，但不在聊天主链路判断其可信度。
+ * 可信声明识别、噪声过滤和最终落库策略均由记忆引擎负责，避免主链路直接写入原始噪声。</p>
  */
 final class MemoryCaptureStage {
 
