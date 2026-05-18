@@ -104,7 +104,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     private final JdbcTemplate jdbcTemplate;
     private final JdbcMetadataJsonSupport jsonSupport;
     private final JdbcMetadataSchemaUsageSupport schemaUsageSupport;
-    private final JdbcMetadataColumnDetector columnDetector;
+    private final JdbcMetadataCanonicalWriteSupport canonicalWriteSupport;
     private final JdbcMetadataReviewSupport reviewSupport;
     private final JdbcMetadataQuarantineSupport quarantineSupport;
     private final JdbcMetadataBackfillSupport backfillSupport;
@@ -116,7 +116,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         // 閹?JSON 閸楀繗顔呴妴涓糲hema Usage 缂佸嫬瀵橀崪灞藉灙閹恒垺绁撮幏鍡欑舶閸楀繋缍旈懓鍜冪礉閺€鑸垫殐娑撳鈧倿鍘ら崳銊ㄤ捍鐠愶絻鈧?
         this.jsonSupport = new JdbcMetadataJsonSupport(objectMapper);
         this.schemaUsageSupport = new JdbcMetadataSchemaUsageSupport();
-        this.columnDetector = new JdbcMetadataColumnDetector(jdbcTemplate);
+        this.canonicalWriteSupport = new JdbcMetadataCanonicalWriteSupport(jdbcTemplate, jsonSupport);
         this.reviewSupport = new JdbcMetadataReviewSupport(jdbcTemplate, jsonSupport);
         this.quarantineSupport = new JdbcMetadataQuarantineSupport(jdbcTemplate, jsonSupport);
         this.backfillSupport = new JdbcMetadataBackfillSupport(jdbcTemplate, jsonSupport);
@@ -590,39 +590,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public void writeDocumentMetadata(String documentId, Map<String, Object> acceptedMetadata) {
-        if (blank(documentId) || acceptedMetadata == null || acceptedMetadata.isEmpty()) {
-            return;
-        }
-        if (!documentMetadataJsonColumnExists()) {
-            return;
-        }
-        // 閸掓鐡ㄩ崷銊ユ倵閸愭瑥鍙嗘径杈Е韫囧懘銆忛崥鎴滅瑐娴肩娀鈧帪绱濋柆鍨帳 canonical metadata 闂堟瑩绮稉銏犮亼閵?
-        jdbcTemplate.update("UPDATE t_knowledge_document SET metadata_json = ?, update_time = CURRENT_TIMESTAMP "
-                + "WHERE id = ? AND deleted = 0", json(acceptedMetadata), documentId);
-        writeChunkMetadata(documentId, acceptedMetadata);
-    }
-
-    private void writeChunkMetadata(String documentId, Map<String, Object> acceptedMetadata) {
-        if (!chunkMetadataJsonColumnExists()) {
-            return;
-        }
-        List<ChunkMetadataRow> rows = jdbcTemplate.query("""
-                SELECT id, metadata_json
-                FROM t_knowledge_chunk
-                WHERE doc_id = ? AND deleted = 0
-                """, (rs, rowNum) -> new ChunkMetadataRow(rs.getString("id"), rs.getString("metadata_json")),
-                documentId);
-        for (ChunkMetadataRow row : rows) {
-            Map<String, Object> merged = new java.util.LinkedHashMap<>(readMap(row.metadataJson()));
-            // 娴滃搫浼愭径宥嗙壋閸氬海娈?canonical metadata 鐟曞棛娲婇弮褌绗熼崝鈥崇摟濞堢绱濇担鍡曠箽閻?chunk 閸樼喐婀侀惃鍕兇缂佺喎鐡у▓闈涙嫲閺夈儲绨箛顐ゅ弾閵?
-            merged.putAll(acceptedMetadata);
-            jdbcTemplate.update("""
-                    UPDATE t_knowledge_chunk
-                    SET metadata_json = ?,
-                        update_time = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                    """, json(merged), row.id());
-        }
+        canonicalWriteSupport.writeDocumentMetadata(documentId, acceptedMetadata);
     }
 
     @Override
@@ -1151,14 +1119,6 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         return jsonSupport.json(value);
     }
 
-    private boolean documentMetadataJsonColumnExists() {
-        return columnDetector.hasDocumentMetadataJsonColumn();
-    }
-
-    private boolean chunkMetadataJsonColumnExists() {
-        return columnDetector.hasChunkMetadataJsonColumn();
-    }
-
     private boolean bool(ResultSet rs, String column) throws SQLException {
         return rs.getInt(column) == 1;
     }
@@ -1252,9 +1212,6 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     private boolean blank(String value) {
         return value == null || value.isBlank();
-    }
-
-    private record ChunkMetadataRow(String id, String metadataJson) {
     }
 
     private record SqlWhere(String sql, List<Object> args) {
