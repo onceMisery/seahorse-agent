@@ -809,76 +809,18 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public String create(MetadataBackfillJobRecord job) {
-        // 先委派给独立协作者，保留旧实现作为渐进重构期间的兼容回退。
-        if (backfillSupport != null) {
-            return backfillSupport.create(job);
-        }
-        MetadataBackfillJobRecord safeJob = Objects.requireNonNull(job, "job must not be null");
-        jdbcTemplate.update("""
-                INSERT INTO t_metadata_extraction_job(
-                    id, tenant_id, kb_id, pipeline_id, status, current_page, checkpoint_json, batch_size,
-                    processed_count, success_count, failed_count, skipped_count, review_count,
-                    quarantine_count, failure_summary, operator, create_time, update_time
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, safeJob.jobId(), safeJob.tenantId(), safeJob.knowledgeBaseId(), safeJob.pipelineId(),
-                safeJob.status().name(), safeJob.currentPage(), json(safeJob.checkpoint()), safeJob.batchSize(),
-                safeJob.processedDocuments(), safeJob.succeededDocuments(), safeJob.failedDocuments(),
-                safeJob.skippedDocuments(), safeJob.reviewDocuments(), safeJob.quarantineDocuments(),
-                json(safeJob.failures()), safeJob.operator(), Timestamp.from(safeJob.createTime()),
-                Timestamp.from(safeJob.updateTime()));
-        return safeJob.jobId();
+        // Backfill 持久化已由独立协作者负责，主适配器只保留端口门面。
+        return backfillSupport.create(job);
     }
 
     @Override
     public Optional<MetadataBackfillJobRecord> findById(String jobId) {
-        // 先委派给独立协作者，保留旧实现作为渐进重构期间的兼容回退。
-        if (backfillSupport != null) {
-            return backfillSupport.findById(jobId);
-        }
-        if (blank(jobId)) {
-            return Optional.empty();
-        }
-        try {
-            return jdbcTemplate.query("""
-                    SELECT id, tenant_id, kb_id, pipeline_id, status, checkpoint_json, batch_size,
-                           current_page,
-                           processed_count, success_count, failed_count, skipped_count, review_count,
-                           quarantine_count, failure_summary, operator, create_time, update_time
-                    FROM t_metadata_extraction_job
-                    WHERE id = ?
-                    """, this::toBackfillJobRecord, jobId).stream().findFirst();
-        } catch (DataAccessException ex) {
-            return Optional.empty();
-        }
+        return backfillSupport.findById(jobId);
     }
 
     @Override
     public MetadataBackfillJobPage page(MetadataBackfillJobQuery query) {
-        // 先委派给独立协作者，保留旧实现作为渐进重构期间的兼容回退。
-        if (backfillSupport != null) {
-            return backfillSupport.page(query);
-        }
-        MetadataBackfillJobQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
-        SqlWhere where = backfillJobWhere(safeQuery);
-        long total = countLong("SELECT COUNT(1) FROM t_metadata_extraction_job " + where.sql(), where.args());
-        if (total <= 0) {
-            return MetadataBackfillJobPage.empty(safeQuery.current(), safeQuery.size());
-        }
-        List<Object> args = new ArrayList<>(where.args());
-        args.add(safeQuery.size());
-        args.add(safeQuery.offset());
-        List<MetadataBackfillJobRecord> records = jdbcTemplate.query("""
-                SELECT id, tenant_id, kb_id, pipeline_id, status, checkpoint_json, batch_size,
-                       current_page,
-                       processed_count, success_count, failed_count, skipped_count, review_count,
-                       quarantine_count, failure_summary, operator, create_time, update_time
-                FROM t_metadata_extraction_job
-                """ + where.sql() + """
-                ORDER BY update_time DESC, create_time DESC, id DESC
-                LIMIT ? OFFSET ?
-                """, this::toBackfillJobRecord, args.toArray());
-        return new MetadataBackfillJobPage(records, total, safeQuery.size(), safeQuery.current(),
-                pages(total, safeQuery.size()));
+        return backfillSupport.page(query);
     }
 
     @Override
@@ -931,33 +873,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public void save(MetadataBackfillJobRecord job) {
-        // 先委派给独立协作者，保留旧实现作为渐进重构期间的兼容回退。
-        if (backfillSupport != null) {
-            backfillSupport.save(job);
-            return;
-        }
-        MetadataBackfillJobRecord safeJob = Objects.requireNonNull(job, "job must not be null");
-        jdbcTemplate.update("""
-                UPDATE t_metadata_extraction_job
-                SET status = ?,
-                    current_page = ?,
-                    checkpoint_json = ?,
-                    batch_size = ?,
-                    processed_count = ?,
-                    success_count = ?,
-                    failed_count = ?,
-                    skipped_count = ?,
-                    review_count = ?,
-                    quarantine_count = ?,
-                    failure_summary = ?,
-                    operator = ?,
-                    update_time = ?
-                WHERE id = ?
-                """, safeJob.status().name(), safeJob.currentPage(), json(safeJob.checkpoint()), safeJob.batchSize(),
-                safeJob.processedDocuments(), safeJob.succeededDocuments(), safeJob.failedDocuments(),
-                safeJob.skippedDocuments(), safeJob.reviewDocuments(), safeJob.quarantineDocuments(),
-                json(safeJob.failures()), safeJob.operator(), Timestamp.from(safeJob.updateTime()),
-                safeJob.jobId());
+        backfillSupport.save(job);
     }
 
     @Override
@@ -1344,77 +1260,6 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             args.add(query.jobId());
         }
         return new SqlWhere(sql.toString(), args);
-    }
-
-    private SqlWhere backfillJobWhere(MetadataBackfillJobQuery query) {
-        StringBuilder sql = new StringBuilder(" WHERE 1 = 1");
-        List<Object> args = new ArrayList<>();
-        if (!blank(query.tenantId())) {
-            sql.append(" AND tenant_id = ?");
-            args.add(query.tenantId());
-        }
-        if (!blank(query.knowledgeBaseId())) {
-            sql.append(" AND kb_id = ?");
-            args.add(query.knowledgeBaseId());
-        }
-        if (query.status() != null) {
-            sql.append(" AND status = ?");
-            args.add(query.status().name());
-        }
-        if (!blank(query.pipelineId())) {
-            sql.append(" AND pipeline_id = ?");
-            args.add(query.pipelineId());
-        }
-        if (!blank(query.operator())) {
-            sql.append(" AND operator = ?");
-            args.add(query.operator());
-        }
-        if (!blank(query.documentId())) {
-            // 閸ョ偛锝炴禒璇插閹稿鏋冨锝呯暰娴ｅ秳绶风挧?checkpoint_json 娑擃厾娈?documentIds/lastDocumentId閿涘奔绗夐弬鏉款杻娴犺濮熼弰搴ｇ矎鐞涖劊鈧?
-            appendJsonTextLike(sql, args, "checkpoint_json", query.documentId());
-        }
-        if (!blank(query.pauseReason())) {
-            appendJsonTextLike(sql, args, "checkpoint_json", "\"pauseReason\"");
-            appendJsonTextLike(sql, args, "checkpoint_json", query.pauseReason());
-        }
-        if (!blank(query.failureKeyword())) {
-            appendJsonTextLike(sql, args, "failure_summary", query.failureKeyword());
-        }
-        if (Boolean.TRUE.equals(query.hasFailures())) {
-            sql.append("""
-                     AND (status = 'FAILED'
-                          OR failed_count > 0
-                          OR CAST(failure_summary AS VARCHAR) NOT IN ('', '[]', '{}', 'null'))
-                    """);
-        } else if (Boolean.FALSE.equals(query.hasFailures())) {
-            sql.append("""
-                     AND status <> 'FAILED'
-                     AND failed_count = 0
-                     AND (failure_summary IS NULL
-                          OR CAST(failure_summary AS VARCHAR) IN ('', '[]', '{}', 'null'))
-                    """);
-        }
-        if (Boolean.TRUE.equals(query.reExtract())) {
-            appendJsonTextLike(sql, args, "checkpoint_json", "\"reExtract\"");
-            appendJsonTextLike(sql, args, "checkpoint_json", "true");
-        } else if (Boolean.FALSE.equals(query.reExtract())) {
-            sql.append("""
-                     AND (checkpoint_json IS NULL
-                          OR CAST(checkpoint_json AS VARCHAR) NOT LIKE ?
-                          OR CAST(checkpoint_json AS VARCHAR) LIKE ?)
-                    """);
-            args.add("%\"reExtract\"%");
-            args.add("%false%");
-        }
-        return new SqlWhere(sql.toString(), args);
-    }
-
-    private void appendJsonTextLike(StringBuilder sql, List<Object> args, String column, String value) {
-        if (blank(value)) {
-            return;
-        }
-        sql.append(" AND CAST(").append(column).append(" AS VARCHAR) LIKE ?");
-        args.add("%" + value.trim() + "%");
     }
 
     private Map<String, Object> approvedMetadata(MetadataReviewRecord current, MetadataReviewDecision decision) {
