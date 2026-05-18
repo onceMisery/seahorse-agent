@@ -19,13 +19,11 @@ package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
-import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataSchema;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchChannelResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
-import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.filter.CompiledMetadataFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.DefaultMetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataFilterCompiler;
@@ -56,10 +54,8 @@ public class KernelMultiChannelRetrievalEngine {
     private static final String PROCESSOR_METADATA_GUARD = "MetadataGuard";
     private static final Duration DEFAULT_CHANNEL_TIMEOUT = Duration.ofSeconds(5);
 
-    private final FeatureActivationContext activationContext;
-    private final MetadataSchemaRegistryPort schemaRegistryPort;
-    private final MetadataFilterCompiler metadataFilterCompiler;
     private final KernelRetrievalObservationSupport observationSupport;
+    private final KernelSearchContextFactory contextFactory;
     private final KernelSearchChannelExecutor channelExecutor;
     private final KernelRetrievalPostProcessorChain postProcessorChain;
 
@@ -110,14 +106,16 @@ public class KernelMultiChannelRetrievalEngine {
                                              MetadataSchemaUsageReportRepositoryPort schemaUsageRepositoryPort) {
         ExtensionRegistry safeExtensionRegistry = Objects.requireNonNull(extensionRegistry, "extensionRegistry must not be null");
         Executor safeRetrievalExecutor = Objects.requireNonNull(retrievalExecutor, "retrievalExecutor must not be null");
-        this.activationContext = Objects.requireNonNullElse(activationContext, FeatureActivationContext.empty());
-        this.schemaRegistryPort = Objects.requireNonNullElseGet(schemaRegistryPort, MetadataSchemaRegistryPort::empty);
-        this.metadataFilterCompiler = Objects.requireNonNullElseGet(metadataFilterCompiler,
+        FeatureActivationContext safeActivationContext = Objects.requireNonNullElse(activationContext,
+                FeatureActivationContext.empty());
+        MetadataSchemaRegistryPort safeSchemaRegistryPort = Objects.requireNonNullElseGet(schemaRegistryPort,
+                MetadataSchemaRegistryPort::empty);
+        MetadataFilterCompiler safeMetadataFilterCompiler = Objects.requireNonNullElseGet(metadataFilterCompiler,
                 DefaultMetadataFilterCompiler::new);
         KernelRagTraceRecorder safeTraceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
         // 观测和 usage 记录集中到协作者，主类只决定何时记录。
         this.observationSupport = new KernelRetrievalObservationSupport(
-                this.activationContext,
+                safeActivationContext,
                 observationPort,
                 schemaUsageRepositoryPort,
                 EVENT_METADATA_FILTER_COMPILED,
@@ -126,16 +124,21 @@ public class KernelMultiChannelRetrievalEngine {
                 EVENT_METADATA_GUARD,
                 EVENT_RETRIEVAL_EMPTY,
                 PROCESSOR_METADATA_GUARD);
+        this.contextFactory = new KernelSearchContextFactory(
+                safeActivationContext,
+                safeSchemaRegistryPort,
+                safeMetadataFilterCompiler,
+                this.observationSupport);
         this.channelExecutor = new KernelSearchChannelExecutor(
                 safeExtensionRegistry,
                 safeRetrievalExecutor,
-                this.activationContext,
+                safeActivationContext,
                 safeTraceRecorder,
                 this.observationSupport,
                 DEFAULT_CHANNEL_TIMEOUT);
         this.postProcessorChain = new KernelRetrievalPostProcessorChain(
                 safeExtensionRegistry,
-                this.activationContext,
+                safeActivationContext,
                 safeTraceRecorder,
                 this.observationSupport);
     }
@@ -178,7 +181,7 @@ public class KernelMultiChannelRetrievalEngine {
                                                           RetrievalFilter filter,
                                                           RetrievalOptions options,
                                                           TraceRunScope traceRunScope) {
-        SearchContext context = buildSearchContext(subIntents, topK, filter, options, traceRunScope);
+        SearchContext context = contextFactory.build(subIntents, topK, filter, options, traceRunScope);
         List<SearchChannelResult> channelResults = channelExecutor.execute(context);
         if (channelResults.isEmpty()) {
             observationSupport.recordRetrievalEmpty(context, "channel", "no_enabled_channels", 0, 0);
@@ -196,42 +199,4 @@ public class KernelMultiChannelRetrievalEngine {
         return chunks;
     }
 
-    private SearchContext buildSearchContext(List<SubQuestionIntent> subIntents,
-                                             int topK,
-                                             RetrievalFilter filter,
-                                             RetrievalOptions options,
-                                             TraceRunScope traceRunScope) {
-        List<SubQuestionIntent> safeSubIntents = Objects.requireNonNullElse(subIntents, List.of());
-        String question = safeSubIntents.isEmpty() ? "" : safeSubIntents.get(0).subQuestion();
-        return SearchContext.builder()
-                .originalQuestion(question)
-                .rewrittenQuestion(question)
-                .intents(safeSubIntents)
-                .topK(topK)
-                .filter(filter)
-                .options(options)
-                .compiledFilter(compileFilter(filter))
-                .traceRunScope(traceRunScope)
-                .build();
-    }
-
-    private CompiledMetadataFilter compileFilter(RetrievalFilter filter) {
-        if (filter == null) {
-            return null;
-        }
-        String knowledgeBaseId = filter.system().knowledgeBaseIds().isEmpty()
-                ? ""
-                : filter.system().knowledgeBaseIds().get(0);
-        String tenantId = !filter.system().tenantId().isBlank() ? filter.system().tenantId() : activationContext.tenantId();
-        MetadataSchema schema = schemaRegistryPort.loadSchema(tenantId, knowledgeBaseId);
-        try {
-            // 只有通过 schema 编译后的过滤条件才能下发到检索通道与后处理器。
-            CompiledMetadataFilter compiledFilter = metadataFilterCompiler.compile(filter, schema);
-            observationSupport.recordMetadataFilterUsage(tenantId, knowledgeBaseId, schema, compiledFilter);
-            return compiledFilter;
-        } catch (RuntimeException ex) {
-            observationSupport.recordMetadataFilterRejected(tenantId, knowledgeBaseId, schema, filter, ex);
-            throw ex;
-        }
-    }
 }
