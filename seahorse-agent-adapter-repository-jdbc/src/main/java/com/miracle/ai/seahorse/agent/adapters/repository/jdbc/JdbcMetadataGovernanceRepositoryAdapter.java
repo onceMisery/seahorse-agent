@@ -716,14 +716,8 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public MetadataSchemaUsageReport report(String tenantId, String knowledgeBaseId, Integer schemaVersion) {
-        // schema usage report 已抽离为独立读协作者，主适配器仅保留门面职责。
-        if (schemaUsageReportSupport != null) {
-            return schemaUsageReportSupport.report(tenantId, knowledgeBaseId, schemaVersion);
-        }
-        String safeTenantId = Objects.requireNonNullElse(tenantId, "");
-        String safeKbId = Objects.requireNonNullElse(knowledgeBaseId, "");
-        Integer safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? null : schemaVersion;
-        return MetadataSchemaUsageReport.empty(safeTenantId, safeKbId, safeSchemaVersion);
+        // Schema Usage Report 已抽离为独立读协作者，主适配器仅保留端口门面。
+        return schemaUsageReportSupport.report(tenantId, knowledgeBaseId, schemaVersion);
     }
 
     @Override
@@ -909,63 +903,6 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         }
     }
 
-    private MetadataReviewRecord toReviewRecord(ResultSet rs, int rowNum) throws SQLException {
-        return new MetadataReviewRecord(
-                rs.getString("id"),
-                rs.getString("tenant_id"),
-                rs.getString("kb_id"),
-                rs.getString("doc_id"),
-                rs.getString("result_id"),
-                enumValue(MetadataReviewStatus.class, rs.getString("review_status"), MetadataReviewStatus.PENDING),
-                rs.getInt("priority"),
-                rs.getString("reason_code"),
-                rs.getString("reason_message"),
-                readMap(rs.getString("suggested_metadata")),
-                readMap(rs.getString("review_context")),
-                readMap(rs.getString("corrected_metadata")),
-                rs.getString("reviewer_id"),
-                rs.getString("review_comment"),
-                instant(rs.getTimestamp("create_time")),
-                instant(rs.getTimestamp("update_time")));
-    }
-
-    private MetadataReviewAuditRecord toReviewAuditRecord(ResultSet rs, int rowNum) throws SQLException {
-        return new MetadataReviewAuditRecord(
-                rs.getString("id"),
-                rs.getString("review_item_id"),
-                rs.getString("tenant_id"),
-                rs.getString("kb_id"),
-                rs.getString("doc_id"),
-                rs.getString("result_id"),
-                rs.getString("from_status"),
-                rs.getString("to_status"),
-                rs.getString("reviewer_id"),
-                rs.getString("review_comment"),
-                readMap(rs.getString("previous_metadata")),
-                readMap(rs.getString("updated_metadata")),
-                readMap(rs.getString("decision_metadata")),
-                instant(rs.getTimestamp("create_time")));
-    }
-
-    private MetadataReviewAuditRecord toReviewAuditRecordLegacy(ResultSet rs, int rowNum) throws SQLException {
-        Map<String, Object> decisionMetadata = readMap(rs.getString("decision_metadata"));
-        return new MetadataReviewAuditRecord(
-                rs.getString("id"),
-                rs.getString("review_item_id"),
-                rs.getString("tenant_id"),
-                rs.getString("kb_id"),
-                rs.getString("doc_id"),
-                rs.getString("result_id"),
-                rs.getString("from_status"),
-                rs.getString("to_status"),
-                rs.getString("reviewer_id"),
-                rs.getString("review_comment"),
-                Map.of(),
-                decisionMetadata,
-                decisionMetadata,
-                instant(rs.getTimestamp("create_time")));
-    }
-
     private SqlWhere extractionResultWhere(MetadataExtractionResultQuery query) {
         StringBuilder sql = new StringBuilder(" WHERE 1 = 1");
         List<Object> args = new ArrayList<>();
@@ -996,32 +933,6 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         if (!blank(query.extractorVersion())) {
             sql.append(" AND COALESCE(extractor_version, '') = ?");
             args.add(query.extractorVersion());
-        }
-        return new SqlWhere(sql.toString(), args);
-    }
-
-    private SqlWhere reviewWhere(MetadataReviewQuery query) {
-        StringBuilder sql = new StringBuilder(" WHERE 1 = 1");
-        List<Object> args = new ArrayList<>();
-        if (!blank(query.tenantId())) {
-            sql.append(" AND tenant_id = ?");
-            args.add(query.tenantId());
-        }
-        if (!blank(query.knowledgeBaseId())) {
-            sql.append(" AND kb_id = ?");
-            args.add(query.knowledgeBaseId());
-        }
-        if (query.reviewStatus() != null) {
-            sql.append(" AND review_status = ?");
-            args.add(query.reviewStatus().name());
-        }
-        if (!blank(query.reasonCode())) {
-            sql.append(" AND reason_code = ?");
-            args.add(query.reasonCode());
-        }
-        if (!blank(query.documentId())) {
-            sql.append(" AND doc_id = ?");
-            args.add(query.documentId());
         }
         return new SqlWhere(sql.toString(), args);
     }
