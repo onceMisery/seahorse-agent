@@ -27,9 +27,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -41,6 +43,7 @@ import javax.sql.DataSource;
  * <p>本类只承接认证闭环所需的用户仓储、认证策略和 Web 当前用户桥接，避免把其他 JDBC 仓储混入认证配置。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentAuthAdapterAutoConfiguration {
 

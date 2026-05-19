@@ -25,11 +25,13 @@ import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisStreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedSemaphorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
+import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
+import org.redisson.config.Config;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -63,8 +65,18 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
     })
     static class RedisCacheAutoConfiguration {
 
+        @Bean(destroyMethod = "shutdown")
+        @ConditionalOnMissingBean(RedissonClient.class)
+        public RedissonClient redissonClient(RedisProperties redisProperties) {
+            Config config = new Config();
+            config.useSingleServer()
+                    .setAddress("redis://" + redisProperties.getHost() + ":" + redisProperties.getPort())
+                    .setPassword(redisProperties.getPassword())
+                    .setDatabase(redisProperties.getDatabase());
+            return Redisson.create(config);
+        }
+
         @Bean
-        @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
                 havingValue = "redis", matchIfMissing = true)
         @ConditionalOnMissingBean(RedisCacheAdapter.class)
@@ -73,7 +85,6 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
                 havingValue = "redis", matchIfMissing = true)
         @ConditionalOnMissingBean(DistributedSemaphorePort.class)
@@ -82,7 +93,6 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnProperty(prefix = "seahorse-agent.adapters.stream-task", name = "type", havingValue = "redis")
         @ConditionalOnMissingBean(StreamTaskPort.class)
         public RedisStreamTaskPort seahorseRedisStreamTaskPort(RedissonClient redissonClient) {

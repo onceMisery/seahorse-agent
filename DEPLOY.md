@@ -17,13 +17,24 @@
 ## 环境要求
 
 - Docker Desktop（含 Docker Compose v2）
-- 至少 8GB RAM（Docker Desktop → Settings → Resources）
+- 内存：最小化 4GB / 全量 8GB（Docker Desktop → Settings → Resources）
 - 可用的 OpenAI 兼容 API
 
-## 快速开始
+## 一键部署
 
 ### 最小化部署
 
+**Linux / macOS：**
+```bash
+./deploy.sh minimal
+```
+
+**Windows：**
+```powershell
+.\deploy.ps1 minimal
+```
+
+**手动部署：**
 ```bash
 cp .env.example .env
 # 编辑 .env 填入 AI API 配置
@@ -34,13 +45,12 @@ docker compose up -d --build
 
 **Linux / macOS：**
 ```bash
-chmod +x deploy.sh
-./deploy.sh
+./deploy.sh full
 ```
 
 **Windows：**
 ```powershell
-.\deploy.ps1
+.\deploy.ps1 full
 ```
 
 **手动部署：**
@@ -52,20 +62,20 @@ docker compose -f docker-compose.full.yml up -d --build
 
 ## 服务端口一览
 
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| 前端 | 80 | React SPA |
-| 后端 API | 9090 | Spring Boot |
-| PostgreSQL | 5432 | 数据库 |
-| Redis | 6379 | 缓存 |
-| Elasticsearch | 9200 | 关键词搜索 |
-| MinIO API | 9000 | S3 对象存储 |
-| MinIO 控制台 | 9001 | MinIO Web UI |
-| Milvus | 19530 | 向量数据库 |
-| Milvus Attu | 8000 | Milvus Web UI |
-| Pulsar Broker | 6650 | 消息队列 |
-| Pulsar 管理台 | 8080 | Pulsar Web UI |
-| ZooKeeper | 2181 | Pulsar 元数据 |
+| 服务 | 端口 | 说明 | 部署模式 |
+|------|------|------|----------|
+| 前端 | 80 | React SPA | 全部 |
+| 后端 API | 9090 | Spring Boot | 全部 |
+| PostgreSQL | 5432 | 数据库 | 全部 |
+| Redis | 16379 | 缓存 | 全量 |
+| Elasticsearch | 9200 | 关键词搜索 | 全量 |
+| MinIO API | 9000 | S3 对象存储 | 全量 |
+| MinIO 控制台 | 9001 | MinIO Web UI | 全量 |
+| Milvus | 19530 | 向量数据库 | 全量 |
+| Milvus Attu | 8000 | Milvus Web UI | 全量 |
+| Pulsar Broker | 6650 | 消息队列 | 全量 |
+| Pulsar 管理台 | 8080 | Pulsar Web UI | 全量 |
+| ZooKeeper | 2181 | Pulsar 元数据 | 全量 |
 
 ## 配置说明
 
@@ -90,11 +100,24 @@ SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=text-embedding-3-small
 |------|------|
 | text-embedding-3-small | 1536 |
 | text-embedding-3-large | 3072 |
-| text-embedding-ada-002 | 1536 |
 | bge-m3 | 1024 |
 | bge-large-zh | 1024 |
 
 在 `.env` 中设置 `MILVUS_DIMENSION=1024`。
+
+## 访问地址
+
+部署成功后访问：
+
+| 地址 | 说明 |
+|------|------|
+| http://localhost | 前端界面 |
+| http://localhost:9090 | 后端 API |
+| http://localhost:9001 | MinIO 控制台（全量） |
+| http://localhost:8000 | Milvus Attu（全量） |
+| http://localhost:8080 | Pulsar 管理台（全量） |
+
+默认账号：`admin` / `admin`
 
 ## 健康检查
 
@@ -106,7 +129,7 @@ docker compose -f docker-compose.full.yml ps
 docker compose -f docker-compose.full.yml logs -f backend
 
 # 测试后端 API
-curl http://localhost:9090/api/user/me
+curl http://localhost:9090/actuator/health
 
 # 测试 Elasticsearch
 curl http://localhost:9200/_cluster/health
@@ -144,22 +167,23 @@ docker compose -f docker-compose.full.yml logs -f redis
 
 Milvus 首次启动需要 60-90 秒。后端有健康检查重试机制，会自动等待。
 
-### 3. Elasticsearch 启动慢
-
-ES 8.x 首次启动需要 30-60 秒，已配置 `start_period: 30s`。
-
-### 4. 端口冲突
+### 3. 端口冲突
 
 如果端口被占用，修改 `.env` 中的端口映射或停止占用端口的服务。
 
-### 5. Windows 行尾符问题
+### 4. Docker 构建网络问题
 
-如果遇到 `mvnw` 执行错误，运行：
+如果构建时 Maven 依赖下载失败，可能需要配置代理：
+
 ```bash
-sed -i 's/\r$//' mvnw
+# Linux/macOS
+docker compose build --build-arg HTTP_PROXY=http://host.docker.internal:7890 --build-arg HTTPS_PROXY=http://host.docker.internal:7890 backend
+
+# Windows PowerShell
+docker compose build --build-arg HTTP_PROXY=http://host.docker.internal:7890 --build-arg HTTPS_PROXY=http://host.docker.internal:7890 backend
 ```
 
-### 6. 清理所有数据重来
+### 5. 清理所有数据重来
 
 ```bash
 docker compose -f docker-compose.full.yml down -v
@@ -170,11 +194,11 @@ docker compose -f docker-compose.full.yml up -d --build
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                    Docker Network (seahorse-net)                     │
+│                    Docker Network                                    │
 ├──────────┬──────────┬──────────┬──────────┬──────────┬──────────────┤
 │ Postgres │  Redis   │  Milvus  │  Pulsar  │  ES 8.x  │    MinIO     │
 │ +pgvector│  7.x     │  2.6.6   │  3.1.3   │          │  (S3 兼容)   │
-│  :5432   │  :6379   │  :19530  │  :6650   │  :9200   │  :9000       │
+│  :5432   │ :16379   │  :19530  │  :6650   │  :9200   │  :9000       │
 ├──────────┴──────────┴──────────┴──────────┴──────────┴──────────────┤
 │                       Backend (Java 17)             :9090           │
 │                       Frontend (nginx + React)      :80             │

@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: docker.m.daocloud.io/pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16
     container_name: seahorse-postgres
     ports:
       - "5432:5432"

@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -37,6 +38,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>认证入口与用户管理入口共享用户仓储和密码能力，单独配置后认证职责不再混在主 kernel 装配类中。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(SeahorseAgentAuthAdapterAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelAuthAutoConfiguration {
 

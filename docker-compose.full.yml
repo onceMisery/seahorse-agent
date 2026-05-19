@@ -6,7 +6,7 @@ services:
   # ==================== 基础设施 ====================
 
   postgres:
-    image: docker.m.daocloud.io/pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16
     container_name: seahorse-postgres
     ports:
       - "5432:5432"
@@ -25,10 +25,10 @@ services:
     restart: unless-stopped
 
   redis:
-    image: docker.m.daocloud.io/redis:7-alpine
+    image: redis:7-alpine
     container_name: seahorse-redis
     ports:
-      - "6379:6379"
+      - "16379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
 
   elasticsearch:
-    image: docker.m.daocloud.io/elasticsearch/elasticsearch:8.12.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
     container_name: seahorse-elasticsearch
     environment:
       - discovery.type=single-node
@@ -59,7 +59,7 @@ services:
     restart: unless-stopped
 
   minio:
-    image: docker.m.daocloud.io/minio/minio:latest
+    image: minio/minio:latest
     container_name: seahorse-minio
     command: server /data --console-address ":9001"
     environment:
@@ -80,7 +80,7 @@ services:
   # ==================== Milvus 向量库 ====================
 
   milvus-etcd:
-    image: docker.m.daocloud.io/quay.io/coreos/etcd:v3.5.18
+    image: quay.io/coreos/etcd:v3.5.18
     container_name: seahorse-milvus-etcd
     environment:
       ETCD_AUTO_COMPACTION_MODE: revision
@@ -102,7 +102,7 @@ services:
     restart: unless-stopped
 
   milvus-minio:
-    image: docker.m.daocloud.io/minio/minio:latest
+    image: minio/minio:latest
     container_name: seahorse-milvus-minio
     command: server /data --console-address ":9001"
     environment:
@@ -118,7 +118,7 @@ services:
     restart: unless-stopped
 
   milvus-standalone:
-    image: docker.m.daocloud.io/milvusdb/milvus:v2.6.6
+    image: milvusdb/milvus:v2.6.6
     container_name: seahorse-milvus
     command: ["milvus", "run", "standalone"]
     security_opt:
@@ -147,7 +147,7 @@ services:
     restart: unless-stopped
 
   attu:
-    image: docker.m.daocloud.io/zilliz/attu:v2.6.3
+    image: docker.io/zilliz/attu:v2.6.3
     container_name: seahorse-attu
     environment:
       MILVUS_URL: milvus-standalone:19530
@@ -161,7 +161,7 @@ services:
   # ==================== Pulsar 消息队列 ====================
 
   pulsar-zookeeper:
-    image: docker.m.daocloud.io/apachepulsar/pulsar:3.1.3
+    image: apachepulsar/pulsar:3.1.3
     container_name: seahorse-pulsar-zk
     command: bin/pulsar zookeeper
     environment:
@@ -169,21 +169,32 @@ services:
     ports:
       - "2181:2181"
     volumes:
-      - pulsar-zk-data:/pulsar/data/zookeeper
+      - pulsar-zk-data:/pulsar/data
     healthcheck:
-      test: ["CMD-SHELL", "bin/pulsar-admin brokers healthcheck"]
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
       interval: 10s
-      timeout: 10s
+      timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 15s
     restart: unless-stopped
 
+  pulsar-cluster-init:
+    image: apachepulsar/pulsar:3.1.3
+    container_name: seahorse-pulsar-cluster-init
+    depends_on:
+      pulsar-zookeeper:
+        condition: service_healthy
+    entrypoint: ["bash", "-c", "bin/pulsar initialize-cluster-metadata --cluster standalone --metadata-store zk:pulsar-zookeeper:2181 --configuration-metadata-store zk:pulsar-zookeeper:2181 --web-service-url http://pulsar-broker:8080 --broker-service-url pulsar://pulsar-broker:6650 && echo 'Cluster metadata initialized'"]
+    restart: "no"
+
   pulsar-bookie:
-    image: docker.m.daocloud.io/apachepulsar/pulsar:3.1.3
+    image: apachepulsar/pulsar:3.1.3
     container_name: seahorse-pulsar-bookie
     depends_on:
       pulsar-zookeeper:
         condition: service_healthy
+      pulsar-cluster-init:
+        condition: service_completed_successfully
     command: >
       bash -c "bin/apply-config-from-env.py conf/bookkeeper.conf &&
       bin/pulsar bookie"
@@ -196,7 +207,7 @@ services:
     ports:
       - "3181:3181"
     volumes:
-      - pulsar-bookie-data:/pulsar/data/bookkeeper
+      - pulsar-bookie-data:/pulsar/data
     healthcheck:
       test: ["CMD-SHELL", "bin/bookkeeper shell bookiesanity || exit 1"]
       interval: 15s
@@ -206,7 +217,7 @@ services:
     restart: unless-stopped
 
   pulsar-broker:
-    image: docker.m.daocloud.io/apachepulsar/pulsar:3.1.3
+    image: apachepulsar/pulsar:3.1.3
     container_name: seahorse-pulsar-broker
     depends_on:
       pulsar-zookeeper:
@@ -229,7 +240,7 @@ services:
       - "6650:6650"
       - "8080:8080"
     volumes:
-      - pulsar-broker-data:/pulsar/data/broker
+      - pulsar-broker-data:/pulsar/data
     healthcheck:
       test: ["CMD-SHELL", "bin/pulsar-admin brokers healthcheck || exit 1"]
       interval: 10s
@@ -239,7 +250,7 @@ services:
     restart: unless-stopped
 
   pulsar-init:
-    image: docker.m.daocloud.io/apachepulsar/pulsar:3.1.3
+    image: apachepulsar/pulsar:3.1.3
     container_name: seahorse-pulsar-init
     depends_on:
       pulsar-broker:
@@ -261,6 +272,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
+      args:
+        HTTP_PROXY: http://host.docker.internal:7890
+        HTTPS_PROXY: http://host.docker.internal:7890
+        NO_PROXY: localhost,127.0.0.1
     container_name: seahorse-backend
     ports:
       - "9090:9090"
@@ -279,6 +294,9 @@ services:
         condition: service_healthy
     environment:
       SERVER_PORT: "9090"
+      # Redis (for Redisson auto-config)
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
       # DataSource
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-seahorse}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-seahorse}
