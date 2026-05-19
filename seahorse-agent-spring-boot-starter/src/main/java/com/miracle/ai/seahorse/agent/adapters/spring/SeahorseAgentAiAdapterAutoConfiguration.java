@@ -30,10 +30,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
 import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -47,6 +49,7 @@ import java.util.concurrent.Executor;
  * <p>OpenAI-compatible 适配器同时暴露 chat、streaming、embedding、rerank 等端口，集中在本配置中便于后续新增模型 provider。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnClass(name = "com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter")
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentAiAdapterAutoConfiguration {

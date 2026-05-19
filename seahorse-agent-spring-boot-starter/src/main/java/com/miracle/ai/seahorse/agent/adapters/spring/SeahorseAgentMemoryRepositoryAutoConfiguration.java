@@ -33,9 +33,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -47,6 +49,7 @@ import javax.sql.DataSource;
  * <p>四层记忆和记忆质量治理共享同一数据域，集中装配可以让主链路配置只依赖记忆端口而不承载 JDBC 细节。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 

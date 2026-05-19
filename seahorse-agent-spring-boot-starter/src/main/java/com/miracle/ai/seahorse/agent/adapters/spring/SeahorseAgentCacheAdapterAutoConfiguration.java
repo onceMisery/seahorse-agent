@@ -28,10 +28,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -41,6 +43,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>该配置承接 cache-local 与 cache-redis 模块，保持原 Bean 名称不变，后续可继续拆出 coordination 专用配置。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentCacheAdapterAutoConfiguration {
 

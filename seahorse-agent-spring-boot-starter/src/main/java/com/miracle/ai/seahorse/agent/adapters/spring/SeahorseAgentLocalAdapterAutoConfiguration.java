@@ -38,9 +38,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFo
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -53,6 +55,7 @@ import java.util.List;
  * <p>这些 Bean 不依赖外部 SDK，主要承担默认开发体验；独立配置后，主 native 配置只负责聚合兼容入口。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentLocalAdapterAutoConfiguration {
 

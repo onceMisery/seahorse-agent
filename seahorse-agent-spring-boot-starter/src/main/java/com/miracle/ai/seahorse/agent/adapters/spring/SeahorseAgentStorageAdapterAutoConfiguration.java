@@ -21,10 +21,12 @@ import com.miracle.ai.seahorse.agent.adapters.storage.local.LocalObjectStorageAd
 import com.miracle.ai.seahorse.agent.adapters.storage.s3.S3ObjectStorageAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -37,6 +39,7 @@ import java.nio.file.Path;
  * <p>存储适配器独立成组，后续新增 OSS、MinIO 等实现时不再扩张原生适配器总配置。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentStorageAdapterAutoConfiguration {
 

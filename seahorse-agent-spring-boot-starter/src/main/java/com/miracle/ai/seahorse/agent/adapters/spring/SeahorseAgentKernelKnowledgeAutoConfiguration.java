@@ -58,6 +58,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import java.util.concurrent.Executor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -71,6 +72,7 @@ import org.springframework.context.annotation.Configuration;
  * 知识域装配细节的直接承载。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(SeahorseAgentKernelAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelKnowledgeAutoConfiguration {
 

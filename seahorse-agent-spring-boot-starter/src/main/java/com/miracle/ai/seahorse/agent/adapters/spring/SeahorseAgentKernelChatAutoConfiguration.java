@@ -45,6 +45,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import java.util.Map;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -57,6 +58,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>该配置收拢查询优化、流任务默认实现、聊天管线与入口装配，避免主 kernel 配置继续承担聊天主链路细节。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(SeahorseAgentKernelAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelChatAutoConfiguration {
 

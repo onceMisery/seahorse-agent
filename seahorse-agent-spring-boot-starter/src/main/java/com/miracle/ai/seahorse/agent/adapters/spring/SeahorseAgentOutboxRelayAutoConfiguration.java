@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -37,6 +38,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>relay job 依赖 outbox 仓储和消息队列端口，单独配置后可以清晰表达它是跨仓储与 MQ 的集成任务。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter({SeahorseAgentMqAdapterAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentOutboxRelayAutoConfiguration {
 

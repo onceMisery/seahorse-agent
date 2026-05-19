@@ -26,10 +26,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import org.apache.pulsar.client.api.PulsarClient;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -39,6 +41,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>仅迁移 direct/pulsar 基础 MQ Bean；keyword outbox 仍保留在 keyword 配置区域，避免跨领域耦合扩大。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentMqAdapterAutoConfiguration {
 

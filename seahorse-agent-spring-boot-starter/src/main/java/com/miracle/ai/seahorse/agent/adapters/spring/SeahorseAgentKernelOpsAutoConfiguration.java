@@ -39,6 +39,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionReposit
 import java.time.Duration;
 import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -51,6 +52,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>该配置只承载后台运营和治理页面使用的轻量入站服务，避免这些低耦合管理能力继续堆在主 kernel 装配类中。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(SeahorseAgentKernelAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelOpsAutoConfiguration {
 

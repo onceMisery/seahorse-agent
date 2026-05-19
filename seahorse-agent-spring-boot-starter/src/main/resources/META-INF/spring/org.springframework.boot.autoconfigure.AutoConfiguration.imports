@@ -1,4 +1,41 @@
+# Layer 1: Adapters (after DataSource)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAuthAdapterAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAiAdapterAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentCacheAdapterAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentIngestionRepositoryAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKeywordAdapterAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKnowledgeRepositoryAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentLocalAdapterAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMemoryRepositoryAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMetadataAdapterAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMqAdapterAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentObservationAdapterAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentOpsRepositoryAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRetrievalRepositoryAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentStorageAdapterAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentVectorAdapterAutoConfiguration
+
+# Layer 2: Outbox relay (after MQ + Ops)
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentOutboxRelayAutoConfiguration
+
+# Layer 3: Native aggregator (after DataSource)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentNativeAdapterAutoConfiguration
+
+# Layer 4: Kernel auth (after Auth adapter)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAuthAutoConfiguration
+
+# Layer 5: Kernel main (after Native aggregator)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAutoConfiguration
+
+# Layer 6: Kernel sub-configs (after Kernel main)
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelChatAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelDocumentRefreshAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelKeywordAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelKnowledgeAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelMemoryAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelMetadataAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelModelAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelOpsAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelPluginAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelRetrievalAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelTraceAutoConfiguration

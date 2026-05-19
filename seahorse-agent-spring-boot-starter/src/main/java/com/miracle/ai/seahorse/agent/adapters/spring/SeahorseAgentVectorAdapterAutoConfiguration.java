@@ -28,10 +28,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import io.milvus.v2.client.MilvusClientV2;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -43,6 +45,7 @@ import javax.sql.DataSource;
  * <p>将 Milvus、PgVector、Noop 三类 provider 与端口暴露集中管理，避免 native 主配置继续承担向量 SDK 细节。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentVectorAdapterAutoConfiguration {
     @Bean

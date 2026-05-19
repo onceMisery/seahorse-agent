@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -38,6 +39,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>模型路由聚合 chat、streaming、embedding、rerank 和健康状态端口，独立配置后新增模型 provider 不需要触碰主 kernel 配置。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(SeahorseAgentKernelAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelModelAutoConfiguration {
 

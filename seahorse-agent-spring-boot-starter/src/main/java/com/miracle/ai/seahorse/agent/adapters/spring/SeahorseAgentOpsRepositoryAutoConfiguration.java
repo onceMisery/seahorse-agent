@@ -36,9 +36,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -50,6 +52,7 @@ import javax.sql.DataSource;
  * <p>会话、反馈、看板、扩展状态、意图树和术语映射属于运营管理侧数据域，独立配置可以避免主 native 配置继续聚合杂项仓储。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentOpsRepositoryAutoConfiguration {
 

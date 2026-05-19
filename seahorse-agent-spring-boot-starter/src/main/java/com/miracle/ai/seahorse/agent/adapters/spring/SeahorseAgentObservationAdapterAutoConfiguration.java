@@ -21,10 +21,12 @@ import com.miracle.ai.seahorse.agent.adapters.observation.micrometer.MicrometerO
 import com.miracle.ai.seahorse.agent.adapters.observation.noop.NoopObservationAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -34,6 +36,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>从原生适配器总配置拆出，保持 Bean 名称和条件不变，降低总配置类继续膨胀的风险。
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentObservationAdapterAutoConfiguration {
 
