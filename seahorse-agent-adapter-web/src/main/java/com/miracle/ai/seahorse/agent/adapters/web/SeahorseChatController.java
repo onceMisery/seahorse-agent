@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import cn.hutool.core.util.IdUtil;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimitDecision;
@@ -92,7 +93,7 @@ public class SeahorseChatController {
         String actualConversationId = resolveId(conversationId);
         String actualUserId = resolveUserId(userId);
         checkChatRateLimit(actualUserId);
-        String taskId = UUID.randomUUID().toString();
+        String taskId = nextShortId();
         SseEmitter emitter = new SseEmitter(sseTimeoutMs);
         StreamCallback callback = callbackFactory.create(emitter, actualConversationId, taskId, actualUserId);
         StreamChatCommand command = new StreamChatCommand(
@@ -115,9 +116,13 @@ public class SeahorseChatController {
 
     private String resolveId(String value) {
         if (value == null || value.isBlank()) {
-            return UUID.randomUUID().toString();
+            return nextShortId();
         }
         return value;
+    }
+
+    private static String nextShortId() {
+        return IdUtil.nanoId(20);
     }
 
     private ChatMode parseChatMode(String value) {
