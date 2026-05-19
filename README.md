@@ -1,12 +1,13 @@
 # Seahorse Agent
 
-Seahorse Agent 是一个面向企业知识问答与智能体应用的 RAG（Retrieval-Augmented Generation，检索增强生成）系统。项目以后端微内核为核心，将领域模型、端口契约和核心编排收敛在 `seahorse-agent-kernel`，再通过可插拔适配器接入模型、向量库、缓存、消息队列、对象存储、文档解析、MCP 工具和可观测能力。整体采用 Spring Boot 3 + Java 17 的多模块架构，并配套 React + TypeScript 前端，围绕知识库管理、文档入库、向量检索、意图解析、会话记忆、流式对话和 RAG Trace 构建完整的 AI 应用工程化链路。
+Seahorse Agent 是一个面向企业知识问答与智能体应用的 Agent 工程平台，首发核心能力是 RAG（Retrieval-Augmented Generation，检索增强生成）闭环。项目以后端微内核为核心，将领域模型、端口契约和核心编排收敛在 `seahorse-agent-kernel`，再通过可插拔适配器接入模型、向量库、缓存、消息队列、对象存储、文档解析、MCP 工具和可观测能力。整体采用 Spring Boot 3 + Java 17 的多模块架构，并配套 React + TypeScript 前端，围绕知识库管理、文档入库、向量检索、意图解析、会话记忆、流式对话、基础 Agent Loop 和 RAG Trace 构建完整的 AI 应用工程化链路。
 
 ## 项目亮点
 
 - **微内核架构**：`seahorse-agent-kernel` 只保留稳定的领域模型、端口接口、应用服务、Feature 扩展点和主链路编排，把外部依赖全部隔离到适配器模块。
 - **可插拔适配器体系**：AI 模型、向量库、缓存、消息队列、对象存储、文档解析、可观测、MCP 等能力均通过端口契约接入，可在本地、noop、远程服务和生产级实现之间切换。
 - **完整 RAG 闭环**：覆盖文档上传、解析、分块、Embedding、向量索引、意图检索、上下文组装、Prompt 构造和大模型流式回答。
+- **基础 Agent 工具循环**：`chatMode=agent` 可进入 `KernelAgentLoop`，通过 OpenAI-compatible function-calling、`ToolRegistryPort` / `ToolPort` 和 MCP allowlist adapter 执行多轮工具调用。
 - **OpenAI 兼容模型接入**：`OpenAiCompatibleModelAdapter` 支持 Chat、Streaming Chat、Embedding、Rerank、模型发现和健康检查，可接入 OpenAI 兼容协议的模型服务。
 - **多向量后端**：提供 Milvus、pgvector 和 noop 向量适配器，`MilvusVectorAdapter` 实现基于 `id/content/metadata/embedding` 字段模型和 HNSW 索引。
 - **可配置文档入库 Pipeline**：`KernelIngestionEngine` 按节点定义串联执行入库任务，原生节点包括 fetcher、parser、chunker、embedder、indexer、enhancer、enricher 等。
@@ -51,6 +52,7 @@ Seahorse Agent 是一个面向企业知识问答与智能体应用的 RAG（Retr
 Seahorse Agent 的 AI 能力由内核编排和出站端口共同组成：
 
 - **智能对话**：`ChatInboundPort` 接收外部请求，`KernelChatPipeline` 负责编排会话记忆、查询改写、意图解析、检索增强和流式响应。
+- **Agent 模式**：聊天请求可通过 `chatMode=agent` 进入 `KernelAgentLoop`，由模型基于 function-calling 在运行时选择工具、读取 observation 并继续决策；默认仍保持 RAG 模式以兼容既有链路。
 - **OpenAI 兼容大模型适配**：模型适配器调用 `/chat/completions`、`/embeddings`、`/rerank`，支持普通对话、SSE 流式输出、Embedding、Rerank、模型列表和健康判断。
 - **向量检索**：`VectorSearchPort` 抽象检索能力，`MilvusVectorAdapter` 使用 FloatVector 字段、HNSW 索引和可配置 metric；pgvector Adapter 适合 PostgreSQL 向量化部署。
 - **知识库问答**：知识库、文档和分块通过仓储端口持久化，分块内容写入向量库后可被 RAG 检索链路召回。
@@ -58,7 +60,7 @@ Seahorse Agent 的 AI 能力由内核编排和出站端口共同组成：
 - **会话记忆**：`ConversationMemoryPort` 加载历史消息并追加用户输入，`DefaultMemoryEnginePort` 编排短期/长期/语义三层记忆，通过 `activateMemory` 阶段注入 Prompt 上下文。
 - **查询优化**：`QueryOptimizerPort` 在查询改写前执行专有名词保护和术语映射，默认规则版确定性实现，可切换为 LLM 版。
 - **深度思考开关**：聊天接口支持 `deepThinking` 参数，最终传入模型采样选项，前端可处理 thinking 类型流式事件。
-- **MCP 工具扩展**：MCP HTTP 适配器、工具注册和参数抽取端口为工具调用与外部能力编排预留扩展点。
+- **MCP 工具扩展**：RAG 路径可把 MCP 结果作为上下文来源；Agent 模式可将 allowlist 中的 MCP 工具注册为 `ToolPort`，由 LLM function-calling 按需调用。
 
 ## 系统架构
 
@@ -186,7 +188,7 @@ sequenceDiagram
 
 ### 1. 流式智能对话链路
 
-`SeahorseChatController` 暴露 `GET /rag/v3/chat`，返回 `text/event-stream;charset=UTF-8`。接口支持 `question`、`conversationId`、`userId`、`deepThinking` 参数，并通过 `RateLimiterPort` 做聊天限流。用户可以通过 `POST /rag/v3/stop` 停止指定流式任务。
+`SeahorseChatController` 暴露 `GET /rag/v3/chat`，返回 `text/event-stream;charset=UTF-8`。接口支持 `question`、`conversationId`、`userId`、`deepThinking`、`chatMode` 参数，并通过 `RateLimiterPort` 做聊天限流。`chatMode` 默认走 RAG；显式传入 `agent` 时进入基础 Agent Loop。用户可以通过 `POST /rag/v3/stop` 停止指定流式任务。
 
 ```mermaid
 flowchart TD
@@ -384,6 +386,7 @@ npm run dev
 | Starter 依赖治理 | 继续推进 `seahorse-agent-spring-boot-starter-core` 作为轻量入口，`seahorse-agent-spring-boot-starter-all` 作为官方全量适配器聚合入口；后续将 bootstrap 迁移到 core starter + 显式适配器依赖，并逐步 optional 化旧聚合 starter 的重型 SDK。 |
 | 元数据治理 JDBC 拆分 | `JdbcMetadataGovernanceRepositoryAdapter` 已显著瘦身，但仍作为 14 个 metadata 端口的兼容门面。后续应先输出 schema、dictionary、extraction、review、quarantine、backfill、canonical write、quality report 的事务边界清单，再按子域拆成独立端口 Bean。 |
 | 端口准入规则 | 端口文件数不再作为机械合并依据。后续新增端口需说明外部能力边界、独立替换需求、事务生命周期或插件治理理由；不满足时优先使用领域服务、DTO、query object 或现有端口方法。 |
+| Agent 能力演进 | Phase A 基础 Agent Loop 已落地。后续重点是把检索、记忆、Web Search 等能力注册为标准工具，并补齐 Skill/Agent 注册中心、持久化状态机、Human-in-the-Loop、任务快照和输出自愈。 |
 | 记忆质量治理 | 四层记忆架构保留。后续重点补齐 token budget、复杂衰减分更新、高价值短期记忆晋升、冲突检测和语义记忆向量检索闭环。 |
 | 检索与重排增强 | 检索通道、后处理链和 Lucene 适配器已具备可插拔基础。后续可继续增强 OpenSearch/Elasticsearch 生产检索、RRF 权重策略、业务指标和检索评测闭环。 |
 | 大类治理制度化 | 对超过 500 行且包含多个变更原因的类建立拆分触发器；超过 800 行且跨 3 个以上职责时列为 P1 候选，拆分时保持外部端口、Bean 名称和配置契约兼容。 |
