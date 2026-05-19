@@ -320,7 +320,7 @@ CREATE TABLE t_rag_trace_node (
     node_id        VARCHAR(64)      NOT NULL,
     parent_node_id VARCHAR(64),
     depth          INTEGER          DEFAULT 0,
-    node_type      VARCHAR(16),
+    node_type      VARCHAR(64),
     node_name      VARCHAR(128),
     class_name     VARCHAR(256),
     method_name    VARCHAR(128),

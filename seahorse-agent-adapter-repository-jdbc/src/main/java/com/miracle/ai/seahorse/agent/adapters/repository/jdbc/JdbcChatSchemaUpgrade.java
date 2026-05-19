@@ -42,7 +42,7 @@ public class JdbcChatSchemaUpgrade {
         widenColumns("t_message", List.of("id", "conversation_id", "user_id"));
         widenColumns("t_message_feedback", List.of("id", "message_id", "conversation_id", "user_id"));
         widenColumns("t_rag_trace_run", List.of("id", "trace_id", "conversation_id", "task_id", "user_id"));
-        widenColumns("t_rag_trace_node", List.of("id", "trace_id", "node_id", "parent_node_id"));
+        widenColumns("t_rag_trace_node", List.of("id", "trace_id", "node_id", "parent_node_id", "node_type"));
         widenColumns("t_short_term_memory", List.of("id", "user_id", "conversation_id"));
     }
 
