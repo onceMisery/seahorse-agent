@@ -40,13 +40,13 @@ public class SeahorseMemoryController {
     private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "system";
 
-    private final MemoryManagementInboundPort managementPort;
-    private final MemoryGovernanceInboundPort governancePort;
+    private final ObjectProvider<MemoryManagementInboundPort> managementPortProvider;
+    private final ObjectProvider<MemoryGovernanceInboundPort> governancePortProvider;
 
     public SeahorseMemoryController(ObjectProvider<MemoryManagementInboundPort> managementPortProvider,
                                     ObjectProvider<MemoryGovernanceInboundPort> governancePortProvider) {
-        this.managementPort = managementPortProvider.getIfAvailable();
-        this.governancePort = governancePortProvider.getIfAvailable();
+        this.managementPortProvider = managementPortProvider;
+        this.governancePortProvider = governancePortProvider;
     }
 
     @GetMapping("/memories")
@@ -54,64 +54,64 @@ public class SeahorseMemoryController {
                                     @RequestParam(defaultValue = "short_term") String layer,
                                     @RequestParam(required = false) String conversationId,
                                     @RequestParam(defaultValue = "20") int limit) {
-        if (managementPort == null) return Map.of("code", "1", "message", "Service not available");
-        return ok(managementPort.listMemories(userId, layer, conversationId, limit));
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(managementPortProvider.getIfAvailable().listMemories(userId, layer, conversationId, limit));
     }
 
     @GetMapping("/memories/{layer}/{memoryId}")
     public Map<String, Object> detail(@PathVariable String layer, @PathVariable String memoryId) {
-        if (managementPort == null) return Map.of("code", "1", "message", "Service not available");
-        return ok(managementPort.findMemory(layer, memoryId).orElse(null));
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(managementPortProvider.getIfAvailable().findMemory(layer, memoryId).orElse(null));
     }
 
     @DeleteMapping("/memories/{layer}/{memoryId}")
     public Map<String, Object> delete(@PathVariable String layer, @PathVariable String memoryId) {
-        if (managementPort == null) return Map.of("code", "1", "message", "Service not available");
-        return ok(Map.of("deleted", managementPort.deleteMemory(layer, memoryId)));
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(Map.of("deleted", managementPortProvider.getIfAvailable().deleteMemory(layer, memoryId)));
     }
 
     @GetMapping("/memories/quality-snapshots")
     public Map<String, Object> qualitySnapshots(@RequestParam String userId,
                                                 @RequestParam(defaultValue = "20") int limit) {
-        if (managementPort == null) return Map.of("code", "1", "message", "Service not available");
-        return ok(managementPort.listQualitySnapshots(userId, limit));
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(managementPortProvider.getIfAvailable().listQualitySnapshots(userId, limit));
     }
 
     @GetMapping("/memories/conflicts")
     public Map<String, Object> conflicts(@RequestParam String userId,
                                          @RequestParam(required = false) String status,
                                          @RequestParam(defaultValue = "20") int limit) {
-        if (managementPort == null) return Map.of("code", "1", "message", "Service not available");
-        return ok(managementPort.listConflicts(userId, status, limit));
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(managementPortProvider.getIfAvailable().listConflicts(userId, status, limit));
     }
 
     @PostMapping("/memories/conflicts/{conflictId}/resolve")
     public Map<String, Object> resolveConflict(@PathVariable String conflictId,
                                                @RequestBody(required = false) MemoryConflictResolveRequest request,
                                                @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        if (managementPort == null) return Map.of("code", "1", "message", "Service not available");
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
         String action = request == null ? "manual-resolve" : request.action();
-        return ok(Map.of("resolved", managementPort.resolveConflict(conflictId, action, operator(userId))));
+        return ok(Map.of("resolved", managementPortProvider.getIfAvailable().resolveConflict(conflictId, action, operator(userId))));
     }
 
     @PostMapping("/memories/governance/run")
     public Map<String, Object> runGovernance(@RequestParam String userId,
                                              @RequestParam(defaultValue = "manual") String reason,
                                              @RequestParam(defaultValue = "true") boolean assessQuality) {
-        if (governancePort == null) return Map.of("code", "1", "message", "Service not available");
-        return ok(governancePort.runGovernance(userId, reason, assessQuality));
+        if (governancePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(governancePortProvider.getIfAvailable().runGovernance(userId, reason, assessQuality));
     }
 
     @PostMapping("/memories/governance/decay")
     public Map<String, Object> runDecay(@RequestParam(defaultValue = "manual-decay") String reason) {
-        if (governancePort == null) return Map.of("code", "1", "message", "Service not available");
-        return ok(governancePort.runDecay(reason));
+        if (governancePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(governancePortProvider.getIfAvailable().runDecay(reason));
     }
 
     @PostMapping("/memories/governance/quality")
     public Map<String, Object> assessQuality(@RequestParam String userId) {
-        if (governancePort == null) return Map.of("code", "1", "message", "Service not available");
-        return ok(governancePort.assessQuality(userId));
+        if (governancePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(governancePortProvider.getIfAvailable().assessQuality(userId));
     }
 
     private Map<String, Object> ok(Object data) {

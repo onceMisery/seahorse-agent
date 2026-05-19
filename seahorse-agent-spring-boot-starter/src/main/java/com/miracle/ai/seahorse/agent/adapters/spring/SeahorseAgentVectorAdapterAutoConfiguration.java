@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.adapters.vector.pgvector.PgVectorProperties
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
+import io.milvus.v2.client.ConnectConfig;
 import io.milvus.v2.client.MilvusClientV2;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -82,6 +83,18 @@ public class SeahorseAgentVectorAdapterAutoConfiguration {
             "com.miracle.ai.seahorse.agent.adapters.vector.milvus.MilvusVectorAdapter"
     })
     static class MilvusVectorAutoConfiguration {
+
+        @Bean(destroyMethod = "close")
+        @ConditionalOnMissingBean(MilvusClientV2.class)
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.vector", name = "type", havingValue = "milvus")
+        public MilvusClientV2 seahorseMilvusClient(
+                @Value("${seahorse-agent.adapters.vector.milvus.host:localhost}") String host,
+                @Value("${seahorse-agent.adapters.vector.milvus.port:19530}") int port) {
+            ConnectConfig config = ConnectConfig.builder()
+                    .uri("http://" + host + ":" + port)
+                    .build();
+            return new MilvusClientV2(config);
+        }
 
         @Bean
         @ConditionalOnBean(MilvusClientV2.class)

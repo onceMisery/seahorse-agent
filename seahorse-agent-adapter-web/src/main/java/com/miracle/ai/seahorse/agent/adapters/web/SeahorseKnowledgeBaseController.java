@@ -50,17 +50,17 @@ public class SeahorseKnowledgeBaseController {
     private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "";
 
-    private final KnowledgeBaseInboundPort knowledgeBasePort;
+    private final ObjectProvider<KnowledgeBaseInboundPort> knowledgeBasePortProvider;
 
     public SeahorseKnowledgeBaseController(ObjectProvider<KnowledgeBaseInboundPort> knowledgeBasePortProvider) {
-        this.knowledgeBasePort = knowledgeBasePortProvider.getIfAvailable();
+        this.knowledgeBasePortProvider = knowledgeBasePortProvider;
     }
 
     @PostMapping("/knowledge-base")
     public Map<String, Object> create(@RequestBody KnowledgeBaseCreateRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         KnowledgeBaseCreateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        String id = knowledgeBasePort.create(new CreateKnowledgeBaseCommand(
+        String id = knowledgeBasePortProvider.getIfAvailable().create(new CreateKnowledgeBaseCommand(
                 safeRequest.name(), safeRequest.embeddingModel(), safeRequest.collectionName(), operator(userId)));
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, id);
     }
@@ -70,7 +70,7 @@ public class SeahorseKnowledgeBaseController {
                                       @RequestBody KnowledgeBaseUpdateRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         KnowledgeBaseUpdateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        knowledgeBasePort.update(kbId, new UpdateKnowledgeBaseCommand(
+        knowledgeBasePortProvider.getIfAvailable().update(kbId, new UpdateKnowledgeBaseCommand(
                 safeRequest.name(), safeRequest.embeddingModel(), operator(userId)));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
@@ -78,13 +78,13 @@ public class SeahorseKnowledgeBaseController {
     @DeleteMapping("/knowledge-base/{kb-id}")
     public Map<String, Object> delete(@PathVariable("kb-id") String kbId,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        knowledgeBasePort.delete(kbId, operator(userId));
+        knowledgeBasePortProvider.getIfAvailable().delete(kbId, operator(userId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @GetMapping("/knowledge-base/{kb-id}")
     public Map<String, Object> queryById(@PathVariable("kb-id") String kbId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, knowledgeBasePort.queryById(kbId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, knowledgeBasePortProvider.getIfAvailable().queryById(kbId));
     }
 
     @GetMapping("/knowledge-base")
@@ -92,12 +92,12 @@ public class SeahorseKnowledgeBaseController {
                                     @RequestParam(required = false, defaultValue = "10") long size,
                                     @RequestParam(required = false) String name) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                knowledgeBasePort.page(new KnowledgeBasePageCommand(current, size, name)));
+                knowledgeBasePortProvider.getIfAvailable().page(new KnowledgeBasePageCommand(current, size, name)));
     }
 
     @GetMapping("/knowledge-base/chunk-strategies")
     public Map<String, Object> listChunkStrategies() {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, knowledgeBasePort.listChunkStrategies());
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, knowledgeBasePortProvider.getIfAvailable().listChunkStrategies());
     }
 
     private String operator(String userId) {

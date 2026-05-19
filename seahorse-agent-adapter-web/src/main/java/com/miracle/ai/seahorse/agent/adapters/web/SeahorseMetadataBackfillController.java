@@ -48,10 +48,10 @@ public class SeahorseMetadataBackfillController {
     private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "system";
 
-    private final MetadataBackfillInboundPort backfillPort;
+    private final ObjectProvider<MetadataBackfillInboundPort> backfillPortProvider;
 
     public SeahorseMetadataBackfillController(ObjectProvider<MetadataBackfillInboundPort> backfillPortProvider) {
-        this.backfillPort = backfillPortProvider.getIfAvailable();
+        this.backfillPortProvider = backfillPortProvider;
     }
 
     @PostMapping("/knowledge-base/{kb-id}/metadata-backfill/jobs")
@@ -59,7 +59,7 @@ public class SeahorseMetadataBackfillController {
                                          @RequestBody(required = false) MetadataBackfillCreateRequest request,
                                          @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                backfillPort.createJob(toCommand(kbId, request, operator(userId))));
+                backfillPortProvider.getIfAvailable().createJob(toCommand(kbId, request, operator(userId))));
     }
 
     @GetMapping("/knowledge-base/{kb-id}/metadata-backfill/jobs")
@@ -77,7 +77,7 @@ public class SeahorseMetadataBackfillController {
                                         @RequestParam(value = "size", defaultValue = "10") long size) {
         // 列表查询只拼装筛选条件，具体分页和状态口径由 kernel 统一处理。
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                backfillPort.pageJobs(new MetadataBackfillJobQuery(
+                backfillPortProvider.getIfAvailable().pageJobs(new MetadataBackfillJobQuery(
                         tenantId, kbId, status(status), pipelineId, operator, documentId, pauseReason,
                         failureKeyword, hasFailures, reExtract, current, size)));
     }
@@ -85,35 +85,35 @@ public class SeahorseMetadataBackfillController {
     @GetMapping("/knowledge-base/{kb-id}/metadata-backfill/overview")
     public Map<String, Object> overview(@PathVariable("kb-id") String kbId,
                                         @RequestParam(value = "tenantId", required = false) String tenantId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort.overview(tenantId, kbId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().overview(tenantId, kbId));
     }
 
     @GetMapping("/metadata-backfill/jobs/{job-id}")
     public Map<String, Object> getJob(@PathVariable("job-id") String jobId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort.getJob(jobId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().getJob(jobId));
     }
 
     @PostMapping("/metadata-backfill/jobs/{job-id}/run-next")
     public Map<String, Object> runNextBatch(@PathVariable("job-id") String jobId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort.runNextBatch(jobId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().runNextBatch(jobId));
     }
 
     @PostMapping("/metadata-backfill/jobs/{job-id}/pause")
     public Map<String, Object> pause(@PathVariable("job-id") String jobId,
                                      @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort.pause(jobId, operator(userId)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().pause(jobId, operator(userId)));
     }
 
     @PostMapping("/metadata-backfill/jobs/{job-id}/resume")
     public Map<String, Object> resume(@PathVariable("job-id") String jobId,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort.resume(jobId, operator(userId)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().resume(jobId, operator(userId)));
     }
 
     @PostMapping("/metadata-backfill/jobs/{job-id}/cancel")
     public Map<String, Object> cancel(@PathVariable("job-id") String jobId,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort.cancel(jobId, operator(userId)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().cancel(jobId, operator(userId)));
     }
 
     private MetadataBackfillCommand toCommand(String kbId,

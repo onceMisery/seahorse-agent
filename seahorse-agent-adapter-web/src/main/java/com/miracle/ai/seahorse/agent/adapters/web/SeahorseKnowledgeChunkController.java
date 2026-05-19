@@ -49,10 +49,10 @@ public class SeahorseKnowledgeChunkController {
     private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "";
 
-    private final KnowledgeChunkInboundPort chunkPort;
+    private final ObjectProvider<KnowledgeChunkInboundPort> chunkPortProvider;
 
     public SeahorseKnowledgeChunkController(ObjectProvider<KnowledgeChunkInboundPort> chunkPortProvider) {
-        this.chunkPort = chunkPortProvider.getIfAvailable();
+        this.chunkPortProvider = chunkPortProvider;
     }
 
     @GetMapping("/knowledge-base/docs/{doc-id}/chunks")
@@ -61,7 +61,7 @@ public class SeahorseKnowledgeChunkController {
                                     @RequestParam(required = false, defaultValue = "10") long size,
                                     @RequestParam(required = false) Boolean enabled) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                chunkPort.page(docId, new KnowledgeChunkPageCommand(current, size, enabled)));
+                chunkPortProvider.getIfAvailable().page(docId, new KnowledgeChunkPageCommand(current, size, enabled)));
     }
 
     @PostMapping("/knowledge-base/docs/{doc-id}/chunks")
@@ -69,7 +69,7 @@ public class SeahorseKnowledgeChunkController {
                                       @RequestBody KnowledgeChunkCreateRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         KnowledgeChunkCreateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, chunkPort.create(docId,
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, chunkPortProvider.getIfAvailable().create(docId,
                 new CreateKnowledgeChunkCommand(safeRequest.chunkId(),
                         safeRequest.content(), safeRequest.index(), operator(userId))));
     }
@@ -80,14 +80,14 @@ public class SeahorseKnowledgeChunkController {
                                       @RequestBody KnowledgeChunkUpdateRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         KnowledgeChunkUpdateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        chunkPort.update(docId, chunkId, new UpdateKnowledgeChunkCommand(safeRequest.content(), operator(userId)));
+        chunkPortProvider.getIfAvailable().update(docId, chunkId, new UpdateKnowledgeChunkCommand(safeRequest.content(), operator(userId)));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @DeleteMapping("/knowledge-base/docs/{doc-id}/chunks/{chunk-id}")
     public Map<String, Object> delete(@PathVariable("doc-id") String docId,
                                       @PathVariable("chunk-id") String chunkId) {
-        chunkPort.delete(docId, chunkId);
+        chunkPortProvider.getIfAvailable().delete(docId, chunkId);
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
@@ -96,7 +96,7 @@ public class SeahorseKnowledgeChunkController {
                                       @PathVariable("chunk-id") String chunkId,
                                       @RequestParam("value") boolean enabled,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        chunkPort.enable(docId, chunkId, enabled, operator(userId));
+        chunkPortProvider.getIfAvailable().enable(docId, chunkId, enabled, operator(userId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
@@ -106,7 +106,7 @@ public class SeahorseKnowledgeChunkController {
                                            @RequestBody(required = false) KnowledgeChunkBatchRequest request,
                                            @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         List<String> chunkIds = request == null ? List.of() : request.chunkIds();
-        chunkPort.batchEnable(docId, chunkIds, enabled, operator(userId));
+        chunkPortProvider.getIfAvailable().batchEnable(docId, chunkIds, enabled, operator(userId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 

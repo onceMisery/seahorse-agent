@@ -29,8 +29,13 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Configuration;
 
+import java.net.URI;
 import java.nio.file.Path;
 
 /**
@@ -58,6 +63,29 @@ public class SeahorseAgentStorageAdapterAutoConfiguration {
             "com.miracle.ai.seahorse.agent.adapters.storage.s3.S3ObjectStorageAdapter"
     })
     static class S3StorageAutoConfiguration {
+
+        @Bean(destroyMethod = "close")
+        @ConditionalOnMissingBean(S3Client.class)
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.storage", name = "type", havingValue = "s3")
+        public S3Client seahorseS3Client(
+                @Value("${seahorse-agent.adapters.storage.s3.endpoint:}") String endpoint,
+                @Value("${seahorse-agent.adapters.storage.s3.access-key:}") String accessKey,
+                @Value("${seahorse-agent.adapters.storage.s3.secret-key:}") String secretKey,
+                @Value("${seahorse-agent.adapters.storage.s3.region:us-east-1}") String region) {
+            var builder = S3Client.builder()
+                    .region(Region.of(region))
+                    .serviceConfiguration(S3Configuration.builder()
+                            .pathStyleAccessEnabled(true)
+                            .build());
+            if (!endpoint.isBlank()) {
+                builder.endpointOverride(URI.create(endpoint));
+            }
+            if (!accessKey.isBlank() && !secretKey.isBlank()) {
+                builder.credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(accessKey, secretKey)));
+            }
+            return builder.build();
+        }
 
         @Bean
         @ConditionalOnBean(S3Client.class)

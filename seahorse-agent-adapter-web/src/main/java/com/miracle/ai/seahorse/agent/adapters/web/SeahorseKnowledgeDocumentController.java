@@ -56,10 +56,10 @@ public class SeahorseKnowledgeDocumentController {
     private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "";
 
-    private final KnowledgeDocumentInboundPort documentPort;
+    private final ObjectProvider<KnowledgeDocumentInboundPort> documentPortProvider;
 
     public SeahorseKnowledgeDocumentController(ObjectProvider<KnowledgeDocumentInboundPort> documentPortProvider) {
-        this.documentPort = documentPortProvider.getIfAvailable();
+        this.documentPortProvider = documentPortProvider;
     }
 
     @PostMapping(value = "/knowledge-base/{kb-id}/docs/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -69,7 +69,7 @@ public class SeahorseKnowledgeDocumentController {
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId)
             throws IOException {
         KnowledgeDocumentUploadRequest safeRequest = request == null ? new KnowledgeDocumentUploadRequest() : request;
-        KnowledgeDocumentRecord document = documentPort.upload(new UploadKnowledgeDocumentCommand(
+        KnowledgeDocumentRecord document = documentPortProvider.getIfAvailable().upload(new UploadKnowledgeDocumentCommand(
                 kbId,
                 new UploadFileContent(file.getInputStream(), file.getSize(),
                         file.getOriginalFilename(), file.getContentType()),
@@ -82,27 +82,27 @@ public class SeahorseKnowledgeDocumentController {
     @PostMapping("/knowledge-base/docs/{doc-id}/chunk")
     public Map<String, Object> startChunk(@PathVariable("doc-id") String docId,
                                           @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        documentPort.startChunk(docId, operator(userId));
+        documentPortProvider.getIfAvailable().startChunk(docId, operator(userId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @DeleteMapping("/knowledge-base/docs/{doc-id}")
     public Map<String, Object> delete(@PathVariable("doc-id") String docId,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        documentPort.delete(docId, operator(userId));
+        documentPortProvider.getIfAvailable().delete(docId, operator(userId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @GetMapping("/knowledge-base/docs/{doc-id}")
     public Map<String, Object> queryById(@PathVariable("doc-id") String docId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, documentPort.queryById(docId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, documentPortProvider.getIfAvailable().queryById(docId));
     }
 
     @PutMapping("/knowledge-base/docs/{doc-id}")
     public Map<String, Object> update(@PathVariable("doc-id") String docId,
                                       @RequestBody KnowledgeDocumentUpdateRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        documentPort.update(docId, toCommand(request, operator(userId)));
+        documentPortProvider.getIfAvailable().update(docId, toCommand(request, operator(userId)));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
@@ -110,7 +110,7 @@ public class SeahorseKnowledgeDocumentController {
     public Map<String, Object> page(@PathVariable("kb-id") String kbId,
                                     @ModelAttribute KnowledgeDocumentPageRequest request) {
         KnowledgeDocumentPageRequest safeRequest = request == null ? new KnowledgeDocumentPageRequest() : request;
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, documentPort.page(kbId,
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, documentPortProvider.getIfAvailable().page(kbId,
                 new KnowledgeDocumentPageCommand(safeRequest.currentOrDefault(), safeRequest.sizeOrDefault(),
                         safeRequest.getStatus(), safeRequest.getKeyword())));
     }
@@ -118,14 +118,14 @@ public class SeahorseKnowledgeDocumentController {
     @GetMapping("/knowledge-base/docs/search")
     public Map<String, Object> search(@RequestParam(required = false) String keyword,
                                       @RequestParam(defaultValue = "8") int limit) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, documentPort.search(keyword, limit));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, documentPortProvider.getIfAvailable().search(keyword, limit));
     }
 
     @PatchMapping("/knowledge-base/docs/{doc-id}/enable")
     public Map<String, Object> enable(@PathVariable("doc-id") String docId,
                                       @RequestParam("value") boolean enabled,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        documentPort.enable(docId, enabled, operator(userId));
+        documentPortProvider.getIfAvailable().enable(docId, enabled, operator(userId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
@@ -134,7 +134,7 @@ public class SeahorseKnowledgeDocumentController {
                                          @ModelAttribute KnowledgeDocumentPageRequest request) {
         KnowledgeDocumentPageRequest safeRequest = request == null ? new KnowledgeDocumentPageRequest() : request;
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                documentPort.chunkLogs(docId, safeRequest.currentOrDefault(), safeRequest.sizeOrDefault()));
+                documentPortProvider.getIfAvailable().chunkLogs(docId, safeRequest.currentOrDefault(), safeRequest.sizeOrDefault()));
     }
 
     private UpdateKnowledgeDocumentCommand toCommand(KnowledgeDocumentUpdateRequest request, String operator) {

@@ -44,10 +44,10 @@ public class SeahorseConversationController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final ConversationManagementInboundPort conversationPort;
+    private final ObjectProvider<ConversationManagementInboundPort> conversationPortProvider;
 
     public SeahorseConversationController(ObjectProvider<ConversationManagementInboundPort> conversationPortProvider) {
-        this.conversationPort = conversationPortProvider.getIfAvailable();
+        this.conversationPortProvider = conversationPortProvider;
     }
 
     @GetMapping("/conversations")
@@ -55,7 +55,7 @@ public class SeahorseConversationController {
                                                  @RequestHeader(value = "X-User-Id", required = false)
                                                  String headerUserId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                conversationPort.listConversations(resolveUserId(userId, headerUserId)));
+                conversationPortProvider.getIfAvailable().listConversations(resolveUserId(userId, headerUserId)));
     }
 
     @PutMapping("/conversations/{conversationId}")
@@ -65,7 +65,7 @@ public class SeahorseConversationController {
                                       @RequestHeader(value = "X-User-Id", required = false)
                                       String headerUserId) {
         ConversationUpdateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        conversationPort.rename(conversationId, resolveUserId(userId, headerUserId), safeRequest.title());
+        conversationPortProvider.getIfAvailable().rename(conversationId, resolveUserId(userId, headerUserId), safeRequest.title());
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
@@ -74,7 +74,7 @@ public class SeahorseConversationController {
                                       @RequestParam(required = false) String userId,
                                       @RequestHeader(value = "X-User-Id", required = false)
                                       String headerUserId) {
-        conversationPort.delete(conversationId, resolveUserId(userId, headerUserId));
+        conversationPortProvider.getIfAvailable().delete(conversationId, resolveUserId(userId, headerUserId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
@@ -84,7 +84,7 @@ public class SeahorseConversationController {
                                             @RequestHeader(value = "X-User-Id", required = false)
                                             String headerUserId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                conversationPort.listMessages(conversationId, resolveUserId(userId, headerUserId)));
+                conversationPortProvider.getIfAvailable().listMessages(conversationId, resolveUserId(userId, headerUserId)));
     }
 
     private String resolveUserId(String userId, String headerUserId) {

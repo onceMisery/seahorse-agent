@@ -40,29 +40,29 @@ public class SeahorseDocumentRefreshController {
     private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "system";
 
-    private final DocumentRefreshInboundPort refreshPort;
+    private final ObjectProvider<DocumentRefreshInboundPort> refreshPortProvider;
 
     public SeahorseDocumentRefreshController(ObjectProvider<DocumentRefreshInboundPort> refreshPortProvider) {
-        this.refreshPort = refreshPortProvider.getIfAvailable();
+        this.refreshPortProvider = refreshPortProvider;
     }
 
     @PostMapping("/knowledge-base/docs/{doc-id}/refresh")
     public Map<String, Object> refresh(@PathVariable("doc-id") String docId,
                                        @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        if (refreshPort == null) {
+        if (refreshPortProvider.getIfAvailable() == null) {
             return Map.of(KEY_CODE, "1", "message", "Service not available");
         }
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, refreshPort.refreshDocument(docId, operator(userId)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, refreshPortProvider.getIfAvailable().refreshDocument(docId, operator(userId)));
     }
 
     @PostMapping("/knowledge-base/docs/refresh-due")
     public Map<String, Object> refreshDue(@RequestParam(defaultValue = "20") int limit,
                                           @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        if (refreshPort == null) {
+        if (refreshPortProvider.getIfAvailable() == null) {
             return Map.of(KEY_CODE, "1", "message", "Service not available");
         }
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                refreshPort.refreshDueSchedules(Instant.now(), limit, operator(userId)));
+                refreshPortProvider.getIfAvailable().refreshDueSchedules(Instant.now(), limit, operator(userId)));
     }
 
     private String operator(String userId) {

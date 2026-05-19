@@ -46,7 +46,7 @@ public class SeahorseChatController {
 
     private static final String DEFAULT_USER_ID = "default";
 
-    private final ChatInboundPort chatInboundPort;
+    private final ObjectProvider<ChatInboundPort> chatInboundPortProvider;
     private final ChatStreamCallbackFactoryPort callbackFactory;
     private final StreamTaskPort streamTaskPort;
     private final RateLimiterPort rateLimiterPort;
@@ -72,7 +72,7 @@ public class SeahorseChatController {
                                   @Value("${seahorse-agent.web.chat-rate-limit.permits:60}") int chatRateLimitPermits,
                                   @Value("${seahorse-agent.web.chat-rate-limit.window-ms:60000}")
                                   long chatRateLimitWindowMs) {
-        this.chatInboundPort = chatInboundPortProvider.getIfAvailable();
+        this.chatInboundPortProvider = chatInboundPortProvider;
         this.callbackFactory = Objects.requireNonNull(callbackFactory, "callbackFactory must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPort, RateLimiterPort.noop());
@@ -98,13 +98,13 @@ public class SeahorseChatController {
                 taskId,
                 actualUserId,
                 Boolean.TRUE.equals(deepThinking));
-        chatInboundPort.streamChat(command, callback);
+        chatInboundPortProvider.getIfAvailable().streamChat(command, callback);
         return emitter;
     }
 
     @PostMapping("/rag/v3/stop")
     public Map<String, Object> stop(@RequestParam String taskId) {
-        chatInboundPort.stopTask(taskId);
+        chatInboundPortProvider.getIfAvailable().stopTask(taskId);
         streamTaskPort.unregister(taskId);
         return Map.of("code", "0");
     }

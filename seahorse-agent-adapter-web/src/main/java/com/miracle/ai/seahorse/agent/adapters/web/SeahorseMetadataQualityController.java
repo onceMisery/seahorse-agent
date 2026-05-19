@@ -39,10 +39,10 @@ public class SeahorseMetadataQualityController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final MetadataQualityInboundPort qualityPort;
+    private final ObjectProvider<MetadataQualityInboundPort> qualityPortProvider;
 
     public SeahorseMetadataQualityController(ObjectProvider<MetadataQualityInboundPort> qualityPortProvider) {
-        this.qualityPort = qualityPortProvider.getIfAvailable();
+        this.qualityPortProvider = qualityPortProvider;
     }
 
     @GetMapping("/knowledge-base/{kb-id}/metadata-quality/report")
@@ -53,7 +53,7 @@ public class SeahorseMetadataQualityController {
                                       @RequestParam(value = "llmPromptVersion", required = false) String llmPromptVersion,
                                       @RequestParam(defaultValue = "5") int topN) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                qualityPort.report(tenantId, kbId, topN, schemaVersion, extractorVersion, llmPromptVersion));
+                qualityPortProvider.getIfAvailable().report(tenantId, kbId, topN, schemaVersion, extractorVersion, llmPromptVersion));
     }
 
     @GetMapping("/knowledge-base/{kb-id}/metadata-quality/compare")
@@ -66,7 +66,7 @@ public class SeahorseMetadataQualityController {
                                        @RequestParam(value = "candidateExtractorVersion", required = false) String candidateExtractorVersion,
                                        @RequestParam(value = "candidateLlmPromptVersion", required = false) String candidateLlmPromptVersion,
                                        @RequestParam(defaultValue = "5") int topN) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, qualityPort.compare(
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, qualityPortProvider.getIfAvailable().compare(
                 tenantId,
                 kbId,
                 topN,

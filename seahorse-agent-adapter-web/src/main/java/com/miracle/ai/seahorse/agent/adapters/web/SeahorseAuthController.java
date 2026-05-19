@@ -34,22 +34,22 @@ public class SeahorseAuthController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final AuthInboundPort authInboundPort;
+    private final ObjectProvider<AuthInboundPort> authInboundPortProvider;
 
     public SeahorseAuthController(ObjectProvider<AuthInboundPort> authInboundPortProvider) {
-        this.authInboundPort = authInboundPortProvider.getIfAvailable();
+        this.authInboundPortProvider = authInboundPortProvider;
     }
 
     @PostMapping("/auth/login")
     public Map<String, Object> login(@RequestBody AuthLoginRequest request) {
         AuthLoginRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                authInboundPort.login(new LoginCommand(safeRequest.getUsername(), safeRequest.getPassword())));
+                authInboundPortProvider.getIfAvailable().login(new LoginCommand(safeRequest.getUsername(), safeRequest.getPassword())));
     }
 
     @PostMapping("/auth/logout")
     public Map<String, Object> logout() {
-        authInboundPort.logout();
+        authInboundPortProvider.getIfAvailable().logout();
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 }

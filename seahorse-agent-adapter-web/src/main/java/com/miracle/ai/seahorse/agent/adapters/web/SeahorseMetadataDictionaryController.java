@@ -41,10 +41,10 @@ public class SeahorseMetadataDictionaryController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final MetadataDictionaryInboundPort dictionaryPort;
+    private final ObjectProvider<MetadataDictionaryInboundPort> dictionaryPortProvider;
 
     public SeahorseMetadataDictionaryController(ObjectProvider<MetadataDictionaryInboundPort> dictionaryPortProvider) {
-        this.dictionaryPort = dictionaryPortProvider.getIfAvailable();
+        this.dictionaryPortProvider = dictionaryPortProvider;
     }
 
     @GetMapping("/metadata-dictionaries/items")
@@ -53,26 +53,26 @@ public class SeahorseMetadataDictionaryController {
                                          @RequestParam(required = false, defaultValue = "false")
                                          boolean includeDisabled) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                dictionaryPort.listItems(tenantId, dictCode, includeDisabled));
+                dictionaryPortProvider.getIfAvailable().listItems(tenantId, dictCode, includeDisabled));
     }
 
     @PostMapping("/metadata-dictionaries/items")
     public Map<String, Object> createItem(@RequestBody MetadataDictionaryItemRequest request) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                dictionaryPort.createItem(toPayload(request)));
+                dictionaryPortProvider.getIfAvailable().createItem(toPayload(request)));
     }
 
     @PutMapping("/metadata-dictionaries/items/{item-id}")
     public Map<String, Object> updateItem(@PathVariable("item-id") String itemId,
                                           @RequestBody MetadataDictionaryItemRequest request) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                dictionaryPort.updateItem(itemId, toPayload(request)));
+                dictionaryPortProvider.getIfAvailable().updateItem(itemId, toPayload(request)));
     }
 
     @DeleteMapping("/metadata-dictionaries/items/{item-id}")
     public Map<String, Object> deleteItem(@PathVariable("item-id") String itemId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                Map.of("deleted", dictionaryPort.deleteItem(itemId)));
+                Map.of("deleted", dictionaryPortProvider.getIfAvailable().deleteItem(itemId)));
     }
 
     private MetadataDictionaryItemPayload toPayload(MetadataDictionaryItemRequest request) {

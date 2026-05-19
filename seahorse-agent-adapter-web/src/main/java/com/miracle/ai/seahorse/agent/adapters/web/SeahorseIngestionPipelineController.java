@@ -47,46 +47,46 @@ public class SeahorseIngestionPipelineController {
     private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "";
 
-    private final IngestionPipelineInboundPort pipelinePort;
+    private final ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider;
 
     public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider) {
-        this.pipelinePort = pipelinePortProvider.getIfAvailable();
+        this.pipelinePortProvider = pipelinePortProvider;
     }
 
     @PostMapping("/ingestion/pipelines")
     public Map<String, Object> create(@RequestBody IngestionPipelineRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        if (pipelinePort == null) return Map.of("code", "1", "message", "Service not available");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePort.create(toPayload(request, operator(userId))));
+        if (pipelinePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePortProvider.getIfAvailable().create(toPayload(request, operator(userId))));
     }
 
     @PutMapping("/ingestion/pipelines/{id}")
     public Map<String, Object> update(@PathVariable String id,
                                       @RequestBody IngestionPipelineRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        if (pipelinePort == null) return Map.of("code", "1", "message", "Service not available");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePort.update(id, toPayload(request, operator(userId))));
+        if (pipelinePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePortProvider.getIfAvailable().update(id, toPayload(request, operator(userId))));
     }
 
     @GetMapping("/ingestion/pipelines/{id}")
     public Map<String, Object> get(@PathVariable String id) {
-        if (pipelinePort == null) return Map.of("code", "1", "message", "Service not available");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePort.get(id));
+        if (pipelinePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePortProvider.getIfAvailable().get(id));
     }
 
     @GetMapping("/ingestion/pipelines")
     public Map<String, Object> page(@RequestParam(value = "pageNo", defaultValue = "1") long pageNo,
                                     @RequestParam(value = "pageSize", defaultValue = "10") long pageSize,
                                     @RequestParam(value = "keyword", required = false) String keyword) {
-        if (pipelinePort == null) return Map.of("code", "1", "message", "Service not available");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePort.page(pageNo, pageSize, keyword));
+        if (pipelinePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePortProvider.getIfAvailable().page(pageNo, pageSize, keyword));
     }
 
     @DeleteMapping("/ingestion/pipelines/{id}")
     public Map<String, Object> delete(@PathVariable String id,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        if (pipelinePort == null) return Map.of("code", "1", "message", "Service not available");
-        pipelinePort.delete(id, operator(userId));
+        if (pipelinePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        pipelinePortProvider.getIfAvailable().delete(id, operator(userId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 

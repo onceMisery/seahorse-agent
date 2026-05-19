@@ -42,39 +42,39 @@ public class SeahorseQueryTermMappingController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final QueryTermMappingInboundPort mappingPort;
+    private final ObjectProvider<QueryTermMappingInboundPort> mappingPortProvider;
 
     public SeahorseQueryTermMappingController(ObjectProvider<QueryTermMappingInboundPort> mappingPortProvider) {
-        this.mappingPort = mappingPortProvider.getIfAvailable();
+        this.mappingPortProvider = mappingPortProvider;
     }
 
     @GetMapping("/mappings")
     public Map<String, Object> page(@RequestParam(required = false, defaultValue = "1") long current,
                                     @RequestParam(required = false, defaultValue = "10") long size,
                                     @RequestParam(required = false) String keyword) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, mappingPort.page(current, size, keyword));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, mappingPortProvider.getIfAvailable().page(current, size, keyword));
     }
 
     @GetMapping("/mappings/{id}")
     public Map<String, Object> queryById(@PathVariable String id) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, mappingPort.queryById(id));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, mappingPortProvider.getIfAvailable().queryById(id));
     }
 
     @PostMapping("/mappings")
     public Map<String, Object> create(@RequestBody QueryTermMappingPayload request) {
-        String id = mappingPort.create(Objects.requireNonNull(request, "request must not be null"));
+        String id = mappingPortProvider.getIfAvailable().create(Objects.requireNonNull(request, "request must not be null"));
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, id);
     }
 
     @PutMapping("/mappings/{id}")
     public Map<String, Object> update(@PathVariable String id, @RequestBody QueryTermMappingPayload request) {
-        mappingPort.update(id, Objects.requireNonNull(request, "request must not be null"));
+        mappingPortProvider.getIfAvailable().update(id, Objects.requireNonNull(request, "request must not be null"));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @DeleteMapping("/mappings/{id}")
     public Map<String, Object> delete(@PathVariable String id) {
-        mappingPort.delete(id);
+        mappingPortProvider.getIfAvailable().delete(id);
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 }

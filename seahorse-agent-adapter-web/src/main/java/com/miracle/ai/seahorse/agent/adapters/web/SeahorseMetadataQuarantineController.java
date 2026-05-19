@@ -44,10 +44,10 @@ public class SeahorseMetadataQuarantineController {
     private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "system";
 
-    private final MetadataQuarantineInboundPort quarantinePort;
+    private final ObjectProvider<MetadataQuarantineInboundPort> quarantinePortProvider;
 
     public SeahorseMetadataQuarantineController(ObjectProvider<MetadataQuarantineInboundPort> quarantinePortProvider) {
-        this.quarantinePort = quarantinePortProvider.getIfAvailable();
+        this.quarantinePortProvider = quarantinePortProvider;
     }
 
     @GetMapping("/metadata-quarantine/items")
@@ -61,19 +61,19 @@ public class SeahorseMetadataQuarantineController {
                                     @RequestParam(defaultValue = "1") long current,
                                     @RequestParam(defaultValue = "10") long size) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                quarantinePort.page(tenantId, kbId, resolved, stage, reasonCode, documentId, jobId, current, size));
+                quarantinePortProvider.getIfAvailable().page(tenantId, kbId, resolved, stage, reasonCode, documentId, jobId, current, size));
     }
 
     @GetMapping("/metadata-quarantine/items/{item-id}")
     public Map<String, Object> queryById(@PathVariable("item-id") String itemId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, quarantinePort.queryById(itemId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, quarantinePortProvider.getIfAvailable().queryById(itemId));
     }
 
     @PostMapping("/metadata-quarantine/items/{item-id}/resolve")
     public Map<String, Object> resolve(@PathVariable("item-id") String itemId,
                                        @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                quarantinePort.resolve(itemId, operator(userId)));
+                quarantinePortProvider.getIfAvailable().resolve(itemId, operator(userId)));
     }
 
     @PostMapping("/metadata-quarantine/items/{item-id}/retry")
@@ -81,7 +81,7 @@ public class SeahorseMetadataQuarantineController {
                                      @RequestBody(required = false) MetadataQuarantineRetryRequest request,
                                      @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                quarantinePort.retry(itemId, new MetadataQuarantineRetryCommand(
+                quarantinePortProvider.getIfAvailable().retry(itemId, new MetadataQuarantineRetryCommand(
                         operator(userId), nextRetryTime(request))));
     }
 

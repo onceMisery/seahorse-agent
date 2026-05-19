@@ -37,26 +37,26 @@ public class SeahorseDashboardController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final DashboardInboundPort dashboardPort;
+    private final ObjectProvider<DashboardInboundPort> dashboardPortProvider;
 
     public SeahorseDashboardController(ObjectProvider<DashboardInboundPort> dashboardPortProvider) {
-        this.dashboardPort = dashboardPortProvider.getIfAvailable();
+        this.dashboardPortProvider = dashboardPortProvider;
     }
 
     @GetMapping("/overview")
     public Map<String, Object> overview(@RequestParam(required = false) String window) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, dashboardPort.overview(window));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, dashboardPortProvider.getIfAvailable().overview(window));
     }
 
     @GetMapping("/performance")
     public Map<String, Object> performance(@RequestParam(required = false) String window) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, dashboardPort.performance(window));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, dashboardPortProvider.getIfAvailable().performance(window));
     }
 
     @GetMapping("/trends")
     public Map<String, Object> trends(@RequestParam String metric,
                                       @RequestParam(required = false) String window,
                                       @RequestParam(required = false) String granularity) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, dashboardPort.trends(metric, window, granularity));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, dashboardPortProvider.getIfAvailable().trends(metric, window, granularity));
     }
 }

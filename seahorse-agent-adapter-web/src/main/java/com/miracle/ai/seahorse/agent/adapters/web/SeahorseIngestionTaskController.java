@@ -54,7 +54,7 @@ public class SeahorseIngestionTaskController {
     private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "";
 
-    private final IngestionTaskInboundPort taskPort;
+    private final ObjectProvider<IngestionTaskInboundPort> taskPortProvider;
     private final RateLimiterPort rateLimiterPort;
     private final int uploadRateLimitPermits;
     private final Duration uploadRateLimitWindow;
@@ -70,7 +70,7 @@ public class SeahorseIngestionTaskController {
                                            int uploadRateLimitPermits,
                                            @Value("${seahorse-agent.web.upload-rate-limit.window-ms:60000}")
                                            long uploadRateLimitWindowMs) {
-        this.taskPort = taskPortProvider.getIfAvailable();
+        this.taskPortProvider = taskPortProvider;
         this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPort, RateLimiterPort.noop());
         this.uploadRateLimitPermits = Math.max(1, uploadRateLimitPermits);
         this.uploadRateLimitWindow = Duration.ofMillis(Math.max(1L, uploadRateLimitWindowMs));
@@ -79,7 +79,7 @@ public class SeahorseIngestionTaskController {
     @PostMapping("/ingestion/tasks")
     public Map<String, Object> create(@RequestBody IngestionTaskRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPort.execute(toCommand(request, operator(userId))));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().execute(toCommand(request, operator(userId))));
     }
 
     @PostMapping(value = "/ingestion/tasks/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -95,24 +95,24 @@ public class SeahorseIngestionTaskController {
                 file.getContentType(),
                 file.getBytes(),
                 operator);
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPort.upload(command));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().upload(command));
     }
 
     @GetMapping("/ingestion/tasks/{id}")
     public Map<String, Object> get(@PathVariable String id) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPort.get(id));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().get(id));
     }
 
     @GetMapping("/ingestion/tasks/{id}/nodes")
     public Map<String, Object> nodes(@PathVariable String id) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPort.listNodes(id));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().listNodes(id));
     }
 
     @GetMapping("/ingestion/tasks")
     public Map<String, Object> page(@RequestParam(value = "pageNo", defaultValue = "1") long pageNo,
                                     @RequestParam(value = "pageSize", defaultValue = "10") long pageSize,
                                     @RequestParam(value = "status", required = false) String status) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPort.page(pageNo, pageSize, status));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().page(pageNo, pageSize, status));
     }
 
     private IngestionTaskCreateCommand toCommand(IngestionTaskRequest request, String operator) {

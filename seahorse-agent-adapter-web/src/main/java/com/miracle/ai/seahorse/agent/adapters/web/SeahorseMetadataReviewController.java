@@ -47,10 +47,10 @@ public class SeahorseMetadataReviewController {
     private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "system";
 
-    private final MetadataReviewInboundPort reviewPort;
+    private final ObjectProvider<MetadataReviewInboundPort> reviewPortProvider;
 
     public SeahorseMetadataReviewController(ObjectProvider<MetadataReviewInboundPort> reviewPortProvider) {
-        this.reviewPort = reviewPortProvider.getIfAvailable();
+        this.reviewPortProvider = reviewPortProvider;
     }
 
     @GetMapping("/metadata-review/items")
@@ -62,17 +62,17 @@ public class SeahorseMetadataReviewController {
                                     @RequestParam(defaultValue = "1") long current,
                                     @RequestParam(defaultValue = "10") long size) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                reviewPort.page(tenantId, kbId, reviewStatus(status), reasonCode, documentId, current, size));
+                reviewPortProvider.getIfAvailable().page(tenantId, kbId, reviewStatus(status), reasonCode, documentId, current, size));
     }
 
     @GetMapping("/metadata-review/items/{item-id}")
     public Map<String, Object> queryById(@PathVariable("item-id") String itemId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, reviewPort.queryById(itemId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, reviewPortProvider.getIfAvailable().queryById(itemId));
     }
 
     @GetMapping("/metadata-review/items/{item-id}/audits")
     public Map<String, Object> listAudits(@PathVariable("item-id") String itemId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, reviewPort.listAudits(itemId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, reviewPortProvider.getIfAvailable().listAudits(itemId));
     }
 
     @PostMapping("/metadata-review/items/{item-id}/approve")
@@ -80,7 +80,7 @@ public class SeahorseMetadataReviewController {
                                        @RequestBody(required = false) MetadataReviewDecisionRequest request,
                                        @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                reviewPort.approve(itemId, toCommand(request, userId)));
+                reviewPortProvider.getIfAvailable().approve(itemId, toCommand(request, userId)));
     }
 
     @PostMapping("/metadata-review/items/{item-id}/correct")
@@ -88,7 +88,7 @@ public class SeahorseMetadataReviewController {
                                        @RequestBody(required = false) MetadataReviewDecisionRequest request,
                                        @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                reviewPort.correct(itemId, toCommand(request, userId)));
+                reviewPortProvider.getIfAvailable().correct(itemId, toCommand(request, userId)));
     }
 
     @PostMapping("/metadata-review/items/{item-id}/ignore-field")
@@ -96,7 +96,7 @@ public class SeahorseMetadataReviewController {
                                            @RequestBody(required = false) MetadataReviewDecisionRequest request,
                                            @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                reviewPort.ignoreField(itemId, toCommand(request, userId)));
+                reviewPortProvider.getIfAvailable().ignoreField(itemId, toCommand(request, userId)));
     }
 
     @PostMapping("/metadata-review/items/{item-id}/re-extract")
@@ -104,7 +104,7 @@ public class SeahorseMetadataReviewController {
                                          @RequestBody(required = false) MetadataReviewDecisionRequest request,
                                          @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                reviewPort.reExtract(itemId, toCommand(request, userId)));
+                reviewPortProvider.getIfAvailable().reExtract(itemId, toCommand(request, userId)));
     }
 
     @PostMapping("/metadata-review/items/{item-id}/reject")
@@ -112,7 +112,7 @@ public class SeahorseMetadataReviewController {
                                       @RequestBody(required = false) MetadataReviewDecisionRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                reviewPort.reject(itemId, toCommand(request, userId)));
+                reviewPortProvider.getIfAvailable().reject(itemId, toCommand(request, userId)));
     }
 
     @PostMapping("/metadata-review/items/{item-id}/quarantine")
@@ -120,7 +120,7 @@ public class SeahorseMetadataReviewController {
                                           @RequestBody(required = false) MetadataReviewDecisionRequest request,
                                           @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                reviewPort.quarantine(itemId, toCommand(request, userId)));
+                reviewPortProvider.getIfAvailable().quarantine(itemId, toCommand(request, userId)));
     }
 
     private MetadataReviewDecisionCommand toCommand(MetadataReviewDecisionRequest request, String userId) {

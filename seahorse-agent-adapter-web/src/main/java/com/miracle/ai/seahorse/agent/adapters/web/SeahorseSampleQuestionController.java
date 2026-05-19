@@ -46,15 +46,15 @@ public class SeahorseSampleQuestionController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final SampleQuestionInboundPort sampleQuestionPort;
+    private final ObjectProvider<SampleQuestionInboundPort> sampleQuestionPortProvider;
 
     public SeahorseSampleQuestionController(ObjectProvider<SampleQuestionInboundPort> sampleQuestionPortProvider) {
-        this.sampleQuestionPort = sampleQuestionPortProvider.getIfAvailable();
+        this.sampleQuestionPortProvider = sampleQuestionPortProvider;
     }
 
     @GetMapping("/rag/sample-questions")
     public Map<String, Object> listRandomQuestions() {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, sampleQuestionPort.listRandomQuestions());
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, sampleQuestionPortProvider.getIfAvailable().listRandomQuestions());
     }
 
     @GetMapping("/sample-questions")
@@ -62,18 +62,18 @@ public class SeahorseSampleQuestionController {
                                     @RequestParam(required = false, defaultValue = "10") long size,
                                     @RequestParam(required = false) String keyword) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                sampleQuestionPort.page(new SampleQuestionPageCommand(current, size, keyword)));
+                sampleQuestionPortProvider.getIfAvailable().page(new SampleQuestionPageCommand(current, size, keyword)));
     }
 
     @GetMapping("/sample-questions/{id}")
     public Map<String, Object> queryById(@PathVariable String id) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, sampleQuestionPort.queryById(id));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, sampleQuestionPortProvider.getIfAvailable().queryById(id));
     }
 
     @PostMapping("/sample-questions")
     public Map<String, Object> create(@RequestBody SampleQuestionCreateRequest request) {
         SampleQuestionCreateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        String id = sampleQuestionPort.create(new CreateSampleQuestionCommand(
+        String id = sampleQuestionPortProvider.getIfAvailable().create(new CreateSampleQuestionCommand(
                 safeRequest.title(), safeRequest.description(), safeRequest.question()));
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, id);
     }
@@ -81,7 +81,7 @@ public class SeahorseSampleQuestionController {
     @PutMapping("/sample-questions/{id}")
     public Map<String, Object> update(@PathVariable String id, @RequestBody SampleQuestionUpdateRequest request) {
         SampleQuestionUpdateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        sampleQuestionPort.update(id, new UpdateSampleQuestionCommand(
+        sampleQuestionPortProvider.getIfAvailable().update(id, new UpdateSampleQuestionCommand(
                 safeRequest.title(),
                 safeRequest.description(),
                 safeRequest.question(),
@@ -93,7 +93,7 @@ public class SeahorseSampleQuestionController {
 
     @DeleteMapping("/sample-questions/{id}")
     public Map<String, Object> delete(@PathVariable String id) {
-        sampleQuestionPort.delete(id);
+        sampleQuestionPortProvider.getIfAvailable().delete(id);
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 }

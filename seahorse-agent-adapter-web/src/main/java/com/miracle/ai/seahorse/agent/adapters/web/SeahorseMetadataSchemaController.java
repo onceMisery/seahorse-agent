@@ -48,39 +48,39 @@ public class SeahorseMetadataSchemaController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final MetadataSchemaInboundPort schemaPort;
+    private final ObjectProvider<MetadataSchemaInboundPort> schemaPortProvider;
 
     public SeahorseMetadataSchemaController(ObjectProvider<MetadataSchemaInboundPort> schemaPortProvider) {
-        this.schemaPort = schemaPortProvider.getIfAvailable();
+        this.schemaPortProvider = schemaPortProvider;
     }
 
     @GetMapping("/knowledge-base/{kb-id}/metadata-schema/fields")
     public Map<String, Object> listFields(@PathVariable("kb-id") String kbId,
                                           @RequestParam String tenantId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, schemaPort.listFields(tenantId, kbId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, schemaPortProvider.getIfAvailable().listFields(tenantId, kbId));
     }
 
     @GetMapping("/knowledge-base/{kb-id}/metadata-schema/field-capabilities")
     public Map<String, Object> listFieldCapabilities(@PathVariable("kb-id") String kbId,
                                                      @RequestParam String tenantId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, schemaPort.listFieldCapabilities(tenantId, kbId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, schemaPortProvider.getIfAvailable().listFieldCapabilities(tenantId, kbId));
     }
 
     @PostMapping("/knowledge-base/{kb-id}/metadata-schema/fields")
     public Map<String, Object> createField(@PathVariable("kb-id") String kbId,
                                            @RequestBody MetadataSchemaFieldRequest request) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, schemaPort.createField(kbId, toPayload(kbId, request)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, schemaPortProvider.getIfAvailable().createField(kbId, toPayload(kbId, request)));
     }
 
     @PutMapping("/metadata-schema/fields/{field-id}")
     public Map<String, Object> updateField(@PathVariable("field-id") String fieldId,
                                            @RequestBody MetadataSchemaFieldRequest request) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, schemaPort.updateField(fieldId, toPayload("", request)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, schemaPortProvider.getIfAvailable().updateField(fieldId, toPayload("", request)));
     }
 
     @DeleteMapping("/metadata-schema/fields/{field-id}")
     public Map<String, Object> deleteField(@PathVariable("field-id") String fieldId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, Map.of("deleted", schemaPort.deleteField(fieldId)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, Map.of("deleted", schemaPortProvider.getIfAvailable().deleteField(fieldId)));
     }
 
     private MetadataSchemaFieldPayload toPayload(String kbId, MetadataSchemaFieldRequest request) {

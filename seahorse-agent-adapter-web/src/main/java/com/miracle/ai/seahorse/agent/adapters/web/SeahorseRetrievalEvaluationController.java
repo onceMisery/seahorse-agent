@@ -38,10 +38,10 @@ public class SeahorseRetrievalEvaluationController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final RetrievalEvaluationInboundPort evaluationPort;
+    private final ObjectProvider<RetrievalEvaluationInboundPort> evaluationPortProvider;
 
     public SeahorseRetrievalEvaluationController(ObjectProvider<RetrievalEvaluationInboundPort> evaluationPortProvider) {
-        this.evaluationPort = evaluationPortProvider.getIfAvailable();
+        this.evaluationPortProvider = evaluationPortProvider;
     }
 
     @PostMapping("/knowledge-base/{kb-id}/retrieval-quality/evaluate")
@@ -50,7 +50,7 @@ public class SeahorseRetrievalEvaluationController {
         RetrievalEvaluationRequest safeRequest = request == null
                 ? new RetrievalEvaluationRequest("", "", 5, null, java.util.List.of())
                 : request;
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, evaluationPort.evaluate(safeRequest.toCommand(kbId)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, evaluationPortProvider.getIfAvailable().evaluate(safeRequest.toCommand(kbId)));
     }
 
     @PostMapping("/knowledge-base/{kb-id}/retrieval-quality/compare")
@@ -59,6 +59,6 @@ public class SeahorseRetrievalEvaluationController {
         RetrievalEvaluationComparisonRequest safeRequest = request == null
                 ? new RetrievalEvaluationComparisonRequest("", "", 5, java.util.List.of(), java.util.List.of())
                 : request;
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, evaluationPort.compare(safeRequest.toCommand(kbId)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, evaluationPortProvider.getIfAvailable().compare(safeRequest.toCommand(kbId)));
     }
 }

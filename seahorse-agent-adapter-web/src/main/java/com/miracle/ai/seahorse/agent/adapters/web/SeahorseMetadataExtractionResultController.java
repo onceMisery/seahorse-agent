@@ -36,10 +36,10 @@ public class SeahorseMetadataExtractionResultController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final MetadataExtractionResultInboundPort resultPort;
+    private final ObjectProvider<MetadataExtractionResultInboundPort> resultPortProvider;
 
     public SeahorseMetadataExtractionResultController(ObjectProvider<MetadataExtractionResultInboundPort> resultPortProvider) {
-        this.resultPort = resultPortProvider.getIfAvailable();
+        this.resultPortProvider = resultPortProvider;
     }
 
     @GetMapping("/metadata-extraction/results")
@@ -53,11 +53,11 @@ public class SeahorseMetadataExtractionResultController {
                                            @RequestParam(defaultValue = "1") long current,
                                            @RequestParam(defaultValue = "10") long size) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                resultPort.page(tenantId, kbId, docId, jobId, status, schemaVersion, extractorVersion, current, size));
+                resultPortProvider.getIfAvailable().page(tenantId, kbId, docId, jobId, status, schemaVersion, extractorVersion, current, size));
     }
 
     @GetMapping("/metadata-extraction/results/{result-id}")
     public Map<String, Object> queryById(@PathVariable("result-id") String resultId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, resultPort.queryById(resultId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, resultPortProvider.getIfAvailable().queryById(resultId));
     }
 }

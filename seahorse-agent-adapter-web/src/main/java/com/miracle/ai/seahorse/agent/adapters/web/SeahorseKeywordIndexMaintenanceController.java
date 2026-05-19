@@ -38,21 +38,21 @@ public class SeahorseKeywordIndexMaintenanceController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final KeywordIndexMaintenanceInboundPort maintenancePort;
+    private final ObjectProvider<KeywordIndexMaintenanceInboundPort> maintenancePortProvider;
 
     public SeahorseKeywordIndexMaintenanceController(ObjectProvider<KeywordIndexMaintenanceInboundPort> maintenancePortProvider) {
-        this.maintenancePort = maintenancePortProvider.getIfAvailable();
+        this.maintenancePortProvider = maintenancePortProvider;
     }
 
     @PostMapping("/knowledge-base/docs/{doc-id}/keyword-index/rebuild")
     public Map<String, Object> rebuildDocument(@PathVariable("doc-id") String docId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, maintenancePort.rebuildDocument(docId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, maintenancePortProvider.getIfAvailable().rebuildDocument(docId));
     }
 
     @PostMapping("/knowledge-base/{kb-id}/keyword-index/rebuild")
     public Map<String, Object> rebuildKnowledgeBase(@PathVariable("kb-id") String kbId,
                                                     @RequestParam(defaultValue = "50") int batchSize) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                maintenancePort.rebuildKnowledgeBase(kbId, batchSize));
+                maintenancePortProvider.getIfAvailable().rebuildKnowledgeBase(kbId, batchSize));
     }
 }

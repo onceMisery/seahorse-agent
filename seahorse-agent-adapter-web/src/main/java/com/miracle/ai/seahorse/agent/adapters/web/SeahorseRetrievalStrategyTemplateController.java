@@ -41,21 +41,21 @@ public class SeahorseRetrievalStrategyTemplateController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final RetrievalStrategyTemplateInboundPort templatePort;
+    private final ObjectProvider<RetrievalStrategyTemplateInboundPort> templatePortProvider;
 
     public SeahorseRetrievalStrategyTemplateController(ObjectProvider<RetrievalStrategyTemplateInboundPort> templatePortProvider) {
-        this.templatePort = templatePortProvider.getIfAvailable();
+        this.templatePortProvider = templatePortProvider;
     }
 
     @GetMapping("/knowledge-base/{kb-id}/retrieval-strategy-templates")
     public Map<String, Object> listTemplates(@PathVariable("kb-id") String kbId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, templatePort.listTemplates(kbId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, templatePortProvider.getIfAvailable().listTemplates(kbId));
     }
 
     @PostMapping("/knowledge-base/{kb-id}/retrieval-strategy-templates")
     public Map<String, Object> createTemplate(@PathVariable("kb-id") String kbId,
                                               @RequestBody RetrievalStrategyTemplatePayload request) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, templatePort.upsertTemplate(kbId, request));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, templatePortProvider.getIfAvailable().upsertTemplate(kbId, request));
     }
 
     @PutMapping("/knowledge-base/{kb-id}/retrieval-strategy-templates/{template-key}")
@@ -65,13 +65,13 @@ public class SeahorseRetrievalStrategyTemplateController {
         RetrievalStrategyTemplatePayload safeRequest = Objects.requireNonNull(request,
                 "request must not be null");
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                templatePort.upsertTemplate(kbId, safeRequest.withTemplateKey(templateKey)));
+                templatePortProvider.getIfAvailable().upsertTemplate(kbId, safeRequest.withTemplateKey(templateKey)));
     }
 
     @DeleteMapping("/knowledge-base/{kb-id}/retrieval-strategy-templates/{template-key}")
     public Map<String, Object> deleteTemplate(@PathVariable("kb-id") String kbId,
                                               @PathVariable("template-key") String templateKey) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                Map.of("deleted", templatePort.deleteTemplate(kbId, templateKey)));
+                Map.of("deleted", templatePortProvider.getIfAvailable().deleteTemplate(kbId, templateKey)));
     }
 }

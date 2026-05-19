@@ -40,10 +40,10 @@ public class SeahorseMessageFeedbackController {
 
     private static final String DEFAULT_USER_ID = "default";
 
-    private final MessageFeedbackInboundPort feedbackInboundPort;
+    private final ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider;
 
     public SeahorseMessageFeedbackController(ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider) {
-        this.feedbackInboundPort = feedbackInboundPortProvider.getIfAvailable();
+        this.feedbackInboundPortProvider = feedbackInboundPortProvider;
     }
 
     @PostMapping("/conversations/messages/{messageId}/feedback")
@@ -53,7 +53,7 @@ public class SeahorseMessageFeedbackController {
                                               @RequestHeader(value = "X-User-Id", required = false)
                                               String headerUserId) {
         MessageFeedbackRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        feedbackInboundPort.submit(new SubmitMessageFeedbackCommand(
+        feedbackInboundPortProvider.getIfAvailable().submit(new SubmitMessageFeedbackCommand(
                 messageId,
                 resolveUserId(userId, headerUserId),
                 requireVote(safeRequest.vote()),

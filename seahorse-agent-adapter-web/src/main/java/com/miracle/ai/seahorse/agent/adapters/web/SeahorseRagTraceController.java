@@ -38,10 +38,10 @@ public class SeahorseRagTraceController {
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final RagTraceInboundPort traceInboundPort;
+    private final ObjectProvider<RagTraceInboundPort> traceInboundPortProvider;
 
     public SeahorseRagTraceController(ObjectProvider<RagTraceInboundPort> traceInboundPortProvider) {
-        this.traceInboundPort = traceInboundPortProvider.getIfAvailable();
+        this.traceInboundPortProvider = traceInboundPortProvider;
     }
 
     @GetMapping("/rag/traces/runs")
@@ -53,16 +53,16 @@ public class SeahorseRagTraceController {
                                         @RequestParam(required = false) String status) {
         RagTracePageCommand command = new RagTracePageCommand(
                 current, size, traceId, conversationId, taskId, status);
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, traceInboundPort.pageRuns(command));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, traceInboundPortProvider.getIfAvailable().pageRuns(command));
     }
 
     @GetMapping("/rag/traces/runs/{traceId}")
     public Map<String, Object> detail(@PathVariable String traceId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, traceInboundPort.detail(traceId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, traceInboundPortProvider.getIfAvailable().detail(traceId));
     }
 
     @GetMapping("/rag/traces/runs/{traceId}/nodes")
     public Map<String, Object> nodes(@PathVariable String traceId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, traceInboundPort.listNodes(traceId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, traceInboundPortProvider.getIfAvailable().listNodes(traceId));
     }
 }
