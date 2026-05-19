@@ -196,7 +196,7 @@ export function WelcomeScreen() {
                   ref={textareaRef}
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
-                  placeholder={deepThinkingEnabled ? "// 输入需要深度分析的问题..." : "// 问我任何关于研究、分析或创意的问题..."}
+                  placeholder={deepThinkingEnabled ? "输入需要深度分析的问题..." : "问我任何关于研究、分析或创意的问题..."}
                   className="max-h-40 min-h-[60px] w-full resize-none border-0 bg-transparent px-3 py-2 text-lg focus:outline-none font-mono"
                   style={{ color: "var(--theme-text-primary)" }}
                   rows={1}
@@ -255,7 +255,7 @@ export function WelcomeScreen() {
             <span className="px-1.5">·</span>
             <kbd className="rounded px-1.5 py-0.5" style={{ backgroundColor: "var(--theme-bg-elevated)", color: "var(--theme-text-secondary)" }}>Shift+Enter</kbd>
             {" "}换行
-            {isStreaming && <span className="ml-2 animate-pulse-soft">// GENERATING...</span>}
+            {isStreaming && <span className="ml-2 animate-pulse-soft">生成中...</span>}
           </p>
         </div>
 

@@ -1,6 +1,7 @@
 import axios from "axios";
 import { toast } from "sonner";
 
+import { handleUnauthorizedSession } from "@/utils/authSession";
 import { storage } from "@/utils/storage";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -31,13 +32,10 @@ api.interceptors.response.use(
     const payload = response.data;
     if (payload && typeof payload === "object" && "code" in payload) {
       if (payload.code !== "0") {
-        const message = payload.message || "请求失败";
+        const message = payload.message || "Request failed";
         const isAuthExpired = typeof message === "string" && message.includes("未登录");
         if (isAuthExpired) {
-          storage.clearAuth();
-          if (window.location.pathname !== "/login") {
-            window.location.href = "/login";
-          }
+          handleUnauthorizedSession(message);
         }
         return Promise.reject(new Error(message));
       }
@@ -47,18 +45,15 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error?.response?.status === 401) {
-      storage.clearAuth();
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
-      }
+      handleUnauthorizedSession(error?.response?.data?.message);
     }
     const responseData = error?.response?.data;
     if (responseData && typeof responseData === "object" && "message" in responseData && responseData.message) {
       toast.error(responseData.message);
     } else if (error?.code === "ERR_NETWORK") {
-      toast.error("网络错误，请检查网络连接");
+      toast.error("Network error, please check your connection.");
     } else {
-      toast.error(error?.message || "网络错误");
+      toast.error(error?.message || "Network error");
     }
     return Promise.reject(error);
   }

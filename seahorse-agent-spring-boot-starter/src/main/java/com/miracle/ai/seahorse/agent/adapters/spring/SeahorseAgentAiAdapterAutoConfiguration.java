@@ -40,6 +40,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Executor;
 
@@ -53,6 +54,21 @@ import java.util.concurrent.Executor;
 @ConditionalOnClass(name = "com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleModelAdapter")
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentAiAdapterAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean(OkHttpClient.class)
+    public OkHttpClient seahorseOkHttpClient(
+            @Value("${seahorse-agent.adapters.http.connect-timeout:10s}") Duration connectTimeout,
+            @Value("${seahorse-agent.adapters.http.read-timeout:60s}") Duration readTimeout,
+            @Value("${seahorse-agent.adapters.http.write-timeout:60s}") Duration writeTimeout,
+            @Value("${seahorse-agent.adapters.http.call-timeout:120s}") Duration callTimeout) {
+        return new OkHttpClient.Builder()
+                .connectTimeout(connectTimeout)
+                .readTimeout(readTimeout)
+                .writeTimeout(writeTimeout)
+                .callTimeout(callTimeout)
+                .build();
+    }
 
     @Bean
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.ai", name = "type", havingValue = "openai-compatible")

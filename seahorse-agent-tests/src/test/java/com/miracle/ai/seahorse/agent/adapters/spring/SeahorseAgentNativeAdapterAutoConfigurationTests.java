@@ -352,6 +352,19 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
     }
 
     @Test
+    void shouldCreateDefaultOkHttpClientForOpenAiAdapter() {
+        contextRunner.withBean(ObjectMapper.class, ObjectMapper::new)
+                .withPropertyValues(
+                        "seahorse-agent.adapters.ai.type=openai-compatible",
+                        "seahorse-agent.adapters.ai.chat-model=gpt-test")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(OkHttpClient.class);
+                    assertThat(context).hasSingleBean(OpenAiCompatibleModelAdapter.class);
+                });
+    }
+
+    @Test
     void shouldRegisterLuceneKeywordAdaptersWhenSelected() {
         contextRunner.withBean(ObjectMapper.class, ObjectMapper::new)
                 .withPropertyValues(

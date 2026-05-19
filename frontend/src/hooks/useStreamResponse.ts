@@ -21,6 +21,10 @@ export interface StreamOptions {
   retryDelayMs?: number;
 }
 
+type HttpError = Error & {
+  status?: number;
+};
+
 function parseData(raw: string): unknown {
   if (!raw) return "";
   try {
@@ -32,7 +36,7 @@ function parseData(raw: string): unknown {
 
 async function readSseStream(response: Response, handlers: StreamHandlers, signal?: AbortSignal) {
   if (!response.body) {
-    throw new Error("流式响应为空");
+    throw new Error("Stream response body is empty");
   }
 
   const reader = response.body.getReader();
@@ -54,15 +58,14 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
       case "meta":
         handlers.onMeta?.(payload as StreamMetaPayload);
         break;
-      case "message":
-        {
-          const messagePayload = payload as MessageDeltaPayload;
-          if (messagePayload?.type === "think") {
-            handlers.onThinking?.(messagePayload);
-          }
-          handlers.onMessage?.(messagePayload);
+      case "message": {
+        const messagePayload = payload as MessageDeltaPayload;
+        if (messagePayload?.type === "think") {
+          handlers.onThinking?.(messagePayload);
         }
+        handlers.onMessage?.(messagePayload);
         break;
+      }
       case "finish":
         handlers.onFinish?.(payload as CompletionPayload);
         break;
@@ -121,6 +124,31 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
   }
 }
 
+async function buildHttpError(response: Response): Promise<HttpError> {
+  let message = `SSE request failed (${response.status})`;
+  const contentType = response.headers.get("content-type") || "";
+
+  try {
+    if (contentType.includes("application/json")) {
+      const payload = (await response.json()) as { message?: string };
+      if (payload?.message) {
+        message = payload.message;
+      }
+    } else {
+      const text = (await response.text()).trim();
+      if (text) {
+        message = text;
+      }
+    }
+  } catch {
+    // Keep default message when parsing fails.
+  }
+
+  const error = new Error(message) as HttpError;
+  error.status = response.status;
+  return error;
+}
+
 async function streamWithRetry(
   options: StreamOptions,
   handlers: StreamHandlers
@@ -142,7 +170,7 @@ async function streamWithRetry(
       });
 
       if (!response.ok) {
-        throw new Error(`SSE 请求失败（${response.status}）`);
+        throw await buildHttpError(response);
       }
 
       await readSseStream(response, handlers, signal);

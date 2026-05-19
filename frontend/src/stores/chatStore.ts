@@ -11,10 +11,13 @@ import {
 import { stopTask, submitFeedback } from "@/services/chatService";
 import { buildQuery } from "@/utils/helpers";
 import { createStreamResponse } from "@/hooks/useStreamResponse";
+import { handleUnauthorizedSession } from "@/utils/authSession";
 import { storage } from "@/utils/storage";
 import type { ChatState } from "@/stores/chatStoreTypes";
 import { mapVoteToFeedback, upsertSession } from "@/stores/chatSessionUtils";
 import { API_BASE_URL, computeThinkingDuration } from "@/stores/chatStreamUtils";
+
+const EMPTY_ASSISTANT_MESSAGE = "本次对话没有返回有效内容，请稍后重试。";
 
 export const useChatStore = create<ChatState>((set, get) => ({
   sessions: [],
@@ -37,9 +40,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const data = await listSessions();
       const sessions = data
         .map((item) => ({
-        id: item.conversationId,
-        title: item.title || "新对话",
-        lastTime: item.lastTime
+          id: item.conversationId,
+          title: item.title || "New Chat",
+          lastTime: item.lastTime
         }))
         .sort((a, b) => {
           const timeA = a.lastTime ? new Date(a.lastTime).getTime() : 0;
@@ -48,7 +51,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
       set({ sessions });
     } catch (error) {
-      toast.error((error as Error).message || "加载会话失败");
+      toast.error((error as Error).message || "Failed to load conversations");
     } finally {
       set({ isLoading: false, sessionsLoaded: true });
     }
@@ -90,9 +93,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: state.currentSessionId === sessionId ? [] : state.messages,
         currentSessionId: state.currentSessionId === sessionId ? null : state.currentSessionId
       }));
-      toast.success("删除成功");
+      toast.success("Conversation deleted");
     } catch (error) {
-      toast.error((error as Error).message || "删除会话失败");
+      toast.error((error as Error).message || "Failed to delete conversation");
     }
   },
   renameSession: async (sessionId, title) => {
@@ -105,9 +108,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           session.id === sessionId ? { ...session, title: nextTitle } : session
         )
       }));
-      toast.success("已重命名");
+      toast.success("Conversation renamed");
     } catch (error) {
-      toast.error((error as Error).message || "重命名失败");
+      toast.error((error as Error).message || "Failed to rename conversation");
     }
   },
   selectSession: async (sessionId) => {
@@ -140,7 +143,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
       set({ messages: mapped });
     } catch (error) {
-      toast.error((error as Error).message || "加载消息失败");
+      toast.error((error as Error).message || "Failed to load messages");
     } finally {
       if (get().currentSessionId !== sessionId) {
         set({ isLoading: false });
@@ -225,7 +228,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           streamTaskId: payload.taskId,
           sessions: upsertSession(state.sessions, {
             id: nextId,
-            title: existing?.title || "新对话",
+            title: existing?.title || "New Chat",
             lastTime
           })
         }));
@@ -257,7 +260,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (currentId) {
           const lastTime = new Date().toISOString();
           const existingTitle =
-            get().sessions.find((session) => session.id === currentId)?.title || "新对话";
+            get().sessions.find((session) => session.id === currentId)?.title || "New Chat";
           const nextTitle = payload.title || existingTitle;
           set((state) => ({
             sessions: upsertSession(state.sessions, {
@@ -306,9 +309,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set((state) => ({
           messages: state.messages.map((message) => {
             if (message.id !== state.streamingMessageId) return message;
-            const suffix = message.content.includes("（已停止生成）")
-              ? ""
-              : "\n\n（已停止生成）";
+            const suffix = message.content.includes("(Stopped)") ? "" : "\n\n(Stopped)";
             const nextId = payload?.messageId ? String(payload.messageId) : message.id;
             return {
               ...message,
@@ -330,14 +331,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
       onDone: () => {
         if (get().streamingMessageId !== assistantId) return;
-        set({
+        set((state) => ({
           isStreaming: false,
           thinkingStartAt: null,
           streamTaskId: null,
           streamAbort: null,
           streamingMessageId: null,
-          cancelRequested: false
-        });
+          cancelRequested: false,
+          messages: state.messages.map((message) => {
+            if (message.id !== state.streamingMessageId) {
+              return message;
+            }
+            if (message.content.trim() || message.status === "cancelled" || message.status === "error") {
+              return message;
+            }
+            return {
+              ...message,
+              content: EMPTY_ASSISTANT_MESSAGE,
+              status: "done",
+              isThinking: false,
+              thinkingDuration:
+                message.thinkingDuration ?? computeThinkingDuration(state.thinkingStartAt)
+            };
+          })
+        }));
       },
       onTitle: (payload: { title: string }) => {
         if (get().streamingMessageId !== assistantId) return;
@@ -347,6 +364,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
       onError: (error: Error) => {
         if (get().streamingMessageId !== assistantId) return;
+        const unauthorized = (error as Error & { status?: number }).status === 401;
         set((state) => ({
           isStreaming: false,
           thinkingStartAt: null,
@@ -365,7 +383,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
               : message
           )
         }));
-        toast.error(error.message || "生成失败");
+        if (unauthorized) {
+          handleUnauthorizedSession(error.message);
+          return;
+        }
+        toast.error(error.message || "Generation failed");
       }
     };
 
@@ -454,19 +476,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       )
     }));
     if (vote === null) {
-      toast.success("取消成功");
+      toast.success("Feedback cleared");
       return;
     }
     try {
       await submitFeedback(messageId, vote);
-      toast.success(feedback === "like" ? "点赞成功" : "点踩成功");
+      toast.success(feedback === "like" ? "Liked" : "Disliked");
     } catch (error) {
       set((state) => ({
         messages: state.messages.map((message) =>
           message.id === messageId ? { ...message, feedback: prev } : message
         )
       }));
-      toast.error((error as Error).message || "反馈保存失败");
+      toast.error((error as Error).message || "Failed to save feedback");
     }
   }
 }));

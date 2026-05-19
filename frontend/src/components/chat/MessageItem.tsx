@@ -12,6 +12,8 @@ interface MessageItemProps {
   isLast?: boolean;
 }
 
+const EMPTY_RESULT_TEXT = "本次对话没有返回有效内容，请稍后重试。";
+
 export const MessageItem = React.memo(function MessageItem({ message, isLast }: MessageItemProps) {
   const isUser = message.role === "user";
   const showFeedback =
@@ -24,6 +26,7 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
   const hasThinking = Boolean(message.thinking && message.thinking.trim().length > 0);
   const hasContent = message.content.trim().length > 0;
   const isWaiting = message.status === "streaming" && !isThinking && !hasContent;
+  const showEmptyResult = !hasContent && message.status === "done";
 
   if (isUser) {
     return (
@@ -36,6 +39,7 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
   }
 
   const thinkingDuration = message.thinkingDuration ? `${message.thinkingDuration}秒` : "";
+
   return (
     <div className="group flex">
       <div className="min-w-0 flex-1 space-y-4">
@@ -43,7 +47,10 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
           <ThinkingIndicator content={message.thinking} duration={message.thinkingDuration} />
         ) : null}
         {!isThinking && hasThinking ? (
-          <div className="overflow-hidden rounded-lg glass" style={{ borderColor: "var(--theme-accent-alpha-30)" }}>
+          <div
+            className="overflow-hidden rounded-lg glass"
+            style={{ borderColor: "var(--theme-accent-alpha-30)" }}
+          >
             <button
               type="button"
               onClick={() => setThinkingExpanded((prev) => !prev)}
@@ -51,27 +58,41 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
               style={{ color: "var(--theme-accent)" }}
             >
               <div className="flex flex-1 items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ backgroundColor: "var(--theme-accent-alpha-20)" }}>
+                <div
+                  className="flex h-7 w-7 items-center justify-center rounded-lg"
+                  style={{ backgroundColor: "var(--theme-accent-alpha-20)" }}
+                >
                   <Brain className="h-4 w-4" style={{ color: "var(--theme-accent)" }} />
                 </div>
-                <span className="text-sm font-medium" style={{ color: "var(--theme-accent)" }}>深度思考</span>
+                <span className="text-sm font-medium" style={{ color: "var(--theme-accent)" }}>
+                  深度思考
+                </span>
                 {thinkingDuration ? (
-                  <span className="rounded-full px-2 py-0.5 text-xs" style={{ backgroundColor: "var(--theme-accent-alpha-20)", color: "var(--theme-accent)" }}>
+                  <span
+                    className="rounded-full px-2 py-0.5 text-xs"
+                    style={{
+                      backgroundColor: "var(--theme-accent-alpha-20)",
+                      color: "var(--theme-accent)"
+                    }}
+                  >
                     {thinkingDuration}
                   </span>
                 ) : null}
               </div>
               <ChevronDown
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  thinkingExpanded && "rotate-180"
-                )}
+                className={cn("h-4 w-4 transition-transform", thinkingExpanded && "rotate-180")}
                 style={{ color: "var(--theme-accent)" }}
               />
             </button>
             {thinkingExpanded ? (
-              <div className="px-4 pb-4" style={{ borderTop: "1px solid var(--theme-accent-alpha-20)" }}>
-                <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed" style={{ color: "var(--theme-accent-light)" }}>
+              <div
+                className="px-4 pb-4"
+                style={{ borderTop: "1px solid var(--theme-accent-alpha-20)" }}
+              >
+                <div
+                  className="mt-3 whitespace-pre-wrap text-sm leading-relaxed"
+                  style={{ color: "var(--theme-accent-light)" }}
+                >
                   {message.thinking}
                 </div>
               </div>
@@ -89,6 +110,11 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
             </div>
           ) : null}
           {hasContent ? <MarkdownRenderer content={message.content} /> : null}
+          {showEmptyResult ? (
+            <p className="text-sm" style={{ color: "var(--theme-text-muted)" }}>
+              {EMPTY_RESULT_TEXT}
+            </p>
+          ) : null}
           {message.status === "error" ? (
             <p className="text-xs text-rose-400">生成已中断。</p>
           ) : null}
