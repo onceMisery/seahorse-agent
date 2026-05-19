@@ -387,9 +387,25 @@ npm run dev
 | 元数据治理 JDBC 拆分 | `JdbcMetadataGovernanceRepositoryAdapter` 已显著瘦身，但仍作为 14 个 metadata 端口的兼容门面。后续应先输出 schema、dictionary、extraction、review、quarantine、backfill、canonical write、quality report 的事务边界清单，再按子域拆成独立端口 Bean。 |
 | 端口准入规则 | 端口文件数不再作为机械合并依据。后续新增端口需说明外部能力边界、独立替换需求、事务生命周期或插件治理理由；不满足时优先使用领域服务、DTO、query object 或现有端口方法。 |
 | Agent 能力演进 | Phase A 基础 Agent Loop 已落地。后续重点是把检索、记忆、Web Search 等能力注册为标准工具，并补齐 Skill/Agent 注册中心、持久化状态机、Human-in-the-Loop、任务快照和输出自愈。 |
-| 记忆质量治理 | 四层记忆架构保留。后续重点补齐 token budget、复杂衰减分更新、高价值短期记忆晋升、冲突检测和语义记忆向量检索闭环。 |
 | 检索与重排增强 | 检索通道、后处理链和 Lucene 适配器已具备可插拔基础。后续可继续增强 OpenSearch/Elasticsearch 生产检索、RRF 权重策略、业务指标和检索评测闭环。 |
 | 大类治理制度化 | 对超过 500 行且包含多个变更原因的类建立拆分触发器；超过 800 行且跨 3 个以上职责时列为 P1 候选，拆分时保持外部端口、Bean 名称和配置契约兼容。 |
+
+### 记忆系统规划
+
+四层记忆架构已完成读路径闭环（Phase 1）、查询优化（Phase 3A/3B）和跨会话推理基础设施（Phase 4A/4B）。以下阶段仍待实施（详见 [智能体记忆系统架构设计](docs/zh/content/架构设计/智能体记忆系统架构设计.md)）：
+
+| 阶段 | 规划内容 | 状态 |
+|------|----------|------|
+| Phase 2 | 规则版记忆写入闭环：实现对话摘要、明确事实、明确偏好的异步写入机制，通过 `StreamCallback` 装饰器在 `onComplete()` 后触发候选记忆提取，写入短期记忆并设置 importanceScore/confidenceLevel/sourceMessageIds/decayScore | ⏳ 待实施 |
+| Phase 5 | 衰减、质量评估与冲突治理：新增 `ShortTermMemoryMaintenancePort` 仓储能力，实现仿生衰减算法（`e^(-λt)` 时间衰减 + 访问衰减 + 重要性权重），独立质量评估器（准确性/时效性/相关性/完整性/一致性五维度），冲突检测与自动修复，写入 `t_memory_conflict_log` 和 `t_memory_quality_snapshot` | ⏳ 待实施 |
+| MemoryVectorPort 向量检索闭环 | 接入真实向量后端（Milvus），实现语义记忆的向量检索，当前 `MemoryVectorPort` 仅端口未接入 | ⏳ 待实施 |
+| 多级摘要策略 | L2 会话级摘要、L3 跨会话主题聚合摘要、L4 用户画像摘要，当前仅有 L1 即时摘要 | ⏳ 待实施 |
+| 关键事实提取器 | 从对话中自动提取用户偏好/属性/决策/问题/领域知识等结构化事实，当前规则版仅覆盖 PROFILE/PREFERENCE | ⏳ 待实施 |
+| 术语映射 JDBC 实现 | 实现 `JdbcQueryTermExpansionAdapter`，让 `QueryTermExpansionPort` 的术语映射真正生效，当前默认退化为 noop | ⏳ 待实施 |
+| Token 预算管理 | 智能分配和截断记忆 Token，按工作记忆 40%/短期 30%/长期 20%/语义 10% 比例分配 | ⏳ 待实施 |
+| 知识图谱集成 | 可选集成 Neo4j，增强语义记忆的关系推理能力 | 🔮 远期规划 |
+| 多模态记忆 | 支持图片、音频等多模态记忆存储与检索 | 🔮 远期规划 |
+| 记忆可解释性 | 提供记忆来源和推理路径的可解释性 | 🔮 远期规划 |
 
 ## 参考文档
 
