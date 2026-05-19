@@ -851,4 +851,4 @@ CREATE INDEX idx_ltm_vector_hnsw ON t_long_term_memory_vector USING hnsw (embedd
 -- PostgreSQL Initial Data for Seahorse Agent
 
 INSERT INTO t_user (id, username, password, role, avatar, create_time, update_time, deleted)
-VALUES (2001523723396308993, 'admin', 'admin', 'admin', 'https://static.deepseek.com/user-avatar/G_6cuD8GbD53VwGRwisvCsZ6', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
+VALUES (2001523723396308993, 'admin', 'admin', 'admin', 'https://avatars.githubusercontent.com/u/37446017?v=4', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);

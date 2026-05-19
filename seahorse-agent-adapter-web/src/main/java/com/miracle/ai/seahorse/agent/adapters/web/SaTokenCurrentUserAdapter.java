@@ -28,7 +28,7 @@ import java.util.Optional;
 
 public class SaTokenCurrentUserAdapter implements CurrentUserPort {
 
-    private static final String DEFAULT_AVATAR_URL = "https://avatars.githubusercontent.com/u/583231?v=4";
+    private static final String DEFAULT_AVATAR_URL = "https://avatars.githubusercontent.com/u/37446017?v=4";
 
     private final UserRepositoryPort userRepositoryPort;
 
