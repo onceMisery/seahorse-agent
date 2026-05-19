@@ -105,7 +105,11 @@ public class SeahorseChatController {
                 Boolean.TRUE.equals(deepThinking),
                 parseChatMode(chatMode));
         try {
-            chatInboundPortProvider.getIfAvailable().streamChat(command, callback);
+            ChatInboundPort chatInboundPort = chatInboundPortProvider.getIfAvailable();
+            if (chatInboundPort == null) {
+                throw new IllegalStateException("ChatInboundPort is not configured");
+            }
+            chatInboundPort.streamChat(command, callback);
         } catch (RuntimeException ex) {
             emitSseError(emitter, ex);
         }
@@ -114,7 +118,10 @@ public class SeahorseChatController {
 
     @PostMapping("/rag/v3/stop")
     public Map<String, Object> stop(@RequestParam String taskId) {
-        chatInboundPortProvider.getIfAvailable().stopTask(taskId);
+        ChatInboundPort chatInboundPort = chatInboundPortProvider.getIfAvailable();
+        if (chatInboundPort != null) {
+            chatInboundPort.stopTask(taskId);
+        }
         streamTaskPort.unregister(taskId);
         return Map.of("code", "0");
     }

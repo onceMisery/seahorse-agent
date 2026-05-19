@@ -21,13 +21,16 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamChatContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +38,7 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * L1 问答入站应用服务。
@@ -51,6 +55,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     private final StreamTaskPort streamTaskPort;
     private final Optional<KernelAgentLoop> agentLoop;
     private final KernelRagTraceRecorder traceRecorder;
+    private final ConversationMemoryPort memoryPort;
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
         this(chatPipeline, streamTaskPort, KernelRagTraceRecorder.noop());
@@ -59,17 +64,26 @@ public class KernelChatInboundService implements ChatInboundPort {
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
                                     KernelRagTraceRecorder traceRecorder) {
-        this(chatPipeline, streamTaskPort, Optional.empty(), traceRecorder);
+        this(chatPipeline, streamTaskPort, Optional.empty(), traceRecorder, ConversationMemoryPort.noop());
     }
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
                                     Optional<KernelAgentLoop> agentLoop,
                                     KernelRagTraceRecorder traceRecorder) {
+        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, ConversationMemoryPort.noop());
+    }
+
+    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+                                    StreamTaskPort streamTaskPort,
+                                    Optional<KernelAgentLoop> agentLoop,
+                                    KernelRagTraceRecorder traceRecorder,
+                                    ConversationMemoryPort memoryPort) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop;
         this.traceRecorder = Objects.requireNonNull(traceRecorder, "traceRecorder must not be null");
+        this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
     }
 
     @Override
@@ -85,8 +99,11 @@ public class KernelChatInboundService implements ChatInboundPort {
         try {
             if (safeCommand.chatMode() == ChatMode.AGENT) {
                 if (agentLoop.isPresent()) {
-                    agentLoop.get().streamExecute(buildAgentLoopRequest(safeCommand), safeCallback);
-                    traceRecorder.finishRun(traceRunScope);
+                    StreamCancellationHandle handle = agentLoop.get().streamExecute(
+                            buildAgentLoopRequest(safeCommand),
+                            finishTraceOnTerminal(safeCallback, traceRunScope),
+                            traceRunScope);
+                    streamTaskPort.bindHandle(safeCommand.taskId(), handle);
                     return;
                 }
                 LOG.warn("chatMode=AGENT but KernelAgentLoop is not configured, fallback to RAG: taskId={}, userId={}",
@@ -122,11 +139,62 @@ public class KernelChatInboundService implements ChatInboundPort {
     private AgentLoopRequest buildAgentLoopRequest(StreamChatCommand command) {
         return AgentLoopRequest.builder()
                 .question(command.question())
-                .history(List.of())
+                .history(loadAgentHistory(command))
                 .allowedToolIds(List.of())
                 .samplingOptions(ChatSamplingOptions.builder()
                         .temperature(0.3D)
                         .build())
                 .build();
+    }
+
+    private List<ChatMessage> loadAgentHistory(StreamChatCommand command) {
+        return memoryPort.loadAndAppend(
+                command.conversationId(),
+                command.userId(),
+                ChatMessage.user(command.question()));
+    }
+
+    private StreamCallback finishTraceOnTerminal(StreamCallback delegate, TraceRunScope traceRunScope) {
+        AtomicBoolean finished = new AtomicBoolean(false);
+        return new StreamCallback() {
+            @Override
+            public void onContent(String content) {
+                delegate.onContent(content);
+            }
+
+            @Override
+            public void onThinking(String content) {
+                delegate.onThinking(content);
+            }
+
+            @Override
+            public void onComplete() {
+                try {
+                    delegate.onComplete();
+                } finally {
+                    finishOnce(null);
+                }
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                try {
+                    delegate.onError(error);
+                } finally {
+                    finishOnce(error);
+                }
+            }
+
+            private void finishOnce(Throwable error) {
+                if (!finished.compareAndSet(false, true)) {
+                    return;
+                }
+                if (error == null) {
+                    traceRecorder.finishRun(traceRunScope);
+                } else {
+                    traceRecorder.finishRun(traceRunScope, error);
+                }
+            }
+        };
     }
 }

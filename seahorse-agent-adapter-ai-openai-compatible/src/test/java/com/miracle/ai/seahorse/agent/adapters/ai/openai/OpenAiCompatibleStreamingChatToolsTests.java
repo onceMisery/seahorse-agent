@@ -180,6 +180,27 @@ class OpenAiCompatibleStreamingChatToolsTests {
     }
 
     @Test
+    void streamEofBeforeDoneReportsErrorAndDoesNotCallCollector() {
+        CapturingInterceptor interceptor = new CapturingInterceptor("""
+                data: {"choices":[{"delta":{"content":"partial"}}]}
+
+                """);
+        OpenAiCompatibleModelAdapter adapter = adapter(interceptor);
+        ErrorRecordingCallback callback = new ErrorRecordingCallback();
+        AtomicReference<List<AgentToolCall>> seen = new AtomicReference<>();
+
+        adapter.streamChatWithTools(ChatRequest.builder()
+                .messages(List.of(ChatMessage.user("天气")))
+                .tools(List.of(WEATHER))
+                .build(), callback, seen::set);
+
+        assertThat(callback.error).isNotNull();
+        assertThat(callback.completeCount).isZero();
+        assertThat(seen.get()).isNull();
+    }
+
+
+    @Test
     void serializesAssistantToolCallsAndToolMessages() throws Exception {
         AgentToolCall call = AgentToolCall.of("call-1", "weather", Map.of("city", "SH"));
         CapturingInterceptor interceptor = new CapturingInterceptor(done());

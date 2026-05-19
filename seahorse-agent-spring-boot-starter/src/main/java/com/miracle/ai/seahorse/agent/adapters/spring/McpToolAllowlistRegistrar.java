@@ -19,9 +19,9 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import org.slf4j.Logger;
@@ -44,13 +44,13 @@ public class McpToolAllowlistRegistrar implements ApplicationRunner {
 
     private final McpToolPortAdapter adapter;
     private final McpToolRegistryPort mcpRegistry;
-    private final InMemoryToolRegistry toolRegistry;
+    private final ToolRegistryPort toolRegistry;
     private final List<String> includeToolIds;
     private final ObjectMapper objectMapper;
 
     public McpToolAllowlistRegistrar(McpToolPortAdapter adapter,
                                      McpToolRegistryPort mcpRegistry,
-                                     InMemoryToolRegistry toolRegistry,
+                                     ToolRegistryPort toolRegistry,
                                      List<String> includeToolIds,
                                      ObjectMapper objectMapper) {
         this.adapter = Objects.requireNonNull(adapter, "adapter must not be null");
@@ -73,8 +73,16 @@ public class McpToolAllowlistRegistrar implements ApplicationRunner {
         }
         mcpRegistry.findTool(toolId)
                 .ifPresentOrElse(
-                        descriptor -> toolRegistry.register(toToolDescriptor(descriptor), adapter),
+                        descriptor -> registerTool(descriptor, toolId),
                         () -> LOG.warn("MCP tool allowlist item not found: {}", toolId));
+    }
+
+    private void registerTool(McpToolDescriptor descriptor, String toolId) {
+        try {
+            toolRegistry.register(toToolDescriptor(descriptor), adapter);
+        } catch (UnsupportedOperationException ex) {
+            LOG.warn("ToolRegistryPort does not support dynamic MCP tool registration: toolId={}", toolId, ex);
+        }
     }
 
     private ToolDescriptor toToolDescriptor(McpToolDescriptor descriptor) {

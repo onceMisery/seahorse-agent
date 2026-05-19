@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -300,11 +301,47 @@ class KernelAgentLoopTests {
 
         loop.streamExecute(defaultRequest(), callback);
 
+        assertTrue(callback.awaitTerminal(1_000));
         assertEquals(List.of("上海 21 度"), callback.contents);
         assertEquals(1, callback.completeCount);
         assertTrue(callback.thinking.stream().anyMatch(text -> text.contains("先查天气")));
         assertTrue(callback.thinking.stream().anyMatch(text -> text.contains("weather")));
         assertTrue(callback.contents.stream().noneMatch(text -> text.contains("\"arguments\"")));
+    }
+
+    @Test
+    void streamExecuteCancellationCancelsModelStreamAndSignalsError() {
+        BlockingModel model = new BlockingModel();
+        KernelAgentLoop loop = new KernelAgentLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+        RecordingCallback callback = new RecordingCallback();
+
+        StreamCancellationHandle handle = loop.streamExecute(defaultRequest(), callback);
+        assertTrue(await(model.started, 1_000));
+
+        handle.cancel();
+
+        assertTrue(callback.awaitTerminal(1_000));
+        assertTrue(model.cancelled.get());
+        assertTrue(callback.error instanceof AgentLoopCancelledException);
+    }
+
+    @Test
+    void rawToolArgumentsBecomeFailedObservationWithoutInvokingTool() {
+        AgentToolCall weather = AgentToolCall.of("call-1", "weather", Map.of("_raw", "{bad"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("bad args", List.of(weather)),
+                Turn.finalAnswer("handled")));
+        InMemoryToolRegistry registry = new InMemoryToolRegistry();
+        registry.register(WEATHER_DESCRIPTOR, (callId, toolId, arguments) -> {
+            throw new AssertionError("tool should not be invoked for raw arguments");
+        });
+        KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(defaultRequest());
+
+        AgentObservation observation = result.steps().get(0).observations().get(0);
+        assertFalse(observation.success());
+        assertTrue(observation.error().contains("arguments"));
     }
 
     private static AgentLoopRequest defaultRequest() {
@@ -340,6 +377,25 @@ class KernelAgentLoopTests {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             return false;
+        }
+    }
+
+    private static final class BlockingModel implements StreamingChatModelPort {
+        private final CountDownLatch started = new CountDownLatch(1);
+        private final AtomicBoolean cancelled = new AtomicBoolean(false);
+
+        @Override
+        public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public StreamCancellationHandle streamChatWithTools(
+                ChatRequest request,
+                StreamCallback callback,
+                ToolCallCollector toolCallCollector) {
+            started.countDown();
+            return () -> cancelled.set(true);
         }
     }
 
@@ -387,6 +443,8 @@ class KernelAgentLoopTests {
     private static final class RecordingCallback implements StreamCallback {
         private final List<String> contents = new ArrayList<>();
         private final List<String> thinking = new ArrayList<>();
+        private final CountDownLatch terminal = new CountDownLatch(1);
+        private Throwable error;
         private int completeCount;
 
         @Override
@@ -402,11 +460,17 @@ class KernelAgentLoopTests {
         @Override
         public void onComplete() {
             completeCount++;
+            terminal.countDown();
         }
 
         @Override
         public void onError(Throwable error) {
-            throw new AssertionError(error);
+            this.error = error;
+            terminal.countDown();
+        }
+
+        private boolean awaitTerminal(long millis) {
+            return await(terminal, millis);
         }
     }
 }

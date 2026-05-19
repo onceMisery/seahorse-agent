@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
@@ -83,8 +84,10 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @ConditionalOnMissingBean
     public KernelAgentLoop seahorseKernelAgentLoop(StreamingChatModelPort modelPort,
                                                    ToolRegistryPort toolRegistry,
-                                                   KernelAgentLoopOptions options) {
-        return new KernelAgentLoop(modelPort, toolRegistry, options);
+                                                   KernelAgentLoopOptions options,
+                                                   ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
+        return new KernelAgentLoop(modelPort, toolRegistry, options,
+                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
     }
 
     @Bean
@@ -97,11 +100,11 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentModeEnabled
-    @ConditionalOnBean({McpToolPortAdapter.class, McpToolRegistryPort.class, InMemoryToolRegistry.class})
+    @ConditionalOnBean({McpToolPortAdapter.class, McpToolRegistryPort.class, ToolRegistryPort.class})
     @ConditionalOnMissingBean
     public McpToolAllowlistRegistrar seahorseMcpToolAllowlistRegistrar(McpToolPortAdapter adapter,
                                                                         McpToolRegistryPort mcpRegistry,
-                                                                        InMemoryToolRegistry toolRegistry,
+                                                                        ToolRegistryPort toolRegistry,
                                                                         Environment environment,
                                                                         ObjectProvider<ObjectMapper> objectMapper) {
         return new McpToolAllowlistRegistrar(

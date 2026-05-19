@@ -17,10 +17,16 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
+import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.GuidanceDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.RewriteResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentGroup;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
@@ -34,8 +40,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -122,6 +130,35 @@ class KernelChatInboundServiceTests {
         service.stopTask("task-1");
 
         verify(taskPort).cancel("task-1");
+    }
+
+    @Test
+    void agentModeLoadsConversationHistoryAndBindsCancellationHandle() {
+        KernelChatPipeline pipeline = mock(KernelChatPipeline.class);
+        StreamTaskPort taskPort = mock(StreamTaskPort.class);
+        ConversationMemoryPort memoryPort = mock(ConversationMemoryPort.class);
+        KernelAgentLoop agentLoop = mock(KernelAgentLoop.class);
+        StreamCancellationHandle handle = mock(StreamCancellationHandle.class);
+        StreamCallback callback = mock(StreamCallback.class);
+        List<ChatMessage> history = List.of(ChatMessage.assistant("prev", "", null));
+
+        when(memoryPort.loadAndAppend(any(), any(), any())).thenReturn(history);
+        when(agentLoop.streamExecute(any(), any(), any(TraceRunScope.class))).thenReturn(handle);
+        KernelChatInboundService service = new KernelChatInboundService(
+                pipeline,
+                taskPort,
+                Optional.of(agentLoop),
+                KernelRagTraceRecorder.noop(),
+                memoryPort);
+
+        service.streamChat(new StreamChatCommand(
+                "hello", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
+
+        ArgumentCaptor<AgentLoopRequest> requestCaptor = ArgumentCaptor.forClass(AgentLoopRequest.class);
+        verify(memoryPort).loadAndAppend("conv-1", "user-1", ChatMessage.user("hello"));
+        verify(agentLoop).streamExecute(requestCaptor.capture(), any(), any(TraceRunScope.class));
+        verify(taskPort).bindHandle("task-1", handle);
+        Assertions.assertEquals(history, requestCaptor.getValue().history());
     }
 
     @Test

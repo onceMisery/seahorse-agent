@@ -22,6 +22,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceReco
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.junit.jupiter.api.Test;
@@ -47,8 +49,8 @@ class KernelChatInboundServiceAgentModeTests {
         StreamTaskPort taskPort = mock(StreamTaskPort.class);
         KernelAgentLoop agentLoop = mock(KernelAgentLoop.class);
         StreamCallback callback = mock(StreamCallback.class);
-        when(agentLoop.streamExecute(any(), any())).thenReturn(() -> {
-        });
+        StreamCancellationHandle handle = mock(StreamCancellationHandle.class);
+        when(agentLoop.streamExecute(any(), any(), any(TraceRunScope.class))).thenReturn(handle);
         KernelChatInboundService service = new KernelChatInboundService(
                 pipeline, taskPort, Optional.of(agentLoop), KernelRagTraceRecorder.noop());
 
@@ -56,7 +58,8 @@ class KernelChatInboundServiceAgentModeTests {
                 "hello", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
 
         ArgumentCaptor<AgentLoopRequest> requestCaptor = ArgumentCaptor.forClass(AgentLoopRequest.class);
-        verify(agentLoop).streamExecute(requestCaptor.capture(), any());
+        verify(agentLoop).streamExecute(requestCaptor.capture(), any(), any(TraceRunScope.class));
+        verify(taskPort).bindHandle("task-1", handle);
         verify(pipeline, never()).execute(any());
         AgentLoopRequest request = requestCaptor.getValue();
         assertThat(request.question()).isEqualTo("hello");

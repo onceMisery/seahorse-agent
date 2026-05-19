@@ -29,6 +29,10 @@ public interface ToolRegistryPort {
 
     Optional<ToolPort> find(String toolId);
 
+    default void register(ToolDescriptor descriptor, ToolPort port) {
+        throw new UnsupportedOperationException("ToolRegistryPort does not support registration");
+    }
+
     static ToolRegistryPort empty() {
         return new ToolRegistryPort() {
             @Override

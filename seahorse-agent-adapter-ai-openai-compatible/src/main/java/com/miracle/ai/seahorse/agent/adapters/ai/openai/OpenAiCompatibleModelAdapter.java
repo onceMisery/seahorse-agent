@@ -345,12 +345,19 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
             callback.onComplete();
             return;
         }
+        boolean done = false;
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(responseBody.byteStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                consumeStreamLine(line, callback);
+                if (consumeStreamLine(line, callback)) {
+                    done = true;
+                    break;
+                }
             }
+        }
+        if (!done) {
+            callback.onError(new IOException("OpenAI-compatible stream ended before [DONE]"));
         }
     }
 
@@ -373,19 +380,21 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
                 }
             }
         }
+        callback.onError(new IOException("OpenAI-compatible stream ended before [DONE]"));
     }
 
-    private void consumeStreamLine(String line, StreamCallback callback) {
+    private boolean consumeStreamLine(String line, StreamCallback callback) {
         String trimmed = line.trim();
         if (!trimmed.startsWith(SSE_DATA_PREFIX)) {
-            return;
+            return false;
         }
         String data = trimmed.substring(SSE_DATA_PREFIX.length()).trim();
         if (SSE_DONE.equals(data)) {
             callback.onComplete();
-            return;
+            return true;
         }
         consumeStreamDelta(data, callback);
+        return false;
     }
 
     private boolean consumeStreamLineWithTools(
