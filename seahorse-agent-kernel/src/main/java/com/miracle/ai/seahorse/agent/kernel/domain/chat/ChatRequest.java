@@ -38,6 +38,10 @@ public class ChatRequest {
 
     private ChatSamplingOptions samplingOptions;
 
+    /**
+     * 历史兼容字段。新 function-calling 逻辑只根据 {@link #tools} 是否为空判断是否启用工具协议。
+     */
+    @Deprecated(forRemoval = false)
     private Boolean enableTools;
 
     /** OpenAI 兼容 function-calling 工具列表；空列表表示禁用工具协议。 */

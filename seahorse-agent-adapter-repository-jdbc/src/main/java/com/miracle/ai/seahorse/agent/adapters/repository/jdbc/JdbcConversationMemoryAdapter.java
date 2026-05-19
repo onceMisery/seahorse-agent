@@ -31,6 +31,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 基于旧会话表的原生会话记忆 adapter。
@@ -44,11 +45,12 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
     private static final String ROLE_USER = "user";
     private static final String ROLE_ASSISTANT = "assistant";
     private static final String DEFAULT_TITLE = "New conversation";
+    private static final AtomicLong LAST_SORTABLE_ID = new AtomicLong();
     private static final String SQL_LIST_MESSAGES = """
             SELECT role, content, thinking_content, thinking_duration
             FROM t_message
             WHERE conversation_id = ? AND user_id = ? AND deleted = 0
-            ORDER BY create_time DESC
+            ORDER BY create_time DESC, id DESC
             LIMIT ?
             """;
     private static final String SQL_INSERT_MESSAGE = """
@@ -184,9 +186,17 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
     }
 
     private String nextId() {
-        long millis = System.currentTimeMillis();
+        long current = System.currentTimeMillis() * 1_000_000L;
+        long sortable = LAST_SORTABLE_ID.updateAndGet(previous -> Math.max(current, previous + 1));
         int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return Long.toString(millis, 36) + suffix;
+        return leftPad(Long.toString(sortable, 36), 13) + suffix;
+    }
+
+    private String leftPad(String value, int length) {
+        if (value.length() >= length) {
+            return value;
+        }
+        return "0".repeat(length - value.length()) + value;
     }
 
     private boolean hasText(String value) {

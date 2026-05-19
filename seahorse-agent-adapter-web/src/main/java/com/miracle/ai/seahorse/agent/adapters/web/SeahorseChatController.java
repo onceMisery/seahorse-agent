@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimitDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -85,7 +87,8 @@ public class SeahorseChatController {
     public SseEmitter chat(@RequestParam String question,
                            @RequestParam(required = false) String conversationId,
                            @RequestParam(required = false, defaultValue = DEFAULT_USER_ID) String userId,
-                           @RequestParam(required = false, defaultValue = "false") Boolean deepThinking) {
+                           @RequestParam(required = false, defaultValue = "false") Boolean deepThinking,
+                           @RequestParam(required = false) String chatMode) {
         String actualConversationId = resolveId(conversationId);
         String actualUserId = resolveUserId(userId);
         checkChatRateLimit(actualUserId);
@@ -97,7 +100,8 @@ public class SeahorseChatController {
                 actualConversationId,
                 taskId,
                 actualUserId,
-                Boolean.TRUE.equals(deepThinking));
+                Boolean.TRUE.equals(deepThinking),
+                parseChatMode(chatMode));
         chatInboundPort.streamChat(command, callback);
         return emitter;
     }
@@ -114,6 +118,17 @@ public class SeahorseChatController {
             return UUID.randomUUID().toString();
         }
         return value;
+    }
+
+    private ChatMode parseChatMode(String value) {
+        if (value == null || value.isBlank()) {
+            return ChatMode.RAG;
+        }
+        try {
+            return ChatMode.valueOf(value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return ChatMode.RAG;
+        }
     }
 
     private String resolveUserId(String value) {

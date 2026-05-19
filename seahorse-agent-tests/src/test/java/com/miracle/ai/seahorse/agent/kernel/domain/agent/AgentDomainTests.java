@@ -93,11 +93,13 @@ class AgentDomainTests {
         AgentLoopRequest req = AgentLoopRequest.builder()
                 .question("天气如何")
                 .history(List.of(ChatMessage.user("hi")))
-                .tools(List.of())
+                .allowedToolIds(List.of())
                 .samplingOptions(ChatSamplingOptions.builder().temperature(0.3D).build())
                 .build();
         assertEquals(6, req.maxSteps(), "maxSteps 缺省 6");
         assertNotNull(req.history());
+        assertNotNull(req.allowedToolIds());
+        assertTrue(req.allowedToolIds().isEmpty(), "空 allowedToolIds 表示允许全部工具");
         assertNull(req.memoryContext());
     }
 
@@ -106,7 +108,7 @@ class AgentDomainTests {
         assertThrows(IllegalArgumentException.class, () -> AgentLoopRequest.builder()
                 .question(" ")
                 .history(List.of())
-                .tools(List.of())
+                .allowedToolIds(List.of())
                 .samplingOptions(ChatSamplingOptions.builder().build())
                 .build());
     }

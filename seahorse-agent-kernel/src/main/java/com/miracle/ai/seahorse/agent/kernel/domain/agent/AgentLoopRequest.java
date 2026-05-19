@@ -35,7 +35,7 @@ public final class AgentLoopRequest {
 
     private final String question;
     private final List<ChatMessage> history;
-    private final List<String> tools;
+    private final List<String> allowedToolIds;
     private final ChatSamplingOptions samplingOptions;
     private final int maxSteps;
     private final MemoryContext memoryContext;
@@ -47,7 +47,7 @@ public final class AgentLoopRequest {
         Objects.requireNonNull(b.samplingOptions, "AgentLoopRequest.samplingOptions 不能为空");
         this.question = b.question;
         this.history = b.history == null ? List.of() : List.copyOf(b.history);
-        this.tools = b.tools == null ? List.of() : List.copyOf(b.tools);
+        this.allowedToolIds = b.allowedToolIds == null ? List.of() : List.copyOf(b.allowedToolIds);
         this.samplingOptions = b.samplingOptions;
         this.maxSteps = b.maxSteps <= 0 ? DEFAULT_MAX_STEPS : b.maxSteps;
         this.memoryContext = b.memoryContext;
@@ -61,8 +61,8 @@ public final class AgentLoopRequest {
         return history;
     }
 
-    public List<String> tools() {
-        return tools;
+    public List<String> allowedToolIds() {
+        return allowedToolIds;
     }
 
     public ChatSamplingOptions samplingOptions() {
@@ -84,7 +84,7 @@ public final class AgentLoopRequest {
     public static final class Builder {
         private String question;
         private List<ChatMessage> history;
-        private List<String> tools;
+        private List<String> allowedToolIds;
         private ChatSamplingOptions samplingOptions;
         private int maxSteps;
         private MemoryContext memoryContext;
@@ -99,8 +99,8 @@ public final class AgentLoopRequest {
             return this;
         }
 
-        public Builder tools(List<String> tools) {
-            this.tools = tools;
+        public Builder allowedToolIds(List<String> allowedToolIds) {
+            this.allowedToolIds = allowedToolIds;
             return this;
         }
 

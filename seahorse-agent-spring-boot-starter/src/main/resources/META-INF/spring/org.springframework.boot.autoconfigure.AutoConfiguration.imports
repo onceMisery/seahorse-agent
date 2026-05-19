@@ -1,4 +1,5 @@
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAuthAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentNativeAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAuthAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAgentAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAutoConfiguration

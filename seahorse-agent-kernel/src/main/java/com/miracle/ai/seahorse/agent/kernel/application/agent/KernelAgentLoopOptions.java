@@ -27,7 +27,7 @@ public final class KernelAgentLoopOptions {
 
     private static final int DEFAULT_MAX_STEPS = 6;
     private static final Duration DEFAULT_PER_TOOL_TIMEOUT = Duration.ofSeconds(30);
-    private static final int DEFAULT_MAX_PARALLEL_TOOLS = 4;
+    private static final int DEFAULT_MAX_PARALLEL_TOOLS = 1;
 
     private final int maxSteps;
     private final Duration perToolTimeout;

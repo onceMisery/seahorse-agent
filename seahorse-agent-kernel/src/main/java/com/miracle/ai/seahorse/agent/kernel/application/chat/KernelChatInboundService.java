@@ -17,7 +17,11 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamChatContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
@@ -25,13 +29,19 @@ import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * L1 问答入站应用服务。
  */
 public class KernelChatInboundService implements ChatInboundPort {
+
+    private static final Logger LOG = LoggerFactory.getLogger(KernelChatInboundService.class);
 
     private static final String TRACE_NAME_STREAM_CHAT = "stream-chat";
     private static final String TRACE_ENTRY_STREAM_CHAT =
@@ -39,6 +49,7 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     private final KernelChatPipeline chatPipeline;
     private final StreamTaskPort streamTaskPort;
+    private final Optional<KernelAgentLoop> agentLoop;
     private final KernelRagTraceRecorder traceRecorder;
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
@@ -48,8 +59,16 @@ public class KernelChatInboundService implements ChatInboundPort {
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
                                     KernelRagTraceRecorder traceRecorder) {
+        this(chatPipeline, streamTaskPort, Optional.empty(), traceRecorder);
+    }
+
+    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+                                    StreamTaskPort streamTaskPort,
+                                    Optional<KernelAgentLoop> agentLoop,
+                                    KernelRagTraceRecorder traceRecorder) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
+        this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop;
         this.traceRecorder = Objects.requireNonNull(traceRecorder, "traceRecorder must not be null");
     }
 
@@ -64,6 +83,15 @@ public class KernelChatInboundService implements ChatInboundPort {
                 safeCommand.taskId(),
                 safeCommand.userId()));
         try {
+            if (safeCommand.chatMode() == ChatMode.AGENT) {
+                if (agentLoop.isPresent()) {
+                    agentLoop.get().streamExecute(buildAgentLoopRequest(safeCommand), safeCallback);
+                    traceRecorder.finishRun(traceRunScope);
+                    return;
+                }
+                LOG.warn("chatMode=AGENT but KernelAgentLoop is not configured, fallback to RAG: taskId={}, userId={}",
+                        safeCommand.taskId(), safeCommand.userId());
+            }
             chatPipeline.execute(buildContext(safeCommand, safeCallback, traceRunScope));
             traceRecorder.finishRun(traceRunScope);
         } catch (Exception ex) {
@@ -88,6 +116,17 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .deepThinking(command.deepThinking())
                 .callback(callback)
                 .traceRunScope(traceRunScope)
+                .build();
+    }
+
+    private AgentLoopRequest buildAgentLoopRequest(StreamChatCommand command) {
+        return AgentLoopRequest.builder()
+                .question(command.question())
+                .history(List.of())
+                .allowedToolIds(List.of())
+                .samplingOptions(ChatSamplingOptions.builder()
+                        .temperature(0.3D)
+                        .build())
                 .build();
     }
 }

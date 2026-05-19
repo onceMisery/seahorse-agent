@@ -1,0 +1,138 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.adapters.spring;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.convert.DurationStyle;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
+
+/**
+ * AgentLoop 自动装配。默认关闭，仅在显式打开 agent-mode-enabled 后生效。
+ */
+@AutoConfiguration
+@AutoConfigureAfter(SeahorseAgentKernelChatAutoConfiguration.class)
+@ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
+        matchIfMissing = true)
+public class SeahorseAgentKernelAgentAutoConfiguration {
+
+    private static final String PROP_AGENT_ENABLED = "seahorse-agent.chat.agent-mode-enabled";
+    private static final String PROP_MAX_STEPS = "seahorse-agent.chat.agent.max-steps";
+    private static final String PROP_PER_TOOL_TIMEOUT = "seahorse-agent.chat.agent.per-tool-timeout";
+    private static final String PROP_MAX_PARALLEL_TOOLS = "seahorse-agent.chat.agent.max-parallel-tools";
+    private static final String PROP_MCP_INCLUDE = "seahorse-agent.chat.agent.tools.mcp.include";
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnMissingBean(ToolRegistryPort.class)
+    public InMemoryToolRegistry seahorseAgentToolRegistryPort() {
+        return new InMemoryToolRegistry();
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnMissingBean
+    public KernelAgentLoopOptions seahorseKernelAgentLoopOptions(Environment environment) {
+        return KernelAgentLoopOptions.builder()
+                .maxSteps(environment.getProperty(PROP_MAX_STEPS, Integer.class, 6))
+                .perToolTimeout(parseDuration(environment.getProperty(PROP_PER_TOOL_TIMEOUT), Duration.ofSeconds(30)))
+                .maxParallelTools(environment.getProperty(PROP_MAX_PARALLEL_TOOLS, Integer.class, 1))
+                .build();
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean(StreamingChatModelPort.class)
+    @ConditionalOnMissingBean
+    public KernelAgentLoop seahorseKernelAgentLoop(StreamingChatModelPort modelPort,
+                                                   ToolRegistryPort toolRegistry,
+                                                   KernelAgentLoopOptions options) {
+        return new KernelAgentLoop(modelPort, toolRegistry, options);
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean(KernelMcpOrchestrator.class)
+    @ConditionalOnMissingBean
+    public McpToolPortAdapter seahorseMcpToolPortAdapter(KernelMcpOrchestrator orchestrator) {
+        return new McpToolPortAdapter(orchestrator);
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean({McpToolPortAdapter.class, McpToolRegistryPort.class, InMemoryToolRegistry.class})
+    @ConditionalOnMissingBean
+    public McpToolAllowlistRegistrar seahorseMcpToolAllowlistRegistrar(McpToolPortAdapter adapter,
+                                                                        McpToolRegistryPort mcpRegistry,
+                                                                        InMemoryToolRegistry toolRegistry,
+                                                                        Environment environment,
+                                                                        ObjectProvider<ObjectMapper> objectMapper) {
+        return new McpToolAllowlistRegistrar(
+                adapter,
+                mcpRegistry,
+                toolRegistry,
+                parseCsv(environment.getProperty(PROP_MCP_INCLUDE, "")),
+                objectMapper.getIfAvailable(ObjectMapper::new));
+    }
+
+    private List<String> parseCsv(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private Duration parseDuration(String value, Duration defaultValue) {
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        return DurationStyle.detectAndParse(value);
+    }
+
+    @Target({ElementType.METHOD, ElementType.TYPE})
+    @Retention(RetentionPolicy.RUNTIME)
+    @ConditionalOnProperty(name = PROP_AGENT_ENABLED, havingValue = "true")
+    private @interface ConditionalOnAgentModeEnabled {
+    }
+}

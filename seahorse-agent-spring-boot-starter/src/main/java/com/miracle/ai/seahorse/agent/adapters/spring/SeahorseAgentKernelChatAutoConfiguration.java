@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.adapters.ai.openai.LlmQueryOptimizerAdapter
 import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFactory;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService;
@@ -44,6 +45,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -151,8 +153,10 @@ public class SeahorseAgentKernelChatAutoConfiguration {
     @ConditionalOnMissingBean
     public ChatInboundPort seahorseChatInboundPort(KernelChatPipeline chatPipeline,
                                                    StreamTaskPort streamTaskPort,
+                                                   ObjectProvider<KernelAgentLoop> agentLoop,
                                                    ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
+                Optional.ofNullable(agentLoop.getIfAvailable()),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
     }
 }

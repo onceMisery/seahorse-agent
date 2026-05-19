@@ -20,10 +20,13 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 import java.util.Objects;
 
 /**
- * Agent 工具元数据：toolId、显示名、自然语言描述、JSON Schema。
+ * Agent 工具元数据。
  *
- * <p>jsonSchema 由具体 Tool 实现自行提供，用于喂给 OpenAI 兼容 function-calling
- * 的 {@code parameters} 字段；MUST 为合法 JSON 字符串，但本契约只做空白校验。
+ * <p>{@code toolId} 是工具唯一派发 key，并直接作为 OpenAI 兼容 function name
+ * 序列化给模型；{@code name} 仅用于 UI / 日志展示，不参与模型协议映射。
+ *
+ * <p>{@code jsonSchema} 由具体 Tool 实现自行提供，用于喂给 OpenAI 兼容
+ * function-calling 的 {@code parameters} 字段；MUST 为合法 JSON 字符串，但本契约只做空白校验。
  */
 public record ToolDescriptor(String toolId, String name, String description, String jsonSchema) {
 

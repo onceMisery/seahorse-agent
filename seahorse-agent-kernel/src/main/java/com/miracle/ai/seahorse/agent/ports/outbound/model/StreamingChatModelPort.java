@@ -21,6 +21,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 
+import java.util.List;
+
 /**
  * 流式对话模型端口。
  * <p>
@@ -37,13 +39,46 @@ public interface StreamingChatModelPort {
      */
     StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback);
 
+    /**
+     * 执行支持工具调用的流式对话。
+     *
+     * @param request           模型请求
+     * @param callback          流式回调
+     * @param toolCallCollector 工具调用收集器；适配器必须在 {@code onComplete()} 前调用一次
+     * @return 可取消句柄
+     */
+    default StreamCancellationHandle streamChatWithTools(
+            ChatRequest request,
+            StreamCallback callback,
+            ToolCallCollector toolCallCollector) {
+        throw new UnsupportedOperationException("当前模型适配器尚未支持工具调用（function-calling）");
+    }
+
     static StreamingChatModelPort noop() {
-        return (request, callback) -> {
-            if (callback != null) {
-                callback.onComplete();
+        return new StreamingChatModelPort() {
+            @Override
+            public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
+                if (callback != null) {
+                    callback.onComplete();
+                }
+                return () -> {
+                };
             }
-            return () -> {
-            };
+
+            @Override
+            public StreamCancellationHandle streamChatWithTools(
+                    ChatRequest request,
+                    StreamCallback callback,
+                    ToolCallCollector toolCallCollector) {
+                if (toolCallCollector != null) {
+                    toolCallCollector.onToolCalls(List.of());
+                }
+                if (callback != null) {
+                    callback.onComplete();
+                }
+                return () -> {
+                };
+            }
         };
     }
 }

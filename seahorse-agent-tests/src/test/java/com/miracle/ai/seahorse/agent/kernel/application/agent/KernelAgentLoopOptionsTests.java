@@ -34,7 +34,7 @@ class KernelAgentLoopOptionsTests {
         KernelAgentLoopOptions opts = KernelAgentLoopOptions.defaults();
         assertEquals(6, opts.maxSteps());
         assertEquals(Duration.ofSeconds(30), opts.perToolTimeout());
-        assertEquals(4, opts.maxParallelTools());
+        assertEquals(1, opts.maxParallelTools());
     }
 
     @Test

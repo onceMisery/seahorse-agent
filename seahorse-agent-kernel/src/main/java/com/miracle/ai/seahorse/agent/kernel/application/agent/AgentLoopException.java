@@ -15,15 +15,18 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.chat;
+package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 /**
- * Seahorse 内核对话消息角色。
+ * Agent loop 执行失败或模型适配器协议错误。
  */
-public enum ChatRole {
+public class AgentLoopException extends RuntimeException {
 
-    SYSTEM,
-    USER,
-    ASSISTANT,
-    TOOL
+    public AgentLoopException(String message) {
+        super(message);
+    }
+
+    public AgentLoopException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }
