@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
+
 import java.util.Objects;
 
 /**
@@ -27,13 +29,26 @@ public record StreamChatCommand(
         String conversationId,
         String taskId,
         String userId,
-        boolean deepThinking) {
+        boolean deepThinking,
+        ChatMode chatMode) {
 
     public StreamChatCommand {
         question = requireText(question, "question");
         conversationId = requireText(conversationId, "conversationId");
         taskId = requireText(taskId, "taskId");
         userId = Objects.requireNonNullElse(userId, "");
+        chatMode = Objects.requireNonNullElse(chatMode, ChatMode.RAG);
+    }
+
+    /**
+     * 兼容旧 5 参签名：缺省 {@link ChatMode#RAG}。
+     */
+    public StreamChatCommand(String question,
+                             String conversationId,
+                             String taskId,
+                             String userId,
+                             boolean deepThinking) {
+        this(question, conversationId, taskId, userId, deepThinking, ChatMode.RAG);
     }
 
     private static String requireText(String value, String name) {

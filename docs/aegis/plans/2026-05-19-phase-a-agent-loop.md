@@ -106,7 +106,7 @@ mvn -pl seahorse-agent-tests -am -DfailIfNoTests=false test
 - `.../kernel/application/agent/KernelAgentLoopOptions.java`
 - `.../kernel/application/agent/McpToolPortAdapter.java`（把现有 `KernelMcpOrchestrator` 包成 `ToolPort`）
 - `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/domain/chat/ChatMode.java`
-- `seahorse-agent-adapter-ai-openai-compatible/.../OpenAiCompatibleStreamingChatModelAdapter.java`（**扩展**已有适配器，新增 `streamChatWithTools`）
+- `seahorse-agent-adapter-ai-openai-compatible/.../OpenAiCompatibleModelAdapter.java`（**扩展**已有多端口适配器，新增 `streamChatWithTools` 实现；类名已与仓库现状对齐）
 - `seahorse-agent-spring-boot-starter/.../SeahorseAgentKernelAgentAutoConfiguration.java`
 - 单元测试：
   - `seahorse-agent-tests/src/test/java/.../kernel/application/agent/KernelAgentLoopTests.java`
@@ -349,23 +349,23 @@ mvn -pl seahorse-agent-tests -am -DfailIfNoTests=false test
 
 **Why**: 与现有 SSE 协议对齐：工具调用过程以 `thinking` 事件流出，最终回答以 `message` 事件流出，结束发 `done`。
 
-**Compatibility**: 不引入新事件类型；通过 `StreamCallback.onThinking(String)`（如不存在则降级为 `onContent`）输出工具调用摘要。先检查现有接口能力。
+**Compatibility**: 不引入新事件类型；`StreamCallback.onThinking(String)` 已作为 `default` 方法存在于既有接口（`@/seahorse-agent-kernel/.../domain/chat/StreamCallback.java`），直接复用；自定义实现未覆盖时 default 体为空，安全 no-op。
 
 **Verification**: `mvn -pl seahorse-agent-tests -am -Dtest=KernelAgentLoopTests test`
 
 **Steps** (TDD):
 1. **Write test** — `shouldStreamFinalAnswerViaCallback`：当 LLM 第二步走最终回答时，`StreamCallback` 至少收到一次 `onContent(non-empty)`、一次 `onComplete()`；工具调用阶段 `onContent` 不应携带 raw JSON（断言不包含 `"arguments":`）。
 2. **Verify RED** — 失败。
-3. **Minimal code** — 新增 `streamExecute(AgentLoopRequest req, StreamCallback callback): StreamCancellationHandle`。中间步骤可通过 `onThinking` 推送 `[工具调用] toolId(arguments_summary) -> ok|err`；若 `StreamCallback` 无 `onThinking`，则跳过中间提示，仅推最终回答。
+3. **Minimal code** — 新增 `streamExecute(AgentLoopRequest req, StreamCallback callback): StreamCancellationHandle`。中间步骤通过 `callback.onThinking("[工具调用] toolId(arguments_summary) -> ok|err")` 推送；最终回答走 `onContent` + `onComplete`。
 4. **Verify GREEN** — 绿。
 5. **Commit** — `feat(agent): KernelAgentLoop 接入 SSE 流式输出`
 
 ---
 
-### Task A11 — OpenAiCompatibleStreamingChatModelAdapter 支持 streamChatWithTools
+### Task A11 — OpenAiCompatibleModelAdapter 支持 streamChatWithTools
 
 **Files**:
-- modify: `seahorse-agent-adapter-ai-openai-compatible/src/main/java/.../OpenAiCompatibleStreamingChatModelAdapter.java`
+- modify: `seahorse-agent-adapter-ai-openai-compatible/src/main/java/.../OpenAiCompatibleModelAdapter.java`
 - create test: `seahorse-agent-tests/.../adapters/ai/openai/OpenAiCompatibleStreamingChatToolsTests.java`
 
 **Why**: 让 `KernelAgentLoop` 在真实模型上跑得通；使用 MockWebServer 验证 wire format。
