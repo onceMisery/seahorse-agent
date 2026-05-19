@@ -73,14 +73,28 @@ final class KernelChatResponseSupport {
 
     boolean handleEmptyRetrieval(StreamChatContext context,
                                  RetrievalContext retrievalContext,
+                                 KernelChatPipeline.EmptyRetrievalStrategy strategy,
                                  String emptyRetrievalMessage) {
         if (retrievalContext != null && !retrievalContext.isEmpty()) {
             return false;
         }
-        StreamCallback callback = requireCallback(context);
-        callback.onContent(Objects.requireNonNullElse(emptyRetrievalMessage, ""));
-        callback.onComplete();
+        KernelChatPipeline.EmptyRetrievalStrategy effective = Objects.requireNonNullElse(strategy,
+                KernelChatPipeline.EmptyRetrievalStrategy.FALLBACK_GENERIC);
+        if (effective == KernelChatPipeline.EmptyRetrievalStrategy.STATIC_MESSAGE) {
+            StreamCallback callback = requireCallback(context);
+            callback.onContent(Objects.requireNonNullElse(emptyRetrievalMessage, ""));
+            callback.onComplete();
+            return true;
+        }
+        // FALLBACK_GENERIC：复用通用 system prompt 走流式 LLM，对齐 Agent 通用对话能力。
+        StreamCancellationHandle handle = streamSystemResponse(context, requireRewriteResultFromContext(context), null);
+        responsePorts.streamTaskPort().bindHandle(context.getTaskId(), handle);
         return true;
+    }
+
+    private RewriteResult requireRewriteResultFromContext(StreamChatContext context) {
+        return Objects.requireNonNullElse(context.getRewriteResult(),
+                new RewriteResult(context.getQuestion(), List.of()));
     }
 
     void streamRagResponse(StreamChatContext context,

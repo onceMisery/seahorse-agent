@@ -32,25 +32,48 @@ import java.util.Objects;
  */
 public class KernelChatPipeline {
 
+    /**
+     * 空检索（无知识库或 0 命中）兜底策略。
+     * <p>
+     * Agent 平台默认使用 {@link #FALLBACK_GENERIC} 走通用 LLM 对话，避免 RAG 命中为空时退化成"无法回答"。
+     * 严格 RAG 场景可切回 {@link #STATIC_MESSAGE}，沿用历史固定文案。
+     */
+    public enum EmptyRetrievalStrategy {
+        /** 复用 system prompt 走通用 LLM 对话（默认）。 */
+        FALLBACK_GENERIC,
+        /** 直接返回固定文案，不调用模型。 */
+        STATIC_MESSAGE
+    }
+
     private static final String EMPTY_RETRIEVAL_MESSAGE = "未检索到与问题相关的文档内容。";
     private static final String TRACE_TYPE_CHAT_STAGE = "CHAT_STAGE";
+    private static final EmptyRetrievalStrategy DEFAULT_EMPTY_RETRIEVAL_STRATEGY = EmptyRetrievalStrategy.FALLBACK_GENERIC;
 
     private final KernelRagTraceRecorder traceRecorder;
     private final KernelChatPreparationSupport preparationSupport;
     private final KernelChatResponseSupport responseSupport;
+    private final EmptyRetrievalStrategy emptyRetrievalStrategy;
 
     public KernelChatPipeline(ChatPreparationPorts preparationPorts, ChatResponsePorts responsePorts) {
-        this(preparationPorts, responsePorts, KernelRagTraceRecorder.noop());
+        this(preparationPorts, responsePorts, KernelRagTraceRecorder.noop(), DEFAULT_EMPTY_RETRIEVAL_STRATEGY);
     }
 
     public KernelChatPipeline(ChatPreparationPorts preparationPorts,
                               ChatResponsePorts responsePorts,
                               KernelRagTraceRecorder traceRecorder) {
+        this(preparationPorts, responsePorts, traceRecorder, DEFAULT_EMPTY_RETRIEVAL_STRATEGY);
+    }
+
+    public KernelChatPipeline(ChatPreparationPorts preparationPorts,
+                              ChatResponsePorts responsePorts,
+                              KernelRagTraceRecorder traceRecorder,
+                              EmptyRetrievalStrategy emptyRetrievalStrategy) {
         ChatPreparationPorts safePreparationPorts = Objects.requireNonNull(preparationPorts, "问答前置端口集合不能为空");
         ChatResponsePorts safeResponsePorts = Objects.requireNonNull(responsePorts, "问答响应端口集合不能为空");
         this.traceRecorder = Objects.requireNonNull(traceRecorder, "traceRecorder must not be null");
         this.preparationSupport = new KernelChatPreparationSupport(safePreparationPorts);
         this.responseSupport = new KernelChatResponseSupport(safePreparationPorts, safeResponsePorts);
+        this.emptyRetrievalStrategy = Objects.requireNonNullElse(emptyRetrievalStrategy, DEFAULT_EMPTY_RETRIEVAL_STRATEGY);
     }
 
     /**
@@ -99,7 +122,8 @@ public class KernelChatPipeline {
     }
 
     private boolean handleEmptyRetrieval(StreamChatContext context, RetrievalContext retrievalContext) {
-        return responseSupport.handleEmptyRetrieval(context, retrievalContext, EMPTY_RETRIEVAL_MESSAGE);
+        return responseSupport.handleEmptyRetrieval(context, retrievalContext, emptyRetrievalStrategy,
+                EMPTY_RETRIEVAL_MESSAGE);
     }
 
     private void streamRagResponse(StreamChatContext context, RetrievalContext retrievalContext) {
