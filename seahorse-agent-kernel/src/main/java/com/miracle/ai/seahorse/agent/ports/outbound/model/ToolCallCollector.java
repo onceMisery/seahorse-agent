@@ -15,15 +15,22 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.chat;
+package com.miracle.ai.seahorse.agent.ports.outbound.model;
+
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+
+import java.util.List;
 
 /**
- * Seahorse 内核对话消息角色。
+ * 模型适配器收集本轮工具调用决策的回调。
  */
-public enum ChatRole {
+@FunctionalInterface
+public interface ToolCallCollector {
 
-    SYSTEM,
-    USER,
-    ASSISTANT,
-    TOOL
+    void onToolCalls(List<AgentToolCall> toolCalls);
+
+    static ToolCallCollector noop() {
+        return toolCalls -> {
+        };
+    }
 }

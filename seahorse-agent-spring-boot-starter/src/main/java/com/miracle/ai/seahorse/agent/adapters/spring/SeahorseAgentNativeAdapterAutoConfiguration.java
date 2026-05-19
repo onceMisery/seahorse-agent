@@ -21,6 +21,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.context.annotation.Import;
 
 /**
  * Seahorse 原生 L3 adapter 自动配置入口。
@@ -31,5 +32,23 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 @AutoConfiguration
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@Import({
+        SeahorseAgentAiAdapterAutoConfiguration.class,
+        SeahorseAgentAuthAdapterAutoConfiguration.class,
+        SeahorseAgentCacheAdapterAutoConfiguration.class,
+        SeahorseAgentIngestionRepositoryAutoConfiguration.class,
+        SeahorseAgentKeywordAdapterAutoConfiguration.class,
+        SeahorseAgentKnowledgeRepositoryAutoConfiguration.class,
+        SeahorseAgentLocalAdapterAutoConfiguration.class,
+        SeahorseAgentMemoryRepositoryAutoConfiguration.class,
+        SeahorseAgentMetadataAdapterAutoConfiguration.class,
+        SeahorseAgentMqAdapterAutoConfiguration.class,
+        SeahorseAgentObservationAdapterAutoConfiguration.class,
+        SeahorseAgentOpsRepositoryAutoConfiguration.class,
+        SeahorseAgentOutboxRelayAutoConfiguration.class,
+        SeahorseAgentRetrievalRepositoryAutoConfiguration.class,
+        SeahorseAgentStorageAdapterAutoConfiguration.class,
+        SeahorseAgentVectorAdapterAutoConfiguration.class
+})
 public class SeahorseAgentNativeAdapterAutoConfiguration {
 }

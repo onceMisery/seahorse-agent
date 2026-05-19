@@ -18,12 +18,16 @@
 package com.miracle.ai.seahorse.agent.kernel.domain.chat;
 
 /**
- * Seahorse 内核对话消息角色。
+ * 聊天模式：决定 KernelChatInboundService 把请求路由到哪条主链路。
+ *
+ * <ul>
+ *     <li>{@link #RAG}：默认。走 KernelChatPipeline，行为与 Phase A 之前完全一致。</li>
+ *     <li>{@link #AGENT}：走 KernelAgentLoop（ReAct 风格的 LLM-Driven 工具调用循环）。</li>
+ * </ul>
+ *
+ * 兼容性：旧 StreamChatCommand 5 参构造缺省 chatMode 时归一化为 {@link #RAG}。
  */
-public enum ChatRole {
-
-    SYSTEM,
-    USER,
-    ASSISTANT,
-    TOOL
+public enum ChatMode {
+    RAG,
+    AGENT
 }

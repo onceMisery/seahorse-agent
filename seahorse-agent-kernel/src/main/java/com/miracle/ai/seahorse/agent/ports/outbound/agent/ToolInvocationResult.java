@@ -15,15 +15,19 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.chat;
+package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 /**
- * Seahorse 内核对话消息角色。
+ * 工具调用结果。content 总是字符串（JSON 序列化由 Tool 实现负责），
+ * 便于直接以 OpenAI 兼容 "tool" role 消息回填给 LLM。
  */
-public enum ChatRole {
+public record ToolInvocationResult(boolean success, String content, String error) {
 
-    SYSTEM,
-    USER,
-    ASSISTANT,
-    TOOL
+    public static ToolInvocationResult ok(String content) {
+        return new ToolInvocationResult(true, content, null);
+    }
+
+    public static ToolInvocationResult failed(String error) {
+        return new ToolInvocationResult(false, null, error);
+    }
 }

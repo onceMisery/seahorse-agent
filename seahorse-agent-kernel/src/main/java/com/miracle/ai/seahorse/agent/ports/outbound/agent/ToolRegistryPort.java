@@ -15,15 +15,31 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.chat;
+package com.miracle.ai.seahorse.agent.ports.outbound.agent;
+
+import java.util.List;
+import java.util.Optional;
 
 /**
- * Seahorse 内核对话消息角色。
+ * 工具注册中心出站端口。KernelAgentLoop 通过此端口枚举可用工具与按 toolId 派发执行。
  */
-public enum ChatRole {
+public interface ToolRegistryPort {
 
-    SYSTEM,
-    USER,
-    ASSISTANT,
-    TOOL
+    List<ToolDescriptor> listTools();
+
+    Optional<ToolPort> find(String toolId);
+
+    static ToolRegistryPort empty() {
+        return new ToolRegistryPort() {
+            @Override
+            public List<ToolDescriptor> listTools() {
+                return List.of();
+            }
+
+            @Override
+            public Optional<ToolPort> find(String toolId) {
+                return Optional.empty();
+            }
+        };
+    }
 }

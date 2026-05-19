@@ -15,15 +15,20 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.chat;
+package com.miracle.ai.seahorse.agent.kernel.domain.agent;
+
+import java.util.List;
 
 /**
- * Seahorse 内核对话消息角色。
+ * Agent ReAct 循环结果。
+ *
+ * @param finalAnswer 最终回答；触达 maxSteps 截断时为 fallback 文案
+ * @param steps       完整步骤列表（不可变）
+ * @param truncated   true 表示因 maxSteps 截断
  */
-public enum ChatRole {
+public record AgentLoopResult(String finalAnswer, List<AgentStep> steps, boolean truncated) {
 
-    SYSTEM,
-    USER,
-    ASSISTANT,
-    TOOL
+    public AgentLoopResult {
+        steps = steps == null ? List.of() : List.copyOf(steps);
+    }
 }

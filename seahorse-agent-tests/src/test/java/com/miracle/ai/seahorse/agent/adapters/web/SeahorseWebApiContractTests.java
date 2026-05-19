@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.BackendFieldMapping;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.MetadataIndexPolicy;
@@ -29,6 +30,7 @@ import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureHealthAggregator;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.dashboard.DashboardInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.MessageFeedbackInboundPort;
@@ -233,6 +235,28 @@ class SeahorseWebApiContractTests {
                         .param("userId", "u1"))
                 .andExpect(status().isOk())
                 .andExpect(request().asyncStarted());
+
+        mvc.perform(get("/rag/v3/chat")
+                        .param("question", "hello")
+                        .param("conversationId", "c2")
+                        .param("userId", "u1")
+                        .param("chatMode", "agent"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        mvc.perform(get("/rag/v3/chat")
+                        .param("question", "hello")
+                        .param("conversationId", "c3")
+                        .param("userId", "u1")
+                        .param("chatMode", "invalid"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        ArgumentCaptor<StreamChatCommand> commandCaptor = ArgumentCaptor.forClass(StreamChatCommand.class);
+        verify(chatPort, times(3)).streamChat(commandCaptor.capture(), any());
+        assertThat(commandCaptor.getAllValues())
+                .extracting(StreamChatCommand::chatMode)
+                .containsExactly(ChatMode.RAG, ChatMode.AGENT, ChatMode.RAG);
 
         mvc.perform(post("/rag/v3/stop").param("taskId", "task-1"))
                 .andExpect(status().isOk())

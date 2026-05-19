@@ -43,6 +43,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 
 /**
  * Seahorse 原生 L1/L2 内核自动配置。
@@ -58,6 +59,21 @@ import org.springframework.context.annotation.Bean;
         AgentAdapterProperties.class
 })
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@Import({
+        SeahorseAgentKernelAuthAutoConfiguration.class,
+        SeahorseAgentKernelChatAutoConfiguration.class,
+        SeahorseAgentKernelAgentAutoConfiguration.class,
+        SeahorseAgentKernelDocumentRefreshAutoConfiguration.class,
+        SeahorseAgentKernelKeywordAutoConfiguration.class,
+        SeahorseAgentKernelKnowledgeAutoConfiguration.class,
+        SeahorseAgentKernelMemoryAutoConfiguration.class,
+        SeahorseAgentKernelMetadataAutoConfiguration.class,
+        SeahorseAgentKernelModelAutoConfiguration.class,
+        SeahorseAgentKernelOpsAutoConfiguration.class,
+        SeahorseAgentKernelPluginAutoConfiguration.class,
+        SeahorseAgentKernelRetrievalAutoConfiguration.class,
+        SeahorseAgentKernelTraceAutoConfiguration.class
+})
 public class SeahorseAgentKernelAutoConfiguration {
     @Bean
     @ConditionalOnBean({MetadataQualityInboundPort.class, RetrievalEvaluationInboundPort.class})

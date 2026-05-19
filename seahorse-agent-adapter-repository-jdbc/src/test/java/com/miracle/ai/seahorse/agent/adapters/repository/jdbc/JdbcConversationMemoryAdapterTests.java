@@ -24,6 +24,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,8 +46,9 @@ class JdbcConversationMemoryAdapterTests {
 
     @Test
     void shouldLoadHistoryAndAppendUserMessage() {
-        adapter.append("conv-1", "user-1", ChatMessage.user("hello"));
-        adapter.append("conv-1", "user-1", ChatMessage.assistant("hi"));
+        Timestamp sameMoment = Timestamp.from(Instant.parse("2026-05-19T12:00:00Z"));
+        insertMessage("msg-1", "conv-1", "user-1", "user", "hello", sameMoment);
+        insertMessage("msg-2", "conv-1", "user-1", "assistant", "hi", sameMoment);
 
         List<ChatMessage> history = adapter.loadAndAppend("conv-1", "user-1", ChatMessage.user("next"));
 
@@ -95,5 +98,15 @@ class JdbcConversationMemoryAdapterTests {
                     deleted SMALLINT DEFAULT 0
                 )
                 """);
+    }
+
+    private void insertMessage(String id, String conversationId, String userId, String role, String content,
+                               Timestamp timestamp) {
+        jdbcTemplate.update("""
+                INSERT INTO t_message
+                (id, conversation_id, user_id, role, content, thinking_content, thinking_duration,
+                 create_time, update_time, deleted)
+                VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, 0)
+                """, id, conversationId, userId, role, content, timestamp, timestamp);
     }
 }

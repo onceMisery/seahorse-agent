@@ -3,6 +3,31 @@
 > 该计划为 Seahorse Agent 由 RAG 系统进化到 Agent 平台的 **关键基础**。
 > 完成后将解锁 Phase B（Agentic Search）、Phase D（输出治理）、Phase E（记忆闭环）的实现路径。
 
+> **⚠️ v2 修订（2026-05-19，吸收 reviewer 反馈）**
+>
+> 本 plan v1 在执行 A1–A6 后被 review 出 4 个事实性错误 + 1 个架构阻塞点。
+> 修订详情见同目录 spec v2：`@/docs/aegis/specs/2026-05-19-phase-a-design.md`。
+> 本文件保留 Task 主体描述作为执行参考，但下列 Task 的代码实现以 spec v2 §5 为准：
+>
+> | Task | v2 状态 |
+> |---|---|
+> | A1, A4 | 已 commit，无修订 |
+> | A2 | 已 commit；字段 `tools` → `allowedToolIds`（合并到 A7.5 commit） |
+> | A3 | 已 commit；`ToolDescriptor` Javadoc 修订（合并到 A7.5 commit） |
+> | A5 | 已 commit；`maxParallelTools` 默认 `4` → `1`（合并到 A7.5 commit） |
+> | A6 | 已 commit；`enableTools` 标 `@Deprecated`（合并到 A7.5 commit） |
+> | **A7.5（新）** | 待落地：扩展 `ChatRole` 增 `TOOL`、`ChatMessage` 增 `toolCallId/toolCalls` 字段与 `assistantToolCalls/tool` 工厂；附带 §2.2 的 4 个微修订 |
+> | **A7（重写）** | `ToolCallCollector` 严格契约：每轮必调一次；空 = 最终回答；在 onComplete 之前；解析失败走 onError 不调 collector。`noop()` 重写为先调 collector 再 onComplete |
+> | **A8（修正）** | 改用真实 `McpToolExecutionResult` 字段：`r.success() ? ok(r.content()) : failed(r.message())`；删除 `r.payload()` 假设 + ObjectMapper 全量序列化 |
+> | **A9（升级）** | 新增 `ModelTurn` 收敛对象；并发执行但 observation 按原 toolCalls 顺序回填；content + toolCalls 共存时 content 作 thought 不输出最终回答；collector 未调用抛 `AgentLoopException` |
+> | **A10（修正）** | SSE 事件映射改为：`onContent → message+type=response`、`onThinking → message+type=think`、完成走 `FINISH+DONE`、`onError` 走 `sender.fail`（非业务 error event） |
+> | **A11（扩范围）** | 工作项扩到 7 项（含 messages payload 升级为 `Map<String,Object>`、assistant.tool_calls、tool role 含 tool_call_id、SSE delta.tool_calls 聚合、非法 arguments 处理）；测试扩到 5 类 |
+> | **A12（修正）** | 删除虚构的 `traceRecorder.markFallback(...)`，改 `LOG.warn(...)`；`buildAgentLoopRequest` 不复用 RAG pipeline 前处理（仅读 history） |
+> | **A13（修正）** | 新增 `McpToolAllowlistRegistrar`；`seahorse-agent.chat.agent.tools.mcp.include` 默认空 → 不暴露 MCP 工具；`max-parallel-tools` 默认 `1` |
+> | **A14** | 确认不新增 SSE event type |
+>
+> 推进顺序：**A7.5 → A7 → A8 → A9 → A10 → A11 → A12 → A13 → A14**。
+
 ## Goal
 
 在不破坏现有 RAG 主链路的前提下，在 kernel 中引入 **LLM-Driven 工具调用编排器** `KernelAgentLoop`，实现 ReAct 风格的多步推理与工具调用（Thought → Action → Observation → ...）。聊天入口通过新的 `chatMode` 参数选择 `rag`（默认，保持原行为）或 `agent`（启用 AgentLoop）。
@@ -106,7 +131,7 @@ mvn -pl seahorse-agent-tests -am -DfailIfNoTests=false test
 - `.../kernel/application/agent/KernelAgentLoopOptions.java`
 - `.../kernel/application/agent/McpToolPortAdapter.java`（把现有 `KernelMcpOrchestrator` 包成 `ToolPort`）
 - `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/domain/chat/ChatMode.java`
-- `seahorse-agent-adapter-ai-openai-compatible/.../OpenAiCompatibleStreamingChatModelAdapter.java`（**扩展**已有适配器，新增 `streamChatWithTools`）
+- `seahorse-agent-adapter-ai-openai-compatible/.../OpenAiCompatibleModelAdapter.java`（**扩展**已有多端口适配器，新增 `streamChatWithTools` 实现；类名已与仓库现状对齐）
 - `seahorse-agent-spring-boot-starter/.../SeahorseAgentKernelAgentAutoConfiguration.java`
 - 单元测试：
   - `seahorse-agent-tests/src/test/java/.../kernel/application/agent/KernelAgentLoopTests.java`
@@ -269,7 +294,51 @@ mvn -pl seahorse-agent-tests -am -DfailIfNoTests=false test
 
 ---
 
-### Task A7 — StreamingChatModelPort 新增 streamChatWithTools 默认方法
+### Task A7.5（v2 新增）— 扩展 ChatRole / ChatMessage 支持 tool-calling，并合并 A2/A3/A5/A6 微修订
+
+**Files**:
+- modify: `seahorse-agent-kernel/.../kernel/domain/chat/ChatRole.java` — 增 `TOOL` 枚举值
+- modify: `seahorse-agent-kernel/.../kernel/domain/chat/ChatMessage.java` — 增 `toolCallId/toolCalls` 字段 + `assistantToolCalls(...)/tool(...)` 工厂
+- modify: `seahorse-agent-kernel/.../kernel/domain/agent/AgentLoopRequest.java` — 字段 `tools` 重命名为 `allowedToolIds`（语义：null/空 = 全部可用）
+- modify: `seahorse-agent-kernel/.../ports/outbound/agent/ToolDescriptor.java` — Javadoc 注明 `toolId` = OpenAI function name；`name` 仅 UI
+- modify: `seahorse-agent-kernel/.../kernel/application/agent/KernelAgentLoopOptions.java` — `maxParallelTools` 默认 `4` → `1`
+- modify: `seahorse-agent-kernel/.../kernel/domain/chat/ChatRequest.java` — `enableTools` 加 `@Deprecated(forRemoval=false)` + Javadoc 注明"新逻辑只看 tools 是否空"
+- modify: 旧测试同步：`AgentDomainTests`（字段名）、`KernelAgentLoopOptionsTests`（默认值 1）
+- create test: `seahorse-agent-tests/.../kernel/domain/chat/ChatMessageToolCallingTests.java`
+
+**Why**: 真正阻塞 A9 / A11 的是 `ChatMessage` 无法表达 OpenAI `assistant.tool_calls` 与 `tool.tool_call_id`。先补这层契约。同时把 reviewer 指出的 4 个微调一并落地，避免散碎 commit。
+
+**Compatibility**:
+- `ChatRole` 增枚举值：旧 switch 在打开新值时编译警告但不破坏
+- `ChatMessage` 旧 5 工厂全保留；新加 2 工厂
+- `AgentLoopRequest.allowedToolIds` 字段重命名；只有 v1 plan 中"待用"的代码受影响（A9 待写），不破坏已 commit 的代码语义
+- `KernelAgentLoopOptions.maxParallelTools` 默认改值仅影响 A9 行为；旧 5 个 commit 没有调用此默认值的运行路径
+- `ChatRequest.enableTools` 仅标记 `@Deprecated`，不删字段
+
+**Verification**: `mvn -pl seahorse-agent-tests -am -Dtest=ChatMessageToolCallingTests,AgentDomainTests,KernelAgentLoopOptionsTests test`
+
+**Steps** (TDD):
+1. **Write test** — `ChatMessageToolCallingTests`：
+   - `ChatRole.values()` 含 `TOOL`
+   - `ChatMessage.assistantToolCalls("",List.of(call))` → role==ASSISTANT、`toolCalls()` 等于入参的不可变拷贝
+   - 修改入参后 message 内的 toolCalls 不变（防御性拷贝）
+   - `ChatMessage.tool("c1","{...}")` → role==TOOL、`toolCallId()`=="c1"
+   - `ChatMessage.tool(null,"...")` 或 `tool("","...")` 抛 `IllegalArgumentException`
+   - `ChatMessage.user("hi").toolCalls()` 返回 null（不强求空 list，避免破坏 Lombok @Data 反射）
+   - 同步更新 `AgentDomainTests` 把 `tools()` 调用改为 `allowedToolIds()`；`KernelAgentLoopOptionsTests.defaultsAreSane` 的并发数断言改为 `1`
+2. **Verify RED** — 失败（`ChatRole.TOOL` / `assistantToolCalls` / `tool` / `allowedToolIds` 都不存在）。
+3. **Minimal code** —
+   - `ChatRole` 增 `TOOL`
+   - `ChatMessage` 增字段（`String toolCallId`、`List<AgentToolCall> toolCalls`）+ 2 工厂；`tool` 工厂校验 `toolCallId` 非空
+   - `AgentLoopRequest` 字段 + getter + Builder setter 重命名 `tools` → `allowedToolIds`
+   - `ToolDescriptor` 类 Javadoc 加注释（无字段变化）
+   - `KernelAgentLoopOptions` 默认值改 `1`；同步注释
+   - `ChatRequest.enableTools` 加 `@Deprecated`
+4. **Verify GREEN** — 上述 mvn 命令绿；反应堆全模块编译通过（如 `KernelChatPipelineTests`、`KernelChatInboundServiceTests` 不受影响）。
+5. **Commit** — `feat(agent): 扩展 ChatRole/ChatMessage 支持 tool-calling，合并 A2/A3/A5/A6 微修订 [Phase A Task A7.5]`
+
+---
+
 
 **Files**:
 - modify: `ports/outbound/model/StreamingChatModelPort.java`
@@ -349,23 +418,23 @@ mvn -pl seahorse-agent-tests -am -DfailIfNoTests=false test
 
 **Why**: 与现有 SSE 协议对齐：工具调用过程以 `thinking` 事件流出，最终回答以 `message` 事件流出，结束发 `done`。
 
-**Compatibility**: 不引入新事件类型；通过 `StreamCallback.onThinking(String)`（如不存在则降级为 `onContent`）输出工具调用摘要。先检查现有接口能力。
+**Compatibility**: 不引入新事件类型；`StreamCallback.onThinking(String)` 已作为 `default` 方法存在于既有接口（`@/seahorse-agent-kernel/.../domain/chat/StreamCallback.java`），直接复用；自定义实现未覆盖时 default 体为空，安全 no-op。
 
 **Verification**: `mvn -pl seahorse-agent-tests -am -Dtest=KernelAgentLoopTests test`
 
 **Steps** (TDD):
 1. **Write test** — `shouldStreamFinalAnswerViaCallback`：当 LLM 第二步走最终回答时，`StreamCallback` 至少收到一次 `onContent(non-empty)`、一次 `onComplete()`；工具调用阶段 `onContent` 不应携带 raw JSON（断言不包含 `"arguments":`）。
 2. **Verify RED** — 失败。
-3. **Minimal code** — 新增 `streamExecute(AgentLoopRequest req, StreamCallback callback): StreamCancellationHandle`。中间步骤可通过 `onThinking` 推送 `[工具调用] toolId(arguments_summary) -> ok|err`；若 `StreamCallback` 无 `onThinking`，则跳过中间提示，仅推最终回答。
+3. **Minimal code** — 新增 `streamExecute(AgentLoopRequest req, StreamCallback callback): StreamCancellationHandle`。中间步骤通过 `callback.onThinking("[工具调用] toolId(arguments_summary) -> ok|err")` 推送；最终回答走 `onContent` + `onComplete`。
 4. **Verify GREEN** — 绿。
 5. **Commit** — `feat(agent): KernelAgentLoop 接入 SSE 流式输出`
 
 ---
 
-### Task A11 — OpenAiCompatibleStreamingChatModelAdapter 支持 streamChatWithTools
+### Task A11 — OpenAiCompatibleModelAdapter 支持 streamChatWithTools
 
 **Files**:
-- modify: `seahorse-agent-adapter-ai-openai-compatible/src/main/java/.../OpenAiCompatibleStreamingChatModelAdapter.java`
+- modify: `seahorse-agent-adapter-ai-openai-compatible/src/main/java/.../OpenAiCompatibleModelAdapter.java`
 - create test: `seahorse-agent-tests/.../adapters/ai/openai/OpenAiCompatibleStreamingChatToolsTests.java`
 
 **Why**: 让 `KernelAgentLoop` 在真实模型上跑得通；使用 MockWebServer 验证 wire format。

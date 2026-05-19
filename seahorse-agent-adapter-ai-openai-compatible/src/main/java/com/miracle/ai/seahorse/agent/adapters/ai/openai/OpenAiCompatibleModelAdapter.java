@@ -18,12 +18,15 @@
 package com.miracle.ai.seahorse.agent.adapters.ai.openai;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelHealthPort;
@@ -31,6 +34,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelProviderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
 import okhttp3.Call;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -111,6 +115,19 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
     }
 
     @Override
+    public StreamCancellationHandle streamChatWithTools(
+            ChatRequest request,
+            StreamCallback callback,
+            ToolCallCollector toolCallCollector) {
+        StreamCallback safeCallback = Objects.requireNonNull(callback, "callback must not be null");
+        ToolCallCollector safeCollector = Objects.requireNonNullElseGet(toolCallCollector, ToolCallCollector::noop);
+        Map<String, Object> payload = chatPayload(request, null, true);
+        Call call = httpClient.newCall(httpRequest("/chat/completions", payload));
+        CompletableFuture.runAsync(() -> consumeStreamWithTools(call, safeCallback, safeCollector), streamingExecutor);
+        return call::cancel;
+    }
+
+    @Override
     public List<Float> embed(String modelId, String text) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", resolveEmbeddingModel(modelId));
@@ -187,6 +204,7 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
 
     private Map<String, Object> chatPayload(ChatRequest request, String modelId, boolean stream) {
         ChatRequest safeRequest = Objects.requireNonNullElseGet(request, ChatRequest::new);
+        validateToolChoice(safeRequest);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", resolveChatModel(modelId));
         payload.put("messages", messages(safeRequest.getMessages()));
@@ -194,11 +212,22 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         putIfPresent(payload, "temperature", safeRequest.getTemperature());
         putIfPresent(payload, "top_p", safeRequest.getTopP());
         putIfPresent(payload, "max_tokens", safeRequest.getMaxTokens());
+        if (safeRequest.getTools() != null && !safeRequest.getTools().isEmpty()) {
+            payload.put("tools", tools(safeRequest.getTools()));
+            payload.put("tool_choice", safeRequest.getToolChoice());
+        }
         return payload;
     }
 
-    private List<Map<String, String>> messages(List<ChatMessage> messages) {
-        List<Map<String, String>> payload = new ArrayList<>();
+    private void validateToolChoice(ChatRequest request) {
+        if ("required".equalsIgnoreCase(request.getToolChoice())
+                && (request.getTools() == null || request.getTools().isEmpty())) {
+            throw new IllegalArgumentException("tool_choice=required requires at least one tool");
+        }
+    }
+
+    private List<Map<String, Object>> messages(List<ChatMessage> messages) {
+        List<Map<String, Object>> payload = new ArrayList<>();
         if (messages == null) {
             return payload;
         }
@@ -210,10 +239,52 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         return payload;
     }
 
-    private Map<String, String> message(ChatMessage message) {
-        Map<String, String> payload = new LinkedHashMap<>();
+    private Map<String, Object> message(ChatMessage message) {
+        Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("role", message.getRole() == null ? "user" : message.getRole().name().toLowerCase(Locale.ROOT));
         payload.put("content", Objects.requireNonNullElse(message.getContent(), ""));
+        if (message.getToolCalls() != null && !message.getToolCalls().isEmpty()) {
+            payload.put("tool_calls", toolCalls(message.getToolCalls()));
+        }
+        if (message.getToolCallId() != null && !message.getToolCallId().isBlank()) {
+            payload.put("tool_call_id", message.getToolCallId());
+        }
+        return payload;
+    }
+
+    private List<Map<String, Object>> tools(List<ToolDescriptor> tools) {
+        return tools.stream()
+                .filter(Objects::nonNull)
+                .map(this::tool)
+                .toList();
+    }
+
+    private Map<String, Object> tool(ToolDescriptor descriptor) {
+        Map<String, Object> function = new LinkedHashMap<>();
+        function.put("name", descriptor.toolId());
+        function.put("description", descriptor.description());
+        function.put("parameters", jsonObject(descriptor.jsonSchema()));
+        Map<String, Object> tool = new LinkedHashMap<>();
+        tool.put("type", "function");
+        tool.put("function", function);
+        return tool;
+    }
+
+    private List<Map<String, Object>> toolCalls(List<AgentToolCall> toolCalls) {
+        return toolCalls.stream()
+                .filter(Objects::nonNull)
+                .map(this::toolCall)
+                .toList();
+    }
+
+    private Map<String, Object> toolCall(AgentToolCall toolCall) {
+        Map<String, Object> function = new LinkedHashMap<>();
+        function.put("name", toolCall.toolId());
+        function.put("arguments", serialize(toolCall.arguments()));
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("id", toolCall.id());
+        payload.put("type", "function");
+        payload.put("function", function);
         return payload;
     }
 
@@ -255,6 +326,20 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         }
     }
 
+    private void consumeStreamWithTools(Call call, StreamCallback callback, ToolCallCollector toolCallCollector) {
+        try (Response response = call.execute()) {
+            if (!response.isSuccessful()) {
+                callback.onError(new IllegalStateException("OpenAI-compatible stream failed: " + response.code()));
+                return;
+            }
+            consumeStreamBodyWithTools(response.body(), callback, toolCallCollector);
+        } catch (IOException ex) {
+            if (!call.isCanceled()) {
+                callback.onError(ex);
+            }
+        }
+    }
+
     private void consumeStreamBody(ResponseBody responseBody, StreamCallback callback) throws IOException {
         if (responseBody == null) {
             callback.onComplete();
@@ -265,6 +350,27 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
             String line;
             while ((line = reader.readLine()) != null) {
                 consumeStreamLine(line, callback);
+            }
+        }
+    }
+
+    private void consumeStreamBodyWithTools(
+            ResponseBody responseBody,
+            StreamCallback callback,
+            ToolCallCollector toolCallCollector) throws IOException {
+        if (responseBody == null) {
+            toolCallCollector.onToolCalls(List.of());
+            callback.onComplete();
+            return;
+        }
+        ToolCallAggregation aggregation = new ToolCallAggregation();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(responseBody.byteStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (consumeStreamLineWithTools(line, callback, toolCallCollector, aggregation)) {
+                    return;
+                }
             }
         }
     }
@@ -282,6 +388,24 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         consumeStreamDelta(data, callback);
     }
 
+    private boolean consumeStreamLineWithTools(
+            String line,
+            StreamCallback callback,
+            ToolCallCollector toolCallCollector,
+            ToolCallAggregation aggregation) {
+        String trimmed = line.trim();
+        if (!trimmed.startsWith(SSE_DATA_PREFIX)) {
+            return false;
+        }
+        String data = trimmed.substring(SSE_DATA_PREFIX.length()).trim();
+        if (SSE_DONE.equals(data)) {
+            toolCallCollector.onToolCalls(aggregation.toToolCalls());
+            callback.onComplete();
+            return true;
+        }
+        return consumeStreamDeltaWithTools(data, callback, aggregation);
+    }
+
     private void consumeStreamDelta(String data, StreamCallback callback) {
         try {
             JsonNode delta = objectMapper.readTree(data).at("/choices/0/delta");
@@ -295,6 +419,30 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
             }
         } catch (JsonProcessingException ex) {
             callback.onError(ex);
+        }
+    }
+
+    private boolean consumeStreamDeltaWithTools(String data, StreamCallback callback, ToolCallAggregation aggregation) {
+        try {
+            JsonNode delta = objectMapper.readTree(data).at("/choices/0/delta");
+            String content = delta.path("content").asText("");
+            if (!content.isBlank()) {
+                callback.onContent(content);
+            }
+            String thinking = firstText(delta, "reasoning_content", "thinking_content");
+            if (!thinking.isBlank()) {
+                callback.onThinking(thinking);
+            }
+            JsonNode toolCalls = delta.path("tool_calls");
+            if (toolCalls.isArray()) {
+                for (JsonNode toolCall : toolCalls) {
+                    aggregation.accept(toolCall);
+                }
+            }
+            return false;
+        } catch (JsonProcessingException ex) {
+            callback.onError(ex);
+            return true;
         }
     }
 
@@ -348,6 +496,18 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         }
     }
 
+    private JsonNode jsonObject(String json) {
+        try {
+            JsonNode node = objectMapper.readTree(Objects.requireNonNullElse(json, "{}"));
+            if (!node.isObject()) {
+                throw new IllegalArgumentException("OpenAI tool parameters must be a JSON object");
+            }
+            return node;
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("parse OpenAI tool parameters failed", ex);
+        }
+    }
+
     private String firstText(JsonNode node, String firstField, String secondField) {
         String first = node.path(firstField).asText("");
         if (!first.isBlank()) {
@@ -391,5 +551,64 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value;
+    }
+
+    private final class ToolCallAggregation {
+        private final Map<Integer, ToolCallAccumulator> calls = new LinkedHashMap<>();
+
+        private void accept(JsonNode node) {
+            int index = node.path("index").asInt(calls.size());
+            ToolCallAccumulator call = calls.computeIfAbsent(index, ignored -> new ToolCallAccumulator());
+            if (node.hasNonNull("id")) {
+                call.id = node.path("id").asText();
+            }
+            JsonNode function = node.path("function");
+            if (function.hasNonNull("name")) {
+                call.name = function.path("name").asText();
+            }
+            if (function.hasNonNull("arguments")) {
+                call.arguments.append(function.path("arguments").asText());
+            }
+        }
+
+        private List<AgentToolCall> toToolCalls() {
+            return calls.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(Map.Entry::getValue)
+                    .filter(ToolCallAccumulator::complete)
+                    .map(ToolCallAccumulator::toToolCall)
+                    .toList();
+        }
+    }
+
+    private final class ToolCallAccumulator {
+        private String id;
+        private String name;
+        private final StringBuilder arguments = new StringBuilder();
+
+        private boolean complete() {
+            return id != null && !id.isBlank() && name != null && !name.isBlank();
+        }
+
+        private AgentToolCall toToolCall() {
+            return AgentToolCall.of(id, name, arguments(arguments.toString()));
+        }
+    }
+
+    private Map<String, Object> arguments(String arguments) {
+        String safeArguments = Objects.requireNonNullElse(arguments, "");
+        if (safeArguments.isBlank()) {
+            return Map.of();
+        }
+        try {
+            JsonNode node = objectMapper.readTree(safeArguments);
+            if (node.isObject()) {
+                return objectMapper.convertValue(node, new TypeReference<>() {
+                });
+            }
+            return Map.of("_raw", safeArguments);
+        } catch (JsonProcessingException ex) {
+            return Map.of("_raw", safeArguments);
+        }
     }
 }

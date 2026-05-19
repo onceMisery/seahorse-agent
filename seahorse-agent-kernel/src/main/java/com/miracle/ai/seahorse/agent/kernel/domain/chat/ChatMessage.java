@@ -17,9 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Seahorse 内核对话消息契约。
@@ -36,6 +40,10 @@ public class ChatMessage {
     private String thinkingContent;
 
     private Integer thinkingDuration;
+
+    private String toolCallId;
+
+    private List<AgentToolCall> toolCalls;
 
     public ChatMessage(ChatRole role, String content) {
         this.role = role;
@@ -62,6 +70,21 @@ public class ChatMessage {
         ChatMessage message = new ChatMessage(ChatRole.ASSISTANT, content);
         message.setThinkingContent(thinkingContent);
         message.setThinkingDuration(thinkingDuration);
+        return message;
+    }
+
+    public static ChatMessage assistantToolCalls(String content, List<AgentToolCall> toolCalls) {
+        ChatMessage message = new ChatMessage(ChatRole.ASSISTANT, content);
+        message.setToolCalls(List.copyOf(Objects.requireNonNull(toolCalls, "toolCalls 不能为空")));
+        return message;
+    }
+
+    public static ChatMessage tool(String toolCallId, String content) {
+        if (toolCallId == null || toolCallId.isBlank()) {
+            throw new IllegalArgumentException("tool message 必须携带 toolCallId");
+        }
+        ChatMessage message = new ChatMessage(ChatRole.TOOL, content);
+        message.setToolCallId(toolCallId);
         return message;
     }
 }

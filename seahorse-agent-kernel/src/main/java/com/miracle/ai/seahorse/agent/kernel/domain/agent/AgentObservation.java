@@ -15,15 +15,24 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.chat;
+package com.miracle.ai.seahorse.agent.kernel.domain.agent;
 
 /**
- * Seahorse 内核对话消息角色。
+ * 工具调用观察值：循环把工具结果回填给 LLM 之前的中间形态。
  */
-public enum ChatRole {
+public record AgentObservation(String toolCallId, boolean success, String content, String error) {
 
-    SYSTEM,
-    USER,
-    ASSISTANT,
-    TOOL
+    public AgentObservation {
+        if (toolCallId == null || toolCallId.isBlank()) {
+            throw new IllegalArgumentException("AgentObservation.toolCallId 不能为空");
+        }
+    }
+
+    public static AgentObservation ok(String toolCallId, String content) {
+        return new AgentObservation(toolCallId, true, content, null);
+    }
+
+    public static AgentObservation failed(String toolCallId, String error) {
+        return new AgentObservation(toolCallId, false, null, error);
+    }
 }
