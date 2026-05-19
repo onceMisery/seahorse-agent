@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcChatSchemaUpgrade;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationMemoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLongTermMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflictLogRepositoryAdapter;
@@ -55,6 +56,16 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(JdbcChatSchemaUpgrade.class)
+    public JdbcChatSchemaUpgrade seahorseJdbcChatSchemaUpgrade(DataSource dataSource) {
+        JdbcChatSchemaUpgrade upgrade = new JdbcChatSchemaUpgrade(dataSource);
+        upgrade.upgrade();
+        return upgrade;
+    }
+
+    @Bean
+    @ConditionalOnBean({DataSource.class, JdbcChatSchemaUpgrade.class})
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ConversationMemoryPort.class)
     public JdbcConversationMemoryAdapter seahorseJdbcConversationMemoryAdapter(

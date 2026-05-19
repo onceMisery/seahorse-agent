@@ -17,10 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.adapters.local;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventSender;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -62,7 +65,8 @@ public class SpringSseEventSender implements StreamEventSender {
     @Override
     public void fail(Throwable error) {
         if (closed.compareAndSet(false, true)) {
-            emitter.completeWithError(error);
+            sendError(error);
+            emitter.complete();
         }
         log.warn("SSE send failed", error);
     }
@@ -73,5 +77,17 @@ public class SpringSseEventSender implements StreamEventSender {
             return;
         }
         emitter.send(SseEmitter.event().name(eventName).data(payload));
+    }
+
+    private void sendError(Throwable error) {
+        try {
+            emitter.send(SseEmitter.event()
+                    .name("error")
+                    .data(Map.of("error", Objects.requireNonNullElse(error.getMessage(),
+                            error.getClass().getSimpleName()))));
+            emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
+        } catch (IOException ioException) {
+            log.debug("Failed to send SSE error payload", ioException);
+        }
     }
 }

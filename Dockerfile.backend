@@ -37,6 +37,7 @@ COPY seahorse-agent-adapter-source-feishu/pom.xml seahorse-agent-adapter-source-
 COPY seahorse-agent-adapter-storage-s3/pom.xml seahorse-agent-adapter-storage-s3/
 COPY seahorse-agent-adapter-vector-milvus/pom.xml seahorse-agent-adapter-vector-milvus/
 COPY seahorse-agent-adapter-search-elasticsearch/pom.xml seahorse-agent-adapter-search-elasticsearch/
+COPY seahorse-agent-adapter-search-lucene/pom.xml seahorse-agent-adapter-search-lucene/
 COPY seahorse-agent-mcp-server/pom.xml seahorse-agent-mcp-server/
 COPY seahorse-agent-tests/pom.xml seahorse-agent-tests/
 

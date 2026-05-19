@@ -22,6 +22,7 @@ export function ChatPage() {
   } = useChatStore();
   const showWelcome = messages.length === 0 && !isLoading;
   const [sessionsReady, setSessionsReady] = React.useState(false);
+  const invalidSessionHandledRef = React.useRef<string | null>(null);
   const sessionExists = React.useMemo(() => {
     if (!sessionId) return false;
     return sessions.some((session) => session.id === sessionId);
@@ -44,13 +45,23 @@ export function ChatPage() {
   React.useEffect(() => {
     if (sessionId) {
       if (sessionsReady && !sessionExists) {
-        createSession().catch(() => null);
-        navigate("/chat", { replace: true });
+        if (invalidSessionHandledRef.current === sessionId) {
+          return;
+        }
+        invalidSessionHandledRef.current = sessionId;
+        void createSession().catch(() => null);
+        if (currentSessionId) {
+          navigate(`/chat/${currentSessionId}`, { replace: true });
+        } else {
+          navigate("/chat", { replace: true });
+        }
         return;
       }
+      invalidSessionHandledRef.current = null;
       selectSession(sessionId).catch(() => null);
       return;
     }
+    invalidSessionHandledRef.current = null;
     if (!sessionsReady) {
       return;
     }

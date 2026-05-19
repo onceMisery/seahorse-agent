@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import cn.hutool.core.util.IdUtil;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimitDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
@@ -103,7 +105,12 @@ public class SeahorseChatController {
                 actualUserId,
                 Boolean.TRUE.equals(deepThinking),
                 parseChatMode(chatMode));
-        chatInboundPortProvider.getIfAvailable().streamChat(command, callback);
+                Boolean.TRUE.equals(deepThinking);
+        try {
+            chatInboundPortProvider.getIfAvailable().streamChat(command, callback);
+        } catch (RuntimeException ex) {
+            emitSseError(emitter, ex);
+        }
         return emitter;
     }
 
@@ -118,7 +125,7 @@ public class SeahorseChatController {
         if (value == null || value.isBlank()) {
             return nextShortId();
         }
-        return value;
+        return value.length() > 64 ? value.substring(0, 64) : value;
     }
 
     private static String nextShortId() {
@@ -140,7 +147,7 @@ public class SeahorseChatController {
         if (value == null || value.isBlank()) {
             return DEFAULT_USER_ID;
         }
-        return value;
+        return value.length() > 64 ? value.substring(0, 64) : value;
     }
 
     private void checkChatRateLimit(String userId) {
@@ -148,6 +155,21 @@ public class SeahorseChatController {
                 "chat", userId, chatRateLimitPermits, chatRateLimitWindow);
         if (!decision.allowed()) {
             throw new IllegalStateException("chat rate limit exceeded");
+        }
+    }
+
+    private void emitSseError(SseEmitter emitter, RuntimeException ex) {
+        try {
+            emitter.send(SseEmitter.event()
+                    .name(StreamEventType.REJECT.value())
+                    .data(Map.of("type", "response", "delta", "")));
+            emitter.send(SseEmitter.event()
+                    .name("error")
+                    .data(Map.of("error", Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getSimpleName()))));
+            emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
+            emitter.complete();
+        } catch (IOException sendError) {
+            emitter.complete();
         }
     }
 }

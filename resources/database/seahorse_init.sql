@@ -30,9 +30,9 @@ COMMENT ON COLUMN t_user.update_time IS '更新时间';
 COMMENT ON COLUMN t_user.deleted IS '是否删除 0：正常 1：删除';
 
 CREATE TABLE t_conversation (
-    id              VARCHAR(20) NOT NULL PRIMARY KEY,
-    conversation_id VARCHAR(20) NOT NULL,
-    user_id         VARCHAR(20) NOT NULL,
+    id              VARCHAR(64) NOT NULL PRIMARY KEY,
+    conversation_id VARCHAR(64) NOT NULL,
+    user_id         VARCHAR(64) NOT NULL,
     title           VARCHAR(128) NOT NULL,
     last_time       TIMESTAMP,
     create_time     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -52,10 +52,10 @@ COMMENT ON COLUMN t_conversation.update_time IS '更新时间';
 COMMENT ON COLUMN t_conversation.deleted IS '是否删除 0：正常 1：删除';
 
 CREATE TABLE t_conversation_summary (
-    id              VARCHAR(20)      NOT NULL PRIMARY KEY,
-    conversation_id VARCHAR(20) NOT NULL,
-    user_id         VARCHAR(20) NOT NULL,
-    last_message_id VARCHAR(20) NOT NULL,
+    id              VARCHAR(64)      NOT NULL PRIMARY KEY,
+    conversation_id VARCHAR(64) NOT NULL,
+    user_id         VARCHAR(64) NOT NULL,
+    last_message_id VARCHAR(64) NOT NULL,
     content         TEXT        NOT NULL,
     create_time     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -65,9 +65,9 @@ CREATE INDEX idx_conv_user ON t_conversation_summary (conversation_id, user_id);
 COMMENT ON TABLE t_conversation_summary IS '会话摘要表（与消息表分离存储）';
 
 CREATE TABLE t_message (
-    id                VARCHAR(20)      NOT NULL PRIMARY KEY,
-    conversation_id   VARCHAR(20) NOT NULL,
-    user_id           VARCHAR(20) NOT NULL,
+    id                VARCHAR(64)      NOT NULL PRIMARY KEY,
+    conversation_id   VARCHAR(64) NOT NULL,
+    user_id           VARCHAR(64) NOT NULL,
     role              VARCHAR(16) NOT NULL,
     content           TEXT        NOT NULL,
     thinking_content  TEXT,
@@ -80,10 +80,10 @@ CREATE INDEX idx_conversation_user_time ON t_message (conversation_id, user_id, 
 COMMENT ON TABLE t_message IS '会话消息记录表';
 
 CREATE TABLE t_message_feedback (
-    id              VARCHAR(20)       NOT NULL PRIMARY KEY,
-    message_id      VARCHAR(20)       NOT NULL,
-    conversation_id VARCHAR(20)  NOT NULL,
-    user_id         VARCHAR(20)  NOT NULL,
+    id              VARCHAR(64)       NOT NULL PRIMARY KEY,
+    message_id      VARCHAR(64)       NOT NULL,
+    conversation_id VARCHAR(64)  NOT NULL,
+    user_id         VARCHAR(64)  NOT NULL,
     vote            SMALLINT     NOT NULL,
     reason          VARCHAR(255),
     comment         VARCHAR(1024),
@@ -292,13 +292,13 @@ CREATE INDEX idx_source ON t_query_term_mapping (source_term);
 COMMENT ON TABLE t_query_term_mapping IS '关键词归一化映射表';
 
 CREATE TABLE t_rag_trace_run (
-    id              VARCHAR(20)           NOT NULL PRIMARY KEY,
+    id              VARCHAR(64)           NOT NULL PRIMARY KEY,
     trace_id        VARCHAR(64)      NOT NULL,
     trace_name      VARCHAR(128),
     entry_method    VARCHAR(256),
-    conversation_id VARCHAR(20),
-    task_id         VARCHAR(20),
-    user_id         VARCHAR(20),
+    conversation_id VARCHAR(64),
+    task_id         VARCHAR(64),
+    user_id         VARCHAR(64),
     status          VARCHAR(16)      NOT NULL DEFAULT 'RUNNING',
     error_message   VARCHAR(1000),
     start_time      TIMESTAMP(3),
@@ -315,10 +315,10 @@ CREATE INDEX idx_user_id_trace ON t_rag_trace_run (user_id);
 COMMENT ON TABLE t_rag_trace_run IS 'Trace 运行记录表';
 
 CREATE TABLE t_rag_trace_node (
-    id             VARCHAR(20)           NOT NULL PRIMARY KEY,
-    trace_id       VARCHAR(20)      NOT NULL,
-    node_id        VARCHAR(20)      NOT NULL,
-    parent_node_id VARCHAR(20),
+    id             VARCHAR(64)           NOT NULL PRIMARY KEY,
+    trace_id       VARCHAR(64)      NOT NULL,
+    node_id        VARCHAR(64)      NOT NULL,
+    parent_node_id VARCHAR(64),
     depth          INTEGER          DEFAULT 0,
     node_type      VARCHAR(16),
     node_name      VARCHAR(128),
@@ -758,9 +758,9 @@ CREATE TABLE t_outbox_event (
 CREATE INDEX idx_outbox_status_retry ON t_outbox_event (status, next_retry_time, create_time);
 
 CREATE TABLE t_short_term_memory (
-    id VARCHAR(20) PRIMARY KEY,
-    user_id VARCHAR(20) NOT NULL,
-    conversation_id VARCHAR(20),
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    conversation_id VARCHAR(64),
     memory_type VARCHAR(32) NOT NULL,
     content TEXT NOT NULL,
     metadata_json JSONB,
