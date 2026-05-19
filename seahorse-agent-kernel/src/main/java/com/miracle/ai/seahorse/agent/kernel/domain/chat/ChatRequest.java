@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.chat;
 
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -31,17 +32,31 @@ import java.util.List;
 @NoArgsConstructor
 public class ChatRequest {
 
+    private static final String DEFAULT_TOOL_CHOICE = "auto";
+
     private List<ChatMessage> messages = new ArrayList<>();
 
     private ChatSamplingOptions samplingOptions;
 
     private Boolean enableTools;
 
+    /** OpenAI 兼容 function-calling 工具列表；空列表表示禁用工具协议。 */
+    private List<ToolDescriptor> tools = new ArrayList<>();
+
+    /** OpenAI 兼容 tool_choice：auto / required / none / 工具名。 */
+    private String toolChoice = DEFAULT_TOOL_CHOICE;
+
     @Builder
-    public ChatRequest(List<ChatMessage> messages, ChatSamplingOptions samplingOptions, Boolean enableTools) {
+    public ChatRequest(List<ChatMessage> messages,
+                       ChatSamplingOptions samplingOptions,
+                       Boolean enableTools,
+                       List<ToolDescriptor> tools,
+                       String toolChoice) {
         this.messages = messages == null ? new ArrayList<>() : messages;
         this.samplingOptions = samplingOptions;
         this.enableTools = enableTools;
+        this.tools = tools == null ? new ArrayList<>() : tools;
+        this.toolChoice = toolChoice == null || toolChoice.isBlank() ? DEFAULT_TOOL_CHOICE : toolChoice;
     }
 
     public Double getTemperature() {
