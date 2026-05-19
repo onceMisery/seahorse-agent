@@ -133,9 +133,17 @@ public class SeahorseAgentKernelChatAutoConfiguration {
     @ConditionalOnMissingBean
     public KernelChatPipeline seahorseKernelChatPipeline(ChatPreparationPorts preparationPorts,
                                                          ChatResponsePorts responsePorts,
-                                                         ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
+                                                         ObjectProvider<KernelRagTraceRecorder> traceRecorder,
+                                                         org.springframework.core.env.Environment environment) {
+        String configured = environment.getProperty(
+                "seahorse-agent.chat.empty-retrieval-fallback", "generic");
+        KernelChatPipeline.EmptyRetrievalStrategy strategy =
+                "strict".equalsIgnoreCase(configured) || "message".equalsIgnoreCase(configured)
+                        ? KernelChatPipeline.EmptyRetrievalStrategy.STATIC_MESSAGE
+                        : KernelChatPipeline.EmptyRetrievalStrategy.FALLBACK_GENERIC;
         return new KernelChatPipeline(preparationPorts, responsePorts,
-                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
+                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
+                strategy);
     }
 
     @Bean

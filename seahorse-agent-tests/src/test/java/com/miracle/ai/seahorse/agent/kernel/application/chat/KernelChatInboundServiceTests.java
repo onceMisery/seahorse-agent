@@ -45,7 +45,43 @@ import static org.mockito.Mockito.when;
 class KernelChatInboundServiceTests {
 
     @Test
-    void shouldExecuteKernelPipelineThroughInboundPort() {
+    void shouldFallbackToGenericChatWhenRetrievalIsEmpty() {
+        ConversationMemoryPort memoryPort = mock(ConversationMemoryPort.class);
+        QueryRewritePort rewritePort = mock(QueryRewritePort.class);
+        IntentResolutionPort intentPort = mock(IntentResolutionPort.class);
+        IntentGuidancePort guidancePort = mock(IntentGuidancePort.class);
+        RetrievalContextPort retrievalPort = mock(RetrievalContextPort.class);
+        StreamTaskPort taskPort = mock(StreamTaskPort.class);
+        StreamingChatModelPort streamingModel = mock(StreamingChatModelPort.class);
+        StreamCallback callback = mock(StreamCallback.class);
+        KernelChatPipeline pipeline = new KernelChatPipeline(
+                new ChatPreparationPorts(memoryPort, rewritePort, intentPort, guidancePort, retrievalPort),
+                new ChatResponsePorts(
+                        RagPromptPort.simple(),
+                        PromptTemplatePort.empty(),
+                        streamingModel,
+                        taskPort));
+
+        when(memoryPort.loadAndAppend(any(), any(), any())).thenReturn(List.of(ChatMessage.user("hello")));
+        when(rewritePort.rewriteWithSplit(any(), any())).thenReturn(new RewriteResult("hello", List.of()));
+        when(intentPort.resolve(any())).thenReturn(List.of());
+        when(intentPort.mergeIntentGroup(any())).thenReturn(new IntentGroup(List.of(), List.of()));
+        when(guidancePort.detectAmbiguity(any(), any())).thenReturn(GuidanceDecision.none());
+        when(streamingModel.streamChat(any(), any())).thenReturn(() -> {
+        });
+
+        KernelChatInboundService service = new KernelChatInboundService(pipeline, taskPort);
+
+        service.streamChat(new StreamChatCommand("hello", "conv-1", "task-1", "user-1", false), callback);
+
+        verify(memoryPort).loadAndAppend("conv-1", "user-1", ChatMessage.user("hello"));
+        // 空检索默认走 FALLBACK_GENERIC：调用流式模型而不是返回固定文案
+        verify(streamingModel).streamChat(any(), any());
+        verify(callback, org.mockito.Mockito.never()).onContent("未检索到与问题相关的文档内容。");
+    }
+
+    @Test
+    void shouldReturnStaticMessageWhenStrictEmptyRetrievalStrategy() {
         ConversationMemoryPort memoryPort = mock(ConversationMemoryPort.class);
         QueryRewritePort rewritePort = mock(QueryRewritePort.class);
         IntentResolutionPort intentPort = mock(IntentResolutionPort.class);
@@ -59,7 +95,9 @@ class KernelChatInboundServiceTests {
                         RagPromptPort.simple(),
                         PromptTemplatePort.empty(),
                         StreamingChatModelPort.noop(),
-                        taskPort));
+                        taskPort),
+                com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder.noop(),
+                KernelChatPipeline.EmptyRetrievalStrategy.STATIC_MESSAGE);
 
         when(memoryPort.loadAndAppend(any(), any(), any())).thenReturn(List.of(ChatMessage.user("hello")));
         when(rewritePort.rewriteWithSplit(any(), any())).thenReturn(new RewriteResult("hello", List.of()));
@@ -71,7 +109,6 @@ class KernelChatInboundServiceTests {
 
         service.streamChat(new StreamChatCommand("hello", "conv-1", "task-1", "user-1", false), callback);
 
-        verify(memoryPort).loadAndAppend("conv-1", "user-1", ChatMessage.user("hello"));
         verify(callback).onContent("未检索到与问题相关的文档内容。");
         verify(callback).onComplete();
     }
