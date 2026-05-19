@@ -62,15 +62,20 @@ public class SeahorseChatController {
                                   ChatStreamCallbackFactoryPort callbackFactory,
                                   StreamTaskPort streamTaskPort,
                                   long sseTimeoutMs) {
-        this(chatInboundPortProvider, callbackFactory, streamTaskPort, RateLimiterPort.noop(), sseTimeoutMs, 60,
-                Duration.ofMinutes(1).toMillis());
+        this.chatInboundPortProvider = chatInboundPortProvider;
+        this.callbackFactory = Objects.requireNonNull(callbackFactory, "callbackFactory must not be null");
+        this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
+        this.rateLimiterPort = RateLimiterPort.noop();
+        this.sseTimeoutMs = sseTimeoutMs;
+        this.chatRateLimitPermits = 60;
+        this.chatRateLimitWindow = Duration.ofMinutes(1);
     }
 
     @Autowired
     public SeahorseChatController(ObjectProvider<ChatInboundPort> chatInboundPortProvider,
                                   ChatStreamCallbackFactoryPort callbackFactory,
                                   StreamTaskPort streamTaskPort,
-                                  RateLimiterPort rateLimiterPort,
+                                  ObjectProvider<RateLimiterPort> rateLimiterPortProvider,
                                   @Value("${seahorse-agent.web.sse-timeout-ms:300000}")
                                   long sseTimeoutMs,
                                   @Value("${seahorse-agent.web.chat-rate-limit.permits:60}") int chatRateLimitPermits,
@@ -79,7 +84,7 @@ public class SeahorseChatController {
         this.chatInboundPortProvider = chatInboundPortProvider;
         this.callbackFactory = Objects.requireNonNull(callbackFactory, "callbackFactory must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
-        this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPort, RateLimiterPort.noop());
+        this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPortProvider.getIfAvailable(), RateLimiterPort.noop());
         this.sseTimeoutMs = sseTimeoutMs;
         this.chatRateLimitPermits = Math.max(1, chatRateLimitPermits);
         this.chatRateLimitWindow = Duration.ofMillis(Math.max(1L, chatRateLimitWindowMs));

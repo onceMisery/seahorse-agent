@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisCacheAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisSemaphoreAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisStreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedSemaphorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.redisson.Redisson;
@@ -50,6 +51,12 @@ import org.springframework.context.annotation.ConfigurationCondition.Configurati
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentCacheAdapterAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean(RateLimiterPort.class)
+    public RateLimiterPort seahorseRateLimiterPort() {
+        return RateLimiterPort.noop();
+    }
 
     @Bean
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type", havingValue = "local")
