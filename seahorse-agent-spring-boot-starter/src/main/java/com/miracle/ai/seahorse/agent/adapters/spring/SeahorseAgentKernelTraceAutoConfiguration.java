@@ -38,7 +38,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>trace 记录、查询入口和 TTL 清理任务同属可观测治理职责域，独立配置后主 kernel 配置不再承载 trace 治理细节。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter(SeahorseAgentKernelAutoConfiguration.class)
+@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelTraceAutoConfiguration {
 

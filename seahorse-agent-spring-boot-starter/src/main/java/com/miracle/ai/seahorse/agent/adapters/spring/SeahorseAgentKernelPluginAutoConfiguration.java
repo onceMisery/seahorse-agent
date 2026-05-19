@@ -85,7 +85,7 @@ import org.springframework.context.annotation.Configuration;
  * 承担插件注册职责。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter(SeahorseAgentKernelAutoConfiguration.class)
+@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentVectorAdapterAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentKeywordAdapterAutoConfiguration.class, SeahorseAgentAiAdapterAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelPluginAutoConfiguration {
 

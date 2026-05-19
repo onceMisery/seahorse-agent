@@ -63,7 +63,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
  * 检索编排链路的装配细节。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter(SeahorseAgentKernelAutoConfiguration.class)
+@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentRetrievalRepositoryAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelRetrievalAutoConfiguration {
 

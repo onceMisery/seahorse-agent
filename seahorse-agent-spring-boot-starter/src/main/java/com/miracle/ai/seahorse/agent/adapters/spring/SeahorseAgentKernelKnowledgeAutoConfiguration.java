@@ -72,7 +72,7 @@ import org.springframework.context.annotation.Configuration;
  * 知识域装配细节的直接承载。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter(SeahorseAgentKernelAutoConfiguration.class)
+@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentVectorAdapterAutoConfiguration.class, SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentIngestionRepositoryAutoConfiguration.class, SeahorseAgentMqAdapterAutoConfiguration.class, SeahorseAgentMetadataAdapterAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelKnowledgeAutoConfiguration {
 

@@ -54,7 +54,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>四层记忆引擎、管理服务、治理服务和治理调度属于同一内核职责域，独立配置后主 kernel 配置不再承载记忆闭环细节。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter(SeahorseAgentKernelAutoConfiguration.class)
+@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentMemoryRepositoryAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelMemoryAutoConfiguration {
 
