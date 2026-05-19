@@ -41,7 +41,6 @@ import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * Seahorse 原生问答 Web 入站适配器。
@@ -105,7 +104,6 @@ public class SeahorseChatController {
                 actualUserId,
                 Boolean.TRUE.equals(deepThinking),
                 parseChatMode(chatMode));
-                Boolean.TRUE.equals(deepThinking);
         try {
             chatInboundPortProvider.getIfAvailable().streamChat(command, callback);
         } catch (RuntimeException ex) {
