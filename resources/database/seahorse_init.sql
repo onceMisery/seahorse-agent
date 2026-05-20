@@ -760,6 +760,7 @@ CREATE INDEX idx_outbox_status_retry ON t_outbox_event (status, next_retry_time,
 CREATE TABLE t_short_term_memory (
     id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) NOT NULL,
+    tenant_id VARCHAR(64) DEFAULT 'default',
     conversation_id VARCHAR(64),
     memory_type VARCHAR(32) NOT NULL,
     content TEXT NOT NULL,
@@ -770,17 +771,28 @@ CREATE TABLE t_short_term_memory (
     last_access_time TIMESTAMP,
     decay_score NUMERIC(4, 3) DEFAULT 0,
     expires_time TIMESTAMP,
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    generation_id VARCHAR(64),
+    valid_from TIMESTAMP,
+    valid_until TIMESTAMP,
+    last_referenced_at TIMESTAMP,
+    schema_version VARCHAR(32),
+    policy_version VARCHAR(64),
+    sensitivity_level VARCHAR(32),
+    obsolete_reason TEXT,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted SMALLINT DEFAULT 0
 );
 CREATE INDEX idx_stm_user_conv_time ON t_short_term_memory (user_id, conversation_id, create_time DESC);
 CREATE INDEX idx_stm_user_type_decay ON t_short_term_memory (user_id, memory_type, decay_score DESC);
+CREATE INDEX idx_stm_lifecycle_user_status ON t_short_term_memory (user_id, tenant_id, status, update_time);
 CREATE INDEX idx_stm_metadata_gin ON t_short_term_memory USING GIN (metadata_json);
 
 CREATE TABLE t_long_term_memory (
     id VARCHAR(20) PRIMARY KEY,
     user_id VARCHAR(20) NOT NULL,
+    tenant_id VARCHAR(64) DEFAULT 'default',
     memory_category VARCHAR(32) NOT NULL,
     title VARCHAR(256),
     content TEXT NOT NULL,
@@ -791,27 +803,48 @@ CREATE TABLE t_long_term_memory (
     confidence_level NUMERIC(4, 3) DEFAULT 0,
     embedding_model VARCHAR(64),
     vector_ref_id VARCHAR(64),
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    generation_id VARCHAR(64),
+    valid_from TIMESTAMP,
+    valid_until TIMESTAMP,
+    last_referenced_at TIMESTAMP,
+    schema_version VARCHAR(32),
+    policy_version VARCHAR(64),
+    sensitivity_level VARCHAR(32),
+    obsolete_reason TEXT,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted SMALLINT DEFAULT 0
 );
 CREATE INDEX idx_ltm_user_category_importance ON t_long_term_memory (user_id, memory_category, importance_score DESC);
+CREATE INDEX idx_ltm_lifecycle_user_status ON t_long_term_memory (user_id, tenant_id, status, update_time);
 CREATE INDEX idx_ltm_tags_gin ON t_long_term_memory USING GIN (tags);
 
 CREATE TABLE t_semantic_memory (
     id VARCHAR(20) PRIMARY KEY,
     user_id VARCHAR(20) NOT NULL,
+    tenant_id VARCHAR(64) DEFAULT 'default',
     semantic_key VARCHAR(64) NOT NULL,
     semantic_type VARCHAR(32) NOT NULL,
     value_json JSONB NOT NULL,
     confidence_level NUMERIC(4, 3) DEFAULT 0,
     source_memory_ids JSONB,
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    generation_id VARCHAR(64),
+    valid_from TIMESTAMP,
+    valid_until TIMESTAMP,
+    last_referenced_at TIMESTAMP,
+    schema_version VARCHAR(32),
+    policy_version VARCHAR(64),
+    sensitivity_level VARCHAR(32),
+    obsolete_reason TEXT,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted SMALLINT DEFAULT 0,
     CONSTRAINT uk_semantic_memory UNIQUE (user_id, semantic_key, semantic_type)
 );
 CREATE INDEX idx_sem_user_type ON t_semantic_memory (user_id, semantic_type);
+CREATE INDEX idx_sem_lifecycle_user_status ON t_semantic_memory (user_id, tenant_id, status, update_time);
 
 CREATE TABLE t_memory_operation_log (
     operation_id VARCHAR(128) PRIMARY KEY,

@@ -49,6 +49,7 @@ class JdbcMemoryRepositoryAdapterTests {
     private JdbcCorrectionLedgerRepositoryAdapter correctionAdapter;
     private JdbcMemoryOperationLogRepositoryAdapter operationLogAdapter;
     private JdbcMemoryOutboxRepositoryAdapter outboxAdapter;
+    private JdbcMemoryLifecycleRepositoryAdapter lifecycleAdapter;
 
     @BeforeEach
     void setUp() {
@@ -66,6 +67,7 @@ class JdbcMemoryRepositoryAdapterTests {
         correctionAdapter = new JdbcCorrectionLedgerRepositoryAdapter(dataSource, objectMapper);
         operationLogAdapter = new JdbcMemoryOperationLogRepositoryAdapter(dataSource, objectMapper);
         outboxAdapter = new JdbcMemoryOutboxRepositoryAdapter(dataSource, objectMapper);
+        lifecycleAdapter = new JdbcMemoryLifecycleRepositoryAdapter(dataSource);
     }
 
     @Test
@@ -256,6 +258,80 @@ class JdbcMemoryRepositoryAdapterTests {
         assertThat(row.get("STATUS")).isEqualTo("SUCCEEDED");
     }
 
+    @Test
+    void shouldFilterObsoleteMemoriesAndRecordLifecycleFeedback() {
+        jdbcTemplate.update("""
+                INSERT INTO t_short_term_memory
+                (id, user_id, tenant_id, conversation_id, memory_type, content, metadata_json, source_message_ids,
+                 importance_score, access_count, last_access_time, decay_score, expires_time, status,
+                 generation_id, last_referenced_at, schema_version, policy_version, sensitivity_level,
+                 obsolete_reason, create_time, update_time, deleted)
+                VALUES ('active-1', 'user-1', 'default', 'conv-1', 'PROFILE', 'active student',
+                        '{"profileSlot":"identity.occupation"}', '[]',
+                        0.8, 0, CURRENT_TIMESTAMP, 0.5, ?,
+                        'ACTIVE', 'identity.occupation:g1', NULL, '1', 'policy-v1', 'LOW', NULL,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """, java.sql.Timestamp.from(Instant.now().plusSeconds(3600)));
+        jdbcTemplate.update("""
+                INSERT INTO t_short_term_memory
+                (id, user_id, tenant_id, conversation_id, memory_type, content, metadata_json, source_message_ids,
+                 importance_score, access_count, last_access_time, decay_score, expires_time, status,
+                 generation_id, last_referenced_at, schema_version, policy_version, sensitivity_level,
+                 obsolete_reason, create_time, update_time, deleted)
+                VALUES ('obsolete-1', 'user-1', 'default', 'conv-1', 'PROFILE', 'obsolete student',
+                        '{"profileSlot":"identity.occupation"}', '[]',
+                        0.8, 0, CURRENT_TIMESTAMP, 0.5, ?,
+                        'OBSOLETE', 'identity.occupation:old', NULL, '1', 'policy-v1', 'LOW',
+                        'profile slot updated',
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """, java.sql.Timestamp.from(Instant.now().plusSeconds(3600)));
+
+        assertThat(shortTermAdapter.listByUser("user-1", 10))
+                .extracting(MemoryRecord::id)
+                .containsExactly("active-1");
+
+        Instant referencedAt = Instant.parse("2026-05-20T00:00:00Z");
+        lifecycleAdapter.recordRead("short_term", "active-1", referencedAt);
+
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT access_count, last_referenced_at, status
+                FROM t_short_term_memory
+                WHERE id = 'active-1'
+                """);
+        assertThat(row.get("ACCESS_COUNT")).isEqualTo(1);
+        assertThat(row.get("LAST_REFERENCED_AT")).isNotNull();
+        assertThat(row.get("STATUS")).isEqualTo("REFERENCED");
+    }
+
+    @Test
+    void shouldMarkProfileSlotFragmentsObsoleteAcrossLayeredStores() {
+        shortTermAdapter.save(new MemoryRecord("stm-profile", "short_term", "PROFILE", "student",
+                Map.of("userId", "user-1", "tenantId", "default", "profileSlot", "identity.occupation",
+                        "importanceScore", 0.8D),
+                Instant.now()));
+        longTermAdapter.save(new MemoryRecord("ltm-profile", "long_term", "PROFILE", "student",
+                Map.of("userId", "user-1", "tenantId", "default", "profileSlot", "identity.occupation",
+                        "importanceScore", 0.8D),
+                Instant.now()));
+        semanticAdapter.save(new MemoryRecord("sem-profile", "semantic", "PROFILE", "student",
+                Map.of("userId", "user-1", "tenantId", "default", "semanticKey", "identity.occupation",
+                        "profileSlot", "identity.occupation"),
+                Instant.now()));
+
+        int updated = lifecycleAdapter.markObsoleteByProfileSlot(
+                "user-1", "default", "identity.occupation", "identity.occupation:g2", "profile slot updated");
+
+        assertThat(updated).isEqualTo(3);
+        assertThat(shortTermAdapter.listByUser("user-1", 10)).isEmpty();
+        assertThat(longTermAdapter.listByUser("user-1", 10)).isEmpty();
+        assertThat(semanticAdapter.listByUser("user-1", 10)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT obsolete_reason
+                FROM t_semantic_memory
+                WHERE id = 'sem-profile'
+                """, String.class)).isEqualTo("profile slot updated");
+    }
+
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_short_term_memory");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_long_term_memory");
@@ -270,6 +346,7 @@ class JdbcMemoryRepositoryAdapterTests {
                 CREATE TABLE t_short_term_memory (
                     id VARCHAR(64) PRIMARY KEY,
                     user_id VARCHAR(64),
+                    tenant_id VARCHAR(64) DEFAULT 'default',
                     conversation_id VARCHAR(64),
                     memory_type VARCHAR(32),
                     content TEXT,
@@ -280,6 +357,15 @@ class JdbcMemoryRepositoryAdapterTests {
                     last_access_time TIMESTAMP,
                     decay_score DOUBLE,
                     expires_time TIMESTAMP,
+                    status VARCHAR(32) DEFAULT 'ACTIVE',
+                    generation_id VARCHAR(64),
+                    valid_from TIMESTAMP,
+                    valid_until TIMESTAMP,
+                    last_referenced_at TIMESTAMP,
+                    schema_version VARCHAR(32),
+                    policy_version VARCHAR(64),
+                    sensitivity_level VARCHAR(32),
+                    obsolete_reason TEXT,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
@@ -289,6 +375,7 @@ class JdbcMemoryRepositoryAdapterTests {
                 CREATE TABLE t_long_term_memory (
                     id VARCHAR(64) PRIMARY KEY,
                     user_id VARCHAR(64),
+                    tenant_id VARCHAR(64) DEFAULT 'default',
                     memory_category VARCHAR(32),
                     title VARCHAR(128),
                     content TEXT,
@@ -299,6 +386,15 @@ class JdbcMemoryRepositoryAdapterTests {
                     confidence_level DOUBLE,
                     embedding_model VARCHAR(64),
                     vector_ref_id VARCHAR(64),
+                    status VARCHAR(32) DEFAULT 'ACTIVE',
+                    generation_id VARCHAR(64),
+                    valid_from TIMESTAMP,
+                    valid_until TIMESTAMP,
+                    last_referenced_at TIMESTAMP,
+                    schema_version VARCHAR(32),
+                    policy_version VARCHAR(64),
+                    sensitivity_level VARCHAR(32),
+                    obsolete_reason TEXT,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
@@ -308,11 +404,21 @@ class JdbcMemoryRepositoryAdapterTests {
                 CREATE TABLE t_semantic_memory (
                     id VARCHAR(64) PRIMARY KEY,
                     user_id VARCHAR(64),
+                    tenant_id VARCHAR(64) DEFAULT 'default',
                     semantic_key VARCHAR(128),
                     semantic_type VARCHAR(32),
                     value_json TEXT,
                     confidence_level DOUBLE,
                     source_memory_ids TEXT,
+                    status VARCHAR(32) DEFAULT 'ACTIVE',
+                    generation_id VARCHAR(64),
+                    valid_from TIMESTAMP,
+                    valid_until TIMESTAMP,
+                    last_referenced_at TIMESTAMP,
+                    schema_version VARCHAR(32),
+                    policy_version VARCHAR(64),
+                    sensitivity_level VARCHAR(32),
+                    obsolete_reason TEXT,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0

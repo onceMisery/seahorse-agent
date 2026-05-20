@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Implement P5 lifecycle governance and management surface for the Seahorse memory system",
+  "goal": "Make obsolete or corrected memory fragments read-invisible, record read feedback, and expose lifecycle-related memory state through management APIs",
+  "successEvidence": [
+    "Layered memory tables carry lifecycle columns without breaking existing records",
+    "Active reads exclude OBSOLETE, DELETED, and PHYSICAL_DELETED records",
+    "Profile slot updates can mark old same-slot fragments obsolete across short-term, long-term, and semantic stores",
+    "Loaded memory records produce read feedback for lifecycle tuning",
+    "Management APIs expose Profile facts, Correction rules, operation records, and memory outbox tasks"
+  ],
+  "stopCondition": "Stop when lifecycle repository tests, kernel lifecycle tests, management API contract tests, Spring wiring tests, starter packaging, and diff checks pass.",
+  "nonGoals": [
+    "Full offline compaction job",
+    "Physical vector/BM25 GC worker",
+    "Human REVIEW queue mutation workflow",
+    "P6 dynamic observability and policy tuning"
+  ],
+  "scope": "layered memory lifecycle columns/indexes, lifecycle outbound port/JDBC adapter, read filtering/read feedback, profile generation invalidation, management query surface, Spring wiring, tests",
+  "changeKinds": [
+    "architecture",
+    "behavior",
+    "persistence",
+    "api"
+  ]
+}

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import java.util.List;
 import java.util.Map;
 
 public interface MemoryOperationLogPort {
@@ -26,6 +27,10 @@ public interface MemoryOperationLogPort {
     void markCompleted(String operationId, MemoryOperationStatus status, Map<String, Object> decision);
 
     void markFailed(String operationId, String errorMessage);
+
+    default List<MemoryOperationRecord> listByUser(String userId, String tenantId, String status, int limit) {
+        return List.of();
+    }
 
     static MemoryOperationLogPort noop() {
         return new MemoryOperationLogPort() {

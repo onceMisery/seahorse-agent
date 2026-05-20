@@ -93,6 +93,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentR
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillCountItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRecord;
@@ -284,6 +288,24 @@ class SeahorseWebApiContractTests {
         when(memoryManagementPort.listQualitySnapshots("u1", 20)).thenReturn(List.of());
         when(memoryManagementPort.listConflicts("u1", null, 20)).thenReturn(List.of());
         when(memoryManagementPort.resolveConflict("c1", "merge", "u1")).thenReturn(true);
+        when(memoryManagementPort.listProfileFacts("u1", "default", 20))
+                .thenReturn(List.of(new ProfileFact(
+                        "pf-1", "u1", "default", "occupation", "学生", 0.95,
+                        "explicit", "gen-1", "ACTIVE", Instant.EPOCH)));
+        when(memoryManagementPort.listCorrectionRules("u1", "default", 20))
+                .thenReturn(List.of(new CorrectionRule(
+                        "cr-1", "u1", "default", "REPLACE", "PROFILE_SLOT",
+                        "occupation", "学生", "老师", "职业应以老师为准",
+                        "HARD_RULE", "gen-2", "ACTIVE", Instant.EPOCH)));
+        when(memoryManagementPort.listOperations("u1", "default", null, 20))
+                .thenReturn(List.of(new MemoryOperationRecord(
+                        "op-1", "u1", "default", "PROFILE_UPSERT", "PROFILE_SLOT",
+                        "occupation", Map.of("value", "学生"), Map.of("accepted", true),
+                        "APPLIED", "policy-v1", "", Instant.EPOCH, Instant.EPOCH)));
+        when(memoryManagementPort.listOutboxTasks(20))
+                .thenReturn(List.of(new MemoryOutboxPort.MemoryOutboxTask(
+                        "outbox-1", "VECTOR_UPSERT", "m1", "u1", "default",
+                        Map.of("memoryId", "m1"), "", null, Instant.EPOCH)));
 
         MemoryGovernanceInboundPort governancePort = mock(MemoryGovernanceInboundPort.class);
         when(governancePort.runGovernance("u1", "manual", true)).thenReturn(governanceResult("u1"));
@@ -334,6 +356,22 @@ class SeahorseWebApiContractTests {
         mvc.perform(get("/memories").param("userId", "u1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.layer").value("short_term"));
+        mvc.perform(get("/memories/profile-facts").param("userId", "u1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].slotKey").value("occupation"))
+                .andExpect(jsonPath("$.data[0].valueText").value("学生"));
+        mvc.perform(get("/memories/corrections").param("userId", "u1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].targetKey").value("occupation"))
+                .andExpect(jsonPath("$.data[0].correctValue").value("老师"));
+        mvc.perform(get("/memories/operations").param("userId", "u1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].operationId").value("op-1"))
+                .andExpect(jsonPath("$.data[0].targetKey").value("occupation"));
+        mvc.perform(get("/memories/outbox"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value("outbox-1"))
+                .andExpect(jsonPath("$.data[0].taskType").value("VECTOR_UPSERT"));
         mvc.perform(post("/memories/conflicts/c1/resolve")
                         .header("X-User-Id", "u1")
                         .contentType(MediaType.APPLICATION_JSON)

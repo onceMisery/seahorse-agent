@@ -28,3 +28,10 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p4-retrieval-outbox/task-intent-draft.json | Memory P4 retrieval outbox task intent draft |
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p4-retrieval-outbox/todo-checkpoint-draft.json | Memory P4 retrieval outbox todo checkpoint draft |
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p4-retrieval-outbox/drift-check-draft.json | Memory P4 retrieval outbox drift check draft |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p5-lifecycle-management/10-intent.md | Memory P5 lifecycle management intent |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p5-lifecycle-management/20-checkpoint.md | Memory P5 lifecycle management checkpoint |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p5-lifecycle-management/90-evidence.md | Memory P5 lifecycle management evidence |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p5-lifecycle-management/99-reflection.md | Memory P5 lifecycle management reflection |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p5-lifecycle-management/task-intent-draft.json | Memory P5 lifecycle management task intent draft |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p5-lifecycle-management/todo-checkpoint-draft.json | Memory P5 lifecycle management todo checkpoint draft |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p5-lifecycle-management/drift-check-draft.json | Memory P5 lifecycle management drift check draft |

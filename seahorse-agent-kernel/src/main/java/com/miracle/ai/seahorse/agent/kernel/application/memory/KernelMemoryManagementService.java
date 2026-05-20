@@ -20,9 +20,13 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 
 import java.util.List;
 import java.util.Locale;
@@ -76,6 +80,29 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
         return ports.conflictLogRepositoryPort()
                 .resolve(requireText(conflictId, "conflictId"), requireText(action, "action"),
                         Objects.requireNonNullElse(resolvedBy, "").trim());
+    }
+
+    @Override
+    public List<ProfileFact> listProfileFacts(String userId, String tenantId, int limit) {
+        return ports.profileMemoryPort()
+                .listActive(requireText(userId, "userId"), tenantId, limit <= 0 ? DEFAULT_LIMIT : limit);
+    }
+
+    @Override
+    public List<CorrectionRule> listCorrectionRules(String userId, String tenantId, int limit) {
+        return ports.correctionLedgerPort()
+                .listActive(requireText(userId, "userId"), tenantId, limit <= 0 ? DEFAULT_LIMIT : limit);
+    }
+
+    @Override
+    public List<MemoryOperationRecord> listOperations(String userId, String tenantId, String status, int limit) {
+        return ports.operationLogPort()
+                .listByUser(requireText(userId, "userId"), tenantId, status, limit <= 0 ? DEFAULT_LIMIT : limit);
+    }
+
+    @Override
+    public List<MemoryOutboxPort.MemoryOutboxTask> listOutboxTasks(int limit) {
+        return ports.outboxPort().pollPending(limit <= 0 ? DEFAULT_LIMIT : limit);
     }
 
     private MemoryStorePort store(String layer) {

@@ -75,7 +75,12 @@ final class JdbcMemorySupport {
 
     static Map<String, Object> metadata(ObjectMapper objectMapper, String json, Map<String, Object> additional) {
         LinkedHashMap<String, Object> values = new LinkedHashMap<>(parseJson(objectMapper, json));
-        values.putAll(Objects.requireNonNullElse(additional, Map.of()));
+        Objects.requireNonNullElse(additional, Map.<String, Object>of())
+                .forEach((key, value) -> {
+                    if (key != null && value != null) {
+                        values.put(key, value);
+                    }
+                });
         return values;
     }
 

@@ -45,7 +45,10 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
     @Override
     public Optional<MemoryRecord> findById(String id) {
         return jdbcTemplate.query("""
-                SELECT * FROM t_semantic_memory WHERE id = ? AND deleted = 0
+                SELECT * FROM t_semantic_memory
+                WHERE id = ?
+                  AND deleted = 0
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
                 """, this::mapRecord, id).stream().findFirst();
     }
 
@@ -58,7 +61,9 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
     public List<MemoryRecord> listByUser(String userId, int limit) {
         return jdbcTemplate.query("""
                 SELECT * FROM t_semantic_memory
-                WHERE user_id = ? AND deleted = 0
+                WHERE user_id = ?
+                  AND deleted = 0
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY update_time DESC
                 LIMIT ?
                 """, this::mapRecord, userId, safeLimit(limit));
@@ -77,8 +82,11 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
             jdbcTemplate.update("""
                     INSERT INTO t_semantic_memory
                     (id, user_id, semantic_key, semantic_type, value_json, confidence_level,
-                     source_memory_ids, create_time, update_time, deleted)
-                    VALUES (?, ?, ?, ?, CAST(? AS JSON), ?, CAST(? AS JSON), ?, ?, 0)
+                     source_memory_ids, tenant_id, status, generation_id, valid_from, valid_until,
+                     last_referenced_at, schema_version, policy_version, sensitivity_level, obsolete_reason,
+                     create_time, update_time, deleted)
+                    VALUES (?, ?, ?, ?, CAST(? AS JSON), ?, CAST(? AS JSON),
+                            ?, 'ACTIVE', ?, ?, NULL, NULL, ?, ?, ?, NULL, ?, ?, 0)
                     """,
                     JdbcMemorySupport.hasText(record.id()) ? record.id() : JdbcMemorySupport.nextId(),
                     userId,
@@ -90,6 +98,12 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
                             "metadata", record.metadata())),
                     number(record.metadata().get("confidenceLevel"), 0D),
                     sourceIds(record),
+                    tenantId(record.metadata()),
+                    string(record.metadata().get("generationId")),
+                    JdbcMemorySupport.timestamp(now),
+                    stringOrDefault(record.metadata().get("schemaVersion"), "1"),
+                    stringOrDefault(record.metadata().get("policyVersion"), "memory-governance-v1"),
+                    stringOrDefault(record.metadata().get("sensitivityLevel"), "LOW"),
                     JdbcMemorySupport.timestamp(now),
                     JdbcMemorySupport.timestamp(now));
             return;
@@ -97,8 +111,19 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
         jdbcTemplate.update("""
                 UPDATE t_semantic_memory
                 SET value_json = CAST(? AS JSON), confidence_level = GREATEST(confidence_level, ?),
-                    source_memory_ids = CAST(? AS JSON), update_time = ?
-                WHERE id = ? AND deleted = 0
+                    source_memory_ids = CAST(? AS JSON),
+                    tenant_id = ?,
+                    status = 'ACTIVE',
+                    generation_id = ?,
+                    valid_until = NULL,
+                    schema_version = ?,
+                    policy_version = ?,
+                    sensitivity_level = ?,
+                    obsolete_reason = NULL,
+                    update_time = ?
+                WHERE id = ?
+                  AND deleted = 0
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
                 """,
                 JdbcMemorySupport.writeJson(objectMapper, Map.of(
                         "type", record.type(),
@@ -106,6 +131,11 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
                         "metadata", record.metadata())),
                 number(record.metadata().get("confidenceLevel"), 0D),
                 sourceIds(record),
+                tenantId(record.metadata()),
+                string(record.metadata().get("generationId")),
+                stringOrDefault(record.metadata().get("schemaVersion"), "1"),
+                stringOrDefault(record.metadata().get("policyVersion"), "memory-governance-v1"),
+                stringOrDefault(record.metadata().get("sensitivityLevel"), "LOW"),
                 JdbcMemorySupport.timestamp(now),
                 existingId);
     }
@@ -131,6 +161,14 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
         values.put("semanticKey", rs.getString("semantic_key"));
         values.put("confidenceLevel", rs.getDouble("confidence_level"));
         values.put("sourceMemoryIds", rs.getString("source_memory_ids"));
+        values.put("tenantId", stringOrDefault(rs.getString("tenant_id"), "default"));
+        values.put("status", stringOrDefault(rs.getString("status"), "ACTIVE"));
+        values.put("generationId", rs.getString("generation_id"));
+        values.put("lastReferencedAt", JdbcMemorySupport.instant(rs.getTimestamp("last_referenced_at")));
+        values.put("schemaVersion", rs.getString("schema_version"));
+        values.put("policyVersion", rs.getString("policy_version"));
+        values.put("sensitivityLevel", rs.getString("sensitivity_level"));
+        values.put("obsoleteReason", rs.getString("obsolete_reason"));
         return values;
     }
 
@@ -138,7 +176,11 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
         try {
             return jdbcTemplate.queryForObject("""
                     SELECT id FROM t_semantic_memory
-                    WHERE user_id = ? AND semantic_key = ? AND semantic_type = ? AND deleted = 0
+                    WHERE user_id = ?
+                      AND semantic_key = ?
+                      AND semantic_type = ?
+                      AND deleted = 0
+                      AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
                     LIMIT 1
                     """, String.class, userId, semanticKey, semanticType);
         } catch (EmptyResultDataAccessException ex) {
@@ -161,6 +203,15 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
 
     private String string(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private String stringOrDefault(Object value, String fallback) {
+        String text = string(value);
+        return JdbcMemorySupport.hasText(text) ? text : fallback;
+    }
+
+    private String tenantId(Map<String, Object> metadata) {
+        return stringOrDefault(metadata.get("tenantId"), "default");
     }
 
     private double number(Object value, double fallback) {

@@ -39,6 +39,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
@@ -83,6 +84,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryVectorPort> memoryVectorPort,
             ObjectProvider<MemoryOutboxPort> memoryOutboxPort,
             ObjectProvider<MemoryBusinessDocumentRetrieverPort> businessDocumentRetrieverPort,
+            ObjectProvider<MemoryLifecyclePort> memoryLifecyclePort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
             @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
@@ -106,7 +108,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 memoryOperationLogPort.getIfAvailable(MemoryOperationLogPort::noop),
                 memoryVectorPort.getIfAvailable(MemoryVectorPort::noop),
                 memoryOutboxPort.getIfAvailable(MemoryOutboxPort::noop),
-                businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop));
+                businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop),
+                memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop));
     }
 
     @Bean
@@ -151,14 +154,22 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             LongTermMemoryPort longTermMemoryPort,
             SemanticMemoryPort semanticMemoryPort,
             ObjectProvider<MemoryQualitySnapshotRepositoryPort> qualitySnapshotRepositoryPort,
-            ObjectProvider<MemoryConflictLogRepositoryPort> conflictLogRepositoryPort) {
+            ObjectProvider<MemoryConflictLogRepositoryPort> conflictLogRepositoryPort,
+            ObjectProvider<ProfileMemoryPort> profileMemoryPort,
+            ObjectProvider<CorrectionLedgerPort> correctionLedgerPort,
+            ObjectProvider<MemoryOperationLogPort> operationLogPort,
+            ObjectProvider<MemoryOutboxPort> outboxPort) {
         return new MemoryManagementServicePorts(
                 workingMemoryPort,
                 shortTermMemoryPort,
                 longTermMemoryPort,
                 semanticMemoryPort,
                 qualitySnapshotRepositoryPort.getIfAvailable(MemoryQualitySnapshotRepositoryPort::empty),
-                conflictLogRepositoryPort.getIfAvailable(MemoryConflictLogRepositoryPort::empty));
+                conflictLogRepositoryPort.getIfAvailable(MemoryConflictLogRepositoryPort::empty),
+                profileMemoryPort.getIfAvailable(ProfileMemoryPort::noop),
+                correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
+                operationLogPort.getIfAvailable(MemoryOperationLogPort::noop),
+                outboxPort.getIfAvailable(MemoryOutboxPort::noop));
     }
 
     @Bean

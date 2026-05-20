@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "scope": "P5 lifecycle governance and management-surface subset",
+  "servesOriginalIntent": true,
+  "servesStopCondition": true,
+  "compatibilityBoundaryHeld": true,
+  "newOwnersOrFallbacks": [
+    "MemoryLifecyclePort",
+    "JdbcMemoryLifecycleRepositoryAdapter"
+  ],
+  "retirementTrack": "No legacy table retired; active reads now honor lifecycle status while compatibility stores remain in use.",
+  "evidenceSufficientForNextClaim": true,
+  "decision": "continue"
+}

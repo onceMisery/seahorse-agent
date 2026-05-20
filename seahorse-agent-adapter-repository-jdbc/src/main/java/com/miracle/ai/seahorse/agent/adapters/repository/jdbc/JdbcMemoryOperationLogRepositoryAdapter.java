@@ -20,12 +20,16 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -95,5 +99,47 @@ public class JdbcMemoryOperationLogRepositoryAdapter implements MemoryOperationL
                 Objects.requireNonNullElse(errorMessage, ""),
                 JdbcMemorySupport.timestamp(Instant.now()),
                 operationId);
+    }
+
+    @Override
+    public List<MemoryOperationRecord> listByUser(String userId, String tenantId, String status, int limit) {
+        String safeTenantId = JdbcMemorySupport.hasText(tenantId) ? tenantId : "default";
+        int safeLimit = limit > 0 ? limit : 20;
+        if (JdbcMemorySupport.hasText(status)) {
+            return jdbcTemplate.query("""
+                    SELECT *
+                    FROM t_memory_operation_log
+                    WHERE user_id = ?
+                      AND tenant_id = ?
+                      AND status = ?
+                    ORDER BY create_time DESC
+                    LIMIT ?
+                    """, this::mapRecord, userId, safeTenantId, status, safeLimit);
+        }
+        return jdbcTemplate.query("""
+                SELECT *
+                FROM t_memory_operation_log
+                WHERE user_id = ?
+                  AND tenant_id = ?
+                ORDER BY create_time DESC
+                LIMIT ?
+                """, this::mapRecord, userId, safeTenantId, safeLimit);
+    }
+
+    private MemoryOperationRecord mapRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new MemoryOperationRecord(
+                rs.getString("operation_id"),
+                rs.getString("user_id"),
+                rs.getString("tenant_id"),
+                rs.getString("operation_type"),
+                rs.getString("target_kind"),
+                rs.getString("target_key"),
+                JdbcMemorySupport.parseJson(objectMapper, rs.getString("request_json")),
+                JdbcMemorySupport.parseJson(objectMapper, rs.getString("decision_json")),
+                rs.getString("status"),
+                rs.getString("policy_version"),
+                rs.getString("error_message"),
+                JdbcMemorySupport.instant(rs.getTimestamp("create_time")),
+                JdbcMemorySupport.instant(rs.getTimestamp("update_time")));
     }
 }

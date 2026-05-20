@@ -18,8 +18,12 @@
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
@@ -32,8 +36,30 @@ public record MemoryManagementServicePorts(
         LongTermMemoryPort longTermMemoryPort,
         SemanticMemoryPort semanticMemoryPort,
         MemoryQualitySnapshotRepositoryPort qualitySnapshotRepositoryPort,
-        MemoryConflictLogRepositoryPort conflictLogRepositoryPort
+        MemoryConflictLogRepositoryPort conflictLogRepositoryPort,
+        ProfileMemoryPort profileMemoryPort,
+        CorrectionLedgerPort correctionLedgerPort,
+        MemoryOperationLogPort operationLogPort,
+        MemoryOutboxPort outboxPort
 ) {
+
+    public MemoryManagementServicePorts(WorkingMemoryPort workingMemoryPort,
+                                        ShortTermMemoryPort shortTermMemoryPort,
+                                        LongTermMemoryPort longTermMemoryPort,
+                                        SemanticMemoryPort semanticMemoryPort,
+                                        MemoryQualitySnapshotRepositoryPort qualitySnapshotRepositoryPort,
+                                        MemoryConflictLogRepositoryPort conflictLogRepositoryPort) {
+        this(workingMemoryPort,
+                shortTermMemoryPort,
+                longTermMemoryPort,
+                semanticMemoryPort,
+                qualitySnapshotRepositoryPort,
+                conflictLogRepositoryPort,
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                MemoryOperationLogPort.noop(),
+                MemoryOutboxPort.noop());
+    }
 
     public MemoryManagementServicePorts {
         Objects.requireNonNull(workingMemoryPort, "workingMemoryPort must not be null");
@@ -42,5 +68,9 @@ public record MemoryManagementServicePorts(
         Objects.requireNonNull(semanticMemoryPort, "semanticMemoryPort must not be null");
         Objects.requireNonNull(qualitySnapshotRepositoryPort, "qualitySnapshotRepositoryPort must not be null");
         Objects.requireNonNull(conflictLogRepositoryPort, "conflictLogRepositoryPort must not be null");
+        Objects.requireNonNull(profileMemoryPort, "profileMemoryPort must not be null");
+        Objects.requireNonNull(correctionLedgerPort, "correctionLedgerPort must not be null");
+        Objects.requireNonNull(operationLogPort, "operationLogPort must not be null");
+        Objects.requireNonNull(outboxPort, "outboxPort must not be null");
     }
 }

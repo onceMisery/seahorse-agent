@@ -46,6 +46,7 @@ public class JdbcChatSchemaUpgrade {
         widenColumns("t_rag_trace_run", List.of("id", "trace_id", "conversation_id", "task_id", "user_id"));
         widenColumns("t_rag_trace_node", List.of("id", "trace_id", "node_id", "parent_node_id", "node_type"));
         widenColumns("t_short_term_memory", List.of("id", "user_id", "conversation_id"));
+        ensureLayeredMemoryLifecycleColumns();
     }
 
     private void ensureMemoryProfileTables() {
@@ -162,6 +163,61 @@ public class JdbcChatSchemaUpgrade {
         } catch (BadSqlGrammarException ex) {
             jdbcTemplate.execute(fallbackSql);
         }
+    }
+
+    private void ensureLayeredMemoryLifecycleColumns() {
+        ensureLifecycleColumns("t_short_term_memory");
+        ensureLifecycleColumns("t_long_term_memory");
+        ensureLifecycleColumns("t_semantic_memory");
+        createLifecycleIndexes();
+    }
+
+    private void ensureLifecycleColumns(String tableName) {
+        addColumnIfMissing(tableName, "tenant_id", "VARCHAR(64) DEFAULT 'default'");
+        addColumnIfMissing(tableName, "status", "VARCHAR(32) DEFAULT 'ACTIVE'");
+        addColumnIfMissing(tableName, "generation_id", "VARCHAR(64)");
+        addColumnIfMissing(tableName, "valid_from", "TIMESTAMP");
+        addColumnIfMissing(tableName, "valid_until", "TIMESTAMP");
+        addColumnIfMissing(tableName, "last_referenced_at", "TIMESTAMP");
+        addColumnIfMissing(tableName, "schema_version", "VARCHAR(32)");
+        addColumnIfMissing(tableName, "policy_version", "VARCHAR(64)");
+        addColumnIfMissing(tableName, "sensitivity_level", "VARCHAR(32)");
+        addColumnIfMissing(tableName, "obsolete_reason", "TEXT");
+    }
+
+    private void createLifecycleIndexes() {
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_stm_lifecycle_user_status
+                ON t_short_term_memory (user_id, tenant_id, status, update_time)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ltm_lifecycle_user_status
+                ON t_long_term_memory (user_id, tenant_id, status, update_time)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sem_lifecycle_user_status
+                ON t_semantic_memory (user_id, tenant_id, status, update_time)
+                """);
+    }
+
+    private void addColumnIfMissing(String tableName, String columnName, String definition) {
+        if (columnExists(tableName, columnName)) {
+            return;
+        }
+        jdbcTemplate.execute("ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + definition);
+    }
+
+    private boolean columnExists(String tableName, String columnName) {
+        return !jdbcTemplate.query(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = ? AND column_name = ?
+                        """,
+                        (rs, rowNum) -> rs.getString(1),
+                        tableName,
+                        columnName)
+                .isEmpty();
     }
 
     private void widenColumns(String tableName, List<String> columns) {

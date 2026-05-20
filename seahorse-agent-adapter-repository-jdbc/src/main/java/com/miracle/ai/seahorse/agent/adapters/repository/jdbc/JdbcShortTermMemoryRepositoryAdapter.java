@@ -45,7 +45,10 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
     @Override
     public Optional<MemoryRecord> findById(String id) {
         return jdbcTemplate.query("""
-                SELECT * FROM t_short_term_memory WHERE id = ? AND deleted = 0
+                SELECT * FROM t_short_term_memory
+                WHERE id = ?
+                  AND deleted = 0
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
                 """, this::mapRecord, id).stream().findFirst();
     }
 
@@ -53,7 +56,9 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
     public List<MemoryRecord> listByConversation(String conversationId, int limit) {
         return jdbcTemplate.query("""
                 SELECT * FROM t_short_term_memory
-                WHERE conversation_id = ? AND deleted = 0
+                WHERE conversation_id = ?
+                  AND deleted = 0
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY create_time DESC
                 LIMIT ?
                 """, this::mapRecord, conversationId, safeLimit(limit));
@@ -63,7 +68,9 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
     public List<MemoryRecord> listByUser(String userId, int limit) {
         return jdbcTemplate.query("""
                 SELECT * FROM t_short_term_memory
-                WHERE user_id = ? AND deleted = 0
+                WHERE user_id = ?
+                  AND deleted = 0
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY importance_score DESC, create_time DESC
                 LIMIT ?
                 """, this::mapRecord, userId, safeLimit(limit));
@@ -76,8 +83,11 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
                 INSERT INTO t_short_term_memory
                 (id, user_id, conversation_id, memory_type, content, metadata_json, source_message_ids,
                  importance_score, access_count, last_access_time, decay_score, expires_time,
+                 tenant_id, status, generation_id, valid_from, valid_until, last_referenced_at,
+                 schema_version, policy_version, sensitivity_level, obsolete_reason,
                  create_time, update_time, deleted)
-                VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, 0, ?, ?, ?, ?, ?, 0)
+                VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, 0, ?, ?, ?,
+                        ?, 'ACTIVE', ?, ?, NULL, NULL, ?, ?, ?, NULL, ?, ?, 0)
                 """,
                 JdbcMemorySupport.hasText(record.id()) ? record.id() : JdbcMemorySupport.nextId(),
                 string(record.metadata().get("userId")),
@@ -90,6 +100,12 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
                 JdbcMemorySupport.timestamp(now),
                 number(record.metadata().get("decayScore"), 0D),
                 JdbcMemorySupport.timestamp(now.plusSeconds(30L * 24 * 3600)),
+                tenantId(record.metadata()),
+                string(record.metadata().get("generationId")),
+                JdbcMemorySupport.timestamp(now),
+                stringOrDefault(record.metadata().get("schemaVersion"), "1"),
+                stringOrDefault(record.metadata().get("policyVersion"), string(record.metadata().get("capturePolicyVersion"))),
+                stringOrDefault(record.metadata().get("sensitivityLevel"), "LOW"),
                 JdbcMemorySupport.timestamp(now),
                 JdbcMemorySupport.timestamp(now));
     }
@@ -104,6 +120,7 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
         return jdbcTemplate.query("""
                 SELECT * FROM t_short_term_memory
                 WHERE deleted = 0
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
                   AND (expires_time < ? OR decay_score <= ?)
                 ORDER BY expires_time ASC, decay_score ASC, create_time ASC
                 LIMIT ?
@@ -144,6 +161,14 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
         values.put("sourceMessageIds", rs.getString("source_message_ids"));
         values.put("importanceScore", rs.getDouble("importance_score"));
         values.put("decayScore", rs.getDouble("decay_score"));
+        values.put("tenantId", stringOrDefault(rs.getString("tenant_id"), "default"));
+        values.put("status", stringOrDefault(rs.getString("status"), "ACTIVE"));
+        values.put("generationId", rs.getString("generation_id"));
+        values.put("lastReferencedAt", JdbcMemorySupport.instant(rs.getTimestamp("last_referenced_at")));
+        values.put("schemaVersion", rs.getString("schema_version"));
+        values.put("policyVersion", rs.getString("policy_version"));
+        values.put("sensitivityLevel", rs.getString("sensitivity_level"));
+        values.put("obsoleteReason", rs.getString("obsolete_reason"));
         return values;
     }
 
@@ -153,6 +178,15 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
 
     private String string(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private String stringOrDefault(Object value, String fallback) {
+        String text = string(value);
+        return JdbcMemorySupport.hasText(text) ? text : fallback;
+    }
+
+    private String tenantId(Map<String, Object> metadata) {
+        return stringOrDefault(metadata.get("tenantId"), "default");
     }
 
     private double number(Object value, double fallback) {

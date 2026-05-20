@@ -18,8 +18,12 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 
 import java.util.List;
 import java.util.Optional;
@@ -37,4 +41,20 @@ public interface MemoryManagementInboundPort {
     List<MemoryConflictRecord> listConflicts(String userId, String status, int limit);
 
     boolean resolveConflict(String conflictId, String action, String resolvedBy);
+
+    default List<ProfileFact> listProfileFacts(String userId, String tenantId, int limit) {
+        return List.of();
+    }
+
+    default List<CorrectionRule> listCorrectionRules(String userId, String tenantId, int limit) {
+        return List.of();
+    }
+
+    default List<MemoryOperationRecord> listOperations(String userId, String tenantId, String status, int limit) {
+        return List.of();
+    }
+
+    default List<MemoryOutboxPort.MemoryOutboxTask> listOutboxTasks(int limit) {
+        return List.of();
+    }
 }

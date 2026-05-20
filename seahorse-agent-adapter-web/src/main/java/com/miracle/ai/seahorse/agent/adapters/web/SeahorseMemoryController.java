@@ -85,6 +85,37 @@ public class SeahorseMemoryController {
         return ok(managementPortProvider.getIfAvailable().listConflicts(userId, status, limit));
     }
 
+    @GetMapping("/memories/profile-facts")
+    public Map<String, Object> profileFacts(@RequestParam String userId,
+                                            @RequestParam(defaultValue = "default") String tenantId,
+                                            @RequestParam(defaultValue = "20") int limit) {
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(managementPortProvider.getIfAvailable().listProfileFacts(userId, tenantId, limit));
+    }
+
+    @GetMapping("/memories/corrections")
+    public Map<String, Object> correctionRules(@RequestParam String userId,
+                                               @RequestParam(defaultValue = "default") String tenantId,
+                                               @RequestParam(defaultValue = "20") int limit) {
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(managementPortProvider.getIfAvailable().listCorrectionRules(userId, tenantId, limit));
+    }
+
+    @GetMapping("/memories/operations")
+    public Map<String, Object> operations(@RequestParam String userId,
+                                          @RequestParam(defaultValue = "default") String tenantId,
+                                          @RequestParam(required = false) String status,
+                                          @RequestParam(defaultValue = "20") int limit) {
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(managementPortProvider.getIfAvailable().listOperations(userId, tenantId, status, limit));
+    }
+
+    @GetMapping("/memories/outbox")
+    public Map<String, Object> outbox(@RequestParam(defaultValue = "20") int limit) {
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(managementPortProvider.getIfAvailable().listOutboxTasks(limit));
+    }
+
     @PostMapping("/memories/conflicts/{conflictId}/resolve")
     public Map<String, Object> resolveConflict(@PathVariable String conflictId,
                                                @RequestBody(required = false) MemoryConflictResolveRequest request,

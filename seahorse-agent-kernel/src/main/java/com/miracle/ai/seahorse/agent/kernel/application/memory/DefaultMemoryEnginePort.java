@@ -38,6 +38,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
@@ -100,6 +101,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryVectorPort memoryVectorPort;
     private final MemoryOutboxPort memoryOutboxPort;
     private final MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort;
+    private final MemoryLifecyclePort memoryLifecyclePort;
     private final ObjectMapper objectMapper;
     private final MemoryEngineOptions options;
     private final MemoryCaptureCandidateExtractor captureCandidateExtractor;
@@ -159,7 +161,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryOperationLogPort memoryOperationLogPort) {
         this(shortTermPort, longTermPort, semanticPort, objectMapper, options,
                 profileMemoryPort, correctionLedgerPort, memoryRouterPort, memoryOperationLogPort,
-                MemoryVectorPort.noop(), MemoryOutboxPort.noop(), MemoryBusinessDocumentRetrieverPort.noop());
+                MemoryVectorPort.noop(), MemoryOutboxPort.noop(), MemoryBusinessDocumentRetrieverPort.noop(),
+                MemoryLifecyclePort.noop());
     }
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
@@ -174,6 +177,24 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryVectorPort memoryVectorPort,
                                    MemoryOutboxPort memoryOutboxPort,
                                    MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
+                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort,
+                memoryOutboxPort, businessDocumentRetrieverPort, MemoryLifecyclePort.noop());
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort,
+                                   MemoryVectorPort memoryVectorPort,
+                                   MemoryOutboxPort memoryOutboxPort,
+                                   MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                   MemoryLifecyclePort memoryLifecyclePort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -186,6 +207,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.memoryOutboxPort = Objects.requireNonNull(memoryOutboxPort, "memoryOutboxPort must not be null");
         this.businessDocumentRetrieverPort = Objects.requireNonNull(businessDocumentRetrieverPort,
                 "businessDocumentRetrieverPort must not be null");
+        this.memoryLifecyclePort = Objects.requireNonNull(memoryLifecyclePort, "memoryLifecyclePort must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.options = Objects.requireNonNullElseGet(options, MemoryEngineOptions::defaults);
         this.captureCandidateExtractor = new MemoryCaptureCandidateExtractor();
@@ -238,6 +260,10 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             longTerm = removeActiveProfileSlotMemories(longTerm, activeProfileSlots);
             semantic = removeActiveProfileSlotMemories(semantic, activeProfileSlots);
         }
+        shortTerm = deduplicateById(shortTerm);
+        longTerm = deduplicateProfileSlots(deduplicateById(longTerm));
+        semantic = deduplicateProfileSlots(deduplicateById(semantic));
+        recordReadFeedback(shortTerm, longTerm, semantic);
 
         return MemoryContext.builder()
                 .conversationId(request.conversationId())
@@ -246,9 +272,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 .workingMemory(Collections.emptyList())
                 .correctionMemories(corrections)
                 .profileMemories(profile)
-                .shortTermMemories(deduplicateById(shortTerm))
-                .longTermMemories(deduplicateProfileSlots(deduplicateById(longTerm)))
-                .semanticMemories(deduplicateProfileSlots(deduplicateById(semantic)))
+                .shortTermMemories(shortTerm)
+                .longTermMemories(longTerm)
+                .semanticMemories(semantic)
                 .promptMessages(Collections.emptyList())
                 .build();
     }
@@ -498,17 +524,24 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     "correctValue", correction.correctValue()));
         }
         MemoryCaptureDecision decision = classification.decision();
+        String profileSlot = profileSlot(decision);
+        String profileGenerationId = isBlank(profileSlot) ? "" : profileSlot + ":" + UUID.randomUUID();
+        Map<String, Object> metadata = captureMetadata(operationId, tenantId, request, message, decision);
+        if (!isBlank(profileSlot)) {
+            metadata.put("profileSlot", profileSlot);
+            metadata.put("generationId", profileGenerationId);
+        }
         MemoryRecord record = new MemoryRecord(
                 memoryId(request),
                 MemoryLayer.SHORT_TERM.name(),
                 decision.type(),
                 decision.content(),
-                captureMetadata(operationId, tenantId, request, message, decision),
+                metadata,
                 java.time.Instant.now());
         shortTermPort.save(record);
         List<String> operations = new ArrayList<>();
         operations.add("SHORT_TERM_SAVE");
-        if (captureProfileFact(request, tenantId, decision)) {
+        if (captureProfileFact(request, tenantId, decision, profileSlot, profileGenerationId)) {
             operations.add("PROFILE_UPSERT");
         }
         operations.add(indexMemoryOrEnqueueOutbox(record, request.userId(), tenantId));
@@ -561,14 +594,18 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     "explicit_user_correction",
                     sourceIds,
                     generationId));
+            markProfileSlotFragmentsObsolete(request.userId(), tenantId, "identity.occupation", generationId);
         } catch (RuntimeException ex) {
             LOG.warn("写入Profile纠错失败: userId={}", request.userId(), ex);
         }
         return List.of("CORRECTION_UPSERT", "PROFILE_UPSERT");
     }
 
-    private boolean captureProfileFact(MemoryWriteRequest request, String tenantId, MemoryCaptureDecision decision) {
-        String slotKey = profileSlot(decision);
+    private boolean captureProfileFact(MemoryWriteRequest request,
+                                       String tenantId,
+                                       MemoryCaptureDecision decision,
+                                       String slotKey,
+                                       String generationId) {
         if (isBlank(slotKey)) {
             return false;
         }
@@ -585,11 +622,28 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     decision.confidenceLevel(),
                     "explicit_user_memory",
                     isBlank(request.messageId()) ? List.of() : List.of(request.messageId()),
-                    slotKey + ":" + UUID.randomUUID()));
+                    generationId));
+            markProfileSlotFragmentsObsolete(request.userId(), tenantId, slotKey, generationId);
             return true;
         } catch (RuntimeException ex) {
             LOG.warn("写入Profile KV失败: userId={}, slot={}", request.userId(), slotKey, ex);
             return false;
+        }
+    }
+
+    private void markProfileSlotFragmentsObsolete(String userId,
+                                                  String tenantId,
+                                                  String profileSlot,
+                                                  String activeGenerationId) {
+        try {
+            memoryLifecyclePort.markObsoleteByProfileSlot(
+                    userId,
+                    tenantId,
+                    profileSlot,
+                    activeGenerationId,
+                    "profile slot updated");
+        } catch (RuntimeException ex) {
+            LOG.warn("Profile slot鏃х鐗囧け鏁堝け璐? userId={}, slot={}", userId, profileSlot, ex);
         }
     }
 
@@ -650,6 +704,31 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return items.stream()
                 .filter(item -> !activeSlots.contains(semanticSlot(item)))
                 .toList();
+    }
+
+    private void recordReadFeedback(List<MemoryItem> shortTerm,
+                                    List<MemoryItem> longTerm,
+                                    List<MemoryItem> semantic) {
+        Instant referencedAt = Instant.now();
+        recordReadFeedback(MemoryLayer.SHORT_TERM, shortTerm, referencedAt);
+        recordReadFeedback(MemoryLayer.LONG_TERM, longTerm, referencedAt);
+        recordReadFeedback(MemoryLayer.SEMANTIC, semantic, referencedAt);
+    }
+
+    private void recordReadFeedback(MemoryLayer layer, List<MemoryItem> items, Instant referencedAt) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        for (MemoryItem item : items) {
+            if (item == null || isBlank(item.getId())) {
+                continue;
+            }
+            try {
+                memoryLifecyclePort.recordRead(layer.name().toLowerCase(Locale.ROOT), item.getId(), referencedAt);
+            } catch (RuntimeException ex) {
+                LOG.debug("璁板繂璇诲彇鍙嶉澶辫触: layer={}, memoryId={}", layer, item.getId(), ex);
+            }
+        }
     }
 
     private Map<String, Object> captureMetadata(String operationId,
