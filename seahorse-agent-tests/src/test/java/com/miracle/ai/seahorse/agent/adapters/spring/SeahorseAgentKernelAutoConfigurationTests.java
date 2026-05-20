@@ -124,9 +124,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSchedulePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshStateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
@@ -432,6 +437,11 @@ class SeahorseAgentKernelAutoConfigurationTests {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(MemoryEnginePort.class);
+                    assertThat(context).hasSingleBean(MemoryRouterPort.class);
+                    assertThat(context).hasSingleBean(ContextWeaverPort.class);
+                    assertThat(context).hasSingleBean(MemoryIngestionWorkflowPort.class);
+                    assertThat(context).hasSingleBean(ProfileMemoryPort.class);
+                    assertThat(context).hasSingleBean(CorrectionLedgerPort.class);
                     assertThat(context).hasSingleBean(KernelMemoryManagementService.class);
                     assertThat(context).hasSingleBean(KernelMemoryGovernanceService.class);
                     assertThat(context).hasSingleBean(MemoryManagementInboundPort.class);
@@ -842,6 +852,16 @@ class SeahorseAgentKernelAutoConfigurationTests {
         @Bean
         SemanticMemoryPort semanticMemoryPort() {
             return mock(SemanticMemoryPort.class);
+        }
+
+        @Bean
+        ProfileMemoryPort profileMemoryPort() {
+            return mock(ProfileMemoryPort.class);
+        }
+
+        @Bean
+        CorrectionLedgerPort correctionLedgerPort() {
+            return mock(CorrectionLedgerPort.class);
         }
     }
 

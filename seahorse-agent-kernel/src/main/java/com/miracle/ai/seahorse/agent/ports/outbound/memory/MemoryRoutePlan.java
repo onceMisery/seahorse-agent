@@ -15,29 +15,27 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.memory;
+package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
-import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
-import lombok.Builder;
-import lombok.Value;
+import java.util.EnumSet;
+import java.util.Objects;
+import java.util.Set;
 
-import java.util.List;
+public record MemoryRoutePlan(Set<MemoryTrack> activeTracks) {
 
-/**
- * 加载后的多层记忆上下文。
- */
-@Value
-@Builder
-public class MemoryContext {
+    public MemoryRoutePlan {
+        activeTracks = activeTracks == null || activeTracks.isEmpty()
+                ? Set.of()
+                : Set.copyOf(activeTracks);
+    }
 
-    String conversationId;
-    String userId;
-    String currentQuestion;
-    List<ChatMessage> workingMemory;
-    List<MemoryItem> correctionMemories;
-    List<MemoryItem> profileMemories;
-    List<MemoryItem> shortTermMemories;
-    List<MemoryItem> longTermMemories;
-    List<MemoryItem> semanticMemories;
-    List<ChatMessage> promptMessages;
+    public static MemoryRoutePlan of(MemoryTrack first, MemoryTrack... rest) {
+        Objects.requireNonNull(first, "first must not be null");
+        EnumSet<MemoryTrack> tracks = EnumSet.of(first, rest);
+        return new MemoryRoutePlan(tracks);
+    }
+
+    public boolean isActive(MemoryTrack track) {
+        return activeTracks.contains(track);
+    }
 }

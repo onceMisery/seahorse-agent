@@ -184,6 +184,8 @@ public class KernelChatInboundService implements ChatInboundPort {
                     .userId(command.userId())
                     .currentQuestion(command.question())
                     .workingMemory(loaded.getWorkingMemory())
+                    .correctionMemories(loaded.getCorrectionMemories())
+                    .profileMemories(loaded.getProfileMemories())
                     .shortTermMemories(loaded.getShortTermMemories())
                     .longTermMemories(loaded.getLongTermMemories())
                     .semanticMemories(loaded.getSemanticMemories())

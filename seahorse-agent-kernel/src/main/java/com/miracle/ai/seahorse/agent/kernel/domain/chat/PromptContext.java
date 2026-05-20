@@ -57,7 +57,9 @@ public class PromptContext {
 
     public boolean hasMemory() {
         return memoryContext != null
-                && (notEmpty(memoryContext.getShortTermMemories())
+                && (notEmpty(memoryContext.getCorrectionMemories())
+                || notEmpty(memoryContext.getProfileMemories())
+                || notEmpty(memoryContext.getShortTermMemories())
                 || notEmpty(memoryContext.getLongTermMemories())
                 || notEmpty(memoryContext.getSemanticMemories()));
     }

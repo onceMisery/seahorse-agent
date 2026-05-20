@@ -15,29 +15,15 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.memory;
+package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
-import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
-import lombok.Builder;
-import lombok.Value;
+import java.util.Objects;
 
-import java.util.List;
+public record MemoryRouteRequest(String userId, String tenantId, String question) {
 
-/**
- * 加载后的多层记忆上下文。
- */
-@Value
-@Builder
-public class MemoryContext {
-
-    String conversationId;
-    String userId;
-    String currentQuestion;
-    List<ChatMessage> workingMemory;
-    List<MemoryItem> correctionMemories;
-    List<MemoryItem> profileMemories;
-    List<MemoryItem> shortTermMemories;
-    List<MemoryItem> longTermMemories;
-    List<MemoryItem> semanticMemories;
-    List<ChatMessage> promptMessages;
+    public MemoryRouteRequest {
+        userId = Objects.requireNonNullElse(userId, "");
+        tenantId = Objects.requireNonNullElse(tenantId, "default");
+        question = Objects.requireNonNullElse(question, "");
+    }
 }

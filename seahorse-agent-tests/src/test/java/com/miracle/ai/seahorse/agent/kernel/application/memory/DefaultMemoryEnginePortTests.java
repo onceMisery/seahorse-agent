@@ -19,19 +19,27 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.MemoryPromptFormatter;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -245,6 +253,120 @@ class DefaultMemoryEnginePortTests {
         Assertions.assertEquals("PROFILE", saved.type());
         Assertions.assertEquals("我是一名学生", saved.content());
         Assertions.assertEquals("high_precision_rule_v1", saved.metadata().get("capturePolicyVersion"));
+    }
+
+    @Test
+    void shouldWriteProfileFactWhenProfileMemoryCaptured() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                CorrectionLedgerPort.noop());
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-profile")
+                .messageId("msg-profile-kv")
+                .message(ChatMessage.user("我 是一名学生，很高兴认识你"))
+                .build());
+
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        Assertions.assertEquals(1, profilePort.updates.size());
+        ProfileFactUpdate update = profilePort.updates.get(0);
+        Assertions.assertEquals(USER_ID, update.userId());
+        Assertions.assertEquals("default", update.tenantId());
+        Assertions.assertEquals("identity.occupation", update.slotKey());
+        Assertions.assertEquals("学生", update.valueText());
+        Assertions.assertEquals("explicit_user_memory", update.sourceType());
+    }
+
+    @Test
+    void shouldStoreCorrectionAndPreferCorrectedProfileWhenLoadingMemory() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(
+                semanticRecord("stm-old", "PROFILE", "我是一名学生", 0.8D,
+                        Instant.parse("2026-05-19T00:00:00Z"), "identity.occupation")));
+        StubSemanticMemoryPort semanticPort = new StubSemanticMemoryPort(List.of(
+                semanticRecord("sem-old", "PROFILE", "我是一名学生", 0.8D,
+                        Instant.parse("2026-05-19T00:00:00Z"), "identity.occupation")));
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        RecordingCorrectionLedgerPort correctionPort = new RecordingCorrectionLedgerPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                semanticPort,
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                correctionPort);
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-correction")
+                .messageId("msg-correction")
+                .message(ChatMessage.user("我不是学生了，我现在是老师"))
+                .build());
+        MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-read")
+                .currentQuestion("我的职业是什么？")
+                .build());
+
+        Assertions.assertEquals(1, correctionPort.commands.size());
+        CorrectionCommand command = correctionPort.commands.get(0);
+        Assertions.assertEquals("PROFILE_SLOT", command.targetKind());
+        Assertions.assertEquals("identity.occupation", command.targetKey());
+        Assertions.assertEquals("学生", command.incorrectValue());
+        Assertions.assertEquals("老师", command.correctValue());
+        Assertions.assertEquals(1, profilePort.updates.size());
+        Assertions.assertEquals("老师", profilePort.updates.get(0).valueText());
+        Assertions.assertEquals(1, context.getCorrectionMemories().size());
+        Assertions.assertEquals(1, context.getProfileMemories().size());
+        Assertions.assertEquals("老师", context.getProfileMemories().get(0).getContent());
+        String promptMemory = MemoryPromptFormatter.format(context);
+        Assertions.assertTrue(promptMemory.indexOf("用户纠错本：") < promptMemory.indexOf("用户画像："));
+        Assertions.assertTrue(promptMemory.contains("老师"));
+        Assertions.assertFalse(promptMemory.contains("- 我是一名学生"));
+    }
+
+    @Test
+    void shouldOnlySuppressLegacyProfileSlotMemoriesWhenProfileFactIsActive() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(
+                semanticRecord("stm-profile", "PROFILE", "我是一名学生", 0.8D,
+                        Instant.parse("2026-05-19T00:00:00Z"), "identity.occupation"),
+                record("stm-history", "SUMMARY", "用户问过学生优惠政策", 0.5D)));
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        profilePort.upsert(new ProfileFactUpdate(
+                USER_ID,
+                "default",
+                "identity.occupation",
+                "老师",
+                0.95D,
+                "explicit_user_correction",
+                List.of("msg-correction"),
+                "identity.occupation:test"));
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                CorrectionLedgerPort.noop());
+
+        MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
+                .userId(USER_ID)
+                .currentQuestion("我的职业是什么？")
+                .build());
+
+        Assertions.assertEquals(1, context.getProfileMemories().size());
+        Assertions.assertEquals("老师", context.getProfileMemories().get(0).getContent());
+        Assertions.assertEquals(1, context.getShortTermMemories().size());
+        Assertions.assertEquals("stm-history", context.getShortTermMemories().get(0).getId());
     }
 
     @Test
@@ -552,6 +674,68 @@ class DefaultMemoryEnginePortTests {
         @Override
         public boolean deleteById(String id) {
             return false;
+        }
+    }
+
+    private static class RecordingProfileMemoryPort implements ProfileMemoryPort {
+
+        private final List<ProfileFactUpdate> updates = new ArrayList<>();
+        private final Map<String, ProfileFact> activeFacts = new java.util.LinkedHashMap<>();
+
+        @Override
+        public Optional<ProfileFact> findActive(String userId, String tenantId, String slotKey) {
+            return Optional.ofNullable(activeFacts.get(slotKey));
+        }
+
+        @Override
+        public List<ProfileFact> listActive(String userId, String tenantId, int limit) {
+            return activeFacts.values().stream().limit(limit).toList();
+        }
+
+        @Override
+        public void upsert(ProfileFactUpdate update) {
+            updates.add(update);
+            activeFacts.put(update.slotKey(), new ProfileFact(
+                    "profile-" + updates.size(),
+                    update.userId(),
+                    update.tenantId(),
+                    update.slotKey(),
+                    update.valueText(),
+                    update.confidenceLevel(),
+                    update.sourceType(),
+                    update.generationId(),
+                    "ACTIVE",
+                    Instant.now()));
+        }
+    }
+
+    private static class RecordingCorrectionLedgerPort implements CorrectionLedgerPort {
+
+        private final List<CorrectionCommand> commands = new ArrayList<>();
+        private final List<CorrectionRule> rules = new ArrayList<>();
+
+        @Override
+        public List<CorrectionRule> listActive(String userId, String tenantId, int limit) {
+            return rules.stream().limit(limit).toList();
+        }
+
+        @Override
+        public void upsert(CorrectionCommand command) {
+            commands.add(command);
+            rules.add(new CorrectionRule(
+                    "corr-" + commands.size(),
+                    command.userId(),
+                    command.tenantId(),
+                    command.correctionType(),
+                    command.targetKind(),
+                    command.targetKey(),
+                    command.incorrectValue(),
+                    command.correctValue(),
+                    command.ruleText(),
+                    "HARD_RULE",
+                    command.generationId(),
+                    "ACTIVE",
+                    Instant.now()));
         }
     }
 }

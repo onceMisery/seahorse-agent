@@ -813,6 +813,52 @@ CREATE TABLE t_semantic_memory (
 );
 CREATE INDEX idx_sem_user_type ON t_semantic_memory (user_id, semantic_type);
 
+CREATE TABLE t_user_profile_fact (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    slot_key VARCHAR(128) NOT NULL,
+    value_text TEXT NOT NULL,
+    value_json JSONB,
+    confidence_level NUMERIC(4, 3) DEFAULT 0,
+    source_type VARCHAR(64),
+    source_ids JSONB,
+    generation_id VARCHAR(64),
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    valid_from TIMESTAMP,
+    valid_until TIMESTAMP,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted SMALLINT DEFAULT 0
+);
+CREATE INDEX idx_user_profile_active ON t_user_profile_fact (user_id, tenant_id, status, slot_key);
+CREATE UNIQUE INDEX uk_user_profile_active_slot ON t_user_profile_fact (user_id, tenant_id, slot_key)
+WHERE status = 'ACTIVE' AND deleted = 0;
+
+CREATE TABLE t_memory_correction_ledger (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    correction_type VARCHAR(32) NOT NULL,
+    target_kind VARCHAR(32) NOT NULL,
+    target_key VARCHAR(128) NOT NULL,
+    incorrect_value TEXT,
+    correct_value TEXT,
+    rule_text TEXT NOT NULL,
+    priority VARCHAR(32) NOT NULL DEFAULT 'HARD_RULE',
+    source_message_ids JSONB,
+    effective_generation_id VARCHAR(64),
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted SMALLINT DEFAULT 0
+);
+CREATE INDEX idx_memory_correction_active
+ON t_memory_correction_ledger (user_id, tenant_id, status, target_kind, target_key);
+CREATE UNIQUE INDEX uk_memory_correction_active_target
+ON t_memory_correction_ledger (user_id, tenant_id, target_kind, target_key)
+WHERE status = 'ACTIVE' AND deleted = 0;
+
 CREATE TABLE t_memory_conflict_log (
     id VARCHAR(20) PRIMARY KEY,
     user_id VARCHAR(20) NOT NULL,

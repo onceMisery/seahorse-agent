@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.BadSqlGrammarException;
 
 import javax.sql.DataSource;
 import java.util.List;
@@ -37,6 +38,7 @@ public class JdbcChatSchemaUpgrade {
     }
 
     public void upgrade() {
+        ensureMemoryProfileTables();
         widenColumns("t_conversation", List.of("id", "conversation_id", "user_id"));
         widenColumns("t_conversation_summary", List.of("id", "conversation_id", "user_id", "last_message_id"));
         widenColumns("t_message", List.of("id", "conversation_id", "user_id"));
@@ -44,6 +46,81 @@ public class JdbcChatSchemaUpgrade {
         widenColumns("t_rag_trace_run", List.of("id", "trace_id", "conversation_id", "task_id", "user_id"));
         widenColumns("t_rag_trace_node", List.of("id", "trace_id", "node_id", "parent_node_id", "node_type"));
         widenColumns("t_short_term_memory", List.of("id", "user_id", "conversation_id"));
+    }
+
+    private void ensureMemoryProfileTables() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_user_profile_fact (
+                    id VARCHAR(64) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    slot_key VARCHAR(128) NOT NULL,
+                    value_text TEXT NOT NULL,
+                    value_json JSONB,
+                    confidence_level NUMERIC(4, 3) DEFAULT 0,
+                    source_type VARCHAR(64),
+                    source_ids JSONB,
+                    generation_id VARCHAR(64),
+                    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    valid_from TIMESTAMP,
+                    valid_until TIMESTAMP,
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_user_profile_active
+                ON t_user_profile_fact (user_id, tenant_id, status, slot_key)
+                """);
+        executePostgresPartialIndexOrPlainIndex("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_user_profile_active_slot
+                ON t_user_profile_fact (user_id, tenant_id, slot_key)
+                WHERE status = 'ACTIVE' AND deleted = 0
+                """, """
+                CREATE INDEX IF NOT EXISTS uk_user_profile_active_slot
+                ON t_user_profile_fact (user_id, tenant_id, slot_key)
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_memory_correction_ledger (
+                    id VARCHAR(64) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    correction_type VARCHAR(32) NOT NULL,
+                    target_kind VARCHAR(32) NOT NULL,
+                    target_key VARCHAR(128) NOT NULL,
+                    incorrect_value TEXT,
+                    correct_value TEXT,
+                    rule_text TEXT NOT NULL,
+                    priority VARCHAR(32) NOT NULL DEFAULT 'HARD_RULE',
+                    source_message_ids JSONB,
+                    effective_generation_id VARCHAR(64),
+                    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_correction_active
+                ON t_memory_correction_ledger (user_id, tenant_id, status, target_kind, target_key)
+                """);
+        executePostgresPartialIndexOrPlainIndex("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_memory_correction_active_target
+                ON t_memory_correction_ledger (user_id, tenant_id, target_kind, target_key)
+                WHERE status = 'ACTIVE' AND deleted = 0
+                """, """
+                CREATE INDEX IF NOT EXISTS uk_memory_correction_active_target
+                ON t_memory_correction_ledger (user_id, tenant_id, target_kind, target_key)
+                """);
+    }
+
+    private void executePostgresPartialIndexOrPlainIndex(String postgresSql, String fallbackSql) {
+        try {
+            jdbcTemplate.execute(postgresSql);
+        } catch (BadSqlGrammarException ex) {
+            jdbcTemplate.execute(fallbackSql);
+        }
     }
 
     private void widenColumns(String tableName, List<String> columns) {

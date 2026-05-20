@@ -15,29 +15,29 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.memory;
-
-import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
-import lombok.Builder;
-import lombok.Value;
+package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
 import java.util.List;
 
 /**
- * 加载后的多层记忆上下文。
+ * Highest-priority correction ledger port.
  */
-@Value
-@Builder
-public class MemoryContext {
+public interface CorrectionLedgerPort {
 
-    String conversationId;
-    String userId;
-    String currentQuestion;
-    List<ChatMessage> workingMemory;
-    List<MemoryItem> correctionMemories;
-    List<MemoryItem> profileMemories;
-    List<MemoryItem> shortTermMemories;
-    List<MemoryItem> longTermMemories;
-    List<MemoryItem> semanticMemories;
-    List<ChatMessage> promptMessages;
+    List<CorrectionRule> listActive(String userId, String tenantId, int limit);
+
+    void upsert(CorrectionCommand command);
+
+    static CorrectionLedgerPort noop() {
+        return new CorrectionLedgerPort() {
+            @Override
+            public List<CorrectionRule> listActive(String userId, String tenantId, int limit) {
+                return List.of();
+            }
+
+            @Override
+            public void upsert(CorrectionCommand command) {
+            }
+        };
+    }
 }

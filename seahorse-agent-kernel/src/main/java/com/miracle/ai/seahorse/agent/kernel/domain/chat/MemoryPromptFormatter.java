@@ -53,6 +53,8 @@ public final class MemoryPromptFormatter {
             return "";
         }
         StringBuilder memoryBuilder = new StringBuilder();
+        appendMemoryLayer(memoryBuilder, "用户纠错本：", memoryContext.getCorrectionMemories());
+        appendMemoryLayer(memoryBuilder, "用户画像：", memoryContext.getProfileMemories());
         appendMemoryLayer(memoryBuilder, "用户画像：", memoryContext.getSemanticMemories());
         appendMemoryLayer(memoryBuilder, "长期记忆：", memoryContext.getLongTermMemories());
         appendMemoryLayer(memoryBuilder, "近期记忆：", memoryContext.getShortTermMemories());
@@ -68,7 +70,9 @@ public final class MemoryPromptFormatter {
 
     private static boolean hasMemory(MemoryContext memoryContext) {
         return memoryContext != null
-                && (!safeMemoryItems(memoryContext.getShortTermMemories()).isEmpty()
+                && (!safeMemoryItems(memoryContext.getCorrectionMemories()).isEmpty()
+                || !safeMemoryItems(memoryContext.getProfileMemories()).isEmpty()
+                || !safeMemoryItems(memoryContext.getShortTermMemories()).isEmpty()
                 || !safeMemoryItems(memoryContext.getLongTermMemories()).isEmpty()
                 || !safeMemoryItems(memoryContext.getSemanticMemories()).isEmpty());
     }

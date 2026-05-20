@@ -18,9 +18,11 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -39,6 +41,8 @@ class JdbcMemoryRepositoryAdapterTests {
     private JdbcSemanticMemoryRepositoryAdapter semanticAdapter;
     private JdbcMemoryQualitySnapshotRepositoryAdapter snapshotAdapter;
     private JdbcMemoryConflictLogRepositoryAdapter conflictAdapter;
+    private JdbcProfileMemoryRepositoryAdapter profileAdapter;
+    private JdbcCorrectionLedgerRepositoryAdapter correctionAdapter;
 
     @BeforeEach
     void setUp() {
@@ -52,6 +56,8 @@ class JdbcMemoryRepositoryAdapterTests {
         semanticAdapter = new JdbcSemanticMemoryRepositoryAdapter(dataSource, objectMapper);
         snapshotAdapter = new JdbcMemoryQualitySnapshotRepositoryAdapter(dataSource, objectMapper);
         conflictAdapter = new JdbcMemoryConflictLogRepositoryAdapter(dataSource);
+        profileAdapter = new JdbcProfileMemoryRepositoryAdapter(dataSource, objectMapper);
+        correctionAdapter = new JdbcCorrectionLedgerRepositoryAdapter(dataSource, objectMapper);
     }
 
     @Test
@@ -120,12 +126,72 @@ class JdbcMemoryRepositoryAdapterTests {
         assertThat(shortTermAdapter.findById("decayed-1")).isEmpty();
     }
 
+    @Test
+    void shouldUpsertProfileFactAsStrongFactSource() {
+        profileAdapter.upsert(new ProfileFactUpdate(
+                "user-1",
+                "default",
+                "identity.occupation",
+                "学生",
+                0.9D,
+                "explicit_user_memory",
+                java.util.List.of("msg-1"),
+                "identity.occupation:g1"));
+        profileAdapter.upsert(new ProfileFactUpdate(
+                "user-1",
+                "default",
+                "identity.occupation",
+                "老师",
+                0.95D,
+                "explicit_user_correction",
+                java.util.List.of("msg-2"),
+                "identity.occupation:g2"));
+
+        assertThat(profileAdapter.findActive("user-1", "default", "identity.occupation"))
+                .hasValueSatisfying(fact -> {
+                    assertThat(fact.valueText()).isEqualTo("老师");
+                    assertThat(fact.sourceType()).isEqualTo("explicit_user_correction");
+                    assertThat(fact.generationId()).isEqualTo("identity.occupation:g2");
+                });
+        assertThat(profileAdapter.listActive("user-1", "default", 10))
+                .extracting(fact -> fact.slotKey() + "=" + fact.valueText())
+                .containsExactly("identity.occupation=老师");
+    }
+
+    @Test
+    void shouldUpsertAndListActiveCorrectionRules() {
+        correctionAdapter.upsert(new CorrectionCommand(
+                "user-1",
+                "default",
+                "PROFILE_CORRECTION",
+                "PROFILE_SLOT",
+                "identity.occupation",
+                "学生",
+                "老师",
+                "用户纠正职业画像：学生 -> 老师",
+                java.util.List.of("msg-2"),
+                "identity.occupation:g2"));
+
+        assertThat(correctionAdapter.listActive("user-1", "default", 10))
+                .hasSize(1)
+                .first()
+                .satisfies(rule -> {
+                    assertThat(rule.targetKind()).isEqualTo("PROFILE_SLOT");
+                    assertThat(rule.targetKey()).isEqualTo("identity.occupation");
+                    assertThat(rule.incorrectValue()).isEqualTo("学生");
+                    assertThat(rule.correctValue()).isEqualTo("老师");
+                    assertThat(rule.priority()).isEqualTo("HARD_RULE");
+                });
+    }
+
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_short_term_memory");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_long_term_memory");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_semantic_memory");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_quality_snapshot");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_conflict_log");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_user_profile_fact");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_correction_ledger");
         jdbcTemplate.execute("""
                 CREATE TABLE t_short_term_memory (
                     id VARCHAR(64) PRIMARY KEY,
@@ -198,6 +264,46 @@ class JdbcMemoryRepositoryAdapterTests {
                     resolution_action VARCHAR(128),
                     resolved_by VARCHAR(64),
                     resolved_at TIMESTAMP,
+                    create_time TIMESTAMP,
+                    update_time TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_user_profile_fact (
+                    id VARCHAR(64) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    slot_key VARCHAR(128) NOT NULL,
+                    value_text TEXT NOT NULL,
+                    value_json TEXT,
+                    confidence_level DOUBLE,
+                    source_type VARCHAR(64),
+                    source_ids TEXT,
+                    generation_id VARCHAR(64),
+                    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    valid_from TIMESTAMP,
+                    valid_until TIMESTAMP,
+                    create_time TIMESTAMP,
+                    update_time TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_memory_correction_ledger (
+                    id VARCHAR(64) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    correction_type VARCHAR(32) NOT NULL,
+                    target_kind VARCHAR(32) NOT NULL,
+                    target_key VARCHAR(128) NOT NULL,
+                    incorrect_value TEXT,
+                    correct_value TEXT,
+                    rule_text TEXT NOT NULL,
+                    priority VARCHAR(32) NOT NULL DEFAULT 'HARD_RULE',
+                    source_message_ids TEXT,
+                    effective_generation_id VARCHAR(64),
+                    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0

@@ -15,29 +15,9 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.memory;
+package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
-import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
-import lombok.Builder;
-import lombok.Value;
+public interface MemoryIngestionWorkflowPort {
 
-import java.util.List;
-
-/**
- * 加载后的多层记忆上下文。
- */
-@Value
-@Builder
-public class MemoryContext {
-
-    String conversationId;
-    String userId;
-    String currentQuestion;
-    List<ChatMessage> workingMemory;
-    List<MemoryItem> correctionMemories;
-    List<MemoryItem> profileMemories;
-    List<MemoryItem> shortTermMemories;
-    List<MemoryItem> longTermMemories;
-    List<MemoryItem> semanticMemories;
-    List<ChatMessage> promptMessages;
+    MemoryIngestionResult ingest(MemoryIngestionCommand command);
 }

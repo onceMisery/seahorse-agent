@@ -18,7 +18,9 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryEnginePort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryRouter;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService;
@@ -30,11 +32,16 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.RuleBasedMemoryCa
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMaintenancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
@@ -61,10 +68,13 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @Bean
     @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
     @ConditionalOnMissingBean(MemoryEnginePort.class)
-    public MemoryEnginePort seahorseDefaultMemoryEnginePort(
+    public DefaultMemoryEnginePort seahorseDefaultMemoryEnginePort(
             ShortTermMemoryPort shortTermMemoryPort,
             LongTermMemoryPort longTermMemoryPort,
             SemanticMemoryPort semanticMemoryPort,
+            ObjectProvider<ProfileMemoryPort> profileMemoryPort,
+            ObjectProvider<CorrectionLedgerPort> correctionLedgerPort,
+            ObjectProvider<MemoryRouterPort> memoryRouterPort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
             @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
@@ -81,7 +91,36 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 longTermMemoryPort,
                 semanticMemoryPort,
                 objectMapper,
-                options);
+                options,
+                profileMemoryPort.getIfAvailable(ProfileMemoryPort::noop),
+                correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
+                memoryRouterPort.getIfAvailable(DefaultMemoryRouter::new));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MemoryRouterPort.class)
+    public DefaultMemoryRouter seahorseDefaultMemoryRouter() {
+        return new DefaultMemoryRouter();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(ContextWeaverPort.class)
+    public DefaultContextWeaver seahorseDefaultContextWeaver() {
+        return new DefaultContextWeaver();
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryEnginePort.class)
+    @ConditionalOnMissingBean(MemoryIngestionWorkflowPort.class)
+    public MemoryIngestionWorkflowPort seahorseMemoryIngestionWorkflowPort(MemoryEnginePort memoryEnginePort) {
+        return command -> {
+            if (memoryEnginePort instanceof MemoryIngestionWorkflowPort workflowPort) {
+                return workflowPort.ingest(command);
+            }
+            memoryEnginePort.writeMemory(command == null ? null : command.writeRequest());
+            return com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult.ignored(
+                    "delegated_to_memory_engine");
+        };
     }
 
     @Bean
