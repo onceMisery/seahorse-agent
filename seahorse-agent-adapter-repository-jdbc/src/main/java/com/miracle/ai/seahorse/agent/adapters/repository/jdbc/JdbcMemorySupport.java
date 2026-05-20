@@ -56,7 +56,12 @@ final class JdbcMemorySupport {
         try {
             return objectMapper.readValue(json, MAP_TYPE);
         } catch (Exception ignored) {
-            return Map.of("raw", json);
+            try {
+                String unwrapped = objectMapper.readValue(json, String.class);
+                return objectMapper.readValue(unwrapped, MAP_TYPE);
+            } catch (Exception ignoredAgain) {
+                return Map.of("raw", json);
+            }
         }
     }
 

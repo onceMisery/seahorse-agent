@@ -22,10 +22,20 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegist
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJsonSupport;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.QueryMetadataToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
+import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -49,7 +59,11 @@ import java.util.List;
  * AgentLoop 自动装配。默认关闭，仅在显式打开 agent-mode-enabled 后生效。
  */
 @AutoConfiguration
-@AutoConfigureAfter(SeahorseAgentKernelChatAutoConfiguration.class)
+@AutoConfigureAfter({
+        SeahorseAgentKernelChatAutoConfiguration.class,
+        SeahorseAgentKernelMemoryAutoConfiguration.class,
+        SeahorseAgentKernelRetrievalAutoConfiguration.class
+})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
         matchIfMissing = true)
 public class SeahorseAgentKernelAgentAutoConfiguration {
@@ -59,6 +73,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     private static final String PROP_PER_TOOL_TIMEOUT = "seahorse-agent.chat.agent.per-tool-timeout";
     private static final String PROP_MAX_PARALLEL_TOOLS = "seahorse-agent.chat.agent.max-parallel-tools";
     private static final String PROP_MCP_INCLUDE = "seahorse-agent.chat.agent.tools.mcp.include";
+    private static final String PROP_SEARCH_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.search.enabled";
+    private static final String PROP_MEMORY_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.memory.enabled";
 
     @Bean
     @ConditionalOnAgentModeEnabled
@@ -88,6 +104,84 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                    ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
         return new KernelAgentLoop(modelPort, toolRegistry, options,
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnMissingBean
+    public AgentToolJsonSupport seahorseAgentToolJsonSupport(ObjectProvider<ObjectMapper> objectMapper) {
+        return new AgentToolJsonSupport(objectMapper.getIfAvailable(ObjectMapper::new));
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean(KernelRetrievalEngine.class)
+    @ConditionalOnProperty(name = PROP_SEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public SearchKnowledgeBaseToolPortAdapter seahorseSearchKnowledgeBaseToolPortAdapter(
+            KernelRetrievalEngine retrievalEngine,
+            AgentToolJsonSupport jsonSupport) {
+        return new SearchKnowledgeBaseToolPortAdapter(retrievalEngine, jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnProperty(name = PROP_SEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public QueryMetadataToolPortAdapter seahorseQueryMetadataToolPortAdapter(AgentToolJsonSupport jsonSupport) {
+        return new QueryMetadataToolPortAdapter(jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean(MemoryEnginePort.class)
+    @ConditionalOnProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public MemoryReadToolPortAdapter seahorseMemoryReadToolPortAdapter(MemoryEnginePort memoryEnginePort,
+                                                                       AgentToolJsonSupport jsonSupport) {
+        return new MemoryReadToolPortAdapter(memoryEnginePort, jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean(MemoryEnginePort.class)
+    @ConditionalOnProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public MemoryWriteToolPortAdapter seahorseMemoryWriteToolPortAdapter(MemoryEnginePort memoryEnginePort,
+                                                                         ObjectProvider<MemoryGovernanceInboundPort> memoryGovernancePort,
+                                                                         AgentToolJsonSupport jsonSupport) {
+        return new MemoryWriteToolPortAdapter(memoryEnginePort, memoryGovernancePort.getIfAvailable(), jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean(MemoryManagementInboundPort.class)
+    @ConditionalOnProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public MemoryForgetToolPortAdapter seahorseMemoryForgetToolPortAdapter(
+            MemoryManagementInboundPort memoryManagementPort,
+            AgentToolJsonSupport jsonSupport) {
+        return new MemoryForgetToolPortAdapter(memoryManagementPort, jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean(ToolRegistryPort.class)
+    @ConditionalOnMissingBean
+    public BuiltInAgentToolRegistrar seahorseBuiltInAgentToolRegistrar(
+            ToolRegistryPort toolRegistry,
+            ObjectProvider<SearchKnowledgeBaseToolPortAdapter> searchTool,
+            ObjectProvider<QueryMetadataToolPortAdapter> metadataTool,
+            ObjectProvider<MemoryReadToolPortAdapter> memoryReadTool,
+            ObjectProvider<MemoryWriteToolPortAdapter> memoryWriteTool,
+            ObjectProvider<MemoryForgetToolPortAdapter> memoryForgetTool) {
+        return new BuiltInAgentToolRegistrar(
+                toolRegistry,
+                searchTool,
+                metadataTool,
+                memoryReadTool,
+                memoryWriteTool,
+                memoryForgetTool);
     }
 
     @Bean

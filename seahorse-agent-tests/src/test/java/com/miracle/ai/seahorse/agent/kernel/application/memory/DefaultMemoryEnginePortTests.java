@@ -155,6 +155,29 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldKeepNewestProfileOccupationMemoryPerLayer() {
+        StubSemanticMemoryPort semanticPort = new StubSemanticMemoryPort(List.of(
+                semanticRecord("sem-old", "PROFILE", "I am a teacher", 0.9D,
+                        Instant.parse("2026-05-19T00:00:00Z"), "profile:occupation"),
+                semanticRecord("sem-new", "PROFILE", "我是学生", 0.8D,
+                        Instant.parse("2026-05-20T00:00:00Z"), "profile:occupation")));
+
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                new StubShortTermMemoryPort(List.of()),
+                new StubLongTermMemoryPort(List.of()),
+                semanticPort,
+                OBJECT_MAPPER);
+
+        MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
+                .userId(USER_ID)
+                .build());
+
+        Assertions.assertEquals(1, context.getSemanticMemories().size());
+        Assertions.assertEquals("sem-new", context.getSemanticMemories().get(0).getId());
+        Assertions.assertEquals("我是学生", context.getSemanticMemories().get(0).getContent());
+    }
+
+    @Test
     void shouldGracefullyDegradeWhenLayerThrowsException() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(
                 record("stm-1", "SUMMARY", "正常数据", 0.5D)));
@@ -413,6 +436,20 @@ class DefaultMemoryEnginePortTests {
     }
 
     // ========== Stub 实现 ==========
+
+    private MemoryRecord semanticRecord(String id,
+                                        String type,
+                                        String content,
+                                        double importanceScore,
+                                        Instant updatedAt,
+                                        String semanticKey) {
+        return new MemoryRecord(id, "semantic", type, content,
+                Map.of("userId", USER_ID,
+                        "importanceScore", importanceScore,
+                        "confidenceLevel", importanceScore,
+                        "semanticKey", semanticKey),
+                updatedAt);
+    }
 
     private static class StubShortTermMemoryPort implements ShortTermMemoryPort {
         private final List<MemoryRecord> records;

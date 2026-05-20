@@ -28,6 +28,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
@@ -342,6 +344,63 @@ class KernelAgentLoopTests {
         AgentObservation observation = result.steps().get(0).observations().get(0);
         assertFalse(observation.success());
         assertTrue(observation.error().contains("arguments"));
+    }
+
+    @Test
+    void serverInjectedToolScopeOverridesModelSuppliedReservedArguments() {
+        AgentToolCall weather = AgentToolCall.of("call-1", "weather", Map.of(
+                "_seahorseUserId", "attacker",
+                "_seahorseConversationId", "forged",
+                "_seahorseQuestion", "forged question"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need scoped tool", List.of(weather)),
+                Turn.finalAnswer("handled")));
+        InMemoryToolRegistry registry = new InMemoryToolRegistry();
+        registry.register(WEATHER_DESCRIPTOR, (callId, toolId, arguments) -> {
+            assertEquals("admin-user", arguments.get("_seahorseUserId"));
+            assertEquals("conversation-a", arguments.get("_seahorseConversationId"));
+            assertEquals("真实问题", arguments.get("_seahorseQuestion"));
+            return ToolInvocationResult.ok("ok");
+        });
+        KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("真实问题")
+                .history(List.of())
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.3D).build())
+                .memoryContext(MemoryContext.builder()
+                        .userId("admin-user")
+                        .conversationId("conversation-a")
+                        .currentQuestion("真实问题")
+                        .build())
+                .build());
+
+        assertTrue(result.steps().get(0).observations().get(0).success());
+    }
+
+    @Test
+    void memoryContextIsInjectedIntoFirstModelTurn() {
+        ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("学生")));
+        KernelAgentLoop loop = new KernelAgentLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+
+        loop.execute(AgentLoopRequest.builder()
+                .question("我的职业是什么")
+                .history(List.of(ChatMessage.system("你是助手")))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.3D).build())
+                .memoryContext(MemoryContext.builder()
+                        .userId("admin-user")
+                        .conversationId("conversation-a")
+                        .currentQuestion("我的职业是什么")
+                        .semanticMemories(List.of(MemoryItem.builder()
+                                .content("用户是学生")
+                                .build()))
+                        .build())
+                .build());
+
+        List<ChatMessage> messages = model.requests.get(0).getMessages();
+        assertEquals(ChatRole.SYSTEM, messages.get(0).getRole());
+        assertTrue(messages.get(0).getContent().contains("用户是学生"));
+        assertEquals("我的职业是什么", messages.get(messages.size() - 1).getContent());
     }
 
     private static AgentLoopRequest defaultRequest() {

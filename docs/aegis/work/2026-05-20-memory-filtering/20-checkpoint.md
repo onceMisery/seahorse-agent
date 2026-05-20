@@ -16,11 +16,18 @@
 - [x] Run Docker E2E for write and cross-session recall.
 - [x] Split Phase 2 capture policy into candidate extractor and value assessor.
 - [x] Add explainable Phase 2 policy tests.
+- [x] Add governance persistence tests for quality snapshots and conflict records.
+- [x] Implement quality snapshot persistence and high-precision semantic-key conflict logging.
+- [x] Wire governance repositories through Spring auto-configuration.
+- [x] Verify JDBC save/read for memory quality snapshots and conflict logs.
+- [x] Rebuild and restart Docker backend after governance changes.
+- [x] Run Docker governance E2E for quality snapshot and pending conflict visibility.
 - [x] Update evidence and drift check.
+- [x] Run final fresh verification for target regression, JDBC repository, and starter package paths.
 
 ## Active Slice
 
-Phase 2 first implementation slice is complete: write-time memory capture now routes through dedicated candidate extraction and value assessment components instead of private inline rules in `DefaultMemoryEnginePort`.
+Phase 1 through Phase 4 planned implementation slices are complete within the existing compatibility boundary. The latest slice closes the governance loop by persisting quality snapshots and pending semantic-key conflicts without adding new tables or changing public `MemoryEnginePort` methods.
 
 ## Completed Todos
 
@@ -38,6 +45,13 @@ Phase 2 first implementation slice is complete: write-time memory capture now ro
 - `DefaultMemoryEnginePort.writeMemory` now persists decision metadata including `capturePolicyVersion`, `valueScore`, `riskScore`, `captureSignals`, and `captureReasons`.
 - Cleaned duplicate restored test methods in memory and chat test files after stash recovery.
 - Verified target tests: `MemoryCapturePolicyTests`, `DefaultMemoryEnginePortTests`, and `KernelChatInboundServiceTests`.
+- Added `save(...)` support to `MemoryQualitySnapshotRepositoryPort` and `MemoryConflictLogRepositoryPort` with no-op empty adapters for compatibility.
+- Added JDBC persistence for `t_memory_quality_snapshot` and `t_memory_conflict_log`, including real schema columns `memory_id_1` and `memory_id_2`.
+- Hardened JDBC JSON parsing for H2/PostgreSQL-mode string-wrapped JSON values.
+- `KernelMemoryGovernanceService.runGovernance(..., assessQuality=true)` now writes a `memory-governance-v1` quality snapshot.
+- `KernelMemoryGovernanceService` now records high-precision `SEMANTIC_KEY_CONFLICT` pending records when same-type memories share an explicit `semanticKey` but differ in content.
+- `SeahorseAgentKernelMemoryAutoConfiguration` now supplies optional snapshot/conflict repositories to governance ports.
+- Verified management API can list pending conflicts after governance creates them.
 
 ## Evidence Refs
 
@@ -47,12 +61,18 @@ Phase 2 first implementation slice is complete: write-time memory capture now ro
 - Target test output from `./mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=MemoryCapturePolicyTests,DefaultMemoryEnginePortTests,KernelChatInboundServiceTests" test "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"`
 - JDBC test output from `./mvnw.cmd -pl seahorse-agent-adapter-repository-jdbc "-Dtest=JdbcMemoryRepositoryAdapterTests" test "-Dspotless.check.skip=true"`
 - Docker E2E DB rows for `codex-memory-e2e-1779213886` and `codex-memory-read-1779213922`
+- RED evidence from missing `save(...)` methods in quality snapshot and conflict repositories.
+- GREEN evidence from `KernelMemoryGovernanceServiceTests` and `JdbcMemoryRepositoryAdapterTests`.
+- Regression evidence from `MemoryCapturePolicyTests`, `DefaultMemoryEnginePortTests`, `KernelChatInboundServiceTests`, `KernelMemoryGovernanceServiceTests`, and `SeahorseWebApiContractTests`.
+- Docker governance E2E evidence for run id `cdxgov113633`.
+- Final fresh verification on 2026-05-20: target regression tests, JDBC repository tests with and without `-am`, and starter package all passed.
 
 ## Blocked-On Items
 
-- None for Phase 1 or the Phase 2 capture-policy slice.
+- None for Phase 1 through Phase 4 within the existing schema/API compatibility boundary.
 - Full repository test suite was not run; verification focused on the changed memory, chat, repository, and Docker runtime paths.
-- Phase 2 conflict queue, candidate decision persistence beyond memory metadata, metric counters, and knowledge-base candidate governance remain planned work.
+- Full knowledge-base candidate review queue remains out of scope per `10-intent.md` because it would require new durable workflow/storage beyond this slice.
+- Metric dashboard UI was not built; governance metrics are persisted as quality snapshot JSON and verified through API/DB.
 
 ## ResumeStateHint
 
@@ -63,13 +83,14 @@ Resume by reading:
 3. `docs/aegis/work/2026-05-20-memory-filtering/90-evidence.md`
 4. `git status --short`
 
-Next planned work is Phase 2 continuation: add capture decision logs/metrics, conflict handling, and knowledge-base candidate tagging.
+Next planned work, if scope is expanded, is a dedicated knowledge-base candidate review queue and dashboard UI. The current memory filtering/cross-session recall plan is otherwise completed.
 
 ## DriftCheckDraft
 
 - Serves original task intent: yes.
 - Inside compatibility boundary: yes.
 - New owners introduced as planned: `WebUserIdResolver`, `MemoryPromptFormatter`, `MemoryCaptureCandidateExtractor`, and `MemoryValueAssessor`.
+- Governance write ownership now also includes existing `MemoryQualitySnapshotRepositoryPort` and `MemoryConflictLogRepositoryPort`.
 - Runtime identity assumption updated: `admin` login maps to authenticated business `userId = 2001523723396308993`, not literal username `admin`.
-- Retirement explicit: duplicated controller user resolution, duplicated prompt memory formatting, and inline write-time extraction/scoring in `DefaultMemoryEnginePort` are retired.
-- Decision: Phase 1 complete; Phase 2 first capture-policy slice complete; continue with governance/metrics only as a separate slice.
+- Retirement explicit: duplicated controller user resolution, duplicated prompt memory formatting, inline write-time extraction/scoring in `DefaultMemoryEnginePort`, and read-only governance skeletons are retired.
+- Decision: Phase 1 through Phase 4 complete for this plan; final fresh verification passed; remaining knowledge-base candidate workflow is intentionally outside this slice.

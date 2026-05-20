@@ -38,7 +38,6 @@ public class JdbcMemoryQualitySnapshotRepositoryAdapter implements MemoryQuality
         this.objectMapper = objectMapper;
     }
 
-    @Override
     public void save(MemoryQualitySnapshot snapshot) {
         Instant now = Instant.now();
         jdbcTemplate.update("""

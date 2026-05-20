@@ -23,12 +23,18 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,11 +54,20 @@ class KernelChatInboundServiceAgentModeTests {
         KernelChatPipeline pipeline = mock(KernelChatPipeline.class);
         StreamTaskPort taskPort = mock(StreamTaskPort.class);
         KernelAgentLoop agentLoop = mock(KernelAgentLoop.class);
+        MemoryEnginePort memoryEnginePort = mock(MemoryEnginePort.class);
         StreamCallback callback = mock(StreamCallback.class);
         StreamCancellationHandle handle = mock(StreamCancellationHandle.class);
         when(agentLoop.streamExecute(any(), any(), any(TraceRunScope.class))).thenReturn(handle);
+        when(memoryEnginePort.loadMemory(any(MemoryLoadRequest.class))).thenReturn(MemoryContext.builder()
+                .semanticMemories(List.of(MemoryItem.builder()
+                        .id("mem-1")
+                        .layer(MemoryLayer.SEMANTIC)
+                        .content("用户是学生")
+                        .build()))
+                .build());
         KernelChatInboundService service = new KernelChatInboundService(
-                pipeline, taskPort, Optional.of(agentLoop), KernelRagTraceRecorder.noop());
+                pipeline, taskPort, Optional.of(agentLoop), KernelRagTraceRecorder.noop(),
+                null, memoryEnginePort);
 
         service.streamChat(new StreamChatCommand(
                 "hello", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
@@ -66,6 +81,17 @@ class KernelChatInboundServiceAgentModeTests {
         assertThat(request.history()).isEmpty();
         assertThat(request.allowedToolIds()).isEmpty();
         assertThat(request.samplingOptions().getTemperature()).isEqualTo(0.3D);
+        assertThat(request.memoryContext().getUserId()).isEqualTo("user-1");
+        assertThat(request.memoryContext().getConversationId()).isEqualTo("conv-1");
+        assertThat(request.memoryContext().getSemanticMemories())
+                .extracting(MemoryItem::getContent)
+                .containsExactly("用户是学生");
+
+        ArgumentCaptor<MemoryLoadRequest> memoryCaptor = ArgumentCaptor.forClass(MemoryLoadRequest.class);
+        verify(memoryEnginePort).loadMemory(memoryCaptor.capture());
+        assertThat(memoryCaptor.getValue().userId()).isEqualTo("user-1");
+        assertThat(memoryCaptor.getValue().conversationId()).isEqualTo("conv-1");
+        assertThat(memoryCaptor.getValue().currentQuestion()).isEqualTo("hello");
     }
 
     @Test

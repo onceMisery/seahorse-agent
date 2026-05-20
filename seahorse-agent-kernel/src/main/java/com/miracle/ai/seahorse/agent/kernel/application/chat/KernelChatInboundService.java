@@ -26,11 +26,14 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamChatContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +59,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     private final Optional<KernelAgentLoop> agentLoop;
     private final KernelRagTraceRecorder traceRecorder;
     private final ConversationMemoryPort memoryPort;
+    private final MemoryEnginePort memoryEnginePort;
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
         this(chatPipeline, streamTaskPort, KernelRagTraceRecorder.noop());
@@ -64,14 +68,16 @@ public class KernelChatInboundService implements ChatInboundPort {
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
                                     KernelRagTraceRecorder traceRecorder) {
-        this(chatPipeline, streamTaskPort, Optional.empty(), traceRecorder, ConversationMemoryPort.noop());
+        this(chatPipeline, streamTaskPort, Optional.empty(), traceRecorder, ConversationMemoryPort.noop(),
+                MemoryEnginePort.noop());
     }
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
                                     StreamTaskPort streamTaskPort,
                                     Optional<KernelAgentLoop> agentLoop,
                                     KernelRagTraceRecorder traceRecorder) {
-        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, ConversationMemoryPort.noop());
+        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, ConversationMemoryPort.noop(),
+                MemoryEnginePort.noop());
     }
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline,
@@ -79,11 +85,21 @@ public class KernelChatInboundService implements ChatInboundPort {
                                     Optional<KernelAgentLoop> agentLoop,
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort) {
+        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, MemoryEnginePort.noop());
+    }
+
+    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+                                    StreamTaskPort streamTaskPort,
+                                    Optional<KernelAgentLoop> agentLoop,
+                                    KernelRagTraceRecorder traceRecorder,
+                                    ConversationMemoryPort memoryPort,
+                                    MemoryEnginePort memoryEnginePort) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop;
         this.traceRecorder = Objects.requireNonNull(traceRecorder, "traceRecorder must not be null");
         this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
+        this.memoryEnginePort = Objects.requireNonNullElse(memoryEnginePort, MemoryEnginePort.noop());
     }
 
     @Override
@@ -144,7 +160,40 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .samplingOptions(ChatSamplingOptions.builder()
                         .temperature(0.3D)
                         .build())
+                .memoryContext(loadAgentMemoryContext(command))
                 .build();
+    }
+
+    private MemoryContext loadAgentMemoryContext(StreamChatCommand command) {
+        MemoryContext fallback = MemoryContext.builder()
+                .conversationId(command.conversationId())
+                .userId(command.userId())
+                .currentQuestion(command.question())
+                .build();
+        try {
+            MemoryContext loaded = memoryEnginePort.loadMemory(MemoryLoadRequest.builder()
+                    .conversationId(command.conversationId())
+                    .userId(command.userId())
+                    .currentQuestion(command.question())
+                    .build());
+            if (loaded == null) {
+                return fallback;
+            }
+            return MemoryContext.builder()
+                    .conversationId(command.conversationId())
+                    .userId(command.userId())
+                    .currentQuestion(command.question())
+                    .workingMemory(loaded.getWorkingMemory())
+                    .shortTermMemories(loaded.getShortTermMemories())
+                    .longTermMemories(loaded.getLongTermMemories())
+                    .semanticMemories(loaded.getSemanticMemories())
+                    .promptMessages(loaded.getPromptMessages())
+                    .build();
+        } catch (Exception ex) {
+            LOG.warn("Agent memory activation failed, fallback to scoped empty memory: userId={}",
+                    command.userId(), ex);
+            return fallback;
+        }
     }
 
     private List<ChatMessage> loadAgentHistory(StreamChatCommand command) {

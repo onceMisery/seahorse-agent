@@ -66,6 +66,26 @@ class KernelMemoryGovernanceServiceTests {
     }
 
     @Test
+    void shouldUseStableOccupationSemanticKeyForProfileMemory() {
+        RecordingShortTermMemoryPort shortTerm = new RecordingShortTermMemoryPort();
+        RecordingMemoryPort longTerm = new RecordingMemoryPort();
+        RecordingMemoryPort semantic = new RecordingMemoryPort();
+        RecordingMemoryEnginePort memoryEngine = new RecordingMemoryEnginePort();
+        shortTerm.records.add(new MemoryRecord("m1", "short_term", "PROFILE", "我是学生",
+                Map.of("userId", "user-1", "importanceScore", 0.8D, "confidenceLevel", 0.9D),
+                Instant.now()));
+
+        KernelMemoryGovernanceService service = new KernelMemoryGovernanceService(
+                new MemoryGovernanceServicePorts(shortTerm, longTerm, semantic, memoryEngine), 0.6D);
+
+        MemoryGovernanceRunResult result = service.runGovernance("user-1", "manual", false);
+
+        assertThat(result.semanticUpsertCount()).isEqualTo(1);
+        assertThat(semantic.records).hasSize(1);
+        assertThat(semantic.records.get(0).metadata()).containsEntry("semanticKey", "profile:occupation");
+    }
+
+    @Test
     void shouldPersistQualitySnapshotAndPendingConflictsDuringGovernance() {
         RecordingShortTermMemoryPort shortTerm = new RecordingShortTermMemoryPort();
         RecordingMemoryPort longTerm = new RecordingMemoryPort();

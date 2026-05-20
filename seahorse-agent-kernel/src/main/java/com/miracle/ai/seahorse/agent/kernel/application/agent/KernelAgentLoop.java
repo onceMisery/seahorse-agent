@@ -25,8 +25,11 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.MemoryPromptFormatter;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
@@ -38,6 +41,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -131,6 +135,7 @@ public class KernelAgentLoop {
         Objects.requireNonNull(request, "AgentLoopRequest 不能为 null");
         AgentRunControl runControl = Objects.requireNonNullElseGet(control, AgentRunControl::direct);
         List<ChatMessage> messages = new ArrayList<>(request.history());
+        installMemoryContext(messages, request.memoryContext());
         messages.add(ChatMessage.user(request.question()));
 
         List<AgentStep> steps = new ArrayList<>();
@@ -149,7 +154,7 @@ public class KernelAgentLoop {
                 }
 
                 List<AgentObservation> observations = executeTools(
-                        turn.toolCalls(), request.allowedToolIds(), runControl, traceRunScope, stepScope);
+                        turn.toolCalls(), request.allowedToolIds(), request, runControl, traceRunScope, stepScope);
                 runControl.checkCancelled();
                 emitToolThinking(callback, turn, observations);
                 steps.add(AgentStep.thought(turn.thought(), turn.toolCalls(), observations));
@@ -217,8 +222,23 @@ public class KernelAgentLoop {
                 .toList();
     }
 
+    private void installMemoryContext(List<ChatMessage> messages, MemoryContext memoryContext) {
+        String memoryText = MemoryPromptFormatter.format(memoryContext);
+        if (memoryText.isBlank()) {
+            return;
+        }
+        if (!messages.isEmpty() && messages.get(0).getRole() == ChatRole.SYSTEM) {
+            ChatMessage first = messages.get(0);
+            messages.set(0, ChatMessage.system(
+                    MemoryPromptFormatter.appendToSystemPrompt(first.getContent(), memoryContext)));
+            return;
+        }
+        messages.add(0, ChatMessage.system(memoryText));
+    }
+
     private List<AgentObservation> executeTools(List<AgentToolCall> toolCalls,
                                                 List<String> allowedToolIds,
+                                                AgentLoopRequest request,
                                                 AgentRunControl control,
                                                 TraceRunScope traceRunScope,
                                                 TraceNodeScope stepScope) {
@@ -234,7 +254,7 @@ public class KernelAgentLoop {
         for (int start = 0; start < toolCalls.size(); start += parallelism) {
             int end = Math.min(start + parallelism, toolCalls.size());
             observations.addAll(executeToolBatch(
-                    toolCalls.subList(start, end), allowed, parallelism, control, traceRunScope, stepScope));
+                    toolCalls.subList(start, end), allowed, request, parallelism, control, traceRunScope, stepScope));
             if (Thread.currentThread().isInterrupted() && observations.size() < toolCalls.size()) {
                 for (int i = observations.size(); i < toolCalls.size(); i++) {
                     observations.add(AgentObservation.failed(toolCalls.get(i).id(), "工具执行被中断"));
@@ -247,6 +267,7 @@ public class KernelAgentLoop {
 
     private List<AgentObservation> executeToolBatch(List<AgentToolCall> toolCalls,
                                                     Set<String> allowedToolIds,
+                                                    AgentLoopRequest request,
                                                     int parallelism,
                                                     AgentRunControl control,
                                                     TraceRunScope traceRunScope,
@@ -256,7 +277,7 @@ public class KernelAgentLoop {
         try {
             List<Callable<AgentObservation>> tasks = toolCalls.stream()
                     .<Callable<AgentObservation>>map(toolCall ->
-                            () -> executeToolTraced(toolCall, allowedToolIds, traceRunScope, stepScope))
+                            () -> executeToolTraced(toolCall, allowedToolIds, request, traceRunScope, stepScope))
                     .toList();
             List<Future<AgentObservation>> futures = executor.invokeAll(
                     tasks, perToolTimeoutNanos(), TimeUnit.NANOSECONDS);
@@ -303,7 +324,7 @@ public class KernelAgentLoop {
         }
     }
 
-    private AgentObservation executeTool(AgentToolCall toolCall, Set<String> allowedToolIds) {
+    private AgentObservation executeTool(AgentToolCall toolCall, Set<String> allowedToolIds, AgentLoopRequest request) {
         if (hasRawArguments(toolCall)) {
             return AgentObservation.failed(toolCall.id(), "arguments is not valid JSON");
         }
@@ -313,7 +334,8 @@ public class KernelAgentLoop {
         try {
             ToolPort toolPort = toolRegistry.find(toolCall.toolId())
                     .orElseGet(() -> ToolPort.notFound(toolCall.toolId()));
-            ToolInvocationResult result = toolPort.invoke(toolCall.id(), toolCall.toolId(), toolCall.arguments());
+            ToolInvocationResult result = toolPort.invoke(toolCall.id(), toolCall.toolId(),
+                    toolArguments(toolCall, request));
             return result.success()
                     ? AgentObservation.ok(toolCall.id(), truncateObservationText(result.content()))
                     : AgentObservation.failed(toolCall.id(), truncateObservationText(result.error()));
@@ -325,11 +347,12 @@ public class KernelAgentLoop {
 
     private AgentObservation executeToolTraced(AgentToolCall toolCall,
                                                Set<String> allowedToolIds,
+                                               AgentLoopRequest request,
                                                TraceRunScope traceRunScope,
                                                TraceNodeScope stepScope) {
         TraceNodeScope toolScope = traceRecorder.startNode(traceRunScope, agentToolCommand(toolCall, stepScope));
         try {
-            AgentObservation observation = executeTool(toolCall, allowedToolIds);
+            AgentObservation observation = executeTool(toolCall, allowedToolIds, request);
             if (observation.success()) {
                 traceRecorder.finishNode(toolScope);
             } else {
@@ -344,6 +367,18 @@ public class KernelAgentLoop {
 
     private boolean hasRawArguments(AgentToolCall toolCall) {
         return toolCall.arguments().size() == 1 && toolCall.arguments().containsKey(RAW_ARGUMENTS_KEY);
+    }
+
+    private java.util.Map<String, Object> toolArguments(AgentToolCall toolCall, AgentLoopRequest request) {
+        LinkedHashMap<String, Object> arguments = new LinkedHashMap<>(
+                Objects.requireNonNullElse(toolCall.arguments(), java.util.Map.of()));
+        if (request == null || request.memoryContext() == null) {
+            return arguments;
+        }
+        arguments.put("_seahorseUserId", Objects.requireNonNullElse(request.memoryContext().getUserId(), ""));
+        arguments.put("_seahorseConversationId", Objects.requireNonNullElse(request.memoryContext().getConversationId(), ""));
+        arguments.put("_seahorseQuestion", Objects.requireNonNullElse(request.memoryContext().getCurrentQuestion(), ""));
+        return arguments;
     }
 
     private String truncateObservationText(String text) {

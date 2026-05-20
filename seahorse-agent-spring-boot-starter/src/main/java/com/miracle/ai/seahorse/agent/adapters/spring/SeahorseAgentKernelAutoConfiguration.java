@@ -62,7 +62,6 @@ import org.springframework.context.annotation.Import;
 @Import({
         SeahorseAgentKernelAuthAutoConfiguration.class,
         SeahorseAgentKernelChatAutoConfiguration.class,
-        SeahorseAgentKernelAgentAutoConfiguration.class,
         SeahorseAgentKernelDocumentRefreshAutoConfiguration.class,
         SeahorseAgentKernelKeywordAutoConfiguration.class,
         SeahorseAgentKernelKnowledgeAutoConfiguration.class,
@@ -72,6 +71,7 @@ import org.springframework.context.annotation.Import;
         SeahorseAgentKernelOpsAutoConfiguration.class,
         SeahorseAgentKernelPluginAutoConfiguration.class,
         SeahorseAgentKernelRetrievalAutoConfiguration.class,
+        SeahorseAgentKernelAgentAutoConfiguration.class,
         SeahorseAgentKernelTraceAutoConfiguration.class
 })
 public class SeahorseAgentKernelAutoConfiguration {

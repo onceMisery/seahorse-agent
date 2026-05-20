@@ -21,23 +21,32 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.InferredMemory;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceRunResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.HashSet;
 
 public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPort {
 
     private static final Logger LOG = LoggerFactory.getLogger(KernelMemoryGovernanceService.class);
 
     private static final int PROMOTION_SCAN_LIMIT = 500;
+    private static final int CONFLICT_SCAN_LIMIT = 500;
     private static final double DEFAULT_PROMOTION_THRESHOLD = 0.6D;
     private static final double INFERENCE_CONFIDENCE_THRESHOLD = 0.7D;
+    private static final String GOVERNANCE_POLICY_VERSION = "memory-governance-v1";
+    private static final String STATUS_PENDING = "PENDING";
 
     private final MemoryGovernanceServicePorts ports;
     private final double promotionThreshold;
@@ -96,9 +105,13 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
             inferred = runInference(safeUserId, shortTermRecords, errors);
         }
 
+        recordConflicts(safeUserId, shortTermRecords, errors);
+
         if (assessQuality) {
             try {
-                ports.memoryEnginePort().assessMemoryQuality(safeUserId);
+                MemoryQualityReport report = ports.memoryEnginePort().assessMemoryQuality(safeUserId);
+                ports.qualitySnapshotRepositoryPort().save(new MemoryQualitySnapshot(
+                        "", safeUserId, qualitySnapshot(report), Instant.now()));
             } catch (RuntimeException ex) {
                 errors.add("quality:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
             }
@@ -137,6 +150,62 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
             errors.add("inference:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
         }
         return inferred;
+    }
+
+    private void recordConflicts(String userId, List<MemoryRecord> records, List<String> errors) {
+        try {
+            Set<String> existingPairs = new HashSet<>();
+            for (MemoryConflictRecord conflict : ports.conflictLogRepositoryPort()
+                    .listByUser(userId, STATUS_PENDING, CONFLICT_SCAN_LIMIT)) {
+                existingPairs.add(conflictPairKey(conflict.memoryId1(), conflict.memoryId2()));
+            }
+            Map<String, MemoryRecord> seenBySemanticKey = new LinkedHashMap<>();
+            for (MemoryRecord record : records) {
+                String key = semanticConflictKey(record);
+                if (!hasText(key)) {
+                    continue;
+                }
+                MemoryRecord existing = seenBySemanticKey.putIfAbsent(key, record);
+                if (existing == null || sameContent(existing, record)) {
+                    continue;
+                }
+                String pairKey = conflictPairKey(existing.id(), record.id());
+                if (!existingPairs.add(pairKey)) {
+                    continue;
+                }
+                ports.conflictLogRepositoryPort().save(new MemoryConflictRecord(
+                        "",
+                        userId,
+                        existing.id(),
+                        record.id(),
+                        "SEMANTIC_KEY_CONFLICT",
+                        severity(existing, record),
+                        STATUS_PENDING,
+                        "",
+                        "",
+                        Instant.EPOCH,
+                        Instant.now()));
+            }
+        } catch (RuntimeException ex) {
+            errors.add("conflict:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+        }
+    }
+
+    private Map<String, Object> qualitySnapshot(MemoryQualityReport report) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("governancePolicyVersion", GOVERNANCE_POLICY_VERSION);
+        snapshot.put("userId", Objects.requireNonNullElse(report.getUserId(), ""));
+        snapshot.put("shortTermCount", report.getShortTermCount());
+        snapshot.put("longTermCount", report.getLongTermCount());
+        snapshot.put("semanticCount", report.getSemanticCount());
+        snapshot.put("conflictCount", report.getConflictCount());
+        snapshot.put("contradictionConflictCount", report.getContradictionConflictCount());
+        snapshot.put("preferencePolarityConflictCount", report.getPreferencePolarityConflictCount());
+        snapshot.put("singularProfileConflictCount", report.getSingularProfileConflictCount());
+        snapshot.put("multiValueProfileOverloadCount", report.getMultiValueProfileOverloadCount());
+        snapshot.put("autoDowngradedConflictCount", report.getAutoDowngradedConflictCount());
+        snapshot.put("createdBy", "KernelMemoryGovernanceService");
+        return snapshot;
     }
 
     private MemoryRecord toInferredRecord(String userId, InferredMemory candidate) {
@@ -223,7 +292,85 @@ public class KernelMemoryGovernanceService implements MemoryGovernanceInboundPor
         if (explicit != null && hasText(explicit.toString())) {
             return explicit.toString().trim();
         }
+        String profileKey = semanticProfileKey(record);
+        if (hasText(profileKey)) {
+            return profileKey;
+        }
         return record.type().toLowerCase() + ":" + record.content().trim().toLowerCase().replaceAll("\\s+", "_");
+    }
+
+    private String semanticProfileKey(MemoryRecord record) {
+        if (!"PROFILE".equalsIgnoreCase(record.type()) && !"FACT".equalsIgnoreCase(record.type())) {
+            return "";
+        }
+        String normalized = normalizeContent(record.content());
+        if (containsAny(normalized, "occupation", "profession", "job", "student", "teacher")
+                || containsAny(record.content(), "职业", "身份", "工作", "学生", "老师", "教师")) {
+            return "profile:occupation";
+        }
+        if (containsAny(normalized, "name") || containsAny(record.content(), "名字", "昵称")) {
+            return "profile:name";
+        }
+        if (containsAny(normalized, "school", "university", "major")
+                || containsAny(record.content(), "学校", "大学", "专业")) {
+            return "profile:education";
+        }
+        if (containsAny(normalized, "company", "organization")
+                || containsAny(record.content(), "公司", "组织")) {
+            return "profile:organization";
+        }
+        return "";
+    }
+
+    private String semanticConflictKey(MemoryRecord record) {
+        if (record == null || !hasText(record.id()) || !hasText(record.type()) || !hasText(record.content())) {
+            return "";
+        }
+        Object explicit = record.metadata().get("semanticKey");
+        if (explicit == null || !hasText(explicit.toString())) {
+            return "";
+        }
+        return record.type().trim().toUpperCase(Locale.ROOT)
+                + ":" + explicit.toString().trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean sameContent(MemoryRecord left, MemoryRecord right) {
+        return normalizeContent(left.content()).equals(normalizeContent(right.content()));
+    }
+
+    private String normalizeContent(String content) {
+        return Objects.requireNonNullElse(content, "")
+                .trim()
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("\\s+", " ");
+    }
+
+    private boolean containsAny(String content, String... needles) {
+        if (!hasText(content) || needles == null) {
+            return false;
+        }
+        for (String needle : needles) {
+            if (hasText(needle) && content.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String conflictPairKey(String leftId, String rightId) {
+        String left = Objects.requireNonNullElse(leftId, "");
+        String right = Objects.requireNonNullElse(rightId, "");
+        return left.compareTo(right) <= 0 ? left + "|" + right : right + "|" + left;
+    }
+
+    private String severity(MemoryRecord left, MemoryRecord right) {
+        if ("PROFILE".equalsIgnoreCase(left.type()) || "PROFILE".equalsIgnoreCase(right.type())) {
+            return "HIGH";
+        }
+        if ("PREFERENCE".equalsIgnoreCase(left.type()) || "PREFERENCE".equalsIgnoreCase(right.type())) {
+            return "MEDIUM";
+        }
+        return "LOW";
     }
 
     private Map<String, Object> merge(Map<String, Object> source, Map<String, Object> overlay) {

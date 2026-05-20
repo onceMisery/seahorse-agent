@@ -38,9 +38,11 @@ import org.slf4j.LoggerFactory;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -111,8 +113,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort {
                 .currentQuestion(request.currentQuestion())
                 .workingMemory(Collections.emptyList())
                 .shortTermMemories(shortTerm)
-                .longTermMemories(deduplicateById(longTerm))
-                .semanticMemories(semantic)
+                .longTermMemories(deduplicateProfileSlots(deduplicateById(longTerm)))
+                .semanticMemories(deduplicateProfileSlots(semantic))
                 .promptMessages(Collections.emptyList())
                 .build();
     }
@@ -263,6 +265,77 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort {
             }
         }
         return result;
+    }
+
+    private List<MemoryItem> deduplicateProfileSlots(List<MemoryItem> items) {
+        if (items == null || items.size() <= 1) {
+            return items == null ? Collections.emptyList() : items;
+        }
+        Map<String, MemoryItem> slotWinners = new LinkedHashMap<>();
+        List<MemoryItem> nonSlotItems = new ArrayList<>();
+        for (MemoryItem item : items) {
+            String slot = semanticSlot(item);
+            if (slot.isBlank()) {
+                nonSlotItems.add(item);
+                continue;
+            }
+            MemoryItem current = slotWinners.get(slot);
+            if (current == null || prefer(item, current) > 0) {
+                slotWinners.put(slot, item);
+            }
+        }
+        List<MemoryItem> result = new ArrayList<>(slotWinners.values());
+        result.addAll(nonSlotItems);
+        result.sort(Comparator.comparing(MemoryItem::getCreateTime,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return result;
+    }
+
+    private int prefer(MemoryItem candidate, MemoryItem current) {
+        int byTime = Comparator.nullsFirst(java.time.LocalDateTime::compareTo)
+                .compare(candidate.getCreateTime(), current.getCreateTime());
+        if (byTime != 0) {
+            return byTime;
+        }
+        return Double.compare(score(candidate), score(current));
+    }
+
+    private double score(MemoryItem item) {
+        return number(item.getImportanceScore()) + number(item.getConfidenceLevel());
+    }
+
+    private double number(Double value) {
+        return value == null ? 0D : value;
+    }
+
+    private String semanticSlot(MemoryItem item) {
+        if (item == null) {
+            return "";
+        }
+        String metadata = Objects.requireNonNullElse(item.getMetadataJson(), "");
+        if (metadata.contains("\"semanticKey\":\"profile:occupation\"")
+                || metadata.contains("\"semanticKey\": \"profile:occupation\"")) {
+            return "profile:occupation";
+        }
+        String content = Objects.requireNonNullElse(item.getContent(), "");
+        String normalized = content.toLowerCase(Locale.ROOT);
+        if (containsAny(normalized, "occupation", "profession", "job", "student", "teacher")
+                || containsAny(content, "职业", "身份", "工作", "学生", "老师", "教师")) {
+            return "profile:occupation";
+        }
+        return "";
+    }
+
+    private boolean containsAny(String content, String... needles) {
+        if (content == null || needles == null) {
+            return false;
+        }
+        for (String needle : needles) {
+            if (needle != null && !needle.isBlank() && content.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String serializeMetadata(Map<String, Object> metadata) {

@@ -37,7 +37,6 @@ public class JdbcMemoryConflictLogRepositoryAdapter implements MemoryConflictLog
         this.jdbcTemplate = new JdbcTemplate(dataSource);
     }
 
-    @Override
     public void save(MemoryConflictRecord record) {
         Instant now = Instant.now();
         jdbcTemplate.update("""

@@ -116,6 +116,98 @@ Covered:
 - memory quality snapshot and conflict repository behavior.
 - expired/decayed short-term memory scan and deletion.
 
+## Phase 3/4 RED Evidence
+
+Commands:
+
+```powershell
+./mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=KernelMemoryGovernanceServiceTests" test "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"
+./mvnw.cmd -pl seahorse-agent-adapter-repository-jdbc "-Dtest=JdbcMemoryRepositoryAdapterTests" test "-Dspotless.check.skip=true"
+```
+
+Exit status: `1`.
+
+Observed:
+
+- `JdbcMemoryRepositoryAdapterTests` failed to compile because `JdbcMemoryQualitySnapshotRepositoryAdapter.save(MemoryQualitySnapshot)` did not exist.
+- `JdbcMemoryRepositoryAdapterTests` failed to compile because `JdbcMemoryConflictLogRepositoryAdapter.save(MemoryConflictRecord)` did not exist.
+
+Interpretation: the new tests correctly exposed that quality snapshots and conflict records were read/resolve-only and governance could not close the persistence loop.
+
+## Phase 3/4 Governance Tests
+
+Command:
+
+```powershell
+./mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=KernelMemoryGovernanceServiceTests" test "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"
+```
+
+Exit status: `0`.
+
+Observed:
+
+- `KernelMemoryGovernanceServiceTests`: 4 tests run, 0 failures, 0 errors.
+- Reactor result: `BUILD SUCCESS`.
+
+Covered:
+
+- governance still promotes important short-term memory.
+- decay still uses the maintenance port and honors dry-run mode.
+- `assessQuality=true` persists a quality snapshot with `governancePolicyVersion = memory-governance-v1`.
+- same-type memories with the same explicit `semanticKey` and different content create a `SEMANTIC_KEY_CONFLICT` record with `PENDING` status.
+
+## Phase 3/4 JDBC Tests
+
+Command:
+
+```powershell
+./mvnw.cmd -pl seahorse-agent-adapter-repository-jdbc "-Dtest=JdbcMemoryRepositoryAdapterTests" test "-Dspotless.check.skip=true"
+```
+
+Exit status: `0`.
+
+Observed:
+
+- `JdbcMemoryRepositoryAdapterTests`: 3 tests run, 0 failures, 0 errors.
+- Build result: `BUILD SUCCESS`.
+
+Covered:
+
+- `MemoryQualitySnapshotRepositoryPort.save(...)` writes `t_memory_quality_snapshot` and `listByUser(...)` reads parsed JSON.
+- `MemoryConflictLogRepositoryPort.save(...)` writes `t_memory_conflict_log` using real columns `memory_id_1` and `memory_id_2`.
+- `resolve(...)` marks the saved conflict as `RESOLVED`.
+- H2 PostgreSQL-mode JSON string wrapping is handled by `JdbcMemorySupport.parseJson(...)`.
+
+## Phase 3/4 Regression Tests
+
+Command:
+
+```powershell
+./mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=MemoryCapturePolicyTests,DefaultMemoryEnginePortTests,KernelChatInboundServiceTests,KernelMemoryGovernanceServiceTests,SeahorseWebApiContractTests" test "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"
+```
+
+Exit status: `0`.
+
+Observed:
+
+- `SeahorseWebApiContractTests`: 18 tests run, 0 failures, 0 errors.
+- `KernelChatInboundServiceTests`: 6 tests run, 0 failures, 0 errors.
+- `DefaultMemoryEnginePortTests`: 17 tests run, 0 failures, 0 errors.
+- `KernelMemoryGovernanceServiceTests`: 4 tests run, 0 failures, 0 errors.
+- `MemoryCapturePolicyTests`: 4 tests run, 0 failures, 0 errors.
+- Total: 49 tests run, 0 failures, 0 errors.
+- Reactor result: `BUILD SUCCESS`.
+
+Additional compile/package command:
+
+```powershell
+./mvnw.cmd -pl seahorse-agent-spring-boot-starter -am -DskipTests package "-Dspotless.check.skip=true"
+```
+
+Exit status: `0`.
+
+Observed: starter and upstream modules packaged successfully. An earlier parallel run of the test command failed while another Maven process was simultaneously writing target directories; the same command passed when rerun serially.
+
 ## Docker Build and Restart
 
 Commands:
@@ -236,8 +328,117 @@ role                 = assistant
 content              = 根据我们的对话历史记录，您提到自己是一名学生。
 ```
 
+## Docker E2E: Governance Snapshot and Conflict
+
+Commands:
+
+```powershell
+docker compose -f docker-compose.full.yml build backend
+docker compose -f docker-compose.full.yml up -d --no-deps backend
+```
+
+Exit status: `0` for both commands.
+
+Runtime setup:
+
+- Logged in with `admin/admin`.
+- Observed `userId = 2001523723396308993`.
+- Inserted two short-term `PROFILE` memories for run id `cdxgov113633`, both with `semanticKey = profile:occupation` and different content.
+- Called `POST /memories/governance/run?userId=2001523723396308993&reason=cdxgov113633&assessQuality=true`.
+
+Observed API result:
+
+```json
+{
+  "governanceCode": "0",
+  "promoted": 2,
+  "errors": []
+}
+```
+
+Database verification:
+
+```text
+latestSnapshot = 2001523723396308993|memory-governance-v1|2
+latestConflict = 2001523723396308993|cdxgov113633a|cdxgov113633b|SEMANTIC_KEY_CONFLICT|HIGH|PENDING
+```
+
+Management API verification:
+
+```text
+GET /memories/conflicts?userId=2001523723396308993&status=PENDING&limit=5
+```
+
+Observed:
+
+- `code = 0`
+- pending conflict list included one record for the governance run sample.
+
+## Final Fresh Verification
+
+Timestamp: `2026-05-20T12:31-12:34+08:00`.
+
+Command:
+
+```powershell
+./mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=MemoryCapturePolicyTests,DefaultMemoryEnginePortTests,KernelChatInboundServiceTests,KernelMemoryGovernanceServiceTests,SeahorseWebApiContractTests" test "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"
+```
+
+Exit status: `0`.
+
+Observed:
+
+- `SeahorseWebApiContractTests`: 18 tests run, 0 failures, 0 errors.
+- `KernelChatInboundServiceTests`: 6 tests run, 0 failures, 0 errors.
+- `DefaultMemoryEnginePortTests`: 17 tests run, 0 failures, 0 errors.
+- `KernelMemoryGovernanceServiceTests`: 4 tests run, 0 failures, 0 errors.
+- `MemoryCapturePolicyTests`: 4 tests run, 0 failures, 0 errors.
+- Total: 49 tests run, 0 failures, 0 errors.
+- Reactor result: `BUILD SUCCESS`.
+
+Command:
+
+```powershell
+./mvnw.cmd -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcMemoryRepositoryAdapterTests" test "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"
+```
+
+Exit status: `0`.
+
+Observed:
+
+- `JdbcMemoryRepositoryAdapterTests`: 3 tests run, 0 failures, 0 errors.
+- Reactor result: `BUILD SUCCESS`.
+
+Command:
+
+```powershell
+./mvnw.cmd -pl seahorse-agent-adapter-repository-jdbc "-Dtest=JdbcMemoryRepositoryAdapterTests" test "-Dspotless.check.skip=true"
+```
+
+Exit status: `0`.
+
+Observed:
+
+- `JdbcMemoryRepositoryAdapterTests`: 3 tests run, 0 failures, 0 errors.
+- Build result: `BUILD SUCCESS`.
+- A preceding run of this exact command failed after a local edit temporarily restored `@Override` on `save(...)`; the failure showed the standalone module command could resolve an older locally installed kernel interface until the reactor refreshed it. The adapter source was restored to the compatible shape and the command then passed.
+
+Command:
+
+```powershell
+./mvnw.cmd -pl seahorse-agent-spring-boot-starter -am -DskipTests package "-Dspotless.check.skip=true"
+```
+
+Exit status: `0`.
+
+Observed:
+
+- `seahorse-agent-spring-boot-starter` and upstream modules packaged successfully.
+- Reactor result: `BUILD SUCCESS`.
+
 ## Not Covered
 
 - Full repository test suite was not run.
-- Phase 2 conflict queue, decision logs/metrics beyond memory metadata, and knowledge-base candidate governance remain planned work.
-- LLM-based generalized memory extraction remains out of scope for Phase 1.
+- Full knowledge-base candidate review queue remains out of scope for this slice per `10-intent.md`.
+- Metric dashboard UI was not built; persisted governance metrics are exposed through `t_memory_quality_snapshot` and `/memories/quality-snapshots`.
+- LLM-based generalized memory extraction remains out of scope.

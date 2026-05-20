@@ -158,10 +158,12 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    StreamTaskPort streamTaskPort,
                                                    ObjectProvider<KernelAgentLoop> agentLoop,
                                                    ObjectProvider<KernelRagTraceRecorder> traceRecorder,
-                                                   ObjectProvider<ConversationMemoryPort> memoryPort) {
+                                                   ObjectProvider<ConversationMemoryPort> memoryPort,
+                                                   ObjectProvider<MemoryEnginePort> memoryEnginePort) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
                 Optional.ofNullable(agentLoop.getIfAvailable()),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
-                memoryPort.getIfAvailable(ConversationMemoryPort::noop));
+                memoryPort.getIfAvailable(ConversationMemoryPort::noop),
+                memoryEnginePort.getIfAvailable(MemoryEnginePort::noop));
     }
 }
