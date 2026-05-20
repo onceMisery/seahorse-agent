@@ -1,6 +1,6 @@
 # Reflection
 
-Status: complete for Phase 1.
+Status: complete for Phase 1 and the first Phase 2 capture-policy slice.
 
 ## Outcome
 
@@ -12,6 +12,12 @@ The reported behavior was reproduced as a compound design and implementation gap
 - PostgreSQL JSON/JSONB writes work;
 - RAG and generic fallback paths share one memory prompt formatter;
 - a new conversation can answer from the previous conversation's student profile memory.
+
+The resumed Phase 2 work moved write-time capture policy out of `DefaultMemoryEnginePort` and into dedicated, testable components:
+
+- `MemoryCaptureCandidateExtractor` owns normalization, high-value signal detection, low-value tail trimming, question rejection, and sensitive credential rejection.
+- `MemoryValueAssessor` owns value/risk scoring, policy versioning, accept/reject reasons, and importance/confidence levels.
+- `DefaultMemoryEnginePort` now persists capture decision metadata so later governance can inspect why a memory was written.
 
 ## Root Cause Summary
 
@@ -28,30 +34,32 @@ The reported behavior was reproduced as a compound design and implementation gap
 - Baseline checked: existing memory improvement docs, Aegis Phase E memory-loop plan, `KernelChatPipeline`, `DefaultMemoryEnginePort`, `LocalRagPromptAdapter`, Web controllers.
 - Result: aligned.
 - Evidence: Phase 1 keeps existing ports and schemas, introduces two focused owners, keeps `default` fallback only for unauthenticated/dev contexts, and verifies Docker runtime behavior.
-- Residual architecture risk: Phase 2 still needs a proper `MemoryCandidateExtractor`, `MemoryValueAssessor`, policy logs, and conflict governance to avoid rule growth inside `DefaultMemoryEnginePort`.
+- Evidence update: Phase 2 adds two focused capture-policy owners without changing public ports or database schema.
+- Residual architecture risk: Phase 2 still needs durable decision logs/metrics, conflict governance, and knowledge-base candidate tagging.
 
 ## ADR Backfill Check
 
 - Trigger: yes.
-- Suggested action: skip formal ADR for this slice; Aegis spec and plan now carry the implementation rationale.
+- Suggested action: skip formal ADR for this slice; Aegis spec, plan, checkpoint, and evidence now carry the implementation rationale.
 - Evidence source: `docs/aegis/specs/2026-05-20-memory-filtering-architecture.md` and `docs/aegis/plans/2026-05-20-memory-filtering-implementation.md`.
 - Baseline sync: not-needed for Phase 1.
-- Skip reason: this slice restores and narrows the intended memory flow without changing public ports or database schema.
+- Skip reason: this slice restores and narrows the intended memory flow and then extracts internal policy owners without changing public ports or database schema.
 - Boundary: advisory method-pack signal only.
 
 ## Residual Risks
 
 - Full test suite was not run.
-- Current extraction is deliberately high-precision and rule-based; it will miss implicit but potentially useful facts until Phase 2 scoring exists.
+- Current extraction is deliberately high-precision and rule-based; it will still miss implicit but potentially useful facts until generalized candidate strategies are added.
 - Memory management UI/API for user-visible correction, deletion, and conflict handling remains planned work.
 - Existing stored `default` messages are historical data; this fix prevents new authenticated traffic from falling into that bucket but does not migrate old rows.
+- Phase 2 scoring exists for write-time chat capture, but metric counters, durable decision logs, conflict queues, and knowledge-base candidate governance are not implemented yet.
 
 ## Next Phase
 
-Phase 2 should extract memory capture policy into dedicated components:
+Phase 2 continuation should add:
 
-- `MemoryCandidateExtractor`
-- `MemoryValueAssessor`
-- `MemoryCapturePolicy`
-- decision logs and rejection samples
-- unit tests for score thresholds, risk rejection, conflict handling, and knowledge-base candidate tagging
+- durable capture decision logs and rejection samples;
+- metric counters for candidate, accept, reject, and sensitive rejection rates;
+- conflict handling for competing profile/fact memories;
+- knowledge-base candidate tagging and confirmation workflow;
+- tests for conflict handling, metric emission, and knowledge-base candidate governance.

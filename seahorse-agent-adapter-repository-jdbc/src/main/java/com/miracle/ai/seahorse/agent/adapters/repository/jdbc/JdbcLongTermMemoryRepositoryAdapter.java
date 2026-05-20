@@ -70,7 +70,7 @@ public class JdbcLongTermMemoryRepositoryAdapter implements LongTermMemoryPort {
                 INSERT INTO t_long_term_memory
                 (id, user_id, memory_category, title, content, source_type, source_ids, tags,
                  importance_score, confidence_level, embedding_model, vector_ref_id, create_time, update_time, deleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                VALUES (?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, ?, ?, ?, ?, ?, 0)
                 """,
                 JdbcMemorySupport.hasText(record.id()) ? record.id() : JdbcMemorySupport.nextId(),
                 string(record.metadata().get("userId")),

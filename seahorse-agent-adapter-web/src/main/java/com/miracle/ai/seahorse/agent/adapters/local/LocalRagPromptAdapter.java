@@ -18,9 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.local;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.MemoryPromptFormatter;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.PromptContext;
-import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
-import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 
 import java.util.ArrayList;
@@ -42,10 +41,6 @@ public class LocalRagPromptAdapter implements RagPromptPort {
     private static final String KB_CONTEXT_TITLE = "知识库上下文：";
     private static final String MCP_CONTEXT_TITLE = "工具上下文：";
     private static final String QUESTION_TITLE = "用户问题：";
-    private static final String MEMORY_CONTEXT_TITLE = "用户记忆上下文：";
-    private static final String MEMORY_CONFLICT_NOTE =
-            "注意：若用户记忆与知识库上下文冲突，以知识库上下文为准，除非问题明确询问用户偏好或历史。";
-    private static final int MAX_MEMORY_ITEM_LENGTH = 200;
 
     @Override
     public List<ChatMessage> buildStructuredMessages(PromptContext context,
@@ -65,53 +60,11 @@ public class LocalRagPromptAdapter implements RagPromptPort {
         String mcpContext = context == null ? "" : Objects.requireNonNullElse(context.getMcpContext(), "");
         appendContext(builder, KB_CONTEXT_TITLE, kbContext);
         appendContext(builder, MCP_CONTEXT_TITLE, mcpContext);
-        appendMemoryContext(builder, context);
+        String memoryContext = MemoryPromptFormatter.format(context == null ? null : context.getMemoryContext());
+        if (!memoryContext.isBlank()) {
+            builder.append("\n\n").append(memoryContext);
+        }
         return builder.toString();
-    }
-
-    private void appendMemoryContext(StringBuilder builder, PromptContext context) {
-        if (context == null || !context.hasMemory()) {
-            return;
-        }
-        MemoryContext memory = context.getMemoryContext();
-        StringBuilder memoryBuilder = new StringBuilder();
-
-        appendMemoryLayer(memoryBuilder, "用户画像：", memory.getSemanticMemories());
-        appendMemoryLayer(memoryBuilder, "长期记忆：", memory.getLongTermMemories());
-        appendMemoryLayer(memoryBuilder, "近期记忆：", memory.getShortTermMemories());
-
-        if (memoryBuilder.isEmpty()) {
-            return;
-        }
-        builder.append("\n\n")
-                .append(MEMORY_CONTEXT_TITLE)
-                .append("\n")
-                .append(memoryBuilder)
-                .append("\n")
-                .append(MEMORY_CONFLICT_NOTE);
-    }
-
-    private void appendMemoryLayer(StringBuilder builder, String title, List<MemoryItem> items) {
-        if (items == null || items.isEmpty()) {
-            return;
-        }
-        if (!builder.isEmpty()) {
-            builder.append("\n");
-        }
-        builder.append(title);
-        for (MemoryItem item : items) {
-            String content = truncate(item.getContent(), MAX_MEMORY_ITEM_LENGTH);
-            if (content.isBlank()) {
-                continue;
-            }
-            builder.append("\n- ").append(content);
-        }
-    }
-
-    private String truncate(String value, int maxLen) {
-        if (value == null) return "";
-        String trimmed = value.trim();
-        return trimmed.length() <= maxLen ? trimmed : trimmed.substring(0, maxLen) + "...";
     }
 
     private String buildUserPrompt(String question, List<String> subQuestions) {

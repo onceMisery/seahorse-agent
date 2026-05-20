@@ -33,12 +33,10 @@ import java.util.Objects;
 /**
  * Seahorse 原生消息反馈 Web 入站适配器。
  *
- * <p> 用户 ID 可从请求参数或 {@code X-User-Id} 请求头传入。
+ * <p> 用户 ID 优先从请求参数或 {@code X-User-Id} 请求头传入；未显式传入时使用当前登录用户。
  */
 @RestController
 public class SeahorseMessageFeedbackController {
-
-    private static final String DEFAULT_USER_ID = "default";
 
     private final ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider;
 
@@ -50,7 +48,7 @@ public class SeahorseMessageFeedbackController {
     public Map<String, Object> submitFeedback(@PathVariable String messageId,
                                               @RequestBody MessageFeedbackRequest request,
                                               @RequestParam(required = false) String userId,
-                                              @RequestHeader(value = "X-User-Id", required = false)
+                                              @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
                                               String headerUserId) {
         MessageFeedbackRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
         feedbackInboundPortProvider.getIfAvailable().submit(new SubmitMessageFeedbackCommand(
@@ -70,16 +68,6 @@ public class SeahorseMessageFeedbackController {
     }
 
     private String resolveUserId(String userId, String headerUserId) {
-        if (hasText(userId)) {
-            return userId;
-        }
-        if (hasText(headerUserId)) {
-            return headerUserId;
-        }
-        return DEFAULT_USER_ID;
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
+        return WebUserIdResolver.resolve(userId, headerUserId);
     }
 }

@@ -77,7 +77,7 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
                 (id, user_id, conversation_id, memory_type, content, metadata_json, source_message_ids,
                  importance_score, access_count, last_access_time, decay_score, expires_time,
                  create_time, update_time, deleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0)
+                VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, 0, ?, ?, ?, ?, ?, 0)
                 """,
                 JdbcMemorySupport.hasText(record.id()) ? record.id() : JdbcMemorySupport.nextId(),
                 string(record.metadata().get("userId")),

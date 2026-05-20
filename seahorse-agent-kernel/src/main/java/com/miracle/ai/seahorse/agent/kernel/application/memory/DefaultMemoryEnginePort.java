@@ -64,14 +64,13 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort {
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultMemoryEnginePort.class);
 
-    private static final double CAPTURE_CONFIDENCE = 0.75D;
-    private static final double CAPTURE_IMPORTANCE = 0.55D;
-
     private final ShortTermMemoryPort shortTermPort;
     private final LongTermMemoryPort longTermPort;
     private final SemanticMemoryPort semanticPort;
     private final ObjectMapper objectMapper;
     private final MemoryEngineOptions options;
+    private final MemoryCaptureCandidateExtractor captureCandidateExtractor;
+    private final MemoryValueAssessor memoryValueAssessor;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -90,6 +89,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort {
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.options = Objects.requireNonNullElseGet(options, MemoryEngineOptions::defaults);
+        this.captureCandidateExtractor = new MemoryCaptureCandidateExtractor();
+        this.memoryValueAssessor = new MemoryValueAssessor();
     }
 
     @Override
@@ -128,16 +129,20 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort {
         if (message.getRole() != ChatRole.USER || isBlank(message.getContent())) {
             return;
         }
-        String content = extractTrustedUserMemory(message.getContent());
-        if (isBlank(content)) {
+        MemoryCaptureCandidate candidate = captureCandidateExtractor.extract(message.getContent()).orElse(null);
+        if (candidate == null) {
+            return;
+        }
+        MemoryCaptureDecision decision = memoryValueAssessor.assess(candidate);
+        if (!decision.accepted()) {
             return;
         }
         MemoryRecord record = new MemoryRecord(
                 memoryId(request),
                 MemoryLayer.SHORT_TERM.name(),
-                inferMemoryType(content),
-                content,
-                captureMetadata(request, message),
+                decision.type(),
+                decision.content(),
+                captureMetadata(request, message, decision),
                 java.time.Instant.now());
         shortTermPort.save(record);
     }
@@ -177,50 +182,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort {
 
     // ========== 内部方法 ==========
 
-    private String extractTrustedUserMemory(String rawContent) {
-        String content = rawContent == null ? "" : rawContent.trim();
-        if (content.isBlank()) {
-            return "";
-        }
-        String normalized = content
-                .replaceFirst("^(请|帮我|麻烦你)?记住[：:，,\\s]*", "")
-                .replaceFirst("^我的", "我的");
-        boolean explicitRemember = !normalized.equals(content);
-        boolean profileStatement = content.startsWith("我是") || content.startsWith("我在")
-                || content.startsWith("我来自") || content.startsWith("我负责") || content.startsWith("我擅长");
-        boolean preferenceStatement = content.startsWith("我喜欢") || content.startsWith("我偏好")
-                || content.startsWith("我习惯") || content.startsWith("我常用");
-        boolean personalFact = content.startsWith("我的") && content.length() <= 80;
-        if (!explicitRemember && !profileStatement && !preferenceStatement && !personalFact) {
-            return "";
-        }
-        String candidate = explicitRemember ? normalized : content;
-        candidate = candidate.replaceFirst("^[：:，,\\s]+", "").trim();
-        if (candidate.length() < 2 || candidate.length() > 120 || looksLikeQuestion(candidate)) {
-            return "";
-        }
-        return candidate;
-    }
-
-    private boolean looksLikeQuestion(String content) {
-        return content.endsWith("?") || content.endsWith("？")
-                || content.contains("是什么") || content.contains("怎么") || content.contains("如何");
-    }
-
-    private String inferMemoryType(String content) {
-        String lower = content.toLowerCase();
-        if (content.contains("喜欢") || content.contains("偏好") || content.contains("习惯")
-                || content.contains("常用") || lower.contains("prefer") || lower.contains("like")) {
-            return "PREFERENCE";
-        }
-        if (content.startsWith("我是") || content.startsWith("我在") || content.startsWith("我来自")
-                || content.startsWith("我负责") || content.startsWith("我擅长")) {
-            return "PROFILE";
-        }
-        return "FACT";
-    }
-
-    private Map<String, Object> captureMetadata(MemoryWriteRequest request, ChatMessage message) {
+    private Map<String, Object> captureMetadata(MemoryWriteRequest request,
+                                                ChatMessage message,
+                                                MemoryCaptureDecision decision) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("userId", request.userId());
         metadata.put("conversationId", Objects.requireNonNullElse(request.conversationId(), ""));
@@ -228,8 +192,13 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort {
         metadata.put("role", message.getRole().name().toLowerCase());
         metadata.put("source", "chat_memory_capture");
         metadata.put("capturePolicy", "explicit_user_memory");
-        metadata.put("importanceScore", CAPTURE_IMPORTANCE);
-        metadata.put("confidenceLevel", CAPTURE_CONFIDENCE);
+        metadata.put("capturePolicyVersion", decision.policyVersion());
+        metadata.put("importanceScore", decision.importanceScore());
+        metadata.put("confidenceLevel", decision.confidenceLevel());
+        metadata.put("valueScore", decision.valueScore());
+        metadata.put("riskScore", decision.riskScore());
+        metadata.put("captureSignals", decision.signals());
+        metadata.put("captureReasons", decision.reasons());
         return metadata;
     }
 

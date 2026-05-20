@@ -34,12 +34,11 @@ import java.util.Objects;
 /**
  * Seahorse 原生会话管理 Web adapter。
  *
- * <p>用户 ID 可从请求参数或 {@code X-User-Id} 请求头传入。
+ * <p>用户 ID 优先从请求参数或 {@code X-User-Id} 请求头传入；未显式传入时使用当前登录用户。
  */
 @RestController
 public class SeahorseConversationController {
 
-    private static final String DEFAULT_USER_ID = "default";
     private static final String KEY_CODE = "code";
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
@@ -52,7 +51,7 @@ public class SeahorseConversationController {
 
     @GetMapping("/conversations")
     public Map<String, Object> listConversations(@RequestParam(required = false) String userId,
-                                                 @RequestHeader(value = "X-User-Id", required = false)
+                                                 @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
                                                  String headerUserId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
                 conversationPortProvider.getIfAvailable().listConversations(resolveUserId(userId, headerUserId)));
@@ -62,7 +61,7 @@ public class SeahorseConversationController {
     public Map<String, Object> rename(@PathVariable String conversationId,
                                       @RequestBody ConversationUpdateRequest request,
                                       @RequestParam(required = false) String userId,
-                                      @RequestHeader(value = "X-User-Id", required = false)
+                                      @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
                                       String headerUserId) {
         ConversationUpdateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
         conversationPortProvider.getIfAvailable().rename(conversationId, resolveUserId(userId, headerUserId), safeRequest.title());
@@ -72,7 +71,7 @@ public class SeahorseConversationController {
     @DeleteMapping("/conversations/{conversationId}")
     public Map<String, Object> delete(@PathVariable String conversationId,
                                       @RequestParam(required = false) String userId,
-                                      @RequestHeader(value = "X-User-Id", required = false)
+                                      @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
                                       String headerUserId) {
         conversationPortProvider.getIfAvailable().delete(conversationId, resolveUserId(userId, headerUserId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
@@ -81,23 +80,13 @@ public class SeahorseConversationController {
     @GetMapping("/conversations/{conversationId}/messages")
     public Map<String, Object> listMessages(@PathVariable String conversationId,
                                             @RequestParam(required = false) String userId,
-                                            @RequestHeader(value = "X-User-Id", required = false)
+                                            @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
                                             String headerUserId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
                 conversationPortProvider.getIfAvailable().listMessages(conversationId, resolveUserId(userId, headerUserId)));
     }
 
     private String resolveUserId(String userId, String headerUserId) {
-        if (hasText(userId)) {
-            return userId;
-        }
-        if (hasText(headerUserId)) {
-            return headerUserId;
-        }
-        return DEFAULT_USER_ID;
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
+        return WebUserIdResolver.resolve(userId, headerUserId);
     }
 }

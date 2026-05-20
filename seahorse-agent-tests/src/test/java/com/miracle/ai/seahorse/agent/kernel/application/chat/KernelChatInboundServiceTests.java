@@ -26,8 +26,15 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.GuidanceDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.RewriteResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentGroup;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
@@ -86,6 +93,86 @@ class KernelChatInboundServiceTests {
         // 空检索默认走 FALLBACK_GENERIC：调用流式模型而不是返回固定文案
         verify(streamingModel).streamChat(any(), any());
         verify(callback, org.mockito.Mockito.never()).onContent("未检索到与问题相关的文档内容。");
+    }
+
+    @Test
+    void shouldIncludeLoadedMemoryInGenericFallbackPrompt() {
+        ConversationMemoryPort memoryPort = mock(ConversationMemoryPort.class);
+        QueryRewritePort rewritePort = mock(QueryRewritePort.class);
+        IntentResolutionPort intentPort = mock(IntentResolutionPort.class);
+        IntentGuidancePort guidancePort = mock(IntentGuidancePort.class);
+        RetrievalContextPort retrievalPort = mock(RetrievalContextPort.class);
+        StreamTaskPort taskPort = mock(StreamTaskPort.class);
+        StreamingChatModelPort streamingModel = mock(StreamingChatModelPort.class);
+        StreamCallback callback = mock(StreamCallback.class);
+        MemoryContext loadedMemory = MemoryContext.builder()
+                .userId("user-1")
+                .conversationId("conv-1")
+                .currentQuestion("我的职业是什么？")
+                .shortTermMemories(List.of(MemoryItem.builder()
+                        .id("m1")
+                        .userId("user-1")
+                        .conversationId("conv-old")
+                        .layer(MemoryLayer.SHORT_TERM)
+                        .type("PROFILE")
+                        .content("我是一名学生")
+                        .build()))
+                .build();
+        KernelChatPipeline pipeline = new KernelChatPipeline(
+                new ChatPreparationPorts(memoryPort, fixedMemoryEngine(loadedMemory),
+                        com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryOptimizerPort.passthrough(),
+                        rewritePort, intentPort, guidancePort, retrievalPort),
+                new ChatResponsePorts(
+                        RagPromptPort.simple(),
+                        path -> "你是一个助手。",
+                        streamingModel,
+                        taskPort));
+
+        when(memoryPort.loadAndAppend(any(), any(), any())).thenReturn(List.of(ChatMessage.user("我的职业是什么？")));
+        when(rewritePort.rewriteWithSplit(any(), any())).thenReturn(new RewriteResult("我的职业是什么？", List.of()));
+        when(intentPort.resolve(any())).thenReturn(List.of());
+        when(intentPort.mergeIntentGroup(any())).thenReturn(new IntentGroup(List.of(), List.of()));
+        when(guidancePort.detectAmbiguity(any(), any())).thenReturn(GuidanceDecision.none());
+        when(streamingModel.streamChat(any(), any())).thenReturn(() -> {
+        });
+
+        KernelChatInboundService service = new KernelChatInboundService(pipeline, taskPort);
+
+        service.streamChat(new StreamChatCommand("我的职业是什么？", "conv-1", "task-1", "user-1", false), callback);
+
+        ArgumentCaptor<com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest> requestCaptor =
+                ArgumentCaptor.forClass(com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest.class);
+        verify(streamingModel).streamChat(requestCaptor.capture(), any());
+        String systemPrompt = requestCaptor.getValue().getMessages().get(0).getContent();
+        Assertions.assertTrue(systemPrompt.contains("用户记忆上下文："));
+        Assertions.assertTrue(systemPrompt.contains("我是一名学生"));
+    }
+
+    private MemoryEnginePort fixedMemoryEngine(MemoryContext memoryContext) {
+        return new MemoryEnginePort() {
+            @Override
+            public MemoryContext loadMemory(MemoryLoadRequest request) {
+                return memoryContext;
+            }
+
+            @Override
+            public void writeMemory(MemoryWriteRequest request) {
+            }
+
+            @Override
+            public List<MemoryItem> retrieveMemories(MemoryLoadRequest request) {
+                return memoryContext.getShortTermMemories();
+            }
+
+            @Override
+            public void executeMemoryDecay() {
+            }
+
+            @Override
+            public MemoryQualityReport assessMemoryQuality(String userId) {
+                return MemoryQualityReport.builder().userId(userId).build();
+            }
+        };
     }
 
     @Test

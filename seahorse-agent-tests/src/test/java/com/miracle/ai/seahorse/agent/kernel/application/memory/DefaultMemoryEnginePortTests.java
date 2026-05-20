@@ -202,6 +202,97 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldWriteProfileMemoryWithWhitespaceAndTrimSocialTail() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER);
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-1")
+                .messageId("msg-profile")
+                .message(ChatMessage.user("我 是一名学生，很高兴认识你"))
+                .build());
+
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        MemoryRecord saved = shortTermPort.savedRecords.get(0);
+        Assertions.assertEquals("PROFILE", saved.type());
+        Assertions.assertEquals("我是一名学生", saved.content());
+        Assertions.assertEquals("high_precision_rule_v1", saved.metadata().get("capturePolicyVersion"));
+    }
+
+    @Test
+    void shouldWritePreferenceMemoryWithWhitespace() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER);
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-1")
+                .messageId("msg-pref")
+                .message(ChatMessage.user("我  喜欢 简短回答"))
+                .build());
+
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        MemoryRecord saved = shortTermPort.savedRecords.get(0);
+        Assertions.assertEquals("PREFERENCE", saved.type());
+        Assertions.assertEquals("我喜欢简短回答", saved.content());
+    }
+
+    @Test
+    void shouldWriteHighValuePersonalFactMemory() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER);
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-1")
+                .messageId("msg-fact")
+                .message(ChatMessage.user("我的职业是学生"))
+                .build());
+
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        MemoryRecord saved = shortTermPort.savedRecords.get(0);
+        Assertions.assertEquals("FACT", saved.type());
+        Assertions.assertEquals("我的职业是学生", saved.content());
+    }
+
+    @Test
+    void shouldScoreExplicitImportantMemoryHigherThanPlainPreference() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER);
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-1")
+                .messageId("msg-important")
+                .message(ChatMessage.user("以后都按这个来：我喜欢简短回答"))
+                .build());
+
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        MemoryRecord saved = shortTermPort.savedRecords.get(0);
+        Assertions.assertEquals("PREFERENCE", saved.type());
+        Assertions.assertEquals("我喜欢简短回答", saved.content());
+        Assertions.assertTrue((Double) saved.metadata().get("importanceScore") >= 0.75D);
+        Assertions.assertTrue((Double) saved.metadata().get("confidenceLevel") >= 0.85D);
+    }
+
+    @Test
     void shouldSkipNoisyQuestionWhenWritingMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
@@ -215,6 +306,44 @@ class DefaultMemoryEnginePortTests {
                 .conversationId("conv-1")
                 .messageId("msg-2")
                 .message(ChatMessage.user("入职流程是什么？"))
+                .build());
+
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+    }
+
+    @Test
+    void shouldSkipLowValuePersonalExpressionWhenWritingMemory() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER);
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-1")
+                .messageId("msg-low-value")
+                .message(ChatMessage.user("我的天这个太难了"))
+                .build());
+
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+    }
+
+    @Test
+    void shouldSkipSensitiveExplicitMemoryWhenWritingMemory() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER);
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-1")
+                .messageId("msg-sensitive")
+                .message(ChatMessage.user("请记住：我的密码是 123456"))
                 .build());
 
         Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());

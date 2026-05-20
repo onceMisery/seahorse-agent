@@ -19,8 +19,12 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceRunResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
@@ -59,6 +63,50 @@ class KernelMemoryGovernanceServiceTests {
         assertThat(longTerm.records).hasSize(1);
         assertThat(semantic.records).hasSize(1);
         assertThat(memoryEngine.assessedUsers).containsExactly("user-1");
+    }
+
+    @Test
+    void shouldPersistQualitySnapshotAndPendingConflictsDuringGovernance() {
+        RecordingShortTermMemoryPort shortTerm = new RecordingShortTermMemoryPort();
+        RecordingMemoryPort longTerm = new RecordingMemoryPort();
+        RecordingMemoryPort semantic = new RecordingMemoryPort();
+        RecordingMemoryEnginePort memoryEngine = new RecordingMemoryEnginePort();
+        RecordingQualitySnapshotRepository qualitySnapshots = new RecordingQualitySnapshotRepository();
+        RecordingConflictLogRepository conflicts = new RecordingConflictLogRepository();
+        shortTerm.records.add(new MemoryRecord("m1", "short_term", "PROFILE", "I am a student",
+                Map.of("userId", "user-1", "semanticKey", "profile:occupation"),
+                Instant.now()));
+        shortTerm.records.add(new MemoryRecord("m2", "short_term", "PROFILE", "I am a teacher",
+                Map.of("userId", "user-1", "semanticKey", "profile:occupation"),
+                Instant.now()));
+        memoryEngine.report = MemoryQualityReport.builder()
+                .userId("user-1")
+                .shortTermCount(2)
+                .conflictCount(1)
+                .singularProfileConflictCount(1)
+                .build();
+        KernelMemoryGovernanceService service = new KernelMemoryGovernanceService(
+                new MemoryGovernanceServicePorts(shortTerm, longTerm, semantic, memoryEngine,
+                        com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort.noop(),
+                        ShortTermMemoryMaintenancePort.noop(),
+                        qualitySnapshots,
+                        conflicts),
+                0.6D);
+
+        MemoryGovernanceRunResult result = service.runGovernance("user-1", "quality-check", true);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(qualitySnapshots.snapshots).hasSize(1);
+        assertThat(qualitySnapshots.snapshots.get(0).snapshot())
+                .containsEntry("governancePolicyVersion", "memory-governance-v1")
+                .containsEntry("shortTermCount", 2)
+                .containsEntry("singularProfileConflictCount", 1);
+        assertThat(conflicts.records).hasSize(1);
+        assertThat(conflicts.records.get(0).userId()).isEqualTo("user-1");
+        assertThat(conflicts.records.get(0).memoryId1()).isEqualTo("m1");
+        assertThat(conflicts.records.get(0).memoryId2()).isEqualTo("m2");
+        assertThat(conflicts.records.get(0).conflictType()).isEqualTo("SEMANTIC_KEY_CONFLICT");
+        assertThat(conflicts.records.get(0).resolutionStatus()).isEqualTo("PENDING");
     }
 
     @Test
@@ -162,6 +210,7 @@ class KernelMemoryGovernanceServiceTests {
 
         final List<String> assessedUsers = new ArrayList<>();
         boolean decayExecuted;
+        MemoryQualityReport report;
 
         @Override
         public com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext loadMemory(
@@ -187,7 +236,52 @@ class KernelMemoryGovernanceServiceTests {
         @Override
         public MemoryQualityReport assessMemoryQuality(String userId) {
             assessedUsers.add(userId);
+            if (report != null) {
+                return report;
+            }
             return MemoryQualityReport.builder().userId(userId).build();
+        }
+    }
+
+    private static class RecordingQualitySnapshotRepository implements MemoryQualitySnapshotRepositoryPort {
+
+        final List<MemoryQualitySnapshot> snapshots = new ArrayList<>();
+
+        @Override
+        public List<MemoryQualitySnapshot> listByUser(String userId, int limit) {
+            return snapshots.stream()
+                    .filter(snapshot -> userId.equals(snapshot.userId()))
+                    .limit(limit)
+                    .toList();
+        }
+
+        @Override
+        public void save(MemoryQualitySnapshot snapshot) {
+            snapshots.add(snapshot);
+        }
+    }
+
+    private static class RecordingConflictLogRepository implements MemoryConflictLogRepositoryPort {
+
+        final List<MemoryConflictRecord> records = new ArrayList<>();
+
+        @Override
+        public List<MemoryConflictRecord> listByUser(String userId, String status, int limit) {
+            return records.stream()
+                    .filter(record -> userId.equals(record.userId()))
+                    .filter(record -> status == null || status.isBlank() || status.equals(record.resolutionStatus()))
+                    .limit(limit)
+                    .toList();
+        }
+
+        @Override
+        public void save(MemoryConflictRecord record) {
+            records.add(record);
+        }
+
+        @Override
+        public boolean resolve(String conflictId, String action, String resolvedBy) {
+            return false;
         }
     }
 }

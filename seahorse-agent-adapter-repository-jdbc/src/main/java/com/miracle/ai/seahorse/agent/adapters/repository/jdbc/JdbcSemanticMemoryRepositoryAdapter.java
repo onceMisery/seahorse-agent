@@ -78,7 +78,7 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
                     INSERT INTO t_semantic_memory
                     (id, user_id, semantic_key, semantic_type, value_json, confidence_level,
                      source_memory_ids, create_time, update_time, deleted)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                    VALUES (?, ?, ?, ?, CAST(? AS JSON), ?, CAST(? AS JSON), ?, ?, 0)
                     """,
                     JdbcMemorySupport.hasText(record.id()) ? record.id() : JdbcMemorySupport.nextId(),
                     userId,
@@ -96,8 +96,8 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
         }
         jdbcTemplate.update("""
                 UPDATE t_semantic_memory
-                SET value_json = ?, confidence_level = GREATEST(confidence_level, ?),
-                    source_memory_ids = ?, update_time = ?
+                SET value_json = CAST(? AS JSON), confidence_level = GREATEST(confidence_level, ?),
+                    source_memory_ids = CAST(? AS JSON), update_time = ?
                 WHERE id = ? AND deleted = 0
                 """,
                 JdbcMemorySupport.writeJson(objectMapper, Map.of(

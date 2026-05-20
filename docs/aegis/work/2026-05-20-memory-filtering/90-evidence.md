@@ -59,6 +59,42 @@ Covered:
 - low-value personal expressions and sensitive explicit memories are rejected.
 - memory layer read failures degrade without breaking response flow.
 
+## Phase 2 Capture Policy Tests
+
+Command:
+
+```powershell
+./mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=MemoryCapturePolicyTests,DefaultMemoryEnginePortTests,KernelChatInboundServiceTests" test "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"
+```
+
+Exit status: `0`.
+
+Observed:
+
+- `KernelChatInboundServiceTests`: 6 tests run, 0 failures, 0 errors.
+- `DefaultMemoryEnginePortTests`: 17 tests run, 0 failures, 0 errors.
+- `MemoryCapturePolicyTests`: 4 tests run, 0 failures, 0 errors.
+- Total: 27 tests run, 0 failures, 0 errors.
+- Reactor result: `BUILD SUCCESS`.
+
+Covered:
+
+- write-time memory capture uses an explainable candidate extractor and value assessor.
+- extraction records signals such as `profile_statement`, `normalized_chinese_whitespace`, and `trimmed_social_tail`.
+- sensitive explicit memory is rejected with `sensitive_credential`.
+- explicit important preference memory receives high importance/confidence.
+- `DefaultMemoryEnginePort` stores policy metadata: `capturePolicyVersion`, `valueScore`, `riskScore`, `captureSignals`, and `captureReasons`.
+
+Additional compile check:
+
+```powershell
+./mvnw.cmd -pl seahorse-agent-tests -am test-compile "-Dspotless.check.skip=true"
+```
+
+Exit status: `0`.
+
+Observed: all 78 test sources compiled after removing duplicate test methods restored from stash.
+
 ## JDBC Repository Tests
 
 Command:
@@ -203,5 +239,5 @@ content              = 根据我们的对话历史记录，您提到自己是一
 ## Not Covered
 
 - Full repository test suite was not run.
-- Phase 2 value scoring, conflict queue, policy versioning, and knowledge-base candidate governance are design/planned work, not implemented in this slice.
+- Phase 2 conflict queue, decision logs/metrics beyond memory metadata, and knowledge-base candidate governance remain planned work.
 - LLM-based generalized memory extraction remains out of scope for Phase 1.

@@ -28,12 +28,12 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAuthAutoConfigu
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAutoConfiguration
 
 # Layer 6: Kernel sub-configs (after Kernel main)
-com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelChatAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAgentAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelDocumentRefreshAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelKeywordAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelKnowledgeAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelMemoryAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelChatAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelMetadataAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelModelAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelOpsAutoConfiguration

@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.chat;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.MemoryPromptFormatter;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.PromptContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.RewriteResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
@@ -156,6 +157,7 @@ final class KernelChatResponseSupport {
         String systemPrompt = customPrompt == null || customPrompt.isBlank()
                 ? responsePorts.promptTemplatePort().load(CHAT_SYSTEM_PROMPT_PATH)
                 : customPrompt;
+        systemPrompt = MemoryPromptFormatter.appendToSystemPrompt(systemPrompt, context.getMemoryContext());
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.system(systemPrompt));
         messages.addAll(safeHistory(context));

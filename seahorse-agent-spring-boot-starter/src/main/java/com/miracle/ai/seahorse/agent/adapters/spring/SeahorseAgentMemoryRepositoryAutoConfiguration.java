@@ -33,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -83,39 +84,39 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(ShortTermMemoryPort.class)
     public JdbcShortTermMemoryRepositoryAdapter seahorseJdbcShortTermMemoryRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcShortTermMemoryRepositoryAdapter(dataSource, objectMapper);
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcShortTermMemoryRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
     }
 
     @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(LongTermMemoryPort.class)
     public JdbcLongTermMemoryRepositoryAdapter seahorseJdbcLongTermMemoryRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcLongTermMemoryRepositoryAdapter(dataSource, objectMapper);
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcLongTermMemoryRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
     }
 
     @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(SemanticMemoryPort.class)
     public JdbcSemanticMemoryRepositoryAdapter seahorseJdbcSemanticMemoryRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcSemanticMemoryRepositoryAdapter(dataSource, objectMapper);
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcSemanticMemoryRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
     }
 
     @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(MemoryQualitySnapshotRepositoryPort.class)
     public JdbcMemoryQualitySnapshotRepositoryAdapter seahorseJdbcMemoryQualitySnapshotRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcMemoryQualitySnapshotRepositoryAdapter(dataSource, objectMapper);
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcMemoryQualitySnapshotRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
     }
 
     @Bean
@@ -125,5 +126,9 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
     public JdbcMemoryConflictLogRepositoryAdapter seahorseJdbcMemoryConflictLogRepositoryAdapter(
             DataSource dataSource) {
         return new JdbcMemoryConflictLogRepositoryAdapter(dataSource);
+    }
+
+    private ObjectMapper objectMapper(ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return objectMapperProvider.getIfAvailable(ObjectMapper::new);
     }
 }

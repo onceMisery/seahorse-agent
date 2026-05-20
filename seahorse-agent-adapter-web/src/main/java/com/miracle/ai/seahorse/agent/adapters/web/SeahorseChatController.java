@@ -32,6 +32,7 @@ import org.springframework.http.MediaType;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -47,8 +48,6 @@ import java.util.Objects;
  */
 @RestController
 public class SeahorseChatController {
-
-    private static final String DEFAULT_USER_ID = "default";
 
     private final ObjectProvider<ChatInboundPort> chatInboundPortProvider;
     private final ChatStreamCallbackFactoryPort callbackFactory;
@@ -93,11 +92,13 @@ public class SeahorseChatController {
     @GetMapping(value = "/rag/v3/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE + ";charset=UTF-8")
     public SseEmitter chat(@RequestParam String question,
                            @RequestParam(required = false) String conversationId,
-                           @RequestParam(required = false, defaultValue = DEFAULT_USER_ID) String userId,
+                           @RequestParam(required = false) String userId,
+                           @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                           String headerUserId,
                            @RequestParam(required = false, defaultValue = "false") Boolean deepThinking,
                            @RequestParam(required = false) String chatMode) {
         String actualConversationId = resolveId(conversationId);
-        String actualUserId = resolveUserId(userId);
+        String actualUserId = WebUserIdResolver.resolve(userId, headerUserId);
         checkChatRateLimit(actualUserId);
         String taskId = nextShortId();
         SseEmitter emitter = new SseEmitter(sseTimeoutMs);
@@ -151,13 +152,6 @@ public class SeahorseChatController {
         } catch (IllegalArgumentException ex) {
             return ChatMode.RAG;
         }
-    }
-
-    private String resolveUserId(String value) {
-        if (value == null || value.isBlank()) {
-            return DEFAULT_USER_ID;
-        }
-        return value.length() > 64 ? value.substring(0, 64) : value;
     }
 
     private void checkChatRateLimit(String userId) {
