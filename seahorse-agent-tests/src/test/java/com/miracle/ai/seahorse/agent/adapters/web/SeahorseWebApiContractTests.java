@@ -94,8 +94,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentS
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryHealthReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillCountItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
@@ -306,6 +308,17 @@ class SeahorseWebApiContractTests {
                 .thenReturn(List.of(new MemoryOutboxPort.MemoryOutboxTask(
                         "outbox-1", "VECTOR_UPSERT", "m1", "u1", "default",
                         Map.of("memoryId", "m1"), "", null, Instant.EPOCH)));
+        when(memoryManagementPort.memoryHealth("u1", "default"))
+                .thenReturn(new MemoryHealthReport(
+                        "u1", "default", 1, 1, 1, 1,
+                        Map.of("SUCCEEDED", 1L), 1D, 0D, 0, 0, 0.25D, 0.1D,
+                        Map.of("shortTermCount", 3), List.of("memory.outbox.backlog"), Instant.EPOCH));
+        when(memoryManagementPort.memoryPolicyConfig()).thenReturn(MemoryPolicyConfig.defaults()
+                .withCaptureAcceptThreshold(0.55D)
+                .withTokenBudget(1800));
+        when(memoryManagementPort.updatePolicyConfig(any())).thenReturn(MemoryPolicyConfig.defaults()
+                .withCaptureAcceptThreshold(0.6D)
+                .withTokenBudget(1600));
 
         MemoryGovernanceInboundPort governancePort = mock(MemoryGovernanceInboundPort.class);
         when(governancePort.runGovernance("u1", "manual", true)).thenReturn(governanceResult("u1"));
@@ -372,6 +385,20 @@ class SeahorseWebApiContractTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].id").value("outbox-1"))
                 .andExpect(jsonPath("$.data[0].taskType").value("VECTOR_UPSERT"));
+        mvc.perform(get("/memories/health").param("userId", "u1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.profileFactCount").value(1))
+                .andExpect(jsonPath("$.data.alerts[0]").value("memory.outbox.backlog"));
+        mvc.perform(get("/memories/policy-config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.captureAcceptThreshold").value(0.55))
+                .andExpect(jsonPath("$.data.tokenBudget").value(1800));
+        mvc.perform(post("/memories/policy-config")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("captureAcceptThreshold", 0.6D, "tokenBudget", 1600))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.captureAcceptThreshold").value(0.6))
+                .andExpect(jsonPath("$.data.tokenBudget").value(1600));
         mvc.perform(post("/memories/conflicts/c1/resolve")
                         .header("X-User-Id", "u1")
                         .contentType(MediaType.APPLICATION_JSON)

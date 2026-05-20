@@ -44,6 +44,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPor
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
@@ -179,7 +180,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort) {
         this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
                 correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort,
-                memoryOutboxPort, businessDocumentRetrieverPort, MemoryLifecyclePort.noop());
+                memoryOutboxPort, businessDocumentRetrieverPort, MemoryLifecyclePort.noop(),
+                MemoryPolicyConfigPort.defaults());
     }
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
@@ -195,6 +197,25 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryOutboxPort memoryOutboxPort,
                                    MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
                                    MemoryLifecyclePort memoryLifecyclePort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
+                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
+                businessDocumentRetrieverPort, memoryLifecyclePort, MemoryPolicyConfigPort.defaults());
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort,
+                                   MemoryVectorPort memoryVectorPort,
+                                   MemoryOutboxPort memoryOutboxPort,
+                                   MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                   MemoryLifecyclePort memoryLifecyclePort,
+                                   MemoryPolicyConfigPort memoryPolicyConfigPort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -211,7 +232,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.options = Objects.requireNonNullElseGet(options, MemoryEngineOptions::defaults);
         this.captureCandidateExtractor = new MemoryCaptureCandidateExtractor();
-        this.memoryValueAssessor = new MemoryValueAssessor();
+        this.memoryValueAssessor = new MemoryValueAssessor(memoryPolicyConfigPort);
         this.memorySanitizer = new MemorySanitizer();
         this.memoryPreFilter = new MemoryPreFilter();
         this.memorySemanticClassifier = new MemorySemanticClassifier(captureCandidateExtractor, memoryValueAssessor);

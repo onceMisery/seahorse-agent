@@ -130,6 +130,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
@@ -442,6 +443,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(ContextWeaverPort.class);
                     assertThat(context).hasSingleBean(MemoryIngestionWorkflowPort.class);
                     assertThat(context).hasSingleBean(MemoryOperationLogPort.class);
+                    assertThat(context).hasSingleBean(MemoryPolicyConfigPort.class);
                     assertThat(context).hasSingleBean(ProfileMemoryPort.class);
                     assertThat(context).hasSingleBean(CorrectionLedgerPort.class);
                     assertThat(context).hasSingleBean(KernelMemoryManagementService.class);
@@ -469,6 +471,25 @@ class SeahorseAgentKernelAutoConfigurationTests {
                             .build());
 
                     verify(shortTermMemoryPort, never()).save(any(MemoryRecord.class));
+                });
+    }
+
+    @Test
+    void shouldInitializeMemoryPolicyConfigFromProperties() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.memory.policy.capture-accept-threshold=0.55",
+                        "seahorse-agent.memory.policy.token-budget=1800",
+                        "seahorse-agent.memory.policy.review-enabled=true",
+                        "seahorse-agent.memory.policy.grey-release-key=tenant-default")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    MemoryPolicyConfigPort port = context.getBean(MemoryPolicyConfigPort.class);
+
+                    assertThat(port.current().captureAcceptThreshold()).isEqualTo(0.55D);
+                    assertThat(port.current().tokenBudget()).isEqualTo(1800);
+                    assertThat(port.current().reviewEnabled()).isTrue();
+                    assertThat(port.current().greyReleaseKey()).isEqualTo("tenant-default");
                 });
     }
 

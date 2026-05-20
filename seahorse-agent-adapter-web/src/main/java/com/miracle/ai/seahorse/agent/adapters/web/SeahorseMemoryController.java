@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -114,6 +115,25 @@ public class SeahorseMemoryController {
     public Map<String, Object> outbox(@RequestParam(defaultValue = "20") int limit) {
         if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
         return ok(managementPortProvider.getIfAvailable().listOutboxTasks(limit));
+    }
+
+    @GetMapping("/memories/health")
+    public Map<String, Object> health(@RequestParam String userId,
+                                      @RequestParam(defaultValue = "default") String tenantId) {
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(managementPortProvider.getIfAvailable().memoryHealth(userId, tenantId));
+    }
+
+    @GetMapping("/memories/policy-config")
+    public Map<String, Object> policyConfig() {
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(managementPortProvider.getIfAvailable().memoryPolicyConfig());
+    }
+
+    @PostMapping("/memories/policy-config")
+    public Map<String, Object> updatePolicyConfig(@RequestBody(required = false) MemoryPolicyConfig request) {
+        if (managementPortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
+        return ok(managementPortProvider.getIfAvailable().updatePolicyConfig(request));
     }
 
     @PostMapping("/memories/conflicts/{conflictId}/resolve")

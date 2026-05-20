@@ -17,6 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -25,14 +28,22 @@ class MemoryValueAssessor {
 
     static final String POLICY_VERSION = "high_precision_rule_v1";
 
-    private static final double ACCEPT_THRESHOLD = 0.40D;
-    private static final double HIGH_VALUE_THRESHOLD = 0.75D;
+    private final MemoryPolicyConfigPort policyConfigPort;
+
+    MemoryValueAssessor() {
+        this(MemoryPolicyConfigPort.defaults());
+    }
+
+    MemoryValueAssessor(MemoryPolicyConfigPort policyConfigPort) {
+        this.policyConfigPort = Objects.requireNonNullElseGet(policyConfigPort, MemoryPolicyConfigPort::defaults);
+    }
 
     MemoryCaptureDecision assess(MemoryCaptureCandidate candidate) {
         Objects.requireNonNull(candidate, "candidate must not be null");
+        MemoryPolicyConfig policy = policyConfigPort.current();
         List<String> reasons = new ArrayList<>();
         double riskScore = riskScore(candidate);
-        if (riskScore >= 0.70D) {
+        if (riskScore >= policy.riskRejectThreshold()) {
             reasons.add("high_risk");
             return MemoryCaptureDecision.reject(candidate, 0D, riskScore, reasons);
         }
@@ -69,12 +80,12 @@ class MemoryValueAssessor {
         }
         valueScore = clamp(valueScore);
 
-        if (valueScore < ACCEPT_THRESHOLD) {
+        if (valueScore < policy.captureAcceptThreshold()) {
             reasons.add("low_value");
             return MemoryCaptureDecision.reject(candidate, valueScore, riskScore, reasons);
         }
 
-        boolean highValue = valueScore >= HIGH_VALUE_THRESHOLD || candidate.explicitImportant();
+        boolean highValue = valueScore >= policy.highValueThreshold() || candidate.explicitImportant();
         double importanceScore = highValue ? 0.80D : 0.60D;
         double confidenceLevel = highValue ? 0.90D : 0.80D;
         return new MemoryCaptureDecision(

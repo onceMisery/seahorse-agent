@@ -21,8 +21,10 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryHealthReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
@@ -30,8 +32,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.time.Instant;
 
 public class KernelMemoryManagementService implements MemoryManagementInboundPort {
 
@@ -105,6 +111,60 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
         return ports.outboxPort().pollPending(limit <= 0 ? DEFAULT_LIMIT : limit);
     }
 
+    @Override
+    public MemoryHealthReport memoryHealth(String userId, String tenantId) {
+        String safeUserId = requireText(userId, "userId");
+        String safeTenantId = defaultTenant(tenantId);
+        int sampleLimit = 200;
+        List<ProfileFact> profileFacts = ports.profileMemoryPort().listActive(safeUserId, safeTenantId, sampleLimit);
+        List<CorrectionRule> correctionRules = ports.correctionLedgerPort()
+                .listActive(safeUserId, safeTenantId, sampleLimit);
+        List<MemoryConflictRecord> pendingConflicts = ports.conflictLogRepositoryPort()
+                .listByUser(safeUserId, "PENDING", sampleLimit);
+        List<MemoryOutboxPort.MemoryOutboxTask> outboxTasks = ports.outboxPort().pollPending(sampleLimit);
+        List<MemoryOperationRecord> operations = ports.operationLogPort()
+                .listByUser(safeUserId, safeTenantId, null, sampleLimit);
+        List<MemoryQualitySnapshot> snapshots = ports.qualitySnapshotRepositoryPort().listByUser(safeUserId, 1);
+
+        Map<String, Long> operationCounts = operationCounts(operations);
+        int operationTotal = operations.size();
+        int acceptedCount = countStatus(operations, "SUCCEEDED");
+        int rejectedCount = countStatus(operations, "REJECTED");
+        int schemaFailures = countReason(operations, "schema");
+        int policyBlocks = countReason(operations, "high_risk") + countReason(operations, "policy");
+        Map<String, Object> latestSnapshot = snapshots.isEmpty() ? Map.of() : snapshots.get(0).snapshot();
+
+        MemoryPolicyConfig policy = ports.policyConfigPort().current();
+        List<String> alerts = alerts(outboxTasks.size(), schemaFailures, policy);
+        return new MemoryHealthReport(
+                safeUserId,
+                safeTenantId,
+                profileFacts.size(),
+                correctionRules.size(),
+                pendingConflicts.size(),
+                outboxTasks.size(),
+                operationCounts,
+                rate(acceptedCount, operationTotal),
+                rate(rejectedCount, operationTotal),
+                schemaFailures,
+                policyBlocks,
+                profileCompleteness(profileFacts),
+                conflictDensity(latestSnapshot, pendingConflicts.size()),
+                latestSnapshot,
+                alerts,
+                Instant.now());
+    }
+
+    @Override
+    public MemoryPolicyConfig memoryPolicyConfig() {
+        return ports.policyConfigPort().current();
+    }
+
+    @Override
+    public MemoryPolicyConfig updatePolicyConfig(MemoryPolicyConfig config) {
+        return ports.policyConfigPort().update(config);
+    }
+
     private MemoryStorePort store(String layer) {
         return switch (normalizeLayer(layer)) {
             case "working" -> ports.workingMemoryPort();
@@ -130,5 +190,85 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private String defaultTenant(String tenantId) {
+        return hasText(tenantId) ? tenantId.trim() : "default";
+    }
+
+    private Map<String, Long> operationCounts(List<MemoryOperationRecord> operations) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (MemoryOperationRecord operation : operations) {
+            String status = hasText(operation.status()) ? operation.status() : "UNKNOWN";
+            counts.put(status, counts.getOrDefault(status, 0L) + 1L);
+        }
+        return counts;
+    }
+
+    private int countStatus(List<MemoryOperationRecord> operations, String status) {
+        int count = 0;
+        for (MemoryOperationRecord operation : operations) {
+            if (status.equals(operation.status())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int countReason(List<MemoryOperationRecord> operations, String needle) {
+        int count = 0;
+        String normalizedNeedle = Objects.requireNonNullElse(needle, "").toLowerCase(Locale.ROOT);
+        for (MemoryOperationRecord operation : operations) {
+            String error = Objects.requireNonNullElse(operation.errorMessage(), "").toLowerCase(Locale.ROOT);
+            String decision = operation.decision().toString().toLowerCase(Locale.ROOT);
+            if (error.contains(normalizedNeedle) || decision.contains(normalizedNeedle)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private double rate(int count, int total) {
+        return total <= 0 ? 0D : (double) count / total;
+    }
+
+    private double profileCompleteness(List<ProfileFact> profileFacts) {
+        if (profileFacts.isEmpty()) {
+            return 0D;
+        }
+        int targetSlots = 4;
+        return Math.min(1D, (double) profileFacts.size() / targetSlots);
+    }
+
+    private double conflictDensity(Map<String, Object> snapshot, int pendingConflictCount) {
+        int totalMemories = number(snapshot.get("shortTermCount"))
+                + number(snapshot.get("longTermCount"))
+                + number(snapshot.get("semanticCount"));
+        return totalMemories <= 0 ? 0D : (double) pendingConflictCount / totalMemories;
+    }
+
+    private int number(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Integer.parseInt(text);
+            } catch (NumberFormatException ignored) {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
+    private List<String> alerts(int outboxBacklog, int schemaFailures, MemoryPolicyConfig policy) {
+        List<String> alerts = new ArrayList<>();
+        if (outboxBacklog > policy.outboxBacklogAlertThreshold()) {
+            alerts.add("memory.outbox.backlog");
+        }
+        if (schemaFailures > policy.schemaFailureAlertThreshold()) {
+            alerts.add("memory.schema.failures");
+        }
+        return alerts;
     }
 }

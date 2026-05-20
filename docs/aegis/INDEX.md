@@ -35,3 +35,10 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p5-lifecycle-management/task-intent-draft.json | Memory P5 lifecycle management task intent draft |
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p5-lifecycle-management/todo-checkpoint-draft.json | Memory P5 lifecycle management todo checkpoint draft |
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p5-lifecycle-management/drift-check-draft.json | Memory P5 lifecycle management drift check draft |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p6-observability-policy/10-intent.md | Memory P6 observability policy intent |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p6-observability-policy/20-checkpoint.md | Memory P6 observability policy checkpoint |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p6-observability-policy/90-evidence.md | Memory P6 observability policy evidence |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p6-observability-policy/99-reflection.md | Memory P6 observability policy reflection |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p6-observability-policy/task-intent-draft.json | Memory P6 observability policy task intent draft |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p6-observability-policy/todo-checkpoint-draft.json | Memory P6 observability policy todo checkpoint draft |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p6-observability-policy/drift-check-draft.json | Memory P6 observability policy drift check draft |

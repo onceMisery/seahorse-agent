@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryRout
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.InMemoryMemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryDecayOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryEngineOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryGovernanceServicePorts;
@@ -42,6 +43,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
@@ -71,6 +74,29 @@ import org.springframework.context.annotation.Configuration;
 public class SeahorseAgentKernelMemoryAutoConfiguration {
 
     @Bean
+    @ConditionalOnMissingBean(MemoryPolicyConfigPort.class)
+    public InMemoryMemoryPolicyConfigPort seahorseMemoryPolicyConfigPort(
+            @Value("${seahorse-agent.memory.policy.capture-accept-threshold:0.4}") double captureAcceptThreshold,
+            @Value("${seahorse-agent.memory.policy.high-value-threshold:0.75}") double highValueThreshold,
+            @Value("${seahorse-agent.memory.policy.risk-reject-threshold:0.7}") double riskRejectThreshold,
+            @Value("${seahorse-agent.memory.policy.token-budget:2400}") int tokenBudget,
+            @Value("${seahorse-agent.memory.policy.review-enabled:false}") boolean reviewEnabled,
+            @Value("${seahorse-agent.memory.policy.schema-failure-alert-threshold:0}") int schemaFailureAlertThreshold,
+            @Value("${seahorse-agent.memory.policy.outbox-backlog-alert-threshold:0}") int outboxBacklogAlertThreshold,
+            @Value("${seahorse-agent.memory.policy.grey-release-key:}") String greyReleaseKey) {
+        return new InMemoryMemoryPolicyConfigPort(new MemoryPolicyConfig(
+                captureAcceptThreshold,
+                highValueThreshold,
+                riskRejectThreshold,
+                tokenBudget,
+                reviewEnabled,
+                MemoryPolicyConfig.defaults().enabledTracks(),
+                schemaFailureAlertThreshold,
+                outboxBacklogAlertThreshold,
+                greyReleaseKey));
+    }
+
+    @Bean
     @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
     @ConditionalOnMissingBean(MemoryEnginePort.class)
     public DefaultMemoryEnginePort seahorseDefaultMemoryEnginePort(
@@ -85,6 +111,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryOutboxPort> memoryOutboxPort,
             ObjectProvider<MemoryBusinessDocumentRetrieverPort> businessDocumentRetrieverPort,
             ObjectProvider<MemoryLifecyclePort> memoryLifecyclePort,
+            ObjectProvider<MemoryPolicyConfigPort> memoryPolicyConfigPort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
             @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
@@ -109,7 +136,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 memoryVectorPort.getIfAvailable(MemoryVectorPort::noop),
                 memoryOutboxPort.getIfAvailable(MemoryOutboxPort::noop),
                 businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop),
-                memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop));
+                memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop),
+                memoryPolicyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults));
     }
 
     @Bean
@@ -158,7 +186,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<ProfileMemoryPort> profileMemoryPort,
             ObjectProvider<CorrectionLedgerPort> correctionLedgerPort,
             ObjectProvider<MemoryOperationLogPort> operationLogPort,
-            ObjectProvider<MemoryOutboxPort> outboxPort) {
+            ObjectProvider<MemoryOutboxPort> outboxPort,
+            ObjectProvider<MemoryPolicyConfigPort> policyConfigPort) {
         return new MemoryManagementServicePorts(
                 workingMemoryPort,
                 shortTermMemoryPort,
@@ -169,7 +198,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 profileMemoryPort.getIfAvailable(ProfileMemoryPort::noop),
                 correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
                 operationLogPort.getIfAvailable(MemoryOperationLogPort::noop),
-                outboxPort.getIfAvailable(MemoryOutboxPort::noop));
+                outboxPort.getIfAvailable(MemoryOutboxPort::noop),
+                policyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults));
     }
 
     @Bean

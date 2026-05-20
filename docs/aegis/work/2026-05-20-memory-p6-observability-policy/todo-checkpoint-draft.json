@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-20-memory-p6-observability-policy",
+  "currentTodo": "P6 observability and dynamic policy controls verified and ready to commit",
+  "activeSlice": "completion-candidate",
+  "completedTodos": [
+    "Added MemoryPolicyConfig, MemoryPolicyConfigPort, MemoryHealthReport, and InMemoryMemoryPolicyConfigPort",
+    "Updated MemoryValueAssessor to use dynamic thresholds",
+    "Added DefaultMemoryEnginePort constructor overload for policy config",
+    "Extended MemoryManagementServicePorts and KernelMemoryManagementService",
+    "Added management inbound defaults and web endpoints",
+    "Wired policy config from Spring properties",
+    "Added kernel, web, and Spring contract tests"
+  ],
+  "blockedOn": [],
+  "evidenceRefs": [
+    "KernelMemoryObservabilityServiceTests: BUILD SUCCESS, 2 tests",
+    "P6 contract/wiring target: BUILD SUCCESS, 5 tests",
+    "Broader P6 memory regression: BUILD SUCCESS, 47 tests",
+    "seahorse-agent-spring-boot-starter package: BUILD SUCCESS",
+    "git diff --check: exit 0, CRLF warnings only"
+  ],
+  "nextStep": "Commit P6 as feat(memory): add observability policy controls"
+}
