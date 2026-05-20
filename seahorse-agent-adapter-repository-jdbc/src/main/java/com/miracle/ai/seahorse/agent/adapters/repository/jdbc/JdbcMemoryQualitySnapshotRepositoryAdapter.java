@@ -25,6 +25,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import javax.sql.DataSource;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.List;
 
 public class JdbcMemoryQualitySnapshotRepositoryAdapter implements MemoryQualitySnapshotRepositoryPort {
@@ -35,6 +36,19 @@ public class JdbcMemoryQualitySnapshotRepositoryAdapter implements MemoryQuality
     public JdbcMemoryQualitySnapshotRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
         this.jdbcTemplate = new JdbcTemplate(dataSource);
         this.objectMapper = objectMapper;
+    }
+
+    @Override
+    public void save(MemoryQualitySnapshot snapshot) {
+        Instant now = Instant.now();
+        jdbcTemplate.update("""
+                INSERT INTO t_memory_quality_snapshot (id, user_id, snapshot_json, create_time)
+                VALUES (?, ?, CAST(? AS JSON), ?)
+                """,
+                JdbcMemorySupport.hasText(snapshot.id()) ? snapshot.id() : JdbcMemorySupport.nextId(),
+                snapshot.userId(),
+                JdbcMemorySupport.writeJson(objectMapper, snapshot.snapshot()),
+                JdbcMemorySupport.timestamp(snapshot.createTime().equals(Instant.EPOCH) ? now : snapshot.createTime()));
     }
 
     @Override

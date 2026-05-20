@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -71,22 +73,19 @@ class JdbcMemoryRepositoryAdapterTests {
     }
 
     @Test
-    void shouldReadQualitySnapshotsAndResolveConflicts() {
-        jdbcTemplate.update("""
-                INSERT INTO t_memory_quality_snapshot (id, user_id, snapshot_json, create_time)
-                VALUES ('s1', 'user-1', '{"conflictCount":1}', CURRENT_TIMESTAMP)
-                """);
-        jdbcTemplate.update("""
-                INSERT INTO t_memory_conflict_log
-                (id, user_id, memory_id1, memory_id2, conflict_type, severity, resolution_status,
-                 create_time, update_time, deleted)
-                VALUES ('c1', 'user-1', 'm1', 'm2', 'CONTRADICTION', 'HIGH', 'PENDING',
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
-                """);
+    void shouldSaveAndReadQualitySnapshotsAndResolveConflicts() {
+        snapshotAdapter.save(new MemoryQualitySnapshot("", "user-1",
+                Map.of("conflictCount", 1, "governancePolicyVersion", "memory-governance-v1"),
+                Instant.now()));
+        conflictAdapter.save(new MemoryConflictRecord("", "user-1", "m1", "m2",
+                "CONTRADICTION", "HIGH", "PENDING", "", "", null, Instant.now()));
 
         assertThat(snapshotAdapter.listByUser("user-1", 10)).hasSize(1);
+        assertThat(snapshotAdapter.listByUser("user-1", 10).get(0).snapshot())
+                .containsEntry("conflictCount", 1);
         assertThat(conflictAdapter.listByUser("user-1", "PENDING", 10)).hasSize(1);
-        assertThat(conflictAdapter.resolve("c1", "keep-latest", "admin")).isTrue();
+        String conflictId = conflictAdapter.listByUser("user-1", "PENDING", 10).get(0).id();
+        assertThat(conflictAdapter.resolve(conflictId, "keep-latest", "admin")).isTrue();
         assertThat(conflictAdapter.listByUser("user-1", "RESOLVED", 10)).hasSize(1);
     }
 
@@ -191,8 +190,8 @@ class JdbcMemoryRepositoryAdapterTests {
                 CREATE TABLE t_memory_conflict_log (
                     id VARCHAR(64) PRIMARY KEY,
                     user_id VARCHAR(64),
-                    memory_id1 VARCHAR(64),
-                    memory_id2 VARCHAR(64),
+                    memory_id_1 VARCHAR(64),
+                    memory_id_2 VARCHAR(64),
                     conflict_type VARCHAR(32),
                     severity VARCHAR(32),
                     resolution_status VARCHAR(32),

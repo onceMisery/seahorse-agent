@@ -133,14 +133,18 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             SemanticMemoryPort semanticMemoryPort,
             ObjectProvider<MemoryEnginePort> memoryEnginePort,
             ObjectProvider<MemoryInferencePort> memoryInferencePort,
-            ObjectProvider<ShortTermMemoryMaintenancePort> shortTermMemoryMaintenancePort) {
+            ObjectProvider<ShortTermMemoryMaintenancePort> shortTermMemoryMaintenancePort,
+            ObjectProvider<MemoryQualitySnapshotRepositoryPort> qualitySnapshotRepositoryPort,
+            ObjectProvider<MemoryConflictLogRepositoryPort> conflictLogRepositoryPort) {
         return new MemoryGovernanceServicePorts(
                 shortTermMemoryPort,
                 longTermMemoryPort,
                 semanticMemoryPort,
                 memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
                 memoryInferencePort.getIfAvailable(MemoryInferencePort::noop),
-                shortTermMemoryMaintenancePort.getIfAvailable(ShortTermMemoryMaintenancePort::noop));
+                shortTermMemoryMaintenancePort.getIfAvailable(ShortTermMemoryMaintenancePort::noop),
+                qualitySnapshotRepositoryPort.getIfAvailable(MemoryQualitySnapshotRepositoryPort::empty),
+                conflictLogRepositoryPort.getIfAvailable(MemoryConflictLogRepositoryPort::empty));
     }
 
     @Bean

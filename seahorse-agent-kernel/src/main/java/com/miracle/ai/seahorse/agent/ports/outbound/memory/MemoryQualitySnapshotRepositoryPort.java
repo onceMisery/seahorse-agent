@@ -23,7 +23,18 @@ public interface MemoryQualitySnapshotRepositoryPort {
 
     List<MemoryQualitySnapshot> listByUser(String userId, int limit);
 
+    void save(MemoryQualitySnapshot snapshot);
+
     static MemoryQualitySnapshotRepositoryPort empty() {
-        return (userId, limit) -> List.of();
+        return new MemoryQualitySnapshotRepositoryPort() {
+            @Override
+            public List<MemoryQualitySnapshot> listByUser(String userId, int limit) {
+                return List.of();
+            }
+
+            @Override
+            public void save(MemoryQualitySnapshot snapshot) {
+            }
+        };
     }
 }

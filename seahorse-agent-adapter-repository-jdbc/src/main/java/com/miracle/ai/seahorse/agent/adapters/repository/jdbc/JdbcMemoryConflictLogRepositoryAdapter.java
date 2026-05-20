@@ -38,6 +38,29 @@ public class JdbcMemoryConflictLogRepositoryAdapter implements MemoryConflictLog
     }
 
     @Override
+    public void save(MemoryConflictRecord record) {
+        Instant now = Instant.now();
+        jdbcTemplate.update("""
+                INSERT INTO t_memory_conflict_log
+                (id, user_id, memory_id_1, memory_id_2, conflict_type, severity, resolution_status,
+                 resolution_action, resolved_by, resolved_at, create_time, update_time, deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                JdbcMemorySupport.hasText(record.id()) ? record.id() : JdbcMemorySupport.nextId(),
+                record.userId(),
+                record.memoryId1(),
+                record.memoryId2(),
+                record.conflictType(),
+                record.severity(),
+                JdbcMemorySupport.hasText(record.resolutionStatus()) ? record.resolutionStatus() : "PENDING",
+                record.resolutionAction(),
+                record.resolvedBy(),
+                record.resolvedAt().equals(Instant.EPOCH) ? null : JdbcMemorySupport.timestamp(record.resolvedAt()),
+                JdbcMemorySupport.timestamp(record.createTime().equals(Instant.EPOCH) ? now : record.createTime()),
+                JdbcMemorySupport.timestamp(now));
+    }
+
+    @Override
     public List<MemoryConflictRecord> listByUser(String userId, String status, int limit) {
         if (JdbcMemorySupport.hasText(status)) {
             return jdbcTemplate.query("""
@@ -72,8 +95,8 @@ public class JdbcMemoryConflictLogRepositoryAdapter implements MemoryConflictLog
         return new MemoryConflictRecord(
                 rs.getString("id"),
                 rs.getString("user_id"),
-                rs.getString("memory_id1"),
-                rs.getString("memory_id2"),
+                rs.getString("memory_id_1"),
+                rs.getString("memory_id_2"),
                 rs.getString("conflict_type"),
                 rs.getString("severity"),
                 rs.getString("resolution_status"),

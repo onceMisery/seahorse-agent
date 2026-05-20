@@ -23,6 +23,8 @@ public interface MemoryConflictLogRepositoryPort {
 
     List<MemoryConflictRecord> listByUser(String userId, String status, int limit);
 
+    void save(MemoryConflictRecord record);
+
     boolean resolve(String conflictId, String action, String resolvedBy);
 
     static MemoryConflictLogRepositoryPort empty() {
@@ -30,6 +32,10 @@ public interface MemoryConflictLogRepositoryPort {
             @Override
             public List<MemoryConflictRecord> listByUser(String userId, String status, int limit) {
                 return List.of();
+            }
+
+            @Override
+            public void save(MemoryConflictRecord record) {
             }
 
             @Override

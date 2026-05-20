@@ -18,8 +18,10 @@
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMaintenancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
@@ -32,7 +34,9 @@ public record MemoryGovernanceServicePorts(
         SemanticMemoryPort semanticMemoryPort,
         MemoryEnginePort memoryEnginePort,
         MemoryInferencePort memoryInferencePort,
-        ShortTermMemoryMaintenancePort shortTermMemoryMaintenancePort
+        ShortTermMemoryMaintenancePort shortTermMemoryMaintenancePort,
+        MemoryQualitySnapshotRepositoryPort qualitySnapshotRepositoryPort,
+        MemoryConflictLogRepositoryPort conflictLogRepositoryPort
 ) {
 
     public MemoryGovernanceServicePorts(ShortTermMemoryPort shortTermMemoryPort,
@@ -40,7 +44,8 @@ public record MemoryGovernanceServicePorts(
                                         SemanticMemoryPort semanticMemoryPort,
                                         MemoryEnginePort memoryEnginePort) {
         this(shortTermMemoryPort, longTermMemoryPort, semanticMemoryPort, memoryEnginePort,
-                MemoryInferencePort.noop(), ShortTermMemoryMaintenancePort.noop());
+                MemoryInferencePort.noop(), ShortTermMemoryMaintenancePort.noop(),
+                MemoryQualitySnapshotRepositoryPort.empty(), MemoryConflictLogRepositoryPort.empty());
     }
 
     public MemoryGovernanceServicePorts(ShortTermMemoryPort shortTermMemoryPort,
@@ -49,7 +54,19 @@ public record MemoryGovernanceServicePorts(
                                         MemoryEnginePort memoryEnginePort,
                                         MemoryInferencePort memoryInferencePort) {
         this(shortTermMemoryPort, longTermMemoryPort, semanticMemoryPort, memoryEnginePort,
-                memoryInferencePort, ShortTermMemoryMaintenancePort.noop());
+                memoryInferencePort, ShortTermMemoryMaintenancePort.noop(),
+                MemoryQualitySnapshotRepositoryPort.empty(), MemoryConflictLogRepositoryPort.empty());
+    }
+
+    public MemoryGovernanceServicePorts(ShortTermMemoryPort shortTermMemoryPort,
+                                        LongTermMemoryPort longTermMemoryPort,
+                                        SemanticMemoryPort semanticMemoryPort,
+                                        MemoryEnginePort memoryEnginePort,
+                                        MemoryInferencePort memoryInferencePort,
+                                        ShortTermMemoryMaintenancePort shortTermMemoryMaintenancePort) {
+        this(shortTermMemoryPort, longTermMemoryPort, semanticMemoryPort, memoryEnginePort,
+                memoryInferencePort, shortTermMemoryMaintenancePort,
+                MemoryQualitySnapshotRepositoryPort.empty(), MemoryConflictLogRepositoryPort.empty());
     }
 
     public MemoryGovernanceServicePorts {
@@ -59,5 +76,7 @@ public record MemoryGovernanceServicePorts(
         Objects.requireNonNull(memoryEnginePort, "memoryEnginePort must not be null");
         Objects.requireNonNull(memoryInferencePort, "memoryInferencePort must not be null");
         Objects.requireNonNull(shortTermMemoryMaintenancePort, "shortTermMemoryMaintenancePort must not be null");
+        Objects.requireNonNull(qualitySnapshotRepositoryPort, "qualitySnapshotRepositoryPort must not be null");
+        Objects.requireNonNull(conflictLogRepositoryPort, "conflictLogRepositoryPort must not be null");
     }
 }
