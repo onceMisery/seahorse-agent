@@ -893,8 +893,11 @@ CREATE TABLE t_user_profile_fact (
     source_ids JSONB,
     generation_id VARCHAR(64),
     status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    version BIGINT NOT NULL DEFAULT 1,
     valid_from TIMESTAMP,
     valid_until TIMESTAMP,
+    last_referenced_at TIMESTAMP,
+    access_count INTEGER NOT NULL DEFAULT 0,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted SMALLINT DEFAULT 0
@@ -955,12 +958,18 @@ CREATE INDEX idx_memory_quality_snapshot_user_time ON t_memory_quality_snapshot 
 CREATE TABLE t_long_term_memory_vector (
     id VARCHAR(20) PRIMARY KEY,
     user_id VARCHAR(20) NOT NULL,
+    tenant_id VARCHAR(64) DEFAULT 'default',
     content TEXT NOT NULL,
     embedding vector(1536) NOT NULL,
+    generation_id VARCHAR(64),
+    status VARCHAR(32) DEFAULT 'ACTIVE',
+    last_referenced_at TIMESTAMP,
+    access_count INTEGER NOT NULL DEFAULT 0,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_ltm_vector_user ON t_long_term_memory_vector (user_id);
+CREATE INDEX idx_ltm_vector_lifecycle ON t_long_term_memory_vector (user_id, tenant_id, status, update_time);
 CREATE INDEX idx_ltm_vector_hnsw ON t_long_term_memory_vector USING hnsw (embedding vector_cosine_ops);
 -- PostgreSQL Initial Data for Seahorse Agent
 

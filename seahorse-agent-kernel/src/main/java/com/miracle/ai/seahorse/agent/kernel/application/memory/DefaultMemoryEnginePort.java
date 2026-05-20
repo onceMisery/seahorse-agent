@@ -46,6 +46,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTrack;
@@ -91,6 +92,11 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultMemoryEnginePort.class);
     private static final String DEFAULT_VECTOR_EMBEDDING_MODEL = "default";
+    private static final List<String> PROFILE_SLOT_KEYS = List.of(
+            "identity.occupation",
+            "identity.name",
+            "skills.tech_stack",
+            "preferences.response_style");
 
     private final ShortTermMemoryPort shortTermPort;
     private final LongTermMemoryPort longTermPort;
@@ -103,6 +109,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryOutboxPort memoryOutboxPort;
     private final MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort;
     private final MemoryLifecyclePort memoryLifecyclePort;
+    private final MemoryRetrievalPipelinePort memoryRetrievalPipelinePort;
     private final ObjectMapper objectMapper;
     private final MemoryEngineOptions options;
     private final MemoryCaptureCandidateExtractor captureCandidateExtractor;
@@ -216,6 +223,26 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
                                    MemoryLifecyclePort memoryLifecyclePort,
                                    MemoryPolicyConfigPort memoryPolicyConfigPort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
+                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
+                businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort, null);
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort,
+                                   MemoryVectorPort memoryVectorPort,
+                                   MemoryOutboxPort memoryOutboxPort,
+                                   MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                   MemoryLifecyclePort memoryLifecyclePort,
+                                   MemoryPolicyConfigPort memoryPolicyConfigPort,
+                                   MemoryRetrievalPipelinePort memoryRetrievalPipelinePort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -231,6 +258,20 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.memoryLifecyclePort = Objects.requireNonNull(memoryLifecyclePort, "memoryLifecyclePort must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.options = Objects.requireNonNullElseGet(options, MemoryEngineOptions::defaults);
+        this.memoryRetrievalPipelinePort = memoryRetrievalPipelinePort == null
+                ? new DefaultMemoryRetrievalPipeline(
+                this.shortTermPort,
+                this.longTermPort,
+                this.semanticPort,
+                this.objectMapper,
+                this.options,
+                this.profileMemoryPort,
+                this.correctionLedgerPort,
+                this.memoryRouterPort,
+                this.memoryVectorPort,
+                this.businessDocumentRetrieverPort,
+                this.memoryLifecyclePort)
+                : memoryRetrievalPipelinePort;
         this.captureCandidateExtractor = new MemoryCaptureCandidateExtractor();
         this.memoryValueAssessor = new MemoryValueAssessor(memoryPolicyConfigPort);
         this.memorySanitizer = new MemorySanitizer();
@@ -241,63 +282,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
     @Override
     public MemoryContext loadMemory(MemoryLoadRequest request) {
-        if (request == null || isBlank(request.userId())) {
-            return emptyContext(request);
-        }
-
-        String userId = request.userId();
-        var routePlan = memoryRouterPort.route(new MemoryRouteRequest(userId, "default", request.currentQuestion()));
-        boolean loadCorrection = routePlan.isActive(MemoryTrack.CORRECTION);
-        boolean loadProfile = routePlan.isActive(MemoryTrack.PROFILE);
-        boolean loadEpisodic = routePlan.isActive(MemoryTrack.EPISODIC);
-        boolean loadBusinessDocument = routePlan.isActive(MemoryTrack.BUSINESS_DOCUMENT);
-        boolean loadShortWindow = routePlan.isActive(MemoryTrack.SHORT_WINDOW);
-
-        List<MemoryItem> shortTerm = loadShortWindow
-                ? loadLayer(shortTermPort, userId, options.shortTermLimit(), MemoryLayer.SHORT_TERM)
-                : Collections.emptyList();
-        List<MemoryItem> longTerm = loadEpisodic
-                ? loadLayer(longTermPort, userId, options.longTermLimit(), MemoryLayer.LONG_TERM)
-                : Collections.emptyList();
-        List<MemoryItem> semantic = loadEpisodic
-                ? loadLayer(semanticPort, userId, options.semanticLimit(), MemoryLayer.SEMANTIC)
-                : Collections.emptyList();
-        List<MemoryItem> corrections = loadCorrection ? loadCorrections(userId) : Collections.emptyList();
-        List<MemoryItem> profile = loadProfile ? loadProfileFacts(userId) : Collections.emptyList();
-        if (loadEpisodic) {
-            List<MemoryItem> vectorHits = loadVectorHitMemories(userId, request.currentQuestion(),
-                    options.semanticLimit());
-            shortTerm = mergeById(shortTerm, filterByLayer(vectorHits, MemoryLayer.SHORT_TERM));
-            longTerm = mergeById(longTerm, filterByLayer(vectorHits, MemoryLayer.LONG_TERM));
-            semantic = mergeById(semantic, filterByLayer(vectorHits, MemoryLayer.SEMANTIC));
-        }
-        if (loadBusinessDocument) {
-            semantic = mergeById(semantic, loadBusinessDocuments(userId, request.currentQuestion(),
-                    options.semanticLimit()));
-        }
-        Set<String> activeProfileSlots = activeProfileSlots(profile);
-        if (!activeProfileSlots.isEmpty()) {
-            shortTerm = removeActiveProfileSlotMemories(shortTerm, activeProfileSlots);
-            longTerm = removeActiveProfileSlotMemories(longTerm, activeProfileSlots);
-            semantic = removeActiveProfileSlotMemories(semantic, activeProfileSlots);
-        }
-        shortTerm = deduplicateById(shortTerm);
-        longTerm = deduplicateProfileSlots(deduplicateById(longTerm));
-        semantic = deduplicateProfileSlots(deduplicateById(semantic));
-        recordReadFeedback(shortTerm, longTerm, semantic);
-
-        return MemoryContext.builder()
-                .conversationId(request.conversationId())
-                .userId(userId)
-                .currentQuestion(request.currentQuestion())
-                .workingMemory(Collections.emptyList())
-                .correctionMemories(corrections)
-                .profileMemories(profile)
-                .shortTermMemories(shortTerm)
-                .longTermMemories(longTerm)
-                .semanticMemories(semantic)
-                .promptMessages(Collections.emptyList())
-                .build();
+        return memoryRetrievalPipelinePort.load(request);
     }
 
     @Override
@@ -669,11 +654,37 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     }
 
     private String profileSlot(MemoryCaptureDecision decision) {
-        if (!"PROFILE".equalsIgnoreCase(decision.type()) && !"FACT".equalsIgnoreCase(decision.type())) {
+        if (!isProfileSlotCandidate(decision.type())) {
             return "";
         }
         String content = Objects.requireNonNullElse(decision.content(), "");
         String normalized = content.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("my name is ")) {
+            return "identity.name";
+        }
+        if (content.startsWith("\u6211\u53eb")
+                || content.startsWith("\u6211\u7684\u540d\u5b57\u662f")
+                || content.startsWith("\u6211\u7684\u6635\u79f0\u662f")) {
+            return "identity.name";
+        }
+        if (normalized.startsWith("my tech stack is ")) {
+            return "skills.tech_stack";
+        }
+        if (content.startsWith("\u6211\u7684\u6280\u672f\u6808\u662f")
+                || content.startsWith("\u6211\u4e3b\u8981\u4f7f\u7528")) {
+            return "skills.tech_stack";
+        }
+        if (normalized.startsWith("i prefer ")
+                || normalized.startsWith("i like concise answers")
+                || normalized.startsWith("i like detailed answers")) {
+            return "preferences.response_style";
+        }
+        if (content.startsWith("\u6211\u559c\u6b22\u7b80\u77ed\u56de\u7b54")
+                || content.startsWith("\u6211\u559c\u6b22\u8be6\u7ec6\u56de\u7b54")
+                || content.startsWith("\u6211\u504f\u597d\u7b80\u77ed\u56de\u7b54")
+                || content.startsWith("\u6211\u504f\u597d\u8be6\u7ec6\u56de\u7b54")) {
+            return "preferences.response_style";
+        }
         if (containsAny(normalized, "occupation", "profession", "job", "student", "teacher")
                 || containsAny(content, "职业", "身份", "工作", "学生", "老师", "教师")) {
             return "identity.occupation";
@@ -682,10 +693,39 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     }
 
     private String profileValue(String slotKey, String content) {
-        if (!"identity.occupation".equals(slotKey)) {
-            return "";
+        String value = Objects.requireNonNullElse(content, "").trim();
+        if ("identity.name".equals(slotKey)) {
+            value = stripPrefix(value, "(?i)^my name is\\s+");
+            value = stripPrefix(value, "^\u6211\u53eb");
+            value = stripPrefix(value, "^\u6211\u7684\u540d\u5b57\u662f");
+            return stripPrefix(value, "^\u6211\u7684\u6635\u79f0\u662f");
         }
-        return normalizeOccupationValue(stripProfilePrefix(content));
+        if ("skills.tech_stack".equals(slotKey)) {
+            value = stripPrefix(value, "(?i)^my tech stack is\\s+");
+            value = stripPrefix(value, "^\u6211\u7684\u6280\u672f\u6808\u662f\\s*");
+            return stripPrefix(value, "^\u6211\u4e3b\u8981\u4f7f\u7528\\s*");
+        }
+        if ("preferences.response_style".equals(slotKey)) {
+            value = stripPrefix(value, "(?i)^i prefer\\s+");
+            value = stripPrefix(value, "(?i)^i like\\s+");
+            value = stripPrefix(value, "^\u6211\u559c\u6b22");
+            value = stripPrefix(value, "^\u6211\u504f\u597d");
+            return value;
+        }
+        if ("identity.occupation".equals(slotKey)) {
+            return normalizeOccupationValue(stripProfilePrefix(value));
+        }
+        return "";
+    }
+
+    private boolean isProfileSlotCandidate(String type) {
+        return "PROFILE".equalsIgnoreCase(type)
+                || "FACT".equalsIgnoreCase(type)
+                || "PREFERENCE".equalsIgnoreCase(type);
+    }
+
+    private String stripPrefix(String content, String regex) {
+        return Objects.requireNonNullElse(content, "").replaceFirst(regex, "").trim();
     }
 
     private String stripProfilePrefix(String content) {
@@ -1008,19 +1048,41 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return "";
         }
         String metadata = Objects.requireNonNullElse(item.getMetadataJson(), "");
-        if (metadata.contains("\"semanticKey\":\"profile:occupation\"")
-                || metadata.contains("\"semanticKey\": \"profile:occupation\"")
-                || metadata.contains("\"semanticKey\":\"identity.occupation\"")
-                || metadata.contains("\"semanticKey\": \"identity.occupation\"")
-                || metadata.contains("\"profileSlot\":\"identity.occupation\"")
-                || metadata.contains("\"profileSlot\": \"identity.occupation\"")) {
-            return "identity.occupation";
+        String metadataSlot = metadataSlot(metadata);
+        if (!metadataSlot.isBlank()) {
+            return metadataSlot;
         }
         if (!isProfileLike(item)) {
             return "";
         }
         String content = Objects.requireNonNullElse(item.getContent(), "");
         String normalized = content.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("my name is ")) {
+            return "identity.name";
+        }
+        if (content.startsWith("\u6211\u53eb")
+                || content.startsWith("\u6211\u7684\u540d\u5b57\u662f")
+                || content.startsWith("\u6211\u7684\u6635\u79f0\u662f")) {
+            return "identity.name";
+        }
+        if (normalized.startsWith("my tech stack is ")) {
+            return "skills.tech_stack";
+        }
+        if (content.startsWith("\u6211\u7684\u6280\u672f\u6808\u662f")
+                || content.startsWith("\u6211\u4e3b\u8981\u4f7f\u7528")) {
+            return "skills.tech_stack";
+        }
+        if (normalized.startsWith("i prefer ")
+                || normalized.startsWith("i like concise answers")
+                || normalized.startsWith("i like detailed answers")) {
+            return "preferences.response_style";
+        }
+        if (content.startsWith("\u6211\u559c\u6b22\u7b80\u77ed\u56de\u7b54")
+                || content.startsWith("\u6211\u559c\u6b22\u8be6\u7ec6\u56de\u7b54")
+                || content.startsWith("\u6211\u504f\u597d\u7b80\u77ed\u56de\u7b54")
+                || content.startsWith("\u6211\u504f\u597d\u8be6\u7ec6\u56de\u7b54")) {
+            return "preferences.response_style";
+        }
         if (containsAny(normalized, "occupation", "profession", "job", "student", "teacher")
                 || containsAny(content, "职业", "身份", "工作", "学生", "老师", "教师")) {
             return "identity.occupation";
@@ -1028,9 +1090,31 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return "";
     }
 
+    private String metadataSlot(String metadata) {
+        if (metadata == null || metadata.isBlank()) {
+            return "";
+        }
+        if (metadata.contains("\"semanticKey\":\"profile:occupation\"")
+                || metadata.contains("\"semanticKey\": \"profile:occupation\"")) {
+            return "identity.occupation";
+        }
+        for (String slot : PROFILE_SLOT_KEYS) {
+            if (metadataContainsValue(metadata, "semanticKey", slot)
+                    || metadataContainsValue(metadata, "profileSlot", slot)) {
+                return slot;
+            }
+        }
+        return "";
+    }
+
+    private boolean metadataContainsValue(String metadata, String key, String value) {
+        return metadata.contains("\"" + key + "\":\"" + value + "\"")
+                || metadata.contains("\"" + key + "\": \"" + value + "\"");
+    }
+
     private boolean isProfileLike(MemoryItem item) {
         String type = Objects.requireNonNullElse(item.getType(), "");
-        return "PROFILE".equalsIgnoreCase(type) || "FACT".equalsIgnoreCase(type);
+        return isProfileSlotCandidate(type);
     }
 
     private boolean containsAny(String content, String... needles) {

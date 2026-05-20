@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryEnginePort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryRetrievalPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryRouter;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
@@ -29,6 +30,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryDecayOption
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryEngineOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryGovernanceServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryManagementServicePorts;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryOutboxRelayService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.RuleBasedMemoryCandidateExtractor;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
@@ -46,6 +48,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
@@ -112,6 +115,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryBusinessDocumentRetrieverPort> businessDocumentRetrieverPort,
             ObjectProvider<MemoryLifecyclePort> memoryLifecyclePort,
             ObjectProvider<MemoryPolicyConfigPort> memoryPolicyConfigPort,
+            ObjectProvider<MemoryRetrievalPipelinePort> memoryRetrievalPipelinePort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
             @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
@@ -137,7 +141,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 memoryOutboxPort.getIfAvailable(MemoryOutboxPort::noop),
                 businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop),
                 memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop),
-                memoryPolicyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults));
+                memoryPolicyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults),
+                memoryRetrievalPipelinePort.getIfAvailable());
     }
 
     @Bean
@@ -147,9 +152,73 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
+    @ConditionalOnMissingBean(MemoryRetrievalPipelinePort.class)
+    public DefaultMemoryRetrievalPipeline seahorseMemoryRetrievalPipeline(
+            ShortTermMemoryPort shortTermMemoryPort,
+            LongTermMemoryPort longTermMemoryPort,
+            SemanticMemoryPort semanticMemoryPort,
+            ObjectProvider<ProfileMemoryPort> profileMemoryPort,
+            ObjectProvider<CorrectionLedgerPort> correctionLedgerPort,
+            ObjectProvider<MemoryRouterPort> memoryRouterPort,
+            ObjectProvider<MemoryVectorPort> memoryVectorPort,
+            ObjectProvider<MemoryBusinessDocumentRetrieverPort> businessDocumentRetrieverPort,
+            ObjectProvider<MemoryLifecyclePort> memoryLifecyclePort,
+            ObjectProvider<ObjectMapper> objectMapperProvider,
+            @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
+            @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
+            @Value("${seahorse-agent.memory.semantic-limit:10}") int semanticLimit,
+            @Value("${seahorse-agent.memory.capture-enabled:true}") boolean captureEnabled) {
+        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        MemoryEngineOptions options = new MemoryEngineOptions(
+                shortTermLimit,
+                longTermLimit,
+                semanticLimit,
+                captureEnabled);
+        return new DefaultMemoryRetrievalPipeline(
+                shortTermMemoryPort,
+                longTermMemoryPort,
+                semanticMemoryPort,
+                objectMapper,
+                options,
+                profileMemoryPort.getIfAvailable(ProfileMemoryPort::noop),
+                correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
+                memoryRouterPort.getIfAvailable(DefaultMemoryRouter::new),
+                memoryVectorPort.getIfAvailable(MemoryVectorPort::noop),
+                businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop),
+                memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop));
+    }
+
+    @Bean
     @ConditionalOnMissingBean(ContextWeaverPort.class)
     public DefaultContextWeaver seahorseDefaultContextWeaver() {
         return new DefaultContextWeaver();
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryOutboxPort.class)
+    @ConditionalOnMissingBean
+    public MemoryOutboxRelayService seahorseMemoryOutboxRelayService(
+            MemoryOutboxPort memoryOutboxPort,
+            ObjectProvider<MemoryVectorPort> memoryVectorPort) {
+        return new MemoryOutboxRelayService(
+                memoryOutboxPort,
+                memoryVectorPort.getIfAvailable(MemoryVectorPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryOutboxRelayService.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.outbox", name = "relay-enabled",
+            havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public SeahorseMemoryOutboxRelayJob seahorseMemoryOutboxRelayJob(
+            MemoryOutboxRelayService relayService,
+            ObjectProvider<DistributedLockPort> lockPort,
+            @Value("${seahorse-agent.memory.outbox.relay-batch-size:50}") int batchSize) {
+        return new SeahorseMemoryOutboxRelayJob(
+                relayService,
+                lockPort.getIfAvailable(DistributedLockPort::noop),
+                batchSize);
     }
 
     @Bean

@@ -104,13 +104,17 @@ public class JdbcChatSchemaUpgrade {
                     source_ids JSONB,
                     generation_id VARCHAR(64),
                     status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    version BIGINT NOT NULL DEFAULT 1,
                     valid_from TIMESTAMP,
                     valid_until TIMESTAMP,
+                    last_referenced_at TIMESTAMP,
+                    access_count INTEGER NOT NULL DEFAULT 0,
                     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
                 )
                 """);
+        ensureProfileFactColumns();
         jdbcTemplate.execute("""
                 CREATE INDEX IF NOT EXISTS idx_user_profile_active
                 ON t_user_profile_fact (user_id, tenant_id, status, slot_key)
@@ -157,6 +161,15 @@ public class JdbcChatSchemaUpgrade {
                 """);
     }
 
+    private void ensureProfileFactColumns() {
+        if (!tableExists("t_user_profile_fact")) {
+            return;
+        }
+        addColumnIfMissing("t_user_profile_fact", "version", "BIGINT NOT NULL DEFAULT 1");
+        addColumnIfMissing("t_user_profile_fact", "last_referenced_at", "TIMESTAMP");
+        addColumnIfMissing("t_user_profile_fact", "access_count", "INTEGER NOT NULL DEFAULT 0");
+    }
+
     private void executePostgresPartialIndexOrPlainIndex(String postgresSql, String fallbackSql) {
         try {
             jdbcTemplate.execute(postgresSql);
@@ -169,6 +182,7 @@ public class JdbcChatSchemaUpgrade {
         ensureLifecycleColumns("t_short_term_memory");
         ensureLifecycleColumns("t_long_term_memory");
         ensureLifecycleColumns("t_semantic_memory");
+        ensureVectorLifecycleColumns();
         createLifecycleIndexes();
     }
 
@@ -188,6 +202,17 @@ public class JdbcChatSchemaUpgrade {
         addColumnIfMissing(tableName, "obsolete_reason", "TEXT");
     }
 
+    private void ensureVectorLifecycleColumns() {
+        if (!tableExists("t_long_term_memory_vector")) {
+            return;
+        }
+        addColumnIfMissing("t_long_term_memory_vector", "tenant_id", "VARCHAR(64) DEFAULT 'default'");
+        addColumnIfMissing("t_long_term_memory_vector", "generation_id", "VARCHAR(64)");
+        addColumnIfMissing("t_long_term_memory_vector", "status", "VARCHAR(32) DEFAULT 'ACTIVE'");
+        addColumnIfMissing("t_long_term_memory_vector", "last_referenced_at", "TIMESTAMP");
+        addColumnIfMissing("t_long_term_memory_vector", "access_count", "INTEGER NOT NULL DEFAULT 0");
+    }
+
     private void createLifecycleIndexes() {
         createIndexIfTableExists("t_short_term_memory", """
                 CREATE INDEX IF NOT EXISTS idx_stm_lifecycle_user_status
@@ -200,6 +225,10 @@ public class JdbcChatSchemaUpgrade {
         createIndexIfTableExists("t_semantic_memory", """
                 CREATE INDEX IF NOT EXISTS idx_sem_lifecycle_user_status
                 ON t_semantic_memory (user_id, tenant_id, status, update_time)
+                """);
+        createIndexIfTableExists("t_long_term_memory_vector", """
+                CREATE INDEX IF NOT EXISTS idx_ltm_vector_lifecycle
+                ON t_long_term_memory_vector (user_id, tenant_id, status, update_time)
                 """);
     }
 

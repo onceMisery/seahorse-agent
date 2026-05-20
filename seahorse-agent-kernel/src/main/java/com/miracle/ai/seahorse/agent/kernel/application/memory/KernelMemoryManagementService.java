@@ -135,7 +135,8 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
         Map<String, Object> latestSnapshot = snapshots.isEmpty() ? Map.of() : snapshots.get(0).snapshot();
 
         MemoryPolicyConfig policy = ports.policyConfigPort().current();
-        List<String> alerts = alerts(outboxTasks.size(), schemaFailures, policy);
+        double profileCompleteness = profileCompleteness(profileFacts);
+        List<String> alerts = alerts(outboxTasks.size(), schemaFailures, profileCompleteness, policy);
         return new MemoryHealthReport(
                 safeUserId,
                 safeTenantId,
@@ -148,7 +149,7 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
                 rate(rejectedCount, operationTotal),
                 schemaFailures,
                 policyBlocks,
-                profileCompleteness(profileFacts),
+                profileCompleteness,
                 conflictDensity(latestSnapshot, pendingConflicts.size()),
                 latestSnapshot,
                 alerts,
@@ -261,13 +262,19 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
         return 0;
     }
 
-    private List<String> alerts(int outboxBacklog, int schemaFailures, MemoryPolicyConfig policy) {
+    private List<String> alerts(int outboxBacklog,
+                                int schemaFailures,
+                                double profileCompleteness,
+                                MemoryPolicyConfig policy) {
         List<String> alerts = new ArrayList<>();
         if (outboxBacklog > policy.outboxBacklogAlertThreshold()) {
             alerts.add("memory.outbox.backlog");
         }
         if (schemaFailures > policy.schemaFailureAlertThreshold()) {
             alerts.add("memory.schema.failures");
+        }
+        if (profileCompleteness > 0D && profileCompleteness < 0.5D) {
+            alerts.add("memory.profile.low-completeness");
         }
         return alerts;
     }

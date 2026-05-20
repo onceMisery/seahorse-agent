@@ -86,66 +86,69 @@ public class JdbcProfileMemoryRepositoryAdapter implements ProfileMemoryPort {
             throw new IllegalArgumentException("profile fact requires userId, slotKey and valueText");
         }
         String tenantId = defaultTenant(update.tenantId());
-        String existingId = findActiveId(update.userId(), tenantId, update.slotKey());
+        ProfileFact existing = findActive(update.userId(), tenantId, update.slotKey()).orElse(null);
         Instant now = Instant.now();
-        if (existingId == null) {
+        long nextVersion = 1L;
+        if (existing != null) {
+            nextVersion = existing.version() + 1L;
             jdbcTemplate.update("""
-                    INSERT INTO t_user_profile_fact
-                    (id, user_id, tenant_id, slot_key, value_text, value_json, confidence_level, source_type,
-                     source_ids, generation_id, status, valid_from, valid_until, create_time, update_time, deleted)
-                    VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, CAST(? AS JSON), ?, 'ACTIVE', ?, NULL, ?, ?, 0)
+                    UPDATE t_user_profile_fact
+                    SET status = 'HISTORICAL',
+                        valid_until = ?,
+                        update_time = ?
+                    WHERE id = ?
+                      AND status = 'ACTIVE'
+                      AND deleted = 0
                     """,
-                    JdbcMemorySupport.nextId(),
-                    update.userId(),
-                    tenantId,
-                    update.slotKey(),
-                    update.valueText(),
-                    JdbcMemorySupport.writeJson(objectMapper, Map.of("value", update.valueText())),
-                    update.confidenceLevel(),
-                    update.sourceType(),
-                    sourceIds(update.sourceIds()),
-                    update.generationId(),
                     JdbcMemorySupport.timestamp(now),
                     JdbcMemorySupport.timestamp(now),
-                    JdbcMemorySupport.timestamp(now));
-            return;
+                    existing.id());
         }
         jdbcTemplate.update("""
-                UPDATE t_user_profile_fact
-                SET value_text = ?,
-                    value_json = CAST(? AS JSON),
-                    confidence_level = ?,
-                    source_type = ?,
-                    source_ids = CAST(? AS JSON),
-                    generation_id = ?,
-                    valid_until = NULL,
-                    update_time = ?
-                WHERE id = ?
-                  AND status = 'ACTIVE'
-                  AND deleted = 0
+                INSERT INTO t_user_profile_fact
+                (id, user_id, tenant_id, slot_key, value_text, value_json, confidence_level, source_type,
+                 source_ids, generation_id, status, version, valid_from, valid_until, last_referenced_at,
+                 access_count, create_time, update_time, deleted)
+                VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, CAST(? AS JSON), ?, 'ACTIVE', ?, ?, NULL, NULL,
+                        0, ?, ?, 0)
                 """,
+                JdbcMemorySupport.nextId(),
+                update.userId(),
+                tenantId,
+                update.slotKey(),
                 update.valueText(),
                 JdbcMemorySupport.writeJson(objectMapper, Map.of("value", update.valueText())),
                 update.confidenceLevel(),
                 update.sourceType(),
                 sourceIds(update.sourceIds()),
                 update.generationId(),
+                nextVersion,
                 JdbcMemorySupport.timestamp(now),
-                existingId);
+                JdbcMemorySupport.timestamp(now),
+                JdbcMemorySupport.timestamp(now));
     }
 
-    private String findActiveId(String userId, String tenantId, String slotKey) {
-        return jdbcTemplate.query("""
-                SELECT id
-                FROM t_user_profile_fact
+    @Override
+    public void recordRead(String userId, String tenantId, String slotKey, Instant referencedAt) {
+        if (!JdbcMemorySupport.hasText(userId) || !JdbcMemorySupport.hasText(slotKey)) {
+            return;
+        }
+        jdbcTemplate.update("""
+                UPDATE t_user_profile_fact
+                SET access_count = COALESCE(access_count, 0) + 1,
+                    last_referenced_at = ?,
+                    update_time = ?
                 WHERE user_id = ?
                   AND tenant_id = ?
                   AND slot_key = ?
                   AND status = 'ACTIVE'
                   AND deleted = 0
-                ORDER BY update_time DESC
-                LIMIT 1
-                """, (rs, rowNum) -> rs.getString("id"), userId, tenantId, slotKey).stream().findFirst().orElse(null);
+                """,
+                JdbcMemorySupport.timestamp(Objects.requireNonNullElseGet(referencedAt, Instant::now)),
+                JdbcMemorySupport.timestamp(Instant.now()),
+                userId,
+                defaultTenant(tenantId),
+                slotKey);
     }
 
     private ProfileFact mapFact(ResultSet rs, int rowNum) throws SQLException {
@@ -159,7 +162,10 @@ public class JdbcProfileMemoryRepositoryAdapter implements ProfileMemoryPort {
                 rs.getString("source_type"),
                 rs.getString("generation_id"),
                 rs.getString("status"),
-                JdbcMemorySupport.instant(rs.getTimestamp("update_time")));
+                JdbcMemorySupport.instant(rs.getTimestamp("update_time")),
+                rs.getLong("version"),
+                JdbcMemorySupport.instant(rs.getTimestamp("last_referenced_at")),
+                rs.getInt("access_count"));
     }
 
     private String sourceIds(List<String> sourceIds) {

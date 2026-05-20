@@ -97,7 +97,8 @@ class KernelMemoryObservabilityServiceTests {
         assertThat(report.policyBlockCount()).isEqualTo(1);
         assertThat(report.profileCompleteness()).isEqualTo(0.25D);
         assertThat(report.conflictDensity()).isEqualTo(1D / 6D);
-        assertThat(report.alerts()).contains("memory.outbox.backlog", "memory.schema.failures");
+        assertThat(report.alerts())
+                .contains("memory.outbox.backlog", "memory.schema.failures", "memory.profile.low-completeness");
     }
 
     @Test

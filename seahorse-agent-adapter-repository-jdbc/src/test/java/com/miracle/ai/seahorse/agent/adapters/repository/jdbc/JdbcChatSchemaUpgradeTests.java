@@ -39,6 +39,64 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(tableExists(jdbcTemplate, "t_memory_outbox")).isTrue();
     }
 
+    @Test
+    void shouldBackfillProfileFactLifecycleColumnsForExistingTable() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:chat-schema-upgrade-profile;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_user_profile_fact (
+                    id VARCHAR(64) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    slot_key VARCHAR(128) NOT NULL,
+                    value_text TEXT NOT NULL,
+                    value_json TEXT,
+                    confidence_level DOUBLE,
+                    source_type VARCHAR(64),
+                    source_ids TEXT,
+                    generation_id VARCHAR(64),
+                    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    valid_from TIMESTAMP,
+                    valid_until TIMESTAMP,
+                    create_time TIMESTAMP,
+                    update_time TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+
+        new JdbcChatSchemaUpgrade(dataSource).upgrade();
+
+        assertThat(columnExists(jdbcTemplate, "t_user_profile_fact", "version")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_user_profile_fact", "last_referenced_at")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_user_profile_fact", "access_count")).isTrue();
+    }
+
+    @Test
+    void shouldBackfillVectorLifecycleColumnsForExistingTable() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:chat-schema-upgrade-vector;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_long_term_memory_vector (
+                    id VARCHAR(64) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    content TEXT NOT NULL,
+                    embedding TEXT NOT NULL,
+                    create_time TIMESTAMP,
+                    update_time TIMESTAMP
+                )
+                """);
+
+        new JdbcChatSchemaUpgrade(dataSource).upgrade();
+
+        assertThat(columnExists(jdbcTemplate, "t_long_term_memory_vector", "tenant_id")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_long_term_memory_vector", "generation_id")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_long_term_memory_vector", "status")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_long_term_memory_vector", "last_referenced_at")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_long_term_memory_vector", "access_count")).isTrue();
+    }
+
     private boolean tableExists(JdbcTemplate jdbcTemplate, String tableName) {
         return !jdbcTemplate.query(
                         """
@@ -48,6 +106,19 @@ class JdbcChatSchemaUpgradeTests {
                         """,
                         (rs, rowNum) -> rs.getString(1),
                         tableName)
+                .isEmpty();
+    }
+
+    private boolean columnExists(JdbcTemplate jdbcTemplate, String tableName, String columnName) {
+        return !jdbcTemplate.query(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE lower(table_name) = lower(?) AND lower(column_name) = lower(?)
+                        """,
+                        (rs, rowNum) -> rs.getString(1),
+                        tableName,
+                        columnName)
                 .isEmpty();
     }
 }

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,6 +31,9 @@ public interface ProfileMemoryPort {
     List<ProfileFact> listActive(String userId, String tenantId, int limit);
 
     void upsert(ProfileFactUpdate update);
+
+    default void recordRead(String userId, String tenantId, String slotKey, Instant referencedAt) {
+    }
 
     static ProfileMemoryPort noop() {
         return new ProfileMemoryPort() {

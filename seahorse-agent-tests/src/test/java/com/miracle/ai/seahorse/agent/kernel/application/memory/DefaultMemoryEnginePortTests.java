@@ -297,6 +297,88 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldWriteProfileFactsForNameTechStackAndResponseStyle() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                CorrectionLedgerPort.noop());
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-profile-slots")
+                .messageId("msg-name")
+                .message(ChatMessage.user("My name is Alice"))
+                .build());
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-profile-slots")
+                .messageId("msg-stack")
+                .message(ChatMessage.user("My tech stack is Java and Spring"))
+                .build());
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-profile-slots")
+                .messageId("msg-style")
+                .message(ChatMessage.user("I prefer concise answers"))
+                .build());
+
+        Assertions.assertEquals(3, profilePort.updates.size(), profilePort.updates::toString);
+        Assertions.assertEquals("identity.name", profilePort.updates.get(0).slotKey());
+        Assertions.assertEquals("Alice", profilePort.updates.get(0).valueText());
+        Assertions.assertEquals("skills.tech_stack", profilePort.updates.get(1).slotKey());
+        Assertions.assertEquals("Java and Spring", profilePort.updates.get(1).valueText());
+        Assertions.assertEquals("preferences.response_style", profilePort.updates.get(2).slotKey());
+        Assertions.assertEquals("concise answers", profilePort.updates.get(2).valueText());
+    }
+
+    @Test
+    void shouldWriteChineseProfileFactsForNameTechStackAndResponseStyle() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                CorrectionLedgerPort.noop());
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-profile-slots-cn")
+                .messageId("msg-cn-name")
+                .message(ChatMessage.user("\u6211\u53eb\u5f20\u4e09"))
+                .build());
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-profile-slots-cn")
+                .messageId("msg-cn-stack")
+                .message(ChatMessage.user("\u6211\u7684\u6280\u672f\u6808\u662f Java \u548c Spring"))
+                .build());
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-profile-slots-cn")
+                .messageId("msg-cn-style")
+                .message(ChatMessage.user("\u6211\u559c\u6b22\u7b80\u77ed\u56de\u7b54"))
+                .build());
+
+        Assertions.assertEquals(3, profilePort.updates.size());
+        Assertions.assertEquals("identity.name", profilePort.updates.get(0).slotKey());
+        Assertions.assertEquals("\u5f20\u4e09", profilePort.updates.get(0).valueText());
+        Assertions.assertEquals("skills.tech_stack", profilePort.updates.get(1).slotKey());
+        Assertions.assertEquals("Java \u548c Spring", profilePort.updates.get(1).valueText());
+        Assertions.assertEquals("preferences.response_style", profilePort.updates.get(2).slotKey());
+        Assertions.assertEquals("\u7b80\u77ed\u56de\u7b54", profilePort.updates.get(2).valueText());
+    }
+
+    @Test
     void shouldStoreCorrectionAndPreferCorrectedProfileWhenLoadingMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(
                 semanticRecord("stm-old", "PROFILE", "我是一名学生", 0.8D,

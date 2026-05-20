@@ -147,6 +147,20 @@ class MemoryCaptureCandidateExtractor {
     }
 
     private boolean isPersonalFactStatement(String content) {
+        String lower = content.toLowerCase(Locale.ROOT);
+        if (startsWithAny(lower, "my name is ", "my tech stack is ", "i prefer ",
+                "i like concise answers", "i like detailed answers")) {
+            return true;
+        }
+        if (startsWithAny(content,
+                "\u6211\u53eb",
+                "\u6211\u7684\u540d\u5b57\u662f",
+                "\u6211\u7684\u6280\u672f\u6808\u662f",
+                "\u6211\u4e3b\u8981\u4f7f\u7528",
+                "\u6211\u559c\u6b22\u7b80\u77ed\u56de\u7b54",
+                "\u6211\u559c\u6b22\u8be6\u7ec6\u56de\u7b54")) {
+            return true;
+        }
         return startsWithAny(content,
                 "我的职业是", "我的身份是", "我的工作是", "我的专业是", "我的学校是",
                 "我的公司是", "我的岗位是", "我的角色是", "我的职责是", "我的行业是",
@@ -169,6 +183,21 @@ class MemoryCaptureCandidateExtractor {
 
     private String inferMemoryType(String content) {
         String lower = content.toLowerCase(Locale.ROOT);
+        if (startsWithAny(content,
+                "\u6211\u53eb",
+                "\u6211\u7684\u540d\u5b57\u662f",
+                "\u6211\u7684\u6635\u79f0\u662f",
+                "\u6211\u7684\u6280\u672f\u6808\u662f",
+                "\u6211\u4e3b\u8981\u4f7f\u7528")) {
+            return "PROFILE";
+        }
+        if (startsWithAny(content,
+                "\u6211\u559c\u6b22",
+                "\u6211\u504f\u597d",
+                "\u6211\u4e60\u60ef",
+                "\u6211\u5e0c\u671b")) {
+            return "PREFERENCE";
+        }
         if (content.contains("喜欢") || content.contains("偏好") || content.contains("习惯")
                 || content.contains("常用") || lower.contains("prefer") || lower.contains("like")) {
             return "PREFERENCE";

@@ -162,10 +162,76 @@ class JdbcMemoryRepositoryAdapterTests {
                     assertThat(fact.valueText()).isEqualTo("老师");
                     assertThat(fact.sourceType()).isEqualTo("explicit_user_correction");
                     assertThat(fact.generationId()).isEqualTo("identity.occupation:g2");
+                    assertThat(fact.version()).isEqualTo(2L);
                 });
         assertThat(profileAdapter.listActive("user-1", "default", 10))
                 .extracting(fact -> fact.slotKey() + "=" + fact.valueText())
                 .containsExactly("identity.occupation=老师");
+    }
+
+    @Test
+    void shouldKeepProfileFactHistoryWhenSlotIsUpdated() {
+        profileAdapter.upsert(new ProfileFactUpdate(
+                "user-1",
+                "default",
+                "identity.occupation",
+                "student",
+                0.9D,
+                "explicit_user_memory",
+                java.util.List.of("msg-1"),
+                "identity.occupation:g1"));
+        profileAdapter.upsert(new ProfileFactUpdate(
+                "user-1",
+                "default",
+                "identity.occupation",
+                "teacher",
+                0.95D,
+                "explicit_user_correction",
+                java.util.List.of("msg-2"),
+                "identity.occupation:g2"));
+
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT value_text, status, version
+                FROM t_user_profile_fact
+                WHERE user_id = 'user-1'
+                  AND tenant_id = 'default'
+                  AND slot_key = 'identity.occupation'
+                ORDER BY version ASC
+                """))
+                .hasSize(2)
+                .satisfies(rows -> {
+                    assertThat(rows.get(0)).containsEntry("STATUS", "HISTORICAL")
+                            .containsEntry("VERSION", 1L);
+                    assertThat(rows.get(1)).containsEntry("STATUS", "ACTIVE")
+                            .containsEntry("VERSION", 2L);
+                });
+    }
+
+    @Test
+    void shouldRecordProfileFactReadFeedback() {
+        profileAdapter.upsert(new ProfileFactUpdate(
+                "user-1",
+                "default",
+                "preferences.response_style",
+                "concise",
+                0.9D,
+                "explicit_user_memory",
+                java.util.List.of("msg-1"),
+                "preferences.response_style:g1"));
+
+        Instant referencedAt = Instant.parse("2026-05-20T01:02:03Z");
+        profileAdapter.recordRead("user-1", "default", "preferences.response_style", referencedAt);
+
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT access_count, last_referenced_at
+                FROM t_user_profile_fact
+                WHERE user_id = 'user-1'
+                  AND tenant_id = 'default'
+                  AND slot_key = 'preferences.response_style'
+                  AND status = 'ACTIVE'
+                """);
+        assertThat(row.get("ACCESS_COUNT")).isEqualTo(1);
+        assertThat(row.get("LAST_REFERENCED_AT")).isNotNull();
     }
 
     @Test
@@ -495,8 +561,11 @@ class JdbcMemoryRepositoryAdapterTests {
                     source_ids TEXT,
                     generation_id VARCHAR(64),
                     status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    version BIGINT NOT NULL DEFAULT 1,
                     valid_from TIMESTAMP,
                     valid_until TIMESTAMP,
+                    last_referenced_at TIMESTAMP,
+                    access_count INTEGER NOT NULL DEFAULT 0,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0

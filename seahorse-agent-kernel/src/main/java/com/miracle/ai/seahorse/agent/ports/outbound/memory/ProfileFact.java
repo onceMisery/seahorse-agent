@@ -33,7 +33,10 @@ public record ProfileFact(
         String sourceType,
         String generationId,
         String status,
-        Instant updatedAt
+        Instant updatedAt,
+        long version,
+        Instant lastReferencedAt,
+        int accessCount
 ) {
 
     public ProfileFact {
@@ -46,5 +49,22 @@ public record ProfileFact(
         generationId = Objects.requireNonNullElse(generationId, "");
         status = Objects.requireNonNullElse(status, "ACTIVE");
         updatedAt = Objects.requireNonNullElse(updatedAt, Instant.EPOCH);
+        version = version <= 0 ? 1L : version;
+        lastReferencedAt = Objects.requireNonNullElse(lastReferencedAt, Instant.EPOCH);
+        accessCount = Math.max(0, accessCount);
+    }
+
+    public ProfileFact(String id,
+                       String userId,
+                       String tenantId,
+                       String slotKey,
+                       String valueText,
+                       double confidenceLevel,
+                       String sourceType,
+                       String generationId,
+                       String status,
+                       Instant updatedAt) {
+        this(id, userId, tenantId, slotKey, valueText, confidenceLevel, sourceType, generationId, status,
+                updatedAt, 1L, Instant.EPOCH, 0);
     }
 }
