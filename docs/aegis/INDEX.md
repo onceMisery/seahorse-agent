@@ -21,3 +21,10 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p3-router-context-weaver/task-intent-draft.json | Memory P3 router context weaver task intent draft |
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p3-router-context-weaver/todo-checkpoint-draft.json | Memory P3 router context weaver todo checkpoint draft |
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p3-router-context-weaver/drift-check-draft.json | Memory P3 router context weaver drift check draft |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p4-retrieval-outbox/10-intent.md | Memory P4 retrieval outbox intent |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p4-retrieval-outbox/20-checkpoint.md | Memory P4 retrieval outbox checkpoint |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p4-retrieval-outbox/90-evidence.md | Memory P4 retrieval outbox evidence |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p4-retrieval-outbox/99-reflection.md | Memory P4 retrieval outbox reflection |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p4-retrieval-outbox/task-intent-draft.json | Memory P4 retrieval outbox task intent draft |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p4-retrieval-outbox/todo-checkpoint-draft.json | Memory P4 retrieval outbox todo checkpoint draft |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p4-retrieval-outbox/drift-check-draft.json | Memory P4 retrieval outbox drift check draft |

@@ -31,6 +31,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
@@ -41,10 +42,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTrack;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
@@ -64,6 +67,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -84,6 +88,7 @@ import java.util.UUID;
 public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestionWorkflowPort {
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultMemoryEnginePort.class);
+    private static final String DEFAULT_VECTOR_EMBEDDING_MODEL = "default";
 
     private final ShortTermMemoryPort shortTermPort;
     private final LongTermMemoryPort longTermPort;
@@ -92,6 +97,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final CorrectionLedgerPort correctionLedgerPort;
     private final MemoryRouterPort memoryRouterPort;
     private final MemoryOperationLogPort memoryOperationLogPort;
+    private final MemoryVectorPort memoryVectorPort;
+    private final MemoryOutboxPort memoryOutboxPort;
+    private final MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort;
     private final ObjectMapper objectMapper;
     private final MemoryEngineOptions options;
     private final MemoryCaptureCandidateExtractor captureCandidateExtractor;
@@ -149,6 +157,23 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    CorrectionLedgerPort correctionLedgerPort,
                                    MemoryRouterPort memoryRouterPort,
                                    MemoryOperationLogPort memoryOperationLogPort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options,
+                profileMemoryPort, correctionLedgerPort, memoryRouterPort, memoryOperationLogPort,
+                MemoryVectorPort.noop(), MemoryOutboxPort.noop(), MemoryBusinessDocumentRetrieverPort.noop());
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort,
+                                   MemoryVectorPort memoryVectorPort,
+                                   MemoryOutboxPort memoryOutboxPort,
+                                   MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -157,6 +182,10 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.memoryRouterPort = Objects.requireNonNull(memoryRouterPort, "memoryRouterPort must not be null");
         this.memoryOperationLogPort = Objects.requireNonNull(memoryOperationLogPort,
                 "memoryOperationLogPort must not be null");
+        this.memoryVectorPort = Objects.requireNonNull(memoryVectorPort, "memoryVectorPort must not be null");
+        this.memoryOutboxPort = Objects.requireNonNull(memoryOutboxPort, "memoryOutboxPort must not be null");
+        this.businessDocumentRetrieverPort = Objects.requireNonNull(businessDocumentRetrieverPort,
+                "businessDocumentRetrieverPort must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.options = Objects.requireNonNullElseGet(options, MemoryEngineOptions::defaults);
         this.captureCandidateExtractor = new MemoryCaptureCandidateExtractor();
@@ -178,6 +207,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         boolean loadCorrection = routePlan.isActive(MemoryTrack.CORRECTION);
         boolean loadProfile = routePlan.isActive(MemoryTrack.PROFILE);
         boolean loadEpisodic = routePlan.isActive(MemoryTrack.EPISODIC);
+        boolean loadBusinessDocument = routePlan.isActive(MemoryTrack.BUSINESS_DOCUMENT);
         boolean loadShortWindow = routePlan.isActive(MemoryTrack.SHORT_WINDOW);
 
         List<MemoryItem> shortTerm = loadShortWindow
@@ -191,6 +221,17 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 : Collections.emptyList();
         List<MemoryItem> corrections = loadCorrection ? loadCorrections(userId) : Collections.emptyList();
         List<MemoryItem> profile = loadProfile ? loadProfileFacts(userId) : Collections.emptyList();
+        if (loadEpisodic) {
+            List<MemoryItem> vectorHits = loadVectorHitMemories(userId, request.currentQuestion(),
+                    options.semanticLimit());
+            shortTerm = mergeById(shortTerm, filterByLayer(vectorHits, MemoryLayer.SHORT_TERM));
+            longTerm = mergeById(longTerm, filterByLayer(vectorHits, MemoryLayer.LONG_TERM));
+            semantic = mergeById(semantic, filterByLayer(vectorHits, MemoryLayer.SEMANTIC));
+        }
+        if (loadBusinessDocument) {
+            semantic = mergeById(semantic, loadBusinessDocuments(userId, request.currentQuestion(),
+                    options.semanticLimit()));
+        }
         Set<String> activeProfileSlots = activeProfileSlots(profile);
         if (!activeProfileSlots.isEmpty()) {
             shortTerm = removeActiveProfileSlotMemories(shortTerm, activeProfileSlots);
@@ -205,9 +246,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 .workingMemory(Collections.emptyList())
                 .correctionMemories(corrections)
                 .profileMemories(profile)
-                .shortTermMemories(shortTerm)
+                .shortTermMemories(deduplicateById(shortTerm))
                 .longTermMemories(deduplicateProfileSlots(deduplicateById(longTerm)))
-                .semanticMemories(deduplicateProfileSlots(semantic))
+                .semanticMemories(deduplicateProfileSlots(deduplicateById(semantic)))
                 .promptMessages(Collections.emptyList())
                 .build();
     }
@@ -306,6 +347,82 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
     }
 
+    private List<MemoryItem> loadVectorHitMemories(String userId, String question, int limit) {
+        if (isBlank(question)) {
+            return Collections.emptyList();
+        }
+        try {
+            return memoryVectorPort.search(userId, question, limit).stream()
+                    .map(this::findMemoryById)
+                    .flatMap(Optional::stream)
+                    .toList();
+        } catch (RuntimeException ex) {
+            LOG.warn("向量召回记忆失败: userId={}", userId, ex);
+            return Collections.emptyList();
+        }
+    }
+
+    private Optional<MemoryItem> findMemoryById(String memoryId) {
+        if (isBlank(memoryId)) {
+            return Optional.empty();
+        }
+        Optional<MemoryRecord> shortTerm = safeFindById(shortTermPort, memoryId);
+        if (shortTerm.isPresent()) {
+            return shortTerm.map(record -> toMemoryItem(record, MemoryLayer.SHORT_TERM));
+        }
+        Optional<MemoryRecord> longTerm = safeFindById(longTermPort, memoryId);
+        if (longTerm.isPresent()) {
+            return longTerm.map(record -> toMemoryItem(record, MemoryLayer.LONG_TERM));
+        }
+        return safeFindById(semanticPort, memoryId)
+                .map(record -> toMemoryItem(record, MemoryLayer.SEMANTIC));
+    }
+
+    private Optional<MemoryRecord> safeFindById(
+            com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort port, String memoryId) {
+        try {
+            return port.findById(memoryId);
+        } catch (RuntimeException ex) {
+            LOG.debug("按ID读取记忆失败: memoryId={}", memoryId, ex);
+            return Optional.empty();
+        }
+    }
+
+    private List<MemoryItem> loadBusinessDocuments(String userId, String question, int limit) {
+        if (isBlank(question)) {
+            return Collections.emptyList();
+        }
+        try {
+            return businessDocumentRetrieverPort.retrieve("default", question, limit);
+        } catch (RuntimeException ex) {
+            LOG.warn("加载业务文档记忆候选失败: userId={}", userId, ex);
+            return Collections.emptyList();
+        }
+    }
+
+    private List<MemoryItem> filterByLayer(List<MemoryItem> items, MemoryLayer layer) {
+        if (items == null || items.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return items.stream()
+                .filter(item -> item != null && item.getLayer() == layer)
+                .toList();
+    }
+
+    private List<MemoryItem> mergeById(List<MemoryItem> first, List<MemoryItem> second) {
+        if ((first == null || first.isEmpty()) && (second == null || second.isEmpty())) {
+            return Collections.emptyList();
+        }
+        List<MemoryItem> merged = new ArrayList<>();
+        if (first != null) {
+            merged.addAll(first);
+        }
+        if (second != null) {
+            merged.addAll(second);
+        }
+        return deduplicateById(merged);
+    }
+
     private MemoryItem toCorrectionItem(CorrectionRule rule) {
         return MemoryItem.builder()
                 .id(rule.id())
@@ -394,12 +511,30 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         if (captureProfileFact(request, tenantId, decision)) {
             operations.add("PROFILE_UPSERT");
         }
+        operations.add(indexMemoryOrEnqueueOutbox(record, request.userId(), tenantId));
         return MemoryIngestionResult.accepted(MemoryIngestionAction.ADD, operations, Map.of(
                 "memoryType", decision.type(),
                 "valueScore", decision.valueScore(),
                 "riskScore", decision.riskScore(),
                 "captureReasons", decision.reasons(),
                 "captureSignals", decision.signals()));
+    }
+
+    private String indexMemoryOrEnqueueOutbox(MemoryRecord record, String userId, String tenantId) {
+        try {
+            memoryVectorPort.upsert(record.id(), userId, record.content(), DEFAULT_VECTOR_EMBEDDING_MODEL);
+            return "VECTOR_UPSERT";
+        } catch (RuntimeException ex) {
+            LOG.warn("记忆向量索引失败，已转入outbox: memoryId={}, userId={}, error={}",
+                    record.id(), userId, Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorUpsert(
+                    record,
+                    userId,
+                    tenantId,
+                    DEFAULT_VECTOR_EMBEDDING_MODEL,
+                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
+            return "VECTOR_OUTBOX_ENQUEUE";
+        }
     }
 
     private List<String> captureCorrection(MemoryWriteRequest request, String tenantId, OccupationCorrection correction) {

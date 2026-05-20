@@ -34,14 +34,17 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboun
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMaintenancePort;
@@ -77,6 +80,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<CorrectionLedgerPort> correctionLedgerPort,
             ObjectProvider<MemoryRouterPort> memoryRouterPort,
             ObjectProvider<MemoryOperationLogPort> memoryOperationLogPort,
+            ObjectProvider<MemoryVectorPort> memoryVectorPort,
+            ObjectProvider<MemoryOutboxPort> memoryOutboxPort,
+            ObjectProvider<MemoryBusinessDocumentRetrieverPort> businessDocumentRetrieverPort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
             @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
@@ -97,7 +103,10 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 profileMemoryPort.getIfAvailable(ProfileMemoryPort::noop),
                 correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
                 memoryRouterPort.getIfAvailable(DefaultMemoryRouter::new),
-                memoryOperationLogPort.getIfAvailable(MemoryOperationLogPort::noop));
+                memoryOperationLogPort.getIfAvailable(MemoryOperationLogPort::noop),
+                memoryVectorPort.getIfAvailable(MemoryVectorPort::noop),
+                memoryOutboxPort.getIfAvailable(MemoryOutboxPort::noop),
+                businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop));
     }
 
     @Bean

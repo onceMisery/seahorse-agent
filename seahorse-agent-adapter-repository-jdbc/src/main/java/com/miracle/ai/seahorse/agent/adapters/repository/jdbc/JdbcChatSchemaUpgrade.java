@@ -71,6 +71,26 @@ public class JdbcChatSchemaUpgrade {
                 ON t_memory_operation_log (user_id, tenant_id, create_time)
                 """);
         jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_memory_outbox (
+                    id VARCHAR(128) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    task_type VARCHAR(64) NOT NULL,
+                    target_id VARCHAR(128),
+                    payload_json JSONB NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    last_error TEXT,
+                    next_retry_time TIMESTAMP,
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_outbox_status
+                ON t_memory_outbox (status, next_retry_time, create_time)
+                """);
+        jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_user_profile_fact (
                     id VARCHAR(64) PRIMARY KEY,
                     user_id VARCHAR(64) NOT NULL,

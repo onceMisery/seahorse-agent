@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
@@ -47,6 +48,7 @@ class JdbcMemoryRepositoryAdapterTests {
     private JdbcProfileMemoryRepositoryAdapter profileAdapter;
     private JdbcCorrectionLedgerRepositoryAdapter correctionAdapter;
     private JdbcMemoryOperationLogRepositoryAdapter operationLogAdapter;
+    private JdbcMemoryOutboxRepositoryAdapter outboxAdapter;
 
     @BeforeEach
     void setUp() {
@@ -63,6 +65,7 @@ class JdbcMemoryRepositoryAdapterTests {
         profileAdapter = new JdbcProfileMemoryRepositoryAdapter(dataSource, objectMapper);
         correctionAdapter = new JdbcCorrectionLedgerRepositoryAdapter(dataSource, objectMapper);
         operationLogAdapter = new JdbcMemoryOperationLogRepositoryAdapter(dataSource, objectMapper);
+        outboxAdapter = new JdbcMemoryOutboxRepositoryAdapter(dataSource, objectMapper);
     }
 
     @Test
@@ -219,6 +222,40 @@ class JdbcMemoryRepositoryAdapterTests {
         assertThat(row.get("DECISION_JSON").toString()).contains("PREFERENCE");
     }
 
+    @Test
+    void shouldEnqueueAndCompleteMemoryOutboxTasks() {
+        outboxAdapter.enqueue(new MemoryOutboxPort.MemoryOutboxTask(
+                "outbox-1",
+                "VECTOR_UPSERT",
+                "stm-1",
+                "user-1",
+                "default",
+                Map.of("memoryId", "stm-1", "embeddingModel", "default"),
+                "vector down",
+                null,
+                Instant.now()));
+
+        assertThat(outboxAdapter.pollPending(10))
+                .hasSize(1)
+                .first()
+                .satisfies(task -> {
+                    assertThat(task.id()).isEqualTo("outbox-1");
+                    assertThat(task.taskType()).isEqualTo("VECTOR_UPSERT");
+                    assertThat(task.targetId()).isEqualTo("stm-1");
+                    assertThat(task.payload()).containsEntry("memoryId", "stm-1");
+                });
+
+        outboxAdapter.markSucceeded("outbox-1");
+
+        assertThat(outboxAdapter.pollPending(10)).isEmpty();
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT status
+                FROM t_memory_outbox
+                WHERE id = 'outbox-1'
+                """);
+        assertThat(row.get("STATUS")).isEqualTo("SUCCEEDED");
+    }
+
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_short_term_memory");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_long_term_memory");
@@ -228,6 +265,7 @@ class JdbcMemoryRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_user_profile_fact");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_correction_ledger");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_operation_log");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_outbox");
         jdbcTemplate.execute("""
                 CREATE TABLE t_short_term_memory (
                     id VARCHAR(64) PRIMARY KEY,
@@ -301,6 +339,22 @@ class JdbcMemoryRepositoryAdapterTests {
                     status VARCHAR(32) NOT NULL,
                     policy_version VARCHAR(64) NOT NULL,
                     error_message TEXT,
+                    create_time TIMESTAMP,
+                    update_time TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_memory_outbox (
+                    id VARCHAR(128) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL,
+                    task_type VARCHAR(64) NOT NULL,
+                    target_id VARCHAR(128),
+                    payload_json TEXT NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    last_error TEXT,
+                    next_retry_time TIMESTAMP,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP
                 )

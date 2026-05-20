@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-20-memory-p4-retrieval-outbox",
+  "currentTodo": "P4 retrieval/outbox implementation verified and ready to commit.",
+  "completedTodos": [
+    "P3 committed as ddd9dd2 feat(memory): add question-aware context weaving",
+    "Baseline read set reviewed for memory engine, vector port, retrieval engine, JDBC schema upgrade, and Spring wiring",
+    "RED tests added and observed failing for missing outbox/business ports and constructor",
+    "Implemented MemoryOutboxPort, MemoryBusinessDocumentRetrieverPort, JDBC outbox repository/table, Spring wiring, vector indexing fallback, vector hit recall, and business document retrieval bridge",
+    "Target, JDBC repository, related regression, package, and diff checks passed"
+  ],
+  "activeSlice": "completion-candidate",
+  "evidenceRefs": [
+    "P4 target tests: BUILD SUCCESS, 3 tests",
+    "JdbcMemoryRepositoryAdapterTests: BUILD SUCCESS, 7 tests",
+    "Related regression tests: BUILD SUCCESS, 36 tests",
+    "Starter package: BUILD SUCCESS",
+    "git diff --check: exit 0, CRLF warnings only"
+  ],
+  "blockedOn": null,
+  "nextStep": "Commit P4 changes.",
+  "updatedAt": "2026-05-20"
+}

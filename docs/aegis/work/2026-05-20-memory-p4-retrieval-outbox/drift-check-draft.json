@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-20-memory-p4-retrieval-outbox",
+  "taskIntentRef": "docs/aegis/work/2026-05-20-memory-p4-retrieval-outbox/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/Seahorse Agent记忆系统差距分析与Gemini对齐改进方案.md"
+  ],
+  "scopeStatus": "aligned-with-p4-minimal-loop",
+  "compatStatus": "existing-constructors-retained-and-new-ports-default-noop",
+  "retirementStatus": "no-existing-path-retired",
+  "newRiskSignals": [
+    "outbox worker execution deferred to later lifecycle/operations slice",
+    "full vector backend behavior depends on configured MemoryVectorPort adapter"
+  ],
+  "decision": "continue-to-commit"
+}

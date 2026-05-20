@@ -25,6 +25,10 @@ import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrieva
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEvaluationService;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalStrategyTemplateService;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.DefaultMetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataFilterCompiler;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
@@ -37,12 +41,17 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpParameterExtractionPo
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationComparisonRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -161,6 +170,18 @@ public class SeahorseAgentKernelRetrievalAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(KernelRetrievalEngine.class)
+    @ConditionalOnMissingBean(MemoryBusinessDocumentRetrieverPort.class)
+    public MemoryBusinessDocumentRetrieverPort seahorseMemoryBusinessDocumentRetrieverPort(
+            KernelRetrievalEngine retrievalEngine) {
+        return (tenantId, query, topK) -> retrievalEngine
+                .retrieveKnowledgeChannels(List.of(new SubQuestionIntent(query, List.of())), topK)
+                .stream()
+                .map(chunk -> toBusinessDocumentMemoryItem(tenantId, chunk))
+                .toList();
+    }
+
+    @Bean
+    @ConditionalOnBean(KernelRetrievalEngine.class)
     @ConditionalOnMissingBean(RetrievalEvaluationInboundPort.class)
     public KernelRetrievalEvaluationService seahorseRetrievalEvaluationInboundPort(
             KernelRetrievalEngine retrievalEngine) {
@@ -205,5 +226,64 @@ public class SeahorseAgentKernelRetrievalAutoConfiguration {
                 ? "seahorse-rag-" : threadNamePrefix);
         executor.initialize();
         return executor;
+    }
+
+    private static MemoryItem toBusinessDocumentMemoryItem(String tenantId, RetrievedChunk chunk) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("tenantId", tenantId == null || tenantId.isBlank() ? "default" : tenantId);
+        metadata.put("kbId", value(chunk.getKbId()));
+        metadata.put("docId", value(chunk.getDocId()));
+        metadata.put("collectionName", value(chunk.getCollectionName()));
+        metadata.put("chunkIndex", chunk.getChunkIndex());
+        metadata.put("generationId", value(safeMetadata(chunk).get("generationId")));
+        return MemoryItem.builder()
+                .id(businessDocumentId(chunk))
+                .layer(MemoryLayer.SEMANTIC)
+                .type("BUSINESS_DOCUMENT")
+                .content(value(chunk.getText()))
+                .metadataJson(toJsonObject(metadata))
+                .relevanceScore(chunk.getScore() == null ? null : chunk.getScore().doubleValue())
+                .createTime(LocalDateTime.now())
+                .build();
+    }
+
+    private static String toJsonObject(Map<String, Object> metadata) {
+        StringBuilder builder = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, Object> entry : metadata.entrySet()) {
+            if (!first) {
+                builder.append(',');
+            }
+            first = false;
+            builder.append('"').append(escape(entry.getKey())).append('"').append(':');
+            Object value = entry.getValue();
+            if (value instanceof Number || value instanceof Boolean) {
+                builder.append(value);
+            } else {
+                builder.append('"').append(escape(value(value))).append('"');
+            }
+        }
+        return builder.append('}').toString();
+    }
+
+    private static String value(Object value) {
+        return value == null ? "" : value.toString();
+    }
+
+    private static String businessDocumentId(RetrievedChunk chunk) {
+        String id = value(chunk.getId());
+        if (!id.isBlank()) {
+            return id;
+        }
+        String source = value(chunk.getDocId()) + ":" + value(chunk.getChunkIndex()) + ":" + value(chunk.getText());
+        return "biz-doc-" + Integer.toUnsignedString(source.hashCode());
+    }
+
+    private static Map<String, Object> safeMetadata(RetrievedChunk chunk) {
+        return chunk.getMetadata() == null ? Map.of() : chunk.getMetadata();
+    }
+
+    private static String escape(String value) {
+        return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

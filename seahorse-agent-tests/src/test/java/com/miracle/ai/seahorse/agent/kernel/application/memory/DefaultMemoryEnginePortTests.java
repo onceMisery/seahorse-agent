@@ -36,12 +36,15 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -628,12 +631,123 @@ class DefaultMemoryEnginePortTests {
 
         Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
         Assertions.assertEquals(MemoryIngestionAction.ADD, result.action());
-        Assertions.assertEquals(List.of("SHORT_TERM_SAVE"), result.operations());
+        Assertions.assertTrue(result.operations().contains("SHORT_TERM_SAVE"));
         Assertions.assertEquals(1, shortTermPort.savedRecords.size());
         Assertions.assertEquals(MemoryOperationType.ADD, operationLogPort.started.get(0).operationType());
         Assertions.assertEquals("SHORT_TERM_MEMORY", operationLogPort.started.get(0).targetKind());
         Assertions.assertEquals(MemoryOperationStatus.SUCCEEDED, operationLogPort.statusById.get("op-preference"));
         Assertions.assertEquals("PREFERENCE", operationLogPort.decisionById.get("op-preference").get("memoryType"));
+    }
+
+    @Test
+    void shouldEnqueueOutboxWhenVectorIndexingFailsWithoutRollingBackMemoryWrite() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                MemoryOperationLogPort.noop(),
+                new ThrowingMemoryVectorPort(),
+                outboxPort,
+                MemoryBusinessDocumentRetrieverPort.noop());
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-vector-fail", "default", "chat-completed",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-vector")
+                        .messageId("msg-vector")
+                        .message(ChatMessage.user("请记住：我喜欢简短回答"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        Assertions.assertTrue(result.operations().contains("VECTOR_OUTBOX_ENQUEUE"));
+        Assertions.assertEquals(1, outboxPort.tasks.size());
+        Assertions.assertEquals("VECTOR_UPSERT", outboxPort.tasks.get(0).taskType());
+    }
+
+    @Test
+    void shouldRecallVectorHitMemoriesAndFilterObsoleteProfileGeneration() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(
+                semanticRecord("stm-old-profile", "PROFILE", "我是一名学生", 0.9D,
+                        Instant.parse("2026-05-19T00:00:00Z"), "identity.occupation", "identity.occupation:old"),
+                record("stm-project", "SUMMARY", "用户在 Seahorse 项目中调试记忆召回", 0.8D)));
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        profilePort.upsert(new ProfileFactUpdate(
+                USER_ID,
+                "default",
+                "identity.occupation",
+                "老师",
+                0.95D,
+                "explicit_user_correction",
+                List.of("msg-correction"),
+                "identity.occupation:new"));
+        RecordingMemoryVectorPort vectorPort = new RecordingMemoryVectorPort(List.of("stm-old-profile", "stm-project"));
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                MemoryOperationLogPort.noop(),
+                vectorPort,
+                MemoryOutboxPort.noop(),
+                MemoryBusinessDocumentRetrieverPort.noop());
+
+        MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-read")
+                .currentQuestion("之前 Seahorse 项目里调试过什么？")
+                .build());
+
+        Assertions.assertEquals(List.of("之前 Seahorse 项目里调试过什么？"), vectorPort.queries);
+        Assertions.assertTrue(context.getShortTermMemories().stream()
+                .anyMatch(item -> "stm-project".equals(item.getId())));
+        Assertions.assertTrue(context.getShortTermMemories().stream()
+                .noneMatch(item -> "stm-old-profile".equals(item.getId())));
+    }
+
+    @Test
+    void shouldAppendBusinessDocumentCandidatesForBusinessRuleQuestions() {
+        RecordingBusinessDocumentRetrieverPort businessPort = new RecordingBusinessDocumentRetrieverPort(List.of(
+                MemoryItem.builder()
+                        .id("biz-1")
+                        .type("BUSINESS_DOCUMENT")
+                        .content("报销规则：超过 5000 元需要审批")
+                        .metadataJson("{\"docId\":\"policy-1\",\"generationId\":\"doc:v2\"}")
+                        .build()));
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                new StubShortTermMemoryPort(List.of()),
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                MemoryOperationLogPort.noop(),
+                MemoryVectorPort.noop(),
+                MemoryOutboxPort.noop(),
+                businessPort);
+
+        MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-biz")
+                .currentQuestion("知识库里的报销规则是什么？")
+                .build());
+
+        Assertions.assertEquals(List.of("知识库里的报销规则是什么？"), businessPort.queries);
+        Assertions.assertTrue(context.getSemanticMemories().stream()
+                .anyMatch(item -> item.getContent().contains("超过 5000 元需要审批")));
     }
 
     @Test
@@ -743,11 +857,22 @@ class DefaultMemoryEnginePortTests {
                                         double importanceScore,
                                         Instant updatedAt,
                                         String semanticKey) {
+        return semanticRecord(id, type, content, importanceScore, updatedAt, semanticKey, "");
+    }
+
+    private MemoryRecord semanticRecord(String id,
+                                        String type,
+                                        String content,
+                                        double importanceScore,
+                                        Instant updatedAt,
+                                        String semanticKey,
+                                        String generationId) {
         return new MemoryRecord(id, "semantic", type, content,
                 Map.of("userId", USER_ID,
                         "importanceScore", importanceScore,
                         "confidenceLevel", importanceScore,
-                        "semanticKey", semanticKey),
+                        "semanticKey", semanticKey,
+                        "generationId", generationId),
                 updatedAt);
     }
 
@@ -943,6 +1068,65 @@ class DefaultMemoryEnginePortTests {
         public void markFailed(String operationId, String errorMessage) {
             statusById.put(operationId, MemoryOperationStatus.FAILED);
             decisionById.put(operationId, Map.of("errorMessage", errorMessage));
+        }
+    }
+
+    private static class ThrowingMemoryVectorPort implements MemoryVectorPort {
+
+        @Override
+        public void upsert(String memoryId, String userId, String content, String embeddingModel) {
+            throw new IllegalStateException("vector down");
+        }
+
+        @Override
+        public List<String> search(String userId, String query, int topK) {
+            return List.of();
+        }
+    }
+
+    private static class RecordingMemoryVectorPort implements MemoryVectorPort {
+
+        private final List<String> hits;
+        private final List<String> queries = new ArrayList<>();
+
+        RecordingMemoryVectorPort(List<String> hits) {
+            this.hits = hits;
+        }
+
+        @Override
+        public void upsert(String memoryId, String userId, String content, String embeddingModel) {
+        }
+
+        @Override
+        public List<String> search(String userId, String query, int topK) {
+            queries.add(query);
+            return hits.stream().limit(topK).toList();
+        }
+    }
+
+    private static class RecordingMemoryOutboxPort implements MemoryOutboxPort {
+
+        private final List<MemoryOutboxPort.MemoryOutboxTask> tasks = new ArrayList<>();
+
+        @Override
+        public void enqueue(MemoryOutboxPort.MemoryOutboxTask task) {
+            tasks.add(task);
+        }
+    }
+
+    private static class RecordingBusinessDocumentRetrieverPort implements MemoryBusinessDocumentRetrieverPort {
+
+        private final List<MemoryItem> items;
+        private final List<String> queries = new ArrayList<>();
+
+        RecordingBusinessDocumentRetrieverPort(List<MemoryItem> items) {
+            this.items = items;
+        }
+
+        @Override
+        public List<MemoryItem> retrieve(String tenantId, String query, int topK) {
+            queries.add(query);
+            return items.stream().limit(topK).toList();
         }
     }
 }
