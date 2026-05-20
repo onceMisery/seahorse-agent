@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "kernel memory write path",
+    "chat completion capture",
+    "agent memory_write tool",
+    "JDBC repository/schema upgrade",
+    "Spring auto-configuration",
+    "memory workflow tests"
+  ],
+  "owners": [
+    "DefaultMemoryEnginePort owns deterministic write decisions",
+    "MemoryOperationLogPort owns ingestion idempotency persistence",
+    "Profile KV remains the strong profile fact source",
+    "Correction Ledger remains the highest-priority correction source"
+  ],
+  "invariants": [
+    "Sensitive content must not be durably stored by the memory workflow",
+    "Duplicate operation id must not create duplicate durable writes",
+    "LLM/tool calls submit candidates only; deterministic code owns final writes",
+    "P1 read priority for Correction Ledger and Profile KV is retained"
+  ],
+  "compatBoundary": "Existing layered memory tables and MemoryEnginePort signatures remain valid. New workflow wraps write decisions and operation logging without requiring callers to bypass existing APIs.",
+  "nonGoals": [
+    "LLM refiner",
+    "memory outbox",
+    "P3 retrieval routing/context weaving"
+  ]
+}

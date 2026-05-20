@@ -1,0 +1,25 @@
+# Memory P2 ingestion workflow - Checkpoint
+
+- Task ID: 2026-05-20-memory-p2-ingestion-workflow
+- Current todo: P2 implementation verified; prepare commit and handoff to P3.
+- Active slice: completion-candidate
+- Completed todos:
+  - Added ingestion command/action/status/operation models and `MemoryOperationLogPort`.
+  - Implemented deterministic sanitizer, pre-filter, semantic classifier, and schema validator.
+  - Refactored `DefaultMemoryEnginePort.ingest()` to own operation idempotency and final write decisions.
+  - Added JDBC operation log adapter, initial schema, and schema-upgrade DDL.
+  - Routed chat completion capture and `memory_write` through `MemoryIngestionWorkflowPort` with compatibility fallbacks.
+  - Registered new ports in Spring auto-configuration.
+  - Added kernel, JDBC, Spring, and tool regression tests.
+  - Preserved existing `memory_write.policyDecision` response semantics while adding `ingestionStatus` and `ingestionAction`.
+- Blocked on: none
+- Evidence refs:
+  - `mvnw.cmd -pl seahorse-agent-tests -am "-Dtest=DefaultMemoryEnginePortTests,MemoryCapturePolicyTests,KernelMemoryGovernanceServiceTests,MemoryWorkflowRoutingTests,AgentToolPortAdapterTests,SeahorseAgentKernelAutoConfigurationTests#shouldRegisterMemoryManagementAndGovernancePortsWhenMemoryStoresExist,SeahorseAgentNativeAdapterAutoConfigurationTests#shouldRegisterJdbcKnowledgeRepositoryWhenDataSourceExists" test "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"`: BUILD SUCCESS, 51 tests.
+  - `mvnw.cmd -pl seahorse-agent-spring-boot-starter -am -DskipTests package "-Dspotless.check.skip=true"`: BUILD SUCCESS.
+  - `git diff --check`: no whitespace errors; only CRLF conversion warnings.
+- DriftCheckDraft:
+  - Scope: aligned with P2 write workflow and filtering.
+  - Compatibility: existing layered tables and old memory engine API retained.
+  - Retirement: no old path retired; legacy fallback remains explicit.
+  - Decision: continue to commit, then start P3.
+- Next step: Stage and commit P2, then evaluate P3 read router/context weaver work.

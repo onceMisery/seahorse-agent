@@ -25,6 +25,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -36,17 +39,26 @@ public class MemoryWriteToolPortAdapter implements ToolPort {
     public static final String TOOL_ID = "memory_write";
 
     private final MemoryEnginePort memoryEnginePort;
+    private final MemoryIngestionWorkflowPort memoryIngestionWorkflowPort;
     private final MemoryGovernanceInboundPort memoryGovernancePort;
     private final AgentToolJsonSupport jsonSupport;
 
     public MemoryWriteToolPortAdapter(MemoryEnginePort memoryEnginePort, AgentToolJsonSupport jsonSupport) {
-        this(memoryEnginePort, null, jsonSupport);
+        this(memoryEnginePort, null, null, jsonSupport);
     }
 
     public MemoryWriteToolPortAdapter(MemoryEnginePort memoryEnginePort,
                                       MemoryGovernanceInboundPort memoryGovernancePort,
                                       AgentToolJsonSupport jsonSupport) {
+        this(memoryEnginePort, null, memoryGovernancePort, jsonSupport);
+    }
+
+    public MemoryWriteToolPortAdapter(MemoryEnginePort memoryEnginePort,
+                                      MemoryIngestionWorkflowPort memoryIngestionWorkflowPort,
+                                      MemoryGovernanceInboundPort memoryGovernancePort,
+                                      AgentToolJsonSupport jsonSupport) {
         this.memoryEnginePort = Objects.requireNonNull(memoryEnginePort, "memoryEnginePort must not be null");
+        this.memoryIngestionWorkflowPort = memoryIngestionWorkflowPort;
         this.memoryGovernancePort = memoryGovernancePort;
         this.jsonSupport = Objects.requireNonNull(jsonSupport, "jsonSupport must not be null");
     }
@@ -70,15 +82,28 @@ public class MemoryWriteToolPortAdapter implements ToolPort {
             if (content.isBlank()) {
                 return ToolInvocationResult.failed("content is required");
             }
-            memoryEnginePort.writeMemory(MemoryWriteRequest.builder()
+            MemoryWriteRequest writeRequest = MemoryWriteRequest.builder()
                     .userId(userId)
                     .conversationId(jsonSupport.string(arguments, "_seahorseConversationId"))
                     .messageId("agent-tool-" + UUID.randomUUID())
                     .message(ChatMessage.user(content))
-                    .build());
+                    .build();
+            MemoryIngestionResult ingestionResult;
+            if (memoryIngestionWorkflowPort != null) {
+                ingestionResult = memoryIngestionWorkflowPort.ingest(
+                        MemoryIngestionCommand.toolWrite(toolCallId, writeRequest));
+            } else {
+                memoryEnginePort.writeMemory(writeRequest);
+                ingestionResult = MemoryIngestionResult.ignored("delegated_to_memory_engine");
+            }
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("success", true);
             response.put("policyDecision", "ALLOW_IF_CAPTURE_POLICY_ACCEPTS");
+            response.put("ingestionStatus", ingestionResult.status().name());
+            response.put("ingestionAction", ingestionResult.action().name());
+            response.put("memoryAction", ingestionResult.action().name());
+            response.put("memoryReason", ingestionResult.reason());
+            response.put("memoryOperations", ingestionResult.operations());
             response.put("layer", "SHORT_TERM");
             installGovernanceResult(userId, response);
             return ToolInvocationResult.ok(jsonSupport.write(response));

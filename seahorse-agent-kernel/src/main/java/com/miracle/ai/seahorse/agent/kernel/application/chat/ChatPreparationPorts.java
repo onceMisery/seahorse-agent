@@ -24,6 +24,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryOptimizerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 
 import java.util.Objects;
 
@@ -32,6 +34,7 @@ import java.util.Objects;
  */
 public record ChatPreparationPorts(ConversationMemoryPort memoryPort,
                                    MemoryEnginePort memoryEnginePort,
+                                   MemoryIngestionWorkflowPort memoryIngestionWorkflowPort,
                                    QueryOptimizerPort queryOptimizerPort,
                                    QueryRewritePort queryRewritePort,
                                    IntentResolutionPort intentResolutionPort,
@@ -43,13 +46,28 @@ public record ChatPreparationPorts(ConversationMemoryPort memoryPort,
                                 IntentResolutionPort intentResolutionPort,
                                 IntentGuidancePort intentGuidancePort,
                                 RetrievalContextPort retrievalContextPort) {
-        this(memoryPort, MemoryEnginePort.noop(), QueryOptimizerPort.passthrough(),
+        this(memoryPort, MemoryEnginePort.noop(), command -> MemoryIngestionResult.ignored("noop"),
+                QueryOptimizerPort.passthrough(),
                 queryRewritePort, intentResolutionPort, intentGuidancePort, retrievalContextPort);
+    }
+
+    public ChatPreparationPorts(ConversationMemoryPort memoryPort,
+                                MemoryEnginePort memoryEnginePort,
+                                QueryOptimizerPort queryOptimizerPort,
+                                QueryRewritePort queryRewritePort,
+                                IntentResolutionPort intentResolutionPort,
+                                IntentGuidancePort intentGuidancePort,
+                                RetrievalContextPort retrievalContextPort) {
+        this(memoryPort, memoryEnginePort, command -> {
+            memoryEnginePort.writeMemory(command == null ? null : command.writeRequest());
+            return MemoryIngestionResult.ignored("delegated_to_memory_engine");
+        }, queryOptimizerPort, queryRewritePort, intentResolutionPort, intentGuidancePort, retrievalContextPort);
     }
 
     public ChatPreparationPorts {
         Objects.requireNonNull(memoryPort, "对话记忆端口不能为空");
         Objects.requireNonNull(memoryEnginePort, "记忆引擎端口不能为空");
+        Objects.requireNonNull(memoryIngestionWorkflowPort, "记忆写入工作流端口不能为空");
         Objects.requireNonNull(queryOptimizerPort, "查询优化端口不能为空");
         Objects.requireNonNull(queryRewritePort, "查询改写端口不能为空");
         Objects.requireNonNull(intentResolutionPort, "意图解析端口不能为空");

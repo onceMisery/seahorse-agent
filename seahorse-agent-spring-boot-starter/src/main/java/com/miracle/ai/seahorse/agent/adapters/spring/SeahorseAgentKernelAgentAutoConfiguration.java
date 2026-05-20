@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboun
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -148,9 +149,14 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @ConditionalOnProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public MemoryWriteToolPortAdapter seahorseMemoryWriteToolPortAdapter(MemoryEnginePort memoryEnginePort,
+                                                                         ObjectProvider<MemoryIngestionWorkflowPort> memoryIngestionWorkflowPort,
                                                                          ObjectProvider<MemoryGovernanceInboundPort> memoryGovernancePort,
                                                                          AgentToolJsonSupport jsonSupport) {
-        return new MemoryWriteToolPortAdapter(memoryEnginePort, memoryGovernancePort.getIfAvailable(), jsonSupport);
+        return new MemoryWriteToolPortAdapter(
+                memoryEnginePort,
+                memoryIngestionWorkflowPort.getIfAvailable(),
+                memoryGovernancePort.getIfAvailable(),
+                jsonSupport);
     }
 
     @Bean

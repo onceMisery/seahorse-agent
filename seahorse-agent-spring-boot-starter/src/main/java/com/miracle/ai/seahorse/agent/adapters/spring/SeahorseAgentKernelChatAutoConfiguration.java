@@ -41,6 +41,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermExpansionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
@@ -103,6 +104,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
     @ConditionalOnMissingBean
     public ChatPreparationPorts seahorseChatPreparationPorts(ObjectProvider<ConversationMemoryPort> memoryPort,
                                                              ObjectProvider<MemoryEnginePort> memoryEnginePort,
+                                                             ObjectProvider<MemoryIngestionWorkflowPort> memoryIngestionWorkflowPort,
                                                              ObjectProvider<QueryOptimizerPort> queryOptimizerPort,
                                                              ObjectProvider<QueryRewritePort> queryRewritePort,
                                                              ObjectProvider<IntentResolutionPort> intentResolutionPort,
@@ -111,6 +113,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
         return new ChatPreparationPorts(
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
                 memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
+                memoryIngestionWorkflowPort.getIfAvailable(() -> command ->
+                        com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult.ignored("noop")),
                 queryOptimizerPort.getIfAvailable(QueryOptimizerPort::passthrough),
                 queryRewritePort.getIfAvailable(QueryRewritePort::passthrough),
                 intentResolutionPort.getIfAvailable(IntentResolutionPort::empty),

@@ -29,6 +29,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperation;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
@@ -40,6 +47,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -495,6 +503,176 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldUseOperationLogToAvoidDuplicateIngestionWrites() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort);
+        MemoryWriteRequest writeRequest = MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-idempotent")
+                .messageId("msg-idempotent")
+                .message(ChatMessage.user("我的职业是学生"))
+                .build();
+
+        var first = engine.ingest(new MemoryIngestionCommand("op-idempotent", "default", "test", writeRequest));
+        var second = engine.ingest(new MemoryIngestionCommand("op-idempotent", "default", "test", writeRequest));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, first.status());
+        Assertions.assertEquals(MemoryIngestionStatus.IGNORED, second.status());
+        Assertions.assertEquals("duplicate_operation", second.reason());
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        Assertions.assertEquals(1, profilePort.updates.size());
+        Assertions.assertEquals(1, operationLogPort.started.size());
+        Assertions.assertEquals(MemoryOperationType.ADD, operationLogPort.started.get(0).operationType());
+        Assertions.assertEquals(MemoryOperationStatus.SUCCEEDED, operationLogPort.statusById.get("op-idempotent"));
+    }
+
+    @Test
+    void shouldRejectSensitiveContentBeforeAnyDurableMemoryWrite() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        RecordingCorrectionLedgerPort correctionPort = new RecordingCorrectionLedgerPort();
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                correctionPort,
+                new DefaultMemoryRouter(),
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-sensitive", "default", "test",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-sensitive")
+                        .messageId("msg-sensitive-op")
+                        .message(ChatMessage.user("请记住：我的密码是 123456"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.IGNORE, result.action());
+        Assertions.assertTrue(result.reason().contains("sensitive"));
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertTrue(profilePort.updates.isEmpty());
+        Assertions.assertTrue(correctionPort.commands.isEmpty());
+        Assertions.assertEquals(MemoryOperationStatus.REJECTED, operationLogPort.statusById.get("op-sensitive"));
+        Assertions.assertEquals(MemoryOperationType.IGNORE, operationLogPort.started.get(0).operationType());
+    }
+
+    @Test
+    void shouldIgnoreLowValueChatAndRecordDecision() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-low-value", "default", "chat-completed",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-low")
+                        .messageId("msg-low-op")
+                        .message(ChatMessage.user("谢谢，收到"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.IGNORED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.IGNORE, result.action());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(MemoryOperationStatus.IGNORED, operationLogPort.statusById.get("op-low-value"));
+        Assertions.assertEquals("no_high_value_signal",
+                operationLogPort.decisionById.get("op-low-value").get("reason"));
+    }
+
+    @Test
+    void shouldRecordAddOperationForExplicitPreferenceMemory() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-preference", "default", "agent-memory-write",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-pref-op")
+                        .messageId("msg-pref-op")
+                        .message(ChatMessage.user("请记住：我喜欢简短回答"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.ADD, result.action());
+        Assertions.assertEquals(List.of("SHORT_TERM_SAVE"), result.operations());
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        Assertions.assertEquals(MemoryOperationType.ADD, operationLogPort.started.get(0).operationType());
+        Assertions.assertEquals("SHORT_TERM_MEMORY", operationLogPort.started.get(0).targetKind());
+        Assertions.assertEquals(MemoryOperationStatus.SUCCEEDED, operationLogPort.statusById.get("op-preference"));
+        Assertions.assertEquals("PREFERENCE", operationLogPort.decisionById.get("op-preference").get("memoryType"));
+    }
+
+    @Test
+    void shouldRecordUpdateOperationForExplicitCorrection() {
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        RecordingCorrectionLedgerPort correctionPort = new RecordingCorrectionLedgerPort();
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                new StubShortTermMemoryPort(List.of()),
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                correctionPort,
+                new DefaultMemoryRouter(),
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-correction", "default", "chat-completed",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-correction-op")
+                        .messageId("msg-correction-op")
+                        .message(ChatMessage.user("我不是学生了，我现在是老师"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.UPDATE, result.action());
+        Assertions.assertEquals(List.of("CORRECTION_UPSERT", "PROFILE_UPSERT"), result.operations());
+        Assertions.assertEquals(1, correctionPort.commands.size());
+        Assertions.assertEquals(1, profilePort.updates.size());
+        Assertions.assertEquals(MemoryOperationType.UPDATE, operationLogPort.started.get(0).operationType());
+        Assertions.assertEquals("PROFILE_SLOT", operationLogPort.started.get(0).targetKind());
+        Assertions.assertEquals("identity.occupation", operationLogPort.started.get(0).targetKey());
+        Assertions.assertEquals(MemoryOperationStatus.SUCCEEDED, operationLogPort.statusById.get("op-correction"));
+        Assertions.assertEquals("老师", operationLogPort.decisionById.get("op-correction").get("correctValue"));
+    }
+
+    @Test
     void shouldSkipMemoryCaptureWhenDisabled() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
@@ -736,6 +914,35 @@ class DefaultMemoryEnginePortTests {
                     command.generationId(),
                     "ACTIVE",
                     Instant.now()));
+        }
+    }
+
+    private static class RecordingMemoryOperationLogPort implements MemoryOperationLogPort {
+
+        private final List<MemoryOperation> started = new ArrayList<>();
+        private final Map<String, MemoryOperationStatus> statusById = new LinkedHashMap<>();
+        private final Map<String, Map<String, Object>> decisionById = new LinkedHashMap<>();
+
+        @Override
+        public boolean tryStart(MemoryOperation operation) {
+            if (statusById.containsKey(operation.operationId())) {
+                return false;
+            }
+            started.add(operation);
+            statusById.put(operation.operationId(), MemoryOperationStatus.STARTED);
+            return true;
+        }
+
+        @Override
+        public void markCompleted(String operationId, MemoryOperationStatus status, Map<String, Object> decision) {
+            statusById.put(operationId, status);
+            decisionById.put(operationId, decision);
+        }
+
+        @Override
+        public void markFailed(String operationId, String errorMessage) {
+            statusById.put(operationId, MemoryOperationStatus.FAILED);
+            decisionById.put(operationId, Map.of("errorMessage", errorMessage));
         }
     }
 }

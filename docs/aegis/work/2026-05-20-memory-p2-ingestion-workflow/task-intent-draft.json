@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Implement P2 deterministic memory ingestion workflow with operation log, filtering, and entrypoint convergence",
+  "goal": "Implement P2 deterministic memory ingestion workflow with operation log, filtering, and entrypoint convergence",
+  "successEvidence": [
+    "MemoryIngestionWorkflowPort is implemented by DefaultMemoryEnginePort",
+    "Chat completion capture and memory_write submit ingestion commands",
+    "Sanitizer/pre-filter/classifier/schema validator gate durable writes",
+    "Operation log idempotency is persisted through JDBC",
+    "Sensitive, low-value, preference, and correction inputs follow distinct decision paths",
+    "Existing writeMemory API and memory_write response compatibility are preserved"
+  ],
+  "stopCondition": "Stop when success evidence is satisfied or a blocker/risk requires pause.",
+  "nonGoals": [
+    "LLM refiner",
+    "memory outbox",
+    "P3 read router/context weaver"
+  ],
+  "scope": "Seahorse Agent memory write path, operation log persistence, sanitizer/pre-filter/classifier/schema validator, tests",
+  "changeKinds": [
+    "architecture"
+  ],
+  "riskHints": [
+    "Public tool response compatibility",
+    "Database migration compatibility",
+    "Deterministic code owns final persistence"
+  ]
+}

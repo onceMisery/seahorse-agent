@@ -55,7 +55,7 @@ final class KernelChatPreparationSupport {
         if (callback == null) {
             return;
         }
-        context.setCallback(MemoryCaptureStage.wrap(callback, preparationPorts.memoryEnginePort(), context));
+        context.setCallback(MemoryCaptureStage.wrap(callback, preparationPorts.memoryIngestionWorkflowPort(), context));
     }
 
     void loadMemory(StreamChatContext context) {

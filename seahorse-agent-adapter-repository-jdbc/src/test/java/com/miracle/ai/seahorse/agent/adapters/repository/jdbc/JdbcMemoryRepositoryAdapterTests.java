@@ -20,6 +20,9 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperation;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
@@ -43,6 +46,7 @@ class JdbcMemoryRepositoryAdapterTests {
     private JdbcMemoryConflictLogRepositoryAdapter conflictAdapter;
     private JdbcProfileMemoryRepositoryAdapter profileAdapter;
     private JdbcCorrectionLedgerRepositoryAdapter correctionAdapter;
+    private JdbcMemoryOperationLogRepositoryAdapter operationLogAdapter;
 
     @BeforeEach
     void setUp() {
@@ -58,6 +62,7 @@ class JdbcMemoryRepositoryAdapterTests {
         conflictAdapter = new JdbcMemoryConflictLogRepositoryAdapter(dataSource);
         profileAdapter = new JdbcProfileMemoryRepositoryAdapter(dataSource, objectMapper);
         correctionAdapter = new JdbcCorrectionLedgerRepositoryAdapter(dataSource, objectMapper);
+        operationLogAdapter = new JdbcMemoryOperationLogRepositoryAdapter(dataSource, objectMapper);
     }
 
     @Test
@@ -184,6 +189,36 @@ class JdbcMemoryRepositoryAdapterTests {
                 });
     }
 
+    @Test
+    void shouldUseOperationLogAsIdempotencyGuard() {
+        MemoryOperation operation = new MemoryOperation(
+                "op-1",
+                "user-1",
+                "default",
+                MemoryOperationType.ADD,
+                "SHORT_TERM_MEMORY",
+                "",
+                Map.of("messageId", "msg-1"),
+                "high_precision_rule_v1",
+                Instant.now());
+
+        assertThat(operationLogAdapter.tryStart(operation)).isTrue();
+        assertThat(operationLogAdapter.tryStart(operation)).isFalse();
+
+        operationLogAdapter.markCompleted("op-1", MemoryOperationStatus.SUCCEEDED,
+                Map.of("memoryType", "PREFERENCE", "action", "ADD"));
+
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT status, operation_type, target_kind, decision_json
+                FROM t_memory_operation_log
+                WHERE operation_id = 'op-1'
+                """);
+        assertThat(row.get("STATUS")).isEqualTo("SUCCEEDED");
+        assertThat(row.get("OPERATION_TYPE")).isEqualTo("ADD");
+        assertThat(row.get("TARGET_KIND")).isEqualTo("SHORT_TERM_MEMORY");
+        assertThat(row.get("DECISION_JSON").toString()).contains("PREFERENCE");
+    }
+
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_short_term_memory");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_long_term_memory");
@@ -192,6 +227,7 @@ class JdbcMemoryRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_conflict_log");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_user_profile_fact");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_correction_ledger");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_operation_log");
         jdbcTemplate.execute("""
                 CREATE TABLE t_short_term_memory (
                     id VARCHAR(64) PRIMARY KEY,
@@ -250,6 +286,23 @@ class JdbcMemoryRepositoryAdapterTests {
                     user_id VARCHAR(64),
                     snapshot_json TEXT,
                     create_time TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_memory_operation_log (
+                    operation_id VARCHAR(128) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL,
+                    operation_type VARCHAR(32) NOT NULL,
+                    target_kind VARCHAR(32) NOT NULL,
+                    target_key VARCHAR(128),
+                    request_json TEXT NOT NULL,
+                    decision_json TEXT,
+                    status VARCHAR(32) NOT NULL,
+                    policy_version VARCHAR(64) NOT NULL,
+                    error_message TEXT,
+                    create_time TIMESTAMP,
+                    update_time TIMESTAMP
                 )
                 """);
         jdbcTemplate.execute("""

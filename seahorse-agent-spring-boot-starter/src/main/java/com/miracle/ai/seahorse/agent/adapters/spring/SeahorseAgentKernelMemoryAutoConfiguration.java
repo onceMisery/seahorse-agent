@@ -38,6 +38,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
@@ -75,6 +76,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<ProfileMemoryPort> profileMemoryPort,
             ObjectProvider<CorrectionLedgerPort> correctionLedgerPort,
             ObjectProvider<MemoryRouterPort> memoryRouterPort,
+            ObjectProvider<MemoryOperationLogPort> memoryOperationLogPort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
             @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
@@ -94,7 +96,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 options,
                 profileMemoryPort.getIfAvailable(ProfileMemoryPort::noop),
                 correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
-                memoryRouterPort.getIfAvailable(DefaultMemoryRouter::new));
+                memoryRouterPort.getIfAvailable(DefaultMemoryRouter::new),
+                memoryOperationLogPort.getIfAvailable(MemoryOperationLogPort::noop));
     }
 
     @Bean

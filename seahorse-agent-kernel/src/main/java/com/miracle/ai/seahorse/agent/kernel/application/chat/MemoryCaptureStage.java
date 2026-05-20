@@ -22,6 +22,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamChatContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,10 +52,20 @@ final class MemoryCaptureStage {
         return new CapturingStreamCallback(delegate, memoryEnginePort, context);
     }
 
+    static StreamCallback wrap(StreamCallback delegate,
+                               MemoryIngestionWorkflowPort memoryIngestionWorkflowPort,
+                               StreamChatContext context) {
+        Objects.requireNonNull(delegate, "delegate must not be null");
+        Objects.requireNonNull(memoryIngestionWorkflowPort, "memoryIngestionWorkflowPort must not be null");
+        Objects.requireNonNull(context, "context must not be null");
+        return new CapturingStreamCallback(delegate, memoryIngestionWorkflowPort, context);
+    }
+
     private static final class CapturingStreamCallback implements StreamCallback {
 
         private final StreamCallback delegate;
         private final MemoryEnginePort memoryEnginePort;
+        private final MemoryIngestionWorkflowPort memoryIngestionWorkflowPort;
         private final StreamChatContext context;
 
         private CapturingStreamCallback(StreamCallback delegate,
@@ -61,6 +73,16 @@ final class MemoryCaptureStage {
                                         StreamChatContext context) {
             this.delegate = delegate;
             this.memoryEnginePort = memoryEnginePort;
+            this.memoryIngestionWorkflowPort = null;
+            this.context = context;
+        }
+
+        private CapturingStreamCallback(StreamCallback delegate,
+                                        MemoryIngestionWorkflowPort memoryIngestionWorkflowPort,
+                                        StreamChatContext context) {
+            this.delegate = delegate;
+            this.memoryEnginePort = null;
+            this.memoryIngestionWorkflowPort = memoryIngestionWorkflowPort;
             this.context = context;
         }
 
@@ -83,12 +105,17 @@ final class MemoryCaptureStage {
         private void captureUserStatement() {
             try {
                 // 捕获阶段只提交候选，DefaultMemoryEnginePort 会继续做可信过滤。
-                memoryEnginePort.writeMemory(MemoryWriteRequest.builder()
+                MemoryWriteRequest writeRequest = MemoryWriteRequest.builder()
                         .conversationId(context.getConversationId())
                         .userId(context.getUserId())
                         .messageId(context.getTaskId())
                         .message(ChatMessage.user(context.getQuestion()))
-                        .build());
+                        .build();
+                if (memoryIngestionWorkflowPort != null) {
+                    memoryIngestionWorkflowPort.ingest(MemoryIngestionCommand.chatCompleted(writeRequest));
+                } else {
+                    memoryEnginePort.writeMemory(writeRequest);
+                }
             } catch (Exception ex) {
                 LOG.warn("记忆捕获失败，已降级为不写入: userId={}, conversationId={}",
                         context.getUserId(), context.getConversationId(), ex);

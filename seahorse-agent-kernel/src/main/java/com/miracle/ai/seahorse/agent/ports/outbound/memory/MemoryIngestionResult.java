@@ -18,33 +18,64 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public record MemoryIngestionResult(
         MemoryIngestionStatus status,
+        MemoryIngestionAction action,
         List<String> operations,
-        String reason
+        String reason,
+        Map<String, Object> details
 ) {
 
     public MemoryIngestionResult {
         status = Objects.requireNonNullElse(status, MemoryIngestionStatus.IGNORED);
+        action = Objects.requireNonNullElse(action, MemoryIngestionAction.IGNORE);
         operations = List.copyOf(Objects.requireNonNullElse(operations, List.of()));
         reason = Objects.requireNonNullElse(reason, "");
+        details = Map.copyOf(Objects.requireNonNullElse(details, Map.of()));
     }
 
     public static MemoryIngestionResult accepted(List<String> operations) {
-        return new MemoryIngestionResult(MemoryIngestionStatus.ACCEPTED, operations, "");
+        return accepted(MemoryIngestionAction.ADD, operations);
+    }
+
+    public static MemoryIngestionResult accepted(MemoryIngestionAction action, List<String> operations) {
+        return accepted(action, operations, Map.of());
+    }
+
+    public static MemoryIngestionResult accepted(MemoryIngestionAction action,
+                                                 List<String> operations,
+                                                 Map<String, Object> details) {
+        return new MemoryIngestionResult(MemoryIngestionStatus.ACCEPTED, action, operations, "", details);
     }
 
     public static MemoryIngestionResult ignored(String reason) {
-        return new MemoryIngestionResult(MemoryIngestionStatus.IGNORED, List.of(), reason);
+        return ignored(reason, Map.of());
+    }
+
+    public static MemoryIngestionResult ignored(String reason, Map<String, Object> details) {
+        return new MemoryIngestionResult(MemoryIngestionStatus.IGNORED, MemoryIngestionAction.IGNORE,
+                List.of(), reason, details);
     }
 
     public static MemoryIngestionResult rejected(String reason) {
-        return new MemoryIngestionResult(MemoryIngestionStatus.REJECTED, List.of(), reason);
+        return rejected(reason, Map.of());
+    }
+
+    public static MemoryIngestionResult rejected(String reason, Map<String, Object> details) {
+        return new MemoryIngestionResult(MemoryIngestionStatus.REJECTED, MemoryIngestionAction.IGNORE,
+                List.of(), reason, details);
+    }
+
+    public static MemoryIngestionResult review(String reason) {
+        return new MemoryIngestionResult(MemoryIngestionStatus.REJECTED, MemoryIngestionAction.REVIEW,
+                List.of(), reason, Map.of());
     }
 
     public static MemoryIngestionResult failed(String reason) {
-        return new MemoryIngestionResult(MemoryIngestionStatus.FAILED, List.of(), reason);
+        return new MemoryIngestionResult(MemoryIngestionStatus.FAILED, MemoryIngestionAction.IGNORE,
+                List.of(), reason, Map.of());
     }
 }

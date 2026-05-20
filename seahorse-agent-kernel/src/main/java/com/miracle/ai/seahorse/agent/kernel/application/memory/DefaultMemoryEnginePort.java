@@ -31,10 +31,16 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperation;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
@@ -85,10 +91,15 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final ProfileMemoryPort profileMemoryPort;
     private final CorrectionLedgerPort correctionLedgerPort;
     private final MemoryRouterPort memoryRouterPort;
+    private final MemoryOperationLogPort memoryOperationLogPort;
     private final ObjectMapper objectMapper;
     private final MemoryEngineOptions options;
     private final MemoryCaptureCandidateExtractor captureCandidateExtractor;
     private final MemoryValueAssessor memoryValueAssessor;
+    private final MemorySanitizer memorySanitizer;
+    private final MemoryPreFilter memoryPreFilter;
+    private final MemorySemanticClassifier memorySemanticClassifier;
+    private final MemorySchemaValidator memorySchemaValidator;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -125,16 +136,35 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    ProfileMemoryPort profileMemoryPort,
                                    CorrectionLedgerPort correctionLedgerPort,
                                    MemoryRouterPort memoryRouterPort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options,
+                profileMemoryPort, correctionLedgerPort, memoryRouterPort, MemoryOperationLogPort.noop());
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
         this.profileMemoryPort = Objects.requireNonNull(profileMemoryPort, "profileMemoryPort must not be null");
         this.correctionLedgerPort = Objects.requireNonNull(correctionLedgerPort, "correctionLedgerPort must not be null");
         this.memoryRouterPort = Objects.requireNonNull(memoryRouterPort, "memoryRouterPort must not be null");
+        this.memoryOperationLogPort = Objects.requireNonNull(memoryOperationLogPort,
+                "memoryOperationLogPort must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.options = Objects.requireNonNullElseGet(options, MemoryEngineOptions::defaults);
         this.captureCandidateExtractor = new MemoryCaptureCandidateExtractor();
         this.memoryValueAssessor = new MemoryValueAssessor();
+        this.memorySanitizer = new MemorySanitizer();
+        this.memoryPreFilter = new MemoryPreFilter();
+        this.memorySemanticClassifier = new MemorySemanticClassifier(captureCandidateExtractor, memoryValueAssessor);
+        this.memorySchemaValidator = new MemorySchemaValidator(memorySanitizer);
     }
 
     @Override
@@ -200,32 +230,21 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         if (message.getRole() != ChatRole.USER || isBlank(message.getContent())) {
             return MemoryIngestionResult.ignored("non_user_or_blank_message");
         }
-        List<String> correctionOperations = captureCorrection(request, message.getContent());
-        if (!correctionOperations.isEmpty()) {
-            return MemoryIngestionResult.accepted(correctionOperations);
+        String operationId = operationId(command, request);
+        String tenantId = tenantId(command);
+        MemoryOperation operation = buildOperation(operationId, tenantId, command, request, message.getContent());
+        if (!memoryOperationLogPort.tryStart(operation)) {
+            return MemoryIngestionResult.ignored("duplicate_operation");
         }
-        MemoryCaptureCandidate candidate = captureCandidateExtractor.extract(message.getContent()).orElse(null);
-        if (candidate == null) {
-            return MemoryIngestionResult.rejected(captureCandidateExtractor.lastRejectionReason());
+        try {
+            MemoryIngestionResult result = executeIngestion(operationId, tenantId, request, message);
+            markOperationCompleted(operationId, result, decisionMap(result));
+            return result;
+        } catch (RuntimeException ex) {
+            memoryOperationLogPort.markFailed(operationId,
+                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            throw ex;
         }
-        MemoryCaptureDecision decision = memoryValueAssessor.assess(candidate);
-        if (!decision.accepted()) {
-            return MemoryIngestionResult.rejected(String.join(",", decision.reasons()));
-        }
-        MemoryRecord record = new MemoryRecord(
-                memoryId(request),
-                MemoryLayer.SHORT_TERM.name(),
-                decision.type(),
-                decision.content(),
-                captureMetadata(request, message, decision),
-                java.time.Instant.now());
-        shortTermPort.save(record);
-        List<String> operations = new ArrayList<>();
-        operations.add("SHORT_TERM_SAVE");
-        if (captureProfileFact(request, decision)) {
-            operations.add("PROFILE_UPSERT");
-        }
-        return MemoryIngestionResult.accepted(operations);
     }
 
     @Override
@@ -329,17 +348,67 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 .build();
     }
 
-    private List<String> captureCorrection(MemoryWriteRequest request, String content) {
-        OccupationCorrection correction = extractOccupationCorrection(content);
-        if (correction == null) {
-            return List.of();
+    private MemoryIngestionResult executeIngestion(String operationId,
+                                                   String tenantId,
+                                                   MemoryWriteRequest request,
+                                                   ChatMessage message) {
+        SanitizedMemoryInput sanitized = memorySanitizer.sanitize(message.getContent());
+        if (sanitized.rejected()) {
+            return MemoryIngestionResult.rejected(sanitized.reason(), Map.of("signals", sanitized.signals()));
         }
+        MemoryPreFilterResult preFilterResult = memoryPreFilter.filter(sanitized.content());
+        if (!preFilterResult.accepted()) {
+            return MemoryIngestionResult.ignored(preFilterResult.reason());
+        }
+        MemoryClassificationResult classification = memorySemanticClassifier.classify(sanitized.content());
+        if (classification.action() == MemoryIngestionAction.IGNORE && classification.decision() == null) {
+            return MemoryIngestionResult.ignored(classification.reason());
+        }
+        if (classification.action() == MemoryIngestionAction.IGNORE) {
+            return MemoryIngestionResult.rejected(classification.reason());
+        }
+        MemorySchemaValidationResult validation = memorySchemaValidator.validate(classification);
+        if (!validation.valid()) {
+            return MemoryIngestionResult.rejected(validation.reason());
+        }
+        if (classification.action() == MemoryIngestionAction.UPDATE) {
+            List<String> operations = captureCorrection(request, tenantId, classification.correction());
+            OccupationCorrection correction = classification.correction();
+            return MemoryIngestionResult.accepted(MemoryIngestionAction.UPDATE, operations, Map.of(
+                    "targetKind", "PROFILE_SLOT",
+                    "targetKey", "identity.occupation",
+                    "incorrectValue", correction.incorrectValue(),
+                    "correctValue", correction.correctValue()));
+        }
+        MemoryCaptureDecision decision = classification.decision();
+        MemoryRecord record = new MemoryRecord(
+                memoryId(request),
+                MemoryLayer.SHORT_TERM.name(),
+                decision.type(),
+                decision.content(),
+                captureMetadata(operationId, tenantId, request, message, decision),
+                java.time.Instant.now());
+        shortTermPort.save(record);
+        List<String> operations = new ArrayList<>();
+        operations.add("SHORT_TERM_SAVE");
+        if (captureProfileFact(request, tenantId, decision)) {
+            operations.add("PROFILE_UPSERT");
+        }
+        return MemoryIngestionResult.accepted(MemoryIngestionAction.ADD, operations, Map.of(
+                "memoryType", decision.type(),
+                "valueScore", decision.valueScore(),
+                "riskScore", decision.riskScore(),
+                "captureReasons", decision.reasons(),
+                "captureSignals", decision.signals()));
+    }
+
+    private List<String> captureCorrection(MemoryWriteRequest request, String tenantId, OccupationCorrection correction) {
         String generationId = "identity.occupation:" + UUID.randomUUID();
         List<String> sourceIds = isBlank(request.messageId()) ? List.of() : List.of(request.messageId());
         try {
             correctionLedgerPort.upsert(new CorrectionCommand(
                     request.userId(),
-                    "default",
+                    tenantId,
                     "PROFILE_CORRECTION",
                     "PROFILE_SLOT",
                     "identity.occupation",
@@ -350,7 +419,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     generationId));
             profileMemoryPort.upsert(new ProfileFactUpdate(
                     request.userId(),
-                    "default",
+                    tenantId,
                     "identity.occupation",
                     correction.correctValue(),
                     0.95D,
@@ -363,23 +432,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return List.of("CORRECTION_UPSERT", "PROFILE_UPSERT");
     }
 
-    private OccupationCorrection extractOccupationCorrection(String rawContent) {
-        String content = normalizeUserFactText(rawContent);
-        java.util.regex.Matcher matcher = java.util.regex.Pattern
-                .compile("^我不是(.{1,20}?)(?:了)?[，,。\\s]*(?:我)?(?:现在|目前)?是(.{1,20})$")
-                .matcher(content);
-        if (!matcher.find()) {
-            return null;
-        }
-        String incorrect = normalizeOccupationValue(matcher.group(1));
-        String correct = normalizeOccupationValue(matcher.group(2));
-        if (isBlank(incorrect) || isBlank(correct)) {
-            return null;
-        }
-        return new OccupationCorrection(incorrect, correct);
-    }
-
-    private boolean captureProfileFact(MemoryWriteRequest request, MemoryCaptureDecision decision) {
+    private boolean captureProfileFact(MemoryWriteRequest request, String tenantId, MemoryCaptureDecision decision) {
         String slotKey = profileSlot(decision);
         if (isBlank(slotKey)) {
             return false;
@@ -391,7 +444,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         try {
             profileMemoryPort.upsert(new ProfileFactUpdate(
                     request.userId(),
-                    "default",
+                    tenantId,
                     slotKey,
                     value,
                     decision.confidenceLevel(),
@@ -438,26 +491,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     }
 
     private String normalizeOccupationValue(String value) {
-        String normalized = Objects.requireNonNullElse(value, "")
-                .replaceAll("[。！!？?，,；;\\s]+$", "")
-                .trim();
-        if (normalized.startsWith("一名") || normalized.startsWith("一位")) {
-            normalized = normalized.substring(2).trim();
-        }
-        if (normalized.contains("学生")) {
-            return "学生";
-        }
-        if (normalized.contains("老师") || normalized.contains("教师")) {
-            return "老师";
-        }
-        return normalized;
-    }
-
-    private String normalizeUserFactText(String rawContent) {
-        String content = Objects.requireNonNullElse(rawContent, "").trim();
-        content = content.replaceAll("\\s+", " ");
-        content = content.replaceAll("(?<=\\p{IsHan}) (?=\\p{IsHan})", "");
-        return content;
+        return OccupationCorrection.normalizeOccupationValue(value);
     }
 
     private Set<String> activeProfileSlots(List<MemoryItem> profile) {
@@ -483,11 +517,15 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 .toList();
     }
 
-    private Map<String, Object> captureMetadata(MemoryWriteRequest request,
+    private Map<String, Object> captureMetadata(String operationId,
+                                                String tenantId,
+                                                MemoryWriteRequest request,
                                                 ChatMessage message,
                                                 MemoryCaptureDecision decision) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("userId", request.userId());
+        metadata.put("tenantId", tenantId);
+        metadata.put("operationId", operationId);
         metadata.put("conversationId", Objects.requireNonNullElse(request.conversationId(), ""));
         metadata.put("messageId", Objects.requireNonNullElse(request.messageId(), ""));
         metadata.put("role", message.getRole().name().toLowerCase());
@@ -508,6 +546,129 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return "stm-" + request.messageId();
         }
         return "stm-" + UUID.randomUUID();
+    }
+
+    private MemoryOperation buildOperation(String operationId,
+                                           String tenantId,
+                                           MemoryIngestionCommand command,
+                                           MemoryWriteRequest request,
+                                           String content) {
+        MemoryOperationType operationType = inferOperationType(content);
+        return new MemoryOperation(
+                operationId,
+                request.userId(),
+                tenantId,
+                operationType,
+                inferTargetKind(operationType, content),
+                inferTargetKey(operationType, content),
+                requestMap(command, request, content),
+                MemoryValueAssessor.POLICY_VERSION,
+                Instant.now());
+    }
+
+    private MemoryOperationType inferOperationType(String content) {
+        if (OccupationCorrection.extract(content) != null) {
+            return MemoryOperationType.UPDATE;
+        }
+        SanitizedMemoryInput sanitized = memorySanitizer.sanitize(content);
+        if (sanitized.rejected()) {
+            return MemoryOperationType.IGNORE;
+        }
+        MemoryPreFilterResult preFilterResult = memoryPreFilter.filter(sanitized.content());
+        if (!preFilterResult.accepted()) {
+            return MemoryOperationType.IGNORE;
+        }
+        MemoryClassificationResult classification = memorySemanticClassifier.classify(sanitized.content());
+        if (classification.action() == MemoryIngestionAction.UPDATE) {
+            return MemoryOperationType.UPDATE;
+        }
+        if (classification.action() == MemoryIngestionAction.ADD) {
+            return MemoryOperationType.ADD;
+        }
+        if (classification.action() == MemoryIngestionAction.REVIEW) {
+            return MemoryOperationType.REVIEW;
+        }
+        return MemoryOperationType.IGNORE;
+    }
+
+    private String inferTargetKind(MemoryOperationType operationType, String content) {
+        if (operationType == MemoryOperationType.UPDATE || OccupationCorrection.extract(content) != null) {
+            return "PROFILE_SLOT";
+        }
+        if (operationType == MemoryOperationType.ADD) {
+            return "SHORT_TERM_MEMORY";
+        }
+        return "NONE";
+    }
+
+    private String inferTargetKey(MemoryOperationType operationType, String content) {
+        if (operationType == MemoryOperationType.UPDATE || OccupationCorrection.extract(content) != null) {
+            return "identity.occupation";
+        }
+        return "";
+    }
+
+    private Map<String, Object> requestMap(MemoryIngestionCommand command,
+                                           MemoryWriteRequest request,
+                                           String content) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("source", command == null ? "" : command.source());
+        values.put("conversationId", Objects.requireNonNullElse(request.conversationId(), ""));
+        values.put("messageId", Objects.requireNonNullElse(request.messageId(), ""));
+        values.put("role", request.message() == null ? "" : request.message().getRole().name());
+        values.put("content", Objects.requireNonNullElse(content, ""));
+        return values;
+    }
+
+    private String operationId(MemoryIngestionCommand command, MemoryWriteRequest request) {
+        if (command != null && !isBlank(command.operationId())) {
+            return command.operationId();
+        }
+        return new MemoryIngestionCommand(request).operationId();
+    }
+
+    private String tenantId(MemoryIngestionCommand command) {
+        if (command != null && !isBlank(command.tenantId())) {
+            return command.tenantId();
+        }
+        return "default";
+    }
+
+    private void markOperationCompleted(String operationId,
+                                        MemoryIngestionResult result,
+                                        Map<String, Object> decision) {
+        memoryOperationLogPort.markCompleted(operationId, operationStatus(result), decision);
+    }
+
+    private MemoryOperationStatus operationStatus(MemoryIngestionResult result) {
+        if (result == null) {
+            return MemoryOperationStatus.FAILED;
+        }
+        return switch (result.status()) {
+            case ACCEPTED -> MemoryOperationStatus.SUCCEEDED;
+            case REJECTED -> result.action() == MemoryIngestionAction.REVIEW
+                    ? MemoryOperationStatus.REVIEW
+                    : MemoryOperationStatus.REJECTED;
+            case IGNORED -> MemoryOperationStatus.IGNORED;
+            case FAILED -> MemoryOperationStatus.FAILED;
+        };
+    }
+
+    private Map<String, Object> decisionMap(MemoryIngestionResult result) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        if (result == null) {
+            values.put("status", MemoryIngestionStatus.FAILED.name());
+            values.put("action", MemoryIngestionAction.IGNORE.name());
+            values.put("reason", "empty_result");
+            values.put("operations", List.of());
+            return values;
+        }
+        values.put("status", result.status().name());
+        values.put("action", result.action().name());
+        values.put("reason", result.reason());
+        values.put("operations", result.operations());
+        values.putAll(result.details());
+        return values;
     }
 
     private List<MemoryItem> loadLayer(ShortTermMemoryPort port, String userId, int limit, MemoryLayer layer) {
@@ -697,6 +858,4 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return value == null || value.isBlank();
     }
 
-    private record OccupationCorrection(String incorrectValue, String correctValue) {
-    }
 }

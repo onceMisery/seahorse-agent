@@ -813,6 +813,24 @@ CREATE TABLE t_semantic_memory (
 );
 CREATE INDEX idx_sem_user_type ON t_semantic_memory (user_id, semantic_type);
 
+CREATE TABLE t_memory_operation_log (
+    operation_id VARCHAR(128) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    operation_type VARCHAR(32) NOT NULL,
+    target_kind VARCHAR(32) NOT NULL,
+    target_key VARCHAR(128),
+    request_json JSONB NOT NULL,
+    decision_json JSONB,
+    status VARCHAR(32) NOT NULL,
+    policy_version VARCHAR(64) NOT NULL,
+    error_message TEXT,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_memory_operation_user_time
+ON t_memory_operation_log (user_id, tenant_id, create_time);
+
 CREATE TABLE t_user_profile_fact (
     id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) NOT NULL,

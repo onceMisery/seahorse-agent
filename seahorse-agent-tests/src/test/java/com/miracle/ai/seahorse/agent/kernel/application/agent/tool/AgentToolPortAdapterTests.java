@@ -30,6 +30,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -145,6 +149,37 @@ class AgentToolPortAdapterTests {
         assertThat(captor.getValue().userId()).isEqualTo("admin-user");
         assertThat(captor.getValue().conversationId()).isEqualTo("conversation-a");
         assertThat(captor.getValue().message().getContent()).isEqualTo("用户是学生");
+    }
+
+    @Test
+    void memoryWriteSubmitsIngestionCommandWhenWorkflowExists() throws Exception {
+        MemoryEnginePort memoryEnginePort = mock(MemoryEnginePort.class);
+        MemoryIngestionWorkflowPort workflowPort = mock(MemoryIngestionWorkflowPort.class);
+        when(workflowPort.ingest(any(MemoryIngestionCommand.class)))
+                .thenReturn(MemoryIngestionResult.accepted(
+                        MemoryIngestionAction.ADD,
+                        List.of("SHORT_TERM_SAVE"),
+                        Map.of("memoryType", "PROFILE")));
+
+        ToolInvocationResult result = new MemoryWriteToolPortAdapter(memoryEnginePort, workflowPort, null, jsonSupport)
+                .invoke("call-9", MemoryWriteToolPortAdapter.TOOL_ID, Map.of(
+                        "_seahorseUserId", "admin-user",
+                        "_seahorseConversationId", "conversation-a",
+                        "content", "用户是学生",
+                        "reason", "profile fact"));
+
+        assertThat(result.success()).isTrue();
+        ArgumentCaptor<MemoryIngestionCommand> captor = ArgumentCaptor.forClass(MemoryIngestionCommand.class);
+        verify(workflowPort).ingest(captor.capture());
+        verify(memoryEnginePort, never()).writeMemory(any(MemoryWriteRequest.class));
+        assertThat(captor.getValue().operationId()).isEqualTo("tool-memory-write-call-9");
+        assertThat(captor.getValue().source()).isEqualTo("agent-memory-write");
+        assertThat(captor.getValue().writeRequest().userId()).isEqualTo("admin-user");
+        JsonNode body = objectMapper.readTree(result.content());
+        assertThat(body.path("policyDecision").asText()).isEqualTo("ALLOW_IF_CAPTURE_POLICY_ACCEPTS");
+        assertThat(body.path("ingestionStatus").asText()).isEqualTo("ACCEPTED");
+        assertThat(body.path("ingestionAction").asText()).isEqualTo("ADD");
+        assertThat(body.path("memoryAction").asText()).isEqualTo("ADD");
     }
 
     @Test

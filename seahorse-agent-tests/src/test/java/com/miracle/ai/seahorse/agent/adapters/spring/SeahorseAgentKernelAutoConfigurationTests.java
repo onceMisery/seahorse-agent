@@ -129,6 +129,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
@@ -440,6 +441,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryRouterPort.class);
                     assertThat(context).hasSingleBean(ContextWeaverPort.class);
                     assertThat(context).hasSingleBean(MemoryIngestionWorkflowPort.class);
+                    assertThat(context).hasSingleBean(MemoryOperationLogPort.class);
                     assertThat(context).hasSingleBean(ProfileMemoryPort.class);
                     assertThat(context).hasSingleBean(CorrectionLedgerPort.class);
                     assertThat(context).hasSingleBean(KernelMemoryManagementService.class);
@@ -862,6 +864,11 @@ class SeahorseAgentKernelAutoConfigurationTests {
         @Bean
         CorrectionLedgerPort correctionLedgerPort() {
             return mock(CorrectionLedgerPort.class);
+        }
+
+        @Bean
+        MemoryOperationLogPort memoryOperationLogPort() {
+            return mock(MemoryOperationLogPort.class);
         }
     }
 

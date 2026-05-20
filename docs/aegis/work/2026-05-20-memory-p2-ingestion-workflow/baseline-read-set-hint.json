@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "candidateDocs": [
+    "docs/Seahorse Agent记忆系统差距分析与Gemini对齐改进方案.md",
+    "seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/memory/DefaultMemoryEnginePort.java",
+    "seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/chat/MemoryCaptureStage.java",
+    "seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/agent/tool/MemoryWriteToolPortAdapter.java",
+    "resources/database/seahorse_init.sql"
+  ],
+  "whyRelevant": "P2 changes the memory write pipeline, entrypoints, and durable operation-log schema while preserving existing compatibility contracts.",
+  "missingAuthority": []
+}
