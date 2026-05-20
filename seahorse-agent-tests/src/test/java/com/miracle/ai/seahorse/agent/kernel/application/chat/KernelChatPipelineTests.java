@@ -37,6 +37,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryOptimizerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNode;
@@ -109,6 +113,27 @@ class KernelChatPipelineTests {
     }
 
     @Test
+    void shouldCaptureMemoryCandidateWhenResponseErrors() {
+        RecordingChatPorts ports = new RecordingChatPorts(GuidanceDecision.none(), RetrievalContext.builder().build());
+        ports.streamError = new IllegalStateException("model unavailable");
+        RecordingMemoryIngestionWorkflowPort workflowPort = new RecordingMemoryIngestionWorkflowPort();
+        KernelChatPipeline pipeline = pipeline(ports, workflowPort);
+        RecordingCallback callback = new RecordingCallback();
+        StreamChatContext context = context(callback);
+        context.setQuestion("我是学生");
+
+        pipeline.execute(context);
+
+        Assertions.assertFalse(callback.completed);
+        Assertions.assertEquals("model unavailable", callback.error.getMessage());
+        Assertions.assertNotNull(workflowPort.lastCommand);
+        Assertions.assertEquals("chat-completed", workflowPort.lastCommand.source());
+        Assertions.assertEquals("conversation-1", workflowPort.lastCommand.writeRequest().conversationId());
+        Assertions.assertEquals("user-1", workflowPort.lastCommand.writeRequest().userId());
+        Assertions.assertEquals("我是学生", workflowPort.lastCommand.writeRequest().message().getContent());
+    }
+
+    @Test
     void shouldStreamRagResponseWithMcpSamplingParameters() {
         RetrievalContext retrievalContext = RetrievalContext.builder()
                 .mcpContext("实时数据")
@@ -168,6 +193,20 @@ class KernelChatPipelineTests {
         return new KernelChatPipeline(preparationPorts, responsePorts, KernelRagTraceRecorder.noop());
     }
 
+    private KernelChatPipeline pipeline(RecordingChatPorts ports, MemoryIngestionWorkflowPort workflowPort) {
+        ChatPreparationPorts preparationPorts = new ChatPreparationPorts(
+                ports,
+                MemoryEnginePort.noop(),
+                workflowPort,
+                QueryOptimizerPort.passthrough(),
+                ports,
+                ports,
+                ports,
+                ports);
+        ChatResponsePorts responsePorts = new ChatResponsePorts(ports, ports, ports, ports);
+        return new KernelChatPipeline(preparationPorts, responsePorts, KernelRagTraceRecorder.noop());
+    }
+
     private StreamChatContext context(StreamCallback callback) {
         return StreamChatContext.builder()
                 .question(QUESTION)
@@ -193,6 +232,7 @@ class KernelChatPipelineTests {
         private boolean retrieved;
         private ChatRequest lastChatRequest;
         private String boundTaskId;
+        private RuntimeException streamError;
 
         private RecordingChatPorts(GuidanceDecision guidanceDecision, RetrievalContext retrievalContext) {
             this.guidanceDecision = guidanceDecision;
@@ -251,6 +291,9 @@ class KernelChatPipelineTests {
         @Override
         public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
             lastChatRequest = request;
+            if (streamError != null) {
+                callback.onError(streamError);
+            }
             return () -> {
             };
         }
@@ -284,6 +327,7 @@ class KernelChatPipelineTests {
 
         private String content;
         private boolean completed;
+        private Throwable error;
 
         @Override
         public void onContent(String content) {
@@ -297,6 +341,18 @@ class KernelChatPipelineTests {
 
         @Override
         public void onError(Throwable error) {
+            this.error = error;
+        }
+    }
+
+    private static final class RecordingMemoryIngestionWorkflowPort implements MemoryIngestionWorkflowPort {
+
+        private MemoryIngestionCommand lastCommand;
+
+        @Override
+        public MemoryIngestionResult ingest(MemoryIngestionCommand command) {
+            lastCommand = command;
+            return MemoryIngestionResult.accepted(MemoryIngestionAction.ADD, List.of("profile:occupation"));
         }
     }
 

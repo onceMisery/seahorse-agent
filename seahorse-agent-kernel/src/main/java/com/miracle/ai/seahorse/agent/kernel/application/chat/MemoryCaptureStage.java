@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 问答完成后的轻量记忆捕获阶段。
@@ -67,6 +68,7 @@ final class MemoryCaptureStage {
         private final MemoryEnginePort memoryEnginePort;
         private final MemoryIngestionWorkflowPort memoryIngestionWorkflowPort;
         private final StreamChatContext context;
+        private final AtomicBoolean captured = new AtomicBoolean(false);
 
         private CapturingStreamCallback(StreamCallback delegate,
                                         MemoryEnginePort memoryEnginePort,
@@ -93,16 +95,26 @@ final class MemoryCaptureStage {
 
         @Override
         public void onComplete() {
-            delegate.onComplete();
-            captureUserStatement();
+            try {
+                delegate.onComplete();
+            } finally {
+                captureUserStatementOnce();
+            }
         }
 
         @Override
         public void onError(Throwable error) {
-            delegate.onError(error);
+            try {
+                delegate.onError(error);
+            } finally {
+                captureUserStatementOnce();
+            }
         }
 
-        private void captureUserStatement() {
+        private void captureUserStatementOnce() {
+            if (!captured.compareAndSet(false, true)) {
+                return;
+            }
             try {
                 // 捕获阶段只提交候选，DefaultMemoryEnginePort 会继续做可信过滤。
                 MemoryWriteRequest writeRequest = MemoryWriteRequest.builder()

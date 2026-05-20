@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.TokenCounterPort;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -38,10 +39,13 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.convert.DurationStyle;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Executor;
 
 /**
@@ -58,16 +62,49 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(OkHttpClient.class)
     public OkHttpClient seahorseOkHttpClient(
-            @Value("${seahorse-agent.adapters.http.connect-timeout:10s}") Duration connectTimeout,
-            @Value("${seahorse-agent.adapters.http.read-timeout:60s}") Duration readTimeout,
-            @Value("${seahorse-agent.adapters.http.write-timeout:60s}") Duration writeTimeout,
-            @Value("${seahorse-agent.adapters.http.call-timeout:120s}") Duration callTimeout) {
-        return new OkHttpClient.Builder()
-                .connectTimeout(connectTimeout)
-                .readTimeout(readTimeout)
-                .writeTimeout(writeTimeout)
-                .callTimeout(callTimeout)
-                .build();
+            @Value("${seahorse-agent.adapters.http.connect-timeout:10s}") String connectTimeout,
+            @Value("${seahorse-agent.adapters.http.read-timeout:60s}") String readTimeout,
+            @Value("${seahorse-agent.adapters.http.write-timeout:60s}") String writeTimeout,
+            @Value("${seahorse-agent.adapters.http.call-timeout:120s}") String callTimeout,
+            @Value("${seahorse-agent.adapters.http.protocols:}") String protocols) {
+        OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                .connectTimeout(parseDuration(connectTimeout, Duration.ofSeconds(10)))
+                .readTimeout(parseDuration(readTimeout, Duration.ofSeconds(60)))
+                .writeTimeout(parseDuration(writeTimeout, Duration.ofSeconds(60)))
+                .callTimeout(parseDuration(callTimeout, Duration.ofSeconds(120)));
+        List<Protocol> configuredProtocols = parseProtocols(protocols);
+        if (!configuredProtocols.isEmpty()) {
+            builder.protocols(configuredProtocols);
+        }
+        return builder.build();
+    }
+
+    private static Duration parseDuration(String value, Duration fallback) {
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.isBlank()) {
+            return fallback;
+        }
+        return DurationStyle.detectAndParse(normalized);
+    }
+
+    private static List<Protocol> parseProtocols(String value) {
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.isBlank()) {
+            return List.of();
+        }
+        List<Protocol> protocols = new ArrayList<>();
+        for (String token : normalized.split(",")) {
+            String protocol = token.trim().toLowerCase(Locale.ROOT);
+            if (protocol.isBlank()) {
+                continue;
+            }
+            protocols.add(switch (protocol) {
+                case "http/1.1", "http1", "http_1_1" -> Protocol.HTTP_1_1;
+                case "h2", "http/2", "http2" -> Protocol.HTTP_2;
+                default -> throw new IllegalArgumentException("Unsupported OkHttp protocol: " + token.trim());
+            });
+        }
+        return List.copyOf(protocols);
     }
 
     @Bean

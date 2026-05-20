@@ -133,6 +133,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import io.milvus.v2.client.MilvusClientV2;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -372,6 +373,20 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(OkHttpClient.class);
                     assertThat(context).hasSingleBean(OpenAiCompatibleModelAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldApplyConfiguredOkHttpProtocols() {
+        contextRunner.withBean(ObjectMapper.class, ObjectMapper::new)
+                .withPropertyValues(
+                        "seahorse-agent.adapters.ai.type=openai-compatible",
+                        "seahorse-agent.adapters.ai.chat-model=gpt-test",
+                        "seahorse-agent.adapters.http.protocols=http/1.1")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBean(OkHttpClient.class).protocols())
+                            .containsExactly(Protocol.HTTP_1_1);
                 });
     }
 

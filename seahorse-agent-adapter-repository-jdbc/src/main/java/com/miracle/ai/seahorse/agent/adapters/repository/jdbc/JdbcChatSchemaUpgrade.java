@@ -173,6 +173,9 @@ public class JdbcChatSchemaUpgrade {
     }
 
     private void ensureLifecycleColumns(String tableName) {
+        if (!tableExists(tableName)) {
+            return;
+        }
         addColumnIfMissing(tableName, "tenant_id", "VARCHAR(64) DEFAULT 'default'");
         addColumnIfMissing(tableName, "status", "VARCHAR(32) DEFAULT 'ACTIVE'");
         addColumnIfMissing(tableName, "generation_id", "VARCHAR(64)");
@@ -186,18 +189,24 @@ public class JdbcChatSchemaUpgrade {
     }
 
     private void createLifecycleIndexes() {
-        jdbcTemplate.execute("""
+        createIndexIfTableExists("t_short_term_memory", """
                 CREATE INDEX IF NOT EXISTS idx_stm_lifecycle_user_status
                 ON t_short_term_memory (user_id, tenant_id, status, update_time)
                 """);
-        jdbcTemplate.execute("""
+        createIndexIfTableExists("t_long_term_memory", """
                 CREATE INDEX IF NOT EXISTS idx_ltm_lifecycle_user_status
                 ON t_long_term_memory (user_id, tenant_id, status, update_time)
                 """);
-        jdbcTemplate.execute("""
+        createIndexIfTableExists("t_semantic_memory", """
                 CREATE INDEX IF NOT EXISTS idx_sem_lifecycle_user_status
                 ON t_semantic_memory (user_id, tenant_id, status, update_time)
                 """);
+    }
+
+    private void createIndexIfTableExists(String tableName, String sql) {
+        if (tableExists(tableName)) {
+            jdbcTemplate.execute(sql);
+        }
     }
 
     private void addColumnIfMissing(String tableName, String columnName, String definition) {
@@ -207,12 +216,24 @@ public class JdbcChatSchemaUpgrade {
         jdbcTemplate.execute("ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + definition);
     }
 
+    private boolean tableExists(String tableName) {
+        return !jdbcTemplate.query(
+                        """
+                        SELECT table_name
+                        FROM information_schema.tables
+                        WHERE lower(table_name) = lower(?)
+                        """,
+                        (rs, rowNum) -> rs.getString(1),
+                        tableName)
+                .isEmpty();
+    }
+
     private boolean columnExists(String tableName, String columnName) {
         return !jdbcTemplate.query(
                         """
                         SELECT column_name
                         FROM information_schema.columns
-                        WHERE table_name = ? AND column_name = ?
+                        WHERE lower(table_name) = lower(?) AND lower(column_name) = lower(?)
                         """,
                         (rs, rowNum) -> rs.getString(1),
                         tableName,
