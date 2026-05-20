@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-20-memory-p3-router-context-weaver",
+  "taskIntentRef": "docs/aegis/work/2026-05-20-memory-p3-router-context-weaver/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/Seahorse Agent记忆系统差距分析与Gemini对齐改进方案.md"
+  ],
+  "scopeStatus": "aligned-with-p3",
+  "compatStatus": "existing-APIs-and-constructors-retained",
+  "retirementStatus": "direct-runtime-formatter-call-sites-moved-behind-context-weaver; formatter-retained-as-compatibility-facade",
+  "newRiskSignals": [],
+  "decision": "continue-to-commit"
+}

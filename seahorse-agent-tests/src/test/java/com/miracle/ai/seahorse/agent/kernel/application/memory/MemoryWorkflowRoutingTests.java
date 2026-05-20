@@ -62,8 +62,24 @@ class MemoryWorkflowRoutingTests {
 
         Assertions.assertTrue(plan.isActive(MemoryTrack.CORRECTION));
         Assertions.assertTrue(plan.isActive(MemoryTrack.PROFILE));
-        Assertions.assertTrue(plan.isActive(MemoryTrack.EPISODIC));
         Assertions.assertTrue(plan.isActive(MemoryTrack.SHORT_WINDOW));
+        Assertions.assertFalse(plan.isActive(MemoryTrack.EPISODIC));
+        Assertions.assertFalse(plan.isActive(MemoryTrack.BUSINESS_DOCUMENT));
+    }
+
+    @Test
+    void shouldRouteGeneralChatToShortWindowWithoutProfileOrEpisodicTracks() {
+        MemoryRouterPort router = new DefaultMemoryRouter();
+
+        MemoryRoutePlan plan = router.route(new MemoryRouteRequest(
+                "user-1",
+                "default",
+                "帮我把这句话润色一下"));
+
+        Assertions.assertTrue(plan.isActive(MemoryTrack.CORRECTION));
+        Assertions.assertTrue(plan.isActive(MemoryTrack.SHORT_WINDOW));
+        Assertions.assertFalse(plan.isActive(MemoryTrack.PROFILE));
+        Assertions.assertFalse(plan.isActive(MemoryTrack.EPISODIC));
         Assertions.assertFalse(plan.isActive(MemoryTrack.BUSINESS_DOCUMENT));
     }
 
@@ -91,9 +107,34 @@ class MemoryWorkflowRoutingTests {
 
         String prompt = weaver.weave(context, ContextBudget.defaults());
 
-        Assertions.assertTrue(prompt.indexOf("用户纠错本：") < prompt.indexOf("用户画像："));
+        Assertions.assertTrue(prompt.indexOf("[Correction Ledger]") < prompt.indexOf("[Profile KV]"));
         Assertions.assertTrue(prompt.contains("用户纠正职业画像：学生 -> 老师"));
         Assertions.assertTrue(prompt.contains("老师"));
+    }
+
+    @Test
+    void shouldWeavePriorityZonesWithinBudget() {
+        ContextWeaverPort weaver = new DefaultContextWeaver();
+        MemoryContext context = MemoryContext.builder()
+                .correctionMemories(List.of(MemoryItem.builder()
+                        .content("user corrected occupation: student -> teacher")
+                        .build()))
+                .profileMemories(List.of(MemoryItem.builder().content("teacher").build()))
+                .shortTermMemories(List.of(MemoryItem.builder().content("prefers concise answers").build()))
+                .longTermMemories(List.of(
+                        MemoryItem.builder().content("low-priority long memory one").build(),
+                        MemoryItem.builder().content("low-priority long memory two").build()))
+                .build();
+
+        String prompt = weaver.weave(context, new ContextBudget(3, 180));
+
+        Assertions.assertTrue(prompt.indexOf("[Correction Ledger]") < prompt.indexOf("[Profile KV]"));
+        Assertions.assertTrue(prompt.contains("user corrected occupation: student -> teacher"));
+        Assertions.assertTrue(prompt.contains("teacher"));
+        Assertions.assertTrue(prompt.contains("[Short Window]"));
+        Assertions.assertTrue(prompt.contains("prefers concise answers"));
+        Assertions.assertFalse(prompt.contains("low-priority long memory"));
+        Assertions.assertTrue(prompt.length() <= 180);
     }
 
     @Test

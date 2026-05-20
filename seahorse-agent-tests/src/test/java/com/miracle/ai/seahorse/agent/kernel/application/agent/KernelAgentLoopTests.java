@@ -403,6 +403,29 @@ class KernelAgentLoopTests {
         assertEquals("我的职业是什么", messages.get(messages.size() - 1).getContent());
     }
 
+    @Test
+    void memoryContextIsInjectedThroughConfiguredContextWeaver() {
+        ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("teacher")));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                ToolRegistryPort.empty(),
+                KernelAgentLoopOptions.defaults(),
+                (memoryContext, budget) -> "[woven-memory]\n" + memoryContext.getProfileMemories().get(0).getContent());
+
+        loop.execute(AgentLoopRequest.builder()
+                .question("what is my occupation?")
+                .history(List.of(ChatMessage.system("system-base")))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.3D).build())
+                .memoryContext(MemoryContext.builder()
+                        .profileMemories(List.of(MemoryItem.builder().content("teacher").build()))
+                        .build())
+                .build());
+
+        List<ChatMessage> messages = model.requests.get(0).getMessages();
+        assertTrue(messages.get(0).getContent().contains("[woven-memory]"));
+        assertTrue(messages.get(0).getContent().contains("teacher"));
+    }
+
     private static AgentLoopRequest defaultRequest() {
         return defaultRequest(6);
     }

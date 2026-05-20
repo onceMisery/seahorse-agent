@@ -35,17 +35,36 @@ public class DefaultMemoryRouter implements MemoryRouterPort {
     public MemoryRoutePlan route(MemoryRouteRequest request) {
         String question = Objects.requireNonNullElse(request, new MemoryRouteRequest("", "default", ""))
                 .question();
+        if (question.isBlank()) {
+            return new MemoryRoutePlan(EnumSet.of(
+                    MemoryTrack.CORRECTION,
+                    MemoryTrack.SHORT_WINDOW,
+                    MemoryTrack.EPISODIC,
+                    MemoryTrack.PROFILE));
+        }
         String lower = question.toLowerCase(Locale.ROOT);
         EnumSet<MemoryTrack> tracks = EnumSet.of(MemoryTrack.CORRECTION, MemoryTrack.SHORT_WINDOW);
-        if (containsAny(question, "我", "我的", "职业", "身份", "偏好", "喜欢")
-                || containsAny(lower, "my ", "me ", "profile", "occupation", "preference")) {
+        boolean profileQuestion = containsAny(question, "我是谁", "我的职业", "我的身份", "我的技术栈", "我的偏好", "我喜欢")
+                || containsAny(lower, "who am i", "my occupation", "my profession", "my job",
+                "my identity", "my tech stack", "my preference", "what do i like", "profile");
+        boolean correctionQuestion = containsAny(question, "不是", "错了", "改成", "以后别", "忘记")
+                || containsAny(lower, "not anymore", "wrong", "correct", "change to", "forget");
+        boolean businessQuestion = containsAny(question, "知识库", "文档", "规则", "制度", "流程", "阈值", "接口", "API")
+                || containsAny(lower, "knowledge", "document", "policy", "rule", "process",
+                "threshold", "api");
+        boolean episodicQuestion = containsAny(question, "上次", "之前", "历史", "项目", "决策", "讨论过", "做过")
+                || containsAny(lower, "last time", "previous", "history", "project", "decision",
+                "discussed", "remember when");
+
+        if (profileQuestion || correctionQuestion || businessQuestion || episodicQuestion) {
             tracks.add(MemoryTrack.PROFILE);
         }
-        if (containsAny(question, "知识库", "文档", "规则", "制度", "流程")
-                || containsAny(lower, "knowledge", "document", "policy", "rule")) {
+        if (businessQuestion) {
             tracks.add(MemoryTrack.BUSINESS_DOCUMENT);
+            tracks.add(MemoryTrack.EPISODIC);
+        } else if (episodicQuestion) {
+            tracks.add(MemoryTrack.EPISODIC);
         }
-        tracks.add(MemoryTrack.EPISODIC);
         return new MemoryRoutePlan(tracks);
     }
 

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-20-memory-p3-router-context-weaver",
+  "currentTodo": "P3 implementation candidate is complete; prepare commit.",
+  "completedTodos": [
+    "P2 committed as 2f95f05 feat(memory): add deterministic ingestion workflow",
+    "Baseline read set reviewed for Router, ContextWeaver, chat prompt, AgentLoop, and Spring wiring",
+    "RED tests added for question-aware routing, budgeted Context Weaver zones, and AgentLoop ContextWeaver injection",
+    "DefaultMemoryRouter now activates tracks by question type instead of always pulling episodic memory",
+    "DefaultContextWeaver now emits ordered zones and enforces item/character budget",
+    "Chat fallback, AgentLoop, and Local RAG prompt construction now consume ContextWeaverPort",
+    "Spring auto-configuration now wires ContextWeaverPort into chat, agent, and local RAG prompt paths"
+  ],
+  "activeSlice": "verification-and-commit",
+  "evidenceRefs": [
+    "Target P3 tests: 7 tests, BUILD SUCCESS",
+    "Regression tests: 55 tests, BUILD SUCCESS",
+    "Starter package: BUILD SUCCESS",
+    "git diff --check: exit 0, CRLF warnings only"
+  ],
+  "blockedOn": null,
+  "nextStep": "Commit P3 as feat(memory): add question-aware context weaving.",
+  "updatedAt": "2026-05-20"
+}

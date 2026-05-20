@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentFetcherPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionNodeLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalContextFormatPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
@@ -95,8 +96,9 @@ public class SeahorseAgentLocalAdapterAutoConfiguration {
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.rag-prompt", name = "type", havingValue = "local",
             matchIfMissing = true)
     @ConditionalOnMissingBean(RagPromptPort.class)
-    public LocalRagPromptAdapter seahorseLocalRagPromptAdapter() {
-        return new LocalRagPromptAdapter();
+    public LocalRagPromptAdapter seahorseLocalRagPromptAdapter(ObjectProvider<ContextWeaverPort> contextWeaverPort) {
+        return new LocalRagPromptAdapter(contextWeaverPort.getIfAvailable(
+                com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver::new));
     }
 
     @Bean

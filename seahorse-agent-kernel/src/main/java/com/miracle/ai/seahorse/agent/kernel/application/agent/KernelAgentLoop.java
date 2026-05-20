@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
@@ -26,7 +27,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
-import com.miracle.ai.seahorse.agent.kernel.domain.chat.MemoryPromptFormatter;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
@@ -37,6 +37,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 
 import java.util.ArrayList;
@@ -75,6 +77,7 @@ public class KernelAgentLoop {
     private final ToolRegistryPort toolRegistry;
     private final KernelAgentLoopOptions options;
     private final KernelRagTraceRecorder traceRecorder;
+    private final ContextWeaverPort contextWeaver;
 
     public KernelAgentLoop(StreamingChatModelPort modelPort,
                            ToolRegistryPort toolRegistry,
@@ -86,10 +89,26 @@ public class KernelAgentLoop {
                            ToolRegistryPort toolRegistry,
                            KernelAgentLoopOptions options,
                            KernelRagTraceRecorder traceRecorder) {
+        this(modelPort, toolRegistry, options, traceRecorder, new DefaultContextWeaver());
+    }
+
+    public KernelAgentLoop(StreamingChatModelPort modelPort,
+                           ToolRegistryPort toolRegistry,
+                           KernelAgentLoopOptions options,
+                           ContextWeaverPort contextWeaver) {
+        this(modelPort, toolRegistry, options, KernelRagTraceRecorder.noop(), contextWeaver);
+    }
+
+    public KernelAgentLoop(StreamingChatModelPort modelPort,
+                           ToolRegistryPort toolRegistry,
+                           KernelAgentLoopOptions options,
+                           KernelRagTraceRecorder traceRecorder,
+                           ContextWeaverPort contextWeaver) {
         this.modelPort = Objects.requireNonNull(modelPort, "modelPort 不能为 null");
         this.toolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         this.options = Objects.requireNonNullElseGet(options, KernelAgentLoopOptions::defaults);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
+        this.contextWeaver = Objects.requireNonNullElseGet(contextWeaver, DefaultContextWeaver::new);
     }
 
     public AgentLoopResult execute(AgentLoopRequest request) {
@@ -223,17 +242,24 @@ public class KernelAgentLoop {
     }
 
     private void installMemoryContext(List<ChatMessage> messages, MemoryContext memoryContext) {
-        String memoryText = MemoryPromptFormatter.format(memoryContext);
+        String memoryText = contextWeaver.weave(memoryContext, ContextBudget.defaults());
         if (memoryText.isBlank()) {
             return;
         }
         if (!messages.isEmpty() && messages.get(0).getRole() == ChatRole.SYSTEM) {
             ChatMessage first = messages.get(0);
-            messages.set(0, ChatMessage.system(
-                    MemoryPromptFormatter.appendToSystemPrompt(first.getContent(), memoryContext)));
+            messages.set(0, ChatMessage.system(appendMemoryText(first.getContent(), memoryText)));
             return;
         }
         messages.add(0, ChatMessage.system(memoryText));
+    }
+
+    private String appendMemoryText(String systemPrompt, String memoryText) {
+        String safeSystemPrompt = Objects.requireNonNullElse(systemPrompt, "").trim();
+        if (safeSystemPrompt.isBlank()) {
+            return memoryText;
+        }
+        return safeSystemPrompt + "\n\n" + memoryText;
     }
 
     private List<AgentObservation> executeTools(List<AgentToolCall> toolCalls,

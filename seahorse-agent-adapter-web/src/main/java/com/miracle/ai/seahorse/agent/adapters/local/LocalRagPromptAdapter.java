@@ -17,10 +17,12 @@
 
 package com.miracle.ai.seahorse.agent.adapters.local;
 
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
-import com.miracle.ai.seahorse.agent.kernel.domain.chat.MemoryPromptFormatter;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.PromptContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +44,16 @@ public class LocalRagPromptAdapter implements RagPromptPort {
     private static final String MCP_CONTEXT_TITLE = "工具上下文：";
     private static final String QUESTION_TITLE = "用户问题：";
 
+    private final ContextWeaverPort contextWeaverPort;
+
+    public LocalRagPromptAdapter() {
+        this(new DefaultContextWeaver());
+    }
+
+    public LocalRagPromptAdapter(ContextWeaverPort contextWeaverPort) {
+        this.contextWeaverPort = Objects.requireNonNullElseGet(contextWeaverPort, DefaultContextWeaver::new);
+    }
+
     @Override
     public List<ChatMessage> buildStructuredMessages(PromptContext context,
                                                      List<ChatMessage> history,
@@ -60,7 +72,9 @@ public class LocalRagPromptAdapter implements RagPromptPort {
         String mcpContext = context == null ? "" : Objects.requireNonNullElse(context.getMcpContext(), "");
         appendContext(builder, KB_CONTEXT_TITLE, kbContext);
         appendContext(builder, MCP_CONTEXT_TITLE, mcpContext);
-        String memoryContext = MemoryPromptFormatter.format(context == null ? null : context.getMemoryContext());
+        String memoryContext = contextWeaverPort.weave(
+                context == null ? null : context.getMemoryContext(),
+                ContextBudget.defaults());
         if (!memoryContext.isBlank()) {
             builder.append("\n\n").append(memoryContext);
         }

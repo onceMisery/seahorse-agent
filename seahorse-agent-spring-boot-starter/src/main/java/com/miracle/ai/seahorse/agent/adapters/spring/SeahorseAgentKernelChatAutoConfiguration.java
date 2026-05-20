@@ -42,6 +42,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermExpansionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
@@ -130,12 +131,14 @@ public class SeahorseAgentKernelChatAutoConfiguration {
     public ChatResponsePorts seahorseChatResponsePorts(ObjectProvider<RagPromptPort> ragPromptPort,
                                                        ObjectProvider<PromptTemplatePort> promptTemplatePort,
                                                        ObjectProvider<StreamingChatModelPort> streamingChatModelPort,
-                                                       ObjectProvider<StreamTaskPort> streamTaskPort) {
+                                                       ObjectProvider<StreamTaskPort> streamTaskPort,
+                                                       ObjectProvider<ContextWeaverPort> contextWeaverPort) {
         return new ChatResponsePorts(
                 ragPromptPort.getIfAvailable(RagPromptPort::simple),
                 promptTemplatePort.getIfAvailable(PromptTemplatePort::empty),
                 streamingChatModelPort.getIfAvailable(StreamingChatModelPort::noop),
-                streamTaskPort.getIfAvailable(StreamTaskPort::noop));
+                streamTaskPort.getIfAvailable(StreamTaskPort::noop),
+                contextWeaverPort.getIfAvailable(com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver::new));
     }
 
     @Bean

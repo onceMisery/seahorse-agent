@@ -14,3 +14,10 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p2-ingestion-workflow/impact-statement-draft.json | Memory P2 ingestion workflow impact statement draft |
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p2-ingestion-workflow/todo-checkpoint-draft.json | Memory P2 ingestion workflow todo checkpoint draft |
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p2-ingestion-workflow/drift-check-draft.json | Memory P2 ingestion workflow drift check draft |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p3-router-context-weaver/10-intent.md | Memory P3 router context weaver intent |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p3-router-context-weaver/20-checkpoint.md | Memory P3 router context weaver checkpoint |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p3-router-context-weaver/90-evidence.md | Memory P3 router context weaver evidence |
+| 2026-05-20 | work | docs/aegis/work/2026-05-20-memory-p3-router-context-weaver/99-reflection.md | Memory P3 router context weaver reflection |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p3-router-context-weaver/task-intent-draft.json | Memory P3 router context weaver task intent draft |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p3-router-context-weaver/todo-checkpoint-draft.json | Memory P3 router context weaver todo checkpoint draft |
+| 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p3-router-context-weaver/drift-check-draft.json | Memory P3 router context weaver drift check draft |

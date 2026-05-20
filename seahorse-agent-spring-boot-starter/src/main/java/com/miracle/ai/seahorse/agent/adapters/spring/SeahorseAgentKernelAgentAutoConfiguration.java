@@ -35,6 +35,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
@@ -102,9 +103,12 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     public KernelAgentLoop seahorseKernelAgentLoop(StreamingChatModelPort modelPort,
                                                    ToolRegistryPort toolRegistry,
                                                    KernelAgentLoopOptions options,
-                                                   ObjectProvider<KernelRagTraceRecorder> traceRecorder) {
+                                                   ObjectProvider<KernelRagTraceRecorder> traceRecorder,
+                                                   ObjectProvider<ContextWeaverPort> contextWeaverPort) {
         return new KernelAgentLoop(modelPort, toolRegistry, options,
-                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop));
+                traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
+                contextWeaverPort.getIfAvailable(
+                        com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver::new));
     }
 
     @Bean

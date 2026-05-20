@@ -17,8 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 
@@ -30,12 +32,21 @@ import java.util.Objects;
 public record ChatResponsePorts(RagPromptPort ragPromptPort,
                                 PromptTemplatePort promptTemplatePort,
                                 StreamingChatModelPort streamingChatModelPort,
-                                StreamTaskPort streamTaskPort) {
+                                StreamTaskPort streamTaskPort,
+                                ContextWeaverPort contextWeaverPort) {
+
+    public ChatResponsePorts(RagPromptPort ragPromptPort,
+                             PromptTemplatePort promptTemplatePort,
+                             StreamingChatModelPort streamingChatModelPort,
+                             StreamTaskPort streamTaskPort) {
+        this(ragPromptPort, promptTemplatePort, streamingChatModelPort, streamTaskPort, new DefaultContextWeaver());
+    }
 
     public ChatResponsePorts {
         Objects.requireNonNull(ragPromptPort, "RAG Prompt 端口不能为空");
         Objects.requireNonNull(promptTemplatePort, "Prompt 模板端口不能为空");
         Objects.requireNonNull(streamingChatModelPort, "流式模型端口不能为空");
         Objects.requireNonNull(streamTaskPort, "流式任务端口不能为空");
+        Objects.requireNonNull(contextWeaverPort, "Context Weaver 端口不能为空");
     }
 }

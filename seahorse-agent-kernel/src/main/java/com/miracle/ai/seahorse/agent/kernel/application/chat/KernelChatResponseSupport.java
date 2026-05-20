@@ -20,7 +20,6 @@ package com.miracle.ai.seahorse.agent.kernel.application.chat;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
-import com.miracle.ai.seahorse.agent.kernel.domain.chat.MemoryPromptFormatter;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.PromptContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.RewriteResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
@@ -32,6 +31,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -157,7 +157,7 @@ final class KernelChatResponseSupport {
         String systemPrompt = customPrompt == null || customPrompt.isBlank()
                 ? responsePorts.promptTemplatePort().load(CHAT_SYSTEM_PROMPT_PATH)
                 : customPrompt;
-        systemPrompt = MemoryPromptFormatter.appendToSystemPrompt(systemPrompt, context.getMemoryContext());
+        systemPrompt = appendMemoryContext(systemPrompt, context.getMemoryContext());
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.system(systemPrompt));
         messages.addAll(safeHistory(context));
@@ -171,6 +171,18 @@ final class KernelChatResponseSupport {
                         .build())
                 .build();
         return responsePorts.streamingChatModelPort().streamChat(request, requireCallback(context));
+    }
+
+    private String appendMemoryContext(String systemPrompt, MemoryContext memoryContext) {
+        String memoryText = responsePorts.contextWeaverPort().weave(memoryContext, ContextBudget.defaults());
+        if (memoryText.isBlank()) {
+            return systemPrompt;
+        }
+        String safeSystemPrompt = Objects.requireNonNullElse(systemPrompt, "").trim();
+        if (safeSystemPrompt.isBlank()) {
+            return memoryText;
+        }
+        return safeSystemPrompt + "\n\n" + memoryText;
     }
 
     private double resolveTemperature(RetrievalContext retrievalContext) {
