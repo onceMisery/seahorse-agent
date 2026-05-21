@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolutionRunResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
 
 import java.time.Instant;
@@ -30,6 +31,7 @@ public record MemoryMaintenanceRunResult(
         boolean aliasEnabled,
         boolean garbageCollectionEnabled,
         MemoryCompactionResult compactionResult,
+        MemoryAliasResolutionRunResult aliasResolutionResult,
         MemoryGarbageCollectionResult garbageCollectionResult,
         List<String> skippedTasks,
         List<String> errors,
@@ -44,6 +46,7 @@ public record MemoryMaintenanceRunResult(
                                       boolean compactionEnabled,
                                       boolean aliasEnabled,
                                       boolean garbageCollectionEnabled,
+                                      MemoryCompactionResult compactionResult,
                                       MemoryGarbageCollectionResult garbageCollectionResult,
                                       List<String> skippedTasks,
                                       List<String> errors,
@@ -52,6 +55,27 @@ public record MemoryMaintenanceRunResult(
                 compactionEnabled,
                 aliasEnabled,
                 garbageCollectionEnabled,
+                compactionResult,
+                null,
+                garbageCollectionResult,
+                skippedTasks,
+                errors,
+                executedAt);
+    }
+
+    public MemoryMaintenanceRunResult(String reason,
+                                      boolean compactionEnabled,
+                                      boolean aliasEnabled,
+                                      boolean garbageCollectionEnabled,
+                                      MemoryGarbageCollectionResult garbageCollectionResult,
+                                      List<String> skippedTasks,
+                                      List<String> errors,
+                                      Instant executedAt) {
+        this(reason,
+                compactionEnabled,
+                aliasEnabled,
+                garbageCollectionEnabled,
+                null,
                 null,
                 garbageCollectionResult,
                 skippedTasks,

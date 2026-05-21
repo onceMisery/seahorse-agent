@@ -30,6 +30,10 @@ public interface MemoryAliasPort {
         return List.of();
     }
 
+    default List<MemoryAliasCandidate> findMergeCandidates(int limit) {
+        return List.of();
+    }
+
     static MemoryAliasPort noop() {
         return new MemoryAliasPort() {
             @Override

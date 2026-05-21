@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolutionRunResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
@@ -37,6 +38,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
 
     private final MemoryGarbageCollectionService garbageCollectionService;
     private final MemoryCompactionService compactionService;
+    private final MemoryAliasResolutionService aliasResolutionService;
     private final MemoryMaintenanceRunRepositoryPort maintenanceRunRepositoryPort;
     private final boolean compactionEnabled;
     private final boolean aliasEnabled;
@@ -47,6 +49,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                                            boolean aliasEnabled,
                                            boolean garbageCollectionEnabled) {
         this(garbageCollectionService,
+                null,
                 null,
                 MemoryMaintenanceRunRepositoryPort.noop(),
                 compactionEnabled,
@@ -61,6 +64,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                                            boolean garbageCollectionEnabled) {
         this(garbageCollectionService,
                 null,
+                null,
                 maintenanceRunRepositoryPort,
                 compactionEnabled,
                 aliasEnabled,
@@ -73,8 +77,25 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                                            boolean compactionEnabled,
                                            boolean aliasEnabled,
                                            boolean garbageCollectionEnabled) {
+        this(garbageCollectionService,
+                compactionService,
+                null,
+                maintenanceRunRepositoryPort,
+                compactionEnabled,
+                aliasEnabled,
+                garbageCollectionEnabled);
+    }
+
+    public DefaultMemoryMaintenanceService(MemoryGarbageCollectionService garbageCollectionService,
+                                           MemoryCompactionService compactionService,
+                                           MemoryAliasResolutionService aliasResolutionService,
+                                           MemoryMaintenanceRunRepositoryPort maintenanceRunRepositoryPort,
+                                           boolean compactionEnabled,
+                                           boolean aliasEnabled,
+                                           boolean garbageCollectionEnabled) {
         this.garbageCollectionService = garbageCollectionService;
         this.compactionService = compactionService;
+        this.aliasResolutionService = aliasResolutionService;
         this.maintenanceRunRepositoryPort = Objects.requireNonNullElseGet(
                 maintenanceRunRepositoryPort,
                 MemoryMaintenanceRunRepositoryPort::noop);
@@ -91,9 +112,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
         List<String> skippedTasks = new ArrayList<>();
         List<String> errors = new ArrayList<>();
         MemoryCompactionResult compactionResult = runCompaction(safeCommand, skippedTasks, errors);
-        if (safeCommand.aliasEnabled() && !aliasEnabled) {
-            skippedTasks.add(MemoryMaintenanceRunResult.SKIP_ALIAS_UNAVAILABLE);
-        }
+        MemoryAliasResolutionRunResult aliasResolutionResult = runAliasResolution(safeCommand, skippedTasks, errors);
         MemoryGarbageCollectionResult garbageCollectionResult = null;
         if (safeCommand.garbageCollectionEnabled()) {
             if (garbageCollectionEnabled && garbageCollectionService != null) {
@@ -113,6 +132,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 safeCommand.aliasEnabled(),
                 safeCommand.garbageCollectionEnabled(),
                 compactionResult,
+                aliasResolutionResult,
                 garbageCollectionResult,
                 skippedTasks,
                 errors,
@@ -137,6 +157,26 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
             return result;
         } catch (RuntimeException ex) {
             errors.add("compaction:" + errorMessage(ex));
+            return null;
+        }
+    }
+
+    private MemoryAliasResolutionRunResult runAliasResolution(MemoryMaintenanceRunCommand command,
+                                                              List<String> skippedTasks,
+                                                              List<String> errors) {
+        if (!command.aliasEnabled()) {
+            return null;
+        }
+        if (!aliasEnabled || aliasResolutionService == null) {
+            skippedTasks.add(MemoryMaintenanceRunResult.SKIP_ALIAS_UNAVAILABLE);
+            return null;
+        }
+        try {
+            MemoryAliasResolutionRunResult result = aliasResolutionService.run(command.reason());
+            errors.addAll(result.errors());
+            return result;
+        } catch (RuntimeException ex) {
+            errors.add("alias:" + errorMessage(ex));
             return null;
         }
     }

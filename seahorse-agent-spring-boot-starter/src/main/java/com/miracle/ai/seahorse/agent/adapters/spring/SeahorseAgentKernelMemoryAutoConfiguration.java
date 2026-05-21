@@ -38,6 +38,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.Defau
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.InMemoryMemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.DefaultMemoryMaintenanceService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryAliasResolutionOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryAliasResolutionService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryCompactionOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryCompactionService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryGarbageCollectionOptions;
@@ -58,6 +60,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationSchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
@@ -111,6 +114,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 内核记忆能力自动配置。
@@ -682,11 +686,30 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(MemoryAliasPort.class)
+    @ConditionalOnMissingBean(MemoryAliasResolutionService.class)
+    public MemoryAliasResolutionService seahorseMemoryAliasResolutionService(
+            MemoryAliasPort aliasPort,
+            @Value("${seahorse-agent.memory.alias-resolution.scan-limit:100}") int scanLimit,
+            @Value("${seahorse-agent.memory.alias-resolution.auto-resolve-confidence-threshold:0.95}")
+            double autoResolveConfidenceThreshold) {
+        return new MemoryAliasResolutionService(
+                aliasPort,
+                new MemoryAliasResolutionOptions(
+                        scanLimit,
+                        "",
+                        "default",
+                        autoResolveConfidenceThreshold,
+                        Map.of()));
+    }
+
+    @Bean
     @ConditionalOnBean(MemoryGarbageCollectionService.class)
     @ConditionalOnMissingBean(MemoryMaintenanceInboundPort.class)
     public DefaultMemoryMaintenanceService seahorseMemoryMaintenanceInboundPort(
             MemoryGarbageCollectionService garbageCollectionService,
             ObjectProvider<MemoryCompactionService> compactionService,
+            ObjectProvider<MemoryAliasResolutionService> aliasResolutionService,
             ObjectProvider<MemoryMaintenanceRunRepositoryPort> maintenanceRunRepositoryPort,
             @Value("${seahorse-agent.memory.maintenance.compaction-enabled:false}") boolean compactionEnabled,
             @Value("${seahorse-agent.memory.maintenance.alias-enabled:false}") boolean aliasEnabled,
@@ -694,7 +717,27 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
         return new DefaultMemoryMaintenanceService(
                 garbageCollectionService,
                 compactionService.getIfAvailable(),
+                aliasResolutionService.getIfAvailable(),
                 maintenanceRunRepositoryPort.getIfAvailable(MemoryMaintenanceRunRepositoryPort::noop),
+                compactionEnabled,
+                aliasEnabled,
+                garbageCollectionEnabled);
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryMaintenanceInboundPort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.maintenance", name = "scheduler-enabled",
+            havingValue = "true")
+    @ConditionalOnMissingBean
+    public SeahorseMemoryMaintenanceJob seahorseMemoryMaintenanceJob(
+            MemoryMaintenanceInboundPort maintenanceInboundPort,
+            ObjectProvider<DistributedLockPort> lockPort,
+            @Value("${seahorse-agent.memory.maintenance.compaction-enabled:false}") boolean compactionEnabled,
+            @Value("${seahorse-agent.memory.maintenance.alias-enabled:false}") boolean aliasEnabled,
+            @Value("${seahorse-agent.memory.maintenance.gc-enabled:true}") boolean garbageCollectionEnabled) {
+        return new SeahorseMemoryMaintenanceJob(
+                maintenanceInboundPort,
+                lockPort.getIfAvailable(DistributedLockPort::noop),
                 compactionEnabled,
                 aliasEnabled,
                 garbageCollectionEnabled);

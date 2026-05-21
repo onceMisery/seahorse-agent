@@ -20,13 +20,25 @@ package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 import java.util.Objects;
 
 public record MemoryAliasCandidate(
+        String userId,
+        String tenantId,
         String aliasText,
         String canonicalEntityId,
         String canonicalName,
         String entityType,
         double confidenceLevel) {
 
+    public MemoryAliasCandidate(String aliasText,
+                                String canonicalEntityId,
+                                String canonicalName,
+                                String entityType,
+                                double confidenceLevel) {
+        this("", "default", aliasText, canonicalEntityId, canonicalName, entityType, confidenceLevel);
+    }
+
     public MemoryAliasCandidate {
+        userId = normalize(userId, "");
+        tenantId = normalize(tenantId, "default");
         aliasText = normalize(aliasText, "");
         canonicalEntityId = normalize(canonicalEntityId, "");
         canonicalName = normalize(canonicalName, canonicalEntityId);

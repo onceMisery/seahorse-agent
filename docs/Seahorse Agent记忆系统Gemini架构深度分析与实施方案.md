@@ -1830,3 +1830,17 @@ seahorse-agent.memory.maintenance.gc-enabled=false
 - 深入拆解 `LLM Refiner`、`Debounce`、`Hybrid Recall`、`REVIEW`、`Compaction/Alias/GC`。
 - 明确每个能力与当前代码的实际差距。
 - 给出可以直接进入开发计划的模块、接口、表结构、数据流和验收步骤。
+## 12. 当前实施进度（2026-05-22）
+
+已落地：
+- `LlmMemoryRefinerAdapter`
+- `MemoryCompactionService` 与 canonical entity compaction
+- `MemoryGarbageCollectionService`
+- `SeahorseMemoryMaintenanceJob`
+- `MemoryAliasResolutionService`
+- `JdbcMemoryAliasRepositoryAdapter` 的 scoped/global merge candidate scan
+
+保持不变：
+- 四层记忆 `WORKING / SHORT_TERM / LONG_TERM / SEMANTIC`
+- Gemini 能力以可插拔横向能力接入，不替换主记忆层级
+- alias / compaction / GC 通过维护入口和独立 service 组合实现
