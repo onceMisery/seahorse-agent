@@ -21,14 +21,21 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRepositoryPort;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 
 public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInboundPort {
 
     private final MemoryGarbageCollectionService garbageCollectionService;
+    private final MemoryMaintenanceRunRepositoryPort maintenanceRunRepositoryPort;
     private final boolean compactionEnabled;
     private final boolean aliasEnabled;
     private final boolean garbageCollectionEnabled;
@@ -37,7 +44,22 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                                            boolean compactionEnabled,
                                            boolean aliasEnabled,
                                            boolean garbageCollectionEnabled) {
+        this(garbageCollectionService,
+                MemoryMaintenanceRunRepositoryPort.noop(),
+                compactionEnabled,
+                aliasEnabled,
+                garbageCollectionEnabled);
+    }
+
+    public DefaultMemoryMaintenanceService(MemoryGarbageCollectionService garbageCollectionService,
+                                           MemoryMaintenanceRunRepositoryPort maintenanceRunRepositoryPort,
+                                           boolean compactionEnabled,
+                                           boolean aliasEnabled,
+                                           boolean garbageCollectionEnabled) {
         this.garbageCollectionService = garbageCollectionService;
+        this.maintenanceRunRepositoryPort = Objects.requireNonNullElseGet(
+                maintenanceRunRepositoryPort,
+                MemoryMaintenanceRunRepositoryPort::noop);
         this.compactionEnabled = compactionEnabled;
         this.aliasEnabled = aliasEnabled;
         this.garbageCollectionEnabled = garbageCollectionEnabled;
@@ -61,6 +83,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
             if (garbageCollectionEnabled && garbageCollectionService != null) {
                 try {
                     garbageCollectionResult = garbageCollectionService.run(safeCommand.reason());
+                    errors.addAll(garbageCollectionResult.errors());
                 } catch (RuntimeException ex) {
                     errors.add("garbageCollection:" + errorMessage(ex));
                 }
@@ -68,7 +91,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 skippedTasks.add(MemoryMaintenanceRunResult.SKIP_GARBAGE_COLLECTION_DISABLED);
             }
         }
-        return new MemoryMaintenanceRunResult(
+        MemoryMaintenanceRunResult result = new MemoryMaintenanceRunResult(
                 safeCommand.reason(),
                 safeCommand.compactionEnabled(),
                 safeCommand.aliasEnabled(),
@@ -77,6 +100,47 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 skippedTasks,
                 errors,
                 Instant.now());
+        persistRunRecord(result);
+        return result;
+    }
+
+    @Override
+    public MemoryMaintenanceRunPage pageMaintenanceRuns(MemoryMaintenanceRunQuery query) {
+        MemoryMaintenanceRunQuery safeQuery = query == null ? new MemoryMaintenanceRunQuery(null, 1L, 20L) : query;
+        return maintenanceRunRepositoryPort.pageMaintenanceRuns(safeQuery);
+    }
+
+    private void persistRunRecord(MemoryMaintenanceRunResult result) {
+        try {
+            MemoryGarbageCollectionResult gc = result.garbageCollectionResult();
+            maintenanceRunRepositoryPort.save(new MemoryMaintenanceRunRecord(
+                    "maintenance-" + UUID.randomUUID(),
+                    result.reason(),
+                    status(result),
+                    result.compactionEnabled(),
+                    result.aliasEnabled(),
+                    result.garbageCollectionEnabled(),
+                    gc == null ? 0 : gc.scannedCount(),
+                    gc == null ? 0 : gc.enqueuedDeleteTaskCount(),
+                    gc == null ? 0 : gc.markedIndexDeletedCount(),
+                    gc != null && gc.dryRun(),
+                    result.skippedTasks(),
+                    result.errors(),
+                    result.executedAt(),
+                    Instant.now()));
+        } catch (RuntimeException ignored) {
+            // Maintenance records are observability data and must not change maintenance execution semantics.
+        }
+    }
+
+    private String status(MemoryMaintenanceRunResult result) {
+        if (!result.errors().isEmpty()) {
+            return MemoryMaintenanceRunRecord.STATUS_FAILED;
+        }
+        if (!result.skippedTasks().isEmpty()) {
+            return MemoryMaintenanceRunRecord.STATUS_SUCCEEDED_WITH_WARNINGS;
+        }
+        return MemoryMaintenanceRunRecord.STATUS_SUCCEEDED;
     }
 
     private String errorMessage(RuntimeException ex) {

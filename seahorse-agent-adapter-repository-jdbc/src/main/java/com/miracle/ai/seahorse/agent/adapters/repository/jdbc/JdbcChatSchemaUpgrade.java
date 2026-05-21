@@ -133,6 +133,28 @@ public class JdbcChatSchemaUpgrade {
                 ON t_memory_review_candidate (operation_id)
                 """);
         jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_memory_maintenance_run (
+                    id VARCHAR(128) PRIMARY KEY,
+                    reason VARCHAR(128),
+                    status VARCHAR(32) NOT NULL,
+                    compaction_requested SMALLINT NOT NULL DEFAULT 0,
+                    alias_requested SMALLINT NOT NULL DEFAULT 0,
+                    gc_requested SMALLINT NOT NULL DEFAULT 0,
+                    gc_scanned_count INTEGER NOT NULL DEFAULT 0,
+                    gc_enqueued_count INTEGER NOT NULL DEFAULT 0,
+                    gc_marked_count INTEGER NOT NULL DEFAULT 0,
+                    gc_dry_run SMALLINT NOT NULL DEFAULT 0,
+                    skipped_tasks TEXT,
+                    errors TEXT,
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_maintenance_run_status_time
+                ON t_memory_maintenance_run (status, update_time)
+                """);
+        jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_review_feedback_sample (
                     id VARCHAR(128) PRIMARY KEY,
                     candidate_id VARCHAR(64) NOT NULL,

@@ -39,6 +39,7 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(tableExists(jdbcTemplate, "t_memory_outbox")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_review_candidate")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_review_feedback_sample")).isTrue();
+        assertThat(tableExists(jdbcTemplate, "t_memory_maintenance_run")).isTrue();
     }
 
     @Test

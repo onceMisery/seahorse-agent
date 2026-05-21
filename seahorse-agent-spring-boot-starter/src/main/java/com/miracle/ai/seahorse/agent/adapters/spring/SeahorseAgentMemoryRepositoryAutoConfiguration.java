@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLongTermMemory
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflictLogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryKeywordSearchRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryLifecycleRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryMaintenanceRunRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryOperationLogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryOutboxRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryQualitySnapshotRepositoryAdapter;
@@ -41,6 +42,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
@@ -195,6 +197,16 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
     public JdbcMemoryReviewFeedbackRepositoryAdapter seahorseJdbcMemoryReviewFeedbackRepositoryAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
         return new JdbcMemoryReviewFeedbackRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
+            matchIfMissing = true)
+    @ConditionalOnMissingBean(MemoryMaintenanceRunRepositoryPort.class)
+    public JdbcMemoryMaintenanceRunRepositoryAdapter seahorseJdbcMemoryMaintenanceRunRepositoryAdapter(
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcMemoryMaintenanceRunRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
     }
 
     @Bean

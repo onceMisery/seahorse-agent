@@ -69,6 +69,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkfl
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandler;
@@ -635,11 +636,13 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnMissingBean(MemoryMaintenanceInboundPort.class)
     public DefaultMemoryMaintenanceService seahorseMemoryMaintenanceInboundPort(
             MemoryGarbageCollectionService garbageCollectionService,
+            ObjectProvider<MemoryMaintenanceRunRepositoryPort> maintenanceRunRepositoryPort,
             @Value("${seahorse-agent.memory.maintenance.compaction-enabled:false}") boolean compactionEnabled,
             @Value("${seahorse-agent.memory.maintenance.alias-enabled:false}") boolean aliasEnabled,
             @Value("${seahorse-agent.memory.maintenance.gc-enabled:true}") boolean garbageCollectionEnabled) {
         return new DefaultMemoryMaintenanceService(
                 garbageCollectionService,
+                maintenanceRunRepositoryPort.getIfAvailable(MemoryMaintenanceRunRepositoryPort::noop),
                 compactionEnabled,
                 aliasEnabled,
                 garbageCollectionEnabled);

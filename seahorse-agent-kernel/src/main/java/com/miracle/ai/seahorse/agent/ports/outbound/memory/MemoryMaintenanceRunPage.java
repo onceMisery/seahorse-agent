@@ -15,14 +15,28 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.inbound.memory;
+package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
+import java.util.List;
+import java.util.Objects;
 
-public interface MemoryMaintenanceInboundPort {
+public record MemoryMaintenanceRunPage(
+        List<MemoryMaintenanceRunRecord> records,
+        long total,
+        long size,
+        long current,
+        long pages
+) {
 
-    MemoryMaintenanceRunResult runMaintenance(MemoryMaintenanceRunCommand command);
+    public MemoryMaintenanceRunPage {
+        records = List.copyOf(Objects.requireNonNullElse(records, List.of()));
+        total = Math.max(0L, total);
+        size = Math.max(1L, size);
+        current = Math.max(1L, current);
+        pages = Math.max(0L, pages);
+    }
 
-    MemoryMaintenanceRunPage pageMaintenanceRuns(MemoryMaintenanceRunQuery query);
+    public static MemoryMaintenanceRunPage empty(long current, long size) {
+        return new MemoryMaintenanceRunPage(List.of(), 0L, size, current, 0L);
+    }
 }

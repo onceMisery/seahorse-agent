@@ -100,6 +100,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingReco
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryHealthReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
@@ -334,6 +337,8 @@ class SeahorseWebApiContractTests {
         when(governancePort.assessQuality("u1")).thenReturn(MemoryQualityReport.builder().userId("u1").build());
         MemoryMaintenanceInboundPort maintenancePort = mock(MemoryMaintenanceInboundPort.class);
         when(maintenancePort.runMaintenance(any())).thenReturn(maintenanceResult("manual-maintenance"));
+        when(maintenancePort.pageMaintenanceRuns(any())).thenReturn(new MemoryMaintenanceRunPage(
+                List.of(maintenanceRunRecord("run-1")), 1, 10, 1, 1));
 
         IngestionTaskInboundPort ingestionTaskPort = mock(IngestionTaskInboundPort.class);
         when(ingestionTaskPort.execute(any()))
@@ -432,6 +437,17 @@ class SeahorseWebApiContractTests {
         verify(maintenancePort).runMaintenance(maintenanceCaptor.capture());
         assertThat(maintenanceCaptor.getValue().reason()).isEqualTo("manual-maintenance");
         assertThat(maintenanceCaptor.getValue().garbageCollectionEnabled()).isTrue();
+        mvc.perform(get("/memories/maintenance-runs")
+                        .param("status", "SUCCEEDED")
+                        .param("current", "1")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.records[0].runId").value("run-1"));
+        ArgumentCaptor<MemoryMaintenanceRunQuery> maintenanceQueryCaptor =
+                ArgumentCaptor.forClass(MemoryMaintenanceRunQuery.class);
+        verify(maintenancePort).pageMaintenanceRuns(maintenanceQueryCaptor.capture());
+        assertThat(maintenanceQueryCaptor.getValue().status()).isEqualTo("SUCCEEDED");
 
         mvc.perform(post("/ingestion/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -1836,6 +1852,24 @@ class SeahorseWebApiContractTests {
                 new MemoryGarbageCollectionResult(reason, 1, 1, 1, false, List.of(), Instant.EPOCH),
                 List.of(),
                 List.of(),
+                Instant.EPOCH);
+    }
+
+    private static MemoryMaintenanceRunRecord maintenanceRunRecord(String runId) {
+        return new MemoryMaintenanceRunRecord(
+                runId,
+                "manual-maintenance",
+                MemoryMaintenanceRunRecord.STATUS_SUCCEEDED,
+                false,
+                false,
+                true,
+                1,
+                1,
+                1,
+                false,
+                List.of(),
+                List.of(),
+                Instant.EPOCH,
                 Instant.EPOCH);
     }
 

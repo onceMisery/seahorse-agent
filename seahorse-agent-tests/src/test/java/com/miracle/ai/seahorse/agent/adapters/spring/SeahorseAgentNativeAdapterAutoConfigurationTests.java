@@ -44,6 +44,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeChunk
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeDocumentRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLongTermMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflictLogRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryMaintenanceRunRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryQualitySnapshotRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryReviewCandidateRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryReviewFeedbackRepositoryAdapter;
@@ -101,6 +102,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
@@ -278,6 +280,7 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(JdbcMemoryConflictLogRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(JdbcMemoryReviewCandidateRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(JdbcMemoryReviewFeedbackRepositoryAdapter.class);
+                    assertThat(context).hasSingleBean(JdbcMemoryMaintenanceRunRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(JdbcMetadataGovernanceRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(JdbcKeywordSearchAdapter.class);
                     assertThat(context).hasSingleBean(JdbcKeywordIndexAdapter.class);
@@ -315,6 +318,7 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryReviewCandidatePort.class);
                     assertThat(context).hasSingleBean(MemoryReviewManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MemoryReviewFeedbackRepositoryPort.class);
+                    assertThat(context).hasSingleBean(MemoryMaintenanceRunRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataBackfillJobRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataQualityReportRepositoryPort.class);
                     assertThat(context).hasSingleBean(MetadataSchemaUsageReportRepositoryPort.class);

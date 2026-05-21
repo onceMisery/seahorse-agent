@@ -19,7 +19,9 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,6 +52,18 @@ public class SeahorseMemoryMaintenanceController {
             return Map.of(KEY_CODE, "1", "message", "Service not available");
         }
         return ok(maintenancePort.runMaintenance(new MemoryMaintenanceRunCommand(reason, compaction, alias, gc)));
+    }
+
+    @GetMapping("/memories/maintenance-runs")
+    public Map<String, Object> pageMaintenanceRuns(
+            @RequestParam(defaultValue = "") String status,
+            @RequestParam(defaultValue = "1") long current,
+            @RequestParam(defaultValue = "10") long size) {
+        MemoryMaintenanceInboundPort maintenancePort = maintenancePortProvider.getIfAvailable();
+        if (maintenancePort == null) {
+            return Map.of(KEY_CODE, "1", "message", "Service not available");
+        }
+        return ok(maintenancePort.pageMaintenanceRuns(new MemoryMaintenanceRunQuery(status, current, size)));
     }
 
     private Map<String, Object> ok(Object data) {

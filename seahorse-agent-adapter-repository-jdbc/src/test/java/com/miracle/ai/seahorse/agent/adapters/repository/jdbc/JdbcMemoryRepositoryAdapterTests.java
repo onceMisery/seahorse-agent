@@ -22,6 +22,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionCandidate;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
@@ -59,6 +61,7 @@ class JdbcMemoryRepositoryAdapterTests {
     private JdbcMemoryOutboxRepositoryAdapter outboxAdapter;
     private JdbcMemoryReviewCandidateRepositoryAdapter reviewCandidateAdapter;
     private JdbcMemoryReviewFeedbackRepositoryAdapter reviewFeedbackAdapter;
+    private JdbcMemoryMaintenanceRunRepositoryAdapter maintenanceRunAdapter;
     private JdbcMemoryLifecycleRepositoryAdapter lifecycleAdapter;
     private JdbcMemoryKeywordSearchRepositoryAdapter keywordSearchAdapter;
 
@@ -80,6 +83,7 @@ class JdbcMemoryRepositoryAdapterTests {
         outboxAdapter = new JdbcMemoryOutboxRepositoryAdapter(dataSource, objectMapper);
         reviewCandidateAdapter = new JdbcMemoryReviewCandidateRepositoryAdapter(dataSource, objectMapper);
         reviewFeedbackAdapter = new JdbcMemoryReviewFeedbackRepositoryAdapter(dataSource, objectMapper);
+        maintenanceRunAdapter = new JdbcMemoryMaintenanceRunRepositoryAdapter(dataSource, objectMapper);
         lifecycleAdapter = new JdbcMemoryLifecycleRepositoryAdapter(dataSource);
         keywordSearchAdapter = new JdbcMemoryKeywordSearchRepositoryAdapter(dataSource, objectMapper);
     }
@@ -569,6 +573,36 @@ class JdbcMemoryRepositoryAdapterTests {
     }
 
     @Test
+    void shouldPersistAndPageMaintenanceRuns() {
+        maintenanceRunAdapter.save(new MemoryMaintenanceRunRecord(
+                "run-1",
+                "manual-maintenance",
+                MemoryMaintenanceRunRecord.STATUS_SUCCEEDED_WITH_WARNINGS,
+                true,
+                true,
+                true,
+                2,
+                3,
+                1,
+                false,
+                java.util.List.of("ALIAS_UNAVAILABLE"),
+                java.util.List.of("gc:transient"),
+                Instant.EPOCH,
+                Instant.EPOCH));
+
+        var page = maintenanceRunAdapter.pageMaintenanceRuns(new MemoryMaintenanceRunQuery(
+                MemoryMaintenanceRunRecord.STATUS_SUCCEEDED_WITH_WARNINGS,
+                1,
+                10));
+
+        assertThat(page.records()).hasSize(1);
+        assertThat(page.total()).isEqualTo(1);
+        assertThat(page.records().get(0).runId()).isEqualTo("run-1");
+        assertThat(page.records().get(0).skippedTasks()).containsExactly("ALIAS_UNAVAILABLE");
+        assertThat(page.records().get(0).errors()).containsExactly("gc:transient");
+    }
+
+    @Test
     void shouldFilterObsoleteMemoriesAndRecordLifecycleFeedback() {
         jdbcTemplate.update("""
                 INSERT INTO t_short_term_memory
@@ -654,6 +688,7 @@ class JdbcMemoryRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_outbox");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_review_candidate");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_review_feedback_sample");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_maintenance_run");
         jdbcTemplate.execute("""
                 CREATE TABLE t_short_term_memory (
                     id VARCHAR(64) PRIMARY KEY,
@@ -834,6 +869,24 @@ class JdbcMemoryRepositoryAdapterTests {
                     reviewed_memory_id VARCHAR(64),
                     reviewed_layer VARCHAR(32),
                     create_time TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_memory_maintenance_run (
+                    id VARCHAR(128) PRIMARY KEY,
+                    reason VARCHAR(128),
+                    status VARCHAR(32) NOT NULL,
+                    compaction_requested SMALLINT NOT NULL DEFAULT 0,
+                    alias_requested SMALLINT NOT NULL DEFAULT 0,
+                    gc_requested SMALLINT NOT NULL DEFAULT 0,
+                    gc_scanned_count INTEGER NOT NULL DEFAULT 0,
+                    gc_enqueued_count INTEGER NOT NULL DEFAULT 0,
+                    gc_marked_count INTEGER NOT NULL DEFAULT 0,
+                    gc_dry_run SMALLINT NOT NULL DEFAULT 0,
+                    skipped_tasks TEXT,
+                    errors TEXT,
+                    create_time TIMESTAMP,
+                    update_time TIMESTAMP
                 )
                 """);
         jdbcTemplate.execute("""

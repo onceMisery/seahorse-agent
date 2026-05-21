@@ -21,6 +21,10 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCo
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import org.junit.jupiter.api.Test;
 
@@ -79,6 +83,39 @@ class DefaultMemoryMaintenanceServiceTests {
         assertThat(result.errors()).isEmpty();
     }
 
+    @Test
+    void shouldPersistMaintenanceRunRecordWithSkippedTasks() {
+        RecordingGarbageCollectionService garbageCollectionService = new RecordingGarbageCollectionService();
+        RecordingMaintenanceRunRepository repository = new RecordingMaintenanceRunRepository();
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                garbageCollectionService,
+                repository,
+                false,
+                false,
+                false);
+
+        MemoryMaintenanceRunResult result = service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "manual-maintenance",
+                true,
+                true,
+                true));
+
+        assertThat(result.skippedTasks()).containsExactly(
+                MemoryMaintenanceRunResult.SKIP_COMPACTION_UNAVAILABLE,
+                MemoryMaintenanceRunResult.SKIP_ALIAS_UNAVAILABLE,
+                MemoryMaintenanceRunResult.SKIP_GARBAGE_COLLECTION_DISABLED);
+        assertThat(repository.records).hasSize(1);
+        MemoryMaintenanceRunRecord record = repository.records.get(0);
+        assertThat(record.runId()).isNotBlank();
+        assertThat(record.reason()).isEqualTo("manual-maintenance");
+        assertThat(record.status()).isEqualTo(MemoryMaintenanceRunRecord.STATUS_SUCCEEDED_WITH_WARNINGS);
+        assertThat(record.compactionRequested()).isTrue();
+        assertThat(record.aliasRequested()).isTrue();
+        assertThat(record.garbageCollectionRequested()).isTrue();
+        assertThat(record.skippedTasks()).containsExactlyElementsOf(result.skippedTasks());
+        assertThat(record.errors()).isEmpty();
+    }
+
     private static class RecordingGarbageCollectionService extends MemoryGarbageCollectionService {
 
         private final List<String> reasons = new ArrayList<>();
@@ -100,6 +137,21 @@ class DefaultMemoryMaintenanceServiceTests {
                     false,
                     List.of(),
                     Instant.EPOCH);
+        }
+    }
+
+    private static class RecordingMaintenanceRunRepository implements MemoryMaintenanceRunRepositoryPort {
+
+        private final List<MemoryMaintenanceRunRecord> records = new ArrayList<>();
+
+        @Override
+        public void save(MemoryMaintenanceRunRecord record) {
+            records.add(record);
+        }
+
+        @Override
+        public MemoryMaintenanceRunPage pageMaintenanceRuns(MemoryMaintenanceRunQuery query) {
+            return new MemoryMaintenanceRunPage(records, records.size(), query.size(), query.current(), 1);
         }
     }
 }

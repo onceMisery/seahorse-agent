@@ -881,6 +881,25 @@ CREATE TABLE t_memory_outbox (
 CREATE INDEX idx_memory_outbox_status
 ON t_memory_outbox (status, next_retry_time, create_time);
 
+CREATE TABLE t_memory_maintenance_run (
+    id VARCHAR(128) PRIMARY KEY,
+    reason VARCHAR(128),
+    status VARCHAR(32) NOT NULL,
+    compaction_requested SMALLINT NOT NULL DEFAULT 0,
+    alias_requested SMALLINT NOT NULL DEFAULT 0,
+    gc_requested SMALLINT NOT NULL DEFAULT 0,
+    gc_scanned_count INTEGER NOT NULL DEFAULT 0,
+    gc_enqueued_count INTEGER NOT NULL DEFAULT 0,
+    gc_marked_count INTEGER NOT NULL DEFAULT 0,
+    gc_dry_run SMALLINT NOT NULL DEFAULT 0,
+    skipped_tasks TEXT,
+    errors TEXT,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_memory_maintenance_run_status_time
+ON t_memory_maintenance_run (status, update_time);
+
 CREATE TABLE t_user_profile_fact (
     id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) NOT NULL,

@@ -1628,7 +1628,9 @@ flowchart TD
 - 已新增统一维护入口 `MemoryMaintenanceInboundPort`、`MemoryMaintenanceRunCommand`、`MemoryMaintenanceRunResult` 与 `DefaultMemoryMaintenanceService`。该服务当前是窄门面，只编排已存在的 GC 能力；当调用方请求 compaction/alias 时，结果会通过 `COMPACTION_UNAVAILABLE`、`ALIAS_UNAVAILABLE` 明确标记跳过，而不是伪装成功。
 - Spring 自动配置已注册 `DefaultMemoryMaintenanceService`，受 `seahorse-agent.memory.maintenance.compaction-enabled`、`seahorse-agent.memory.maintenance.alias-enabled`、`seahorse-agent.memory.maintenance.gc-enabled` 控制；默认 compaction/alias 关闭，GC 打开。
 - Web 侧已新增 `SeahorseMemoryMaintenanceController`，暴露 `POST /memories/maintenance/run`，参数为 `reason`、`compaction`、`alias`、`gc`。控制器单独成类，不继续膨胀 `SeahorseMemoryController`。
-- 仍未完成：Compaction master memory 生成、碎片置 `COMPACTED` 的服务、Alias registry/Graph relation 表、真实 Graph adapter、维护运行记录持久化以及 `GET /memories/maintenance-runs` 查询接口。
+- 已新增维护运行记录持久化：`MemoryMaintenanceRunRepositoryPort`、`MemoryMaintenanceRunRecord`、`MemoryMaintenanceRunQuery`、`MemoryMaintenanceRunPage`，JDBC 表 `t_memory_maintenance_run` 与 `JdbcMemoryMaintenanceRunRepositoryAdapter`。`DefaultMemoryMaintenanceService` 每次运行后记录请求开关、GC 统计、跳过项、错误和最终状态；记录失败不影响维护执行语义。
+- Web 侧已新增 `GET /memories/maintenance-runs`，支持按 `status` 分页查询维护运行历史，用于排查后台维护和手工维护结果。
+- 仍未完成：Compaction master memory 生成、碎片置 `COMPACTED` 的服务、Alias registry/Graph relation 表、真实 Graph adapter。
 
 测试文件：
 
