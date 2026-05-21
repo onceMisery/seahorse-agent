@@ -149,6 +149,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
 
     private void persistRunRecord(MemoryMaintenanceRunResult result) {
         try {
+            MemoryCompactionResult compaction = result.compactionResult();
             MemoryGarbageCollectionResult gc = result.garbageCollectionResult();
             maintenanceRunRepositoryPort.save(new MemoryMaintenanceRunRecord(
                     "maintenance-" + UUID.randomUUID(),
@@ -157,6 +158,9 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                     result.compactionEnabled(),
                     result.aliasEnabled(),
                     result.garbageCollectionEnabled(),
+                    compaction == null ? 0 : compaction.scannedGroupCount(),
+                    compaction == null ? 0 : compaction.compactedGroupCount(),
+                    compaction == null ? 0 : compaction.compactedFragmentCount(),
                     gc == null ? 0 : gc.scannedCount(),
                     gc == null ? 0 : gc.enqueuedDeleteTaskCount(),
                     gc == null ? 0 : gc.markedIndexDeletedCount(),

@@ -1635,7 +1635,7 @@ flowchart TD
 - 已新增轻量 Graph relation 派生索引：`JdbcMemoryGraphRepositoryAdapter` 同时实现 `MemoryGraphPort` 和 `MemoryGraphIndexPort`，落表 `t_memory_entity_relation`。Graph upsert 从派生索引 document metadata 中读取 `canonicalEntityId`、`canonicalName`、`relatedEntityIds`/`targetEntityId`、`relationType`；Graph recall 先经 alias registry 解析 query token 到 canonical entity，再返回 1-hop 相关 memory；Graph delete 软删除 relation 行。
 - Spring JDBC repository 自动配置已注册 `MemoryAliasPort`、`MemoryGraphPort`、`MemoryGraphIndexPort` 的 JDBC 默认实现；企业环境仍可用自定义 bean 覆盖，保持可插拔。
 - Web 侧已新增 `SeahorseMemoryMaintenanceController`，暴露 `POST /memories/maintenance/run`，参数为 `reason`、`compaction`、`alias`、`gc`。控制器单独成类，不继续膨胀 `SeahorseMemoryController`。
-- 已新增维护运行记录持久化：`MemoryMaintenanceRunRepositoryPort`、`MemoryMaintenanceRunRecord`、`MemoryMaintenanceRunQuery`、`MemoryMaintenanceRunPage`，JDBC 表 `t_memory_maintenance_run` 与 `JdbcMemoryMaintenanceRunRepositoryAdapter`。`DefaultMemoryMaintenanceService` 每次运行后记录请求开关、GC 统计、跳过项、错误和最终状态；记录失败不影响维护执行语义。
+- 已新增维护运行记录持久化：`MemoryMaintenanceRunRepositoryPort`、`MemoryMaintenanceRunRecord`、`MemoryMaintenanceRunQuery`、`MemoryMaintenanceRunPage`，JDBC 表 `t_memory_maintenance_run` 与 `JdbcMemoryMaintenanceRunRepositoryAdapter`。`DefaultMemoryMaintenanceService` 每次运行后记录请求开关、compaction 扫描/压缩统计、GC 统计、跳过项、错误和最终状态；记录失败不影响维护执行语义。
 - Web 侧已新增 `GET /memories/maintenance-runs`，支持按 `status` 分页查询维护运行历史，用于排查后台维护和手工维护结果。
 - 仍未完成：LLM compactor、canonical entity 驱动的 compaction 分组、Alias 自动合并 job、复杂 alias REVIEW 闭环、真实 Graph 数据库 adapter。
 

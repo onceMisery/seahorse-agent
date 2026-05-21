@@ -28,6 +28,9 @@ public record MemoryMaintenanceRunRecord(
         boolean compactionRequested,
         boolean aliasRequested,
         boolean garbageCollectionRequested,
+        int compactionScannedCount,
+        int compactionGroupCount,
+        int compactionFragmentCount,
         int gcScannedCount,
         int gcEnqueuedCount,
         int gcMarkedCount,
@@ -42,10 +45,46 @@ public record MemoryMaintenanceRunRecord(
     public static final String STATUS_SUCCEEDED_WITH_WARNINGS = "SUCCEEDED_WITH_WARNINGS";
     public static final String STATUS_FAILED = "FAILED";
 
+    public MemoryMaintenanceRunRecord(String runId,
+                                      String reason,
+                                      String status,
+                                      boolean compactionRequested,
+                                      boolean aliasRequested,
+                                      boolean garbageCollectionRequested,
+                                      int gcScannedCount,
+                                      int gcEnqueuedCount,
+                                      int gcMarkedCount,
+                                      boolean gcDryRun,
+                                      List<String> skippedTasks,
+                                      List<String> errors,
+                                      Instant createTime,
+                                      Instant updateTime) {
+        this(runId,
+                reason,
+                status,
+                compactionRequested,
+                aliasRequested,
+                garbageCollectionRequested,
+                0,
+                0,
+                0,
+                gcScannedCount,
+                gcEnqueuedCount,
+                gcMarkedCount,
+                gcDryRun,
+                skippedTasks,
+                errors,
+                createTime,
+                updateTime);
+    }
+
     public MemoryMaintenanceRunRecord {
         runId = Objects.requireNonNullElse(runId, "").trim();
         reason = Objects.requireNonNullElse(reason, "").trim();
         status = normalizeStatus(status);
+        compactionScannedCount = Math.max(0, compactionScannedCount);
+        compactionGroupCount = Math.max(0, compactionGroupCount);
+        compactionFragmentCount = Math.max(0, compactionFragmentCount);
         gcScannedCount = Math.max(0, gcScannedCount);
         gcEnqueuedCount = Math.max(0, gcEnqueuedCount);
         gcMarkedCount = Math.max(0, gcMarkedCount);

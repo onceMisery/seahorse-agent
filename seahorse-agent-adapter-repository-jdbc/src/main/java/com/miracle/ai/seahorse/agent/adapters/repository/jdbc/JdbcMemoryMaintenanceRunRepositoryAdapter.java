@@ -48,9 +48,10 @@ public class JdbcMemoryMaintenanceRunRepositoryAdapter implements MemoryMaintena
         jdbcTemplate.update("""
                 INSERT INTO t_memory_maintenance_run
                 (id, reason, status, compaction_requested, alias_requested, gc_requested,
+                 compaction_scanned_count, compaction_group_count, compaction_fragment_count,
                  gc_scanned_count, gc_enqueued_count, gc_marked_count, gc_dry_run,
                  skipped_tasks, errors, create_time, update_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 record.runId(),
                 record.reason(),
@@ -58,6 +59,9 @@ public class JdbcMemoryMaintenanceRunRepositoryAdapter implements MemoryMaintena
                 flag(record.compactionRequested()),
                 flag(record.aliasRequested()),
                 flag(record.garbageCollectionRequested()),
+                record.compactionScannedCount(),
+                record.compactionGroupCount(),
+                record.compactionFragmentCount(),
                 record.gcScannedCount(),
                 record.gcEnqueuedCount(),
                 record.gcMarkedCount(),
@@ -106,6 +110,9 @@ public class JdbcMemoryMaintenanceRunRepositoryAdapter implements MemoryMaintena
                 flag(rs.getInt("compaction_requested")),
                 flag(rs.getInt("alias_requested")),
                 flag(rs.getInt("gc_requested")),
+                rs.getInt("compaction_scanned_count"),
+                rs.getInt("compaction_group_count"),
+                rs.getInt("compaction_fragment_count"),
                 rs.getInt("gc_scanned_count"),
                 rs.getInt("gc_enqueued_count"),
                 rs.getInt("gc_marked_count"),

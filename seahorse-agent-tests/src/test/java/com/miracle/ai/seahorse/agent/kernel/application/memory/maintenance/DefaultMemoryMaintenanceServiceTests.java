@@ -141,7 +141,11 @@ class DefaultMemoryMaintenanceServiceTests {
         assertThat(result.compactionResult().compactedGroupCount()).isEqualTo(1);
         assertThat(result.skippedTasks()).isEmpty();
         assertThat(repository.records).hasSize(1);
-        assertThat(repository.records.get(0).status()).isEqualTo(MemoryMaintenanceRunRecord.STATUS_SUCCEEDED);
+        MemoryMaintenanceRunRecord record = repository.records.get(0);
+        assertThat(record.status()).isEqualTo(MemoryMaintenanceRunRecord.STATUS_SUCCEEDED);
+        assertThat(record.compactionScannedCount()).isEqualTo(1);
+        assertThat(record.compactionGroupCount()).isEqualTo(1);
+        assertThat(record.compactionFragmentCount()).isEqualTo(2);
     }
 
     private static class RecordingGarbageCollectionService extends MemoryGarbageCollectionService {

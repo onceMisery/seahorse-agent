@@ -40,8 +40,42 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(tableExists(jdbcTemplate, "t_memory_review_candidate")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_review_feedback_sample")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_maintenance_run")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_scanned_count")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_group_count")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_fragment_count")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_entity_alias")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_entity_relation")).isTrue();
+    }
+
+    @Test
+    void shouldBackfillMaintenanceCompactionColumnsForExistingTable() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:chat-schema-upgrade-maintenance-run;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_memory_maintenance_run (
+                    id VARCHAR(128) PRIMARY KEY,
+                    reason VARCHAR(128),
+                    status VARCHAR(32) NOT NULL,
+                    compaction_requested SMALLINT NOT NULL DEFAULT 0,
+                    alias_requested SMALLINT NOT NULL DEFAULT 0,
+                    gc_requested SMALLINT NOT NULL DEFAULT 0,
+                    gc_scanned_count INTEGER NOT NULL DEFAULT 0,
+                    gc_enqueued_count INTEGER NOT NULL DEFAULT 0,
+                    gc_marked_count INTEGER NOT NULL DEFAULT 0,
+                    gc_dry_run SMALLINT NOT NULL DEFAULT 0,
+                    skipped_tasks TEXT,
+                    errors TEXT,
+                    create_time TIMESTAMP,
+                    update_time TIMESTAMP
+                )
+                """);
+
+        new JdbcChatSchemaUpgrade(dataSource).upgrade();
+
+        assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_scanned_count")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_group_count")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_fragment_count")).isTrue();
     }
 
     @Test
