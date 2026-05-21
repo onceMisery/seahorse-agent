@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.PromptContext;
@@ -124,6 +125,10 @@ final class KernelChatResponseSupport {
                 rewriteResult.rewrittenQuestion(),
                 rewriteResult.subQuestions()
         );
+        if (!messages.isEmpty() && messages.get(0).getRole() == ChatRole.SYSTEM) {
+            String enriched = prependCoreContext(messages.get(0).getContent());
+            messages.set(0, ChatMessage.system(enriched));
+        }
         ChatRequest chatRequest = ChatRequest.builder()
                 .messages(messages)
                 .samplingOptions(ChatSamplingOptions.builder()
@@ -160,6 +165,7 @@ final class KernelChatResponseSupport {
         String systemPrompt = customPrompt == null || customPrompt.isBlank()
                 ? responsePorts.promptTemplatePort().load(CHAT_SYSTEM_PROMPT_PATH)
                 : customPrompt;
+        systemPrompt = prependCoreContext(systemPrompt);
         systemPrompt = renderSystemPrompt(systemPrompt, context);
         systemPrompt = appendMemoryContext(systemPrompt, context.getMemoryContext());
         List<ChatMessage> messages = new ArrayList<>();
@@ -187,6 +193,20 @@ final class KernelChatResponseSupport {
             return memoryText;
         }
         return safeSystemPrompt + "\n\n" + memoryText;
+    }
+
+    private static final String CORE_CONTEXT_HEADER =
+            "你是 SeahorseAgent，一个智能 AI 协作伙伴。当用户问你是谁时，请自我介绍并说明你的协作能力。\n\n"
+            + "## 当前时间\n";
+
+    private String prependCoreContext(String systemPrompt) {
+        String safe = Objects.requireNonNullElse(systemPrompt, "").trim();
+        if (safe.contains("你是 SeahorseAgent") || safe.contains("SeahorseAgent")) {
+            return safe;
+        }
+        String now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        return CORE_CONTEXT_HEADER + now + "\n\n" + safe;
     }
 
     private String renderSystemPrompt(String template, StreamChatContext context) {
