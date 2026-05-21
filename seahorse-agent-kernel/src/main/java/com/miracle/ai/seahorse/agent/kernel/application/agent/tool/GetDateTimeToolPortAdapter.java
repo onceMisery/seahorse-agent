@@ -17,28 +17,30 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
-public class GetDateTimeToolPortAdapter implements ToolPort {
+public class GetDateTimeToolPortAdapter implements DescribedToolPort {
 
     public static final String TOOL_ID = "get_current_datetime";
+    private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(TOOL_ID, "Get Current Date & Time",
+            "Return the current server date and time. Use this when the user asks about the current time, date, day of week, or any temporal reference.",
+            """
+                    {"type":"object","required":[],"properties":{}}
+                    """);
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
-    public static ToolDescriptor descriptor() {
-        return new ToolDescriptor(TOOL_ID, "Get Current Date & Time",
-                "Return the current server date and time. Use this when the user asks about the current time, date, day of week, or any temporal reference.",
-                """
-                        {"type":"object","required":[],"properties":{}}
-                        """);
+    @Override
+    public ToolDescriptor descriptor() {
+        return DESCRIPTOR;
     }
 
     @Override

@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceRunResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
@@ -34,9 +35,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-public class MemoryWriteToolPortAdapter implements ToolPort {
+public class MemoryWriteToolPortAdapter implements DescribedToolPort {
 
     public static final String TOOL_ID = "memory_write";
+    private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(TOOL_ID, "Write Memory",
+            "Write a high-value short-term memory for the current user. User scope is injected by the server.",
+            """
+                    {"type":"object","required":["content","reason"],"properties":{"content":{"type":"string"},"reason":{"type":"string"},"sourceSnapshotId":{"type":"string"}}}
+                    """);
 
     private final MemoryEnginePort memoryEnginePort;
     private final MemoryIngestionWorkflowPort memoryIngestionWorkflowPort;
@@ -63,12 +69,9 @@ public class MemoryWriteToolPortAdapter implements ToolPort {
         this.jsonSupport = Objects.requireNonNull(jsonSupport, "jsonSupport must not be null");
     }
 
-    public static ToolDescriptor descriptor() {
-        return new ToolDescriptor(TOOL_ID, "Write Memory",
-                "Write a high-value short-term memory for the current user. User scope is injected by the server.",
-                """
-                        {"type":"object","required":["content","reason"],"properties":{"content":{"type":"string"},"reason":{"type":"string"},"sourceSnapshotId":{"type":"string"}}}
-                        """);
+    @Override
+    public ToolDescriptor descriptor() {
+        return DESCRIPTOR;
     }
 
     @Override

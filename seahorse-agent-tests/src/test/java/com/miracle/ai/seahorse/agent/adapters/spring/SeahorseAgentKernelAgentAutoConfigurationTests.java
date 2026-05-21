@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegist
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteToolPortAdapter;
@@ -36,6 +37,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolExecutorPort;
@@ -155,6 +159,7 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryReadToolPortAdapter.class);
                     assertThat(context).hasSingleBean(MemoryWriteToolPortAdapter.class);
                     assertThat(context).hasSingleBean(MemoryForgetToolPortAdapter.class);
+                    assertThat(context).hasSingleBean(GetDateTimeToolPortAdapter.class);
 
                     context.getBeansOfType(ApplicationRunner.class)
                             .values()
@@ -166,7 +171,28 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
                             "query_metadata",
                             "memory_read",
                             "memory_write",
-                            "memory_forget");
+                            "memory_forget",
+                            "get_current_datetime");
+                });
+    }
+
+    @Test
+    void shouldAutoRegisterCustomDescribedToolWithoutChangingRegistrar() throws Exception {
+        contextRunner.withUserConfiguration(
+                        StreamingModelConfiguration.class,
+                        BuiltInToolConfiguration.class,
+                        CustomToolConfiguration.class)
+                .withPropertyValues("seahorse-agent.chat.agent-mode-enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBeansOfType(DescribedToolPort.class)).containsKey("customTool");
+
+                    context.getBeansOfType(ApplicationRunner.class)
+                            .values()
+                            .forEach(runner -> run(runner));
+
+                    InMemoryToolRegistry registry = context.getBean(InMemoryToolRegistry.class);
+                    assertThat(registry.find("custom_tool")).isPresent();
                 });
     }
 
@@ -184,12 +210,14 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
                     assertThat(context).doesNotHaveBean(MemoryReadToolPortAdapter.class);
                     assertThat(context).doesNotHaveBean(MemoryWriteToolPortAdapter.class);
                     assertThat(context).doesNotHaveBean(MemoryForgetToolPortAdapter.class);
+                    assertThat(context).hasSingleBean(GetDateTimeToolPortAdapter.class);
 
                     context.getBeansOfType(ApplicationRunner.class)
                             .values()
                             .forEach(runner -> run(runner));
 
-                    assertThat(context.getBean(InMemoryToolRegistry.class).listTools()).isEmpty();
+                    assertThat(toolIds(context.getBean(InMemoryToolRegistry.class)))
+                            .containsExactly("get_current_datetime");
                 });
     }
 
@@ -317,6 +345,31 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
                 @Override
                 public boolean resolveConflict(String conflictId, String action, String resolvedBy) {
                     return false;
+                }
+            };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class CustomToolConfiguration {
+
+        @Bean
+        DescribedToolPort customTool() {
+            return new DescribedToolPort() {
+                private final ToolDescriptor descriptor = new ToolDescriptor(
+                        "custom_tool",
+                        "Custom Tool",
+                        "Custom tool for registrar coverage",
+                        "{\"type\":\"object\",\"properties\":{}}");
+
+                @Override
+                public ToolDescriptor descriptor() {
+                    return descriptor;
+                }
+
+                @Override
+                public ToolInvocationResult invoke(String toolCallId, String toolId, Map<String, Object> arguments) {
+                    return ToolInvocationResult.ok("ok");
                 }
             };
         }

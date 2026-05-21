@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
@@ -26,9 +27,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import java.util.Map;
 import java.util.Objects;
 
-public class MemoryForgetToolPortAdapter implements ToolPort {
+public class MemoryForgetToolPortAdapter implements DescribedToolPort {
 
     public static final String TOOL_ID = "memory_forget";
+    private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(TOOL_ID, "Forget Memory",
+            "Delete a memory owned by the current server-side user scope.",
+            """
+                    {"type":"object","required":["memoryId","layer","reason"],"properties":{"memoryId":{"type":"string"},"layer":{"type":"string","enum":["short_term","long_term","semantic"]},"reason":{"type":"string"}}}
+                    """);
 
     private final MemoryManagementInboundPort memoryManagementPort;
     private final AgentToolJsonSupport jsonSupport;
@@ -39,12 +45,9 @@ public class MemoryForgetToolPortAdapter implements ToolPort {
         this.jsonSupport = Objects.requireNonNull(jsonSupport, "jsonSupport must not be null");
     }
 
-    public static ToolDescriptor descriptor() {
-        return new ToolDescriptor(TOOL_ID, "Forget Memory",
-                "Delete a memory owned by the current server-side user scope.",
-                """
-                        {"type":"object","required":["memoryId","layer","reason"],"properties":{"memoryId":{"type":"string"},"layer":{"type":"string","enum":["short_term","long_term","semantic"]},"reason":{"type":"string"}}}
-                        """);
+    @Override
+    public ToolDescriptor descriptor() {
+        return DESCRIPTOR;
     }
 
     @Override

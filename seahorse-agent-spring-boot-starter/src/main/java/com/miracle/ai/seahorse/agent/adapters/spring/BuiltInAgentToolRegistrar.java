@@ -17,12 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
-import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteToolPortAdapter;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.QueryMetadataToolPortAdapter;
-import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
@@ -43,37 +38,17 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
     private static final Logger LOG = LoggerFactory.getLogger(BuiltInAgentToolRegistrar.class);
 
     private final ToolRegistryPort toolRegistry;
-    private final ObjectProvider<SearchKnowledgeBaseToolPortAdapter> searchTool;
-    private final ObjectProvider<QueryMetadataToolPortAdapter> metadataTool;
-    private final ObjectProvider<MemoryReadToolPortAdapter> memoryReadTool;
-    private final ObjectProvider<MemoryWriteToolPortAdapter> memoryWriteTool;
-    private final ObjectProvider<MemoryForgetToolPortAdapter> memoryForgetTool;
-    private final ObjectProvider<GetDateTimeToolPortAdapter> dateTimeTool;
+    private final ObjectProvider<DescribedToolPort> toolPorts;
 
     public BuiltInAgentToolRegistrar(ToolRegistryPort toolRegistry,
-                                     ObjectProvider<SearchKnowledgeBaseToolPortAdapter> searchTool,
-                                     ObjectProvider<QueryMetadataToolPortAdapter> metadataTool,
-                                     ObjectProvider<MemoryReadToolPortAdapter> memoryReadTool,
-                                     ObjectProvider<MemoryWriteToolPortAdapter> memoryWriteTool,
-                                     ObjectProvider<MemoryForgetToolPortAdapter> memoryForgetTool,
-                                     ObjectProvider<GetDateTimeToolPortAdapter> dateTimeTool) {
+                                     ObjectProvider<DescribedToolPort> toolPorts) {
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry must not be null");
-        this.searchTool = Objects.requireNonNull(searchTool, "searchTool must not be null");
-        this.metadataTool = Objects.requireNonNull(metadataTool, "metadataTool must not be null");
-        this.memoryReadTool = Objects.requireNonNull(memoryReadTool, "memoryReadTool must not be null");
-        this.memoryWriteTool = Objects.requireNonNull(memoryWriteTool, "memoryWriteTool must not be null");
-        this.memoryForgetTool = Objects.requireNonNull(memoryForgetTool, "memoryForgetTool must not be null");
-        this.dateTimeTool = Objects.requireNonNull(dateTimeTool, "dateTimeTool must not be null");
+        this.toolPorts = Objects.requireNonNull(toolPorts, "toolPorts must not be null");
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        register(SearchKnowledgeBaseToolPortAdapter.descriptor(), searchTool.getIfAvailable());
-        register(QueryMetadataToolPortAdapter.descriptor(), metadataTool.getIfAvailable());
-        register(MemoryReadToolPortAdapter.descriptor(), memoryReadTool.getIfAvailable());
-        register(MemoryWriteToolPortAdapter.descriptor(), memoryWriteTool.getIfAvailable());
-        register(MemoryForgetToolPortAdapter.descriptor(), memoryForgetTool.getIfAvailable());
-        register(GetDateTimeToolPortAdapter.descriptor(), dateTimeTool.getIfAvailable());
+        toolPorts.orderedStream().forEach(toolPort -> register(toolPort.descriptor(), toolPort));
     }
 
     private void register(ToolDescriptor descriptor, ToolPort toolPort) {

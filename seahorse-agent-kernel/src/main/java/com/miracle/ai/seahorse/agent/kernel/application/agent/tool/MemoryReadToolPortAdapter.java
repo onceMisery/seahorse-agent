@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
@@ -30,11 +31,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-public class MemoryReadToolPortAdapter implements ToolPort {
+public class MemoryReadToolPortAdapter implements DescribedToolPort {
 
     public static final String TOOL_ID = "memory_read";
     private static final int DEFAULT_LIMIT = 10;
     private static final int MAX_LIMIT = 20;
+    private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(TOOL_ID, "Read Memory",
+            "Read current user's Seahorse memory. User scope is injected by the server.",
+            """
+                    {"type":"object","required":["query"],"properties":{"query":{"type":"string"},"layers":{"type":"array","items":{"type":"string","enum":["SHORT","LONG","SEMANTIC"]}},"limit":{"type":"integer","minimum":1,"maximum":20}}}
+                    """);
 
     private final MemoryEnginePort memoryEnginePort;
     private final AgentToolJsonSupport jsonSupport;
@@ -44,12 +50,9 @@ public class MemoryReadToolPortAdapter implements ToolPort {
         this.jsonSupport = Objects.requireNonNull(jsonSupport, "jsonSupport must not be null");
     }
 
-    public static ToolDescriptor descriptor() {
-        return new ToolDescriptor(TOOL_ID, "Read Memory",
-                "Read current user's Seahorse memory. User scope is injected by the server.",
-                """
-                        {"type":"object","required":["query"],"properties":{"query":{"type":"string"},"layers":{"type":"array","items":{"type":"string","enum":["SHORT","LONG","SEMANTIC"]}},"limit":{"type":"integer","minimum":1,"maximum":20}}}
-                        """);
+    @Override
+    public ToolDescriptor descriptor() {
+        return DESCRIPTOR;
     }
 
     @Override

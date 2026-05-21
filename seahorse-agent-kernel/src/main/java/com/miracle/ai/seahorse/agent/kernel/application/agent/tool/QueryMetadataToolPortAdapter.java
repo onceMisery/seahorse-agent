@@ -20,14 +20,20 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-public class QueryMetadataToolPortAdapter implements ToolPort {
+public class QueryMetadataToolPortAdapter implements DescribedToolPort {
 
     public static final String TOOL_ID = "query_metadata";
+    private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(TOOL_ID, "Query Metadata",
+            "Describe currently supported metadata fields for Agent knowledge search.",
+            """
+                    {"type":"object","properties":{"knowledgeBaseIds":{"type":"array","items":{"type":"string"}}}}
+                    """);
 
     private final AgentToolJsonSupport jsonSupport;
 
@@ -35,12 +41,9 @@ public class QueryMetadataToolPortAdapter implements ToolPort {
         this.jsonSupport = Objects.requireNonNull(jsonSupport, "jsonSupport must not be null");
     }
 
-    public static ToolDescriptor descriptor() {
-        return new ToolDescriptor(TOOL_ID, "Query Metadata",
-                "Describe currently supported metadata fields for Agent knowledge search.",
-                """
-                        {"type":"object","properties":{"knowledgeBaseIds":{"type":"array","items":{"type":"string"}}}}
-                        """);
+    @Override
+    public ToolDescriptor descriptor() {
+        return DESCRIPTOR;
     }
 
     @Override

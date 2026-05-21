@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOpt
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJsonSupport;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteToolPortAdapter;
@@ -188,20 +189,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @ConditionalOnMissingBean
     public BuiltInAgentToolRegistrar seahorseBuiltInAgentToolRegistrar(
             ToolRegistryPort toolRegistry,
-            ObjectProvider<SearchKnowledgeBaseToolPortAdapter> searchTool,
-            ObjectProvider<QueryMetadataToolPortAdapter> metadataTool,
-            ObjectProvider<MemoryReadToolPortAdapter> memoryReadTool,
-            ObjectProvider<MemoryWriteToolPortAdapter> memoryWriteTool,
-            ObjectProvider<MemoryForgetToolPortAdapter> memoryForgetTool,
-            ObjectProvider<GetDateTimeToolPortAdapter> dateTimeTool) {
-        return new BuiltInAgentToolRegistrar(
-                toolRegistry,
-                searchTool,
-                metadataTool,
-                memoryReadTool,
-                memoryWriteTool,
-                memoryForgetTool,
-                dateTimeTool);
+            ObjectProvider<DescribedToolPort> toolPorts) {
+        return new BuiltInAgentToolRegistrar(toolRegistry, toolPorts);
     }
 
     @Bean

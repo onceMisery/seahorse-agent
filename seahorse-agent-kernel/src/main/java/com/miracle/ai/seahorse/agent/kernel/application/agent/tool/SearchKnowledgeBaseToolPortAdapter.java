@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
@@ -29,9 +30,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-public class SearchKnowledgeBaseToolPortAdapter implements ToolPort {
+public class SearchKnowledgeBaseToolPortAdapter implements DescribedToolPort {
 
     public static final String TOOL_ID = "search_knowledge_base";
+    private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(TOOL_ID, "Search Knowledge Base",
+            "Search Seahorse knowledge bases through the existing RAG retrieval pipeline.",
+            """
+                    {"type":"object","required":["query"],"properties":{"query":{"type":"string","minLength":1},"topK":{"type":"integer","minimum":1,"maximum":20},"searchMode":{"type":"string","enum":["AUTO","VECTOR","KEYWORD","HYBRID"]},"rewriteHint":{"type":"string"}}}
+                    """);
 
     private static final int DEFAULT_TOP_K = 5;
     private static final int MAX_TOP_K = 20;
@@ -46,12 +52,9 @@ public class SearchKnowledgeBaseToolPortAdapter implements ToolPort {
         this.jsonSupport = Objects.requireNonNull(jsonSupport, "jsonSupport must not be null");
     }
 
-    public static ToolDescriptor descriptor() {
-        return new ToolDescriptor(TOOL_ID, "Search Knowledge Base",
-                "Search Seahorse knowledge bases through the existing RAG retrieval pipeline.",
-                """
-                        {"type":"object","required":["query"],"properties":{"query":{"type":"string","minLength":1},"topK":{"type":"integer","minimum":1,"maximum":20},"searchMode":{"type":"string","enum":["AUTO","VECTOR","KEYWORD","HYBRID"]},"rewriteHint":{"type":"string"}}}
-                        """);
+    @Override
+    public ToolDescriptor descriptor() {
+        return DESCRIPTOR;
     }
 
     @Override
