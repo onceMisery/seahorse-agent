@@ -81,7 +81,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
     static class RedisCacheAutoConfiguration {
 
         @Bean(destroyMethod = "shutdown")
-        @Conditional(RedisRequiredCondition.class)
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type", havingValue = "redis")
         @ConditionalOnBean(RedisProperties.class)
         @ConditionalOnMissingBean(RedissonClient.class)
         public RedissonClient redissonClient(RedisProperties redisProperties) {
@@ -95,7 +95,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
 
         @Bean
         @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
-                havingValue = "redis", matchIfMissing = true)
+                havingValue = "redis")
         @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnMissingBean(RedisCacheAdapter.class)
         public RedisCacheAdapter seahorseRedisCacheAdapter(RedissonClient redissonClient) {
@@ -104,7 +104,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
 
         @Bean
         @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
-                havingValue = "redis", matchIfMissing = true)
+                havingValue = "redis")
         @ConditionalOnBean(RedissonClient.class)
         @ConditionalOnMissingBean(DistributedSemaphorePort.class)
         public RedisSemaphoreAdapter seahorseRedisSemaphoreAdapter(RedissonClient redissonClient) {
@@ -127,7 +127,7 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         }
 
         @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
-                havingValue = "redis", matchIfMissing = true)
+                havingValue = "redis")
         static class RedisCacheSelected {
         }
 
