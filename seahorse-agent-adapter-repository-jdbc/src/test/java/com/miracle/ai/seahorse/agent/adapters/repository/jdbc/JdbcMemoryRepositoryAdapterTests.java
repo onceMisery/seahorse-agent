@@ -685,6 +685,31 @@ class JdbcMemoryRepositoryAdapterTests {
     }
 
     @Test
+    void shouldGroupCompactionCandidatesByCanonicalEntityId() {
+        shortTermAdapter.save(new MemoryRecord("stm-entity-1", "short_term", "ENTITY_FACT", "OceanBase uses LSM trees",
+                Map.of("userId", "user-1", "tenantId", "default", "canonicalEntityId", "entity-oceanbase",
+                        "canonicalName", "OceanBase", "importanceScore", 0.8D),
+                Instant.now()));
+        longTermAdapter.save(new MemoryRecord("ltm-entity-1", "long_term", "ENTITY_FACT", "OB is OceanBase",
+                Map.of("userId", "user-1", "tenantId", "default", "canonicalEntityId", "entity-oceanbase",
+                        "canonicalName", "OceanBase"),
+                Instant.now()));
+        shortTermAdapter.save(new MemoryRecord("stm-entity-other", "short_term", "ENTITY_FACT", "TiDB is separate",
+                Map.of("userId", "user-1", "tenantId", "default", "canonicalEntityId", "entity-tidb",
+                        "canonicalName", "TiDB", "importanceScore", 0.7D),
+                Instant.now()));
+
+        List<MemoryCompactionCandidate> candidates = lifecycleAdapter.scanCompactionCandidates(10, 2);
+
+        assertThat(candidates).hasSize(1);
+        MemoryCompactionCandidate candidate = candidates.get(0);
+        assertThat(candidate.groupKey()).isEqualTo("canonicalEntityId:entity-oceanbase");
+        assertThat(candidate.strategy()).isEqualTo("canonicalEntityId");
+        assertThat(candidate.fragments()).extracting(fragment -> fragment.memoryId())
+                .containsExactlyInAnyOrder("stm-entity-1", "ltm-entity-1");
+    }
+
+    @Test
     void shouldScanAndMarkCompactionCandidatesWithoutTouchingWorkingMemory() {
         shortTermAdapter.save(new MemoryRecord("stm-compact-1", "short_term", "PROJECT_FACT", "alpha first",
                 Map.of("userId", "user-1", "tenantId", "default", "semanticKey", "project.alpha",

@@ -530,6 +530,10 @@ public class JdbcMemoryLifecycleRepositoryAdapter
         if (JdbcMemorySupport.hasText(profileSlot)) {
             return "profileSlot:" + profileSlot;
         }
+        String canonicalEntityId = mapValue(values, "canonicalEntityId");
+        if (JdbcMemorySupport.hasText(canonicalEntityId)) {
+            return "canonicalEntityId:" + canonicalEntityId;
+        }
         return "";
     }
 

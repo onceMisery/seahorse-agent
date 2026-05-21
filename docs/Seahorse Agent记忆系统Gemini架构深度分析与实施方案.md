@@ -1636,6 +1636,7 @@ flowchart TD
 - 已新增规则版 Alias registry 基础：`MemoryAliasPort`、`MemoryAliasCommand`、`MemoryAliasResolution`、`MemoryAliasCandidate` 与 `JdbcMemoryAliasRepositoryAdapter`。JDBC 表 `t_memory_entity_alias` 记录 `alias_text`、`normalized_alias`、`canonical_entity_id`、`canonical_name`、`entity_type`、置信度和来源；初版只做 trim/case/空白归一，不做复杂语义合并。
 - 已新增轻量 Graph relation 派生索引：`JdbcMemoryGraphRepositoryAdapter` 同时实现 `MemoryGraphPort` 和 `MemoryGraphIndexPort`，落表 `t_memory_entity_relation`。Graph upsert 从派生索引 document metadata 中读取 `canonicalEntityId`、`canonicalName`、`relatedEntityIds`/`targetEntityId`、`relationType`；Graph recall 先经 alias registry 解析 query token 到 canonical entity，再返回 1-hop 相关 memory；Graph delete 软删除 relation 行。
 - Spring JDBC repository 自动配置已注册 `MemoryAliasPort`、`MemoryGraphPort`、`MemoryGraphIndexPort` 的 JDBC 默认实现；企业环境仍可用自定义 bean 覆盖，保持可插拔。
+- compaction group key 已补齐 `canonicalEntityId` 第三优先级，保留 `semanticKey` 和 `profileSlot` 的既有优先级，因而可以在不破坏旧分组的前提下把实体归一后的 durable fragments 聚到同一压缩候选组中。
 - Web 侧已新增 `SeahorseMemoryMaintenanceController`，暴露 `POST /memories/maintenance/run`，参数为 `reason`、`compaction`、`alias`、`gc`。控制器单独成类，不继续膨胀 `SeahorseMemoryController`。
 - 已新增维护运行记录持久化：`MemoryMaintenanceRunRepositoryPort`、`MemoryMaintenanceRunRecord`、`MemoryMaintenanceRunQuery`、`MemoryMaintenanceRunPage`，JDBC 表 `t_memory_maintenance_run` 与 `JdbcMemoryMaintenanceRunRepositoryAdapter`。`DefaultMemoryMaintenanceService` 每次运行后记录请求开关、compaction 扫描/压缩统计、GC 统计、跳过项、错误和最终状态；记录失败不影响维护执行语义。
 - Web 侧已新增 `GET /memories/maintenance-runs`，支持按 `status` 分页查询维护运行历史，用于排查后台维护和手工维护结果。
