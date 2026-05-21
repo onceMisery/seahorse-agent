@@ -1,5 +1,6 @@
 /**
  * 深海背景 — 阳光穿透水面 + 上升气泡，始终可见。
+ * 颜色跟随主题变量切换。
  */
 
 const BUBBLES = [
@@ -33,14 +34,14 @@ const RAYS = [
 
 export function DeepSeaBackground() {
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>
+    <div aria-hidden="true" className="ds-bg pointer-events-none absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>
 
       {/* 顶部水下环境光 */}
       <div className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 90% 45% at 50% -5%, rgba(6,182,212,0.14) 0%, transparent 55%), " +
-            "radial-gradient(ellipse 60% 35% at 50% 100%, rgba(6,182,212,0.06) 0%, transparent 50%)"
+            "radial-gradient(ellipse 90% 45% at 50% -5%, var(--ds-ambient-top) 0%, transparent 55%), " +
+            "radial-gradient(ellipse 60% 35% at 50% 100%, var(--ds-ambient-bottom) 0%, transparent 50%)"
         }} />
 
       {/* 阳光光线 — 带呼吸动画 */}
@@ -52,7 +53,7 @@ export function DeepSeaBackground() {
             width: ray.width,
             height: "130%",
             transform: `rotate(${ray.rotate})`,
-            background: `linear-gradient(180deg, rgba(6,182,212,${ray.opacity * 1.5}) 0%, rgba(6,182,212,${ray.opacity}) 25%, rgba(6,182,212,${ray.opacity * 0.3}) 50%, transparent 70%)`,
+            background: `linear-gradient(180deg, rgba(var(--ds-ray-color),${ray.opacity * 1.5}) 0%, rgba(var(--ds-ray-color),${ray.opacity}) 25%, rgba(var(--ds-ray-color),${ray.opacity * 0.3}) 50%, transparent 70%)`,
             filter: "blur(30px)",
             animation: `ray-breathe 6s ${ray.animDelay} ease-in-out infinite alternate`,
           }} />
@@ -61,7 +62,7 @@ export function DeepSeaBackground() {
       {/* 顶部水面波纹光斑 */}
       <div className="absolute top-0 left-0 right-0 h-32"
         style={{
-          background: "repeating-linear-gradient(90deg, transparent, rgba(6,182,212,0.03) 100px, transparent 200px)",
+          background: "repeating-linear-gradient(90deg, transparent, var(--ds-water-surface) 100px, transparent 200px)",
           animation: "water-shimmer 8s ease-in-out infinite",
         }} />
 
@@ -73,10 +74,10 @@ export function DeepSeaBackground() {
             height: b.size,
             left: b.left,
             borderRadius: "50%",
-            border: `1px solid rgba(6,182,212,${b.opacity})`,
-            background: `radial-gradient(circle at 30% 30%, rgba(150,230,255,${b.opacity * 0.5}), rgba(6,182,212,${b.opacity * 0.15}))`,
+            border: `1px solid rgba(var(--ds-bubble-r),var(--ds-bubble-g),var(--ds-bubble-b),${b.opacity})`,
+            background: `radial-gradient(circle at 30% 30%, rgba(var(--ds-bubble-r),var(--ds-bubble-g),var(--ds-bubble-b),${b.opacity * 0.5}), rgba(var(--ds-bubble-r),var(--ds-bubble-g),var(--ds-bubble-b),${b.opacity * 0.15}))`,
             animation: `bubble-rise ${b.dur} ${b.delay} ease-in infinite`,
-            boxShadow: `0 0 ${Math.max(b.size / 2, 3)}px rgba(6,182,212,${b.opacity * 0.4}), inset 0 -${b.size / 4}px ${b.size / 3}px rgba(6,182,212,${b.opacity * 0.2})`,
+            boxShadow: `0 0 ${Math.max(b.size / 2, 3)}px rgba(var(--ds-bubble-r),var(--ds-bubble-g),var(--ds-bubble-b),${b.opacity * 0.4}), inset 0 -${b.size / 4}px ${b.size / 3}px rgba(var(--ds-bubble-r),var(--ds-bubble-g),var(--ds-bubble-b),${b.opacity * 0.2})`,
           }} />
       ))}
     </div>
