@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent;
 
+import org.redisson.spring.starter.RedissonAutoConfigurationV2;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -27,7 +28,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * <p>默认只扫描 Seahorse 命名空间。
  * 不再进入默认可执行启动路径。
  */
-@SpringBootApplication(scanBasePackages = "com.miracle.ai.seahorse.agent")
+@SpringBootApplication(
+        scanBasePackages = "com.miracle.ai.seahorse.agent",
+        exclude = RedissonAutoConfigurationV2.class
+)
 @EnableScheduling
 public class SeahorseAgentApplication {
 

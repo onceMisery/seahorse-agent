@@ -53,7 +53,8 @@ import org.springframework.context.annotation.ConfigurationCondition.Configurati
 public class SeahorseAgentCacheAdapterAutoConfiguration {
 
     @Bean
-    @ConditionalOnMissingBean(RateLimiterPort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.cache", name = "type",
+            havingValue = "noop")
     public RateLimiterPort seahorseRateLimiterPort() {
         return RateLimiterPort.noop();
     }
