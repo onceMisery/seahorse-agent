@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolutionRunResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
@@ -81,6 +83,57 @@ class DefaultMemoryMaintenanceServiceTests {
                 MemoryMaintenanceRunResult.SKIP_COMPACTION_UNAVAILABLE,
                 MemoryMaintenanceRunResult.SKIP_ALIAS_UNAVAILABLE,
                 MemoryMaintenanceRunResult.SKIP_GARBAGE_COLLECTION_DISABLED);
+        assertThat(result.aliasResolutionResult()).isNull();
+        assertThat(result.errors()).isEmpty();
+    }
+
+    @Test
+    void shouldRunAliasResolutionWhenRequestedAndEnabled() {
+        RecordingGarbageCollectionService garbageCollectionService = new RecordingGarbageCollectionService();
+        RecordingAliasResolutionService aliasResolutionService = new RecordingAliasResolutionService();
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                garbageCollectionService,
+                null,
+                aliasResolutionService,
+                MemoryMaintenanceRunRepositoryPort.noop(),
+                false,
+                true,
+                false);
+
+        MemoryMaintenanceRunResult result = service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "manual-maintenance",
+                false,
+                true,
+                false));
+
+        assertThat(aliasResolutionService.reasons).containsExactly("manual-maintenance");
+        assertThat(result.aliasResolutionResult()).isNotNull();
+        assertThat(result.aliasResolutionResult().reason()).isEqualTo("manual-maintenance");
+        assertThat(result.aliasResolutionResult().scannedCount()).isEqualTo(2);
+        assertThat(result.aliasResolutionResult().normalizedCount()).isEqualTo(1);
+        assertThat(result.aliasResolutionResult().dictionaryMatchCount()).isEqualTo(0);
+        assertThat(result.aliasResolutionResult().skippedCount()).isEqualTo(0);
+        assertThat(result.skippedTasks()).isEmpty();
+        assertThat(result.errors()).isEmpty();
+    }
+
+    @Test
+    void shouldSkipAliasResolutionCleanlyWhenUnavailable() {
+        RecordingGarbageCollectionService garbageCollectionService = new RecordingGarbageCollectionService();
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                garbageCollectionService,
+                false,
+                true,
+                false);
+
+        MemoryMaintenanceRunResult result = service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "manual-maintenance",
+                false,
+                true,
+                false));
+
+        assertThat(result.aliasResolutionResult()).isNull();
+        assertThat(result.skippedTasks()).containsExactly(MemoryMaintenanceRunResult.SKIP_ALIAS_UNAVAILABLE);
         assertThat(result.errors()).isEmpty();
     }
 
@@ -184,6 +237,21 @@ class DefaultMemoryMaintenanceServiceTests {
         public MemoryCompactionResult run(String reason) {
             reasons.add(reason);
             return new MemoryCompactionResult(reason, 1, 1, 2, List.of(), Instant.EPOCH);
+        }
+    }
+
+    private static class RecordingAliasResolutionService extends MemoryAliasResolutionService {
+
+        private final List<String> reasons = new ArrayList<>();
+
+        private RecordingAliasResolutionService() {
+            super(MemoryAliasPort.noop(), MemoryAliasResolutionOptions.defaults());
+        }
+
+        @Override
+        public MemoryAliasResolutionRunResult run(String reason) {
+            reasons.add(reason);
+            return new MemoryAliasResolutionRunResult(reason, 2, 1, 0, 0, List.of(), Instant.EPOCH);
         }
     }
 
