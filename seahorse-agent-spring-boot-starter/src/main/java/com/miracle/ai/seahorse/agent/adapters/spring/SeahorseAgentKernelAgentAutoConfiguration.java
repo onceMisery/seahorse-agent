@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJsonSupport;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteToolPortAdapter;
@@ -176,6 +177,13 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentModeEnabled
+    @ConditionalOnMissingBean
+    public GetDateTimeToolPortAdapter seahorseGetDateTimeToolPortAdapter() {
+        return new GetDateTimeToolPortAdapter();
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
     @ConditionalOnBean(ToolRegistryPort.class)
     @ConditionalOnMissingBean
     public BuiltInAgentToolRegistrar seahorseBuiltInAgentToolRegistrar(
@@ -184,14 +192,16 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             ObjectProvider<QueryMetadataToolPortAdapter> metadataTool,
             ObjectProvider<MemoryReadToolPortAdapter> memoryReadTool,
             ObjectProvider<MemoryWriteToolPortAdapter> memoryWriteTool,
-            ObjectProvider<MemoryForgetToolPortAdapter> memoryForgetTool) {
+            ObjectProvider<MemoryForgetToolPortAdapter> memoryForgetTool,
+            ObjectProvider<GetDateTimeToolPortAdapter> dateTimeTool) {
         return new BuiltInAgentToolRegistrar(
                 toolRegistry,
                 searchTool,
                 metadataTool,
                 memoryReadTool,
                 memoryWriteTool,
-                memoryForgetTool);
+                memoryForgetTool,
+                dateTimeTool);
     }
 
     @Bean

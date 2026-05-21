@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteToolPortAdapter;
@@ -47,19 +48,22 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
     private final ObjectProvider<MemoryReadToolPortAdapter> memoryReadTool;
     private final ObjectProvider<MemoryWriteToolPortAdapter> memoryWriteTool;
     private final ObjectProvider<MemoryForgetToolPortAdapter> memoryForgetTool;
+    private final ObjectProvider<GetDateTimeToolPortAdapter> dateTimeTool;
 
     public BuiltInAgentToolRegistrar(ToolRegistryPort toolRegistry,
                                      ObjectProvider<SearchKnowledgeBaseToolPortAdapter> searchTool,
                                      ObjectProvider<QueryMetadataToolPortAdapter> metadataTool,
                                      ObjectProvider<MemoryReadToolPortAdapter> memoryReadTool,
                                      ObjectProvider<MemoryWriteToolPortAdapter> memoryWriteTool,
-                                     ObjectProvider<MemoryForgetToolPortAdapter> memoryForgetTool) {
+                                     ObjectProvider<MemoryForgetToolPortAdapter> memoryForgetTool,
+                                     ObjectProvider<GetDateTimeToolPortAdapter> dateTimeTool) {
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry must not be null");
         this.searchTool = Objects.requireNonNull(searchTool, "searchTool must not be null");
         this.metadataTool = Objects.requireNonNull(metadataTool, "metadataTool must not be null");
         this.memoryReadTool = Objects.requireNonNull(memoryReadTool, "memoryReadTool must not be null");
         this.memoryWriteTool = Objects.requireNonNull(memoryWriteTool, "memoryWriteTool must not be null");
         this.memoryForgetTool = Objects.requireNonNull(memoryForgetTool, "memoryForgetTool must not be null");
+        this.dateTimeTool = Objects.requireNonNull(dateTimeTool, "dateTimeTool must not be null");
     }
 
     @Override
@@ -69,6 +73,7 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
         register(MemoryReadToolPortAdapter.descriptor(), memoryReadTool.getIfAvailable());
         register(MemoryWriteToolPortAdapter.descriptor(), memoryWriteTool.getIfAvailable());
         register(MemoryForgetToolPortAdapter.descriptor(), memoryForgetTool.getIfAvailable());
+        register(GetDateTimeToolPortAdapter.descriptor(), dateTimeTool.getIfAvailable());
     }
 
     private void register(ToolDescriptor descriptor, ToolPort toolPort) {

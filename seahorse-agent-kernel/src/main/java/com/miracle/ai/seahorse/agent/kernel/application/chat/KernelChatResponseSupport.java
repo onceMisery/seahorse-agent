@@ -33,6 +33,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -157,6 +160,7 @@ final class KernelChatResponseSupport {
         String systemPrompt = customPrompt == null || customPrompt.isBlank()
                 ? responsePorts.promptTemplatePort().load(CHAT_SYSTEM_PROMPT_PATH)
                 : customPrompt;
+        systemPrompt = renderSystemPrompt(systemPrompt, context);
         systemPrompt = appendMemoryContext(systemPrompt, context.getMemoryContext());
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.system(systemPrompt));
@@ -183,6 +187,27 @@ final class KernelChatResponseSupport {
             return memoryText;
         }
         return safeSystemPrompt + "\n\n" + memoryText;
+    }
+
+    private String renderSystemPrompt(String template, StreamChatContext context) {
+        if (template == null || template.isBlank()) {
+            return template;
+        }
+        String now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        return template
+                .replace("{currentDateTime}", now)
+                .replace("{history}", formatHistory(context.getHistory()));
+    }
+
+    private String formatHistory(List<ChatMessage> history) {
+        if (history == null || history.isEmpty()) return "（无历史对话）";
+        StringBuilder sb = new StringBuilder();
+        for (ChatMessage msg : history) {
+            String role = msg.getRole() == null ? "user" : msg.getRole().name().toLowerCase();
+            sb.append(role).append(": ").append(msg.getContent()).append("\n");
+        }
+        return sb.toString();
     }
 
     private double resolveTemperature(RetrievalContext retrievalContext) {
