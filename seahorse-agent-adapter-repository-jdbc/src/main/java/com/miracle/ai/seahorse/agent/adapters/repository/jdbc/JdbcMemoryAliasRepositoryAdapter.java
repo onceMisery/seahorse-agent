@@ -153,25 +153,17 @@ public class JdbcMemoryAliasRepositoryAdapter implements MemoryAliasPort {
             return List.of();
         }
         String safeTenantId = JdbcMemorySupport.hasText(tenantId) ? tenantId : DEFAULT_TENANT_ID;
-        int safeLimit = limit <= 0 ? 20 : limit;
-        return jdbcTemplate.query("""
-                SELECT alias_text, canonical_entity_id, canonical_name, entity_type, confidence_level
-                FROM t_memory_entity_alias
+        return findMergeCandidates("""
                 WHERE user_id = ?
                   AND tenant_id = ?
-                  AND status = 'ACTIVE'
-                  AND deleted = 0
-                ORDER BY confidence_level DESC, update_time DESC
-                LIMIT ?
-                """, (rs, rowNum) -> new MemoryAliasCandidate(
-                        rs.getString("alias_text"),
-                        rs.getString("canonical_entity_id"),
-                        rs.getString("canonical_name"),
-                        rs.getString("entity_type"),
-                        rs.getDouble("confidence_level")),
-                userId,
-                safeTenantId,
-                safeLimit);
+                """, userId, safeTenantId, limit);
+    }
+
+    @Override
+    public List<MemoryAliasCandidate> findMergeCandidates(int limit) {
+        return findMergeCandidates("""
+                WHERE 1 = 1
+                """, limit);
     }
 
     Optional<String> resolveCanonicalEntityId(String userId, String tenantId, String aliasText) {
@@ -183,6 +175,65 @@ public class JdbcMemoryAliasRepositoryAdapter implements MemoryAliasPort {
                 .trim()
                 .replaceAll("\\s+", " ")
                 .toLowerCase(Locale.ROOT);
+    }
+
+    private List<MemoryAliasCandidate> findMergeCandidates(String scopeClause,
+                                                           Object firstParam,
+                                                           Object secondParam,
+                                                           int limit) {
+        int safeLimit = limit <= 0 ? 20 : limit;
+        return jdbcTemplate.query("""
+                SELECT user_id,
+                       tenant_id,
+                       alias_text,
+                       canonical_entity_id,
+                       canonical_name,
+                       entity_type,
+                       confidence_level
+                FROM t_memory_entity_alias
+                %s
+                  AND status = 'ACTIVE'
+                  AND deleted = 0
+                ORDER BY update_time DESC, confidence_level DESC, create_time DESC, id DESC
+                LIMIT ?
+                """.formatted(scopeClause), (rs, rowNum) -> new MemoryAliasCandidate(
+                        rs.getString("user_id"),
+                        rs.getString("tenant_id"),
+                        rs.getString("alias_text"),
+                        rs.getString("canonical_entity_id"),
+                        rs.getString("canonical_name"),
+                        rs.getString("entity_type"),
+                        rs.getDouble("confidence_level")),
+                firstParam,
+                secondParam,
+                safeLimit);
+    }
+
+    private List<MemoryAliasCandidate> findMergeCandidates(String scopeClause, int limit) {
+        int safeLimit = limit <= 0 ? 20 : limit;
+        return jdbcTemplate.query("""
+                SELECT user_id,
+                       tenant_id,
+                       alias_text,
+                       canonical_entity_id,
+                       canonical_name,
+                       entity_type,
+                       confidence_level
+                FROM t_memory_entity_alias
+                %s
+                  AND status = 'ACTIVE'
+                  AND deleted = 0
+                ORDER BY update_time DESC, confidence_level DESC, create_time DESC, id DESC
+                LIMIT ?
+                """.formatted(scopeClause), (rs, rowNum) -> new MemoryAliasCandidate(
+                        rs.getString("user_id"),
+                        rs.getString("tenant_id"),
+                        rs.getString("alias_text"),
+                        rs.getString("canonical_entity_id"),
+                        rs.getString("canonical_name"),
+                        rs.getString("entity_type"),
+                        rs.getDouble("confidence_level")),
+                safeLimit);
     }
 
     private Optional<String> existingId(String userId, String tenantId, String normalizedAlias) {
