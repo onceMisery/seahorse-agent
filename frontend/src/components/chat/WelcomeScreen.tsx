@@ -108,88 +108,84 @@ export function WelcomeScreen() {
 
   return (
     <div className="relative flex min-h-full items-center justify-center overflow-hidden px-4 py-16 sm:px-6">
-
-      {/* Perspective grid */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={{
-        backgroundImage: `linear-gradient(var(--theme-accent-alpha-40) 1px, transparent 1px), linear-gradient(90deg, var(--theme-accent-alpha-40) 1px, transparent 1px)`,
-        backgroundSize: "50px 50px",
-        opacity: 0.08,
-      }} />
-
-      {/* Ambient glows */}
-      <div aria-hidden="true" className="pointer-events-none absolute -top-32 right-[-40px] h-72 w-72 rounded-full blur-3xl animate-float"
-        style={{ background: "radial-gradient(var(--theme-accent-alpha-20), transparent 70%)" }} />
-      <div aria-hidden="true" className="pointer-events-none absolute -bottom-36 left-[-80px] h-80 w-80 rounded-full blur-3xl animate-float"
-        style={{ background: "radial-gradient(var(--theme-accent-alpha-10), transparent 70%)", animationDelay: "3s" }} />
-
-      {/* Floating data particles */}
-      {[
-        { x: "12%", y: "20%", d: "2.1s", s: "4s" }, { x: "85%", y: "15%", d: "0s", s: "5s" },
-        { x: "70%", y: "70%", d: "1.3s", s: "6s" }, { x: "20%", y: "75%", d: "3s", s: "4.5s" },
-        { x: "50%", y: "10%", d: "0.7s", s: "5.5s" }, { x: "90%", y: "50%", d: "2.5s", s: "4s" },
-      ].map((p, i) => (
-        <div key={i} aria-hidden="true" className="pointer-events-none absolute h-1 w-1 rounded-full"
-          style={{ left: p.x, top: p.y, background: "var(--theme-accent)", animation: `particle-pulse ${p.s} ${p.d} ease-in-out infinite`, boxShadow: "0 0 6px var(--theme-accent)" }} />
-      ))}
-
       <div className="relative w-full max-w-[860px]">
 
         {/* Hero */}
         <div className="flex flex-col items-center text-center mb-12 opacity-0 animate-fade-up" style={{ animationFillMode: "both" }}>
           <div className="relative mb-6">
-            {/* Rotating rings */}
+            {/* 光环 */}
             <div aria-hidden="true" className="absolute rounded-full pointer-events-none"
-              style={{ width: 220, height: 220, top: -10, left: -10, border: "1px solid var(--theme-accent-alpha-30)", animation: "spin-slow 15s linear infinite", backgroundImage: "conic-gradient(from 0deg, transparent 75%, var(--theme-accent-alpha-60) 100%)", borderRadius: "50%" }} />
+              style={{
+                width: 220, height: 220, top: -10, left: -10,
+                border: "1px solid rgba(6,182,212,0.2)",
+                animation: "spin-slow 15s linear infinite",
+                backgroundImage: "conic-gradient(from 0deg, transparent 75%, rgba(6,182,212,0.4) 100%)",
+                borderRadius: "50%"
+              }} />
             <div aria-hidden="true" className="absolute rounded-full pointer-events-none"
-              style={{ width: 250, height: 250, top: -25, left: -25, border: "1px dashed var(--theme-accent-alpha-15)", animation: "spin-slow 25s linear infinite reverse", borderRadius: "50%" }} />
+              style={{
+                width: 250, height: 250, top: -25, left: -25,
+                border: "1px dashed rgba(6,182,212,0.1)",
+                animation: "spin-slow 25s linear infinite reverse",
+                borderRadius: "50%"
+              }} />
+            {/* Logo 光晕 */}
+            <div aria-hidden="true" className="absolute rounded-full pointer-events-none"
+              style={{
+                width: 280, height: 280, top: -40, left: -40,
+                background: "radial-gradient(circle, rgba(6,182,212,0.15) 0%, transparent 70%)",
+                filter: "blur(20px)",
+              }} />
             <div className="relative animate-float">
               <SeahorseLogo size={200} />
             </div>
           </div>
 
-          <h2 className="font-display text-5xl font-bold tracking-widest glow-text" style={{ color: "var(--theme-text-primary)", letterSpacing: "0.12em" }}>
+          <h2 className="font-display text-5xl font-bold tracking-widest glow-text"
+            style={{ color: "var(--theme-text-primary)", letterSpacing: "0.12em" }}>
             SEAHORSE AI
           </h2>
 
-          {/* Typing subtitle */}
+          {/* 打字副标题 */}
           <div className="mt-3 flex items-center gap-2 h-7">
-            <div className="h-px w-6" style={{ background: "var(--theme-accent-alpha-60)" }} />
+            <div className="h-px w-6" style={{ background: "rgba(6,182,212,0.4)" }} />
             <p className="text-base font-mono tracking-widest" style={{ color: "var(--theme-accent)", minWidth: 220 }}>
               {typingText}
               <span className="inline-block w-0.5 h-4 ml-0.5 align-middle animate-pulse" style={{ background: "var(--theme-accent)" }} />
             </p>
-            <div className="h-px w-6" style={{ background: "var(--theme-accent-alpha-60)" }} />
+            <div className="h-px w-6" style={{ background: "rgba(6,182,212,0.4)" }} />
           </div>
 
-          {/* Status bar */}
+          {/* 状态栏 */}
           <div className="mt-5 flex items-center gap-4 text-xs font-mono" style={{ color: "var(--theme-text-muted)" }}>
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: "#22c55e" }} />
-              SYSTEM ONLINE
+              系统在线
             </span>
-            <span style={{ color: "var(--theme-accent-alpha-40)" }}>|</span>
+            <span style={{ color: "rgba(6,182,212,0.3)" }}>|</span>
             <span className="flex items-center gap-1.5">
               <Brain className="h-3 w-3" style={{ color: "var(--theme-accent)" }} />
-              RAG ENGINE READY
+              RAG 引擎就绪
             </span>
-            <span style={{ color: "var(--theme-accent-alpha-40)" }}>|</span>
+            <span style={{ color: "rgba(6,182,212,0.3)" }}>|</span>
             <span>v2.0.0</span>
           </div>
         </div>
 
-        {/* Input */}
+        {/* 输入框 */}
         <div className="opacity-0 animate-fade-up" style={{ animationDelay: "80ms", animationFillMode: "both" }}>
           <div className="relative group">
-            <div className="absolute -inset-1 rounded-3xl blur opacity-30 group-focus-within:opacity-60 transition-opacity"
-              style={{ background: "linear-gradient(to right, var(--theme-accent-alpha-20), var(--theme-accent-alpha-10))" }} />
+            {/* 水下光晕效果 */}
+            <div className="absolute -inset-2 rounded-3xl blur opacity-20 group-focus-within:opacity-50 transition-opacity"
+              style={{ background: "radial-gradient(ellipse at center, rgba(6,182,212,0.25), transparent 70%)" }} />
             <div className={cn("relative glass rounded-3xl p-2 transition-all duration-300", isFocused && "shadow-lg")}
               style={{
-                border: `1px solid ${isFocused ? "var(--theme-accent-alpha-60)" : "var(--theme-accent-alpha-30)"}`,
-                boxShadow: isFocused ? "0 0 30px var(--theme-accent-alpha-20), inset 0 1px 0 var(--theme-accent-alpha-20)" : "none",
+                border: `1px solid ${isFocused ? "rgba(6,182,212,0.5)" : "rgba(6,182,212,0.15)"}`,
+                boxShadow: isFocused ? "0 0 40px rgba(6,182,212,0.15), inset 0 1px 0 rgba(6,182,212,0.1)" : "0 0 20px rgba(6,182,212,0.05)",
               }}>
-              {/* Top accent line */}
+              {/* 顶部光线 */}
               <div aria-hidden="true" className="absolute top-0 left-12 right-12 h-px transition-opacity duration-300"
-                style={{ background: "linear-gradient(90deg, transparent, var(--theme-accent), transparent)", opacity: isFocused ? 1 : 0.3 }} />
+                style={{ background: "linear-gradient(90deg, transparent, rgba(6,182,212,0.6), transparent)", opacity: isFocused ? 1 : 0.3 }} />
 
               <div className="flex flex-col gap-2 p-3">
                 <textarea
@@ -214,25 +210,25 @@ export function WelcomeScreen() {
                   }}
                   aria-label="发送消息"
                 />
-                <div className="flex items-center justify-between mt-2 pt-4" style={{ borderTop: "1px solid var(--theme-accent-alpha-10)" }}>
+                <div className="flex items-center justify-between mt-2 pt-4" style={{ borderTop: "1px solid rgba(6,182,212,0.08)" }}>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono tracking-widest uppercase" style={{ color: "var(--theme-text-muted)" }}>深度思考</span>
+                    <span className="text-xs font-mono tracking-widest" style={{ color: "var(--theme-text-muted)" }}>深度思考</span>
                     <button type="button" onClick={() => setDeepThinkingEnabled(!deepThinkingEnabled)} disabled={isStreaming}
                       aria-pressed={deepThinkingEnabled}
                       className={cn("w-12 h-6 rounded-full relative transition-colors duration-300", isStreaming && "cursor-not-allowed opacity-60")}
-                      style={{ backgroundColor: deepThinkingEnabled ? "var(--theme-accent-alpha-40)" : "var(--theme-bg-elevated)", border: "1px solid var(--theme-accent-alpha-20)" }}>
+                      style={{ backgroundColor: deepThinkingEnabled ? "rgba(6,182,212,0.3)" : "var(--theme-bg-elevated)", border: "1px solid rgba(6,182,212,0.15)" }}>
                       <div className="absolute top-1 w-4 h-4 rounded-full transition-all duration-300"
-                        style={{ left: deepThinkingEnabled ? "24px" : "4px", backgroundColor: "var(--theme-accent)", boxShadow: "0 0 10px var(--theme-accent-alpha-60)" }} />
+                        style={{ left: deepThinkingEnabled ? "24px" : "4px", backgroundColor: "var(--theme-accent)", boxShadow: "0 0 10px rgba(6,182,212,0.5)" }} />
                     </button>
                   </div>
                   <button type="button" onClick={handleSubmit} disabled={!hasContent && !isStreaming}
                     aria-label={isStreaming ? "停止生成" : "发送消息"}
                     className={cn("w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-lg group/send relative overflow-hidden",
                       !isStreaming && !hasContent && "cursor-not-allowed opacity-50")}
-                    style={{ backgroundColor: isStreaming ? "var(--destructive)" : "var(--theme-accent)", color: isStreaming ? "#fff" : "var(--theme-bg-deep)", boxShadow: isStreaming ? undefined : "0 0 20px var(--theme-accent-alpha-30)" }}>
+                    style={{ backgroundColor: isStreaming ? "var(--destructive)" : "var(--theme-accent)", color: isStreaming ? "#fff" : "var(--theme-bg-deep)", boxShadow: isStreaming ? undefined : "0 0 25px rgba(6,182,212,0.3)" }}>
                     {!isStreaming && (
                       <span aria-hidden="true" className="absolute inset-0 pointer-events-none"
-                        style={{ animation: "btn-sweep 3s ease-in-out infinite", background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.2) 50%, transparent 60%)" }} />
+                        style={{ animation: "btn-sweep 3s ease-in-out infinite", background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.2) 50%, transparent 60%" }} />
                     )}
                     {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5 group-hover/send:rotate-12 transition-transform" />}
                   </button>
@@ -245,7 +241,7 @@ export function WelcomeScreen() {
             <p className="mt-3 text-xs font-mono" style={{ color: "var(--theme-accent)" }}>
               <span className="inline-flex items-center gap-1.5">
                 <Lightbulb className="h-3.5 w-3.5" />
-                DEEP_THINK::ENABLED — AI 将进行更深入的分析推理
+                深度思考已开启 — AI 将进行更深入的分析推理
               </span>
             </p>
           )}
@@ -259,12 +255,12 @@ export function WelcomeScreen() {
           </p>
         </div>
 
-        {/* Presets */}
+        {/* 快捷提问 */}
         <div className="mt-10 opacity-0 animate-fade-up" style={{ animationDelay: "160ms", animationFillMode: "both" }}>
-          <div className="flex items-center justify-center gap-3 text-xs font-mono uppercase tracking-widest" style={{ color: "var(--theme-text-muted)" }}>
-            <span className="h-px w-8" style={{ backgroundColor: "var(--theme-accent-alpha-40)" }} />
-            QUICK_PROMPTS
-            <span className="h-px w-8" style={{ backgroundColor: "var(--theme-accent-alpha-40)" }} />
+          <div className="flex items-center justify-center gap-3 text-xs font-mono tracking-widest" style={{ color: "var(--theme-text-muted)" }}>
+            <span className="h-px w-8" style={{ backgroundColor: "rgba(6,182,212,0.3)" }} />
+            快捷提问
+            <span className="h-px w-8" style={{ backgroundColor: "rgba(6,182,212,0.3)" }} />
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {promptPresets.map((preset, idx) => {
@@ -272,22 +268,28 @@ export function WelcomeScreen() {
               return (
                 <button key={preset.id ?? preset.title} type="button" onClick={() => applyPreset(preset.prompt)}
                   disabled={isStreaming}
-                  className={cn("group rounded-2xl p-4 text-left transition-all duration-200 hover:-translate-y-1 relative overflow-hidden", isStreaming && "cursor-not-allowed opacity-60")}
+                  className={cn("group rounded-2xl p-4 text-left transition-all duration-300 hover:-translate-y-1 relative overflow-hidden", isStreaming && "cursor-not-allowed opacity-60")}
                   style={{
-                    background: "var(--theme-glass-bg)",
-                    backdropFilter: "blur(12px)",
-                    border: "1px solid var(--theme-accent-alpha-20)",
-                    boxShadow: "inset 0 1px 0 var(--theme-accent-alpha-10)",
+                    background: "rgba(10,36,62,0.5)",
+                    backdropFilter: "blur(16px)",
+                    border: "1px solid rgba(6,182,212,0.12)",
+                    boxShadow: "0 0 15px rgba(6,182,212,0.05), inset 0 1px 0 rgba(6,182,212,0.08)",
                   }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--theme-accent-alpha-60)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 0 20px var(--theme-accent-alpha-10), inset 0 1px 0 var(--theme-accent-alpha-20)"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--theme-accent-alpha-20)"; (e.currentTarget as HTMLElement).style.boxShadow = "inset 0 1px 0 var(--theme-accent-alpha-10)"; }}>
-                  {/* Card index */}
-                  <span className="absolute top-3 right-3 text-xs font-mono opacity-30" style={{ color: "var(--theme-accent)" }}>
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(6,182,212,0.4)";
+                    (e.currentTarget as HTMLElement).style.boxShadow = "0 0 25px rgba(6,182,212,0.12), inset 0 1px 0 rgba(6,182,212,0.15)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(6,182,212,0.12)";
+                    (e.currentTarget as HTMLElement).style.boxShadow = "0 0 15px rgba(6,182,212,0.05), inset 0 1px 0 rgba(6,182,212,0.08)";
+                  }}>
+                  {/* 卡片序号 */}
+                  <span className="absolute top-3 right-3 text-xs font-mono opacity-20" style={{ color: "var(--theme-accent)" }}>
                     {String(idx + 1).padStart(2, "0")}
                   </span>
                   <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 items-center justify-center rounded-xl transition-colors duration-200"
-                      style={{ backgroundColor: "var(--theme-accent-alpha-10)", color: "var(--theme-accent)", border: "1px solid var(--theme-accent-alpha-20)" }}>
+                      style={{ backgroundColor: "rgba(6,182,212,0.1)", color: "var(--theme-accent)", border: "1px solid rgba(6,182,212,0.15)" }}>
                       <Icon className="h-4 w-4" />
                     </span>
                     <div>

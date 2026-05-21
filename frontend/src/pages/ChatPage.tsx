@@ -2,6 +2,7 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ChatInput } from "@/components/chat/ChatInput";
+import { DeepSeaBackground } from "@/components/chat/DeepSeaBackground";
 import { MessageList } from "@/components/chat/MessageList";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useChatStore } from "@/stores/chatStore";
@@ -91,7 +92,8 @@ export function ChatPage() {
 
   return (
     <MainLayout>
-      <div className="flex h-full flex-col">
+      <div className="relative flex h-full flex-col">
+        <DeepSeaBackground />
         <div className="flex-1 min-h-0">
           <MessageList
             messages={messages}

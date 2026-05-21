@@ -29,7 +29,7 @@ import java.util.Objects;
 
 public class KernelAuthService implements AuthInboundPort {
 
-    private static final String DEFAULT_AVATAR_URL = "https://avatars.githubusercontent.com/u/37446017?v=4";
+    private static final String DEFAULT_AVATAR_URL = "https://avatars.githubusercontent.com/u/37446017?v=4&size=64";
 
     private final UserRepositoryPort userRepositoryPort;
     private final PasswordHasherPort passwordHasherPort;

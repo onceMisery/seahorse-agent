@@ -158,7 +158,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
           );
         }
       }}
-      className="prose prose-invert max-w-none prose-headings:font-semibold prose-p:leading-relaxed"
+      className="prose max-w-none prose-headings:font-semibold prose-p:leading-relaxed"
       style={{
         "--tw-prose-headings": "var(--theme-text-primary)",
         "--tw-prose-body": "var(--theme-text-primary)",
