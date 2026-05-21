@@ -55,6 +55,14 @@ final class KernelChatPreparationSupport {
         if (callback == null) {
             return;
         }
+        if (preparationPorts.memoryAggregationPolicy().enabled()) {
+            context.setCallback(MemoryTurnCaptureStage.wrap(
+                    callback,
+                    preparationPorts.memoryAggregationServicePort(),
+                    preparationPorts.memoryAggregationPolicy(),
+                    context));
+            return;
+        }
         context.setCallback(MemoryCaptureStage.wrap(callback, preparationPorts.memoryIngestionWorkflowPort(), context));
     }
 

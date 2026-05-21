@@ -56,6 +56,7 @@ public final class MemoryPromptFormatter {
         appendMemoryLayer(memoryBuilder, "用户纠错本：", memoryContext.getCorrectionMemories());
         appendMemoryLayer(memoryBuilder, "用户画像：", memoryContext.getProfileMemories());
         appendMemoryLayer(memoryBuilder, "用户画像：", memoryContext.getSemanticMemories());
+        appendMemoryLayer(memoryBuilder, "业务文档：", memoryContext.getBusinessDocumentMemories());
         appendMemoryLayer(memoryBuilder, "长期记忆：", memoryContext.getLongTermMemories());
         appendMemoryLayer(memoryBuilder, "近期记忆：", memoryContext.getShortTermMemories());
         if (memoryBuilder.isEmpty()) {
@@ -73,6 +74,7 @@ public final class MemoryPromptFormatter {
                 && (!safeMemoryItems(memoryContext.getCorrectionMemories()).isEmpty()
                 || !safeMemoryItems(memoryContext.getProfileMemories()).isEmpty()
                 || !safeMemoryItems(memoryContext.getShortTermMemories()).isEmpty()
+                || !safeMemoryItems(memoryContext.getBusinessDocumentMemories()).isEmpty()
                 || !safeMemoryItems(memoryContext.getLongTermMemories()).isEmpty()
                 || !safeMemoryItems(memoryContext.getSemanticMemories()).isEmpty());
     }

@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.PromptContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
@@ -135,6 +136,58 @@ class MemoryWorkflowRoutingTests {
         Assertions.assertTrue(prompt.contains("prefers concise answers"));
         Assertions.assertFalse(prompt.contains("low-priority long memory"));
         Assertions.assertTrue(prompt.length() <= 180);
+    }
+
+    @Test
+    void shouldWeaveBusinessDocumentsSeparatelyWithSourceMetadata() {
+        ContextWeaverPort weaver = new DefaultContextWeaver();
+        MemoryContext context = MemoryContext.builder()
+                .businessDocumentMemories(List.of(MemoryItem.builder()
+                        .content("报销金额超过 5000 元需要直属主管审批")
+                        .metadataJson("{\"docId\":\"expense-policy\",\"version\":\"2026.05\"}")
+                        .build()))
+                .semanticMemories(List.of(MemoryItem.builder()
+                        .content("用户经常咨询报销规则")
+                        .build()))
+                .build();
+
+        String prompt = weaver.weave(context, ContextBudget.defaults());
+
+        Assertions.assertTrue(prompt.contains("[Business Documents]"));
+        Assertions.assertTrue(prompt.contains("[Semantic Memory]"));
+        Assertions.assertTrue(prompt.indexOf("[Business Documents]") < prompt.indexOf("[Semantic Memory]"));
+        Assertions.assertTrue(prompt.contains("docId=expense-policy"));
+        Assertions.assertTrue(prompt.contains("version=2026.05"));
+    }
+
+    @Test
+    void shouldTreatBusinessDocumentsAsPromptMemory() {
+        PromptContext promptContext = PromptContext.builder()
+                .memoryContext(MemoryContext.builder()
+                        .businessDocumentMemories(List.of(MemoryItem.builder()
+                                .content("业务知识库命中一条规则")
+                                .build()))
+                        .build())
+                .build();
+
+        Assertions.assertTrue(promptContext.hasMemory());
+    }
+
+    @Test
+    void shouldWeaveProfileSlotMetadata() {
+        ContextWeaverPort weaver = new DefaultContextWeaver();
+        MemoryContext context = MemoryContext.builder()
+                .profileMemories(List.of(MemoryItem.builder()
+                        .content("teacher")
+                        .metadataJson("{\"profileSlot\":\"identity.occupation\",\"generationId\":\"identity.occupation:g2\"}")
+                        .build()))
+                .build();
+
+        String prompt = weaver.weave(context, ContextBudget.defaults());
+
+        Assertions.assertTrue(prompt.contains("[Profile KV]"));
+        Assertions.assertTrue(prompt.contains("slot=identity.occupation"));
+        Assertions.assertTrue(prompt.contains("generationId=identity.occupation:g2"));
     }
 
     @Test

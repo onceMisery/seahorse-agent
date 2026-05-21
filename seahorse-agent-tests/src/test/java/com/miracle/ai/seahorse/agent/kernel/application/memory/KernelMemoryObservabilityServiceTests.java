@@ -33,6 +33,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPor
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
@@ -75,9 +82,13 @@ class KernelMemoryObservabilityServiceTests {
         snapshots.snapshots.add(new MemoryQualitySnapshot("snapshot-1", "user-1",
                 Map.of("shortTermCount", 3, "longTermCount", 2, "semanticCount", 1, "conflictCount", 1),
                 Instant.EPOCH));
+        RecordingReviewRepository reviews = new RecordingReviewRepository();
+        reviews.records.add(review("review-1", "user-1", "default", MemoryReviewStatus.PENDING));
+        reviews.records.add(review("review-2", "user-1", "default", MemoryReviewStatus.PENDING));
+        reviews.records.add(review("review-3", "user-1", "default", MemoryReviewStatus.REJECTED));
         RecordingPolicyConfigPort policyConfigPort = new RecordingPolicyConfigPort(MemoryPolicyConfig.defaults());
         KernelMemoryManagementService service = service(profilePort, correctionPort, operationLog,
-                conflicts, outbox, snapshots, policyConfigPort);
+                conflicts, outbox, snapshots, reviews, policyConfigPort);
 
         var report = service.memoryHealth("user-1", "default");
 
@@ -87,6 +98,7 @@ class KernelMemoryObservabilityServiceTests {
         assertThat(report.correctionRuleCount()).isEqualTo(1);
         assertThat(report.pendingConflictCount()).isEqualTo(1);
         assertThat(report.outboxBacklogCount()).isEqualTo(1);
+        assertThat(report.pendingReviewCount()).isEqualTo(2);
         assertThat(report.operationCounts())
                 .containsEntry("SUCCEEDED", 1L)
                 .containsEntry("REJECTED", 1L)
@@ -111,6 +123,7 @@ class KernelMemoryObservabilityServiceTests {
                 new RecordingConflictLogRepository(),
                 new RecordingMemoryOutboxPort(),
                 new RecordingQualitySnapshotRepository(),
+                MemoryReviewManagementRepositoryPort.empty(),
                 policyConfigPort);
 
         MemoryPolicyConfig updated = service.updatePolicyConfig(MemoryPolicyConfig.defaults()
@@ -133,6 +146,7 @@ class KernelMemoryObservabilityServiceTests {
                                                   RecordingConflictLogRepository conflicts,
                                                   RecordingMemoryOutboxPort outbox,
                                                   RecordingQualitySnapshotRepository snapshots,
+                                                  MemoryReviewManagementRepositoryPort reviewRepository,
                                                   RecordingPolicyConfigPort policyConfigPort) {
         return new KernelMemoryManagementService(new MemoryManagementServicePorts(
                 new RecordingMemoryPort(),
@@ -145,12 +159,44 @@ class KernelMemoryObservabilityServiceTests {
                 correctionPort,
                 operationLog,
                 outbox,
+                reviewRepository,
                 policyConfigPort));
     }
 
     private MemoryOperationRecord operation(String operationId, String status, Map<String, Object> decision) {
         return new MemoryOperationRecord(operationId, "user-1", "default", "ADD", "SHORT_TERM_MEMORY",
                 "", Map.of(), decision, status, "policy-v1", "", Instant.EPOCH, Instant.EPOCH);
+    }
+
+    private MemoryReviewRecord review(String id, String userId, String tenantId, MemoryReviewStatus status) {
+        return new MemoryReviewRecord(
+                id,
+                "op-" + id,
+                tenantId,
+                userId,
+                "conv-1",
+                "msg-" + id,
+                "REVIEW",
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.state",
+                "candidate " + id,
+                0.8D,
+                0.7D,
+                0.7D,
+                0.2D,
+                "needs review",
+                List.of("msg-" + id),
+                Map.of(),
+                status,
+                "",
+                "",
+                "",
+                Map.of(),
+                "",
+                "",
+                Instant.EPOCH,
+                Instant.EPOCH);
     }
 
     private static class RecordingMemoryPort implements WorkingMemoryPort {
@@ -315,6 +361,46 @@ class KernelMemoryObservabilityServiceTests {
         @Override
         public void save(MemoryQualitySnapshot snapshot) {
             snapshots.add(snapshot);
+        }
+    }
+
+    private static class RecordingReviewRepository implements MemoryReviewManagementRepositoryPort {
+
+        final List<MemoryReviewRecord> records = new ArrayList<>();
+
+        @Override
+        public void save(MemoryReviewCandidate candidate) {
+            records.add(MemoryReviewRecord.pending(candidate));
+        }
+
+        @Override
+        public MemoryReviewPage pageReviewCandidates(MemoryReviewQuery query) {
+            List<MemoryReviewRecord> pageRecords = records.stream()
+                    .filter(record -> query.tenantId().equals(record.tenantId()))
+                    .filter(record -> query.userId().isBlank() || query.userId().equals(record.userId()))
+                    .filter(record -> query.reviewStatus() == null || query.reviewStatus() == record.reviewStatus())
+                    .skip(query.offset())
+                    .limit(query.size())
+                    .toList();
+            long total = records.stream()
+                    .filter(record -> query.tenantId().equals(record.tenantId()))
+                    .filter(record -> query.userId().isBlank() || query.userId().equals(record.userId()))
+                    .filter(record -> query.reviewStatus() == null || query.reviewStatus() == record.reviewStatus())
+                    .count();
+            long pages = total == 0L ? 0L : (total + query.size() - 1L) / query.size();
+            return new MemoryReviewPage(pageRecords, total, query.size(), query.current(), pages);
+        }
+
+        @Override
+        public Optional<MemoryReviewRecord> findReviewItem(String candidateId) {
+            return records.stream()
+                    .filter(record -> candidateId.equals(record.candidateId()))
+                    .findFirst();
+        }
+
+        @Override
+        public MemoryReviewRecord applyReviewDecision(MemoryReviewDecision decision) {
+            throw new UnsupportedOperationException("not used");
         }
     }
 

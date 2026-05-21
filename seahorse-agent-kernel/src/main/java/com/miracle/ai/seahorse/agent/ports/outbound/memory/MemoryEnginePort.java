@@ -50,7 +50,10 @@ public interface MemoryEnginePort {
             public MemoryContext loadMemory(MemoryLoadRequest request) {
                 return MemoryContext.builder()
                         .workingMemory(Collections.emptyList())
+                        .correctionMemories(Collections.emptyList())
+                        .profileMemories(Collections.emptyList())
                         .shortTermMemories(Collections.emptyList())
+                        .businessDocumentMemories(Collections.emptyList())
                         .longTermMemories(Collections.emptyList())
                         .semanticMemories(Collections.emptyList())
                         .promptMessages(Collections.emptyList())

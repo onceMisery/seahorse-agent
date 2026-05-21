@@ -45,7 +45,11 @@ import com.miracle.ai.seahorse.agent.ports.inbound.mapping.QueryTermMappingInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceRunResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillRunResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataDictionaryInboundPort;
@@ -94,10 +98,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentS
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryHealthReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillCountItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
@@ -310,7 +318,7 @@ class SeahorseWebApiContractTests {
                         Map.of("memoryId", "m1"), "", null, Instant.EPOCH)));
         when(memoryManagementPort.memoryHealth("u1", "default"))
                 .thenReturn(new MemoryHealthReport(
-                        "u1", "default", 1, 1, 1, 1,
+                        "u1", "default", 1, 1, 1, 1, 0,
                         Map.of("SUCCEEDED", 1L), 1D, 0D, 0, 0, 0.25D, 0.1D,
                         Map.of("shortTermCount", 3), List.of("memory.outbox.backlog"), Instant.EPOCH));
         when(memoryManagementPort.memoryPolicyConfig()).thenReturn(MemoryPolicyConfig.defaults()
@@ -324,6 +332,8 @@ class SeahorseWebApiContractTests {
         when(governancePort.runGovernance("u1", "manual", true)).thenReturn(governanceResult("u1"));
         when(governancePort.runDecay("manual-decay")).thenReturn(governanceResult(""));
         when(governancePort.assessQuality("u1")).thenReturn(MemoryQualityReport.builder().userId("u1").build());
+        MemoryMaintenanceInboundPort maintenancePort = mock(MemoryMaintenanceInboundPort.class);
+        when(maintenancePort.runMaintenance(any())).thenReturn(maintenanceResult("manual-maintenance"));
 
         IngestionTaskInboundPort ingestionTaskPort = mock(IngestionTaskInboundPort.class);
         when(ingestionTaskPort.execute(any()))
@@ -338,6 +348,7 @@ class SeahorseWebApiContractTests {
                 new SeahorseKnowledgeBaseController(provider(KnowledgeBaseInboundPort.class, knowledgeBasePort)),
                 new SeahorseMemoryController(provider(MemoryManagementInboundPort.class, memoryManagementPort),
                         provider(MemoryGovernanceInboundPort.class, governancePort)),
+                new SeahorseMemoryMaintenanceController(provider(MemoryMaintenanceInboundPort.class, maintenancePort)),
                 new SeahorseIngestionTaskController(provider(IngestionTaskInboundPort.class, ingestionTaskPort)),
                 new SeahorsePluginController(
                         emptyProvider(FeatureHealthAggregator.class),
@@ -388,6 +399,7 @@ class SeahorseWebApiContractTests {
         mvc.perform(get("/memories/health").param("userId", "u1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.profileFactCount").value(1))
+                .andExpect(jsonPath("$.data.pendingReviewCount").value(0))
                 .andExpect(jsonPath("$.data.alerts[0]").value("memory.outbox.backlog"));
         mvc.perform(get("/memories/policy-config"))
                 .andExpect(status().isOk())
@@ -408,6 +420,18 @@ class SeahorseWebApiContractTests {
         mvc.perform(post("/memories/governance/run").param("userId", "u1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.userId").value("u1"));
+        mvc.perform(post("/memories/maintenance/run")
+                        .param("reason", "manual-maintenance")
+                        .param("gc", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.reason").value("manual-maintenance"))
+                .andExpect(jsonPath("$.data.garbageCollectionResult.reason").value("manual-maintenance"));
+        ArgumentCaptor<MemoryMaintenanceRunCommand> maintenanceCaptor =
+                ArgumentCaptor.forClass(MemoryMaintenanceRunCommand.class);
+        verify(maintenancePort).runMaintenance(maintenanceCaptor.capture());
+        assertThat(maintenanceCaptor.getValue().reason()).isEqualTo("manual-maintenance");
+        assertThat(maintenanceCaptor.getValue().garbageCollectionEnabled()).isTrue();
 
         mvc.perform(post("/ingestion/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -1203,6 +1227,63 @@ class SeahorseWebApiContractTests {
     }
 
     @Test
+    void shouldKeepMemoryReviewManagementContracts() throws Exception {
+        MemoryReviewInboundPort reviewPort = mock(MemoryReviewInboundPort.class);
+        when(reviewPort.page("default", "user-1", MemoryReviewStatus.PENDING,
+                "PROJECT_FACT", "project.ambiguous", 1, 10))
+                .thenReturn(new MemoryReviewPage(
+                        List.of(memoryReview("review-1", MemoryReviewStatus.PENDING)), 1, 10, 1, 1));
+        when(reviewPort.queryById("review-1"))
+                .thenReturn(memoryReview("review-1", MemoryReviewStatus.PENDING));
+        when(reviewPort.approve(eq("review-1"), any()))
+                .thenReturn(memoryReview("review-1", MemoryReviewStatus.APPLIED));
+        when(reviewPort.modify(eq("review-1"), any()))
+                .thenReturn(memoryReview("review-1", MemoryReviewStatus.APPLIED));
+        when(reviewPort.reject(eq("review-1"), any()))
+                .thenReturn(memoryReview("review-1", MemoryReviewStatus.REJECTED));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMemoryReviewController(provider(MemoryReviewInboundPort.class, reviewPort))).build();
+
+        mvc.perform(get("/memory-review/items")
+                        .param("tenantId", "default")
+                        .param("userId", "user-1")
+                        .param("status", "PENDING")
+                        .param("targetKind", "PROJECT_FACT")
+                        .param("targetKey", "project.ambiguous")
+                        .param("current", "1")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.records[0].candidateId").value("review-1"))
+                .andExpect(jsonPath("$.data.records[0].reviewStatus").value("PENDING"));
+        mvc.perform(get("/memory-review/items/review-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.targetKind").value("PROJECT_FACT"));
+        mvc.perform(post("/memory-review/items/review-1/approve")
+                        .header("X-User-Id", "auditor")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("comment", "approve"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("APPLIED"));
+        mvc.perform(post("/memory-review/items/review-1/modify")
+                        .header("X-User-Id", "auditor")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "comment", "modify",
+                                "correctedContent", "corrected memory",
+                                "correctedMetadata", Map.of("source", "human")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("APPLIED"));
+        mvc.perform(post("/memory-review/items/review-1/reject")
+                        .header("X-User-Id", "auditor")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("comment", "reject"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("REJECTED"));
+    }
+
+    @Test
     void shouldKeepMetadataSchemaManagementContracts() throws Exception {
         MetadataSchemaInboundPort schemaPort = mock(MetadataSchemaInboundPort.class);
         when(schemaPort.listFields("tenant-1", "kb-1"))
@@ -1627,6 +1708,37 @@ class SeahorseWebApiContractTests {
                 Instant.EPOCH);
     }
 
+    private static MemoryReviewRecord memoryReview(String id, MemoryReviewStatus status) {
+        return new MemoryReviewRecord(
+                id,
+                "op-1",
+                "default",
+                "user-1",
+                "conv-1",
+                "msg-1",
+                "REVIEW",
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.ambiguous",
+                "candidate content",
+                0.7D,
+                0.8D,
+                0.8D,
+                0.2D,
+                "needs_review",
+                List.of("msg-1"),
+                Map.of("reviewReason", "low_confidence"),
+                status,
+                "auditor",
+                "ok",
+                MemoryReviewStatus.APPLIED.equals(status) ? "chosen content" : "",
+                Map.of(),
+                MemoryReviewStatus.APPLIED.equals(status) ? "memory-review-apply-review-1" : "",
+                MemoryReviewStatus.APPLIED.equals(status) ? "SHORT_TERM" : "",
+                Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
     private static MetadataSchemaFieldRecord metadataSchemaField(String id) {
         return new MetadataSchemaFieldRecord(
                 id,
@@ -1713,6 +1825,18 @@ class SeahorseWebApiContractTests {
 
     private static MemoryGovernanceRunResult governanceResult(String userId) {
         return new MemoryGovernanceRunResult(userId, "manual", 0, 0, 0, false, false, List.of(), Instant.EPOCH);
+    }
+
+    private static MemoryMaintenanceRunResult maintenanceResult(String reason) {
+        return new MemoryMaintenanceRunResult(
+                reason,
+                false,
+                false,
+                true,
+                new MemoryGarbageCollectionResult(reason, 1, 1, 1, false, List.of(), Instant.EPOCH),
+                List.of(),
+                List.of(),
+                Instant.EPOCH);
     }
 
     private static <T> ObjectProvider<T> emptyProvider(Class<T> type) {

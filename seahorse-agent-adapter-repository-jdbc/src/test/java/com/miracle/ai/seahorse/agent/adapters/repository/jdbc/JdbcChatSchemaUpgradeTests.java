@@ -37,6 +37,8 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(tableExists(jdbcTemplate, "t_memory_correction_ledger")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_operation_log")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_outbox")).isTrue();
+        assertThat(tableExists(jdbcTemplate, "t_memory_review_candidate")).isTrue();
+        assertThat(tableExists(jdbcTemplate, "t_memory_review_feedback_sample")).isTrue();
     }
 
     @Test
@@ -95,6 +97,49 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(columnExists(jdbcTemplate, "t_long_term_memory_vector", "status")).isTrue();
         assertThat(columnExists(jdbcTemplate, "t_long_term_memory_vector", "last_referenced_at")).isTrue();
         assertThat(columnExists(jdbcTemplate, "t_long_term_memory_vector", "access_count")).isTrue();
+    }
+
+    @Test
+    void shouldBackfillDerivedIndexDeletionMarkerForLayeredMemoryTables() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:chat-schema-upgrade-memory-gc;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_short_term_memory (
+                    id VARCHAR(64) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    content TEXT NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    update_time TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_long_term_memory (
+                    id VARCHAR(64) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    content TEXT NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    update_time TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_semantic_memory (
+                    id VARCHAR(64) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    semantic_key VARCHAR(128) NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    update_time TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+
+        new JdbcChatSchemaUpgrade(dataSource).upgrade();
+
+        assertThat(columnExists(jdbcTemplate, "t_short_term_memory", "derived_indexes_deleted_at")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_long_term_memory", "derived_indexes_deleted_at")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_semantic_memory", "derived_indexes_deleted_at")).isTrue();
     }
 
     private boolean tableExists(JdbcTemplate jdbcTemplate, String tableName) {

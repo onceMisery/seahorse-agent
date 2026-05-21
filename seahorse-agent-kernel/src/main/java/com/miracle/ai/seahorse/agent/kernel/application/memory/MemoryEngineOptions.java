@@ -26,7 +26,9 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 public record MemoryEngineOptions(int shortTermLimit,
                                   int longTermLimit,
                                   int semanticLimit,
-                                  boolean captureEnabled) {
+                                  boolean captureEnabled,
+                                  boolean refinerEnabled,
+                                  boolean refinerFailOpen) {
 
     public static final int DEFAULT_SHORT_TERM_LIMIT = 5;
     public static final int DEFAULT_LONG_TERM_LIMIT = 3;
@@ -38,11 +40,20 @@ public record MemoryEngineOptions(int shortTermLimit,
         semanticLimit = positive(semanticLimit, DEFAULT_SEMANTIC_LIMIT);
     }
 
+    public MemoryEngineOptions(int shortTermLimit,
+                               int longTermLimit,
+                               int semanticLimit,
+                               boolean captureEnabled) {
+        this(shortTermLimit, longTermLimit, semanticLimit, captureEnabled, false, true);
+    }
+
     public static MemoryEngineOptions defaults() {
         return new MemoryEngineOptions(
                 DEFAULT_SHORT_TERM_LIMIT,
                 DEFAULT_LONG_TERM_LIMIT,
                 DEFAULT_SEMANTIC_LIMIT,
+                true,
+                false,
                 true);
     }
 

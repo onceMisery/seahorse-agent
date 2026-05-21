@@ -23,12 +23,20 @@ public interface MemoryVectorPort {
 
     void upsert(String memoryId, String userId, String content, String embeddingModel);
 
+    default void delete(String memoryId, String userId, String tenantId) {
+        throw new UnsupportedOperationException("memory vector delete is not supported");
+    }
+
     List<String> search(String userId, String query, int topK);
 
     static MemoryVectorPort noop() {
         return new MemoryVectorPort() {
             @Override
             public void upsert(String memoryId, String userId, String content, String embeddingModel) {
+            }
+
+            @Override
+            public void delete(String memoryId, String userId, String tenantId) {
             }
 
             @Override

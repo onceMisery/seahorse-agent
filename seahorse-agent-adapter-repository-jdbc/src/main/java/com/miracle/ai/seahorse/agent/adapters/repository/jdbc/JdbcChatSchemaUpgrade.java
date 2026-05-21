@@ -92,6 +92,75 @@ public class JdbcChatSchemaUpgrade {
                 ON t_memory_outbox (status, next_retry_time, create_time)
                 """);
         jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_memory_review_candidate (
+                    id VARCHAR(64) PRIMARY KEY,
+                    operation_id VARCHAR(128),
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    conversation_id VARCHAR(64),
+                    message_id VARCHAR(64),
+                    requested_action VARCHAR(32) NOT NULL,
+                    target_layer VARCHAR(32) NOT NULL,
+                    target_kind VARCHAR(64),
+                    target_key VARCHAR(128),
+                    candidate_content TEXT NOT NULL,
+                    confidence_level NUMERIC(5, 4) DEFAULT 0,
+                    importance_score NUMERIC(5, 4) DEFAULT 0,
+                    value_score NUMERIC(5, 4) DEFAULT 0,
+                    risk_score NUMERIC(5, 4) DEFAULT 0,
+                    reason TEXT,
+                    source_message_ids JSONB,
+                    candidate_metadata JSONB,
+                    review_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                    reviewer_id VARCHAR(64),
+                    reviewer_comment TEXT,
+                    chosen_content TEXT,
+                    chosen_metadata JSONB,
+                    reviewed_memory_id VARCHAR(64),
+                    reviewed_layer VARCHAR(32),
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        ensureMemoryReviewCandidateColumns();
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_review_queue
+                ON t_memory_review_candidate (tenant_id, user_id, review_status, update_time)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_review_operation
+                ON t_memory_review_candidate (operation_id)
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_memory_review_feedback_sample (
+                    id VARCHAR(128) PRIMARY KEY,
+                    candidate_id VARCHAR(64) NOT NULL,
+                    operation_id VARCHAR(128),
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    requested_action VARCHAR(32) NOT NULL,
+                    review_status VARCHAR(32) NOT NULL,
+                    reviewer_id VARCHAR(64),
+                    reviewer_comment TEXT,
+                    target_layer VARCHAR(32),
+                    target_kind VARCHAR(64),
+                    target_key VARCHAR(128),
+                    rejected_content TEXT,
+                    chosen_content TEXT,
+                    rejected_metadata JSONB,
+                    chosen_metadata JSONB,
+                    source_message_ids JSONB,
+                    reviewed_memory_id VARCHAR(64),
+                    reviewed_layer VARCHAR(32),
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_review_feedback_candidate
+                ON t_memory_review_feedback_sample (candidate_id, create_time)
+                """);
+        jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_user_profile_fact (
                     id VARCHAR(64) PRIMARY KEY,
                     user_id VARCHAR(64) NOT NULL,
@@ -170,6 +239,14 @@ public class JdbcChatSchemaUpgrade {
         addColumnIfMissing("t_user_profile_fact", "access_count", "INTEGER NOT NULL DEFAULT 0");
     }
 
+    private void ensureMemoryReviewCandidateColumns() {
+        if (!tableExists("t_memory_review_candidate")) {
+            return;
+        }
+        addColumnIfMissing("t_memory_review_candidate", "chosen_content", "TEXT");
+        addColumnIfMissing("t_memory_review_candidate", "chosen_metadata", "JSONB");
+    }
+
     private void executePostgresPartialIndexOrPlainIndex(String postgresSql, String fallbackSql) {
         try {
             jdbcTemplate.execute(postgresSql);
@@ -200,6 +277,7 @@ public class JdbcChatSchemaUpgrade {
         addColumnIfMissing(tableName, "policy_version", "VARCHAR(64)");
         addColumnIfMissing(tableName, "sensitivity_level", "VARCHAR(32)");
         addColumnIfMissing(tableName, "obsolete_reason", "TEXT");
+        addColumnIfMissing(tableName, "derived_indexes_deleted_at", "TIMESTAMP");
     }
 
     private void ensureVectorLifecycleColumns() {
@@ -225,6 +303,18 @@ public class JdbcChatSchemaUpgrade {
         createIndexIfTableExists("t_semantic_memory", """
                 CREATE INDEX IF NOT EXISTS idx_sem_lifecycle_user_status
                 ON t_semantic_memory (user_id, tenant_id, status, update_time)
+                """);
+        createIndexIfTableExists("t_short_term_memory", """
+                CREATE INDEX IF NOT EXISTS idx_stm_gc_derived_indexes
+                ON t_short_term_memory (status, derived_indexes_deleted_at, update_time)
+                """);
+        createIndexIfTableExists("t_long_term_memory", """
+                CREATE INDEX IF NOT EXISTS idx_ltm_gc_derived_indexes
+                ON t_long_term_memory (status, derived_indexes_deleted_at, update_time)
+                """);
+        createIndexIfTableExists("t_semantic_memory", """
+                CREATE INDEX IF NOT EXISTS idx_sem_gc_derived_indexes
+                ON t_semantic_memory (status, derived_indexes_deleted_at, update_time)
                 """);
         createIndexIfTableExists("t_long_term_memory_vector", """
                 CREATE INDEX IF NOT EXISTS idx_ltm_vector_lifecycle

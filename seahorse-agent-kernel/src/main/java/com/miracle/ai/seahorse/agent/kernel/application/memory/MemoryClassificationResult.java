@@ -25,6 +25,7 @@ record MemoryClassificationResult(
         MemoryIngestionAction action,
         MemoryCaptureDecision decision,
         OccupationCorrection correction,
+        RefinedMemoryDelta refinedDelta,
         String reason
 ) {
 
@@ -34,18 +35,22 @@ record MemoryClassificationResult(
     }
 
     static MemoryClassificationResult correction(OccupationCorrection correction) {
-        return new MemoryClassificationResult(MemoryIngestionAction.UPDATE, null, correction, "");
+        return new MemoryClassificationResult(MemoryIngestionAction.UPDATE, null, correction, null, "");
     }
 
     static MemoryClassificationResult add(MemoryCaptureDecision decision) {
-        return new MemoryClassificationResult(MemoryIngestionAction.ADD, decision, null, "");
+        return new MemoryClassificationResult(MemoryIngestionAction.ADD, decision, null, null, "");
+    }
+
+    static MemoryClassificationResult refinedAdd(MemoryCaptureDecision decision, RefinedMemoryDelta refinedDelta) {
+        return new MemoryClassificationResult(MemoryIngestionAction.ADD, decision, null, refinedDelta, "");
     }
 
     static MemoryClassificationResult ignored(String reason) {
-        return new MemoryClassificationResult(MemoryIngestionAction.IGNORE, null, null, reason);
+        return new MemoryClassificationResult(MemoryIngestionAction.IGNORE, null, null, null, reason);
     }
 
     static MemoryClassificationResult rejected(MemoryCaptureDecision decision, String reason) {
-        return new MemoryClassificationResult(MemoryIngestionAction.IGNORE, decision, null, reason);
+        return new MemoryClassificationResult(MemoryIngestionAction.IGNORE, decision, null, null, reason);
     }
 }

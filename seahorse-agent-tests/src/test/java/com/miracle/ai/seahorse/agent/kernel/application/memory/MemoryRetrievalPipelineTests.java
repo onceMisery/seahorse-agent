@@ -19,7 +19,9 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
@@ -81,6 +83,89 @@ class MemoryRetrievalPipelineTests {
         assertThat(profilePort.readSlots).containsExactly("identity.occupation");
     }
 
+    @Test
+    void shouldKeepBusinessDocumentResultsOnDedicatedTrack() {
+        MemoryItem businessRule = MemoryItem.builder()
+                .id("doc-1#chunk-1")
+                .type("BUSINESS_DOCUMENT")
+                .content("报销金额超过 5000 元需要直属主管审批")
+                .metadataJson("{\"docId\":\"expense-policy\",\"version\":\"2026.05\"}")
+                .build();
+        MemoryRetrievalPipelinePort pipeline = new DefaultMemoryRetrievalPipeline(
+                new EmptyShortTermMemoryPort(),
+                new EmptyLongTermMemoryPort(),
+                new EmptySemanticMemoryPort(),
+                new ObjectMapper(),
+                MemoryEngineOptions.defaults(),
+                new RecordingProfileMemoryPort(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                MemoryVectorPort.noop(),
+                (tenantId, query, topK) -> List.of(businessRule),
+                MemoryLifecyclePort.noop());
+
+        MemoryContext context = pipeline.load(MemoryLoadRequest.builder()
+                .userId("user-1")
+                .conversationId("conv-1")
+                .currentQuestion("知识库里的报销规则是什么？")
+                .build());
+
+        assertThat(context.getBusinessDocumentMemories())
+                .extracting(MemoryItem::getContent)
+                .containsExactly("报销金额超过 5000 元需要直属主管审批");
+        assertThat(context.getSemanticMemories()).isEmpty();
+    }
+
+    @Test
+    void shouldSuppressProfileSlotWhenCorrectionTargetsSameSlot() {
+        RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
+        profilePort.upsert(new ProfileFactUpdate(
+                "user-1",
+                "default",
+                "identity.occupation",
+                "student",
+                0.95D,
+                "explicit_user_memory",
+                List.of("msg-1"),
+                "identity.occupation:g1"));
+        RecordingCorrectionLedgerPort correctionPort = new RecordingCorrectionLedgerPort();
+        correctionPort.upsert(new CorrectionCommand(
+                "user-1",
+                "default",
+                "PROFILE_CORRECTION",
+                "PROFILE_SLOT",
+                "identity.occupation",
+                "student",
+                "teacher",
+                "用户纠正职业画像：不是 student，而是 teacher",
+                List.of("msg-2"),
+                "identity.occupation:g2"));
+        MemoryRetrievalPipelinePort pipeline = new DefaultMemoryRetrievalPipeline(
+                new EmptyShortTermMemoryPort(),
+                new EmptyLongTermMemoryPort(),
+                new EmptySemanticMemoryPort(),
+                new ObjectMapper(),
+                MemoryEngineOptions.defaults(),
+                profilePort,
+                correctionPort,
+                new DefaultMemoryRouter(),
+                MemoryVectorPort.noop(),
+                MemoryBusinessDocumentRetrieverPort.noop(),
+                MemoryLifecyclePort.noop());
+
+        MemoryContext context = pipeline.load(MemoryLoadRequest.builder()
+                .userId("user-1")
+                .conversationId("conv-1")
+                .currentQuestion("我的职业是什么？")
+                .build());
+
+        assertThat(context.getCorrectionMemories())
+                .extracting(MemoryItem::getContent)
+                .containsExactly("用户纠正职业画像：不是 student，而是 teacher");
+        assertThat(context.getProfileMemories()).isEmpty();
+        assertThat(profilePort.readSlots).isEmpty();
+    }
+
     private static class RecordingProfileMemoryPort implements ProfileMemoryPort {
 
         private final Map<String, ProfileFact> activeFacts = new java.util.LinkedHashMap<>();
@@ -114,6 +199,38 @@ class MemoryRetrievalPipelineTests {
         @Override
         public void recordRead(String userId, String tenantId, String slotKey, Instant referencedAt) {
             readSlots.add(slotKey);
+        }
+    }
+
+    private static class RecordingCorrectionLedgerPort implements CorrectionLedgerPort {
+
+        private final List<com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule> rules =
+                new ArrayList<>();
+
+        @Override
+        public List<com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule> listActive(
+                String userId,
+                String tenantId,
+                int limit) {
+            return rules.stream().limit(limit).toList();
+        }
+
+        @Override
+        public void upsert(CorrectionCommand command) {
+            rules.add(new com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule(
+                    "correction-" + rules.size(),
+                    command.userId(),
+                    command.tenantId(),
+                    command.correctionType(),
+                    command.targetKind(),
+                    command.targetKey(),
+                    command.incorrectValue(),
+                    command.correctValue(),
+                    command.ruleText(),
+                    "HARD_RULE",
+                    command.generationId(),
+                    "ACTIVE",
+                    Instant.EPOCH));
         }
     }
 

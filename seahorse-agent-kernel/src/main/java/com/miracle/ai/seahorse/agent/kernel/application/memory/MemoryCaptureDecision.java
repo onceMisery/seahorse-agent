@@ -48,6 +48,27 @@ record MemoryCaptureDecision(boolean accepted,
                 candidate == null ? List.of() : candidate.signals());
     }
 
+    static MemoryCaptureDecision refinedAdd(String content,
+                                            String type,
+                                            double importanceScore,
+                                            double confidenceLevel,
+                                            double valueScore,
+                                            double riskScore,
+                                            List<String> reasons,
+                                            List<String> signals) {
+        return new MemoryCaptureDecision(
+                true,
+                content,
+                type,
+                importanceScore,
+                confidenceLevel,
+                valueScore,
+                riskScore,
+                "llm_refiner_v1",
+                reasons,
+                signals);
+    }
+
     MemoryCaptureDecision {
         content = Objects.requireNonNullElse(content, "").trim();
         type = Objects.requireNonNullElse(type, "FACT");

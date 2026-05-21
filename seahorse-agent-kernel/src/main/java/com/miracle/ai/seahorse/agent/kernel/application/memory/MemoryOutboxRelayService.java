@@ -18,22 +18,30 @@
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskTypes;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 public class MemoryOutboxRelayService {
 
-    private static final String TASK_VECTOR_UPSERT = "VECTOR_UPSERT";
-
     private final MemoryOutboxPort outboxPort;
-    private final MemoryVectorPort vectorPort;
+    private final Map<String, MemoryOutboxTaskHandler> taskHandlers;
 
     public MemoryOutboxRelayService(MemoryOutboxPort outboxPort, MemoryVectorPort vectorPort) {
+        this(outboxPort, List.of(
+                new VectorMemoryOutboxTaskHandler(vectorPort, MemoryOutboxTaskTypes.VECTOR_UPSERT),
+                new VectorMemoryOutboxTaskHandler(vectorPort, MemoryOutboxTaskTypes.VECTOR_DELETE)));
+    }
+
+    public MemoryOutboxRelayService(MemoryOutboxPort outboxPort, List<MemoryOutboxTaskHandler> taskHandlers) {
         this.outboxPort = Objects.requireNonNull(outboxPort, "outboxPort must not be null");
-        this.vectorPort = Objects.requireNonNull(vectorPort, "vectorPort must not be null");
+        this.taskHandlers = registerHandlers(taskHandlers);
     }
 
     public int processBatch(int limit) {
@@ -50,25 +58,43 @@ public class MemoryOutboxRelayService {
             return;
         }
         try {
-            if (!TASK_VECTOR_UPSERT.equals(task.taskType())) {
+            MemoryOutboxTaskHandler handler = taskHandlers.get(task.taskType());
+            if (handler == null) {
                 throw new IllegalArgumentException("unsupported task type: " + task.taskType());
             }
-            Map<String, Object> payload = task.payload();
-            String memoryId = text(payload.get("memoryId"));
-            String content = text(payload.get("content"));
-            String embeddingModel = defaultText(text(payload.get("embeddingModel")), "default");
-            vectorPort.upsert(memoryId, task.userId(), content, embeddingModel);
+            handler.handle(task);
             outboxPort.markSucceeded(task.id());
         } catch (RuntimeException ex) {
             outboxPort.markFailed(task.id(), Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
         }
     }
 
-    private String text(Object value) {
-        return value == null ? "" : value.toString();
-    }
-
-    private String defaultText(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value;
+    private Map<String, MemoryOutboxTaskHandler> registerHandlers(List<MemoryOutboxTaskHandler> handlers) {
+        Map<String, MemoryOutboxTaskHandler> registered = new LinkedHashMap<>();
+        for (MemoryOutboxTaskHandler handler : Objects.requireNonNullElse(handlers, List.<MemoryOutboxTaskHandler>of())) {
+            if (handler == null) {
+                continue;
+            }
+            String taskType = Objects.requireNonNullElse(handler.taskType(), "");
+            if (taskType.isBlank()) {
+                continue;
+            }
+            MemoryOutboxTaskHandler existing = registered.get(taskType);
+            if (existing == null) {
+                registered.put(taskType, handler);
+                continue;
+            }
+            boolean existingBuiltIn = existing.builtIn();
+            boolean handlerBuiltIn = handler.builtIn();
+            if (existingBuiltIn && !handlerBuiltIn) {
+                registered.put(taskType, handler);
+                continue;
+            }
+            if (!existingBuiltIn && handlerBuiltIn) {
+                continue;
+            }
+            throw new IllegalArgumentException("duplicate memory outbox task handler: " + taskType);
+        }
+        return Map.copyOf(registered);
     }
 }

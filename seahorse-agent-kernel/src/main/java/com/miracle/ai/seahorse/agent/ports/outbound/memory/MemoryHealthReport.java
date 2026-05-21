@@ -29,6 +29,7 @@ public record MemoryHealthReport(
         int correctionRuleCount,
         int pendingConflictCount,
         int outboxBacklogCount,
+        int pendingReviewCount,
         Map<String, Long> operationCounts,
         double acceptRate,
         double rejectRate,

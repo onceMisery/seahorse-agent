@@ -60,6 +60,7 @@ public class PromptContext {
                 && (notEmpty(memoryContext.getCorrectionMemories())
                 || notEmpty(memoryContext.getProfileMemories())
                 || notEmpty(memoryContext.getShortTermMemories())
+                || notEmpty(memoryContext.getBusinessDocumentMemories())
                 || notEmpty(memoryContext.getLongTermMemories())
                 || notEmpty(memoryContext.getSemanticMemories()));
     }

@@ -35,6 +35,16 @@ import com.miracle.ai.seahorse.agent.kernel.application.keyword.KernelKeywordInd
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryRetrievalPipeline;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryOutboxRelayService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.DefaultMemoryAggregationService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.InMemoryMemoryAggregationBufferPort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryGarbageCollectionService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.GraphMemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.KeywordMemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.HybridMemoryRecallPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataBackfillService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataDictionaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataExtractionResultService;
@@ -77,6 +87,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeDocumentIn
 import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataDictionaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataExtractionResultInboundPort;
@@ -127,15 +139,33 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentR
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationBufferPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationSchedulerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryDerivedIndexDeleteCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryDerivedIndexDocument;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphIndexPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.RefinedMemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
@@ -170,10 +200,15 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.concurrent.Executor;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -439,6 +474,9 @@ class SeahorseAgentKernelAutoConfigurationTests {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(MemoryEnginePort.class);
+                    assertThat(context).hasSingleBean(MemoryRetrievalPipelinePort.class);
+                    assertThat(context.getBean(MemoryRetrievalPipelinePort.class))
+                            .isInstanceOf(DefaultMemoryRetrievalPipeline.class);
                     assertThat(context).hasSingleBean(MemoryRouterPort.class);
                     assertThat(context).hasSingleBean(ContextWeaverPort.class);
                     assertThat(context).hasSingleBean(MemoryIngestionWorkflowPort.class);
@@ -451,6 +489,176 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryManagementInboundPort.class);
                     assertThat(context).hasSingleBean(MemoryGovernanceInboundPort.class);
                     assertThat(context).hasSingleBean(SeahorseMemoryGovernanceJob.class);
+                    assertThat(context).hasSingleBean(MemoryAggregationPolicy.class);
+                    assertThat(context.getBean(MemoryManagementInboundPort.class)
+                            .memoryHealth("user-1", "default")
+                            .pendingReviewCount()).isZero();
+                    assertThat(context).doesNotHaveBean(MemoryRefinerPort.class);
+                    assertThat(context).doesNotHaveBean(MemoryAggregationServicePort.class);
+                    assertThat(context).doesNotHaveBean(MemoryAggregationBufferPort.class);
+                    assertThat(context).doesNotHaveBean(SeahorseMemoryAggregationJob.class);
+                    assertThat(context).doesNotHaveBean(MemoryGarbageCollectionService.class);
+                    assertThat(context).doesNotHaveBean(SeahorseMemoryGarbageCollectionJob.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterMemoryOutboxRelayWithDefaultVectorHandlerWhenOutboxExists() {
+        contextRunner.withUserConfiguration(MemoryOutboxConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryOutboxRelayService.class);
+                    assertThat(context).hasSingleBean(MemoryGarbageCollectionService.class);
+                    assertThat(context).hasSingleBean(MemoryMaintenanceInboundPort.class);
+                    assertThat(context).hasSingleBean(SeahorseMemoryGarbageCollectionJob.class);
+                    assertThat(context.getBeansOfType(VectorMemoryOutboxTaskHandler.class))
+                            .hasSize(2);
+                    assertThat(context.getBeansOfType(MemoryOutboxTaskHandler.class).values())
+                            .extracting(MemoryOutboxTaskHandler::taskType)
+                            .containsExactlyInAnyOrder("VECTOR_UPSERT", "VECTOR_DELETE");
+                    assertThat(context).doesNotHaveBean(KeywordMemoryOutboxTaskHandler.class);
+                    assertThat(context).doesNotHaveBean(GraphMemoryOutboxTaskHandler.class);
+                });
+    }
+
+    @Test
+    void shouldPreferCustomOutboxTaskHandlerOverAutoConfiguredBuiltInHandler() {
+        contextRunner.withUserConfiguration(CustomMemoryOutboxTaskHandlerConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryOutboxRelayService.class);
+                    assertThat(context.getBeansOfType(VectorMemoryOutboxTaskHandler.class))
+                            .hasSize(2);
+
+                    MemoryOutboxRelayService relayService = context.getBean(MemoryOutboxRelayService.class);
+                    relayService.processBatch(10);
+
+                    RecordingMemoryOutboxTaskHandler customHandler =
+                            context.getBean(RecordingMemoryOutboxTaskHandler.class);
+                    RecordingMemoryVectorPort vectorPort = context.getBean(RecordingMemoryVectorPort.class);
+                    RecordingMemoryOutboxPort outboxPort = context.getBean(RecordingMemoryOutboxPort.class);
+                    assertThat(customHandler.handledTaskIds).containsExactly("outbox-custom-delete");
+                    assertThat(vectorPort.deletedMemoryIds).isEmpty();
+                    assertThat(outboxPort.succeeded).containsExactly("outbox-custom-delete");
+                    assertThat(outboxPort.failed).isEmpty();
+                });
+    }
+
+    @Test
+    void shouldDisableMemoryGarbageCollectionSchedulerWhenConfigured() {
+        contextRunner.withUserConfiguration(MemoryOutboxConfiguration.class)
+                .withPropertyValues("seahorse-agent.memory.gc.scheduler-enabled=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryGarbageCollectionService.class);
+                    assertThat(context).doesNotHaveBean(SeahorseMemoryGarbageCollectionJob.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterDerivedIndexOutboxHandlersOnlyWhenIndexPortsExist() {
+        contextRunner.withUserConfiguration(MemoryOutboxConfiguration.class, MemoryDerivedIndexConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryOutboxRelayService.class);
+                    assertThat(context.getBeansOfType(MemoryOutboxTaskHandler.class))
+                            .hasSize(6);
+                    assertThat(context.getBeansOfType(MemoryOutboxTaskHandler.class).values())
+                            .extracting(MemoryOutboxTaskHandler::taskType)
+                            .containsExactlyInAnyOrder(
+                                    "VECTOR_UPSERT",
+                                    "VECTOR_DELETE",
+                                    "KEYWORD_UPSERT",
+                                    "KEYWORD_DELETE",
+                                    "GRAPH_UPSERT",
+                                    "GRAPH_DELETE");
+                });
+    }
+
+    @Test
+    void shouldRegisterHybridMemoryRecallPipelineOnlyWhenEnabled() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.memory.recall.hybrid-enabled=true",
+                        "seahorse-agent.memory.recall.rrf-k=30",
+                        "seahorse-agent.memory.recall.final-top-k=4",
+                        "seahorse-agent.memory.recall.channel-top-k=12")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryRetrievalPipelinePort.class);
+                    assertThat(context.getBean(MemoryRetrievalPipelinePort.class))
+                            .isInstanceOf(HybridMemoryRecallPipeline.class);
+                    assertThat(context).doesNotHaveBean(DefaultMemoryRetrievalPipeline.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterMemoryReviewPortWhenIngestionWorkflowExistsWithoutReviewRepository() {
+        contextRunner.withUserConfiguration(MemoryReviewIngestionWorkflowConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryIngestionWorkflowPort.class);
+                    assertThat(context).hasSingleBean(MemoryReviewInboundPort.class);
+                    assertThat(context).doesNotHaveBean(MemoryReviewManagementRepositoryPort.class);
+
+                    MemoryReviewInboundPort reviewPort = context.getBean(MemoryReviewInboundPort.class);
+                    assertThat(reviewPort.page(
+                                    "tenant-1",
+                                    "user-1",
+                                    MemoryReviewStatus.PENDING,
+                                    "",
+                                    "",
+                                    1L,
+                                    10L)
+                            .records())
+                            .isEmpty();
+                });
+    }
+
+    @Test
+    void shouldUseProvidedMemoryRefinerOnlyWhenRefinerIsEnabled() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class, MemoryRefinerConfiguration.class)
+                .withPropertyValues("seahorse-agent.memory.refiner.enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    MemoryEnginePort memoryEnginePort = context.getBean(MemoryEnginePort.class);
+                    ShortTermMemoryPort shortTermMemoryPort = context.getBean(ShortTermMemoryPort.class);
+                    when(context.getBean(MemoryOperationLogPort.class).tryStart(any())).thenReturn(true);
+
+                    memoryEnginePort.writeMemory(MemoryWriteRequest.builder()
+                            .userId("user-1")
+                            .conversationId("conv-refiner")
+                            .messageId("msg-refiner")
+                            .message(ChatMessage.user("we discussed project state"))
+                            .build());
+
+                    verify(shortTermMemoryPort).save(any(MemoryRecord.class));
+                });
+    }
+
+    @Test
+    void shouldRegisterMemoryAggregationBeansOnlyWhenEnabled() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.memory.aggregation.enabled=true",
+                        "seahorse-agent.memory.aggregation.idle-flush-millis=1000",
+                        "seahorse-agent.memory.aggregation.max-turns=2",
+                        "seahorse-agent.memory.aggregation.max-tokens=100",
+                        "seahorse-agent.memory.aggregation.capture-on-error=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryAggregationPolicy.class);
+                    assertThat(context).hasSingleBean(MemoryAggregationSchedulerPort.class);
+                    assertThat(context).hasSingleBean(InMemoryMemoryAggregationBufferPort.class);
+                    assertThat(context).hasSingleBean(DefaultMemoryAggregationService.class);
+                    assertThat(context).hasSingleBean(SeahorseMemoryAggregationJob.class);
+
+                    MemoryAggregationPolicy policy = context.getBean(MemoryAggregationPolicy.class);
+                    assertThat(policy.enabled()).isTrue();
+                    assertThat(policy.idleFlushMillis()).isEqualTo(1000L);
+                    assertThat(policy.maxTurns()).isEqualTo(2);
+                    assertThat(policy.maxTokens()).isEqualTo(100);
+                    assertThat(policy.captureOnError()).isTrue();
                 });
     }
 
@@ -890,6 +1098,176 @@ class SeahorseAgentKernelAutoConfigurationTests {
         @Bean
         MemoryOperationLogPort memoryOperationLogPort() {
             return mock(MemoryOperationLogPort.class);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class MemoryOutboxConfiguration {
+
+        @Bean
+        MemoryOutboxPort memoryOutboxPort() {
+            return MemoryOutboxPort.noop();
+        }
+
+        @Bean
+        MemoryVectorPort memoryVectorPort() {
+            return MemoryVectorPort.noop();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class CustomMemoryOutboxTaskHandlerConfiguration {
+
+        @Bean
+        RecordingMemoryOutboxPort memoryOutboxPort() {
+            return new RecordingMemoryOutboxPort(List.of(new MemoryOutboxPort.MemoryOutboxTask(
+                    "outbox-custom-delete",
+                    "VECTOR_DELETE",
+                    "stm-1",
+                    "user-1",
+                    "default",
+                    Map.of("memoryId", "stm-1"),
+                    "",
+                    null,
+                    Instant.EPOCH)));
+        }
+
+        @Bean
+        RecordingMemoryVectorPort memoryVectorPort() {
+            return new RecordingMemoryVectorPort();
+        }
+
+        @Bean
+        RecordingMemoryOutboxTaskHandler customVectorDeleteMemoryOutboxTaskHandler() {
+            return new RecordingMemoryOutboxTaskHandler("VECTOR_DELETE");
+        }
+    }
+
+    static class RecordingMemoryOutboxPort implements MemoryOutboxPort {
+
+        private final List<MemoryOutboxTask> tasks;
+        private final List<String> succeeded = new ArrayList<>();
+        private final Map<String, String> failed = new java.util.LinkedHashMap<>();
+
+        RecordingMemoryOutboxPort(List<MemoryOutboxTask> tasks) {
+            this.tasks = new ArrayList<>(tasks);
+        }
+
+        @Override
+        public void enqueue(MemoryOutboxTask task) {
+            tasks.add(task);
+        }
+
+        @Override
+        public List<MemoryOutboxTask> pollPending(int limit) {
+            return tasks.stream().limit(limit).toList();
+        }
+
+        @Override
+        public void markSucceeded(String taskId) {
+            succeeded.add(taskId);
+        }
+
+        @Override
+        public void markFailed(String taskId, String errorMessage) {
+            failed.put(taskId, errorMessage);
+        }
+    }
+
+    static class RecordingMemoryVectorPort implements MemoryVectorPort {
+
+        private final List<String> deletedMemoryIds = new ArrayList<>();
+
+        @Override
+        public void upsert(String memoryId, String userId, String content, String embeddingModel) {
+        }
+
+        @Override
+        public List<String> search(String userId, String query, int topK) {
+            return List.of();
+        }
+
+        @Override
+        public void delete(String memoryId, String userId, String tenantId) {
+            deletedMemoryIds.add(memoryId);
+        }
+    }
+
+    static class RecordingMemoryOutboxTaskHandler implements MemoryOutboxTaskHandler {
+
+        private final String taskType;
+        private final List<String> handledTaskIds = new ArrayList<>();
+
+        RecordingMemoryOutboxTaskHandler(String taskType) {
+            this.taskType = taskType;
+        }
+
+        @Override
+        public String taskType() {
+            return taskType;
+        }
+
+        @Override
+        public void handle(MemoryOutboxPort.MemoryOutboxTask task) {
+            handledTaskIds.add(task.id());
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class MemoryDerivedIndexConfiguration {
+
+        @Bean
+        MemoryKeywordIndexPort memoryKeywordIndexPort() {
+            return new MemoryKeywordIndexPort() {
+                @Override
+                public void upsert(MemoryDerivedIndexDocument document) {
+                }
+
+                @Override
+                public void delete(MemoryDerivedIndexDeleteCommand command) {
+                }
+            };
+        }
+
+        @Bean
+        MemoryGraphIndexPort memoryGraphIndexPort() {
+            return new MemoryGraphIndexPort() {
+                @Override
+                public void upsert(MemoryDerivedIndexDocument document) {
+                }
+
+                @Override
+                public void delete(MemoryDerivedIndexDeleteCommand command) {
+                }
+            };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class MemoryRefinerConfiguration {
+
+        @Bean
+        MemoryRefinerPort memoryRefinerPort() {
+            return request -> MemoryRefinementResult.refined(
+                    "test-refiner",
+                    List.of(RefinedMemoryOperation.add(
+                            "PROJECT_FACT",
+                            "project.state",
+                            "User discussed project state.",
+                            0.9D,
+                            0.8D,
+                            List.of(request.messageId()),
+                            List.of("test_refiner"))),
+                    Map.of("model", "test"));
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class MemoryReviewIngestionWorkflowConfiguration {
+
+        @Bean
+        MemoryIngestionWorkflowPort memoryIngestionWorkflowPort() {
+            return command -> MemoryIngestionResult.accepted(List.of("review"));
         }
     }
 

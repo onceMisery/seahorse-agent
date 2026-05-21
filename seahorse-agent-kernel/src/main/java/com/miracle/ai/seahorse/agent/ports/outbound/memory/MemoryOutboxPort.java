@@ -71,7 +71,7 @@ public interface MemoryOutboxPort {
                                                     String errorMessage) {
             return new MemoryOutboxTask(
                     null,
-                    "VECTOR_UPSERT",
+                    MemoryOutboxTaskTypes.VECTOR_UPSERT,
                     record == null ? "" : record.id(),
                     userId,
                     tenantId,
@@ -80,6 +80,80 @@ public interface MemoryOutboxPort {
                             "content", record == null ? "" : record.content(),
                             "embeddingModel", Objects.requireNonNullElse(embeddingModel, "default")),
                     errorMessage,
+                    null,
+                    Instant.now());
+        }
+
+        public static MemoryOutboxTask vectorDelete(String memoryId, String userId, String tenantId) {
+            return derivedIndexTask(
+                    MemoryOutboxTaskTypes.VECTOR_DELETE,
+                    memoryId,
+                    userId,
+                    tenantId,
+                    Map.of("memoryId", Objects.requireNonNullElse(memoryId, "")));
+        }
+
+        public static MemoryOutboxTask keywordUpsert(MemoryRecord record, String userId, String tenantId) {
+            return derivedIndexTask(
+                    MemoryOutboxTaskTypes.KEYWORD_UPSERT,
+                    record == null ? "" : record.id(),
+                    userId,
+                    tenantId,
+                    Map.of(
+                            "memoryId", record == null ? "" : record.id(),
+                            "content", record == null ? "" : record.content(),
+                            "layer", record == null ? "" : record.layer(),
+                            "type", record == null ? "" : record.type(),
+                            "metadata", record == null ? Map.of() : record.metadata(),
+                            "updatedAt", record == null ? Instant.EPOCH.toString() : record.updatedAt().toString()));
+        }
+
+        public static MemoryOutboxTask keywordDelete(String memoryId, String userId, String tenantId) {
+            return derivedIndexTask(
+                    MemoryOutboxTaskTypes.KEYWORD_DELETE,
+                    memoryId,
+                    userId,
+                    tenantId,
+                    Map.of("memoryId", Objects.requireNonNullElse(memoryId, "")));
+        }
+
+        public static MemoryOutboxTask graphUpsert(MemoryRecord record, String userId, String tenantId) {
+            return derivedIndexTask(
+                    MemoryOutboxTaskTypes.GRAPH_UPSERT,
+                    record == null ? "" : record.id(),
+                    userId,
+                    tenantId,
+                    Map.of(
+                            "memoryId", record == null ? "" : record.id(),
+                            "content", record == null ? "" : record.content(),
+                            "layer", record == null ? "" : record.layer(),
+                            "type", record == null ? "" : record.type(),
+                            "metadata", record == null ? Map.of() : record.metadata(),
+                            "updatedAt", record == null ? Instant.EPOCH.toString() : record.updatedAt().toString()));
+        }
+
+        public static MemoryOutboxTask graphDelete(String memoryId, String userId, String tenantId) {
+            return derivedIndexTask(
+                    MemoryOutboxTaskTypes.GRAPH_DELETE,
+                    memoryId,
+                    userId,
+                    tenantId,
+                    Map.of("memoryId", Objects.requireNonNullElse(memoryId, "")));
+        }
+
+        private static MemoryOutboxTask derivedIndexTask(String taskType,
+                                                         String memoryId,
+                                                         String userId,
+                                                         String tenantId,
+                                                         Map<String, Object> payload) {
+            return new MemoryOutboxTask(
+                    null,
+                    taskType,
+                    memoryId,
+                    userId,
+                    tenantId,
+                    payload,
+                    "",
                     null,
                     Instant.now());
         }

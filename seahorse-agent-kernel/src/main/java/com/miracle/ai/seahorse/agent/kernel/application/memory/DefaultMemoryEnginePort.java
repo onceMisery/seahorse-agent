@@ -17,7 +17,6 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
@@ -29,7 +28,6 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
@@ -44,34 +42,33 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPor
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTrack;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.RefinedMemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -92,11 +89,18 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultMemoryEnginePort.class);
     private static final String DEFAULT_VECTOR_EMBEDDING_MODEL = "default";
-    private static final List<String> PROFILE_SLOT_KEYS = List.of(
-            "identity.occupation",
-            "identity.name",
-            "skills.tech_stack",
-            "preferences.response_style");
+    private static final String REVIEW_CANDIDATE_PREFIX = "review-";
+    private static final String REVIEW_DEFAULT_LAYER = "SHORT_TERM";
+    private static final String METADATA_CONTENT = "content";
+    private static final String METADATA_CONFIDENCE = "confidence";
+    private static final String METADATA_IMPORTANCE = "importance";
+    private static final String METADATA_VALUE_SCORE = "valueScore";
+    private static final String METADATA_RISK_SCORE = "riskScore";
+    private static final String METADATA_SOURCE_MESSAGE_IDS = "sourceMessageIds";
+    private static final String METADATA_TARGET_LAYER = "targetLayer";
+
+    private record IngestionExecution(MemoryIngestionResult result, MemoryClassificationResult classification) {
+    }
 
     private final ShortTermMemoryPort shortTermPort;
     private final LongTermMemoryPort longTermPort;
@@ -112,12 +116,16 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryRetrievalPipelinePort memoryRetrievalPipelinePort;
     private final ObjectMapper objectMapper;
     private final MemoryEngineOptions options;
+    private final MemoryPolicyConfigPort memoryPolicyConfigPort;
     private final MemoryCaptureCandidateExtractor captureCandidateExtractor;
     private final MemoryValueAssessor memoryValueAssessor;
+    private final MemoryRefinerPort memoryRefinerPort;
+    private final MemoryReviewCandidatePort memoryReviewCandidatePort;
     private final MemorySanitizer memorySanitizer;
     private final MemoryPreFilter memoryPreFilter;
     private final MemorySemanticClassifier memorySemanticClassifier;
     private final MemorySchemaValidator memorySchemaValidator;
+    private final ProfileSlotResolver profileSlotResolver;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -224,8 +232,30 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryLifecyclePort memoryLifecyclePort,
                                    MemoryPolicyConfigPort memoryPolicyConfigPort) {
         this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
-                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
-                businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort, null);
+                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort,
+                memoryOutboxPort, businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort,
+                (MemoryRetrievalPipelinePort) null);
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort,
+                                   MemoryVectorPort memoryVectorPort,
+                                   MemoryOutboxPort memoryOutboxPort,
+                                   MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                   MemoryLifecyclePort memoryLifecyclePort,
+                                   MemoryPolicyConfigPort memoryPolicyConfigPort,
+                                   MemoryRefinerPort memoryRefinerPort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
+                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort,
+                memoryOutboxPort, businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort,
+                null, memoryRefinerPort);
     }
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
@@ -243,6 +273,51 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryLifecyclePort memoryLifecyclePort,
                                    MemoryPolicyConfigPort memoryPolicyConfigPort,
                                    MemoryRetrievalPipelinePort memoryRetrievalPipelinePort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
+                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
+                businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort, memoryRetrievalPipelinePort,
+                MemoryRefinerPort.noop());
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort,
+                                   MemoryVectorPort memoryVectorPort,
+                                   MemoryOutboxPort memoryOutboxPort,
+                                   MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                   MemoryLifecyclePort memoryLifecyclePort,
+                                   MemoryPolicyConfigPort memoryPolicyConfigPort,
+                                   MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
+                                   MemoryRefinerPort memoryRefinerPort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
+                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
+                businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort,
+                memoryRetrievalPipelinePort, memoryRefinerPort, MemoryReviewCandidatePort.noop());
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort,
+                                   MemoryVectorPort memoryVectorPort,
+                                   MemoryOutboxPort memoryOutboxPort,
+                                   MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                   MemoryLifecyclePort memoryLifecyclePort,
+                                   MemoryPolicyConfigPort memoryPolicyConfigPort,
+                                   MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
+                                   MemoryRefinerPort memoryRefinerPort,
+                                   MemoryReviewCandidatePort memoryReviewCandidatePort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -258,6 +333,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.memoryLifecyclePort = Objects.requireNonNull(memoryLifecyclePort, "memoryLifecyclePort must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.options = Objects.requireNonNullElseGet(options, MemoryEngineOptions::defaults);
+        this.memoryPolicyConfigPort = Objects.requireNonNullElseGet(memoryPolicyConfigPort,
+                MemoryPolicyConfigPort::defaults);
         this.memoryRetrievalPipelinePort = memoryRetrievalPipelinePort == null
                 ? new DefaultMemoryRetrievalPipeline(
                 this.shortTermPort,
@@ -273,11 +350,15 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.memoryLifecyclePort)
                 : memoryRetrievalPipelinePort;
         this.captureCandidateExtractor = new MemoryCaptureCandidateExtractor();
-        this.memoryValueAssessor = new MemoryValueAssessor(memoryPolicyConfigPort);
+        this.memoryValueAssessor = new MemoryValueAssessor(this.memoryPolicyConfigPort);
+        this.memoryRefinerPort = Objects.requireNonNullElseGet(memoryRefinerPort, MemoryRefinerPort::noop);
+        this.memoryReviewCandidatePort = Objects.requireNonNullElseGet(memoryReviewCandidatePort,
+                MemoryReviewCandidatePort::noop);
         this.memorySanitizer = new MemorySanitizer();
         this.memoryPreFilter = new MemoryPreFilter();
         this.memorySemanticClassifier = new MemorySemanticClassifier(captureCandidateExtractor, memoryValueAssessor);
         this.memorySchemaValidator = new MemorySchemaValidator(memorySanitizer);
+        this.profileSlotResolver = new ProfileSlotResolver();
     }
 
     @Override
@@ -310,9 +391,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return MemoryIngestionResult.ignored("duplicate_operation");
         }
         try {
-            MemoryIngestionResult result = executeIngestion(operationId, tenantId, request, message);
-            markOperationCompleted(operationId, result, decisionMap(result));
-            return result;
+            IngestionExecution execution = executeIngestion(operationId, tenantId, command, request, message);
+            markOperationCompleted(operationId, execution.result(), decisionMap(execution.result(), execution.classification()));
+            return execution.result();
         } catch (RuntimeException ex) {
             memoryOperationLogPort.markFailed(operationId,
                     Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
@@ -357,182 +438,50 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
     // ========== 内部方法 ==========
 
-    private List<MemoryItem> loadCorrections(String userId) {
-        try {
-            return correctionLedgerPort.listActive(userId, "default", options.semanticLimit()).stream()
-                    .map(this::toCorrectionItem)
-                    .toList();
-        } catch (RuntimeException ex) {
-            LOG.warn("加载纠错本失败: userId={}", userId, ex);
-            return Collections.emptyList();
-        }
-    }
-
-    private List<MemoryItem> loadProfileFacts(String userId) {
-        try {
-            return profileMemoryPort.listActive(userId, "default", options.semanticLimit()).stream()
-                    .map(this::toProfileItem)
-                    .toList();
-        } catch (RuntimeException ex) {
-            LOG.warn("加载Profile KV失败: userId={}", userId, ex);
-            return Collections.emptyList();
-        }
-    }
-
-    private List<MemoryItem> loadVectorHitMemories(String userId, String question, int limit) {
-        if (isBlank(question)) {
-            return Collections.emptyList();
-        }
-        try {
-            return memoryVectorPort.search(userId, question, limit).stream()
-                    .map(this::findMemoryById)
-                    .flatMap(Optional::stream)
-                    .toList();
-        } catch (RuntimeException ex) {
-            LOG.warn("向量召回记忆失败: userId={}", userId, ex);
-            return Collections.emptyList();
-        }
-    }
-
-    private Optional<MemoryItem> findMemoryById(String memoryId) {
-        if (isBlank(memoryId)) {
-            return Optional.empty();
-        }
-        Optional<MemoryRecord> shortTerm = safeFindById(shortTermPort, memoryId);
-        if (shortTerm.isPresent()) {
-            return shortTerm.map(record -> toMemoryItem(record, MemoryLayer.SHORT_TERM));
-        }
-        Optional<MemoryRecord> longTerm = safeFindById(longTermPort, memoryId);
-        if (longTerm.isPresent()) {
-            return longTerm.map(record -> toMemoryItem(record, MemoryLayer.LONG_TERM));
-        }
-        return safeFindById(semanticPort, memoryId)
-                .map(record -> toMemoryItem(record, MemoryLayer.SEMANTIC));
-    }
-
-    private Optional<MemoryRecord> safeFindById(
-            com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort port, String memoryId) {
-        try {
-            return port.findById(memoryId);
-        } catch (RuntimeException ex) {
-            LOG.debug("按ID读取记忆失败: memoryId={}", memoryId, ex);
-            return Optional.empty();
-        }
-    }
-
-    private List<MemoryItem> loadBusinessDocuments(String userId, String question, int limit) {
-        if (isBlank(question)) {
-            return Collections.emptyList();
-        }
-        try {
-            return businessDocumentRetrieverPort.retrieve("default", question, limit);
-        } catch (RuntimeException ex) {
-            LOG.warn("加载业务文档记忆候选失败: userId={}", userId, ex);
-            return Collections.emptyList();
-        }
-    }
-
-    private List<MemoryItem> filterByLayer(List<MemoryItem> items, MemoryLayer layer) {
-        if (items == null || items.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return items.stream()
-                .filter(item -> item != null && item.getLayer() == layer)
-                .toList();
-    }
-
-    private List<MemoryItem> mergeById(List<MemoryItem> first, List<MemoryItem> second) {
-        if ((first == null || first.isEmpty()) && (second == null || second.isEmpty())) {
-            return Collections.emptyList();
-        }
-        List<MemoryItem> merged = new ArrayList<>();
-        if (first != null) {
-            merged.addAll(first);
-        }
-        if (second != null) {
-            merged.addAll(second);
-        }
-        return deduplicateById(merged);
-    }
-
-    private MemoryItem toCorrectionItem(CorrectionRule rule) {
-        return MemoryItem.builder()
-                .id(rule.id())
-                .userId(rule.userId())
-                .layer(MemoryLayer.SEMANTIC)
-                .type("CORRECTION")
-                .content(rule.ruleText())
-                .metadataJson(serializeMetadata(Map.of(
-                        "userId", rule.userId(),
-                        "tenantId", rule.tenantId(),
-                        "targetKind", rule.targetKind(),
-                        "targetKey", rule.targetKey(),
-                        "incorrectValue", rule.incorrectValue(),
-                        "correctValue", rule.correctValue(),
-                        "priority", rule.priority(),
-                        "generationId", rule.generationId())))
-                .importanceScore(1D)
-                .confidenceLevel(1D)
-                .createTime(rule.updatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime())
-                .build();
-    }
-
-    private MemoryItem toProfileItem(ProfileFact fact) {
-        return MemoryItem.builder()
-                .id(fact.id())
-                .userId(fact.userId())
-                .layer(MemoryLayer.SEMANTIC)
-                .type("PROFILE")
-                .content(fact.valueText())
-                .metadataJson(serializeMetadata(Map.of(
-                        "userId", fact.userId(),
-                        "tenantId", fact.tenantId(),
-                        "profileSlot", fact.slotKey(),
-                        "sourceType", fact.sourceType(),
-                        "generationId", fact.generationId(),
-                        "status", fact.status())))
-                .importanceScore(1D)
-                .confidenceLevel(fact.confidenceLevel())
-                .createTime(fact.updatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime())
-                .build();
-    }
-
-    private MemoryIngestionResult executeIngestion(String operationId,
-                                                   String tenantId,
-                                                   MemoryWriteRequest request,
-                                                   ChatMessage message) {
+    private IngestionExecution executeIngestion(String operationId,
+                                                String tenantId,
+                                                MemoryIngestionCommand command,
+                                                MemoryWriteRequest request,
+                                                ChatMessage message) {
         SanitizedMemoryInput sanitized = memorySanitizer.sanitize(message.getContent());
         if (sanitized.rejected()) {
-            return MemoryIngestionResult.rejected(sanitized.reason(), Map.of("signals", sanitized.signals()));
+            return new IngestionExecution(
+                    MemoryIngestionResult.rejected(sanitized.reason(), Map.of("signals", sanitized.signals())),
+                    null);
         }
         MemoryPreFilterResult preFilterResult = memoryPreFilter.filter(sanitized.content());
         if (!preFilterResult.accepted()) {
-            return MemoryIngestionResult.ignored(preFilterResult.reason());
+            return new IngestionExecution(MemoryIngestionResult.ignored(preFilterResult.reason()), null);
         }
         MemoryClassificationResult classification = memorySemanticClassifier.classify(sanitized.content());
+        classification = refineClassification(operationId, tenantId, command, request, sanitized.content(), classification);
         if (classification.action() == MemoryIngestionAction.IGNORE && classification.decision() == null) {
-            return MemoryIngestionResult.ignored(classification.reason());
+            return new IngestionExecution(MemoryIngestionResult.ignored(classification.reason()), classification);
         }
         if (classification.action() == MemoryIngestionAction.IGNORE) {
-            return MemoryIngestionResult.rejected(classification.reason());
+            return new IngestionExecution(MemoryIngestionResult.rejected(classification.reason()), classification);
+        }
+        if (classification.action() == MemoryIngestionAction.REVIEW) {
+            return executeReviewStaging(operationId, tenantId, request, classification);
         }
         MemorySchemaValidationResult validation = memorySchemaValidator.validate(classification);
         if (!validation.valid()) {
-            return MemoryIngestionResult.rejected(validation.reason());
+            return new IngestionExecution(MemoryIngestionResult.rejected(validation.reason()), classification);
         }
         if (classification.action() == MemoryIngestionAction.UPDATE) {
             List<String> operations = captureCorrection(request, tenantId, classification.correction());
             OccupationCorrection correction = classification.correction();
-            return MemoryIngestionResult.accepted(MemoryIngestionAction.UPDATE, operations, Map.of(
+            return new IngestionExecution(MemoryIngestionResult.accepted(MemoryIngestionAction.UPDATE, operations, Map.of(
                     "targetKind", "PROFILE_SLOT",
                     "targetKey", "identity.occupation",
                     "incorrectValue", correction.incorrectValue(),
-                    "correctValue", correction.correctValue()));
+                    "correctValue", correction.correctValue())), classification);
         }
         MemoryCaptureDecision decision = classification.decision();
         String profileSlot = profileSlot(decision);
         String profileGenerationId = isBlank(profileSlot) ? "" : profileSlot + ":" + UUID.randomUUID();
         Map<String, Object> metadata = captureMetadata(operationId, tenantId, request, message, decision);
+        addRefinedMetadata(metadata, classification);
         if (!isBlank(profileSlot)) {
             metadata.put("profileSlot", profileSlot);
             metadata.put("generationId", profileGenerationId);
@@ -551,12 +500,12 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             operations.add("PROFILE_UPSERT");
         }
         operations.add(indexMemoryOrEnqueueOutbox(record, request.userId(), tenantId));
-        return MemoryIngestionResult.accepted(MemoryIngestionAction.ADD, operations, Map.of(
+        return new IngestionExecution(MemoryIngestionResult.accepted(MemoryIngestionAction.ADD, operations, Map.of(
                 "memoryType", decision.type(),
                 "valueScore", decision.valueScore(),
                 "riskScore", decision.riskScore(),
                 "captureReasons", decision.reasons(),
-                "captureSignals", decision.signals()));
+                "captureSignals", decision.signals())), classification);
     }
 
     private String indexMemoryOrEnqueueOutbox(MemoryRecord record, String userId, String tenantId) {
@@ -574,6 +523,251 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
             return "VECTOR_OUTBOX_ENQUEUE";
         }
+    }
+
+    private MemoryClassificationResult refineClassification(String operationId,
+                                                            String tenantId,
+                                                            MemoryIngestionCommand command,
+                                                            MemoryWriteRequest request,
+                                                            String sanitizedContent,
+                                                            MemoryClassificationResult baseline) {
+        if (!options.refinerEnabled()) {
+            return baseline;
+        }
+        try {
+            MemoryRefinementResult result = memoryRefinerPort.refine(new MemoryRefinementRequest(
+                    operationId,
+                    tenantId,
+                    command == null ? "" : command.source(),
+                    request.userId(),
+                    request.conversationId(),
+                    request.messageId(),
+                    sanitizedContent,
+                    baseline == null ? MemoryIngestionAction.IGNORE : baseline.action(),
+                    baselineMemoryType(baseline),
+                    baseline == null ? "" : baseline.reason(),
+                    baselineDetails(baseline)));
+            return applyRefinementResult(result, baseline);
+        } catch (RuntimeException ex) {
+            if (!options.refinerFailOpen()) {
+                return new MemoryClassificationResult(
+                        MemoryIngestionAction.IGNORE,
+                        null,
+                        null,
+                        new RefinedMemoryDelta(
+                                MemoryIngestionAction.IGNORE,
+                                "",
+                                "",
+                                "refiner_failed:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()),
+                                Map.of("status", "failed_closed")),
+                        "refiner_failed");
+            }
+            return withRefinerDelta(
+                    baseline,
+                    MemoryIngestionAction.IGNORE,
+                    "",
+                    "",
+                    "failed_open:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()),
+                    Map.of("status", "failed_open"));
+        }
+    }
+
+    private MemoryClassificationResult applyRefinementResult(MemoryRefinementResult result,
+                                                             MemoryClassificationResult baseline) {
+        if (result == null || !result.refined() || result.operations().isEmpty()) {
+            return withRefinerDelta(
+                    baseline,
+                    MemoryIngestionAction.IGNORE,
+                    "",
+                    "",
+                    result == null ? "empty_result" : result.reason(),
+                    Map.of("status", "empty"));
+        }
+        RefinedMemoryOperation operation = firstSupportedOperation(result.operations());
+        if (operation == null) {
+            return withRefinerDelta(
+                    baseline,
+                    MemoryIngestionAction.IGNORE,
+                    "",
+                    "",
+                    "unsupported_refined_operation",
+                    Map.of("status", "unsupported"));
+        }
+        if (operation.action() == MemoryIngestionAction.ADD) {
+            MemoryCaptureDecision decision = MemoryCaptureDecision.refinedAdd(
+                    operation.content(),
+                    isBlank(operation.targetKind()) ? "FACT" : operation.targetKind(),
+                    operation.importance(),
+                    operation.confidence(),
+                    operation.valueScore(),
+                    operation.riskScore(),
+                    List.of("llm_refiner"),
+                    operation.signals());
+            Map<String, Object> metadata = new LinkedHashMap<>(operation.metadata());
+            metadata.putAll(result.metadata());
+            metadata.put("status", "enabled");
+            metadata.put("sourceMessageIds", operation.sourceMessageIds());
+            return MemoryClassificationResult.refinedAdd(decision, new RefinedMemoryDelta(
+                    operation.action(),
+                    operation.targetKind(),
+                    operation.targetKey(),
+                    result.reason(),
+                    metadata));
+        }
+        if (operation.action() == MemoryIngestionAction.REVIEW) {
+            Map<String, Object> metadata = new LinkedHashMap<>(operation.metadata());
+            metadata.putAll(result.metadata());
+            metadata.put("status", "pending_review");
+            metadata.put(METADATA_CONTENT, operation.content());
+            metadata.put(METADATA_CONFIDENCE, operation.confidence());
+            metadata.put(METADATA_IMPORTANCE, operation.importance());
+            metadata.put(METADATA_VALUE_SCORE, operation.valueScore());
+            metadata.put(METADATA_RISK_SCORE, operation.riskScore());
+            metadata.put(METADATA_SOURCE_MESSAGE_IDS, operation.sourceMessageIds());
+            return new MemoryClassificationResult(
+                    MemoryIngestionAction.REVIEW,
+                    null,
+                    null,
+                    new RefinedMemoryDelta(
+                            operation.action(),
+                            operation.targetKind(),
+                            operation.targetKey(),
+                            result.reason(),
+                            metadata),
+                    result.reason());
+        }
+        return withRefinerDelta(
+                baseline,
+                operation.action(),
+                operation.targetKind(),
+                operation.targetKey(),
+                result.reason(),
+                Map.of("status", "unsupported"));
+    }
+
+    private RefinedMemoryOperation firstSupportedOperation(List<RefinedMemoryOperation> operations) {
+        for (RefinedMemoryOperation operation : operations) {
+            if (operation != null
+                    && (operation.action() == MemoryIngestionAction.ADD
+                    || operation.action() == MemoryIngestionAction.REVIEW)) {
+                return operation;
+            }
+        }
+        return null;
+    }
+
+    private MemoryClassificationResult withRefinerDelta(MemoryClassificationResult baseline,
+                                                        MemoryIngestionAction action,
+                                                        String targetKind,
+                                                        String targetKey,
+                                                        String reason,
+                                                        Map<String, Object> metadata) {
+        if (baseline == null) {
+            return new MemoryClassificationResult(
+                    MemoryIngestionAction.IGNORE,
+                    null,
+                    null,
+                    new RefinedMemoryDelta(action, targetKind, targetKey, reason, metadata),
+                    reason);
+        }
+        return new MemoryClassificationResult(
+                baseline.action(),
+                baseline.decision(),
+                baseline.correction(),
+                new RefinedMemoryDelta(action, targetKind, targetKey, reason, metadata),
+                baseline.reason());
+    }
+
+    private IngestionExecution executeReviewStaging(String operationId,
+                                                    String tenantId,
+                                                    MemoryWriteRequest request,
+                                                    MemoryClassificationResult classification) {
+        MemoryPolicyConfig policy = memoryPolicyConfigPort.current();
+        if (!policy.reviewEnabled()) {
+            return new IngestionExecution(MemoryIngestionResult.ignored("review_disabled"), classification);
+        }
+        RefinedMemoryDelta delta = classification.refinedDelta();
+        Map<String, Object> metadata = delta == null ? Map.of() : delta.metadata();
+        MemoryReviewCandidate candidate = new MemoryReviewCandidate(
+                REVIEW_CANDIDATE_PREFIX + operationId,
+                operationId,
+                tenantId,
+                request.userId(),
+                request.conversationId(),
+                request.messageId(),
+                delta == null ? MemoryIngestionAction.REVIEW : delta.action(),
+                stringMetadata(metadata, METADATA_TARGET_LAYER, REVIEW_DEFAULT_LAYER),
+                delta == null ? "" : delta.targetKind(),
+                delta == null ? "" : delta.targetKey(),
+                stringMetadata(metadata, METADATA_CONTENT, request.message().getContent()),
+                doubleMetadata(metadata, METADATA_CONFIDENCE),
+                doubleMetadata(metadata, METADATA_IMPORTANCE),
+                doubleMetadata(metadata, METADATA_VALUE_SCORE),
+                doubleMetadata(metadata, METADATA_RISK_SCORE),
+                classification.reason(),
+                sourceMessageIds(metadata, request.messageId()),
+                metadata,
+                Instant.now());
+        memoryReviewCandidatePort.save(candidate);
+        return new IngestionExecution(MemoryIngestionResult.review(classification.reason()), classification);
+    }
+
+    private String stringMetadata(Map<String, Object> metadata, String key, String fallback) {
+        Object value = metadata.get(key);
+        if (value == null || value.toString().isBlank()) {
+            return Objects.requireNonNullElse(fallback, "");
+        }
+        return value.toString().trim();
+    }
+
+    private double doubleMetadata(Map<String, Object> metadata, String key) {
+        Object value = metadata.get(key);
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value != null) {
+            try {
+                return Double.parseDouble(value.toString());
+            } catch (NumberFormatException ignored) {
+                return 0D;
+            }
+        }
+        return 0D;
+    }
+
+    private List<String> sourceMessageIds(Map<String, Object> metadata, String fallbackMessageId) {
+        Object value = metadata.get(METADATA_SOURCE_MESSAGE_IDS);
+        if (value instanceof List<?> list) {
+            return list.stream().filter(Objects::nonNull).map(Object::toString).toList();
+        }
+        if (!isBlank(fallbackMessageId)) {
+            return List.of(fallbackMessageId);
+        }
+        return List.of();
+    }
+
+    private String baselineMemoryType(MemoryClassificationResult classification) {
+        if (classification == null || classification.decision() == null) {
+            return "";
+        }
+        return classification.decision().type();
+    }
+
+    private Map<String, Object> baselineDetails(MemoryClassificationResult classification) {
+        if (classification == null) {
+            return Map.of();
+        }
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("action", classification.action().name());
+        details.put("reason", classification.reason());
+        if (classification.decision() != null) {
+            details.put("memoryType", classification.decision().type());
+            details.put("valueScore", classification.decision().valueScore());
+            details.put("riskScore", classification.decision().riskScore());
+            details.put("signals", classification.decision().signals());
+            details.put("reasons", classification.decision().reasons());
+        }
+        return details;
     }
 
     private List<String> captureCorrection(MemoryWriteRequest request, String tenantId, OccupationCorrection correction) {
@@ -654,42 +848,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     }
 
     private String profileSlot(MemoryCaptureDecision decision) {
-        if (!isProfileSlotCandidate(decision.type())) {
-            return "";
-        }
-        String content = Objects.requireNonNullElse(decision.content(), "");
-        String normalized = content.toLowerCase(Locale.ROOT);
-        if (normalized.startsWith("my name is ")) {
-            return "identity.name";
-        }
-        if (content.startsWith("\u6211\u53eb")
-                || content.startsWith("\u6211\u7684\u540d\u5b57\u662f")
-                || content.startsWith("\u6211\u7684\u6635\u79f0\u662f")) {
-            return "identity.name";
-        }
-        if (normalized.startsWith("my tech stack is ")) {
-            return "skills.tech_stack";
-        }
-        if (content.startsWith("\u6211\u7684\u6280\u672f\u6808\u662f")
-                || content.startsWith("\u6211\u4e3b\u8981\u4f7f\u7528")) {
-            return "skills.tech_stack";
-        }
-        if (normalized.startsWith("i prefer ")
-                || normalized.startsWith("i like concise answers")
-                || normalized.startsWith("i like detailed answers")) {
-            return "preferences.response_style";
-        }
-        if (content.startsWith("\u6211\u559c\u6b22\u7b80\u77ed\u56de\u7b54")
-                || content.startsWith("\u6211\u559c\u6b22\u8be6\u7ec6\u56de\u7b54")
-                || content.startsWith("\u6211\u504f\u597d\u7b80\u77ed\u56de\u7b54")
-                || content.startsWith("\u6211\u504f\u597d\u8be6\u7ec6\u56de\u7b54")) {
-            return "preferences.response_style";
-        }
-        if (containsAny(normalized, "occupation", "profession", "job", "student", "teacher")
-                || containsAny(content, "职业", "身份", "工作", "学生", "老师", "教师")) {
-            return "identity.occupation";
-        }
-        return "";
+        return decision == null ? "" : profileSlotResolver.resolve(decision.type(), decision.content(), "");
     }
 
     private String profileValue(String slotKey, String content) {
@@ -718,12 +877,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return "";
     }
 
-    private boolean isProfileSlotCandidate(String type) {
-        return "PROFILE".equalsIgnoreCase(type)
-                || "FACT".equalsIgnoreCase(type)
-                || "PREFERENCE".equalsIgnoreCase(type);
-    }
-
     private String stripPrefix(String content, String regex) {
         return Objects.requireNonNullElse(content, "").replaceFirst(regex, "").trim();
     }
@@ -742,54 +895,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
     private String normalizeOccupationValue(String value) {
         return OccupationCorrection.normalizeOccupationValue(value);
-    }
-
-    private Set<String> activeProfileSlots(List<MemoryItem> profile) {
-        if (profile == null || profile.isEmpty()) {
-            return Set.of();
-        }
-        Set<String> slots = new LinkedHashSet<>();
-        for (MemoryItem item : profile) {
-            String slot = semanticSlot(item);
-            if (!slot.isBlank()) {
-                slots.add(slot);
-            }
-        }
-        return slots;
-    }
-
-    private List<MemoryItem> removeActiveProfileSlotMemories(List<MemoryItem> items, Set<String> activeSlots) {
-        if (items == null || items.isEmpty() || activeSlots == null || activeSlots.isEmpty()) {
-            return items == null ? Collections.emptyList() : items;
-        }
-        return items.stream()
-                .filter(item -> !activeSlots.contains(semanticSlot(item)))
-                .toList();
-    }
-
-    private void recordReadFeedback(List<MemoryItem> shortTerm,
-                                    List<MemoryItem> longTerm,
-                                    List<MemoryItem> semantic) {
-        Instant referencedAt = Instant.now();
-        recordReadFeedback(MemoryLayer.SHORT_TERM, shortTerm, referencedAt);
-        recordReadFeedback(MemoryLayer.LONG_TERM, longTerm, referencedAt);
-        recordReadFeedback(MemoryLayer.SEMANTIC, semantic, referencedAt);
-    }
-
-    private void recordReadFeedback(MemoryLayer layer, List<MemoryItem> items, Instant referencedAt) {
-        if (items == null || items.isEmpty()) {
-            return;
-        }
-        for (MemoryItem item : items) {
-            if (item == null || isBlank(item.getId())) {
-                continue;
-            }
-            try {
-                memoryLifecyclePort.recordRead(layer.name().toLowerCase(Locale.ROOT), item.getId(), referencedAt);
-            } catch (RuntimeException ex) {
-                LOG.debug("璁板繂璇诲彇鍙嶉澶辫触: layer={}, memoryId={}", layer, item.getId(), ex);
-            }
-        }
     }
 
     private Map<String, Object> captureMetadata(String operationId,
@@ -814,6 +919,36 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         metadata.put("captureSignals", decision.signals());
         metadata.put("captureReasons", decision.reasons());
         return metadata;
+    }
+
+    private void addRefinedMetadata(Map<String, Object> metadata, MemoryClassificationResult classification) {
+        RefinedMemoryDelta delta = classification == null ? null : classification.refinedDelta();
+        if (delta == null || delta.action() == MemoryIngestionAction.IGNORE && isBlank(delta.reason())) {
+            return;
+        }
+        metadata.put("refinerStatus", refinerStatus(delta));
+        metadata.put("refinerAction", delta.action().name());
+        metadata.put("refinerReason", delta.reason());
+        metadata.put("targetKind", delta.targetKind());
+        metadata.put("targetKey", delta.targetKey());
+        for (Map.Entry<String, Object> entry : delta.metadata().entrySet()) {
+            metadata.putIfAbsent(entry.getKey(), entry.getValue());
+        }
+        if (classification != null && classification.decision() != null
+                && "llm_refiner_v1".equals(classification.decision().policyVersion())) {
+            metadata.put("capturePolicy", "llm_refiner");
+        }
+    }
+
+    private String refinerStatus(RefinedMemoryDelta delta) {
+        Object status = delta.metadata().get("status");
+        if (status != null && !status.toString().isBlank()) {
+            return status.toString();
+        }
+        if (delta.action() == MemoryIngestionAction.ADD) {
+            return "enabled";
+        }
+        return delta.reason().startsWith("failed_open") ? "failed_open" : "ignored";
     }
 
     private String memoryId(MemoryWriteRequest request) {
@@ -946,212 +1081,10 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return values;
     }
 
-    private List<MemoryItem> loadLayer(ShortTermMemoryPort port, String userId, int limit, MemoryLayer layer) {
-        return loadLayerInternal(port, userId, limit, layer);
-    }
-
-    private List<MemoryItem> loadLayer(LongTermMemoryPort port, String userId, int limit, MemoryLayer layer) {
-        return loadLayerInternal(port, userId, limit, layer);
-    }
-
-    private List<MemoryItem> loadLayer(SemanticMemoryPort port, String userId, int limit, MemoryLayer layer) {
-        return loadLayerInternal(port, userId, limit, layer);
-    }
-
-    private List<MemoryItem> loadLayerInternal(com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort port,
-                                               String userId, int limit, MemoryLayer layer) {
-        try {
-            return port.listByUser(userId, limit).stream()
-                    .map(record -> toMemoryItem(record, layer))
-                    .toList();
-        } catch (Exception ex) {
-            LOG.warn("加载{}记忆失败: userId={}", layer.name(), userId, ex);
-            return Collections.emptyList();
-        }
-    }
-
-    private MemoryItem toMemoryItem(MemoryRecord record, MemoryLayer layer) {
-        return MemoryItem.builder()
-                .id(record.id())
-                .userId(stringField(record.metadata(), "userId"))
-                .conversationId(stringField(record.metadata(), "conversationId"))
-                .layer(layer)
-                .type(record.type())
-                .content(record.content())
-                .metadataJson(serializeMetadata(record.metadata()))
-                .importanceScore(numberField(record.metadata(), "importanceScore", 0D))
-                .confidenceLevel(numberField(record.metadata(), "confidenceLevel", 0D))
-                .createTime(record.updatedAt() != null
-                        ? record.updatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime()
-                        : null)
-                .build();
-    }
-
-    private List<MemoryItem> deduplicateById(List<MemoryItem> items) {
-        if (items == null || items.size() <= 1) {
-            return items == null ? Collections.emptyList() : items;
-        }
-        Set<String> seen = new LinkedHashSet<>();
-        List<MemoryItem> result = new ArrayList<>();
-        for (MemoryItem item : items) {
-            String id = item.getId();
-            if (id != null && seen.add(id)) {
-                result.add(item);
-            }
-        }
-        return result;
-    }
-
-    private List<MemoryItem> deduplicateProfileSlots(List<MemoryItem> items) {
-        if (items == null || items.size() <= 1) {
-            return items == null ? Collections.emptyList() : items;
-        }
-        Map<String, MemoryItem> slotWinners = new LinkedHashMap<>();
-        List<MemoryItem> nonSlotItems = new ArrayList<>();
-        for (MemoryItem item : items) {
-            String slot = semanticSlot(item);
-            if (slot.isBlank()) {
-                nonSlotItems.add(item);
-                continue;
-            }
-            MemoryItem current = slotWinners.get(slot);
-            if (current == null || prefer(item, current) > 0) {
-                slotWinners.put(slot, item);
-            }
-        }
-        List<MemoryItem> result = new ArrayList<>(slotWinners.values());
-        result.addAll(nonSlotItems);
-        result.sort(Comparator.comparing(MemoryItem::getCreateTime,
-                Comparator.nullsLast(Comparator.reverseOrder())));
-        return result;
-    }
-
-    private int prefer(MemoryItem candidate, MemoryItem current) {
-        int byTime = Comparator.nullsFirst(java.time.LocalDateTime::compareTo)
-                .compare(candidate.getCreateTime(), current.getCreateTime());
-        if (byTime != 0) {
-            return byTime;
-        }
-        return Double.compare(score(candidate), score(current));
-    }
-
-    private double score(MemoryItem item) {
-        return number(item.getImportanceScore()) + number(item.getConfidenceLevel());
-    }
-
-    private double number(Double value) {
-        return value == null ? 0D : value;
-    }
-
-    private String semanticSlot(MemoryItem item) {
-        if (item == null) {
-            return "";
-        }
-        String metadata = Objects.requireNonNullElse(item.getMetadataJson(), "");
-        String metadataSlot = metadataSlot(metadata);
-        if (!metadataSlot.isBlank()) {
-            return metadataSlot;
-        }
-        if (!isProfileLike(item)) {
-            return "";
-        }
-        String content = Objects.requireNonNullElse(item.getContent(), "");
-        String normalized = content.toLowerCase(Locale.ROOT);
-        if (normalized.startsWith("my name is ")) {
-            return "identity.name";
-        }
-        if (content.startsWith("\u6211\u53eb")
-                || content.startsWith("\u6211\u7684\u540d\u5b57\u662f")
-                || content.startsWith("\u6211\u7684\u6635\u79f0\u662f")) {
-            return "identity.name";
-        }
-        if (normalized.startsWith("my tech stack is ")) {
-            return "skills.tech_stack";
-        }
-        if (content.startsWith("\u6211\u7684\u6280\u672f\u6808\u662f")
-                || content.startsWith("\u6211\u4e3b\u8981\u4f7f\u7528")) {
-            return "skills.tech_stack";
-        }
-        if (normalized.startsWith("i prefer ")
-                || normalized.startsWith("i like concise answers")
-                || normalized.startsWith("i like detailed answers")) {
-            return "preferences.response_style";
-        }
-        if (content.startsWith("\u6211\u559c\u6b22\u7b80\u77ed\u56de\u7b54")
-                || content.startsWith("\u6211\u559c\u6b22\u8be6\u7ec6\u56de\u7b54")
-                || content.startsWith("\u6211\u504f\u597d\u7b80\u77ed\u56de\u7b54")
-                || content.startsWith("\u6211\u504f\u597d\u8be6\u7ec6\u56de\u7b54")) {
-            return "preferences.response_style";
-        }
-        if (containsAny(normalized, "occupation", "profession", "job", "student", "teacher")
-                || containsAny(content, "职业", "身份", "工作", "学生", "老师", "教师")) {
-            return "identity.occupation";
-        }
-        return "";
-    }
-
-    private String metadataSlot(String metadata) {
-        if (metadata == null || metadata.isBlank()) {
-            return "";
-        }
-        if (metadata.contains("\"semanticKey\":\"profile:occupation\"")
-                || metadata.contains("\"semanticKey\": \"profile:occupation\"")) {
-            return "identity.occupation";
-        }
-        for (String slot : PROFILE_SLOT_KEYS) {
-            if (metadataContainsValue(metadata, "semanticKey", slot)
-                    || metadataContainsValue(metadata, "profileSlot", slot)) {
-                return slot;
-            }
-        }
-        return "";
-    }
-
-    private boolean metadataContainsValue(String metadata, String key, String value) {
-        return metadata.contains("\"" + key + "\":\"" + value + "\"")
-                || metadata.contains("\"" + key + "\": \"" + value + "\"");
-    }
-
-    private boolean isProfileLike(MemoryItem item) {
-        String type = Objects.requireNonNullElse(item.getType(), "");
-        return isProfileSlotCandidate(type);
-    }
-
-    private boolean containsAny(String content, String... needles) {
-        if (content == null || needles == null) {
-            return false;
-        }
-        for (String needle : needles) {
-            if (needle != null && !needle.isBlank() && content.contains(needle)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String serializeMetadata(Map<String, Object> metadata) {
-        if (metadata == null || metadata.isEmpty()) {
-            return "{}";
-        }
-        try {
-            return objectMapper.writeValueAsString(metadata);
-        } catch (JsonProcessingException ex) {
-            LOG.debug("序列化记忆元数据失败", ex);
-            return "{}";
-        }
-    }
-
-    private String stringField(Map<String, Object> metadata, String key) {
-        Object value = metadata.get(key);
-        return value == null ? "" : value.toString();
-    }
-
-    private double numberField(Map<String, Object> metadata, String key, double fallback) {
-        Object value = metadata.get(key);
-        if (value instanceof Number number) {
-            return number.doubleValue();
-        }
-        return fallback;
+    private Map<String, Object> decisionMap(MemoryIngestionResult result, MemoryClassificationResult classification) {
+        Map<String, Object> values = new LinkedHashMap<>(decisionMap(result));
+        addRefinedMetadata(values, classification);
+        return values;
     }
 
     private MemoryContext emptyContext(MemoryLoadRequest request) {
@@ -1163,6 +1096,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 .correctionMemories(Collections.emptyList())
                 .profileMemories(Collections.emptyList())
                 .shortTermMemories(Collections.emptyList())
+                .businessDocumentMemories(Collections.emptyList())
                 .longTermMemories(Collections.emptyList())
                 .semanticMemories(Collections.emptyList())
                 .promptMessages(Collections.emptyList())

@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryRout
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryReviewService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.InMemoryMemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryDecayOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryEngineOptions;
@@ -32,27 +33,61 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryGovernanceS
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryManagementServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryOutboxRelayService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.RuleBasedMemoryCandidateExtractor;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.DefaultMemoryAggregationService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.InMemoryMemoryAggregationBufferPort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.DefaultMemoryMaintenanceService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryGarbageCollectionOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryGarbageCollectionService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.GraphMemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.KeywordMemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.GraphMemoryRecallChannel;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.HybridMemoryRecallPipeline;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.KeywordMemoryRecallChannel;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.RrfMemoryFusion;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.VectorMemoryRecallChannel;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationBufferPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationSchedulerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFusionPolicy;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphIndexPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskTypes;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallChannelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallFusionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ScoredMemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMaintenancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
@@ -66,6 +101,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
+import java.util.List;
+
 /**
  * 内核记忆能力自动配置。
  *
@@ -75,6 +113,73 @@ import org.springframework.context.annotation.Configuration;
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentMemoryRepositoryAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelMemoryAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean(MemoryAggregationPolicy.class)
+    public MemoryAggregationPolicy seahorseMemoryAggregationPolicy(
+            @Value("${seahorse-agent.memory.aggregation.enabled:false}") boolean enabled,
+            @Value("${seahorse-agent.memory.aggregation.idle-flush-millis:40000}") long idleFlushMillis,
+            @Value("${seahorse-agent.memory.aggregation.max-turns:10}") int maxTurns,
+            @Value("${seahorse-agent.memory.aggregation.max-tokens:2000}") int maxTokens,
+            @Value("${seahorse-agent.memory.aggregation.max-context-blocks:32}") int maxContextBlocks,
+            @Value("${seahorse-agent.memory.aggregation.buffer-ttl-millis:86400000}") long bufferTtlMillis,
+            @Value("${seahorse-agent.memory.aggregation.capture-on-error:false}") boolean captureOnError) {
+        return new MemoryAggregationPolicy(
+                enabled,
+                idleFlushMillis,
+                maxTurns,
+                maxTokens,
+                maxContextBlocks,
+                bufferTtlMillis,
+                captureOnError);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
+            havingValue = "true")
+    @ConditionalOnMissingBean(MemoryAggregationBufferPort.class)
+    public InMemoryMemoryAggregationBufferPort seahorseInMemoryAggregationBufferPort(
+            MemoryAggregationPolicy policy) {
+        return new InMemoryMemoryAggregationBufferPort(policy);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MemoryAggregationSchedulerPort.class)
+    public MemoryAggregationSchedulerPort seahorseMemoryAggregationSchedulerPort() {
+        return MemoryAggregationSchedulerPort.noop();
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
+            havingValue = "true")
+    @ConditionalOnMissingBean(MemoryAggregationServicePort.class)
+    public DefaultMemoryAggregationService seahorseMemoryAggregationService(
+            MemoryAggregationPolicy policy,
+            ObjectProvider<MemoryAggregationBufferPort> aggregationBufferPort,
+            ObjectProvider<MemoryAggregationSchedulerPort> schedulerPort,
+            ObjectProvider<MemoryIngestionWorkflowPort> ingestionWorkflowPort) {
+        return new DefaultMemoryAggregationService(
+                policy,
+                aggregationBufferPort.getIfAvailable(MemoryAggregationBufferPort::noop),
+                schedulerPort.getIfAvailable(MemoryAggregationSchedulerPort::noop),
+                ingestionWorkflowPort.getIfAvailable(() -> command ->
+                        com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult.ignored("noop")));
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
+            havingValue = "true")
+    @ConditionalOnBean(MemoryAggregationServicePort.class)
+    @ConditionalOnMissingBean
+    public SeahorseMemoryAggregationJob seahorseMemoryAggregationJob(
+            MemoryAggregationServicePort aggregationServicePort,
+            ObjectProvider<DistributedLockPort> lockPort,
+            @Value("${seahorse-agent.memory.aggregation.scan-limit:100}") int scanLimit) {
+        return new SeahorseMemoryAggregationJob(
+                aggregationServicePort,
+                lockPort.getIfAvailable(DistributedLockPort::noop),
+                scanLimit);
+    }
 
     @Bean
     @ConditionalOnMissingBean(MemoryPolicyConfigPort.class)
@@ -116,17 +221,23 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryLifecyclePort> memoryLifecyclePort,
             ObjectProvider<MemoryPolicyConfigPort> memoryPolicyConfigPort,
             ObjectProvider<MemoryRetrievalPipelinePort> memoryRetrievalPipelinePort,
+            ObjectProvider<MemoryRefinerPort> memoryRefinerPort,
+            ObjectProvider<MemoryReviewCandidatePort> memoryReviewCandidatePort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
             @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
             @Value("${seahorse-agent.memory.semantic-limit:10}") int semanticLimit,
-            @Value("${seahorse-agent.memory.capture-enabled:true}") boolean captureEnabled) {
+            @Value("${seahorse-agent.memory.capture-enabled:true}") boolean captureEnabled,
+            @Value("${seahorse-agent.memory.refiner.enabled:false}") boolean refinerEnabled,
+            @Value("${seahorse-agent.memory.refiner.fail-open:true}") boolean refinerFailOpen) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         MemoryEngineOptions options = new MemoryEngineOptions(
                 shortTermLimit,
                 longTermLimit,
                 semanticLimit,
-                captureEnabled);
+                captureEnabled,
+                refinerEnabled,
+                refinerFailOpen);
         return new DefaultMemoryEnginePort(
                 shortTermMemoryPort,
                 longTermMemoryPort,
@@ -142,7 +253,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop),
                 memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop),
                 memoryPolicyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults),
-                memoryRetrievalPipelinePort.getIfAvailable());
+                memoryRetrievalPipelinePort.getIfAvailable(),
+                memoryRefinerPort.getIfAvailable(MemoryRefinerPort::noop),
+                memoryReviewCandidatePort.getIfAvailable(MemoryReviewCandidatePort::noop));
     }
 
     @Bean
@@ -154,6 +267,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @Bean
     @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
     @ConditionalOnMissingBean(MemoryRetrievalPipelinePort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+            havingValue = "false", matchIfMissing = true)
     public DefaultMemoryRetrievalPipeline seahorseMemoryRetrievalPipeline(
             ShortTermMemoryPort shortTermMemoryPort,
             LongTermMemoryPort longTermMemoryPort,
@@ -190,6 +305,94 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(MemoryFusionPolicy.class)
+    public MemoryFusionPolicy seahorseMemoryFusionPolicy(
+            @Value("${seahorse-agent.memory.recall.rrf-k:60}") int rrfK,
+            @Value("${seahorse-agent.memory.recall.decay-lambda:0.05}") double decayLambda,
+            @Value("${seahorse-agent.memory.recall.final-top-k:8}") int finalTopK,
+            @Value("${seahorse-agent.memory.recall.time-decay-enabled:true}") boolean timeDecayEnabled) {
+        return new MemoryFusionPolicy(rrfK, decayLambda, finalTopK, timeDecayEnabled);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MemoryRecallFusionPort.class)
+    public RrfMemoryFusion seahorseRrfMemoryFusion() {
+        return new RrfMemoryFusion();
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+            havingValue = "true")
+    @ConditionalOnMissingBean(ScoredMemoryVectorPort.class)
+    public ScoredMemoryVectorPort seahorseScoredMemoryVectorPort(ObjectProvider<MemoryVectorPort> memoryVectorPort) {
+        return ScoredMemoryVectorPort.fromLegacy(memoryVectorPort.getIfAvailable(MemoryVectorPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+            havingValue = "true")
+    @ConditionalOnMissingBean(name = "seahorseVectorMemoryRecallChannel")
+    public VectorMemoryRecallChannel seahorseVectorMemoryRecallChannel(ScoredMemoryVectorPort vectorPort) {
+        return new VectorMemoryRecallChannel(vectorPort);
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryKeywordSearchPort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+            havingValue = "true")
+    @ConditionalOnMissingBean(name = "seahorseKeywordMemoryRecallChannel")
+    public KeywordMemoryRecallChannel seahorseKeywordMemoryRecallChannel(MemoryKeywordSearchPort keywordSearchPort) {
+        return new KeywordMemoryRecallChannel(keywordSearchPort);
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryGraphPort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+            havingValue = "true")
+    @ConditionalOnMissingBean(name = "seahorseGraphMemoryRecallChannel")
+    public GraphMemoryRecallChannel seahorseGraphMemoryRecallChannel(
+            MemoryGraphPort graphPort,
+            @Value("${seahorse-agent.memory.recall.graph-max-hops:1}") int maxHops) {
+        return new GraphMemoryRecallChannel(graphPort, maxHops);
+    }
+
+    @Bean
+    @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
+            havingValue = "true")
+    @ConditionalOnMissingBean(MemoryRetrievalPipelinePort.class)
+    public HybridMemoryRecallPipeline seahorseHybridMemoryRecallPipeline(
+            ShortTermMemoryPort shortTermMemoryPort,
+            LongTermMemoryPort longTermMemoryPort,
+            SemanticMemoryPort semanticMemoryPort,
+            ObjectProvider<ProfileMemoryPort> profileMemoryPort,
+            ObjectProvider<CorrectionLedgerPort> correctionLedgerPort,
+            ObjectProvider<MemoryRouterPort> memoryRouterPort,
+            ObjectProvider<MemoryBusinessDocumentRetrieverPort> businessDocumentRetrieverPort,
+            ObjectProvider<MemoryLifecyclePort> memoryLifecyclePort,
+            ObjectProvider<ObjectMapper> objectMapperProvider,
+            List<MemoryRecallChannelPort> recallChannels,
+            MemoryRecallFusionPort recallFusionPort,
+            MemoryFusionPolicy fusionPolicy,
+            @Value("${seahorse-agent.memory.recall.channel-top-k:20}") int channelTopK) {
+        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        return new HybridMemoryRecallPipeline(
+                shortTermMemoryPort,
+                longTermMemoryPort,
+                semanticMemoryPort,
+                objectMapper,
+                profileMemoryPort.getIfAvailable(ProfileMemoryPort::noop),
+                correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
+                memoryRouterPort.getIfAvailable(DefaultMemoryRouter::new),
+                businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop),
+                memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop),
+                recallChannels,
+                recallFusionPort,
+                fusionPolicy,
+                channelTopK);
+    }
+
+    @Bean
     @ConditionalOnMissingBean(ContextWeaverPort.class)
     public DefaultContextWeaver seahorseDefaultContextWeaver() {
         return new DefaultContextWeaver();
@@ -197,13 +400,65 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MemoryOutboxPort.class)
+    @ConditionalOnMissingBean(name = "seahorseVectorUpsertMemoryOutboxTaskHandler")
+    public VectorMemoryOutboxTaskHandler seahorseVectorUpsertMemoryOutboxTaskHandler(
+            ObjectProvider<MemoryVectorPort> memoryVectorPort) {
+        return new VectorMemoryOutboxTaskHandler(
+                memoryVectorPort.getIfAvailable(MemoryVectorPort::noop),
+                MemoryOutboxTaskTypes.VECTOR_UPSERT);
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryOutboxPort.class)
+    @ConditionalOnMissingBean(name = "seahorseVectorDeleteMemoryOutboxTaskHandler")
+    public VectorMemoryOutboxTaskHandler seahorseVectorDeleteMemoryOutboxTaskHandler(
+            ObjectProvider<MemoryVectorPort> memoryVectorPort) {
+        return new VectorMemoryOutboxTaskHandler(
+                memoryVectorPort.getIfAvailable(MemoryVectorPort::noop),
+                MemoryOutboxTaskTypes.VECTOR_DELETE);
+    }
+
+    @Bean
+    @ConditionalOnBean({MemoryOutboxPort.class, MemoryKeywordIndexPort.class})
+    @ConditionalOnMissingBean(name = "seahorseKeywordUpsertMemoryOutboxTaskHandler")
+    public KeywordMemoryOutboxTaskHandler seahorseKeywordUpsertMemoryOutboxTaskHandler(
+            MemoryKeywordIndexPort keywordIndexPort) {
+        return new KeywordMemoryOutboxTaskHandler(keywordIndexPort, MemoryOutboxTaskTypes.KEYWORD_UPSERT);
+    }
+
+    @Bean
+    @ConditionalOnBean({MemoryOutboxPort.class, MemoryKeywordIndexPort.class})
+    @ConditionalOnMissingBean(name = "seahorseKeywordDeleteMemoryOutboxTaskHandler")
+    public KeywordMemoryOutboxTaskHandler seahorseKeywordDeleteMemoryOutboxTaskHandler(
+            MemoryKeywordIndexPort keywordIndexPort) {
+        return new KeywordMemoryOutboxTaskHandler(keywordIndexPort, MemoryOutboxTaskTypes.KEYWORD_DELETE);
+    }
+
+    @Bean
+    @ConditionalOnBean({MemoryOutboxPort.class, MemoryGraphIndexPort.class})
+    @ConditionalOnMissingBean(name = "seahorseGraphUpsertMemoryOutboxTaskHandler")
+    public GraphMemoryOutboxTaskHandler seahorseGraphUpsertMemoryOutboxTaskHandler(
+            MemoryGraphIndexPort graphIndexPort) {
+        return new GraphMemoryOutboxTaskHandler(graphIndexPort, MemoryOutboxTaskTypes.GRAPH_UPSERT);
+    }
+
+    @Bean
+    @ConditionalOnBean({MemoryOutboxPort.class, MemoryGraphIndexPort.class})
+    @ConditionalOnMissingBean(name = "seahorseGraphDeleteMemoryOutboxTaskHandler")
+    public GraphMemoryOutboxTaskHandler seahorseGraphDeleteMemoryOutboxTaskHandler(
+            MemoryGraphIndexPort graphIndexPort) {
+        return new GraphMemoryOutboxTaskHandler(graphIndexPort, MemoryOutboxTaskTypes.GRAPH_DELETE);
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryOutboxPort.class)
     @ConditionalOnMissingBean
     public MemoryOutboxRelayService seahorseMemoryOutboxRelayService(
             MemoryOutboxPort memoryOutboxPort,
-            ObjectProvider<MemoryVectorPort> memoryVectorPort) {
+            ObjectProvider<MemoryOutboxTaskHandler> taskHandlers) {
         return new MemoryOutboxRelayService(
                 memoryOutboxPort,
-                memoryVectorPort.getIfAvailable(MemoryVectorPort::noop));
+                taskHandlers.orderedStream().toList());
     }
 
     @Bean
@@ -256,6 +511,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<CorrectionLedgerPort> correctionLedgerPort,
             ObjectProvider<MemoryOperationLogPort> operationLogPort,
             ObjectProvider<MemoryOutboxPort> outboxPort,
+            ObjectProvider<MemoryReviewManagementRepositoryPort> reviewRepositoryPort,
             ObjectProvider<MemoryPolicyConfigPort> policyConfigPort) {
         return new MemoryManagementServicePorts(
                 workingMemoryPort,
@@ -268,6 +524,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
                 operationLogPort.getIfAvailable(MemoryOperationLogPort::noop),
                 outboxPort.getIfAvailable(MemoryOutboxPort::noop),
+                reviewRepositoryPort.getIfAvailable(MemoryReviewManagementRepositoryPort::empty),
                 policyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults));
     }
 
@@ -277,6 +534,19 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     public KernelMemoryManagementService seahorseMemoryManagementInboundPort(
             MemoryManagementServicePorts servicePorts) {
         return new KernelMemoryManagementService(servicePorts);
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryIngestionWorkflowPort.class)
+    @ConditionalOnMissingBean(MemoryReviewInboundPort.class)
+    public KernelMemoryReviewService seahorseMemoryReviewInboundPort(
+            ObjectProvider<MemoryReviewManagementRepositoryPort> reviewRepositoryPort,
+            ObjectProvider<MemoryReviewFeedbackRepositoryPort> reviewFeedbackRepositoryPort,
+            MemoryIngestionWorkflowPort ingestionWorkflowPort) {
+        return new KernelMemoryReviewService(
+                reviewRepositoryPort.getIfAvailable(MemoryReviewManagementRepositoryPort::empty),
+                ingestionWorkflowPort,
+                reviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty));
     }
 
     @Bean
@@ -331,6 +601,60 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             MemoryGovernanceInboundPort governanceInboundPort,
             ObjectProvider<DistributedLockPort> lockPort) {
         return new SeahorseMemoryGovernanceJob(governanceInboundPort,
+                lockPort.getIfAvailable(DistributedLockPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryOutboxPort.class)
+    @ConditionalOnMissingBean
+    public MemoryGarbageCollectionService seahorseMemoryGarbageCollectionService(
+            ObjectProvider<MemoryGarbageCollectionPort> garbageCollectionPort,
+            MemoryOutboxPort outboxPort,
+            ObjectProvider<MemoryKeywordIndexPort> keywordIndexPort,
+            ObjectProvider<MemoryGraphIndexPort> graphIndexPort,
+            @Value("${seahorse-agent.memory.gc.scan-limit:100}") int scanLimit,
+            @Value("${seahorse-agent.memory.gc.retention-days:7}") long retentionDays,
+            @Value("${seahorse-agent.memory.gc.dry-run:false}") boolean dryRun,
+            @Value("${seahorse-agent.memory.gc.vector-index-enabled:true}") boolean vectorIndexEnabled,
+            @Value("${seahorse-agent.memory.gc.keyword-index-enabled:true}") boolean keywordIndexEnabled,
+            @Value("${seahorse-agent.memory.gc.graph-index-enabled:true}") boolean graphIndexEnabled) {
+        return new MemoryGarbageCollectionService(
+                garbageCollectionPort.getIfAvailable(MemoryGarbageCollectionPort::noop),
+                outboxPort,
+                new MemoryGarbageCollectionOptions(
+                        scanLimit,
+                        Duration.ofDays(Math.max(0L, retentionDays)),
+                        dryRun,
+                        vectorIndexEnabled,
+                        keywordIndexEnabled && keywordIndexPort.getIfAvailable() != null,
+                        graphIndexEnabled && graphIndexPort.getIfAvailable() != null));
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryGarbageCollectionService.class)
+    @ConditionalOnMissingBean(MemoryMaintenanceInboundPort.class)
+    public DefaultMemoryMaintenanceService seahorseMemoryMaintenanceInboundPort(
+            MemoryGarbageCollectionService garbageCollectionService,
+            @Value("${seahorse-agent.memory.maintenance.compaction-enabled:false}") boolean compactionEnabled,
+            @Value("${seahorse-agent.memory.maintenance.alias-enabled:false}") boolean aliasEnabled,
+            @Value("${seahorse-agent.memory.maintenance.gc-enabled:true}") boolean garbageCollectionEnabled) {
+        return new DefaultMemoryMaintenanceService(
+                garbageCollectionService,
+                compactionEnabled,
+                aliasEnabled,
+                garbageCollectionEnabled);
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryGarbageCollectionService.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.gc", name = "scheduler-enabled",
+            havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public SeahorseMemoryGarbageCollectionJob seahorseMemoryGarbageCollectionJob(
+            MemoryGarbageCollectionService garbageCollectionService,
+            ObjectProvider<DistributedLockPort> lockPort) {
+        return new SeahorseMemoryGarbageCollectionJob(
+                garbageCollectionService,
                 lockPort.getIfAvailable(DistributedLockPort::noop));
     }
 }

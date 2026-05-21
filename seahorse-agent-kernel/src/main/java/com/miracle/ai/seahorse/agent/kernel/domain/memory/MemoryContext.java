@@ -37,6 +37,7 @@ public class MemoryContext {
     List<MemoryItem> correctionMemories;
     List<MemoryItem> profileMemories;
     List<MemoryItem> shortTermMemories;
+    List<MemoryItem> businessDocumentMemories;
     List<MemoryItem> longTermMemories;
     List<MemoryItem> semanticMemories;
     List<ChatMessage> promptMessages;

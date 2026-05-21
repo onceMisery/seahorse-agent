@@ -59,11 +59,6 @@ import java.util.Set;
 public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePort {
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultMemoryRetrievalPipeline.class);
-    private static final List<String> PROFILE_SLOT_KEYS = List.of(
-            "identity.occupation",
-            "identity.name",
-            "skills.tech_stack",
-            "preferences.response_style");
 
     private final ShortTermMemoryPort shortTermPort;
     private final LongTermMemoryPort longTermPort;
@@ -76,6 +71,7 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
     private final MemoryVectorPort memoryVectorPort;
     private final MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort;
     private final MemoryLifecyclePort memoryLifecyclePort;
+    private final ProfileSlotResolver profileSlotResolver;
 
     public DefaultMemoryRetrievalPipeline(ShortTermMemoryPort shortTermPort,
                                           LongTermMemoryPort longTermPort,
@@ -100,6 +96,7 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
         this.businessDocumentRetrieverPort = Objects.requireNonNull(businessDocumentRetrieverPort,
                 "businessDocumentRetrieverPort must not be null");
         this.memoryLifecyclePort = Objects.requireNonNull(memoryLifecyclePort, "memoryLifecyclePort must not be null");
+        this.profileSlotResolver = new ProfileSlotResolver();
     }
 
     @Override
@@ -127,26 +124,38 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
                 : Collections.emptyList();
         List<MemoryItem> corrections = loadCorrection ? loadCorrections(userId) : Collections.emptyList();
         List<MemoryItem> profile = loadProfile ? loadProfileFacts(userId) : Collections.emptyList();
+        Set<String> correctionProfileSlots = correctionProfileSlots(corrections);
+        if (!correctionProfileSlots.isEmpty()) {
+            profile = removeActiveProfileSlotMemories(profile, correctionProfileSlots);
+        }
+        int vectorHitCount = 0;
         if (loadEpisodic) {
             List<MemoryItem> vectorHits = loadVectorHitMemories(userId, request.currentQuestion(),
                     options.semanticLimit());
+            vectorHitCount = vectorHits.size();
             shortTerm = mergeById(shortTerm, filterByLayer(vectorHits, MemoryLayer.SHORT_TERM));
             longTerm = mergeById(longTerm, filterByLayer(vectorHits, MemoryLayer.LONG_TERM));
             semantic = mergeById(semantic, filterByLayer(vectorHits, MemoryLayer.SEMANTIC));
         }
+        List<MemoryItem> businessDocuments = Collections.emptyList();
         if (loadBusinessDocument) {
-            semantic = mergeById(semantic, loadBusinessDocuments(userId, request.currentQuestion(),
-                    options.semanticLimit()));
+            businessDocuments = loadBusinessDocuments(userId, request.currentQuestion(), options.semanticLimit());
         }
         Set<String> activeProfileSlots = activeProfileSlots(profile);
-        if (!activeProfileSlots.isEmpty()) {
-            shortTerm = removeActiveProfileSlotMemories(shortTerm, activeProfileSlots);
-            longTerm = removeActiveProfileSlotMemories(longTerm, activeProfileSlots);
-            semantic = removeActiveProfileSlotMemories(semantic, activeProfileSlots);
+        Set<String> suppressedProfileSlots = new LinkedHashSet<>();
+        suppressedProfileSlots.addAll(activeProfileSlots);
+        suppressedProfileSlots.addAll(correctionProfileSlots);
+        if (!suppressedProfileSlots.isEmpty()) {
+            shortTerm = removeActiveProfileSlotMemories(shortTerm, suppressedProfileSlots);
+            longTerm = removeActiveProfileSlotMemories(longTerm, suppressedProfileSlots);
+            semantic = removeActiveProfileSlotMemories(semantic, suppressedProfileSlots);
         }
         shortTerm = deduplicateById(shortTerm);
         longTerm = deduplicateProfileSlots(deduplicateById(longTerm));
         semantic = deduplicateProfileSlots(deduplicateById(semantic));
+        businessDocuments = deduplicateById(businessDocuments);
+        logRetrievalSummary(userId, routePlan.activeTracks(), corrections, profile, shortTerm, businessDocuments,
+                longTerm, semantic, vectorHitCount, suppressedProfileSlots);
         Instant referencedAt = Instant.now();
         recordProfileReadFeedback(profile, referencedAt);
         recordLayerReadFeedback(shortTerm, longTerm, semantic, referencedAt);
@@ -159,10 +168,38 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
                 .correctionMemories(corrections)
                 .profileMemories(profile)
                 .shortTermMemories(shortTerm)
+                .businessDocumentMemories(businessDocuments)
                 .longTermMemories(longTerm)
                 .semanticMemories(semantic)
                 .promptMessages(Collections.emptyList())
                 .build();
+    }
+
+    private void logRetrievalSummary(String userId,
+                                     Set<MemoryTrack> activeTracks,
+                                     List<MemoryItem> corrections,
+                                     List<MemoryItem> profile,
+                                     List<MemoryItem> shortTerm,
+                                     List<MemoryItem> businessDocuments,
+                                     List<MemoryItem> longTerm,
+                                     List<MemoryItem> semantic,
+                                     int vectorHitCount,
+                                     Set<String> suppressedProfileSlots) {
+        if (!LOG.isDebugEnabled()) {
+            return;
+        }
+        LOG.debug("memory retrieval summary: userId={}, tracks={}, corrections={}, profile={}, shortTerm={}, "
+                        + "businessDocuments={}, longTerm={}, semantic={}, vectorHits={}, suppressedProfileSlots={}",
+                userId,
+                activeTracks,
+                safeSize(corrections),
+                safeSize(profile),
+                safeSize(shortTerm),
+                safeSize(businessDocuments),
+                safeSize(longTerm),
+                safeSize(semantic),
+                vectorHitCount,
+                suppressedProfileSlots);
     }
 
     private List<MemoryItem> loadCorrections(String userId) {
@@ -237,6 +274,20 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
             LOG.warn("加载业务文档记忆候选失败: userId={}", userId, ex);
             return Collections.emptyList();
         }
+    }
+
+    private Set<String> correctionProfileSlots(List<MemoryItem> corrections) {
+        if (corrections == null || corrections.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> slots = new LinkedHashSet<>();
+        for (MemoryItem correction : corrections) {
+            String slot = profileSlotResolver.correctionTargetSlot(correction);
+            if (!slot.isBlank()) {
+                slots.add(slot);
+            }
+        }
+        return slots;
     }
 
     private List<MemoryItem> filterByLayer(List<MemoryItem> items, MemoryLayer layer) {
@@ -418,11 +469,11 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
             return items == null ? Collections.emptyList() : items;
         }
         Map<String, MemoryItem> slotWinners = new LinkedHashMap<>();
-        List<MemoryItem> nonSlotItems = new ArrayList<>();
+        List<String> itemSlots = new ArrayList<>();
         for (MemoryItem item : items) {
             String slot = semanticSlot(item);
+            itemSlots.add(slot);
             if (slot.isBlank()) {
-                nonSlotItems.add(item);
                 continue;
             }
             MemoryItem current = slotWinners.get(slot);
@@ -430,10 +481,19 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
                 slotWinners.put(slot, item);
             }
         }
-        List<MemoryItem> result = new ArrayList<>(slotWinners.values());
-        result.addAll(nonSlotItems);
-        result.sort(Comparator.comparing(MemoryItem::getCreateTime,
-                Comparator.nullsLast(Comparator.reverseOrder())));
+        Set<String> emittedSlots = new LinkedHashSet<>();
+        List<MemoryItem> result = new ArrayList<>();
+        for (int index = 0; index < items.size(); index++) {
+            MemoryItem item = items.get(index);
+            String slot = itemSlots.get(index);
+            if (slot.isBlank()) {
+                result.add(item);
+                continue;
+            }
+            if (emittedSlots.add(slot)) {
+                result.add(slotWinners.get(slot));
+            }
+        }
         return result;
     }
 
@@ -455,91 +515,7 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
     }
 
     private String semanticSlot(MemoryItem item) {
-        if (item == null) {
-            return "";
-        }
-        String metadata = Objects.requireNonNullElse(item.getMetadataJson(), "");
-        String metadataSlot = metadataSlot(metadata);
-        if (!metadataSlot.isBlank()) {
-            return metadataSlot;
-        }
-        if (!isProfileLike(item)) {
-            return "";
-        }
-        String content = Objects.requireNonNullElse(item.getContent(), "");
-        String normalized = content.toLowerCase(Locale.ROOT);
-        if (normalized.startsWith("my name is ")) {
-            return "identity.name";
-        }
-        if (content.startsWith("\u6211\u53eb")
-                || content.startsWith("\u6211\u7684\u540d\u5b57\u662f")
-                || content.startsWith("\u6211\u7684\u6635\u79f0\u662f")) {
-            return "identity.name";
-        }
-        if (normalized.startsWith("my tech stack is ")) {
-            return "skills.tech_stack";
-        }
-        if (content.startsWith("\u6211\u7684\u6280\u672f\u6808\u662f")
-                || content.startsWith("\u6211\u4e3b\u8981\u4f7f\u7528")) {
-            return "skills.tech_stack";
-        }
-        if (normalized.startsWith("i prefer ")
-                || normalized.startsWith("i like concise answers")
-                || normalized.startsWith("i like detailed answers")) {
-            return "preferences.response_style";
-        }
-        if (content.startsWith("\u6211\u559c\u6b22\u7b80\u77ed\u56de\u7b54")
-                || content.startsWith("\u6211\u559c\u6b22\u8be6\u7ec6\u56de\u7b54")
-                || content.startsWith("\u6211\u504f\u597d\u7b80\u77ed\u56de\u7b54")
-                || content.startsWith("\u6211\u504f\u597d\u8be6\u7ec6\u56de\u7b54")) {
-            return "preferences.response_style";
-        }
-        if (containsAny(normalized, "occupation", "profession", "job", "student", "teacher")
-                || containsAny(content, "职业", "身份", "工作", "学生", "老师", "教师")) {
-            return "identity.occupation";
-        }
-        return "";
-    }
-
-    private String metadataSlot(String metadata) {
-        if (metadata == null || metadata.isBlank()) {
-            return "";
-        }
-        if (metadata.contains("\"semanticKey\":\"profile:occupation\"")
-                || metadata.contains("\"semanticKey\": \"profile:occupation\"")) {
-            return "identity.occupation";
-        }
-        for (String slot : PROFILE_SLOT_KEYS) {
-            if (metadataContainsValue(metadata, "semanticKey", slot)
-                    || metadataContainsValue(metadata, "profileSlot", slot)) {
-                return slot;
-            }
-        }
-        return "";
-    }
-
-    private boolean metadataContainsValue(String metadata, String key, String value) {
-        return metadata.contains("\"" + key + "\":\"" + value + "\"")
-                || metadata.contains("\"" + key + "\": \"" + value + "\"");
-    }
-
-    private boolean isProfileLike(MemoryItem item) {
-        String type = Objects.requireNonNullElse(item.getType(), "");
-        return "PROFILE".equalsIgnoreCase(type)
-                || "FACT".equalsIgnoreCase(type)
-                || "PREFERENCE".equalsIgnoreCase(type);
-    }
-
-    private boolean containsAny(String content, String... needles) {
-        if (content == null || needles == null) {
-            return false;
-        }
-        for (String needle : needles) {
-            if (needle != null && !needle.isBlank() && content.contains(needle)) {
-                return true;
-            }
-        }
-        return false;
+        return profileSlotResolver.resolve(item);
     }
 
     private String serializeMetadata(Map<String, Object> metadata) {
@@ -576,10 +552,15 @@ public class DefaultMemoryRetrievalPipeline implements MemoryRetrievalPipelinePo
                 .correctionMemories(Collections.emptyList())
                 .profileMemories(Collections.emptyList())
                 .shortTermMemories(Collections.emptyList())
+                .businessDocumentMemories(Collections.emptyList())
                 .longTermMemories(Collections.emptyList())
                 .semanticMemories(Collections.emptyList())
                 .promptMessages(Collections.emptyList())
                 .build();
+    }
+
+    private int safeSize(List<?> items) {
+        return items == null ? 0 : items.size();
     }
 
     private boolean isBlank(String value) {

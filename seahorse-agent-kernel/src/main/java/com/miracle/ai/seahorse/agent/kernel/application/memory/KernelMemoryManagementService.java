@@ -27,6 +27,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 
@@ -122,6 +124,10 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
         List<MemoryConflictRecord> pendingConflicts = ports.conflictLogRepositoryPort()
                 .listByUser(safeUserId, "PENDING", sampleLimit);
         List<MemoryOutboxPort.MemoryOutboxTask> outboxTasks = ports.outboxPort().pollPending(sampleLimit);
+        long pendingReviews = ports.reviewRepositoryPort()
+                .pageReviewCandidates(new MemoryReviewQuery(
+                        safeTenantId, safeUserId, MemoryReviewStatus.PENDING, 1L, 1L))
+                .total();
         List<MemoryOperationRecord> operations = ports.operationLogPort()
                 .listByUser(safeUserId, safeTenantId, null, sampleLimit);
         List<MemoryQualitySnapshot> snapshots = ports.qualitySnapshotRepositoryPort().listByUser(safeUserId, 1);
@@ -144,6 +150,7 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
                 correctionRules.size(),
                 pendingConflicts.size(),
                 outboxTasks.size(),
+                safeCount(pendingReviews),
                 operationCounts,
                 rate(acceptedCount, operationTotal),
                 rate(rejectedCount, operationTotal),
@@ -260,6 +267,10 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
             }
         }
         return 0;
+    }
+
+    private int safeCount(long count) {
+        return count > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) Math.max(0L, count);
     }
 
     private List<String> alerts(int outboxBacklog,

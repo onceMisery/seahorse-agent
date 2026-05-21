@@ -29,18 +29,29 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.RefinedMemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
@@ -120,6 +131,20 @@ class DefaultMemoryEnginePortTests {
         MemoryContext context = engine.loadMemory(null);
 
         Assertions.assertTrue(context.getShortTermMemories().isEmpty());
+    }
+
+    @Test
+    void noopShouldReturnNullSafeMemoryContextLists() {
+        MemoryContext context = MemoryEnginePort.noop().loadMemory(null);
+
+        Assertions.assertNotNull(context.getWorkingMemory());
+        Assertions.assertNotNull(context.getCorrectionMemories());
+        Assertions.assertNotNull(context.getProfileMemories());
+        Assertions.assertNotNull(context.getShortTermMemories());
+        Assertions.assertNotNull(context.getBusinessDocumentMemories());
+        Assertions.assertNotNull(context.getLongTermMemories());
+        Assertions.assertNotNull(context.getSemanticMemories());
+        Assertions.assertNotNull(context.getPromptMessages());
     }
 
     @Test
@@ -418,10 +443,9 @@ class DefaultMemoryEnginePortTests {
         Assertions.assertEquals(1, profilePort.updates.size());
         Assertions.assertEquals("老师", profilePort.updates.get(0).valueText());
         Assertions.assertEquals(1, context.getCorrectionMemories().size());
-        Assertions.assertEquals(1, context.getProfileMemories().size());
-        Assertions.assertEquals("老师", context.getProfileMemories().get(0).getContent());
+        Assertions.assertTrue(context.getProfileMemories().isEmpty());
         String promptMemory = MemoryPromptFormatter.format(context);
-        Assertions.assertTrue(promptMemory.indexOf("用户纠错本：") < promptMemory.indexOf("用户画像："));
+        Assertions.assertTrue(promptMemory.contains("用户纠错本："));
         Assertions.assertTrue(promptMemory.contains("老师"));
         Assertions.assertFalse(promptMemory.contains("- 我是一名学生"));
     }
@@ -722,6 +746,240 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldNotCallRefinerWhenRefinerIsDisabled() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(
+                MemoryRefinementResult.empty("disabled_by_test"));
+        DefaultMemoryEnginePort engine = engineWithRefiner(shortTermPort, refinerPort, false);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-disabled", "default", "chat-completed",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-disabled")
+                        .messageId("msg-refiner-disabled")
+                        .message(ChatMessage.user("i prefer concise answers"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        Assertions.assertEquals(0, refinerPort.requests.size());
+        Assertions.assertEquals("PREFERENCE", shortTermPort.savedRecords.get(0).type());
+    }
+
+    @Test
+    void shouldUseEnabledRefinerStructuredAddBeforeSchemaValidationAndWrite() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "refined",
+                List.of(RefinedMemoryOperation.add(
+                        "PROJECT_FACT",
+                        "project.thread_pool.reject_policy",
+                        "用户正在调优 Dubbo 消费端线程池拒绝策略，关注 CallerRuns 反压效果。",
+                        0.86D,
+                        0.72D,
+                        List.of("msg-refiner-add"),
+                        List.of("llm_refiner"))),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefiner(
+                shortTermPort,
+                refinerPort,
+                true,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-add", "default", "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-add")
+                        .messageId("msg-refiner-add")
+                        .message(ChatMessage.user("刚才讨论 Dubbo 线程池拒绝策略，我想改成 CallerRuns。"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.ADD, result.action());
+        Assertions.assertEquals(1, refinerPort.requests.size());
+        Assertions.assertEquals("op-refiner-add", refinerPort.requests.get(0).operationId());
+        Assertions.assertEquals("memory-aggregation-flush", refinerPort.requests.get(0).source());
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        MemoryRecord saved = shortTermPort.savedRecords.get(0);
+        Assertions.assertEquals("PROJECT_FACT", saved.type());
+        Assertions.assertEquals("用户正在调优 Dubbo 消费端线程池拒绝策略，关注 CallerRuns 反压效果。", saved.content());
+        Assertions.assertEquals("project.thread_pool.reject_policy", saved.metadata().get("targetKey"));
+        Assertions.assertEquals("llm_refiner", saved.metadata().get("capturePolicy"));
+        Assertions.assertEquals("enabled", operationLogPort.decisionById.get("op-refiner-add").get("refinerStatus"));
+        Assertions.assertEquals("ADD", operationLogPort.decisionById.get("op-refiner-add").get("refinerAction"));
+        Assertions.assertEquals("project.thread_pool.reject_policy",
+                operationLogPort.decisionById.get("op-refiner-add").get("targetKey"));
+    }
+
+    @Test
+    void shouldFailOpenToRuleClassificationWhenEnabledRefinerThrows() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        ThrowingMemoryRefinerPort refinerPort = new ThrowingMemoryRefinerPort();
+        DefaultMemoryEnginePort engine = engineWithRefiner(
+                shortTermPort,
+                refinerPort,
+                true,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-fail-open", "default", "chat-completed",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-fail-open")
+                        .messageId("msg-refiner-fail-open")
+                        .message(ChatMessage.user("i prefer concise answers"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(1, refinerPort.requests.size());
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        Assertions.assertEquals("PREFERENCE", shortTermPort.savedRecords.get(0).type());
+        Assertions.assertEquals("failed_open",
+                operationLogPort.decisionById.get("op-refiner-fail-open").get("refinerStatus"));
+        Assertions.assertTrue(operationLogPort.decisionById.get("op-refiner-fail-open")
+                .get("refinerReason").toString().contains("refiner_down"));
+    }
+
+    @Test
+    void shouldRejectRefinedSensitiveAddBeforeDurableWrite() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "refined_sensitive",
+                List.of(RefinedMemoryOperation.add(
+                        "PROJECT_FACT",
+                        "project.secret",
+                        "remember that my api key is sk-test-secret",
+                        0.90D,
+                        0.80D,
+                        List.of("msg-refiner-sensitive"),
+                        List.of("llm_refiner"))),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefiner(
+                shortTermPort,
+                refinerPort,
+                true,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-sensitive", "default", "chat-completed",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-sensitive")
+                        .messageId("msg-refiner-sensitive")
+                        .message(ChatMessage.user("i prefer concise answers"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals("sensitive_credential", result.reason());
+        Assertions.assertEquals(1, refinerPort.requests.size());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(MemoryOperationStatus.REJECTED,
+                operationLogPort.statusById.get("op-refiner-sensitive"));
+        Assertions.assertEquals("ADD",
+                operationLogPort.decisionById.get("op-refiner-sensitive").get("refinerAction"));
+        Assertions.assertEquals("sensitive_credential",
+                operationLogPort.decisionById.get("op-refiner-sensitive").get("reason"));
+    }
+
+    @Test
+    void shouldIgnoreUnsupportedRefinedDeleteWithoutDeletingOrWritingMemory() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "delete_requested",
+                List.of(new RefinedMemoryOperation(
+                        MemoryIngestionAction.DELETE,
+                        "SHORT_TERM_MEMORY",
+                        "stm-old-memory",
+                        "",
+                        0.92D,
+                        0.50D,
+                        0.50D,
+                        0.10D,
+                        List.of("msg-refiner-delete"),
+                        List.of("llm_refiner"),
+                        Map.of())),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefiner(
+                shortTermPort,
+                refinerPort,
+                true,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-delete", "default", "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-delete")
+                        .messageId("msg-refiner-delete")
+                        .message(ChatMessage.user("delete the old memory about my previous project"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.IGNORED, result.status());
+        Assertions.assertEquals(1, refinerPort.requests.size());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(MemoryOperationStatus.IGNORED,
+                operationLogPort.statusById.get("op-refiner-delete"));
+        Assertions.assertEquals("unsupported_refined_operation",
+                operationLogPort.decisionById.get("op-refiner-delete").get("refinerReason"));
+        Assertions.assertEquals("unsupported",
+                operationLogPort.decisionById.get("op-refiner-delete").get("refinerStatus"));
+    }
+
+    @Test
+    void shouldKeepRefinedReviewAsPendingReviewWithoutActiveMemoryWrite() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "needs_review",
+                List.of(new RefinedMemoryOperation(
+                        MemoryIngestionAction.REVIEW,
+                        "PROJECT_FACT",
+                        "project.ambiguous",
+                        "user might be changing the project stack",
+                        0.62D,
+                        0.70D,
+                        0.70D,
+                        0.20D,
+                        List.of("msg-refiner-review"),
+                        List.of("llm_refiner", "low_confidence"),
+                        Map.of("reviewReason", "low_confidence"))),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-review", "default", "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-review")
+                        .messageId("msg-refiner-review")
+                        .message(ChatMessage.user("maybe we are moving the project from Dubbo to something else"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.REVIEW, result.action());
+        Assertions.assertEquals("needs_review", result.reason());
+        Assertions.assertEquals(1, refinerPort.requests.size());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(1, reviewCandidatePort.candidates.size());
+        MemoryReviewCandidate candidate = reviewCandidatePort.candidates.get(0);
+        Assertions.assertEquals("op-refiner-review", candidate.operationId());
+        Assertions.assertEquals("PROJECT_FACT", candidate.targetKind());
+        Assertions.assertEquals("project.ambiguous", candidate.targetKey());
+        Assertions.assertEquals("user might be changing the project stack", candidate.content());
+        Assertions.assertEquals(MemoryIngestionAction.REVIEW, candidate.requestedAction());
+        Assertions.assertEquals("low_confidence", candidate.metadata().get("reviewReason"));
+        Assertions.assertEquals(MemoryOperationStatus.REVIEW,
+                operationLogPort.statusById.get("op-refiner-review"));
+        Assertions.assertEquals("REVIEW",
+                operationLogPort.decisionById.get("op-refiner-review").get("refinerAction"));
+    }
+
+    @Test
     void shouldEnqueueOutboxWhenVectorIndexingFailsWithoutRollingBackMemoryWrite() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
@@ -828,8 +1086,9 @@ class DefaultMemoryEnginePortTests {
                 .build());
 
         Assertions.assertEquals(List.of("知识库里的报销规则是什么？"), businessPort.queries);
-        Assertions.assertTrue(context.getSemanticMemories().stream()
+        Assertions.assertTrue(context.getBusinessDocumentMemories().stream()
                 .anyMatch(item -> item.getContent().contains("超过 5000 元需要审批")));
+        Assertions.assertTrue(context.getSemanticMemories().isEmpty());
     }
 
     @Test
@@ -956,6 +1215,59 @@ class DefaultMemoryEnginePortTests {
                         "semanticKey", semanticKey,
                         "generationId", generationId),
                 updatedAt);
+    }
+
+    private DefaultMemoryEnginePort engineWithRefiner(ShortTermMemoryPort shortTermPort,
+                                                      MemoryRefinerPort refinerPort,
+                                                      boolean enabled) {
+        return engineWithRefiner(shortTermPort, refinerPort, enabled, MemoryOperationLogPort.noop());
+    }
+
+    private DefaultMemoryEnginePort engineWithRefiner(ShortTermMemoryPort shortTermPort,
+                                                      MemoryRefinerPort refinerPort,
+                                                      boolean enabled,
+                                                      MemoryOperationLogPort operationLogPort) {
+        return new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                new MemoryEngineOptions(5, 3, 10, true, enabled, true),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort,
+                MemoryVectorPort.noop(),
+                MemoryOutboxPort.noop(),
+                MemoryBusinessDocumentRetrieverPort.noop(),
+                MemoryLifecyclePort.noop(),
+                MemoryPolicyConfigPort.defaults(),
+                (MemoryRetrievalPipelinePort) null,
+                refinerPort);
+    }
+
+    private DefaultMemoryEnginePort engineWithRefinerAndReview(ShortTermMemoryPort shortTermPort,
+                                                               MemoryRefinerPort refinerPort,
+                                                               MemoryReviewCandidatePort reviewCandidatePort,
+                                                               MemoryOperationLogPort operationLogPort) {
+        return new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                new MemoryEngineOptions(5, 3, 10, true, true, true),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort,
+                MemoryVectorPort.noop(),
+                MemoryOutboxPort.noop(),
+                MemoryBusinessDocumentRetrieverPort.noop(),
+                MemoryLifecyclePort.noop(),
+                new InMemoryMemoryPolicyConfigPort(MemoryPolicyConfig.defaults().withReviewEnabled(true)),
+                (MemoryRetrievalPipelinePort) null,
+                refinerPort,
+                reviewCandidatePort);
     }
 
     private static class StubShortTermMemoryPort implements ShortTermMemoryPort {
@@ -1150,6 +1462,43 @@ class DefaultMemoryEnginePortTests {
         public void markFailed(String operationId, String errorMessage) {
             statusById.put(operationId, MemoryOperationStatus.FAILED);
             decisionById.put(operationId, Map.of("errorMessage", errorMessage));
+        }
+    }
+
+    private static class RecordingMemoryRefinerPort implements MemoryRefinerPort {
+
+        private final MemoryRefinementResult result;
+        private final List<MemoryRefinementRequest> requests = new ArrayList<>();
+
+        RecordingMemoryRefinerPort(MemoryRefinementResult result) {
+            this.result = result;
+        }
+
+        @Override
+        public MemoryRefinementResult refine(MemoryRefinementRequest request) {
+            requests.add(request);
+            return result;
+        }
+    }
+
+    private static class RecordingMemoryReviewCandidatePort implements MemoryReviewCandidatePort {
+
+        private final List<MemoryReviewCandidate> candidates = new ArrayList<>();
+
+        @Override
+        public void save(MemoryReviewCandidate candidate) {
+            candidates.add(candidate);
+        }
+    }
+
+    private static class ThrowingMemoryRefinerPort implements MemoryRefinerPort {
+
+        private final List<MemoryRefinementRequest> requests = new ArrayList<>();
+
+        @Override
+        public MemoryRefinementResult refine(MemoryRefinementRequest request) {
+            requests.add(request);
+            throw new IllegalStateException("refiner_down");
         }
     }
 

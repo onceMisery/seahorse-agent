@@ -61,7 +61,7 @@ public interface MemoryManagementInboundPort {
     }
 
     default MemoryHealthReport memoryHealth(String userId, String tenantId) {
-        return new MemoryHealthReport(userId, tenantId, 0, 0, 0, 0,
+        return new MemoryHealthReport(userId, tenantId, 0, 0, 0, 0, 0,
                 java.util.Map.of(), 0D, 0D, 0, 0, 0D, 0D, java.util.Map.of(), List.of(),
                 java.time.Instant.now());
     }

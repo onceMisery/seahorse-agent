@@ -18,7 +18,10 @@
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskTypes;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -27,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class MemoryOutboxRelayServiceTests {
 
@@ -43,6 +47,23 @@ class MemoryOutboxRelayServiceTests {
 
         assertThat(processed).isEqualTo(1);
         assertThat(vectorPort.upserts).containsExactly("stm-1|user-1|prefers concise answers|default");
+        assertThat(outboxPort.succeeded).containsExactly("outbox-1");
+        assertThat(outboxPort.failed).isEmpty();
+    }
+
+    @Test
+    void shouldRelayVectorDeleteAndMarkTaskSucceeded() {
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of(task(
+                "outbox-1",
+                "VECTOR_DELETE",
+                Map.of("memoryId", "stm-1"))));
+        RecordingVectorPort vectorPort = new RecordingVectorPort();
+        MemoryOutboxRelayService service = new MemoryOutboxRelayService(outboxPort, vectorPort);
+
+        int processed = service.processBatch(10);
+
+        assertThat(processed).isEqualTo(1);
+        assertThat(vectorPort.deletes).containsExactly("stm-1|user-1|default");
         assertThat(outboxPort.succeeded).containsExactly("outbox-1");
         assertThat(outboxPort.failed).isEmpty();
     }
@@ -84,6 +105,145 @@ class MemoryOutboxRelayServiceTests {
         assertThat(outboxPort.failed).containsKey("outbox-unsupported");
         assertThat(outboxPort.failed.get("outbox-unsupported")).contains("unsupported task type");
         assertThat(outboxPort.succeeded).containsExactly("outbox-vector");
+    }
+
+    @Test
+    void shouldDispatchTasksToRegisteredHandlersByTaskType() {
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of(
+                task("outbox-keyword", "KEYWORD_UPSERT",
+                        Map.of("memoryId", "stm-1", "content", "domain-specific phrase")),
+                task("outbox-vector", "VECTOR_UPSERT",
+                        Map.of("memoryId", "stm-2", "content", "second", "embeddingModel", "default"))));
+        RecordingTaskHandler keywordHandler = new RecordingTaskHandler("KEYWORD_UPSERT");
+        RecordingTaskHandler vectorHandler = new RecordingTaskHandler("VECTOR_UPSERT");
+        MemoryOutboxRelayService service = new MemoryOutboxRelayService(
+                outboxPort,
+                List.of(keywordHandler, vectorHandler));
+
+        int processed = service.processBatch(10);
+
+        assertThat(processed).isEqualTo(2);
+        assertThat(keywordHandler.handledTaskIds).containsExactly("outbox-keyword");
+        assertThat(vectorHandler.handledTaskIds).containsExactly("outbox-vector");
+        assertThat(outboxPort.succeeded).containsExactly("outbox-keyword", "outbox-vector");
+        assertThat(outboxPort.failed).isEmpty();
+    }
+
+    @Test
+    void shouldMarkTaskFailedWhenRegisteredHandlerFails() {
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of(
+                task("outbox-keyword", "KEYWORD_UPSERT", Map.of("memoryId", "stm-1")),
+                task("outbox-vector", "VECTOR_UPSERT",
+                        Map.of("memoryId", "stm-2", "content", "second", "embeddingModel", "default"))));
+        RecordingTaskHandler keywordHandler = new RecordingTaskHandler("KEYWORD_UPSERT");
+        keywordHandler.fail = true;
+        RecordingTaskHandler vectorHandler = new RecordingTaskHandler("VECTOR_UPSERT");
+        MemoryOutboxRelayService service = new MemoryOutboxRelayService(
+                outboxPort,
+                List.of(keywordHandler, vectorHandler));
+
+        int processed = service.processBatch(10);
+
+        assertThat(processed).isEqualTo(2);
+        assertThat(outboxPort.failed).containsKey("outbox-keyword");
+        assertThat(outboxPort.failed.get("outbox-keyword")).contains("handler down");
+        assertThat(outboxPort.succeeded).containsExactly("outbox-vector");
+    }
+
+    @Test
+    void shouldPreferCustomHandlerOverBuiltInHandlerForSameTaskType() {
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of(
+                task("outbox-vector-delete", MemoryOutboxTaskTypes.VECTOR_DELETE, Map.of("memoryId", "stm-1"))));
+        RecordingVectorPort vectorPort = new RecordingVectorPort();
+        RecordingTaskHandler customDeleteHandler = new RecordingTaskHandler(MemoryOutboxTaskTypes.VECTOR_DELETE);
+        MemoryOutboxRelayService service = new MemoryOutboxRelayService(
+                outboxPort,
+                List.of(
+                        new VectorMemoryOutboxTaskHandler(vectorPort, MemoryOutboxTaskTypes.VECTOR_DELETE),
+                        customDeleteHandler));
+
+        int processed = service.processBatch(10);
+
+        assertThat(processed).isEqualTo(1);
+        assertThat(customDeleteHandler.handledTaskIds).containsExactly("outbox-vector-delete");
+        assertThat(vectorPort.deletes).isEmpty();
+        assertThat(outboxPort.succeeded).containsExactly("outbox-vector-delete");
+        assertThat(outboxPort.failed).isEmpty();
+    }
+
+    @Test
+    void shouldKeepCustomHandlerWhenBuiltInHandlerIsRegisteredLaterForSameTaskType() {
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of(
+                task("outbox-vector-delete", MemoryOutboxTaskTypes.VECTOR_DELETE, Map.of("memoryId", "stm-1"))));
+        RecordingVectorPort vectorPort = new RecordingVectorPort();
+        RecordingTaskHandler customDeleteHandler = new RecordingTaskHandler(MemoryOutboxTaskTypes.VECTOR_DELETE);
+        MemoryOutboxRelayService service = new MemoryOutboxRelayService(
+                outboxPort,
+                List.of(
+                        customDeleteHandler,
+                        new VectorMemoryOutboxTaskHandler(vectorPort, MemoryOutboxTaskTypes.VECTOR_DELETE)));
+
+        int processed = service.processBatch(10);
+
+        assertThat(processed).isEqualTo(1);
+        assertThat(customDeleteHandler.handledTaskIds).containsExactly("outbox-vector-delete");
+        assertThat(vectorPort.deletes).isEmpty();
+        assertThat(outboxPort.succeeded).containsExactly("outbox-vector-delete");
+        assertThat(outboxPort.failed).isEmpty();
+    }
+
+    @Test
+    void shouldPreferCustomHandlerOverAnyHandlerMarkedBuiltInForSameTaskType() {
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of(
+                task("outbox-custom", "CUSTOM_DELETE", Map.of("memoryId", "stm-1"))));
+        RecordingTaskHandler builtInHandler = new RecordingTaskHandler("CUSTOM_DELETE");
+        builtInHandler.builtIn = true;
+        RecordingTaskHandler customHandler = new RecordingTaskHandler("CUSTOM_DELETE");
+        MemoryOutboxRelayService service = new MemoryOutboxRelayService(
+                outboxPort,
+                List.of(builtInHandler, customHandler));
+
+        int processed = service.processBatch(10);
+
+        assertThat(processed).isEqualTo(1);
+        assertThat(builtInHandler.handledTaskIds).isEmpty();
+        assertThat(customHandler.handledTaskIds).containsExactly("outbox-custom");
+        assertThat(outboxPort.succeeded).containsExactly("outbox-custom");
+        assertThat(outboxPort.failed).isEmpty();
+    }
+
+    @Test
+    void shouldRejectDuplicateCustomHandlersForSameTaskType() {
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of());
+
+        assertThatThrownBy(() -> new MemoryOutboxRelayService(
+                outboxPort,
+                List.of(
+                        new RecordingTaskHandler(MemoryOutboxTaskTypes.VECTOR_DELETE),
+                        new RecordingTaskHandler(MemoryOutboxTaskTypes.VECTOR_DELETE))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("duplicate memory outbox task handler");
+    }
+
+    @Test
+    void shouldIgnoreHandlersWithoutTaskType() {
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of(
+                task("outbox-vector", "VECTOR_UPSERT",
+                        Map.of("memoryId", "stm-1", "content", "first", "embeddingModel", "default"))));
+        RecordingVectorPort vectorPort = new RecordingVectorPort();
+        MemoryOutboxRelayService service = new MemoryOutboxRelayService(
+                outboxPort,
+                List.of(
+                        new RecordingTaskHandler(null),
+                        new RecordingTaskHandler(""),
+                        new VectorMemoryOutboxTaskHandler(vectorPort, MemoryOutboxTaskTypes.VECTOR_UPSERT)));
+
+        int processed = service.processBatch(10);
+
+        assertThat(processed).isEqualTo(1);
+        assertThat(vectorPort.upserts).containsExactly("stm-1|user-1|first|default");
+        assertThat(outboxPort.succeeded).containsExactly("outbox-vector");
+        assertThat(outboxPort.failed).isEmpty();
     }
 
     private MemoryOutboxPort.MemoryOutboxTask task(String id, String type, Map<String, Object> payload) {
@@ -133,6 +293,7 @@ class MemoryOutboxRelayServiceTests {
     private static class RecordingVectorPort implements MemoryVectorPort {
 
         private final List<String> upserts = new ArrayList<>();
+        private final List<String> deletes = new ArrayList<>();
         private final List<String> failMemoryIds = new ArrayList<>();
 
         @Override
@@ -146,6 +307,41 @@ class MemoryOutboxRelayServiceTests {
         @Override
         public List<String> search(String userId, String query, int topK) {
             return List.of();
+        }
+
+        @Override
+        public void delete(String memoryId, String userId, String tenantId) {
+            deletes.add(memoryId + "|" + userId + "|" + tenantId);
+        }
+    }
+
+    private static class RecordingTaskHandler implements MemoryOutboxTaskHandler {
+
+        private final String taskType;
+        private final List<String> handledTaskIds = new ArrayList<>();
+        private boolean builtIn;
+        private boolean fail;
+
+        private RecordingTaskHandler(String taskType) {
+            this.taskType = taskType;
+        }
+
+        @Override
+        public String taskType() {
+            return taskType;
+        }
+
+        @Override
+        public boolean builtIn() {
+            return builtIn;
+        }
+
+        @Override
+        public void handle(MemoryOutboxPort.MemoryOutboxTask task) {
+            handledTaskIds.add(task.id());
+            if (fail) {
+                throw new RuntimeException("handler down");
+            }
         }
     }
 }

@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskTypes;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
@@ -41,6 +42,9 @@ public class JdbcMemoryOutboxRepositoryAdapter implements MemoryOutboxPort {
     @Override
     public void enqueue(MemoryOutboxTask task) {
         Objects.requireNonNull(task, "task must not be null");
+        if (isDerivedIndexDelete(task) && hasExistingDerivedIndexDelete(task)) {
+            return;
+        }
         jdbcTemplate.update("""
                 INSERT INTO t_memory_outbox
                 (id, user_id, tenant_id, task_type, target_id, payload_json, status, attempt_count,
@@ -114,6 +118,30 @@ public class JdbcMemoryOutboxRepositoryAdapter implements MemoryOutboxPort {
                 JdbcMemorySupport.timestamp(Instant.now().plusSeconds(60)),
                 JdbcMemorySupport.timestamp(Instant.now()),
                 taskId);
+    }
+
+    private boolean isDerivedIndexDelete(MemoryOutboxTask task) {
+        return MemoryOutboxTaskTypes.VECTOR_DELETE.equals(task.taskType())
+                || MemoryOutboxTaskTypes.KEYWORD_DELETE.equals(task.taskType())
+                || MemoryOutboxTaskTypes.GRAPH_DELETE.equals(task.taskType());
+    }
+
+    private boolean hasExistingDerivedIndexDelete(MemoryOutboxTask task) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM t_memory_outbox
+                WHERE user_id = ?
+                  AND tenant_id = ?
+                  AND task_type = ?
+                  AND target_id = ?
+                  AND status IN ('PENDING', 'SUCCEEDED')
+                """,
+                Integer.class,
+                task.userId(),
+                task.tenantId(),
+                task.taskType(),
+                task.targetId());
+        return count != null && count > 0;
     }
 
     private Map<String, Object> parsePayload(String payloadJson) {

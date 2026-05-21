@@ -46,7 +46,8 @@ public class DefaultContextWeaver implements ContextWeaverPort {
         appendZone(builder, "[Correction Ledger]", context.getCorrectionMemories());
         appendZone(builder, "[Profile KV]", context.getProfileMemories());
         appendZone(builder, "[Short Window]", context.getShortTermMemories());
-        appendZone(builder, "[Business / Semantic Memory]", context.getSemanticMemories());
+        appendZone(builder, "[Business Documents]", context.getBusinessDocumentMemories());
+        appendZone(builder, "[Semantic Memory]", context.getSemanticMemories());
         appendZone(builder, "[Long-Term Episodic]", context.getLongTermMemories());
         builder.appendFooter(MEMORY_CONFLICT_NOTE);
         return builder.build();
@@ -57,13 +58,15 @@ public class DefaultContextWeaver implements ContextWeaverPort {
                 && (!safeItems(context.getCorrectionMemories()).isEmpty()
                 || !safeItems(context.getProfileMemories()).isEmpty()
                 || !safeItems(context.getShortTermMemories()).isEmpty()
+                || !safeItems(context.getBusinessDocumentMemories()).isEmpty()
                 || !safeItems(context.getSemanticMemories()).isEmpty()
                 || !safeItems(context.getLongTermMemories()).isEmpty());
     }
 
     private static void appendZone(BudgetedBuilder builder, String title, List<MemoryItem> items) {
         for (MemoryItem item : safeItems(items)) {
-            String content = truncate(item.getContent(), MAX_MEMORY_ITEM_LENGTH);
+            String content = decorateWithMetadata(truncate(item.getContent(), MAX_MEMORY_ITEM_LENGTH),
+                    item.getMetadataJson());
             if (!content.isBlank()) {
                 builder.appendItem(title, content);
             }
@@ -80,6 +83,60 @@ public class DefaultContextWeaver implements ContextWeaverPort {
         }
         String trimmed = value.trim();
         return trimmed.length() <= maxLen ? trimmed : trimmed.substring(0, maxLen) + "...";
+    }
+
+    private static String decorateWithMetadata(String content, String metadataJson) {
+        if (content == null || content.isBlank()) {
+            return "";
+        }
+        String metadata = metadataSummary(metadataJson);
+        if (metadata.isBlank()) {
+            return content.trim();
+        }
+        return content.trim() + " (" + metadata + ")";
+    }
+
+    private static String metadataSummary(String metadataJson) {
+        StringBuilder summary = new StringBuilder();
+        appendMetadata(summary, "profileSlot", "slot", metadataJson);
+        appendMetadata(summary, "targetKey", "target", metadataJson);
+        appendMetadata(summary, "docId", "docId", metadataJson);
+        appendMetadata(summary, "version", "version", metadataJson);
+        appendMetadata(summary, "generationId", "generationId", metadataJson);
+        appendMetadata(summary, "sourceType", "source", metadataJson);
+        return summary.toString();
+    }
+
+    private static void appendMetadata(StringBuilder summary, String key, String label, String metadataJson) {
+        String value = metadataValue(metadataJson, key);
+        if (value.isBlank()) {
+            return;
+        }
+        if (!summary.isEmpty()) {
+            summary.append(", ");
+        }
+        summary.append(label).append("=").append(value);
+    }
+
+    private static String metadataValue(String metadataJson, String key) {
+        if (metadataJson == null || metadataJson.isBlank() || key == null || key.isBlank()) {
+            return "";
+        }
+        String compactPrefix = "\"" + key + "\":\"";
+        int compactStart = metadataJson.indexOf(compactPrefix);
+        if (compactStart >= 0) {
+            int valueStart = compactStart + compactPrefix.length();
+            int valueEnd = metadataJson.indexOf('"', valueStart);
+            return valueEnd > valueStart ? metadataJson.substring(valueStart, valueEnd) : "";
+        }
+        String spacedPrefix = "\"" + key + "\": \"";
+        int spacedStart = metadataJson.indexOf(spacedPrefix);
+        if (spacedStart >= 0) {
+            int valueStart = spacedStart + spacedPrefix.length();
+            int valueEnd = metadataJson.indexOf('"', valueStart);
+            return valueEnd > valueStart ? metadataJson.substring(valueStart, valueEnd) : "";
+        }
+        return "";
     }
 
     private static final class BudgetedBuilder {

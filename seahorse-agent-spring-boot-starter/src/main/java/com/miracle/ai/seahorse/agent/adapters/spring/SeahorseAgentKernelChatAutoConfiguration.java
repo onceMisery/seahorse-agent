@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.RuleBasedQueryOptimizerPort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
@@ -41,6 +42,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermExpansionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
@@ -106,6 +108,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
     public ChatPreparationPorts seahorseChatPreparationPorts(ObjectProvider<ConversationMemoryPort> memoryPort,
                                                              ObjectProvider<MemoryEnginePort> memoryEnginePort,
                                                              ObjectProvider<MemoryIngestionWorkflowPort> memoryIngestionWorkflowPort,
+                                                             ObjectProvider<MemoryAggregationServicePort> memoryAggregationServicePort,
+                                                             ObjectProvider<MemoryAggregationPolicy> memoryAggregationPolicy,
                                                              ObjectProvider<QueryOptimizerPort> queryOptimizerPort,
                                                              ObjectProvider<QueryRewritePort> queryRewritePort,
                                                              ObjectProvider<IntentResolutionPort> intentResolutionPort,
@@ -116,6 +120,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
                 memoryIngestionWorkflowPort.getIfAvailable(() -> command ->
                         com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult.ignored("noop")),
+                memoryAggregationServicePort.getIfAvailable(MemoryAggregationServicePort::noop),
+                memoryAggregationPolicy.getIfAvailable(MemoryAggregationPolicy::defaults),
                 queryOptimizerPort.getIfAvailable(QueryOptimizerPort::passthrough),
                 queryRewritePort.getIfAvailable(QueryRewritePort::passthrough),
                 intentResolutionPort.getIfAvailable(IntentResolutionPort::empty),

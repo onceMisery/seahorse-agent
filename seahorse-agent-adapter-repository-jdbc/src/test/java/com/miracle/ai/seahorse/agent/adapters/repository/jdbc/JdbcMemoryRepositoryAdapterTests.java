@@ -19,13 +19,21 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationType;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,7 +57,10 @@ class JdbcMemoryRepositoryAdapterTests {
     private JdbcCorrectionLedgerRepositoryAdapter correctionAdapter;
     private JdbcMemoryOperationLogRepositoryAdapter operationLogAdapter;
     private JdbcMemoryOutboxRepositoryAdapter outboxAdapter;
+    private JdbcMemoryReviewCandidateRepositoryAdapter reviewCandidateAdapter;
+    private JdbcMemoryReviewFeedbackRepositoryAdapter reviewFeedbackAdapter;
     private JdbcMemoryLifecycleRepositoryAdapter lifecycleAdapter;
+    private JdbcMemoryKeywordSearchRepositoryAdapter keywordSearchAdapter;
 
     @BeforeEach
     void setUp() {
@@ -67,7 +78,10 @@ class JdbcMemoryRepositoryAdapterTests {
         correctionAdapter = new JdbcCorrectionLedgerRepositoryAdapter(dataSource, objectMapper);
         operationLogAdapter = new JdbcMemoryOperationLogRepositoryAdapter(dataSource, objectMapper);
         outboxAdapter = new JdbcMemoryOutboxRepositoryAdapter(dataSource, objectMapper);
+        reviewCandidateAdapter = new JdbcMemoryReviewCandidateRepositoryAdapter(dataSource, objectMapper);
+        reviewFeedbackAdapter = new JdbcMemoryReviewFeedbackRepositoryAdapter(dataSource, objectMapper);
         lifecycleAdapter = new JdbcMemoryLifecycleRepositoryAdapter(dataSource);
+        keywordSearchAdapter = new JdbcMemoryKeywordSearchRepositoryAdapter(dataSource, objectMapper);
     }
 
     @Test
@@ -86,6 +100,35 @@ class JdbcMemoryRepositoryAdapterTests {
                 .extracting(MemoryRecord::type)
                 .containsExactly("FACT");
         assertThat(semanticAdapter.listByUser("user-1", 10)).hasSize(1);
+    }
+
+    @Test
+    void shouldSearchLayeredMemoriesByKeywordWithoutReturningObsoleteRows() {
+        shortTermAdapter.save(new MemoryRecord("stm-pip", "short_term", "FACT",
+                "Pulsar PIP-459 failed during compatibility testing",
+                Map.of("userId", "user-1", "tenantId", "default", "conversationId", "conv-1",
+                        "importanceScore", 0.6D),
+                Instant.now()));
+        longTermAdapter.save(new MemoryRecord("ltm-pip", "long_term", "PROJECT_FACT",
+                "PIP-459 rollback plan",
+                Map.of("userId", "user-1", "tenantId", "default", "importanceScore", 0.9D),
+                Instant.now()));
+        semanticAdapter.save(new MemoryRecord("sem-other", "semantic", "PROJECT_FACT",
+                "Unrelated semantic memory",
+                Map.of("userId", "user-1", "tenantId", "default", "semanticKey", "project:other"),
+                Instant.now()));
+        jdbcTemplate.update("""
+                UPDATE t_short_term_memory
+                SET status = 'OBSOLETE'
+                WHERE id = 'stm-pip'
+                """);
+
+        var hits = keywordSearchAdapter.search("user-1", "default", "PIP-459", 10);
+
+        assertThat(hits).extracting(hit -> hit.memoryId())
+                .containsExactly("ltm-pip");
+        assertThat(hits.get(0).layer()).isEqualTo("LONG_TERM");
+        assertThat(hits.get(0).score()).isPositive();
     }
 
     @Test
@@ -134,6 +177,52 @@ class JdbcMemoryRepositoryAdapterTests {
                 .isEqualTo(2);
         assertThat(shortTermAdapter.findById("expired-1")).isEmpty();
         assertThat(shortTermAdapter.findById("decayed-1")).isEmpty();
+    }
+
+    @Test
+    void shouldScanAndMarkDerivedIndexDeleteCandidates() {
+        Instant oldUpdateTime = Instant.now().minusSeconds(10L * 24 * 3600);
+        jdbcTemplate.update("""
+                INSERT INTO t_short_term_memory
+                (id, user_id, tenant_id, conversation_id, memory_type, content, metadata_json, source_message_ids,
+                 importance_score, access_count, last_access_time, decay_score, expires_time,
+                 status, update_time, deleted)
+                VALUES ('gc-stm', 'user-1', 'tenant-1', 'conv-1', 'FACT', 'obsolete short', '{}', '[]',
+                        0.2, 0, CURRENT_TIMESTAMP, 0.5, CURRENT_TIMESTAMP,
+                        'OBSOLETE', ?, 0)
+                """, java.sql.Timestamp.from(oldUpdateTime));
+        jdbcTemplate.update("""
+                INSERT INTO t_long_term_memory
+                (id, user_id, tenant_id, memory_category, title, content, source_type, source_ids, tags,
+                 importance_score, confidence_level, status, update_time, deleted)
+                VALUES ('gc-ltm', 'user-1', 'tenant-1', 'FACT', 'title', 'compacted long', 'short_term', '[]', '{}',
+                        0.2, 0.5, 'COMPACTED', ?, 0)
+                """, java.sql.Timestamp.from(oldUpdateTime));
+        jdbcTemplate.update("""
+                INSERT INTO t_semantic_memory
+                (id, user_id, tenant_id, semantic_key, semantic_type, value_json, confidence_level, source_memory_ids,
+                 status, update_time, deleted)
+                VALUES ('active-sem', 'user-1', 'tenant-1', 'project:active', 'FACT', '{}', 0.9, '[]',
+                        'ACTIVE', ?, 0)
+                """, java.sql.Timestamp.from(oldUpdateTime));
+
+        var candidates = lifecycleAdapter.scanDerivedIndexDeleteCandidates(
+                Instant.now(),
+                java.time.Duration.ofDays(7),
+                10);
+
+        assertThat(candidates)
+                .extracting(MemoryGarbageCollectionCandidate::memoryId)
+                .containsExactly("gc-stm", "gc-ltm");
+        assertThat(lifecycleAdapter.markDerivedIndexesDeleted(
+                candidates.stream().map(MemoryGarbageCollectionCandidate::memoryId).toList(),
+                Instant.now()))
+                .isEqualTo(2);
+        assertThat(lifecycleAdapter.scanDerivedIndexDeleteCandidates(
+                Instant.now(),
+                java.time.Duration.ofDays(7),
+                10))
+                .isEmpty();
     }
 
     @Test
@@ -325,6 +414,161 @@ class JdbcMemoryRepositoryAdapterTests {
     }
 
     @Test
+    void shouldIgnoreDuplicateDerivedIndexDeleteOutboxTasks() {
+        outboxAdapter.enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorDelete("stm-1", "user-1", "default"));
+        outboxAdapter.enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorDelete("stm-1", "user-1", "default"));
+
+        assertThat(outboxAdapter.pollPending(10))
+                .hasSize(1)
+                .first()
+                .satisfies(task -> {
+                    assertThat(task.taskType()).isEqualTo("VECTOR_DELETE");
+                    assertThat(task.targetId()).isEqualTo("stm-1");
+                });
+        Integer rowCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM t_memory_outbox
+                WHERE task_type = 'VECTOR_DELETE'
+                  AND target_id = 'stm-1'
+                """, Integer.class);
+        assertThat(rowCount).isEqualTo(1);
+    }
+
+    @Test
+    void shouldPersistPendingMemoryReviewCandidateWithoutWritingActiveMemory() {
+        reviewCandidateAdapter.save(new MemoryReviewCandidate(
+                "review-op-1",
+                "op-1",
+                "default",
+                "user-1",
+                "conv-1",
+                "msg-1",
+                MemoryIngestionAction.REVIEW,
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.ambiguous",
+                "user might be changing the project stack",
+                0.62D,
+                0.70D,
+                0.70D,
+                0.20D,
+                "needs_review",
+                java.util.List.of("msg-1"),
+                Map.of("reviewReason", "low_confidence"),
+                Instant.now()));
+
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT user_id, tenant_id, operation_id, requested_action, target_kind, target_key,
+                       candidate_content, review_status, candidate_metadata
+                FROM t_memory_review_candidate
+                WHERE id = 'review-op-1'
+                """);
+
+        assertThat(row.get("USER_ID")).isEqualTo("user-1");
+        assertThat(row.get("TENANT_ID")).isEqualTo("default");
+        assertThat(row.get("OPERATION_ID")).isEqualTo("op-1");
+        assertThat(row.get("REQUESTED_ACTION")).isEqualTo("REVIEW");
+        assertThat(row.get("TARGET_KIND")).isEqualTo("PROJECT_FACT");
+        assertThat(row.get("TARGET_KEY")).isEqualTo("project.ambiguous");
+        assertThat(row.get("CANDIDATE_CONTENT")).isEqualTo("user might be changing the project stack");
+        assertThat(row.get("REVIEW_STATUS")).isEqualTo("PENDING");
+        assertThat(row.get("CANDIDATE_METADATA").toString()).contains("low_confidence");
+        assertThat(shortTermAdapter.listByUser("user-1", 10)).isEmpty();
+    }
+
+    @Test
+    void shouldPageAndApplyMemoryReviewDecision() {
+        reviewCandidateAdapter.save(new MemoryReviewCandidate(
+                "review-op-1",
+                "op-1",
+                "default",
+                "user-1",
+                "conv-1",
+                "msg-1",
+                MemoryIngestionAction.REVIEW,
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.ambiguous",
+                "user might be changing the project stack",
+                0.62D,
+                0.70D,
+                0.70D,
+                0.20D,
+                "needs_review",
+                java.util.List.of("msg-1"),
+                Map.of("reviewReason", "low_confidence"),
+                Instant.now()));
+
+        var page = reviewCandidateAdapter.pageReviewCandidates(
+                new MemoryReviewQuery("default", "user-1", MemoryReviewStatus.PENDING, 1, 10));
+
+        assertThat(page.records()).hasSize(1);
+        MemoryReviewRecord pending = page.records().get(0);
+        assertThat(pending.candidateId()).isEqualTo("review-op-1");
+        assertThat(pending.reviewStatus()).isEqualTo(MemoryReviewStatus.PENDING);
+        assertThat(pending.metadata()).containsEntry("reviewReason", "low_confidence");
+        assertThat(reviewCandidateAdapter.findReviewItem("review-op-1")).isPresent();
+
+        MemoryReviewRecord applied = reviewCandidateAdapter.applyReviewDecision(new MemoryReviewDecision(
+                "review-op-1",
+                MemoryReviewStatus.APPLIED,
+                "auditor",
+                "approved",
+                "approved content",
+                Map.of("source", "human"),
+                "memory-review-apply-review-op-1",
+                "SHORT_TERM"));
+
+        assertThat(applied.reviewStatus()).isEqualTo(MemoryReviewStatus.APPLIED);
+        assertThat(applied.reviewerId()).isEqualTo("auditor");
+        assertThat(applied.reviewComment()).isEqualTo("approved");
+        assertThat(applied.chosenContent()).isEqualTo("approved content");
+        assertThat(applied.chosenMetadata()).containsEntry("source", "human");
+        assertThat(applied.reviewedMemoryId()).isEqualTo("memory-review-apply-review-op-1");
+        assertThat(reviewCandidateAdapter.pageReviewCandidates(
+                new MemoryReviewQuery("default", "user-1", MemoryReviewStatus.PENDING, 1, 10)).records())
+                .isEmpty();
+    }
+
+    @Test
+    void shouldPersistMemoryReviewFeedbackSample() {
+        reviewFeedbackAdapter.save(new MemoryReviewFeedbackSample(
+                "feedback-review-op-1",
+                "review-op-1",
+                "op-1",
+                "default",
+                "user-1",
+                "REVIEW",
+                MemoryReviewStatus.REJECTED,
+                "auditor",
+                "not a stable fact",
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.ambiguous",
+                "model proposed unstable fact",
+                "",
+                Map.of("reviewReason", "low_confidence"),
+                Map.of("chosen", "ignore"),
+                java.util.List.of("msg-1", "msg-2"),
+                "",
+                "",
+                Instant.now()));
+
+        assertThat(reviewFeedbackAdapter.listByCandidate("review-op-1", 10))
+                .hasSize(1)
+                .first()
+                .satisfies(sample -> {
+                    assertThat(sample.sampleId()).isEqualTo("feedback-review-op-1");
+                    assertThat(sample.reviewStatus()).isEqualTo(MemoryReviewStatus.REJECTED);
+                    assertThat(sample.rejectedContent()).isEqualTo("model proposed unstable fact");
+                    assertThat(sample.chosenContent()).isEmpty();
+                    assertThat(sample.rejectedMetadata()).containsEntry("reviewReason", "low_confidence");
+                    assertThat(sample.chosenMetadata()).containsEntry("chosen", "ignore");
+                    assertThat(sample.sourceMessageIds()).containsExactly("msg-1", "msg-2");
+                });
+    }
+
+    @Test
     void shouldFilterObsoleteMemoriesAndRecordLifecycleFeedback() {
         jdbcTemplate.update("""
                 INSERT INTO t_short_term_memory
@@ -408,6 +652,8 @@ class JdbcMemoryRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_correction_ledger");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_operation_log");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_outbox");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_review_candidate");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_memory_review_feedback_sample");
         jdbcTemplate.execute("""
                 CREATE TABLE t_short_term_memory (
                     id VARCHAR(64) PRIMARY KEY,
@@ -432,6 +678,7 @@ class JdbcMemoryRepositoryAdapterTests {
                     policy_version VARCHAR(64),
                     sensitivity_level VARCHAR(32),
                     obsolete_reason TEXT,
+                    derived_indexes_deleted_at TIMESTAMP,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
@@ -461,6 +708,7 @@ class JdbcMemoryRepositoryAdapterTests {
                     policy_version VARCHAR(64),
                     sensitivity_level VARCHAR(32),
                     obsolete_reason TEXT,
+                    derived_indexes_deleted_at TIMESTAMP,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
@@ -485,6 +733,7 @@ class JdbcMemoryRepositoryAdapterTests {
                     policy_version VARCHAR(64),
                     sensitivity_level VARCHAR(32),
                     obsolete_reason TEXT,
+                    derived_indexes_deleted_at TIMESTAMP,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
@@ -529,6 +778,62 @@ class JdbcMemoryRepositoryAdapterTests {
                     next_retry_time TIMESTAMP,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_memory_review_candidate (
+                    id VARCHAR(64) PRIMARY KEY,
+                    operation_id VARCHAR(128),
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    conversation_id VARCHAR(64),
+                    message_id VARCHAR(64),
+                    requested_action VARCHAR(32) NOT NULL,
+                    target_layer VARCHAR(32) NOT NULL,
+                    target_kind VARCHAR(64),
+                    target_key VARCHAR(128),
+                    candidate_content TEXT NOT NULL,
+                    confidence_level DOUBLE,
+                    importance_score DOUBLE,
+                    value_score DOUBLE,
+                    risk_score DOUBLE,
+                    reason TEXT,
+                    source_message_ids TEXT,
+                    candidate_metadata TEXT,
+                    review_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                    reviewer_id VARCHAR(64),
+                    reviewer_comment TEXT,
+                    chosen_content TEXT,
+                    chosen_metadata TEXT,
+                    reviewed_memory_id VARCHAR(64),
+                    reviewed_layer VARCHAR(32),
+                    create_time TIMESTAMP,
+                    update_time TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_memory_review_feedback_sample (
+                    id VARCHAR(128) PRIMARY KEY,
+                    candidate_id VARCHAR(64) NOT NULL,
+                    operation_id VARCHAR(128),
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    requested_action VARCHAR(32) NOT NULL,
+                    review_status VARCHAR(32) NOT NULL,
+                    reviewer_id VARCHAR(64),
+                    reviewer_comment TEXT,
+                    target_layer VARCHAR(32),
+                    target_kind VARCHAR(64),
+                    target_key VARCHAR(128),
+                    rejected_content TEXT,
+                    chosen_content TEXT,
+                    rejected_metadata TEXT,
+                    chosen_metadata TEXT,
+                    source_message_ids TEXT,
+                    reviewed_memory_id VARCHAR(64),
+                    reviewed_layer VARCHAR(32),
+                    create_time TIMESTAMP
                 )
                 """);
         jdbcTemplate.execute("""
