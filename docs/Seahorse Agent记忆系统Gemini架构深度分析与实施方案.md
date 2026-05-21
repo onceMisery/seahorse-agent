@@ -20,7 +20,7 @@ Seahorse Agent 当前已经具备一部分关键地基：
 主要差距仍集中在五个方向：
 
 1. **写入入口仍是单轮触发**：`MemoryCaptureStage` 在流式回答完成后提交当前用户问题，不具备跨轮 buffer、静默期防抖、硬阈值 flush。
-2. **LLM Refiner 未落地**：当前 `MemorySemanticClassifier` 是规则版分类，不会基于多轮上下文输出 ADD/UPDATE/DELETE/IGNORE/REVIEW 结构化 delta。
+2. **LLM Refiner 已有可插拔适配器但未完全闭环**：已新增 `LlmMemoryRefinerAdapter` 产出 ADD/UPDATE/DELETE/IGNORE/REVIEW 结构化 delta；后续仍需补齐更强 schema 校验、反馈样本驱动优化和多轮聚合上下文输入。
 3. **记忆多路召回仍不完整**：`MemoryVectorPort` 只有内核端口和 outbox relay，真实 adapter 未接入；BM25/Graph 尚未成为记忆读取 track；当前 RAG 知识库有多路检索能力，但记忆侧未复用成完整闭环。
 4. **REVIEW 只有状态概念，没有审核候选表和闭环 API/UI**：`MemoryIngestionAction.REVIEW`、`MemoryPolicyConfig.reviewEnabled` 已存在，但没有 `t_memory_review_candidate`、审核决策流和训练样本回收。
 5. **自动维护仍是局部治理**：已有短期衰减、Profile slot obsolete、读反馈和质量快照，但缺 Compaction、Alias Resolution、长期/向量/BM25/Graph GC 的完整任务。
@@ -818,6 +818,8 @@ seahorse-agent.memory.refiner.max-context-chars=12000
 seahorse-agent.memory.refiner.prompt-version=memory-refiner-v1
 ```
 
+当前落地状态：`LlmMemoryRefinerAdapter` 已在 `seahorse-agent-adapter-ai-openai-compatible` 中实现，复用通用 `ChatModelPort`、`PromptTemplatePort`、`ObjectMapper`，提示词资源为 `prompt/memory-refiner.st`。Spring 装配在 `SeahorseAgentKernelMemoryAutoConfiguration` 中受 `seahorse-agent.memory.refiner.llm-enabled=true` 控制，并且要求存在 `ChatModelPort`；`seahorse-agent.memory.refiner.enabled` 仍是 `DefaultMemoryEnginePort` 是否调用 refiner 的执行开关。该适配器只输出结构化候选 `MemoryRefinementResult`，不会直接写入四层记忆、Profile、Correction 或 REVIEW 表。
+
 规则：
 
 - `confidence >= min-confidence-auto-commit` 且 `riskTags` 为空且 `op=ADD`：可自动提交。
@@ -1427,7 +1429,7 @@ flowchart TD
 - `DefaultMemoryEnginePort`：保留 `MemoryEnginePort` 门面职责，把 `ingest()` 主体迁移到 `DefaultMemoryIngestionWorkflow`；旧构造器继续可用，内部组合 workflow。
 - `MemorySemanticClassifier`、`MemorySchemaValidator`：规则分类能力迁移或包装进 `RuleBasedMemoryRefiner`，validator 增加 op、target、confidence、risk tags、source ids 校验。
 - `DefaultMemoryAggregationService`：flush snapshot 后调用 `MemoryRefinerPort.refine()`，并把结果交给 `DefaultMemoryIngestionWorkflow` 的批处理方法。
-- `SeahorseAgentKernelMemoryAutoConfiguration`：注册 `RuleBasedMemoryRefiner`；`LlmMemoryRefiner` 受 `seahorse-agent.memory.refiner.llm-enabled=false` 控制。
+- `SeahorseAgentKernelMemoryAutoConfiguration`：注入可选 `MemoryRefinerPort`；`LlmMemoryRefinerAdapter` 受 `seahorse-agent.memory.refiner.llm-enabled=false` 控制，只有存在 `ChatModelPort` 时注册。
 
 实现要点：
 
@@ -1637,6 +1639,7 @@ flowchart TD
 - Web 侧已新增 `SeahorseMemoryMaintenanceController`，暴露 `POST /memories/maintenance/run`，参数为 `reason`、`compaction`、`alias`、`gc`。控制器单独成类，不继续膨胀 `SeahorseMemoryController`。
 - 已新增维护运行记录持久化：`MemoryMaintenanceRunRepositoryPort`、`MemoryMaintenanceRunRecord`、`MemoryMaintenanceRunQuery`、`MemoryMaintenanceRunPage`，JDBC 表 `t_memory_maintenance_run` 与 `JdbcMemoryMaintenanceRunRepositoryAdapter`。`DefaultMemoryMaintenanceService` 每次运行后记录请求开关、compaction 扫描/压缩统计、GC 统计、跳过项、错误和最终状态；记录失败不影响维护执行语义。
 - Web 侧已新增 `GET /memories/maintenance-runs`，支持按 `status` 分页查询维护运行历史，用于排查后台维护和手工维护结果。
+- 已新增可插拔 LLM Refiner 适配器：`LlmMemoryRefinerAdapter` 通过 `ChatModelPort` 调用模型，解析严格 JSON 或 fenced JSON，非法 action/解析失败降级为空结果；Spring 中由 `seahorse-agent.memory.refiner.llm-enabled` 显式开启，且不会绕过现有 `seahorse-agent.memory.refiner.enabled` 执行开关、policy gate 和 REVIEW staging。
 - 仍未完成：LLM compactor、canonical entity 驱动的 compaction 分组、Alias 自动合并 job、复杂 alias REVIEW 闭环、真实 Graph 数据库 adapter。
 
 测试文件：

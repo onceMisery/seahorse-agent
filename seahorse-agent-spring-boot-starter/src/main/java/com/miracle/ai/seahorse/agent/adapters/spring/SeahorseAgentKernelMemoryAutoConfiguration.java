@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.ai.openai.LlmMemoryRefinerAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryEnginePort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryRetrievalPipeline;
@@ -53,6 +54,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
@@ -96,10 +98,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMaintenancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -206,6 +210,21 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 schemaFailureAlertThreshold,
                 outboxBacklogAlertThreshold,
                 greyReleaseKey));
+    }
+
+    @Bean
+    @ConditionalOnClass(LlmMemoryRefinerAdapter.class)
+    @ConditionalOnBean(ChatModelPort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.refiner", name = "llm-enabled", havingValue = "true")
+    @ConditionalOnMissingBean(MemoryRefinerPort.class)
+    public MemoryRefinerPort seahorseLlmMemoryRefiner(
+            ChatModelPort chatModelPort,
+            ObjectProvider<PromptTemplatePort> promptTemplatePort,
+            ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new LlmMemoryRefinerAdapter(
+                chatModelPort,
+                promptTemplatePort.getIfAvailable(PromptTemplatePort::empty),
+                objectMapperProvider.getIfAvailable(ObjectMapper::new));
     }
 
     @Bean

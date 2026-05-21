@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.ai.openai.LlmMemoryRefinerAdapter;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFactory;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
@@ -180,6 +182,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsage
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
@@ -633,6 +637,28 @@ class SeahorseAgentKernelAutoConfigurationTests {
                             .build());
 
                     verify(shortTermMemoryPort).save(any(MemoryRecord.class));
+                });
+    }
+
+    @Test
+    void shouldRegisterLlmMemoryRefinerWhenExplicitlyEnabledAndChatModelExists() {
+        contextRunner.withUserConfiguration(LlmMemoryRefinerConfiguration.class)
+                .withPropertyValues("seahorse-agent.memory.refiner.llm-enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryRefinerPort.class);
+                    assertThat(context.getBean(MemoryRefinerPort.class))
+                            .isInstanceOf(LlmMemoryRefinerAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldNotRegisterLlmMemoryRefinerWithoutChatModel() {
+        contextRunner.withUserConfiguration(ObjectMapperConfiguration.class)
+                .withPropertyValues("seahorse-agent.memory.refiner.llm-enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(MemoryRefinerPort.class);
                 });
     }
 
@@ -1410,6 +1436,31 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     "知识库自定义模板",
                     "自动配置应注入模板仓储端口",
                     RetrievalOptions.defaults(7)));
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class ObjectMapperConfiguration {
+
+        @Bean
+        ObjectMapper objectMapper() {
+            return new ObjectMapper();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class LlmMemoryRefinerConfiguration extends ObjectMapperConfiguration {
+
+        @Bean
+        ChatModelPort chatModelPort() {
+            return (request, modelId) -> """
+                    {"refined":false,"reason":"test","operations":[]}
+                    """;
+        }
+
+        @Bean
+        PromptTemplatePort promptTemplatePort() {
+            return PromptTemplatePort.empty();
         }
     }
 

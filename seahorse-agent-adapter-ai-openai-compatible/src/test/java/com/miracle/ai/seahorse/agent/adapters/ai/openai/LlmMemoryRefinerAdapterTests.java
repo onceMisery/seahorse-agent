@@ -1,0 +1,187 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.adapters.ai.openai;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.RefinedMemoryOperation;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import org.junit.jupiter.api.Test;
+
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class LlmMemoryRefinerAdapterTests {
+
+    @Test
+    void shouldParseValidAddOperation() {
+        CapturingChatModelPort chatModelPort = new CapturingChatModelPort("""
+                {
+                  "refined": true,
+                  "reason": "stable preference",
+                  "operations": [
+                    {
+                      "action": "ADD",
+                      "targetKind": "PREFERENCE",
+                      "targetKey": "language",
+                      "content": "User prefers Java examples.",
+                      "confidence": 0.82,
+                      "importance": 0.72,
+                      "valueScore": 0.9,
+                      "riskScore": 0.1,
+                      "sourceMessageIds": ["m1"],
+                      "signals": ["explicit_preference"],
+                      "metadata": {"profileSlot": "preference.language"}
+                    }
+                  ],
+                  "metadata": {"model": "test"}
+                }
+                """);
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                chatModelPort, PromptTemplatePort.empty(), new ObjectMapper());
+
+        MemoryRefinementResult result = adapter.refine(request("Please answer with Java examples."));
+
+        assertThat(result.refined()).isTrue();
+        assertThat(result.reason()).isEqualTo("stable preference");
+        assertThat(result.metadata()).containsEntry("model", "test");
+        assertThat(result.operations()).hasSize(1);
+        RefinedMemoryOperation operation = result.operations().get(0);
+        assertThat(operation.action()).isEqualTo(MemoryIngestionAction.ADD);
+        assertThat(operation.targetKind()).isEqualTo("PREFERENCE");
+        assertThat(operation.targetKey()).isEqualTo("language");
+        assertThat(operation.content()).isEqualTo("User prefers Java examples.");
+        assertThat(operation.confidence()).isEqualTo(0.82D);
+        assertThat(operation.sourceMessageIds()).containsExactly("m1");
+        assertThat(operation.signals()).containsExactly("explicit_preference");
+        assertThat(operation.metadata()).containsEntry("profileSlot", "preference.language");
+        assertThat(chatModelPort.lastRequest.get()).isNotNull();
+        assertThat(chatModelPort.lastRequest.get().getMessages().get(0).getContent())
+                .contains("Please answer with Java examples.");
+    }
+
+    @Test
+    void shouldExtractFencedJsonAndParseReviewOperation() {
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                new CapturingChatModelPort("""
+                        ```json
+                        {
+                          "refined": true,
+                          "reason": "sensitive update",
+                          "operations": [
+                            {
+                              "action": "REVIEW",
+                              "targetKind": "PROFILE",
+                              "targetKey": "occupation",
+                              "content": "User may have changed occupation.",
+                              "confidence": 0.61,
+                              "importance": 0.7,
+                              "valueScore": 0.75,
+                              "riskScore": 0.64,
+                              "sourceMessageIds": ["m2"],
+                              "signals": ["possible_conflict"],
+                              "metadata": {"requiresHumanReview": true}
+                            }
+                          ]
+                        }
+                        ```
+                        """),
+                PromptTemplatePort.empty(),
+                new ObjectMapper());
+
+        MemoryRefinementResult result = adapter.refine(request("I am no longer a designer."));
+
+        assertThat(result.refined()).isTrue();
+        assertThat(result.operations()).singleElement()
+                .extracting(RefinedMemoryOperation::action)
+                .isEqualTo(MemoryIngestionAction.REVIEW);
+    }
+
+    @Test
+    void shouldReturnEmptyResultWhenModelOutputIsInvalidJson() {
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                new CapturingChatModelPort("not json"),
+                PromptTemplatePort.empty(),
+                new ObjectMapper());
+
+        MemoryRefinementResult result = adapter.refine(request("remember this"));
+
+        assertThat(result.refined()).isFalse();
+        assertThat(result.operations()).isEmpty();
+        assertThat(result.reason()).isEqualTo("llm_refiner_parse_failed");
+    }
+
+    @Test
+    void shouldIgnoreUnsupportedActionsWithoutFailingThePipeline() {
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                new CapturingChatModelPort("""
+                        {
+                          "refined": true,
+                          "reason": "unsupported action",
+                          "operations": [
+                            {"action": "MERGE", "content": "bad", "confidence": 0.9}
+                          ]
+                        }
+                        """),
+                PromptTemplatePort.empty(),
+                new ObjectMapper());
+
+        MemoryRefinementResult result = adapter.refine(request("merge this"));
+
+        assertThat(result.refined()).isFalse();
+        assertThat(result.operations()).isEmpty();
+        assertThat(result.reason()).isEqualTo("llm_refiner_no_supported_operations");
+    }
+
+    private static MemoryRefinementRequest request(String content) {
+        return new MemoryRefinementRequest(
+                "op-1",
+                "tenant-1",
+                "chat",
+                "user-1",
+                "conversation-1",
+                "message-1",
+                content,
+                MemoryIngestionAction.ADD,
+                "FACT",
+                "rule_based",
+                Map.of("valueScore", 0.6D));
+    }
+
+    private static final class CapturingChatModelPort implements ChatModelPort {
+
+        private final String response;
+        private final AtomicReference<ChatRequest> lastRequest = new AtomicReference<>();
+
+        private CapturingChatModelPort(String response) {
+            this.response = response;
+        }
+
+        @Override
+        public String chat(ChatRequest request, String modelId) {
+            lastRequest.set(request);
+            return response;
+        }
+    }
+}
