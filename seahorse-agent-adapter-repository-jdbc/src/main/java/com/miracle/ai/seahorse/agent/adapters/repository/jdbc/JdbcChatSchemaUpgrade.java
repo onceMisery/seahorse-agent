@@ -154,6 +154,7 @@ public class JdbcChatSchemaUpgrade {
                 CREATE INDEX IF NOT EXISTS idx_memory_maintenance_run_status_time
                 ON t_memory_maintenance_run (status, update_time)
                 """);
+        ensureMemoryEntityAliasTables();
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_review_feedback_sample (
                     id VARCHAR(128) PRIMARY KEY,
@@ -249,6 +250,66 @@ public class JdbcChatSchemaUpgrade {
                 """, """
                 CREATE INDEX IF NOT EXISTS uk_memory_correction_active_target
                 ON t_memory_correction_ledger (user_id, tenant_id, target_kind, target_key)
+                """);
+    }
+
+    private void ensureMemoryEntityAliasTables() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_memory_entity_alias (
+                    id VARCHAR(128) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    alias_text VARCHAR(256) NOT NULL,
+                    normalized_alias VARCHAR(256) NOT NULL,
+                    canonical_entity_id VARCHAR(128) NOT NULL,
+                    canonical_name VARCHAR(256) NOT NULL,
+                    entity_type VARCHAR(64) NOT NULL DEFAULT 'ENTITY',
+                    confidence_level NUMERIC(4, 3) DEFAULT 0,
+                    source_type VARCHAR(64),
+                    source_memory_ids JSONB,
+                    metadata_json JSONB,
+                    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_alias_lookup
+                ON t_memory_entity_alias (user_id, tenant_id, normalized_alias, status)
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_memory_entity_relation (
+                    id VARCHAR(128) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    memory_id VARCHAR(128) NOT NULL,
+                    layer_name VARCHAR(32),
+                    memory_type VARCHAR(64),
+                    content TEXT,
+                    source_entity_id VARCHAR(128) NOT NULL,
+                    target_entity_id VARCHAR(128) NOT NULL,
+                    relation_type VARCHAR(64) NOT NULL DEFAULT 'MENTIONS',
+                    weight NUMERIC(6, 4) DEFAULT 1,
+                    confidence_level NUMERIC(4, 3) DEFAULT 1,
+                    metadata_json JSONB,
+                    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_relation_source
+                ON t_memory_entity_relation (user_id, tenant_id, source_entity_id, status)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_relation_target
+                ON t_memory_entity_relation (user_id, tenant_id, target_entity_id, status)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_relation_memory
+                ON t_memory_entity_relation (user_id, tenant_id, memory_id, status)
                 """);
     }
 

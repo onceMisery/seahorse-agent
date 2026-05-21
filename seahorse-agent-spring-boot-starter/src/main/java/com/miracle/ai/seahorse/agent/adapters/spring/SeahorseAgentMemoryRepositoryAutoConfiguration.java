@@ -22,7 +22,9 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcChatSchemaUpgr
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationMemoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcCorrectionLedgerRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLongTermMemoryRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryAliasRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflictLogRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryGraphRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryKeywordSearchRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryLifecycleRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryMaintenanceRunRepositoryAdapter;
@@ -38,9 +40,12 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcWorkingMemoryR
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphIndexPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRepositoryPort;
@@ -208,6 +213,26 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
     public JdbcMemoryMaintenanceRunRepositoryAdapter seahorseJdbcMemoryMaintenanceRunRepositoryAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
         return new JdbcMemoryMaintenanceRunRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
+            matchIfMissing = true)
+    @ConditionalOnMissingBean(MemoryAliasPort.class)
+    public JdbcMemoryAliasRepositoryAdapter seahorseJdbcMemoryAliasRepositoryAdapter(
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcMemoryAliasRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
+            matchIfMissing = true)
+    @ConditionalOnMissingBean({MemoryGraphPort.class, MemoryGraphIndexPort.class})
+    public JdbcMemoryGraphRepositoryAdapter seahorseJdbcMemoryGraphRepositoryAdapter(
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcMemoryGraphRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
     }
 
     @Bean
