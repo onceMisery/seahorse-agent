@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
 
 import java.time.Instant;
 import java.util.List;
@@ -28,6 +29,7 @@ public record MemoryMaintenanceRunResult(
         boolean compactionEnabled,
         boolean aliasEnabled,
         boolean garbageCollectionEnabled,
+        MemoryCompactionResult compactionResult,
         MemoryGarbageCollectionResult garbageCollectionResult,
         List<String> skippedTasks,
         List<String> errors,
@@ -37,6 +39,25 @@ public record MemoryMaintenanceRunResult(
     public static final String SKIP_COMPACTION_UNAVAILABLE = "COMPACTION_UNAVAILABLE";
     public static final String SKIP_ALIAS_UNAVAILABLE = "ALIAS_UNAVAILABLE";
     public static final String SKIP_GARBAGE_COLLECTION_DISABLED = "GARBAGE_COLLECTION_DISABLED";
+
+    public MemoryMaintenanceRunResult(String reason,
+                                      boolean compactionEnabled,
+                                      boolean aliasEnabled,
+                                      boolean garbageCollectionEnabled,
+                                      MemoryGarbageCollectionResult garbageCollectionResult,
+                                      List<String> skippedTasks,
+                                      List<String> errors,
+                                      Instant executedAt) {
+        this(reason,
+                compactionEnabled,
+                aliasEnabled,
+                garbageCollectionEnabled,
+                null,
+                garbageCollectionResult,
+                skippedTasks,
+                errors,
+                executedAt);
+    }
 
     public MemoryMaintenanceRunResult {
         reason = Objects.requireNonNullElse(reason, MemoryMaintenanceRunCommand.DEFAULT_REASON);

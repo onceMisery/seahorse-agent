@@ -1580,7 +1580,7 @@ flowchart TD
 - `MemoryVectorPort` 已扩展 `delete(memoryId, userId, tenantId)`：默认实现显式抛出 unsupported，避免真实 adapter 未实现删除时被误判成功；`MemoryVectorPort.noop()` 覆盖为空操作，用于未接入向量派生索引的安全降级。
 - Spring 自动配置默认注册 vector upsert/delete handler；keyword/graph handler 只在对应 index port 存在时注册，不注册 noop handler，避免任务被错误标记成功。
 - `MemoryOutboxPort.MemoryOutboxTask` 已提供 `vectorDelete()`、`keywordUpsert()`、`keywordDelete()`、`graphUpsert()`、`graphDelete()`。
-- 仍未完成：真实 Lucene/Elasticsearch keyword index adapter、Graph index adapter，以及所有写入/审核/压缩路径上的全量派生索引 enqueue。当前 M5 已完成的是 outbox 协议和 handler 扩展点。
+- 仍未完成：真实 Lucene/Elasticsearch keyword index adapter、Graph index adapter，以及所有写入/审核路径上的全量派生索引 enqueue。当前 M5 已完成的是 outbox 协议和 handler 扩展点；压缩路径已在 M6 第一版接入 master upsert 与 fragment delete outbox。
 
 ### Phase M6：Compaction、Alias、GC 自动维护
 
@@ -1625,12 +1625,16 @@ flowchart TD
 - JDBC 侧由 `JdbcMemoryLifecycleRepositoryAdapter` 扩展实现 `MemoryGarbageCollectionPort`，并通过 `derived_indexes_deleted_at` 做候选幂等标记；`JdbcMemoryOutboxRepositoryAdapter` 还会按 `user_id`、`tenant_id`、`task_type`、`target_id` 查找已有 `PENDING`/`SUCCEEDED` delete task，避免重复生成派生索引 delete outbox。
 - Spring 侧已新增 `SeahorseMemoryGarbageCollectionJob`，受 `seahorse-agent.memory.gc.scheduler-enabled` 控制。默认会生成 vector delete outbox，并且自动配置保证 `VECTOR_DELETE` handler 存在；keyword/graph delete 只有在对应 index port 存在时才会入队。
 - 四层记忆仍是唯一事实源：GC 当前只处理派生索引清理和幂等标记，不引入第五层，不改变 `WORKING`、`SHORT_TERM`、`LONG_TERM`、`SEMANTIC` 的主契约。
-- 已新增统一维护入口 `MemoryMaintenanceInboundPort`、`MemoryMaintenanceRunCommand`、`MemoryMaintenanceRunResult` 与 `DefaultMemoryMaintenanceService`。该服务当前是窄门面，只编排已存在的 GC 能力；当调用方请求 compaction/alias 时，结果会通过 `COMPACTION_UNAVAILABLE`、`ALIAS_UNAVAILABLE` 明确标记跳过，而不是伪装成功。
-- Spring 自动配置已注册 `DefaultMemoryMaintenanceService`，受 `seahorse-agent.memory.maintenance.compaction-enabled`、`seahorse-agent.memory.maintenance.alias-enabled`、`seahorse-agent.memory.maintenance.gc-enabled` 控制；默认 compaction/alias 关闭，GC 打开。
+- 已新增统一维护入口 `MemoryMaintenanceInboundPort`、`MemoryMaintenanceRunCommand`、`MemoryMaintenanceRunResult` 与 `DefaultMemoryMaintenanceService`。该服务保持窄门面，只编排已存在的 compaction/GC 能力；当调用方请求 alias 时，结果会通过 `ALIAS_UNAVAILABLE` 明确标记跳过，而不是伪装成功。
+- 已落地规则版 `MemoryCompactionService`、`MemoryCompactionOptions`、`MemoryCompactionPort`、`MemoryCompactionCandidate`、`MemoryCompactionFragment`、`MemoryCompactionResult`。第一版按 `semanticKey`、`profileSlot` 对 `SHORT_TERM`、`LONG_TERM`、`SEMANTIC` 的碎片分组，生成 `LONG_TERM` master memory，类型为 `COMPACTED_SUMMARY`，metadata 包含 `sourceMemoryIds`、`compactionGroupKey`、`compactionStrategy`、`compactionGenerationId`、`compactedAt`。
+- JDBC 侧由 `JdbcMemoryLifecycleRepositoryAdapter` 扩展实现 `MemoryCompactionPort`，扫描 short/long/semantic 中仍处于 active/reference 状态且带分组键的候选；压缩完成后只把这些 durable fragment 标记为 `COMPACTED`，并写入 `obsolete_reason='compacted into <masterId>'`。`WORKING` 记忆没有 `status` 字段，不参与 `COMPACTED` 标记，避免与现有四层记忆边界冲突。
+- short/long/semantic 的 JDBC list/find/search 路径已排除 `COMPACTED` fragment，因此压缩碎片不会继续进入召回；master memory 作为 long-term 记录继续参与原有读取链路。
+- `MemoryCompactionService` 会为 master 生成 `VECTOR_UPSERT`、`KEYWORD_UPSERT`、`GRAPH_UPSERT`，并为 fragment 生成 `VECTOR_DELETE`、`KEYWORD_DELETE`、`GRAPH_DELETE` outbox task。是否启用三类派生索引由 `MemoryCompactionOptions` 控制。
+- Spring 自动配置已注册 `MemoryCompactionService` 与 `DefaultMemoryMaintenanceService`，受 `seahorse-agent.memory.maintenance.compaction-enabled`、`seahorse-agent.memory.maintenance.alias-enabled`、`seahorse-agent.memory.maintenance.gc-enabled` 控制；默认 compaction/alias 关闭，GC 打开。
 - Web 侧已新增 `SeahorseMemoryMaintenanceController`，暴露 `POST /memories/maintenance/run`，参数为 `reason`、`compaction`、`alias`、`gc`。控制器单独成类，不继续膨胀 `SeahorseMemoryController`。
 - 已新增维护运行记录持久化：`MemoryMaintenanceRunRepositoryPort`、`MemoryMaintenanceRunRecord`、`MemoryMaintenanceRunQuery`、`MemoryMaintenanceRunPage`，JDBC 表 `t_memory_maintenance_run` 与 `JdbcMemoryMaintenanceRunRepositoryAdapter`。`DefaultMemoryMaintenanceService` 每次运行后记录请求开关、GC 统计、跳过项、错误和最终状态；记录失败不影响维护执行语义。
 - Web 侧已新增 `GET /memories/maintenance-runs`，支持按 `status` 分页查询维护运行历史，用于排查后台维护和手工维护结果。
-- 仍未完成：Compaction master memory 生成、碎片置 `COMPACTED` 的服务、Alias registry/Graph relation 表、真实 Graph adapter。
+- 仍未完成：LLM compactor、canonical entity 驱动的 compaction 分组、Alias registry/Graph relation 表、真实 Graph adapter。
 
 测试文件：
 

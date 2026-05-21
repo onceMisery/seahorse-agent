@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
@@ -35,6 +36,7 @@ import java.util.UUID;
 public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInboundPort {
 
     private final MemoryGarbageCollectionService garbageCollectionService;
+    private final MemoryCompactionService compactionService;
     private final MemoryMaintenanceRunRepositoryPort maintenanceRunRepositoryPort;
     private final boolean compactionEnabled;
     private final boolean aliasEnabled;
@@ -45,6 +47,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                                            boolean aliasEnabled,
                                            boolean garbageCollectionEnabled) {
         this(garbageCollectionService,
+                null,
                 MemoryMaintenanceRunRepositoryPort.noop(),
                 compactionEnabled,
                 aliasEnabled,
@@ -56,7 +59,22 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                                            boolean compactionEnabled,
                                            boolean aliasEnabled,
                                            boolean garbageCollectionEnabled) {
+        this(garbageCollectionService,
+                null,
+                maintenanceRunRepositoryPort,
+                compactionEnabled,
+                aliasEnabled,
+                garbageCollectionEnabled);
+    }
+
+    public DefaultMemoryMaintenanceService(MemoryGarbageCollectionService garbageCollectionService,
+                                           MemoryCompactionService compactionService,
+                                           MemoryMaintenanceRunRepositoryPort maintenanceRunRepositoryPort,
+                                           boolean compactionEnabled,
+                                           boolean aliasEnabled,
+                                           boolean garbageCollectionEnabled) {
         this.garbageCollectionService = garbageCollectionService;
+        this.compactionService = compactionService;
         this.maintenanceRunRepositoryPort = Objects.requireNonNullElseGet(
                 maintenanceRunRepositoryPort,
                 MemoryMaintenanceRunRepositoryPort::noop);
@@ -72,9 +90,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 : command;
         List<String> skippedTasks = new ArrayList<>();
         List<String> errors = new ArrayList<>();
-        if (safeCommand.compactionEnabled() && !compactionEnabled) {
-            skippedTasks.add(MemoryMaintenanceRunResult.SKIP_COMPACTION_UNAVAILABLE);
-        }
+        MemoryCompactionResult compactionResult = runCompaction(safeCommand, skippedTasks, errors);
         if (safeCommand.aliasEnabled() && !aliasEnabled) {
             skippedTasks.add(MemoryMaintenanceRunResult.SKIP_ALIAS_UNAVAILABLE);
         }
@@ -96,12 +112,33 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 safeCommand.compactionEnabled(),
                 safeCommand.aliasEnabled(),
                 safeCommand.garbageCollectionEnabled(),
+                compactionResult,
                 garbageCollectionResult,
                 skippedTasks,
                 errors,
                 Instant.now());
         persistRunRecord(result);
         return result;
+    }
+
+    private MemoryCompactionResult runCompaction(MemoryMaintenanceRunCommand command,
+                                                 List<String> skippedTasks,
+                                                 List<String> errors) {
+        if (!command.compactionEnabled()) {
+            return null;
+        }
+        if (!compactionEnabled || compactionService == null) {
+            skippedTasks.add(MemoryMaintenanceRunResult.SKIP_COMPACTION_UNAVAILABLE);
+            return null;
+        }
+        try {
+            MemoryCompactionResult result = compactionService.run(command.reason());
+            errors.addAll(result.errors());
+            return result;
+        } catch (RuntimeException ex) {
+            errors.add("compaction:" + errorMessage(ex));
+            return null;
+        }
     }
 
     @Override

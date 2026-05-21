@@ -17,8 +17,12 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionCandidate;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionFragment;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -26,19 +30,29 @@ import javax.sql.DataSource;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 
-public class JdbcMemoryLifecycleRepositoryAdapter implements MemoryLifecyclePort, MemoryGarbageCollectionPort {
+public class JdbcMemoryLifecycleRepositoryAdapter
+        implements MemoryLifecyclePort, MemoryGarbageCollectionPort, MemoryCompactionPort {
 
     private static final String DEFAULT_TENANT_ID = "default";
     private static final int DEFAULT_SCAN_LIMIT = 100;
+    private static final int DEFAULT_COMPACTION_MIN_GROUP_SIZE = 3;
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
     public JdbcMemoryLifecycleRepositoryAdapter(DataSource dataSource) {
+        this(dataSource, new ObjectMapper());
+    }
+
+    public JdbcMemoryLifecycleRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
     }
 
     @Override
@@ -146,6 +160,48 @@ public class JdbcMemoryLifecycleRepositoryAdapter implements MemoryLifecyclePort
             updated += markLayerDerivedIndexesDeleted("t_short_term_memory", memoryId, now);
             updated += markLayerDerivedIndexesDeleted("t_long_term_memory", memoryId, now);
             updated += markLayerDerivedIndexesDeleted("t_semantic_memory", memoryId, now);
+        }
+        return updated;
+    }
+
+    @Override
+    public List<MemoryCompactionCandidate> scanCandidates(int limit) {
+        return scanCompactionCandidates(limit, DEFAULT_COMPACTION_MIN_GROUP_SIZE);
+    }
+
+    public List<MemoryCompactionCandidate> scanCompactionCandidates(int limit, int minGroupSize) {
+        int safeLimit = limit <= 0 ? DEFAULT_SCAN_LIMIT : limit;
+        int safeMinGroupSize = minGroupSize <= 1 ? DEFAULT_COMPACTION_MIN_GROUP_SIZE : minGroupSize;
+        List<MemoryCompactionFragmentRow> rows = new ArrayList<>();
+        rows.addAll(scanShortTermCompactionRows(safeLimit));
+        rows.addAll(scanLongTermCompactionRows(safeLimit));
+        rows.addAll(scanSemanticCompactionRows(safeLimit));
+
+        Map<String, List<MemoryCompactionFragmentRow>> groups = new LinkedHashMap<>();
+        for (MemoryCompactionFragmentRow row : rows) {
+            if (!JdbcMemorySupport.hasText(row.groupKey())) {
+                continue;
+            }
+            groups.computeIfAbsent(row.userId() + "\u0000" + row.tenantId() + "\u0000" + row.groupKey(),
+                    ignored -> new ArrayList<>()).add(row);
+        }
+        return groups.values().stream()
+                .filter(group -> group.size() >= safeMinGroupSize)
+                .limit(safeLimit)
+                .map(this::candidate)
+                .toList();
+    }
+
+    @Override
+    public int markCompacted(MemoryCompactionCandidate candidate, String masterMemoryId, Instant compactedAt) {
+        if (candidate == null || candidate.fragments().isEmpty()) {
+            return 0;
+        }
+        String safeReason = "compacted into " + Objects.requireNonNullElse(masterMemoryId, "");
+        Instant now = Objects.requireNonNullElseGet(compactedAt, Instant::now);
+        int updated = 0;
+        for (MemoryCompactionFragment fragment : candidate.fragments()) {
+            updated += markFragmentCompacted(fragment, candidate.userId(), candidate.tenantId(), safeReason, now);
         }
         return updated;
     }
@@ -340,6 +396,153 @@ public class JdbcMemoryLifecycleRepositoryAdapter implements MemoryLifecyclePort
                 memoryId);
     }
 
+    private List<MemoryCompactionFragmentRow> scanShortTermCompactionRows(int limit) {
+        return jdbcTemplate.query("""
+                SELECT id AS memory_id,
+                       'short_term' AS layer_name,
+                       user_id,
+                       COALESCE(tenant_id, 'default') AS tenant_id,
+                       memory_type AS memory_type,
+                       content,
+                       metadata_json AS metadata_text,
+                       update_time
+                FROM t_short_term_memory
+                WHERE deleted = 0
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND metadata_json IS NOT NULL
+                ORDER BY update_time ASC
+                LIMIT ?
+                """, this::mapCompactionRow, limit);
+    }
+
+    private List<MemoryCompactionFragmentRow> scanLongTermCompactionRows(int limit) {
+        return jdbcTemplate.query("""
+                SELECT id AS memory_id,
+                       'long_term' AS layer_name,
+                       user_id,
+                       COALESCE(tenant_id, 'default') AS tenant_id,
+                       memory_category AS memory_type,
+                       content,
+                       tags AS metadata_text,
+                       update_time
+                FROM t_long_term_memory
+                WHERE deleted = 0
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND tags IS NOT NULL
+                ORDER BY update_time ASC
+                LIMIT ?
+                """, this::mapCompactionRow, limit);
+    }
+
+    private List<MemoryCompactionFragmentRow> scanSemanticCompactionRows(int limit) {
+        return jdbcTemplate.query("""
+                SELECT id AS memory_id,
+                       'semantic' AS layer_name,
+                       user_id,
+                       COALESCE(tenant_id, 'default') AS tenant_id,
+                       semantic_type AS memory_type,
+                       CAST(value_json AS VARCHAR) AS content,
+                       CAST(value_json AS VARCHAR) AS metadata_text,
+                       update_time,
+                       semantic_key
+                FROM t_semantic_memory
+                WHERE deleted = 0
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND semantic_key IS NOT NULL
+                ORDER BY update_time ASC
+                LIMIT ?
+                """, (rs, rowNum) -> {
+                    MemoryCompactionFragmentRow row = mapCompactionRow(rs, rowNum);
+                    String semanticKey = Objects.requireNonNullElse(rs.getString("semantic_key"), "").trim();
+                    return row.withGroupKey(semanticKey.isBlank() ? row.groupKey() : "semanticKey:" + semanticKey);
+                }, limit);
+    }
+
+    private MemoryCompactionFragmentRow mapCompactionRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        String metadata = Objects.requireNonNullElse(rs.getString("metadata_text"), "");
+        String groupKey = groupKey(metadata);
+        return new MemoryCompactionFragmentRow(
+                rs.getString("memory_id"),
+                rs.getString("layer_name"),
+                rs.getString("user_id"),
+                Objects.requireNonNullElse(rs.getString("tenant_id"), DEFAULT_TENANT_ID),
+                Objects.requireNonNullElse(rs.getString("memory_type"), ""),
+                Objects.requireNonNullElse(rs.getString("content"), ""),
+                metadata,
+                groupKey,
+                JdbcMemorySupport.instant(rs.getTimestamp("update_time")));
+    }
+
+    private MemoryCompactionCandidate candidate(List<MemoryCompactionFragmentRow> group) {
+        MemoryCompactionFragmentRow first = group.get(0);
+        return new MemoryCompactionCandidate(
+                first.userId(),
+                first.tenantId(),
+                first.groupKey(),
+                strategy(first.groupKey()),
+                group.stream()
+                        .map(row -> new MemoryCompactionFragment(
+                                row.memoryId(),
+                                row.layer(),
+                                row.type(),
+                                row.content(),
+                                Map.of("compactionGroupKey", row.groupKey()),
+                                row.updatedAt()))
+                        .toList());
+    }
+
+    private int markFragmentCompacted(MemoryCompactionFragment fragment,
+                                      String userId,
+                                      String tenantId,
+                                      String reason,
+                                      Instant now) {
+        String table = table(fragment.layer());
+        if (table.isBlank() || !JdbcMemorySupport.hasText(fragment.memoryId())) {
+            return 0;
+        }
+        return jdbcTemplate.update("""
+                UPDATE %s
+                SET status = 'COMPACTED',
+                    obsolete_reason = ?,
+                    valid_until = ?,
+                    update_time = ?
+                WHERE id = ?
+                  AND user_id = ?
+                  AND COALESCE(tenant_id, 'default') = ?
+                  AND deleted = 0
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                """.formatted(table),
+                reason,
+                JdbcMemorySupport.timestamp(now),
+                JdbcMemorySupport.timestamp(now),
+                fragment.memoryId(),
+                userId,
+                JdbcMemorySupport.hasText(tenantId) ? tenantId : DEFAULT_TENANT_ID);
+    }
+
+    private String groupKey(String metadata) {
+        Map<String, Object> values = JdbcMemorySupport.parseJson(objectMapper, metadata);
+        String semanticKey = mapValue(values, "semanticKey");
+        if (JdbcMemorySupport.hasText(semanticKey)) {
+            return "semanticKey:" + semanticKey;
+        }
+        String profileSlot = mapValue(values, "profileSlot");
+        if (JdbcMemorySupport.hasText(profileSlot)) {
+            return "profileSlot:" + profileSlot;
+        }
+        return "";
+    }
+
+    private String strategy(String groupKey) {
+        int delimiter = groupKey.indexOf(':');
+        return delimiter <= 0 ? "rule" : groupKey.substring(0, delimiter);
+    }
+
+    private String mapValue(Map<String, Object> values, String key) {
+        Object value = Objects.requireNonNullElse(values, Map.<String, Object>of()).get(key);
+        return value == null ? "" : value.toString().trim();
+    }
+
     private String legacyProfileSemanticKey(String profileSlot) {
         if ("identity.occupation".equals(profileSlot)) {
             return "profile:occupation";
@@ -357,5 +560,42 @@ public class JdbcMemoryLifecycleRepositoryAdapter implements MemoryLifecyclePort
         String safeKey = Objects.requireNonNullElse(key, "");
         String safeValue = Objects.requireNonNullElse(value, "");
         return "%\"" + safeKey + "\": \"" + safeValue + "\"%";
+    }
+
+    private record MemoryCompactionFragmentRow(
+            String memoryId,
+            String layer,
+            String userId,
+            String tenantId,
+            String type,
+            String content,
+            String metadata,
+            String groupKey,
+            Instant updatedAt) {
+
+        MemoryCompactionFragmentRow {
+            memoryId = Objects.requireNonNullElse(memoryId, "");
+            layer = Objects.requireNonNullElse(layer, "");
+            userId = Objects.requireNonNullElse(userId, "");
+            tenantId = Objects.requireNonNullElse(tenantId, DEFAULT_TENANT_ID);
+            type = Objects.requireNonNullElse(type, "");
+            content = Objects.requireNonNullElse(content, "");
+            metadata = Objects.requireNonNullElse(metadata, "");
+            groupKey = Objects.requireNonNullElse(groupKey, "");
+            updatedAt = Objects.requireNonNullElse(updatedAt, Instant.EPOCH);
+        }
+
+        MemoryCompactionFragmentRow withGroupKey(String newGroupKey) {
+            return new MemoryCompactionFragmentRow(
+                    memoryId,
+                    layer,
+                    userId,
+                    tenantId,
+                    type,
+                    content,
+                    metadata,
+                    Objects.requireNonNullElse(newGroupKey, ""),
+                    updatedAt);
+        }
     }
 }

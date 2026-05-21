@@ -47,7 +47,7 @@ public class JdbcLongTermMemoryRepositoryAdapter implements LongTermMemoryPort {
                 SELECT * FROM t_long_term_memory
                 WHERE id = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
                 """, this::mapRecord, id).stream().findFirst();
     }
 
@@ -62,7 +62,7 @@ public class JdbcLongTermMemoryRepositoryAdapter implements LongTermMemoryPort {
                 SELECT * FROM t_long_term_memory
                 WHERE user_id = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY importance_score DESC, create_time DESC
                 LIMIT ?
                 """, this::mapRecord, userId, safeLimit(limit));

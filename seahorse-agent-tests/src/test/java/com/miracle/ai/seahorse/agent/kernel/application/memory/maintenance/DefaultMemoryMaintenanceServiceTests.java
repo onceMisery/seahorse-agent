@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCo
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRecord;
@@ -116,6 +117,33 @@ class DefaultMemoryMaintenanceServiceTests {
         assertThat(record.errors()).isEmpty();
     }
 
+    @Test
+    void shouldRunCompactionWhenRequestedAndEnabled() {
+        RecordingGarbageCollectionService garbageCollectionService = new RecordingGarbageCollectionService();
+        RecordingCompactionService compactionService = new RecordingCompactionService();
+        RecordingMaintenanceRunRepository repository = new RecordingMaintenanceRunRepository();
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                garbageCollectionService,
+                compactionService,
+                repository,
+                true,
+                false,
+                false);
+
+        MemoryMaintenanceRunResult result = service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "manual-maintenance",
+                true,
+                false,
+                false));
+
+        assertThat(compactionService.reasons).containsExactly("manual-maintenance");
+        assertThat(result.compactionResult()).isNotNull();
+        assertThat(result.compactionResult().compactedGroupCount()).isEqualTo(1);
+        assertThat(result.skippedTasks()).isEmpty();
+        assertThat(repository.records).hasSize(1);
+        assertThat(repository.records.get(0).status()).isEqualTo(MemoryMaintenanceRunRecord.STATUS_SUCCEEDED);
+    }
+
     private static class RecordingGarbageCollectionService extends MemoryGarbageCollectionService {
 
         private final List<String> reasons = new ArrayList<>();
@@ -137,6 +165,21 @@ class DefaultMemoryMaintenanceServiceTests {
                     false,
                     List.of(),
                     Instant.EPOCH);
+        }
+    }
+
+    private static class RecordingCompactionService extends MemoryCompactionService {
+
+        private final List<String> reasons = new ArrayList<>();
+
+        private RecordingCompactionService() {
+            super();
+        }
+
+        @Override
+        public MemoryCompactionResult run(String reason) {
+            reasons.add(reason);
+            return new MemoryCompactionResult(reason, 1, 1, 2, List.of(), Instant.EPOCH);
         }
     }
 

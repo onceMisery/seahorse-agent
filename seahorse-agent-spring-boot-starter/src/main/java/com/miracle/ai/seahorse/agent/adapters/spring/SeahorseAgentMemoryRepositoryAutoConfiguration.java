@@ -38,6 +38,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcWorkingMemoryR
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPort;
@@ -213,7 +214,7 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
             matchIfMissing = true)
-    @ConditionalOnMissingBean({MemoryLifecyclePort.class, MemoryGarbageCollectionPort.class})
+    @ConditionalOnMissingBean({MemoryLifecyclePort.class, MemoryGarbageCollectionPort.class, MemoryCompactionPort.class})
     public JdbcMemoryLifecycleRepositoryAdapter seahorseJdbcMemoryLifecycleRepositoryAdapter(DataSource dataSource) {
         return new JdbcMemoryLifecycleRepositoryAdapter(dataSource);
     }

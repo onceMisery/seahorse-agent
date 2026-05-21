@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
@@ -43,6 +44,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -674,6 +676,42 @@ class JdbcMemoryRepositoryAdapterTests {
                 FROM t_semantic_memory
                 WHERE id = 'sem-profile'
                 """, String.class)).isEqualTo("profile slot updated");
+    }
+
+    @Test
+    void shouldScanAndMarkCompactionCandidatesWithoutTouchingWorkingMemory() {
+        shortTermAdapter.save(new MemoryRecord("stm-compact-1", "short_term", "PROJECT_FACT", "alpha first",
+                Map.of("userId", "user-1", "tenantId", "default", "semanticKey", "project.alpha",
+                        "importanceScore", 0.8D),
+                Instant.now()));
+        shortTermAdapter.save(new MemoryRecord("stm-compact-2", "short_term", "PROJECT_FACT", "alpha second",
+                Map.of("userId", "user-1", "tenantId", "default", "semanticKey", "project.alpha",
+                        "importanceScore", 0.7D),
+                Instant.now()));
+        longTermAdapter.save(new MemoryRecord("ltm-single", "long_term", "PROJECT_FACT", "beta single",
+                Map.of("userId", "user-1", "tenantId", "default", "semanticKey", "project.beta"),
+                Instant.now()));
+
+        List<MemoryCompactionCandidate> candidates = lifecycleAdapter.scanCompactionCandidates(10, 2);
+
+        assertThat(candidates).hasSize(1);
+        MemoryCompactionCandidate candidate = candidates.get(0);
+        assertThat(candidate.groupKey()).isEqualTo("semanticKey:project.alpha");
+        assertThat(candidate.userId()).isEqualTo("user-1");
+        assertThat(candidate.fragments()).extracting(fragment -> fragment.memoryId())
+                .containsExactlyInAnyOrder("stm-compact-1", "stm-compact-2");
+
+        int marked = lifecycleAdapter.markCompacted(candidate, "master-1", Instant.EPOCH);
+
+        assertThat(marked).isEqualTo(2);
+        assertThat(shortTermAdapter.listByUser("user-1", 10))
+                .extracting(MemoryRecord::id)
+                .doesNotContain("stm-compact-1", "stm-compact-2");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT obsolete_reason
+                FROM t_short_term_memory
+                WHERE id = 'stm-compact-1'
+                """, String.class)).isEqualTo("compacted into master-1");
     }
 
     private void createSchema() {

@@ -1,0 +1,184 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
+
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionCandidate;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionFragment;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+
+public class MemoryCompactionService {
+
+    private static final String MASTER_TYPE = "COMPACTED_SUMMARY";
+    private static final String SOURCE_TYPE = "memory_compaction";
+
+    private final MemoryCompactionPort compactionPort;
+    private final LongTermMemoryPort longTermMemoryPort;
+    private final MemoryOutboxPort outboxPort;
+    private final MemoryCompactionOptions options;
+
+    public MemoryCompactionService() {
+        this(MemoryCompactionPort.noop(), null, MemoryOutboxPort.noop(), MemoryCompactionOptions.defaults());
+    }
+
+    public MemoryCompactionService(MemoryCompactionPort compactionPort,
+                                   LongTermMemoryPort longTermMemoryPort,
+                                   MemoryOutboxPort outboxPort,
+                                   MemoryCompactionOptions options) {
+        this.compactionPort = Objects.requireNonNullElseGet(compactionPort, MemoryCompactionPort::noop);
+        this.longTermMemoryPort = longTermMemoryPort;
+        this.outboxPort = Objects.requireNonNullElseGet(outboxPort, MemoryOutboxPort::noop);
+        this.options = Objects.requireNonNullElseGet(options, MemoryCompactionOptions::defaults);
+    }
+
+    public MemoryCompactionResult run(String reason) {
+        Instant now = Instant.now();
+        List<String> errors = new ArrayList<>();
+        List<MemoryCompactionCandidate> candidates = scan(errors);
+        int compactedGroups = 0;
+        int compactedFragments = 0;
+        for (MemoryCompactionCandidate candidate : candidates) {
+            if (candidate.fragments().size() < options.minGroupSize()) {
+                continue;
+            }
+            try {
+                MemoryRecord master = masterMemory(candidate, now);
+                saveMaster(master);
+                compactedFragments += compactionPort.markCompacted(candidate, master.id(), now);
+                enqueueMasterUpserts(master, candidate, errors);
+                enqueueFragmentDeletes(candidate, errors);
+                compactedGroups++;
+            } catch (RuntimeException ex) {
+                errors.add(candidate.groupKey() + ":" + errorMessage(ex));
+            }
+        }
+        return new MemoryCompactionResult(
+                Objects.requireNonNullElse(reason, "manual-compaction"),
+                candidates.size(),
+                compactedGroups,
+                compactedFragments,
+                errors,
+                now);
+    }
+
+    private List<MemoryCompactionCandidate> scan(List<String> errors) {
+        try {
+            return compactionPort.scanCandidates(options.scanLimit());
+        } catch (RuntimeException ex) {
+            errors.add("scan:" + errorMessage(ex));
+            return List.of();
+        }
+    }
+
+    private MemoryRecord masterMemory(MemoryCompactionCandidate candidate, Instant now) {
+        String masterId = "mem-compact-" + UUID.randomUUID();
+        List<String> sourceMemoryIds = candidate.fragments().stream()
+                .map(MemoryCompactionFragment::memoryId)
+                .filter(id -> !id.isBlank())
+                .distinct()
+                .toList();
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("userId", candidate.userId());
+        metadata.put("tenantId", candidate.tenantId());
+        metadata.put("sourceType", SOURCE_TYPE);
+        metadata.put("sourceIds", sourceMemoryIds);
+        metadata.put("sourceMemoryIds", sourceMemoryIds);
+        metadata.put("compactionGroupKey", candidate.groupKey());
+        metadata.put("compactionStrategy", candidate.strategy());
+        metadata.put("compactionGenerationId", "compaction-" + UUID.randomUUID());
+        metadata.put("compactedAt", now.toString());
+        metadata.put("importanceScore", 0.8D);
+        metadata.put("confidenceLevel", 0.8D);
+        return new MemoryRecord(masterId, "long_term", MASTER_TYPE, content(candidate), metadata, now);
+    }
+
+    private String content(MemoryCompactionCandidate candidate) {
+        return candidate.fragments().stream()
+                .map(MemoryCompactionFragment::content)
+                .filter(content -> content != null && !content.isBlank())
+                .distinct()
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse(candidate.groupKey());
+    }
+
+    private void saveMaster(MemoryRecord master) {
+        if (longTermMemoryPort == null) {
+            throw new IllegalStateException("longTermMemoryPort unavailable");
+        }
+        longTermMemoryPort.save(master);
+    }
+
+    private void enqueueMasterUpserts(MemoryRecord master, MemoryCompactionCandidate candidate, List<String> errors) {
+        if (options.vectorIndexEnabled()) {
+            enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorUpsert(
+                    master,
+                    candidate.userId(),
+                    candidate.tenantId(),
+                    options.embeddingModel(),
+                    ""), errors);
+        }
+        if (options.keywordIndexEnabled()) {
+            enqueue(MemoryOutboxPort.MemoryOutboxTask.keywordUpsert(master, candidate.userId(), candidate.tenantId()),
+                    errors);
+        }
+        if (options.graphIndexEnabled()) {
+            enqueue(MemoryOutboxPort.MemoryOutboxTask.graphUpsert(master, candidate.userId(), candidate.tenantId()),
+                    errors);
+        }
+    }
+
+    private void enqueueFragmentDeletes(MemoryCompactionCandidate candidate, List<String> errors) {
+        for (MemoryCompactionFragment fragment : candidate.fragments()) {
+            if (options.vectorIndexEnabled()) {
+                enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorDelete(
+                        fragment.memoryId(), candidate.userId(), candidate.tenantId()), errors);
+            }
+            if (options.keywordIndexEnabled()) {
+                enqueue(MemoryOutboxPort.MemoryOutboxTask.keywordDelete(
+                        fragment.memoryId(), candidate.userId(), candidate.tenantId()), errors);
+            }
+            if (options.graphIndexEnabled()) {
+                enqueue(MemoryOutboxPort.MemoryOutboxTask.graphDelete(
+                        fragment.memoryId(), candidate.userId(), candidate.tenantId()), errors);
+            }
+        }
+    }
+
+    private void enqueue(MemoryOutboxPort.MemoryOutboxTask task, List<String> errors) {
+        try {
+            outboxPort.enqueue(task);
+        } catch (RuntimeException ex) {
+            errors.add(task.targetId() + ":" + task.taskType() + ":" + errorMessage(ex));
+        }
+    }
+
+    private String errorMessage(RuntimeException ex) {
+        return ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage();
+    }
+}
