@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
 public enum MemoryReviewStatus {
     PENDING,
+    APPLYING,
     APPLIED,
     REJECTED
 }

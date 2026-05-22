@@ -306,6 +306,24 @@ class KernelMemoryReviewServiceTests {
     }
 
     @Test
+    void shouldNotIngestWhenReviewCandidateIsClaimedByAnotherDecision() {
+        StaleClaimReviewRepository repository = new StaleClaimReviewRepository();
+        repository.put(review("review-1", MemoryReviewStatus.PENDING, "do not apply stale review"));
+        RecordingIngestionWorkflow workflow = new RecordingIngestionWorkflow(
+                MemoryIngestionResult.accepted(List.of("SHORT_TERM_SAVE")));
+        KernelMemoryReviewService service = new KernelMemoryReviewService(repository, workflow);
+
+        assertThatThrownBy(() -> service.approve("review-1",
+                new MemoryReviewDecisionCommand("auditor", "approve", "", Map.of())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("review candidate is not pending");
+
+        assertThat(workflow.commands).isEmpty();
+        assertThat(repository.findReviewItem("review-1").orElseThrow().reviewStatus())
+                .isEqualTo(MemoryReviewStatus.REJECTED);
+    }
+
+    @Test
     void shouldNotApplyAlreadyReviewedCandidateAgain() {
         InMemoryReviewRepository repository = new InMemoryReviewRepository();
         repository.put(review("review-1", MemoryReviewStatus.APPLIED, "already applied"));
@@ -376,7 +394,7 @@ class KernelMemoryReviewServiceTests {
                 Instant.EPOCH);
     }
 
-    private static final class InMemoryReviewRepository implements MemoryReviewManagementRepositoryPort {
+    private static class InMemoryReviewRepository implements MemoryReviewManagementRepositoryPort {
 
         private final Map<String, MemoryReviewRecord> records = new LinkedHashMap<>();
 
@@ -432,6 +450,43 @@ class KernelMemoryReviewServiceTests {
                     Instant.EPOCH);
             records.put(updated.candidateId(), updated);
             return updated;
+        }
+    }
+
+    private static final class StaleClaimReviewRepository extends InMemoryReviewRepository {
+
+        @Override
+        public MemoryReviewRecord applyReviewDecision(MemoryReviewDecision decision) {
+            MemoryReviewRecord current = findReviewItem(decision.candidateId()).orElseThrow();
+            put(new MemoryReviewRecord(
+                    current.candidateId(),
+                    current.operationId(),
+                    current.tenantId(),
+                    current.userId(),
+                    current.conversationId(),
+                    current.messageId(),
+                    current.requestedAction(),
+                    current.targetLayer(),
+                    current.targetKind(),
+                    current.targetKey(),
+                    current.content(),
+                    current.confidence(),
+                    current.importance(),
+                    current.valueScore(),
+                    current.riskScore(),
+                    current.reason(),
+                    current.sourceMessageIds(),
+                    current.metadata(),
+                    MemoryReviewStatus.REJECTED,
+                    "auditor-2",
+                    "concurrent reject",
+                    "",
+                    Map.of(),
+                    "",
+                    "",
+                    current.createdAt(),
+                    Instant.EPOCH));
+            throw new IllegalStateException("review candidate is not pending: " + decision.candidateId());
         }
     }
 

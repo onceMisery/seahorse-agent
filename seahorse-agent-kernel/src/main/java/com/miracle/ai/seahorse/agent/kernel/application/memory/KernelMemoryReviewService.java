@@ -169,6 +169,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                                              String eventType) {
         String operationId = APPLY_OPERATION_PREFIX + current.candidateId();
         String applyContent = reviewApplyContent(current, content);
+        claimForApply(current, command);
         MemoryIngestionResult result = ingestionWorkflowPort.ingest(MemoryIngestionCommand.reviewApply(
                 operationId,
                 current.tenantId(),
@@ -182,6 +183,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 reviewDirective(current, command)));
         if (result == null || result.status() != MemoryIngestionStatus.ACCEPTED) {
             String reason = result == null ? "empty_result" : result.reason();
+            releaseApplyClaim(current, command);
             recordTrace(eventType, MemoryTraceEvent.STATUS_FAILED, current, command, Map.of(
                     "operationId", operationId,
                     "source", source,
@@ -206,6 +208,34 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 "reviewedLayer", reviewed.reviewedLayer()));
         recordFeedback(current, reviewed);
         return reviewed;
+    }
+
+    private MemoryReviewRecord claimForApply(MemoryReviewRecord current, MemoryReviewDecisionCommand command) {
+        return reviewRepositoryPort.applyReviewDecision(new MemoryReviewDecision(
+                current.candidateId(),
+                MemoryReviewStatus.APPLYING,
+                operator(command.reviewerId()),
+                command.comment(),
+                "",
+                Map.of(),
+                "",
+                ""));
+    }
+
+    private void releaseApplyClaim(MemoryReviewRecord current, MemoryReviewDecisionCommand command) {
+        try {
+            reviewRepositoryPort.applyReviewDecision(new MemoryReviewDecision(
+                    current.candidateId(),
+                    MemoryReviewStatus.PENDING,
+                    operator(command.reviewerId()),
+                    command.comment(),
+                    "",
+                    Map.of(),
+                    "",
+                    ""));
+        } catch (RuntimeException ex) {
+            LOG.warn("Failed to release memory review apply claim: {} ({})", current.candidateId(), ex.toString());
+        }
     }
 
     private String reviewApplyContent(MemoryReviewRecord current, String content) {

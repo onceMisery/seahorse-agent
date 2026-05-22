@@ -626,6 +626,17 @@ class JdbcMemoryRepositoryAdapterTests {
         assertThat(pending.metadata()).containsEntry("reviewReason", "low_confidence");
         assertThat(reviewCandidateAdapter.findReviewItem("review-op-1")).isPresent();
 
+        MemoryReviewRecord claimed = reviewCandidateAdapter.applyReviewDecision(new MemoryReviewDecision(
+                "review-op-1",
+                MemoryReviewStatus.APPLYING,
+                "auditor",
+                "approved",
+                "",
+                Map.of(),
+                "",
+                ""));
+        assertThat(claimed.reviewStatus()).isEqualTo(MemoryReviewStatus.APPLYING);
+
         MemoryReviewRecord applied = reviewCandidateAdapter.applyReviewDecision(new MemoryReviewDecision(
                 "review-op-1",
                 MemoryReviewStatus.APPLIED,
@@ -670,6 +681,15 @@ class JdbcMemoryRepositoryAdapterTests {
                 Map.of("reviewReason", "low_confidence"),
                 Instant.now()));
 
+        reviewCandidateAdapter.applyReviewDecision(new MemoryReviewDecision(
+                "review-op-1",
+                MemoryReviewStatus.APPLYING,
+                "auditor-1",
+                "approved",
+                "",
+                Map.of(),
+                "",
+                ""));
         reviewCandidateAdapter.applyReviewDecision(new MemoryReviewDecision(
                 "review-op-1",
                 MemoryReviewStatus.APPLIED,

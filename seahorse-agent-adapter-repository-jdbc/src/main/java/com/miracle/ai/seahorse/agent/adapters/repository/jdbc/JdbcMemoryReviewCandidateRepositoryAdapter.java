@@ -142,16 +142,30 @@ public class JdbcMemoryReviewCandidateRepositoryAdapter implements MemoryReviewM
                 decision.reviewedLayer(),
                 JdbcMemorySupport.timestamp(Instant.now()),
                 decision.candidateId(),
-                STATUS_PENDING.name());
+                expectedStatus(decision.reviewStatus()).name());
         if (updated == 0) {
             MemoryReviewRecord current = findReviewItem(decision.candidateId())
                     .orElseThrow(() -> new IllegalArgumentException(
                             "memory review candidate not found: " + decision.candidateId()));
-            throw new IllegalStateException("review candidate is not pending: " + current.candidateId());
+            throw new IllegalStateException(staleDecisionMessage(current.candidateId(), decision.reviewStatus()));
         }
         return findReviewItem(decision.candidateId())
                 .orElseThrow(() -> new IllegalArgumentException(
                         "memory review candidate not found: " + decision.candidateId()));
+    }
+
+    private MemoryReviewStatus expectedStatus(MemoryReviewStatus nextStatus) {
+        return switch (nextStatus) {
+            case APPLIED, PENDING -> MemoryReviewStatus.APPLYING;
+            case APPLYING, REJECTED -> STATUS_PENDING;
+        };
+    }
+
+    private String staleDecisionMessage(String candidateId, MemoryReviewStatus nextStatus) {
+        if (nextStatus == MemoryReviewStatus.APPLIED || nextStatus == MemoryReviewStatus.PENDING) {
+            return "review candidate is not applying: " + candidateId;
+        }
+        return "review candidate is not pending: " + candidateId;
     }
 
     private Map<String, Object> sourceMessageIds(MemoryReviewCandidate candidate) {
