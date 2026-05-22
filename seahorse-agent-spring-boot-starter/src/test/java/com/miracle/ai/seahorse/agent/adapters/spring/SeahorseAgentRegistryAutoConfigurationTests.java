@@ -23,6 +23,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundP
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.junit.jupiter.api.Test;
@@ -51,6 +53,8 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(AgentDefinitionRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentRunRepositoryPort.class);
+                    assertThat(context).hasSingleBean(ToolCatalogRepositoryPort.class);
+                    assertThat(context).hasSingleBean(AgentToolBindingRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentDefinitionInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunInboundPort.class);
                     assertThat(context).hasSingleBean(KernelAgentDefinitionService.class);

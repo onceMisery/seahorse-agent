@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface ToolCatalogRepositoryPort {
@@ -37,6 +38,16 @@ public interface ToolCatalogRepositoryPort {
      * 启用或禁用工具；禁用工具必须被策略拒绝执行。
      */
     void setEnabled(String toolId, boolean enabled);
+
+    /**
+     * 分页查询工具目录，供管理 API 和策略控制面复用。
+     */
+    default ToolCatalogPage page(ToolCatalogQuery query) {
+        return new ToolCatalogPage(List.of(), 0L,
+                ToolCatalogQuery.DEFAULT_PAGE_SIZE,
+                ToolCatalogQuery.DEFAULT_CURRENT,
+                0L);
+    }
 
     /**
      * 空目录实现，用于没有配置 catalog 仓储时保持依赖可空安全。

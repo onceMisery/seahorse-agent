@@ -78,3 +78,38 @@ CREATE TABLE IF NOT EXISTS sa_agent_step (
 
 CREATE INDEX IF NOT EXISTS idx_sa_agent_step_run
   ON sa_agent_step(run_id, step_no);
+
+CREATE TABLE IF NOT EXISTS sa_tool_catalog (
+  tool_id VARCHAR(128) PRIMARY KEY,
+  provider VARCHAR(32) NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(1000),
+  schema_json TEXT NOT NULL,
+  output_schema_json TEXT,
+  risk_level VARCHAR(32) NOT NULL,
+  action_type VARCHAR(32) NOT NULL,
+  resource_type VARCHAR(64),
+  owner_team VARCHAR(128),
+  enabled BOOLEAN NOT NULL,
+  requires_approval BOOLEAN NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_tool_catalog_resource
+  ON sa_tool_catalog(resource_type, enabled);
+
+CREATE TABLE IF NOT EXISTS sa_agent_tool_binding (
+  id VARCHAR(64) PRIMARY KEY,
+  agent_id VARCHAR(64) NOT NULL,
+  version_id VARCHAR(64) NOT NULL,
+  tool_id VARCHAR(128) NOT NULL,
+  max_calls_per_run INT NOT NULL,
+  argument_policy_json TEXT,
+  created_by VARCHAR(64) NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  UNIQUE(agent_id, version_id, tool_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_tool_binding_version
+  ON sa_agent_tool_binding(agent_id, version_id);

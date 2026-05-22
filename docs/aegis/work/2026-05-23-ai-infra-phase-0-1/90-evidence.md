@@ -465,7 +465,58 @@ Fix boundary:
 
 Remaining Phase 2 work:
 
-- Durable JDBC schema/adapters for tool catalog and bindings.
+- Invocation audit port and storage-backed invocation records.
+- `maxCallsPerRun` and argument policy enforcement.
+- MCP allowlist registration into the catalog.
+- Tool catalog/binding/audit management APIs.
+
+## 2026-05-23 Phase 2 Tool Catalog / Agent Binding persistence slice
+
+RED/GREEN coverage:
+
+- `JdbcToolCatalogRepositoryAdapterTests` first failed because the catalog page/query model and JDBC adapter did not exist; it then verified save/update/find/page and enable/disable persistence for `sa_tool_catalog`.
+- `JdbcAgentToolBindingRepositoryAdapterTests` first failed because the binding JDBC adapter did not exist; it then verified Agent version binding snapshots are replaced, listed, and found without leaking bindings across Agent versions.
+- `SeahorseAgentRegistryAutoConfigurationTests` first failed because no `ToolCatalogRepositoryPort` bean existed; it then verified starter JDBC repository auto-configuration creates both catalog and binding repositories.
+
+Focused JDBC command:
+
+```powershell
+.\mvnw -pl seahorse-agent-adapter-repository-jdbc -am '-Dtest=JdbcToolCatalogRepositoryAdapterTests,JdbcAgentToolBindingRepositoryAdapterTests,JdbcAgentDefinitionRepositoryAdapterTests,JdbcAgentRunRepositoryAdapterTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 6
+- Failures: 0
+- Errors: 0
+- Covered: tool catalog JDBC persistence, Agent tool binding JDBC persistence, and existing Agent registry/run JDBC regressions.
+
+Focused starter command:
+
+```powershell
+.\mvnw -pl seahorse-agent-spring-boot-starter -am '-Dtest=SeahorseAgentRegistryAutoConfigurationTests,SeahorseAgentChatRunStoreAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 4 in starter
+- Failures: 0
+- Errors: 0
+- Covered: starter registration of Agent definition/run repositories, tool catalog repository, Agent tool binding repository, and catalog-backed policy wiring regression.
+
+Fix boundary:
+
+- `ToolCatalogQuery` and `ToolCatalogPage`: added a minimal catalog pagination contract for repository and future management API reuse.
+- `ToolCatalogRepositoryPort`: added a default `page(...)` method while preserving empty fallback compatibility.
+- `JdbcToolCatalogRepositoryAdapter`: added JDBC persistence for tool catalog save/update/find/page and enable/disable.
+- `JdbcAgentToolBindingRepositoryAdapter`: added JDBC persistence for Agent version tool binding snapshots.
+- `agent-registry-run-store-postgresql.sql`: added `sa_tool_catalog` and `sa_agent_tool_binding` table definitions and indexes.
+- `SeahorseAgentRegistryRepositoryAutoConfiguration`: auto-configures the two new JDBC repository beans using the existing repository type conditions.
+
+Remaining Phase 2 work:
+
 - Invocation audit port and storage-backed invocation records.
 - `maxCallsPerRun` and argument policy enforcement.
 - MCP allowlist registration into the catalog.
