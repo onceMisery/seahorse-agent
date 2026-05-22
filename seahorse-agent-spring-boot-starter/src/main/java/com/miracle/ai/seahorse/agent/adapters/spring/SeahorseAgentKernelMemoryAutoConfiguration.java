@@ -65,6 +65,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceInboundPort
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationSchedulerPort;
@@ -125,6 +126,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -797,7 +799,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             MemoryAliasPort aliasPort,
             @Value("${seahorse-agent.memory.alias-resolution.scan-limit:100}") int scanLimit,
             @Value("${seahorse-agent.memory.alias-resolution.auto-resolve-confidence-threshold:0.95}")
-            double autoResolveConfidenceThreshold) {
+            double autoResolveConfidenceThreshold,
+            Environment environment) {
         return new MemoryAliasResolutionService(
                 aliasPort,
                 new MemoryAliasResolutionOptions(
@@ -805,7 +808,72 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                         "",
                         "default",
                         autoResolveConfidenceThreshold,
-                        Map.of()));
+                        memoryAliasDictionary(environment)));
+    }
+
+    private Map<String, MemoryAliasCandidate> memoryAliasDictionary(Environment environment) {
+        Map<String, MemoryAliasDictionaryEntry> entries = Binder.get(environment)
+                .bind("seahorse-agent.memory.alias-resolution.dictionary",
+                        Bindable.mapOf(String.class, MemoryAliasDictionaryEntry.class))
+                .orElse(Map.of());
+        Map<String, MemoryAliasCandidate> dictionary = new LinkedHashMap<>();
+        entries.forEach((aliasText, entry) -> dictionary.put(aliasText, entry.toCandidate(aliasText)));
+        return dictionary;
+    }
+
+    private static final class MemoryAliasDictionaryEntry {
+
+        private String userId;
+        private String tenantId;
+        private String aliasText;
+        private String canonicalEntityId;
+        private String canonicalName;
+        private String entityType;
+        private double confidenceLevel;
+
+        MemoryAliasCandidate toCandidate(String dictionaryAliasText) {
+            String candidateAliasText = hasText(aliasText) ? aliasText : dictionaryAliasText;
+            return new MemoryAliasCandidate(
+                    userId,
+                    tenantId,
+                    candidateAliasText,
+                    canonicalEntityId,
+                    canonicalName,
+                    entityType,
+                    confidenceLevel);
+        }
+
+        public void setUserId(String userId) {
+            this.userId = userId;
+        }
+
+        public void setTenantId(String tenantId) {
+            this.tenantId = tenantId;
+        }
+
+        public void setAliasText(String aliasText) {
+            this.aliasText = aliasText;
+        }
+
+        public void setCanonicalEntityId(String canonicalEntityId) {
+            this.canonicalEntityId = canonicalEntityId;
+        }
+
+        public void setCanonicalName(String canonicalName) {
+            this.canonicalName = canonicalName;
+        }
+
+        public void setEntityType(String entityType) {
+            this.entityType = entityType;
+        }
+
+        public void setConfidenceLevel(double confidenceLevel) {
+            this.confidenceLevel = confidenceLevel;
+        }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     @Bean

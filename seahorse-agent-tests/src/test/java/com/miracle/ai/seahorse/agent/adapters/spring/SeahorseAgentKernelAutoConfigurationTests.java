@@ -42,6 +42,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.Defau
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationTopicShiftDetector;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.InMemoryMemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryAliasResolutionService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryGarbageCollectionService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.GraphMemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.KeywordMemoryOutboxTaskHandler;
@@ -147,6 +148,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationSchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasCandidate;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryDerivedIndexDeleteCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryDerivedIndexDocument;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
@@ -661,6 +666,36 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(policy.channelWeights()).containsEntry("vector", 2.0D);
                     assertThat(policy.channelWeights()).containsEntry("keyword", 1.5D);
                     assertThat(policy.channelWeights()).containsEntry("graph", 1.25D);
+                });
+    }
+
+    @Test
+    void shouldBindAliasResolutionDictionary() {
+        contextRunner.withUserConfiguration(MemoryAliasConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.memory.alias-resolution.auto-resolve-confidence-threshold=0.9",
+                        "seahorse-agent.memory.alias-resolution.dictionary.k8s.user-id=user-1",
+                        "seahorse-agent.memory.alias-resolution.dictionary.k8s.tenant-id=tenant-1",
+                        "seahorse-agent.memory.alias-resolution.dictionary.k8s.canonical-entity-id=ent-core-k8s",
+                        "seahorse-agent.memory.alias-resolution.dictionary.k8s.canonical-name=Kubernetes",
+                        "seahorse-agent.memory.alias-resolution.dictionary.k8s.entity-type=TECHNOLOGY",
+                        "seahorse-agent.memory.alias-resolution.dictionary.k8s.confidence-level=0.99")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    MemoryAliasResolutionService service = context.getBean(MemoryAliasResolutionService.class);
+                    RecordingMemoryAliasPort aliasPort = context.getBean(RecordingMemoryAliasPort.class);
+
+                    service.run("configured-dictionary");
+
+                    assertThat(aliasPort.commands).hasSize(1);
+                    MemoryAliasCommand command = aliasPort.commands.get(0);
+                    assertThat(command.userId()).isEqualTo("user-1");
+                    assertThat(command.tenantId()).isEqualTo("tenant-1");
+                    assertThat(command.aliasText()).isEqualTo("k8s");
+                    assertThat(command.canonicalEntityId()).isEqualTo("ent-core-k8s");
+                    assertThat(command.canonicalName()).isEqualTo("Kubernetes");
+                    assertThat(command.entityType()).isEqualTo("TECHNOLOGY");
+                    assertThat(command.metadata()).containsEntry("normalizationStrategy", "dictionary");
                 });
     }
 
@@ -1259,6 +1294,41 @@ class SeahorseAgentKernelAutoConfigurationTests {
         @Bean
         RecordingMemoryOutboxTaskHandler customVectorDeleteMemoryOutboxTaskHandler() {
             return new RecordingMemoryOutboxTaskHandler("VECTOR_DELETE");
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class MemoryAliasConfiguration {
+
+        @Bean
+        RecordingMemoryAliasPort memoryAliasPort() {
+            return new RecordingMemoryAliasPort();
+        }
+    }
+
+    static class RecordingMemoryAliasPort implements MemoryAliasPort {
+
+        private final List<MemoryAliasCommand> commands = new ArrayList<>();
+
+        @Override
+        public java.util.Optional<MemoryAliasResolution> resolveAlias(String userId, String tenantId,
+                                                                      String aliasText) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public void upsertAlias(MemoryAliasCommand command) {
+            commands.add(command);
+        }
+
+        @Override
+        public List<MemoryAliasCandidate> findMergeCandidates(String userId, String tenantId, int limit) {
+            return List.of();
+        }
+
+        @Override
+        public List<MemoryAliasCandidate> findMergeCandidates(int limit) {
+            return List.of();
         }
     }
 
