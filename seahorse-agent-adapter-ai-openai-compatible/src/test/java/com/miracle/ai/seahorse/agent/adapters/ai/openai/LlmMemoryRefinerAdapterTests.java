@@ -256,6 +256,13 @@ class LlmMemoryRefinerAdapterTests {
 
         String prompt = chatModelPort.lastRequest.get().getMessages().get(0).getContent();
         assertThat(prompt).contains("Human review feedback examples:");
+        assertThat(prompt).contains("\"feedbackType\":\"REJECT\"");
+        assertThat(prompt).contains("\"promptInput\"");
+        assertThat(prompt).contains("\"rejectedOutput\"");
+        assertThat(prompt).contains("\"chosenOutput\"");
+        assertThat(prompt).contains("\"action\":\"REVIEW\"");
+        assertThat(prompt).contains("\"action\":\"IGNORE\"");
+        assertThat(prompt).contains("\"reviewStatus\":\"REJECTED\"");
         assertThat(prompt).contains("not a durable fact");
         assertThat(prompt).contains("User said the build is annoying.");
         assertThat(feedbackRepository.lastQuery.tenantId()).isEqualTo("tenant-1");

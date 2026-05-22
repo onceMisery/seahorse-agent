@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementMemory;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerFeedbackExportRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
@@ -38,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -264,6 +266,7 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                 return "[]";
             }
             List<Map<String, Object>> examples = samples.stream()
+                    .map(MemoryRefinerFeedbackExportRecord::fromReviewFeedbackSample)
                     .map(this::feedbackExample)
                     .toList();
             return writeJsonValue(examples);
@@ -273,15 +276,34 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
         }
     }
 
-    private Map<String, Object> feedbackExample(MemoryReviewFeedbackSample sample) {
-        return Map.of(
-                "reviewStatus", sample.reviewStatus().name(),
-                "targetKind", sample.targetKind(),
-                "targetKey", sample.targetKey(),
-                "rejectedContent", truncate(sample.rejectedContent(), MAX_FEEDBACK_CONTENT_CHARS),
-                "chosenContent", truncate(sample.chosenContent(), MAX_FEEDBACK_CONTENT_CHARS),
-                "reviewComment", truncate(sample.reviewComment(), MAX_FEEDBACK_CONTENT_CHARS),
-                "sourceMessageIds", sample.sourceMessageIds());
+    private Map<String, Object> feedbackExample(MemoryRefinerFeedbackExportRecord record) {
+        Map<String, Object> example = new LinkedHashMap<>();
+        example.put("sampleId", record.sampleId());
+        example.put("candidateId", record.candidateId());
+        example.put("feedbackType", record.feedbackType());
+        example.put("promptInput", feedbackPromptValue(record.promptInput()));
+        example.put("rejectedOutput", feedbackPromptValue(record.rejectedOutput()));
+        example.put("chosenOutput", feedbackPromptValue(record.chosenOutput()));
+        example.put("metadata", feedbackPromptValue(record.metadata()));
+        example.put("createdAt", record.createdAt().toString());
+        return example;
+    }
+
+    private Object feedbackPromptValue(Object value) {
+        if (value instanceof String text) {
+            return truncate(text, MAX_FEEDBACK_CONTENT_CHARS);
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> copy = new LinkedHashMap<>();
+            map.forEach((key, mapValue) -> copy.put(String.valueOf(key), feedbackPromptValue(mapValue)));
+            return copy;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(this::feedbackPromptValue)
+                    .toList();
+        }
+        return value;
     }
 
     private MemoryRefinementResult parseResponse(String response) {
