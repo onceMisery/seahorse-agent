@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionComman
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerFeedbackExportRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
@@ -56,6 +57,11 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
     private static final String REVIEW_MESSAGE_PREFIX = "review-";
     private static final String SOURCE_APPROVE = "memory-review-approve";
     private static final String SOURCE_MODIFY = "memory-review-modify";
+    private static final String FEEDBACK_TYPE_APPROVE = "APPROVE";
+    private static final String FEEDBACK_TYPE_MODIFY = "MODIFY";
+    private static final String FEEDBACK_TYPE_REJECT = "REJECT";
+    private static final String REFINER_ACTION_ADD = "ADD";
+    private static final String REFINER_ACTION_IGNORE = "IGNORE";
 
     private final MemoryReviewManagementRepositoryPort reviewRepositoryPort;
     private final MemoryIngestionWorkflowPort ingestionWorkflowPort;
@@ -162,6 +168,18 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 limit));
     }
 
+    @Override
+    public List<MemoryRefinerFeedbackExportRecord> exportRefinerFeedbackSamples(String tenantId,
+                                                                                String userId,
+                                                                                MemoryReviewStatus status,
+                                                                                String targetKind,
+                                                                                String targetKey,
+                                                                                int limit) {
+        return listFeedbackSamples(tenantId, userId, status, targetKind, targetKey, limit).stream()
+                .map(this::toRefinerFeedbackExportRecord)
+                .toList();
+    }
+
     private MemoryReviewRecord applyAccepted(MemoryReviewRecord current,
                                              MemoryReviewDecisionCommand command,
                                              String content,
@@ -261,6 +279,73 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
             LOG.warn("Failed to record memory review feedback sample: {} ({})", pending.candidateId(),
                     ex.toString());
         }
+    }
+
+    private MemoryRefinerFeedbackExportRecord toRefinerFeedbackExportRecord(MemoryReviewFeedbackSample sample) {
+        return new MemoryRefinerFeedbackExportRecord(
+                sample.sampleId(),
+                sample.candidateId(),
+                feedbackType(sample),
+                promptInput(sample),
+                rejectedOutput(sample),
+                chosenOutput(sample),
+                feedbackMetadata(sample),
+                sample.createdAt());
+    }
+
+    private String feedbackType(MemoryReviewFeedbackSample sample) {
+        if (sample.reviewStatus() == MemoryReviewStatus.REJECTED) {
+            return FEEDBACK_TYPE_REJECT;
+        }
+        if (!Objects.equals(sample.rejectedContent(), sample.chosenContent())
+                || !sample.chosenMetadata().isEmpty()) {
+            return FEEDBACK_TYPE_MODIFY;
+        }
+        return FEEDBACK_TYPE_APPROVE;
+    }
+
+    private Map<String, Object> promptInput(MemoryReviewFeedbackSample sample) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("tenantId", sample.tenantId());
+        input.put("userId", sample.userId());
+        input.put("operationId", sample.operationId());
+        input.put("candidateId", sample.candidateId());
+        input.put("targetLayer", sample.targetLayer());
+        input.put("targetKind", sample.targetKind());
+        input.put("targetKey", sample.targetKey());
+        input.put("sourceMessageIds", sample.sourceMessageIds());
+        input.put("reviewComment", sample.reviewComment());
+        return input;
+    }
+
+    private Map<String, Object> rejectedOutput(MemoryReviewFeedbackSample sample) {
+        return refinerOutput(sample.requestedAction(), sample.rejectedContent(), sample.rejectedMetadata());
+    }
+
+    private Map<String, Object> chosenOutput(MemoryReviewFeedbackSample sample) {
+        if (sample.reviewStatus() == MemoryReviewStatus.REJECTED) {
+            return refinerOutput(REFINER_ACTION_IGNORE, "", Map.of());
+        }
+        return refinerOutput(REFINER_ACTION_ADD, sample.chosenContent(), sample.chosenMetadata());
+    }
+
+    private Map<String, Object> refinerOutput(String action, String content, Map<String, Object> metadata) {
+        Map<String, Object> output = new LinkedHashMap<>();
+        output.put("action", action);
+        output.put("content", Objects.requireNonNullElse(content, ""));
+        output.put("metadata", Objects.requireNonNullElse(metadata, Map.of()));
+        return output;
+    }
+
+    private Map<String, Object> feedbackMetadata(MemoryReviewFeedbackSample sample) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("requestedAction", sample.requestedAction());
+        metadata.put("reviewStatus", sample.reviewStatus().name());
+        metadata.put("reviewerId", sample.reviewerId());
+        metadata.put("targetLayer", sample.targetLayer());
+        metadata.put("reviewedMemoryId", sample.reviewedMemoryId());
+        metadata.put("reviewedLayer", sample.reviewedLayer());
+        return metadata;
     }
 
     private MemoryReviewApplyDirective reviewDirective(MemoryReviewRecord current,

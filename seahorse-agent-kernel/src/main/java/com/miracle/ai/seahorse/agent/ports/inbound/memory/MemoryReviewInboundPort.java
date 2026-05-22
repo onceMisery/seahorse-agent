@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerFeedbackExportRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 
@@ -50,4 +51,11 @@ public interface MemoryReviewInboundPort {
                                                          String targetKind,
                                                          String targetKey,
                                                          int limit);
+
+    List<MemoryRefinerFeedbackExportRecord> exportRefinerFeedbackSamples(String tenantId,
+                                                                         String userId,
+                                                                         MemoryReviewStatus status,
+                                                                         String targetKind,
+                                                                         String targetKey,
+                                                                         int limit);
 }

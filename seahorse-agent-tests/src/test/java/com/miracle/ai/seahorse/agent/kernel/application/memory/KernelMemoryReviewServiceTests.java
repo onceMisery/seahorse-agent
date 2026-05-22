@@ -35,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerFeedbackExportRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
@@ -265,6 +266,81 @@ class KernelMemoryReviewServiceTests {
 
         assertThat(samples).extracting(MemoryReviewFeedbackSample::sampleId)
                 .containsExactly("sample-1");
+    }
+
+    @Test
+    void shouldExportReviewFeedbackAsRefinerTrainingRecords() {
+        RecordingReviewFeedbackRepository feedbackRepository = new RecordingReviewFeedbackRepository();
+        feedbackRepository.save(new MemoryReviewFeedbackSample(
+                "sample-modify",
+                "review-modify",
+                "op-modify",
+                "tenant-1",
+                "user-1",
+                "REVIEW",
+                MemoryReviewStatus.APPLIED,
+                "auditor",
+                "fixed wording",
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.fact",
+                "old fact",
+                "corrected fact",
+                Map.of("source", "llm_refiner"),
+                Map.of("reviewReason", "manual_fix"),
+                List.of("msg-1"),
+                "memory-1",
+                "SHORT_TERM",
+                Instant.EPOCH));
+        feedbackRepository.save(new MemoryReviewFeedbackSample(
+                "sample-reject",
+                "review-reject",
+                "op-reject",
+                "tenant-1",
+                "user-1",
+                "REVIEW",
+                MemoryReviewStatus.REJECTED,
+                "auditor",
+                "hallucinated",
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.fact",
+                "bad fact",
+                "",
+                Map.of(),
+                Map.of(),
+                List.of("msg-2"),
+                "",
+                "",
+                Instant.EPOCH.plusSeconds(1)));
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                new InMemoryReviewRepository(),
+                new RecordingIngestionWorkflow(MemoryIngestionResult.ignored("noop")),
+                feedbackRepository);
+
+        List<MemoryRefinerFeedbackExportRecord> records = service.exportRefinerFeedbackSamples(
+                "tenant-1", "user-1", null, "PROJECT_FACT", "project.fact", 10);
+
+        assertThat(records).extracting(MemoryRefinerFeedbackExportRecord::sampleId)
+                .containsExactly("sample-modify", "sample-reject");
+        MemoryRefinerFeedbackExportRecord modified = records.get(0);
+        assertThat(modified.feedbackType()).isEqualTo("MODIFY");
+        assertThat(modified.promptInput())
+                .containsEntry("tenantId", "tenant-1")
+                .containsEntry("userId", "user-1")
+                .containsEntry("targetKey", "project.fact");
+        assertThat(modified.rejectedOutput())
+                .containsEntry("action", "REVIEW")
+                .containsEntry("content", "old fact");
+        assertThat(modified.chosenOutput())
+                .containsEntry("action", "ADD")
+                .containsEntry("content", "corrected fact");
+        assertThat(modified.metadata()).containsEntry("reviewerId", "auditor");
+        MemoryRefinerFeedbackExportRecord rejected = records.get(1);
+        assertThat(rejected.feedbackType()).isEqualTo("REJECT");
+        assertThat(rejected.chosenOutput())
+                .containsEntry("action", "IGNORE")
+                .containsEntry("content", "");
     }
 
     @Test

@@ -108,6 +108,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunR
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerFeedbackExportRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
@@ -1266,6 +1267,9 @@ class SeahorseWebApiContractTests {
         when(reviewPort.listFeedbackSamples("default", "user-1", MemoryReviewStatus.APPLIED,
                 "PROJECT_FACT", "project.ambiguous", 25))
                 .thenReturn(List.of(memoryReviewFeedback("sample-2", "review-2")));
+        when(reviewPort.exportRefinerFeedbackSamples("default", "user-1", MemoryReviewStatus.APPLIED,
+                "PROJECT_FACT", "project.ambiguous", 25))
+                .thenReturn(List.of(memoryRefinerFeedbackExport("sample-2", "review-2")));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMemoryReviewController(provider(MemoryReviewInboundPort.class, reviewPort))).build();
@@ -1322,6 +1326,18 @@ class SeahorseWebApiContractTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].sampleId").value("sample-2"))
                 .andExpect(jsonPath("$.data[0].candidateId").value("review-2"));
+        mvc.perform(get("/memory-review/feedback-samples/export")
+                        .param("tenantId", "default")
+                        .param("userId", "user-1")
+                        .param("status", "APPLIED")
+                        .param("targetKind", "PROJECT_FACT")
+                        .param("targetKey", "project.ambiguous")
+                        .param("limit", "25"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].sampleId").value("sample-2"))
+                .andExpect(jsonPath("$.data[0].feedbackType").value("MODIFY"))
+                .andExpect(jsonPath("$.data[0].promptInput.targetKey").value("project.ambiguous"))
+                .andExpect(jsonPath("$.data[0].chosenOutput.action").value("ADD"));
     }
 
     @Test
@@ -1841,6 +1857,18 @@ class SeahorseWebApiContractTests {
                 List.of("msg-1"),
                 "memory-review-apply-review-1",
                 "SHORT_TERM",
+                Instant.EPOCH);
+    }
+
+    private static MemoryRefinerFeedbackExportRecord memoryRefinerFeedbackExport(String id, String candidateId) {
+        return new MemoryRefinerFeedbackExportRecord(
+                id,
+                candidateId,
+                "MODIFY",
+                Map.of("tenantId", "default", "userId", "user-1", "targetKey", "project.ambiguous"),
+                Map.of("action", "REVIEW", "content", "candidate content"),
+                Map.of("action", "ADD", "content", "chosen content"),
+                Map.of("reviewerId", "auditor"),
                 Instant.EPOCH);
     }
 
