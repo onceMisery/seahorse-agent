@@ -55,6 +55,7 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
     private final MemoryAggregationSchedulerPort schedulerPort;
     private final MemoryIngestionWorkflowPort ingestionWorkflowPort;
     private final MemoryTraceRecorder traceRecorder;
+    private final MemoryAggregationTopicShiftDetector topicShiftDetector;
     private final Clock clock;
 
     public DefaultMemoryAggregationService(MemoryAggregationPolicy policy,
@@ -86,12 +87,25 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                                            MemoryIngestionWorkflowPort ingestionWorkflowPort,
                                            MemoryTraceRecorder traceRecorder,
                                            Clock clock) {
+        this(policy, bufferPort, schedulerPort, ingestionWorkflowPort, traceRecorder,
+                new ExplicitCueMemoryAggregationTopicShiftDetector(), clock);
+    }
+
+    public DefaultMemoryAggregationService(MemoryAggregationPolicy policy,
+                                           MemoryAggregationBufferPort bufferPort,
+                                           MemoryAggregationSchedulerPort schedulerPort,
+                                           MemoryIngestionWorkflowPort ingestionWorkflowPort,
+                                           MemoryTraceRecorder traceRecorder,
+                                           MemoryAggregationTopicShiftDetector topicShiftDetector,
+                                           Clock clock) {
         this.policy = Objects.requireNonNullElseGet(policy, MemoryAggregationPolicy::defaults);
         this.bufferPort = Objects.requireNonNullElseGet(bufferPort, MemoryAggregationBufferPort::noop);
         this.schedulerPort = Objects.requireNonNullElseGet(schedulerPort, MemoryAggregationSchedulerPort::noop);
         this.ingestionWorkflowPort = Objects.requireNonNull(ingestionWorkflowPort,
                 "ingestionWorkflowPort must not be null");
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
+        this.topicShiftDetector = Objects.requireNonNullElseGet(topicShiftDetector,
+                ExplicitCueMemoryAggregationTopicShiftDetector::new);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -102,11 +116,20 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                     details("reason", "aggregation_disabled", "forceFlushRequired", false));
             return MemoryAggregationAppendResult.pending(noopState(event));
         }
+        MemoryAggregationAppendResult topicShiftFlush = flushForTopicShiftIfNeeded(event);
         MemoryBufferState state = bufferPort.appendTurn(event);
         recordTrace("append-turn", MemoryTraceEvent.STATUS_SUCCESS, state.sessionId(),
                 details("turnCount", state.turnCount(),
                         "tokenCount", state.totalTokens(),
                         "forceFlushRequired", state.forceFlushRequired()));
+        if (topicShiftFlush != null) {
+            schedulerPort.scheduleIdleCheck(
+                    state.sessionId(),
+                    state.tenantId(),
+                    state.lastActivityAt().plusMillis(policy.idleFlushMillis()));
+            return MemoryAggregationAppendResult.flushed(
+                    state, topicShiftFlush.snapshot(), topicShiftFlush.ingestionResult());
+        }
         if (state.forceFlushRequired()) {
             MemoryFlushTrigger trigger = Objects.requireNonNullElse(
                     state.forceFlushTrigger(), MemoryFlushTrigger.FORCE_TURNS);
@@ -129,6 +152,30 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                 state.tenantId(),
                 state.lastActivityAt().plusMillis(policy.idleFlushMillis()));
         return MemoryAggregationAppendResult.pending(state);
+    }
+
+    private MemoryAggregationAppendResult flushForTopicShiftIfNeeded(MemoryTurnEvent event) {
+        if (event == null || !policy.topicShiftFlushEnabled()) {
+            return null;
+        }
+        Optional<MemoryBufferState> currentState = bufferPort.state(event.sessionId(), event.tenantId());
+        if (currentState.isEmpty() || !topicShiftDetector.shouldStartNewTopic(event, currentState.get())) {
+            return null;
+        }
+        Optional<MemoryBufferSnapshot> snapshot = bufferPort.flushReady(
+                event.sessionId(), event.tenantId(), MemoryFlushTrigger.TOPIC_SHIFT, Instant.now(clock));
+        if (snapshot.isEmpty()) {
+            return null;
+        }
+        MemoryIngestionResult result = submit(snapshot.get());
+        recordTrace("flush-ready", result.status() == MemoryIngestionStatus.ACCEPTED
+                        ? MemoryTraceEvent.STATUS_SUCCESS
+                        : MemoryTraceEvent.STATUS_FAILED,
+                snapshot.get().snapshotId(), details(
+                        "trigger", MemoryFlushTrigger.TOPIC_SHIFT.name(),
+                        "resultStatus", result.status().name(),
+                        "reason", result.reason()));
+        return MemoryAggregationAppendResult.flushed(currentState.get(), snapshot.get(), result);
     }
 
     @Override

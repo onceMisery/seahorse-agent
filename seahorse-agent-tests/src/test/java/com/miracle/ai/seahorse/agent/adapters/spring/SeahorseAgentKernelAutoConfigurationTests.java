@@ -39,6 +39,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManag
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryRetrievalPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryOutboxRelayService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.DefaultMemoryAggregationService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationTopicShiftDetector;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.InMemoryMemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryGarbageCollectionService;
@@ -696,10 +697,12 @@ class SeahorseAgentKernelAutoConfigurationTests {
                         "seahorse-agent.memory.aggregation.idle-flush-millis=1000",
                         "seahorse-agent.memory.aggregation.max-turns=2",
                         "seahorse-agent.memory.aggregation.max-tokens=100",
-                        "seahorse-agent.memory.aggregation.capture-on-error=true")
+                        "seahorse-agent.memory.aggregation.capture-on-error=true",
+                        "seahorse-agent.memory.aggregation.topic-shift-flush-enabled=true")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(MemoryAggregationPolicy.class);
+                    assertThat(context).hasSingleBean(MemoryAggregationTopicShiftDetector.class);
                     assertThat(context).hasSingleBean(MemoryAggregationSchedulerPort.class);
                     assertThat(context).hasSingleBean(InMemoryMemoryAggregationBufferPort.class);
                     assertThat(context).hasSingleBean(DefaultMemoryAggregationService.class);
@@ -711,6 +714,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(policy.maxTurns()).isEqualTo(2);
                     assertThat(policy.maxTokens()).isEqualTo(100);
                     assertThat(policy.captureOnError()).isTrue();
+                    assertThat(policy.topicShiftFlushEnabled()).isTrue();
                 });
     }
 

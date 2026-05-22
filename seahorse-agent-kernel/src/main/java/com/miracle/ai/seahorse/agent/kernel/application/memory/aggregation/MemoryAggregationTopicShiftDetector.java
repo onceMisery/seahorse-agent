@@ -15,14 +15,16 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.outbound.memory;
+package com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation;
 
-public enum MemoryFlushTrigger {
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBufferState;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTurnEvent;
 
-    IDLE_TIMEOUT,
-    FORCE_TURNS,
-    FORCE_TOKENS,
-    TOPIC_SHIFT,
-    MANUAL,
-    SESSION_CLOSED
+public interface MemoryAggregationTopicShiftDetector {
+
+    boolean shouldStartNewTopic(MemoryTurnEvent event, MemoryBufferState currentState);
+
+    static MemoryAggregationTopicShiftDetector noop() {
+        return (event, currentState) -> false;
+    }
 }

@@ -24,7 +24,8 @@ public record MemoryAggregationPolicy(
         int maxTokens,
         int maxContextBlocks,
         long bufferTtlMillis,
-        boolean captureOnError
+        boolean captureOnError,
+        boolean topicShiftFlushEnabled
 ) {
 
     private static final long DEFAULT_IDLE_FLUSH_MILLIS = 40_000L;
@@ -41,6 +42,16 @@ public record MemoryAggregationPolicy(
         bufferTtlMillis = positiveOrDefault(bufferTtlMillis, DEFAULT_BUFFER_TTL_MILLIS);
     }
 
+    public MemoryAggregationPolicy(boolean enabled,
+                                   long idleFlushMillis,
+                                   int maxTurns,
+                                   int maxTokens,
+                                   int maxContextBlocks,
+                                   long bufferTtlMillis,
+                                   boolean captureOnError) {
+        this(enabled, idleFlushMillis, maxTurns, maxTokens, maxContextBlocks, bufferTtlMillis, captureOnError, false);
+    }
+
     public static MemoryAggregationPolicy defaults() {
         return new MemoryAggregationPolicy(
                 false,
@@ -49,6 +60,7 @@ public record MemoryAggregationPolicy(
                 DEFAULT_MAX_TOKENS,
                 DEFAULT_MAX_CONTEXT_BLOCKS,
                 DEFAULT_BUFFER_TTL_MILLIS,
+                false,
                 false);
     }
 
@@ -60,7 +72,8 @@ public record MemoryAggregationPolicy(
                 maxTokens,
                 maxContextBlocks,
                 bufferTtlMillis,
-                captureOnError);
+                captureOnError,
+                topicShiftFlushEnabled);
     }
 
     public MemoryAggregationPolicy withCaptureOnError(boolean captureOnError) {
@@ -71,7 +84,20 @@ public record MemoryAggregationPolicy(
                 maxTokens,
                 maxContextBlocks,
                 bufferTtlMillis,
-                captureOnError);
+                captureOnError,
+                topicShiftFlushEnabled);
+    }
+
+    public MemoryAggregationPolicy withTopicShiftFlushEnabled(boolean topicShiftFlushEnabled) {
+        return new MemoryAggregationPolicy(
+                enabled,
+                idleFlushMillis,
+                maxTurns,
+                maxTokens,
+                maxContextBlocks,
+                bufferTtlMillis,
+                captureOnError,
+                topicShiftFlushEnabled);
     }
 
     private static int positiveOrDefault(int value, int fallback) {

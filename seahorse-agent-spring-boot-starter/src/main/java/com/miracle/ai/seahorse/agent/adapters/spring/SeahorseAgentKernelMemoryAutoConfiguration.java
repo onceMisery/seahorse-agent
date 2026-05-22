@@ -35,8 +35,10 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryManagementS
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryOutboxRelayService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.RuleBasedMemoryCandidateExtractor;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.DefaultMemoryAggregationService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.ExplicitCueMemoryAggregationTopicShiftDetector;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.InMemoryMemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationTopicShiftDetector;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.trace.InMemoryMemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.DefaultMemoryMaintenanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryAliasResolutionOptions;
@@ -142,7 +144,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             @Value("${seahorse-agent.memory.aggregation.max-tokens:2000}") int maxTokens,
             @Value("${seahorse-agent.memory.aggregation.max-context-blocks:32}") int maxContextBlocks,
             @Value("${seahorse-agent.memory.aggregation.buffer-ttl-millis:86400000}") long bufferTtlMillis,
-            @Value("${seahorse-agent.memory.aggregation.capture-on-error:false}") boolean captureOnError) {
+            @Value("${seahorse-agent.memory.aggregation.capture-on-error:false}") boolean captureOnError,
+            @Value("${seahorse-agent.memory.aggregation.topic-shift-flush-enabled:false}")
+            boolean topicShiftFlushEnabled) {
         return new MemoryAggregationPolicy(
                 enabled,
                 idleFlushMillis,
@@ -150,7 +154,14 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 maxTokens,
                 maxContextBlocks,
                 bufferTtlMillis,
-                captureOnError);
+                captureOnError,
+                topicShiftFlushEnabled);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MemoryAggregationTopicShiftDetector.class)
+    public ExplicitCueMemoryAggregationTopicShiftDetector seahorseMemoryAggregationTopicShiftDetector() {
+        return new ExplicitCueMemoryAggregationTopicShiftDetector();
     }
 
     @Bean
@@ -190,14 +201,17 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryAggregationBufferPort> aggregationBufferPort,
             ObjectProvider<MemoryAggregationSchedulerPort> schedulerPort,
             ObjectProvider<MemoryIngestionWorkflowPort> ingestionWorkflowPort,
-            ObjectProvider<MemoryTraceRecorder> traceRecorder) {
+            ObjectProvider<MemoryTraceRecorder> traceRecorder,
+            ObjectProvider<MemoryAggregationTopicShiftDetector> topicShiftDetector) {
         return new DefaultMemoryAggregationService(
                 policy,
                 aggregationBufferPort.getIfAvailable(MemoryAggregationBufferPort::noop),
                 schedulerPort.getIfAvailable(MemoryAggregationSchedulerPort::noop),
                 ingestionWorkflowPort.getIfAvailable(() -> command ->
                         com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult.ignored("noop")),
-                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop));
+                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
+                topicShiftDetector.getIfAvailable(ExplicitCueMemoryAggregationTopicShiftDetector::new),
+                java.time.Clock.systemUTC());
     }
 
     @Bean

@@ -170,7 +170,7 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
             case IDLE_TIMEOUT -> !now.isBefore(buffer.lastActivityAt().plusMillis(policy.idleFlushMillis()));
             case FORCE_TURNS -> buffer.turns().size() >= policy.maxTurns();
             case FORCE_TOKENS -> buffer.totalTokens() >= policy.maxTokens();
-            case MANUAL, SESSION_CLOSED -> true;
+            case TOPIC_SHIFT, MANUAL, SESSION_CLOSED -> true;
         };
     }
 

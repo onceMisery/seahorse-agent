@@ -122,6 +122,25 @@ class MemoryAggregationServiceTests {
     }
 
     @Test
+    void shouldFlushExistingBufferBeforeAppendingExplicitTopicShiftTurn() {
+        RecordingWorkflow workflow = new RecordingWorkflow();
+        DefaultMemoryAggregationService service = service(topicShiftPolicy(), workflow, new RecordingScheduler());
+
+        service.appendTurn(turn("task-1", "Remember I use Java", "Noted", 8));
+        MemoryAggregationAppendResult result = service.appendTurn(
+                turn("task-2", "New topic: help me plan a vacation", "Sure", 9));
+
+        Assertions.assertTrue(result.flushed());
+        Assertions.assertEquals(MemoryFlushTrigger.TOPIC_SHIFT, result.snapshot().trigger());
+        Assertions.assertEquals(1, workflow.commands.size());
+        String flushedContent = workflow.commands.get(0).writeRequest().message().getContent();
+        Assertions.assertTrue(flushedContent.contains("user: Remember I use Java"));
+        Assertions.assertFalse(flushedContent.contains("user: New topic: help me plan a vacation"));
+        assertThat(service.state("conversation-1", "default"))
+                .hasValueSatisfying(state -> Assertions.assertEquals(1, state.turnCount()));
+    }
+
+    @Test
     void shouldRecordTraceEventsForAggregationAndFlushLifecycle() {
         RecordingWorkflow workflow = new RecordingWorkflow();
         RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
@@ -159,7 +178,11 @@ class MemoryAggregationServiceTests {
     }
 
     private MemoryAggregationPolicy policy(int maxTurns, long idleFlushMillis) {
-        return new MemoryAggregationPolicy(true, idleFlushMillis, maxTurns, 1_000, 32, 86_400_000L, false);
+        return new MemoryAggregationPolicy(true, idleFlushMillis, maxTurns, 1_000, 32, 86_400_000L, false, false);
+    }
+
+    private MemoryAggregationPolicy topicShiftPolicy() {
+        return new MemoryAggregationPolicy(true, 60_000, 10, 1_000, 32, 86_400_000L, false, true);
     }
 
     private MemoryTurnEvent turn(String taskId, String userText, String assistantText, int estimatedTokens) {
