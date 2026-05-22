@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPendingSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerFeedbackExportRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
@@ -34,6 +35,15 @@ public interface MemoryReviewInboundPort {
                           String targetKey,
                           long current,
                           long size);
+
+    default MemoryReviewPendingSummary pendingSummary(String tenantId,
+                                                       String userId,
+                                                       String targetKind,
+                                                       String targetKey) {
+        MemoryReviewPage page = page(tenantId, userId, MemoryReviewStatus.PENDING, targetKind, targetKey, 1, 1);
+        MemoryReviewRecord latest = page.records().isEmpty() ? null : page.records().get(0);
+        return new MemoryReviewPendingSummary(page.total(), latest);
+    }
 
     MemoryReviewRecord queryById(String candidateId);
 

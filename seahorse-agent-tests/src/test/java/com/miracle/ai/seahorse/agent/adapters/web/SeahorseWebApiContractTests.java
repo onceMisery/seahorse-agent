@@ -111,6 +111,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerFeedbackExportRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPendingSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
@@ -1270,6 +1271,10 @@ class SeahorseWebApiContractTests {
         when(reviewPort.exportRefinerFeedbackSamples("default", "user-1", MemoryReviewStatus.APPLIED,
                 "PROJECT_FACT", "project.ambiguous", 25))
                 .thenReturn(List.of(memoryRefinerFeedbackExport("sample-2", "review-2")));
+        when(reviewPort.pendingSummary("default", "user-1", "PROJECT_FACT", "project.ambiguous"))
+                .thenReturn(new MemoryReviewPendingSummary(
+                        1,
+                        memoryReview("review-1", MemoryReviewStatus.PENDING)));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMemoryReviewController(provider(MemoryReviewInboundPort.class, reviewPort))).build();
@@ -1286,6 +1291,16 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.records[0].candidateId").value("review-1"))
                 .andExpect(jsonPath("$.data.records[0].reviewStatus").value("PENDING"));
+        mvc.perform(get("/memory-review/pending-summary")
+                        .param("tenantId", "default")
+                        .param("userId", "user-1")
+                        .param("targetKind", "PROJECT_FACT")
+                        .param("targetKey", "project.ambiguous"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.pendingCount").value(1))
+                .andExpect(jsonPath("$.data.hasPending").value(true))
+                .andExpect(jsonPath("$.data.latestPendingCandidate.candidateId").value("review-1"));
         mvc.perform(get("/memory-review/items/review-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.targetKind").value("PROJECT_FACT"));

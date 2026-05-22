@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackR
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPendingSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
@@ -98,6 +99,23 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                                  long size) {
         return reviewRepositoryPort.pageReviewCandidates(
                 new MemoryReviewQuery(tenantId, userId, status, targetKind, targetKey, current, size));
+    }
+
+    @Override
+    public MemoryReviewPendingSummary pendingSummary(String tenantId,
+                                                     String userId,
+                                                     String targetKind,
+                                                     String targetKey) {
+        MemoryReviewPage page = reviewRepositoryPort.pageReviewCandidates(new MemoryReviewQuery(
+                tenantId,
+                userId,
+                MemoryReviewStatus.PENDING,
+                targetKind,
+                targetKey,
+                1,
+                1));
+        MemoryReviewRecord latest = page.records().isEmpty() ? null : page.records().get(0);
+        return new MemoryReviewPendingSummary(page.total(), latest);
     }
 
     @Override

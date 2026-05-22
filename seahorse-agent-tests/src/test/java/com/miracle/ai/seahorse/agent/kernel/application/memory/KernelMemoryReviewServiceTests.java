@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkfl
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPendingSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
@@ -51,6 +52,53 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class KernelMemoryReviewServiceTests {
+
+    @Test
+    void shouldSummarizePendingReviewQueueWithSinglePreviewCandidate() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-1", MemoryReviewStatus.PENDING, "pending project fact"));
+        repository.put(review("review-2", MemoryReviewStatus.APPLIED, "already applied"));
+        repository.put(review(
+                "review-3",
+                MemoryReviewStatus.PENDING,
+                "pending preference",
+                "REVIEW",
+                "PREFERENCE",
+                "preference.editor"));
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                repository,
+                new RecordingIngestionWorkflow(MemoryIngestionResult.ignored("noop")));
+
+        MemoryReviewPendingSummary summary = service.pendingSummary(
+                "tenant-1", "user-1", "PROJECT_FACT", "project.fact");
+
+        assertThat(summary.pendingCount()).isEqualTo(1L);
+        assertThat(summary.hasPending()).isTrue();
+        assertThat(summary.latestPendingCandidate()).isNotNull();
+        assertThat(summary.latestPendingCandidate().candidateId()).isEqualTo("review-1");
+        assertThat(repository.queries).hasSize(1);
+        MemoryReviewQuery query = repository.queries.get(0);
+        assertThat(query.reviewStatus()).isEqualTo(MemoryReviewStatus.PENDING);
+        assertThat(query.current()).isEqualTo(1L);
+        assertThat(query.size()).isEqualTo(1L);
+        assertThat(query.targetKind()).isEqualTo("PROJECT_FACT");
+        assertThat(query.targetKey()).isEqualTo("project.fact");
+    }
+
+    @Test
+    void shouldReturnEmptyPendingSummaryWhenReviewQueueHasNoPendingCandidate() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-1", MemoryReviewStatus.REJECTED, "rejected"));
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                repository,
+                new RecordingIngestionWorkflow(MemoryIngestionResult.ignored("noop")));
+
+        MemoryReviewPendingSummary summary = service.pendingSummary("tenant-1", "user-1", "", "");
+
+        assertThat(summary.pendingCount()).isZero();
+        assertThat(summary.hasPending()).isFalse();
+        assertThat(summary.latestPendingCandidate()).isNull();
+    }
 
     @Test
     void shouldApprovePendingCandidateThroughIngestionWorkflow() {
@@ -473,6 +521,7 @@ class KernelMemoryReviewServiceTests {
     private static class InMemoryReviewRepository implements MemoryReviewManagementRepositoryPort {
 
         private final Map<String, MemoryReviewRecord> records = new LinkedHashMap<>();
+        private final List<MemoryReviewQuery> queries = new ArrayList<>();
 
         void put(MemoryReviewRecord record) {
             records.put(record.candidateId(), record);
@@ -485,7 +534,20 @@ class KernelMemoryReviewServiceTests {
 
         @Override
         public MemoryReviewPage pageReviewCandidates(MemoryReviewQuery query) {
-            return new MemoryReviewPage(List.copyOf(records.values()), records.size(), query.size(), query.current(), 1);
+            queries.add(query);
+            List<MemoryReviewRecord> filtered = records.values().stream()
+                    .filter(record -> query.tenantId().isBlank() || record.tenantId().equals(query.tenantId()))
+                    .filter(record -> query.userId().isBlank() || record.userId().equals(query.userId()))
+                    .filter(record -> query.reviewStatus() == null || record.reviewStatus() == query.reviewStatus())
+                    .filter(record -> query.targetKind().isBlank() || record.targetKind().equals(query.targetKind()))
+                    .filter(record -> query.targetKey().isBlank() || record.targetKey().equals(query.targetKey()))
+                    .toList();
+            List<MemoryReviewRecord> pageRecords = filtered.stream()
+                    .skip(query.offset())
+                    .limit(query.size())
+                    .toList();
+            long pages = filtered.isEmpty() ? 0L : (filtered.size() + query.size() - 1L) / query.size();
+            return new MemoryReviewPage(pageRecords, filtered.size(), query.size(), query.current(), pages);
         }
 
         @Override

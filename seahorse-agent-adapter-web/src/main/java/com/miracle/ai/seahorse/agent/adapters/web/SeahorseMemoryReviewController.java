@@ -63,6 +63,18 @@ public class SeahorseMemoryReviewController {
         return ok(port.page(tenantId, userId, reviewStatus(status), targetKind, targetKey, current, size));
     }
 
+    @GetMapping("/memory-review/pending-summary")
+    public Map<String, Object> pendingSummary(@RequestParam(defaultValue = "default") String tenantId,
+                                              @RequestParam(required = false) String userId,
+                                              @RequestParam(required = false) String targetKind,
+                                              @RequestParam(required = false) String targetKey) {
+        MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
+        if (port == null) {
+            return unavailable();
+        }
+        return ok(port.pendingSummary(tenantId, userId, targetKind, targetKey));
+    }
+
     @GetMapping("/memory-review/items/{item-id}")
     public Map<String, Object> queryById(@PathVariable("item-id") String itemId) {
         MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
