@@ -1,1 +1,2 @@
+com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleMemoryCompactionAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.ai.openai.OpenAiCompatibleMemoryRefinerAutoConfiguration
