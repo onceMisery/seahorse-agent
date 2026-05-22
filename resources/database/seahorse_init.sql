@@ -971,6 +971,7 @@ CREATE TABLE t_memory_aggregation_buffer (
     turn_count INTEGER NOT NULL DEFAULT 0,
     total_tokens INTEGER NOT NULL DEFAULT 0,
     turns_json JSONB NOT NULL,
+    version BIGINT NOT NULL DEFAULT 1,
     first_activity_at TIMESTAMP NOT NULL,
     last_activity_at TIMESTAMP NOT NULL,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -23,16 +23,25 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFlushTrigger;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTurnEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class JdbcMemoryAggregationBufferAdapterTests {
 
     private JdbcMemoryAggregationBufferAdapter adapter;
+    private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void setUp() {
@@ -43,6 +52,7 @@ class JdbcMemoryAggregationBufferAdapterTests {
         new JdbcChatSchemaUpgrade(dataSource).upgrade();
         adapter = new JdbcMemoryAggregationBufferAdapter(dataSource, new ObjectMapper(),
                 new MemoryAggregationPolicy(true, 40_000, 3, 120, 32, 86_400_000, false));
+        jdbcTemplate = new JdbcTemplate(dataSource);
     }
 
     @Test
@@ -91,6 +101,68 @@ class JdbcMemoryAggregationBufferAdapterTests {
     }
 
     @Test
+    void shouldTrackVersionForOptimisticConcurrency() {
+        Instant completedAt = Instant.parse("2026-05-22T09:30:00Z");
+
+        adapter.appendTurn(turn("msg-1", "first", "ok", 10, completedAt));
+        Long insertedVersion = jdbcTemplate.queryForObject("""
+                SELECT version
+                FROM t_memory_aggregation_buffer
+                WHERE tenant_id = ? AND session_id = ?
+                """, Long.class, "tenant-1", "session-1");
+
+        adapter.appendTurn(turn("msg-2", "second", "ok", 10, completedAt.plusSeconds(1)));
+        Long updatedVersion = jdbcTemplate.queryForObject("""
+                SELECT version
+                FROM t_memory_aggregation_buffer
+                WHERE tenant_id = ? AND session_id = ?
+                """, Long.class, "tenant-1", "session-1");
+
+        assertThat(insertedVersion).isEqualTo(1L);
+        assertThat(updatedVersion).isEqualTo(2L);
+    }
+
+    @Test
+    void shouldPreserveConcurrentAppendsForSameSession() throws Exception {
+        Instant completedAt = Instant.parse("2026-05-22T10:00:00Z");
+        adapter.appendTurn(turn("seed", "seed", "ok", 1, completedAt));
+
+        int appendCount = 24;
+        ExecutorService executor = Executors.newFixedThreadPool(appendCount);
+        CountDownLatch ready = new CountDownLatch(appendCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < appendCount; i++) {
+            int index = i;
+            futures.add(executor.submit(() -> {
+                ready.countDown();
+                await(start);
+                adapter.appendTurn(turn(
+                        "concurrent-" + index,
+                        "concurrent-" + index,
+                        "ok",
+                        1,
+                        completedAt.plusMillis(index + 1L)));
+            }));
+        }
+
+        assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+        start.countDown();
+        for (Future<?> future : futures) {
+            future.get(5, TimeUnit.SECONDS);
+        }
+        executor.shutdownNow();
+
+        assertThat(adapter.state("session-1", "tenant-1"))
+                .hasValueSatisfying(state -> assertThat(state.turnCount()).isEqualTo(appendCount + 1));
+        assertThat(adapter.flushReady("session-1", "tenant-1", MemoryFlushTrigger.MANUAL, completedAt.plusSeconds(1)))
+                .hasValueSatisfying(snapshot -> assertThat(snapshot.turns())
+                        .extracting(MemoryTurnEvent::userMessageId)
+                        .contains("seed", "concurrent-0", "concurrent-23")
+                        .hasSize(appendCount + 1));
+    }
+
+    @Test
     void shouldListStatesOrderedByLastActivity() {
         adapter.appendTurn(turn("msg-1", "older", "ok", 1, Instant.parse("2026-05-22T08:00:00Z")));
         adapter.appendTurn(new MemoryTurnEvent(
@@ -125,5 +197,14 @@ class JdbcMemoryAggregationBufferAdapterTests {
                 assistantText,
                 completedAt,
                 tokens);
+    }
+
+    private void await(CountDownLatch latch) {
+        try {
+            latch.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(ex);
+        }
     }
 }

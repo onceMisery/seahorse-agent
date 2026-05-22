@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBufferSnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBufferState;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFlushTrigger;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTurnEvent;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
@@ -40,6 +41,7 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
 
     private static final String DEFAULT_TENANT_ID = "default";
     private static final int DEFAULT_LIMIT = 100;
+    private static final int MAX_CAS_RETRIES = 64;
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -56,16 +58,25 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
     @Override
     public MemoryBufferState appendTurn(MemoryTurnEvent event) {
         MemoryTurnEvent safeEvent = Objects.requireNonNull(event, "event must not be null");
-        Optional<StoredBuffer> existing = findBuffer(safeEvent.sessionId(), safeEvent.tenantId());
-        StoredBuffer updated = existing
-                .map(buffer -> buffer.append(safeEvent))
-                .orElseGet(() -> StoredBuffer.from(safeEvent));
-        if (existing.isPresent()) {
-            update(updated);
-        } else {
-            insert(updated);
+        for (int attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
+            Optional<StoredBuffer> existing = findBuffer(safeEvent.sessionId(), safeEvent.tenantId());
+            if (existing.isPresent()) {
+                StoredBuffer current = existing.get();
+                StoredBuffer updated = current.append(safeEvent);
+                if (update(updated, current.version())) {
+                    return updated.state(policy);
+                }
+                continue;
+            }
+            StoredBuffer created = StoredBuffer.from(safeEvent);
+            try {
+                insert(created);
+                return created.state(policy);
+            } catch (DuplicateKeyException ex) {
+                // Another writer created the session buffer between read and insert; retry and merge.
+            }
         }
-        return updated.state(policy);
+        throw new IllegalStateException("memory aggregation buffer append conflict did not converge");
     }
 
     @Override
@@ -83,10 +94,13 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
         if (!isReady(buffer, safeTrigger, safeNow)) {
             return Optional.empty();
         }
-        jdbcTemplate.update("""
+        int deleted = jdbcTemplate.update("""
                 DELETE FROM t_memory_aggregation_buffer
-                WHERE tenant_id = ? AND session_id = ?
-                """, safeTenantId(tenantId), normalize(sessionId, ""));
+                WHERE tenant_id = ? AND session_id = ? AND version = ?
+                """, safeTenantId(tenantId), normalize(sessionId, ""), buffer.version());
+        if (deleted == 0) {
+            return Optional.empty();
+        }
         return Optional.of(buffer.snapshot(safeTrigger));
     }
 
@@ -123,8 +137,8 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
         jdbcTemplate.update("""
                 INSERT INTO t_memory_aggregation_buffer
                     (id, tenant_id, user_id, conversation_id, session_id, turn_count, total_tokens, turns_json,
-                     first_activity_at, last_activity_at, create_time, update_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     version, first_activity_at, last_activity_at, create_time, update_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 buffer.id(),
                 buffer.tenantId(),
@@ -134,14 +148,15 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                 buffer.turns().size(),
                 buffer.totalTokens(),
                 writeTurns(buffer.turns()),
+                buffer.version(),
                 JdbcMemorySupport.timestamp(buffer.firstActivityAt()),
                 JdbcMemorySupport.timestamp(buffer.lastActivityAt()),
                 JdbcMemorySupport.timestamp(now),
                 JdbcMemorySupport.timestamp(now));
     }
 
-    private void update(StoredBuffer buffer) {
-        jdbcTemplate.update("""
+    private boolean update(StoredBuffer buffer, long expectedVersion) {
+        int updated = jdbcTemplate.update("""
                 UPDATE t_memory_aggregation_buffer
                 SET user_id = ?,
                     conversation_id = ?,
@@ -150,8 +165,9 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                     turns_json = ?,
                     first_activity_at = ?,
                     last_activity_at = ?,
+                    version = ?,
                     update_time = ?
-                WHERE tenant_id = ? AND session_id = ?
+                WHERE tenant_id = ? AND session_id = ? AND version = ?
                 """,
                 buffer.userId(),
                 buffer.conversationId(),
@@ -160,9 +176,12 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                 writeTurns(buffer.turns()),
                 JdbcMemorySupport.timestamp(buffer.firstActivityAt()),
                 JdbcMemorySupport.timestamp(buffer.lastActivityAt()),
+                buffer.version(),
                 JdbcMemorySupport.timestamp(Instant.now()),
                 buffer.tenantId(),
-                buffer.sessionId());
+                buffer.sessionId(),
+                expectedVersion);
+        return updated == 1;
     }
 
     private boolean isReady(StoredBuffer buffer, MemoryFlushTrigger trigger, Instant now) {
@@ -183,6 +202,7 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                 rs.getString("session_id"),
                 readTurns(rs.getString("turns_json")),
                 rs.getInt("total_tokens"),
+                rs.getLong("version"),
                 JdbcMemorySupport.instant(rs.getTimestamp("first_activity_at")),
                 JdbcMemorySupport.instant(rs.getTimestamp("last_activity_at")));
     }
@@ -273,6 +293,7 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                                 String sessionId,
                                 List<MemoryTurnEvent> turns,
                                 int totalTokens,
+                                long version,
                                 Instant firstActivityAt,
                                 Instant lastActivityAt) {
 
@@ -285,6 +306,7 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                     event.sessionId(),
                     List.of(event),
                     event.estimatedTokens(),
+                    1L,
                     event.completedAt(),
                     event.completedAt());
         }
@@ -300,6 +322,7 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                     sessionId,
                     updatedTurns,
                     totalTokens + event.estimatedTokens(),
+                    version + 1,
                     firstActivityAt,
                     event.completedAt());
         }

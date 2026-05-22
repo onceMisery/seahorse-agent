@@ -225,6 +225,7 @@ public class JdbcChatSchemaUpgrade {
                     turn_count INTEGER NOT NULL DEFAULT 0,
                     total_tokens INTEGER NOT NULL DEFAULT 0,
                     turns_json JSONB NOT NULL,
+                    version BIGINT NOT NULL DEFAULT 1,
                     first_activity_at TIMESTAMP NOT NULL,
                     last_activity_at TIMESTAMP NOT NULL,
                     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -239,6 +240,7 @@ public class JdbcChatSchemaUpgrade {
                 CREATE INDEX IF NOT EXISTS idx_memory_aggregation_scan
                 ON t_memory_aggregation_buffer (last_activity_at, update_time)
                 """);
+        ensureMemoryAggregationBufferColumns();
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_user_profile_fact (
                     id VARCHAR(64) PRIMARY KEY,
@@ -409,6 +411,13 @@ public class JdbcChatSchemaUpgrade {
         }
         addColumnIfMissing("t_memory_review_candidate", "chosen_content", "TEXT");
         addColumnIfMissing("t_memory_review_candidate", "chosen_metadata", "JSONB");
+    }
+
+    private void ensureMemoryAggregationBufferColumns() {
+        if (!tableExists("t_memory_aggregation_buffer")) {
+            return;
+        }
+        addColumnIfMissing("t_memory_aggregation_buffer", "version", "BIGINT NOT NULL DEFAULT 1");
     }
 
     private void executePostgresPartialIndexOrPlainIndex(String postgresSql, String fallbackSql) {

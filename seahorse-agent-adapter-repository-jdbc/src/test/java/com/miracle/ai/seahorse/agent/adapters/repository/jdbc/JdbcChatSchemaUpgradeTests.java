@@ -40,6 +40,7 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(initSql).contains("CREATE TABLE t_memory_trace_event");
         assertThat(initSql).contains("CREATE INDEX idx_memory_trace_recent");
         assertThat(initSql).contains("CREATE TABLE t_memory_aggregation_buffer");
+        assertThat(initSql).contains("version BIGINT NOT NULL DEFAULT 1");
         assertThat(initSql).contains("CREATE INDEX idx_memory_aggregation_scan");
         assertThat(initSql).contains("CREATE TABLE t_memory_keyword_index");
         assertThat(initSql).contains("CREATE UNIQUE INDEX uk_memory_keyword_memory");
@@ -62,6 +63,7 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(tableExists(jdbcTemplate, "t_memory_review_feedback_sample")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_trace_event")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_aggregation_buffer")).isTrue();
+        assertThat(columnExists(jdbcTemplate, "t_memory_aggregation_buffer", "version")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_maintenance_run")).isTrue();
         assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_scanned_count")).isTrue();
         assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_group_count")).isTrue();
@@ -100,6 +102,33 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_scanned_count")).isTrue();
         assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_group_count")).isTrue();
         assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_fragment_count")).isTrue();
+    }
+
+    @Test
+    void shouldBackfillAggregationBufferVersionForExistingTable() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:chat-schema-upgrade-aggregation-buffer;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("""
+                CREATE TABLE t_memory_aggregation_buffer (
+                    id VARCHAR(128) PRIMARY KEY,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    user_id VARCHAR(64) NOT NULL,
+                    conversation_id VARCHAR(64) NOT NULL,
+                    session_id VARCHAR(128) NOT NULL,
+                    turn_count INTEGER NOT NULL DEFAULT 0,
+                    total_tokens INTEGER NOT NULL DEFAULT 0,
+                    turns_json TEXT NOT NULL,
+                    first_activity_at TIMESTAMP NOT NULL,
+                    last_activity_at TIMESTAMP NOT NULL,
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+
+        new JdbcChatSchemaUpgrade(dataSource).upgrade();
+
+        assertThat(columnExists(jdbcTemplate, "t_memory_aggregation_buffer", "version")).isTrue();
     }
 
     @Test
