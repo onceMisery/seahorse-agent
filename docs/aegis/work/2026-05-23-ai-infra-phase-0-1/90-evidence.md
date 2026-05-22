@@ -610,6 +610,41 @@ Remaining Phase 2 work:
 - MCP allowlist registration into the catalog.
 - Tool catalog/binding/audit management APIs.
 
+## 2026-05-23 Phase 2 argument policy enforcement slice
+
+RED/GREEN coverage:
+
+- `CatalogBackedToolPolicyPortTests.shouldDenyWhenRequiredArgumentIsMissing` first failed because catalog-backed policy allowed a tool call even when `argumentPolicyJson` required `query` and the request did not provide it.
+- `CatalogBackedToolPolicyPortTests.shouldDenyWhenArgumentIsNotAllowedByBindingPolicy` first failed because catalog-backed policy allowed an argument outside the binding whitelist.
+- The final test set verifies missing required arguments, disallowed argument names, valid argument policy pass-through, and fail-closed handling for invalid `argumentPolicyJson`.
+
+Focused kernel command:
+
+```powershell
+.\mvnw -pl seahorse-agent-kernel '-Dtest=CatalogBackedToolPolicyPortTests,LocalToolGatewayPortAuditTests,LocalToolGatewayPortPolicyTests,KernelAgentLoopToolGatewayTests' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 20
+- Failures: 0
+- Errors: 0
+- Covered: argument policy decisions, call-limit policy boundary, Tool Gateway audit lifecycle, policy enforcement, and AgentLoop Gateway delegation.
+
+Fix boundary:
+
+- `ToolArgumentPolicy`: added a package-local parser/validator for binding-level `argumentPolicyJson`, currently supporting `required` and `allowed` arrays only.
+- `CatalogBackedToolPolicyPort`: enforces argument policy after call-limit checks and before approval/execution decisions.
+- `ToolPolicyReasonCodes`: added stable reason codes for invalid argument policy, missing required argument, and disallowed argument.
+- `CatalogBackedToolPolicyPortTests`: covers reject/pass/fail-closed behavior and uses stable reason-code constants for new assertions.
+
+Remaining Phase 2 work:
+
+- MCP allowlist registration into the catalog.
+- Tool catalog/binding/audit management APIs.
+- HITL approval workflow and broader resource ACL/output redaction policy remain later slices.
+
 ## 2026-05-23 Phase 2 Tool Catalog / Agent Binding persistence slice
 
 RED/GREEN coverage:

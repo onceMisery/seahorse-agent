@@ -109,6 +109,10 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
             return deny(ToolPolicyReasonCodes.TOOL_CALL_LIMIT_EXCEEDED,
                     "Tool call limit exceeded for this run");
         }
+        PolicyDecision argumentDecision = validateArguments(request, binding);
+        if (argumentDecision != null) {
+            return argumentDecision;
+        }
         // 高风险、删除、对外发送或显式审批工具先中断执行，后续由 HITL 阶段接管审批流。
         if (requiresApproval(tool)) {
             return PolicyDecision.approvalRequired(
@@ -117,6 +121,19 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
                     "Tool requires approval");
         }
         return PolicyDecision.allow("builtin-tool-allow");
+    }
+
+    private PolicyDecision validateArguments(ToolPolicyRequest request, AgentToolBinding binding) {
+        try {
+            // 参数策略来源于 Agent 版本绑定快照，避免发布后动态工具约束漂移。
+            return ToolArgumentPolicy.parse(binding.argumentPolicyJson())
+                    .validate(request.arguments())
+                    .map(violation -> deny(violation.reasonCode(), violation.reasonMessage()))
+                    .orElse(null);
+        } catch (IllegalArgumentException ex) {
+            return deny(ToolPolicyReasonCodes.TOOL_ARGUMENT_POLICY_INVALID,
+                    "Tool argument policy is invalid");
+        }
     }
 
     private boolean exceedsCallLimit(ToolPolicyRequest request, AgentToolBinding binding) {

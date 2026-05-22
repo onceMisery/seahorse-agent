@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.AgentToolBinding;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
@@ -71,7 +72,7 @@ class CatalogBackedToolPolicyPortTests {
         PolicyDecision decision = policy.decide(request("knowledge-search"));
 
         assertEquals(PolicyDecision.Effect.ALLOW, decision.effect());
-        assertEquals("ALLOW", decision.reasonCode());
+        assertEquals(ToolPolicyReasonCodes.ALLOW, decision.reasonCode());
     }
 
     @Test
@@ -123,6 +124,57 @@ class CatalogBackedToolPolicyPortTests {
         assertEquals("ALLOW", decision.reasonCode());
     }
 
+    @Test
+    void shouldDenyWhenRequiredArgumentIsMissing() {
+        CatalogBackedToolPolicyPort policy = policy(
+                tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ, true, false),
+                binding("knowledge-search", 3, "{\"required\":[\"query\"]}"));
+
+        PolicyDecision decision = policy.decide(request("knowledge-search", Map.of("input", "value")));
+
+        assertEquals(PolicyDecision.Effect.DENY, decision.effect());
+        assertEquals(ToolPolicyReasonCodes.TOOL_ARGUMENT_REQUIRED_MISSING, decision.reasonCode());
+    }
+
+    @Test
+    void shouldDenyWhenArgumentIsNotAllowedByBindingPolicy() {
+        CatalogBackedToolPolicyPort policy = policy(
+                tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ, true, false),
+                binding("knowledge-search", 3, "{\"allowed\":[\"query\"]}"));
+
+        PolicyDecision decision = policy.decide(request("knowledge-search",
+                Map.of("query", "memory", "unsafe", true)));
+
+        assertEquals(PolicyDecision.Effect.DENY, decision.effect());
+        assertEquals(ToolPolicyReasonCodes.TOOL_ARGUMENT_NOT_ALLOWED, decision.reasonCode());
+    }
+
+    @Test
+    void shouldAllowWhenArgumentsSatisfyBindingPolicy() {
+        CatalogBackedToolPolicyPort policy = policy(
+                tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ, true, false),
+                binding("knowledge-search", 3, "{\"required\":[\"query\"],\"allowed\":[\"query\",\"topK\"]}"));
+
+        PolicyDecision decision = policy.decide(request("knowledge-search",
+                Map.of("query", "memory", "topK", 5)));
+
+        assertEquals(PolicyDecision.Effect.ALLOW, decision.effect());
+        assertEquals("ALLOW", decision.reasonCode());
+    }
+
+    @Test
+    void shouldDenyWhenArgumentPolicyJsonIsInvalid() {
+        CatalogBackedToolPolicyPort policy = policy(
+                tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ, true, false),
+                binding("knowledge-search", 3, "[\"query\"]"));
+
+        PolicyDecision decision = policy.decide(request("knowledge-search",
+                Map.of("query", "memory")));
+
+        assertEquals(PolicyDecision.Effect.DENY, decision.effect());
+        assertEquals(ToolPolicyReasonCodes.TOOL_ARGUMENT_POLICY_INVALID, decision.reasonCode());
+    }
+
     private static void assertApprovalRequired(ToolCatalogEntry tool) {
         CatalogBackedToolPolicyPort policy = policy(tool, binding(tool.toolId(), 3));
 
@@ -141,6 +193,10 @@ class CatalogBackedToolPolicyPortTests {
     }
 
     private static ToolPolicyRequest request(String toolId) {
+        return request(toolId, Map.of("input", "value"));
+    }
+
+    private static ToolPolicyRequest request(String toolId, Map<String, Object> arguments) {
         return new ToolPolicyRequest(
                 "run-1",
                 "step-1",
@@ -151,7 +207,7 @@ class CatalogBackedToolPolicyPortTests {
                 "user-1",
                 "agent-identity-1",
                 toolId,
-                Map.of("input", "value"),
+                arguments,
                 Map.of(),
                 "run-1:call-1",
                 List.of(toolId),
@@ -181,13 +237,17 @@ class CatalogBackedToolPolicyPortTests {
     }
 
     private static AgentToolBinding binding(String toolId, int maxCallsPerRun) {
+        return binding(toolId, maxCallsPerRun, "{}");
+    }
+
+    private static AgentToolBinding binding(String toolId, int maxCallsPerRun, String argumentPolicyJson) {
         return new AgentToolBinding(
                 "binding-" + toolId,
                 "agent-1",
                 "agent-1-v1",
                 toolId,
                 maxCallsPerRun,
-                "{}",
+                argumentPolicyJson,
                 "admin-1",
                 Instant.EPOCH);
     }
