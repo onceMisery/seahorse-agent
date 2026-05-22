@@ -102,6 +102,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
@@ -296,6 +297,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryRefinerPort> memoryRefinerPort,
             ObjectProvider<MemoryReviewCandidatePort> memoryReviewCandidatePort,
             ObjectProvider<MemoryAliasPort> memoryAliasPort,
+            ObjectProvider<MemoryReviewPolicyPort> memoryReviewPolicyPort,
             ObjectProvider<MemoryKeywordIndexPort> memoryKeywordIndexPort,
             ObjectProvider<MemoryGraphIndexPort> memoryGraphIndexPort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
@@ -339,7 +341,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 memoryRetrievalPipelinePort.getIfAvailable(),
                 memoryRefinerPort.getIfAvailable(MemoryRefinerPort::noop),
                 memoryReviewCandidatePort.getIfAvailable(MemoryReviewCandidatePort::noop),
-                memoryAliasPort.getIfAvailable(MemoryAliasPort::noop));
+                memoryAliasPort.getIfAvailable(MemoryAliasPort::noop),
+                memoryReviewPolicyPort.getIfAvailable(MemoryReviewPolicyPort::defaults));
     }
 
     @Bean

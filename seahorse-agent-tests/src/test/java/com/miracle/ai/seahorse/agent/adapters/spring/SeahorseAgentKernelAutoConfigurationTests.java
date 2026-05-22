@@ -162,8 +162,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFusionPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphIndexPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
@@ -179,6 +181,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
@@ -869,6 +873,44 @@ class SeahorseAgentKernelAutoConfigurationTests {
                             .build());
 
                     verify(shortTermMemoryPort).save(any(MemoryRecord.class));
+                });
+    }
+
+    @Test
+    void shouldInjectMemoryReviewPolicyPortIntoMemoryEngineForRefinedAddGate() {
+        contextRunner.withUserConfiguration(
+                        MemoryStorePortsConfiguration.class,
+                        MemoryRefinerConfiguration.class,
+                        MemoryReviewRepositoryConfiguration.class,
+                        MemoryReviewPolicyConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.memory.refiner.enabled=true",
+                        "seahorse-agent.memory.policy.review-enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    when(context.getBean(MemoryOperationLogPort.class).tryStart(any())).thenReturn(true);
+
+                    MemoryIngestionResult result = context.getBean(MemoryIngestionWorkflowPort.class)
+                            .ingest(new MemoryIngestionCommand(
+                                    "op-policy-review",
+                                    "default",
+                                    "memory-aggregation-flush",
+                                    MemoryWriteRequest.builder()
+                                            .userId("user-policy-review")
+                                            .conversationId("conv-policy-review")
+                                            .messageId("msg-policy-review")
+                                            .message(ChatMessage.user("remember project policy"))
+                                            .build()));
+
+                    assertThat(result.status()).isEqualTo(MemoryIngestionStatus.REJECTED);
+                    assertThat(result.action()).isEqualTo(MemoryIngestionAction.REVIEW);
+                    verify(context.getBean(ShortTermMemoryPort.class), never()).save(any(MemoryRecord.class));
+
+                    InMemoryMemoryReviewRepository repository =
+                            context.getBean(InMemoryMemoryReviewRepository.class);
+                    MemoryReviewRecord candidate = repository.findReviewItem("review-op-policy-review").orElseThrow();
+                    assertThat(candidate.targetKey()).isEqualTo("project.state");
+                    assertThat(candidate.metadata()).containsEntry("reviewReason", "tenant_requires_manual_review");
                 });
     }
 
@@ -1632,6 +1674,15 @@ class SeahorseAgentKernelAutoConfigurationTests {
                             List.of(request.messageId()),
                             List.of("test_refiner"))),
                     Map.of("model", "test"));
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class MemoryReviewPolicyConfiguration {
+
+        @Bean
+        MemoryReviewPolicyPort memoryReviewPolicyPort() {
+            return (operation, policy) -> MemoryReviewPolicyDecision.review("tenant_requires_manual_review");
         }
     }
 

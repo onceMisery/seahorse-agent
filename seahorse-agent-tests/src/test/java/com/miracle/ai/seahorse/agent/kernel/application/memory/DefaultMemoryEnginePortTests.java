@@ -52,6 +52,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
@@ -917,6 +919,55 @@ class DefaultMemoryEnginePortTests {
                 operationLogPort.decisionById.get("op-refiner-medium-confidence").get("refinerStatus"));
         Assertions.assertEquals("ADD",
                 operationLogPort.decisionById.get("op-refiner-medium-confidence").get("refinerAction"));
+    }
+
+    @Test
+    void shouldDelegateRefinedAddReviewGateToProvidedPolicyPort() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "tenant_policy_review",
+                List.of(new RefinedMemoryOperation(
+                        MemoryIngestionAction.ADD,
+                        "PROJECT_FACT",
+                        "project.secret_rotation",
+                        "User rotates production credentials every Friday.",
+                        0.96D,
+                        0.90D,
+                        0.90D,
+                        0.10D,
+                        List.of("msg-refiner-policy-review"),
+                        List.of("llm_refiner"),
+                        Map.of())),
+                Map.of("model", "test-refiner")));
+        MemoryReviewPolicyPort policyPort = (operation, policy) ->
+                MemoryReviewPolicyDecision.review("tenant_requires_manual_review");
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort,
+                policyPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-policy-review", "default",
+                "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-policy-review")
+                        .messageId("msg-refiner-policy-review")
+                        .message(ChatMessage.user("Remember our credential rotation cadence."))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.REVIEW, result.action());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(1, reviewCandidatePort.candidates.size());
+        MemoryReviewCandidate candidate = reviewCandidatePort.candidates.get(0);
+        Assertions.assertEquals("project.secret_rotation", candidate.targetKey());
+        Assertions.assertEquals("tenant_requires_manual_review", candidate.metadata().get("reviewReason"));
+        Assertions.assertEquals(MemoryOperationStatus.REVIEW,
+                operationLogPort.statusById.get("op-refiner-policy-review"));
     }
 
     @Test
@@ -2087,6 +2138,19 @@ class DefaultMemoryEnginePortTests {
                                                                MemoryRefinerPort refinerPort,
                                                                MemoryReviewCandidatePort reviewCandidatePort,
                                                                MemoryOperationLogPort operationLogPort) {
+        return engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort,
+                MemoryReviewPolicyPort.defaults());
+    }
+
+    private DefaultMemoryEnginePort engineWithRefinerAndReview(ShortTermMemoryPort shortTermPort,
+                                                               MemoryRefinerPort refinerPort,
+                                                               MemoryReviewCandidatePort reviewCandidatePort,
+                                                               MemoryOperationLogPort operationLogPort,
+                                                               MemoryReviewPolicyPort reviewPolicyPort) {
         return new DefaultMemoryEnginePort(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
@@ -2104,7 +2168,9 @@ class DefaultMemoryEnginePortTests {
                 new InMemoryMemoryPolicyConfigPort(MemoryPolicyConfig.defaults().withReviewEnabled(true)),
                 (MemoryRetrievalPipelinePort) null,
                 refinerPort,
-                reviewCandidatePort);
+                reviewCandidatePort,
+                MemoryAliasPort.noop(),
+                reviewPolicyPort);
     }
 
     private String memoryContextBlock(int turnCount) {

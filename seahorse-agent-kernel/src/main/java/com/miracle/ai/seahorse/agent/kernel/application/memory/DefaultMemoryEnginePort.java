@@ -54,6 +54,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
@@ -132,9 +134,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String REFINER_BATCH_CIRCUIT_DELETE_RATIO = "DELETE_RATIO";
     private static final String REFINER_BATCH_REASON_OPERATION_COUNT_EXCEEDED = "operation_count_exceeded";
     private static final String REFINER_BATCH_REASON_DELETE_RATIO_EXCEEDED = "delete_ratio_exceeded";
-    private static final String REFINER_ADD_LOW_CONFIDENCE = "refiner_add_low_confidence";
-    private static final String REFINER_ADD_REVIEW_CONFIDENCE = "confidence_below_auto_commit";
-    private static final String REFINER_ADD_REVIEW_RISK = "risk_score_threshold";
+    private static final String REFINER_ADD_LOW_CONFIDENCE = MemoryReviewPolicyPort.REFINER_ADD_LOW_CONFIDENCE;
+    private static final String REFINER_ADD_REVIEW_CONFIDENCE = MemoryReviewPolicyPort.REFINER_ADD_REVIEW_CONFIDENCE;
+    private static final String REFINER_ADD_REVIEW_RISK = MemoryReviewPolicyPort.REFINER_ADD_REVIEW_RISK;
     private static final String REFINER_STATUS_DROPPED = "dropped";
     private static final String REFINER_STATUS_PENDING_REVIEW = "pending_review";
     private static final int REFINER_READ_MASK_PER_LAYER_LIMIT = 3;
@@ -208,6 +210,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryRefinerPort memoryRefinerPort;
     private final MemoryReviewCandidatePort memoryReviewCandidatePort;
     private final MemoryAliasPort memoryAliasPort;
+    private final MemoryReviewPolicyPort memoryReviewPolicyPort;
     private final MemorySanitizer memorySanitizer;
     private final MemoryPreFilter memoryPreFilter;
     private final MemorySemanticClassifier memorySemanticClassifier;
@@ -429,6 +432,32 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryRefinerPort memoryRefinerPort,
                                    MemoryReviewCandidatePort memoryReviewCandidatePort,
                                    MemoryAliasPort memoryAliasPort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
+                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
+                businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort,
+                memoryRetrievalPipelinePort, memoryRefinerPort, memoryReviewCandidatePort, memoryAliasPort,
+                MemoryReviewPolicyPort.defaults());
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort,
+                                   MemoryVectorPort memoryVectorPort,
+                                   MemoryOutboxPort memoryOutboxPort,
+                                   MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                   MemoryLifecyclePort memoryLifecyclePort,
+                                   MemoryPolicyConfigPort memoryPolicyConfigPort,
+                                   MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
+                                   MemoryRefinerPort memoryRefinerPort,
+                                   MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                   MemoryAliasPort memoryAliasPort,
+                                   MemoryReviewPolicyPort memoryReviewPolicyPort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -466,6 +495,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.memoryReviewCandidatePort = Objects.requireNonNullElseGet(memoryReviewCandidatePort,
                 MemoryReviewCandidatePort::noop);
         this.memoryAliasPort = Objects.requireNonNullElseGet(memoryAliasPort, MemoryAliasPort::noop);
+        this.memoryReviewPolicyPort = Objects.requireNonNullElseGet(memoryReviewPolicyPort,
+                MemoryReviewPolicyPort::defaults);
         this.memorySanitizer = new MemorySanitizer();
         this.memoryPreFilter = new MemoryPreFilter();
         this.memorySemanticClassifier = new MemorySemanticClassifier(captureCandidateExtractor, memoryValueAssessor);
@@ -1346,10 +1377,13 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         metadata.put(METADATA_RISK_SCORE, operation.riskScore());
         metadata.put(METADATA_SOURCE_MESSAGE_IDS, effectiveSourceMessageIds(operation, fallbackSourceMessageIds));
         metadata.putAll(extraMetadata);
-        String gateReason = refinedAddReviewReason(operation);
-        if (operation.confidence() < memoryPolicyConfigPort.current().refinerDropConfidenceThreshold()) {
+        MemoryReviewPolicyDecision gateDecision = Objects.requireNonNullElseGet(
+                memoryReviewPolicyPort.evaluateRefinedAdd(operation, memoryPolicyConfigPort.current()),
+                MemoryReviewPolicyDecision::autoCommit);
+        if (gateDecision.action() == MemoryReviewPolicyDecision.Action.DROP) {
+            String dropReason = isBlank(gateDecision.reason()) ? REFINER_ADD_LOW_CONFIDENCE : gateDecision.reason();
             metadata.put("status", REFINER_STATUS_DROPPED);
-            metadata.put("dropReason", REFINER_ADD_LOW_CONFIDENCE);
+            metadata.put("dropReason", dropReason);
             return new MemoryClassificationResult(
                     MemoryIngestionAction.IGNORE,
                     null,
@@ -1358,13 +1392,14 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                             MemoryIngestionAction.ADD,
                             operation.targetKind(),
                             operation.targetKey(),
-                            REFINER_ADD_LOW_CONFIDENCE,
+                            dropReason,
                             metadata),
-                    REFINER_ADD_LOW_CONFIDENCE);
+                    dropReason);
         }
-        if (!isBlank(gateReason)) {
+        if (gateDecision.action() == MemoryReviewPolicyDecision.Action.REVIEW) {
+            String reviewReason = isBlank(gateDecision.reason()) ? result.reason() : gateDecision.reason();
             metadata.put("status", REFINER_STATUS_PENDING_REVIEW);
-            metadata.put("reviewReason", gateReason);
+            metadata.put("reviewReason", reviewReason);
             metadata.put(METADATA_CONTENT, operation.content());
             return new MemoryClassificationResult(
                     MemoryIngestionAction.REVIEW,
@@ -1394,17 +1429,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 operation.targetKey(),
                 result.reason(),
                 metadata));
-    }
-
-    private String refinedAddReviewReason(RefinedMemoryOperation operation) {
-        MemoryPolicyConfig policy = memoryPolicyConfigPort.current();
-        if (operation.riskScore() >= policy.refinerReviewRiskThreshold()) {
-            return REFINER_ADD_REVIEW_RISK;
-        }
-        if (policy.reviewEnabled() && operation.confidence() < policy.refinerAutoCommitConfidenceThreshold()) {
-            return REFINER_ADD_REVIEW_CONFIDENCE;
-        }
-        return "";
     }
 
     private MemoryClassificationResult refinedReviewClassification(RefinedMemoryOperation operation,
