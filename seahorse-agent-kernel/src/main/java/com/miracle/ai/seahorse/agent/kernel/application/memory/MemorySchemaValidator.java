@@ -26,6 +26,7 @@ import java.util.Map;
 class MemorySchemaValidator {
 
     private static final String METADATA_TARGET_LAYER = "targetLayer";
+    private static final String METADATA_TARGET_MEMORY_ID = "targetMemoryId";
 
     private final MemorySanitizer sanitizer;
 
@@ -67,6 +68,9 @@ class MemorySchemaValidator {
         if (delta == null) {
             return MemorySchemaValidationResult.ok();
         }
+        if (requiresMutationTarget(delta.action()) && invalidMutationTarget(delta)) {
+            return MemorySchemaValidationResult.invalid("invalid_refiner_target");
+        }
         Map<String, Object> metadata = delta.metadata();
         Object targetLayer = metadata.get(METADATA_TARGET_LAYER);
         if (targetLayer == null || targetLayer.toString().isBlank()) {
@@ -81,5 +85,24 @@ class MemorySchemaValidator {
         } catch (IllegalArgumentException ex) {
             return MemorySchemaValidationResult.invalid("invalid_refiner_target_layer");
         }
+    }
+
+    private boolean requiresMutationTarget(MemoryIngestionAction action) {
+        return action == MemoryIngestionAction.UPDATE || action == MemoryIngestionAction.DELETE;
+    }
+
+    private boolean invalidMutationTarget(RefinedMemoryDelta delta) {
+        if (delta.targetKind().isBlank()) {
+            return true;
+        }
+        return delta.targetKey().isBlank() && metadataValue(delta.metadata(), METADATA_TARGET_MEMORY_ID).isBlank();
+    }
+
+    private String metadataValue(Map<String, Object> metadata, String key) {
+        Object value = metadata.get(key);
+        if (value == null) {
+            return "";
+        }
+        return value.toString().trim();
     }
 }

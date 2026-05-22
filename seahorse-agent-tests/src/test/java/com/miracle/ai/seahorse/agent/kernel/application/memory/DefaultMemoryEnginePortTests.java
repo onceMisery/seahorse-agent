@@ -1548,6 +1548,92 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldRejectRefinedDeleteWithoutTargetBeforeReviewStaging() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "delete_target_missing",
+                List.of(new RefinedMemoryOperation(
+                        MemoryIngestionAction.DELETE,
+                        "",
+                        "",
+                        "",
+                        0.92D,
+                        0.50D,
+                        0.50D,
+                        0.10D,
+                        List.of("msg-refiner-delete-missing-target"),
+                        List.of("llm_refiner"),
+                        Map.of())),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-delete-missing-target", "default",
+                "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-delete-missing-target")
+                        .messageId("msg-refiner-delete-missing-target")
+                        .message(ChatMessage.user("delete the outdated memory"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals("invalid_refiner_target", result.reason());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertTrue(reviewCandidatePort.candidates.isEmpty());
+        Assertions.assertEquals(MemoryOperationStatus.REJECTED,
+                operationLogPort.statusById.get("op-refiner-delete-missing-target"));
+    }
+
+    @Test
+    void shouldRejectRefinedUpdateWithoutTargetBeforeReviewStaging() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "update_target_missing",
+                List.of(new RefinedMemoryOperation(
+                        MemoryIngestionAction.UPDATE,
+                        "",
+                        "",
+                        "user now prefers detailed answers",
+                        0.88D,
+                        0.70D,
+                        0.80D,
+                        0.20D,
+                        List.of("msg-refiner-update-missing-target"),
+                        List.of("llm_refiner"),
+                        Map.of())),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-update-missing-target", "default",
+                "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-update-missing-target")
+                        .messageId("msg-refiner-update-missing-target")
+                        .message(ChatMessage.user("actually I now prefer detailed answers"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals("invalid_refiner_target", result.reason());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertTrue(reviewCandidatePort.candidates.isEmpty());
+        Assertions.assertEquals(MemoryOperationStatus.REJECTED,
+                operationLogPort.statusById.get("op-refiner-update-missing-target"));
+    }
+
+    @Test
     void shouldStageRefinedUpdateForReviewWithoutUpdatingDurableMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();

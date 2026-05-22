@@ -619,6 +619,10 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         if (classification.refinedDelta() != null && classification.refinedDelta().metadata().containsKey("refinerBatch")) {
             return executeRefinerBatch(operationId, tenantId, request, message, classification);
         }
+        MemorySchemaValidationResult validation = memorySchemaValidator.validate(classification);
+        if (!validation.valid()) {
+            return new IngestionExecution(MemoryIngestionResult.rejected(validation.reason()), classification);
+        }
         if (classification.action() == MemoryIngestionAction.IGNORE && classification.decision() == null) {
             return new IngestionExecution(MemoryIngestionResult.ignored(classification.reason()), classification);
         }
@@ -627,10 +631,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
         if (classification.action() == MemoryIngestionAction.REVIEW) {
             return executeReviewStaging(operationId, tenantId, request, classification);
-        }
-        MemorySchemaValidationResult validation = memorySchemaValidator.validate(classification);
-        if (!validation.valid()) {
-            return new IngestionExecution(MemoryIngestionResult.rejected(validation.reason()), classification);
         }
         if (classification.action() == MemoryIngestionAction.UPDATE) {
             List<String> operations = captureCorrection(request, tenantId, classification.correction());
