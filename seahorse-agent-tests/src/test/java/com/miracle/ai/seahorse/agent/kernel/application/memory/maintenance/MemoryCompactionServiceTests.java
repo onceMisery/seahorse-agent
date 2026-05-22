@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionCandi
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionFragment;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskTypes;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
@@ -96,6 +97,52 @@ class MemoryCompactionServiceTests {
                         MemoryOutboxTaskTypes.VECTOR_DELETE,
                         MemoryOutboxTaskTypes.KEYWORD_DELETE,
                         MemoryOutboxTaskTypes.GRAPH_DELETE);
+    }
+
+    @Test
+    void shouldUsePluggableSummarizerForMasterMemoryContent() {
+        RecordingCompactionPort compactionPort = new RecordingCompactionPort();
+        RecordingLongTermMemoryPort longTermPort = new RecordingLongTermMemoryPort();
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort();
+        compactionPort.candidates.add(new MemoryCompactionCandidate(
+                "user-1",
+                "default",
+                "semanticKey:project.alpha",
+                "semanticKey",
+                List.of(
+                        new MemoryCompactionFragment(
+                                "stm-1",
+                                "short_term",
+                                "PROJECT_FACT",
+                                "Alpha project uses Spring.",
+                                Map.of("semanticKey", "project.alpha"),
+                                Instant.EPOCH),
+                        new MemoryCompactionFragment(
+                                "sem-1",
+                                "semantic",
+                                "PROJECT_FACT",
+                                "Alpha project target is May.",
+                                Map.of("semanticKey", "project.alpha"),
+                                Instant.EPOCH))));
+        MemoryCompactionService service = new MemoryCompactionService(
+                compactionPort,
+                longTermPort,
+                outboxPort,
+                candidate -> new MemoryCompactionSummary(
+                        "Alpha project uses Spring and targets May.",
+                        "llm-test",
+                        Map.of("model", "test-compactor")),
+                new MemoryCompactionOptions(10, 2, false, false, false, "default"));
+
+        MemoryCompactionResult result = service.run("manual-maintenance");
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(longTermPort.savedRecords).hasSize(1);
+        MemoryRecord master = longTermPort.savedRecords.get(0);
+        assertThat(master.content()).isEqualTo("Alpha project uses Spring and targets May.");
+        assertThat(master.metadata()).containsEntry("compactionSummaryStrategy", "llm-test");
+        assertThat(master.metadata().get("compactionSummaryMetadata"))
+                .isEqualTo(Map.of("model", "test-compactor"));
     }
 
     private static class RecordingCompactionPort implements MemoryCompactionPort {

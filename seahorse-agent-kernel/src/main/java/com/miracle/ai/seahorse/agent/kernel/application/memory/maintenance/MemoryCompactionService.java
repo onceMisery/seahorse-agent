@@ -22,6 +22,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionCandi
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionFragment;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionSummarizerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 
@@ -41,19 +43,30 @@ public class MemoryCompactionService {
     private final MemoryCompactionPort compactionPort;
     private final LongTermMemoryPort longTermMemoryPort;
     private final MemoryOutboxPort outboxPort;
+    private final MemoryCompactionSummarizerPort summarizerPort;
     private final MemoryCompactionOptions options;
 
     public MemoryCompactionService() {
-        this(MemoryCompactionPort.noop(), null, MemoryOutboxPort.noop(), MemoryCompactionOptions.defaults());
+        this(MemoryCompactionPort.noop(), null, MemoryOutboxPort.noop(),
+                MemoryCompactionSummarizerPort.noop(), MemoryCompactionOptions.defaults());
     }
 
     public MemoryCompactionService(MemoryCompactionPort compactionPort,
                                    LongTermMemoryPort longTermMemoryPort,
                                    MemoryOutboxPort outboxPort,
                                    MemoryCompactionOptions options) {
+        this(compactionPort, longTermMemoryPort, outboxPort, MemoryCompactionSummarizerPort.noop(), options);
+    }
+
+    public MemoryCompactionService(MemoryCompactionPort compactionPort,
+                                   LongTermMemoryPort longTermMemoryPort,
+                                   MemoryOutboxPort outboxPort,
+                                   MemoryCompactionSummarizerPort summarizerPort,
+                                   MemoryCompactionOptions options) {
         this.compactionPort = Objects.requireNonNullElseGet(compactionPort, MemoryCompactionPort::noop);
         this.longTermMemoryPort = longTermMemoryPort;
         this.outboxPort = Objects.requireNonNullElseGet(outboxPort, MemoryOutboxPort::noop);
+        this.summarizerPort = Objects.requireNonNullElseGet(summarizerPort, MemoryCompactionSummarizerPort::noop);
         this.options = Objects.requireNonNullElseGet(options, MemoryCompactionOptions::defaults);
     }
 
@@ -98,6 +111,7 @@ public class MemoryCompactionService {
 
     private MemoryRecord masterMemory(MemoryCompactionCandidate candidate, Instant now) {
         String masterId = "mem-compact-" + UUID.randomUUID();
+        MemoryCompactionSummary summary = summarize(candidate);
         List<String> sourceMemoryIds = candidate.fragments().stream()
                 .map(MemoryCompactionFragment::memoryId)
                 .filter(id -> !id.isBlank())
@@ -111,20 +125,43 @@ public class MemoryCompactionService {
         metadata.put("sourceMemoryIds", sourceMemoryIds);
         metadata.put("compactionGroupKey", candidate.groupKey());
         metadata.put("compactionStrategy", candidate.strategy());
+        metadata.put("compactionSummaryStrategy", summaryStrategy(summary, candidate));
+        if (!summary.metadata().isEmpty()) {
+            metadata.put("compactionSummaryMetadata", summary.metadata());
+        }
         metadata.put("compactionGenerationId", "compaction-" + UUID.randomUUID());
         metadata.put("compactedAt", now.toString());
         metadata.put("importanceScore", 0.8D);
         metadata.put("confidenceLevel", 0.8D);
-        return new MemoryRecord(masterId, "long_term", MASTER_TYPE, content(candidate), metadata, now);
+        return new MemoryRecord(masterId, "long_term", MASTER_TYPE, content(candidate, summary), metadata, now);
     }
 
-    private String content(MemoryCompactionCandidate candidate) {
+    private MemoryCompactionSummary summarize(MemoryCompactionCandidate candidate) {
+        try {
+            MemoryCompactionSummary summary = summarizerPort.summarize(candidate);
+            return summary == null ? MemoryCompactionSummary.empty() : summary;
+        } catch (RuntimeException ignored) {
+            return MemoryCompactionSummary.empty();
+        }
+    }
+
+    private String content(MemoryCompactionCandidate candidate, MemoryCompactionSummary summary) {
+        if (summary != null && !summary.content().isBlank()) {
+            return summary.content();
+        }
         return candidate.fragments().stream()
                 .map(MemoryCompactionFragment::content)
                 .filter(content -> content != null && !content.isBlank())
                 .distinct()
                 .reduce((left, right) -> left + "\n" + right)
                 .orElse(candidate.groupKey());
+    }
+
+    private String summaryStrategy(MemoryCompactionSummary summary, MemoryCompactionCandidate candidate) {
+        if (summary != null && !summary.strategy().isBlank()) {
+            return summary.strategy();
+        }
+        return "rule:" + candidate.strategy();
     }
 
     private void saveMaster(MemoryRecord master) {

@@ -67,6 +67,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationSche
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionSummarizerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFusionPolicy;
@@ -652,6 +653,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryCompactionPort> compactionPort,
             ObjectProvider<LongTermMemoryPort> longTermMemoryPort,
             MemoryOutboxPort outboxPort,
+            ObjectProvider<MemoryCompactionSummarizerPort> summarizerPort,
             ObjectProvider<MemoryKeywordIndexPort> keywordIndexPort,
             ObjectProvider<MemoryGraphIndexPort> graphIndexPort,
             @Value("${seahorse-agent.memory.compaction.scan-limit:100}") int scanLimit,
@@ -664,6 +666,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 compactionPort.getIfAvailable(MemoryCompactionPort::noop),
                 longTermMemoryPort.getIfAvailable(),
                 outboxPort,
+                summarizerPort.getIfAvailable(MemoryCompactionSummarizerPort::noop),
                 new MemoryCompactionOptions(
                         scanLimit,
                         minGroupSize,
