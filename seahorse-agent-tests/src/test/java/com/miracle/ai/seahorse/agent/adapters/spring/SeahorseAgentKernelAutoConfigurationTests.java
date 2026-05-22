@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFacto
 import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.auth.KernelAuthService;
 import com.miracle.ai.seahorse.agent.kernel.application.dashboard.KernelDashboardService;
@@ -48,8 +49,9 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.GraphMemor
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.KeywordMemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.HybridMemoryRecallPipeline;
-import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.ModelMemoryRecallReranker;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.LayeredScoredMemoryVectorPort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.ModelMemoryRecallReranker;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.VectorSearchScoredMemoryVectorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataBackfillService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataDictionaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataExtractionResultService;
@@ -179,6 +181,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.RefinedMemoryOperatio
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ScoredMemoryVectorHit;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ScoredMemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
@@ -196,6 +199,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionReposit
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
@@ -210,6 +214,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -699,6 +704,29 @@ class SeahorseAgentKernelAutoConfigurationTests {
     }
 
     @Test
+    void shouldRegisterVectorSearchScoredMemoryVectorPortWhenExplicitlyEnabled() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class, MemoryVectorSearchConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.memory.recall.vector-search-enabled=true",
+                        "seahorse-agent.memory.recall.vector-collection=memory_vectors",
+                        "seahorse-agent.memory.recall.embedding-model=memory-embedding")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBean(ScoredMemoryVectorPort.class))
+                            .isInstanceOf(VectorSearchScoredMemoryVectorPort.class);
+
+                    ScoredMemoryVectorPort vectorPort = context.getBean(ScoredMemoryVectorPort.class);
+                    assertThat(vectorPort.search("user-1", "default", "Pulsar PIP-459", 3))
+                            .extracting(ScoredMemoryVectorHit::memoryId)
+                            .containsExactly("semantic-vector");
+                    RecordingVectorSearchPort searchPort = context.getBean(RecordingVectorSearchPort.class);
+                    assertThat(searchPort.requests)
+                            .extracting(VectorSearchRequest::collectionName)
+                            .containsExactly("memory_vectors");
+                });
+    }
+
+    @Test
     void shouldBindHybridMemoryRecallChannelWeights() {
         contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class)
                 .withPropertyValues(
@@ -964,6 +992,20 @@ class SeahorseAgentKernelAutoConfigurationTests {
         @Bean
         VectorSearchPort vectorSearchPort() {
             return request -> java.util.List.of();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class MemoryVectorSearchConfiguration {
+
+        @Bean
+        EmbeddingModelPort embeddingModelPort() {
+            return (modelId, text) -> List.of(0.1F, 0.2F);
+        }
+
+        @Bean
+        RecordingVectorSearchPort vectorSearchPort() {
+            return new RecordingVectorSearchPort();
         }
     }
 
@@ -1453,6 +1495,28 @@ class SeahorseAgentKernelAutoConfigurationTests {
         @Override
         public void delete(String memoryId, String userId, String tenantId) {
             deletedMemoryIds.add(memoryId);
+        }
+    }
+
+    static class RecordingVectorSearchPort implements VectorSearchPort {
+
+        private final List<VectorSearchRequest> requests = new ArrayList<>();
+
+        @Override
+        public List<RetrievedChunk> search(VectorSearchRequest request) {
+            requests.add(request);
+            return List.of(RetrievedChunk.builder()
+                    .id("vector-chunk")
+                    .text("Pulsar PIP-459 memory")
+                    .score(0.93F)
+                    .metadata(Map.of(
+                            "memoryId", "semantic-vector",
+                            "userId", "user-1",
+                            "tenantId", "default",
+                            "layer", "SEMANTIC",
+                            "type", "PROJECT_FACT",
+                            "generationId", "generation-vector"))
+                    .build());
         }
     }
 

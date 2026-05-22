@@ -57,6 +57,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.MemoryR
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.ModelMemoryRecallReranker;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.RrfMemoryFusion;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.VectorMemoryRecallChannel;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.VectorSearchScoredMemoryVectorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
@@ -112,7 +113,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMaintenancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -423,6 +426,29 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnMissingBean(MemoryRecallRerankerPort.class)
     public MemoryRecallRerankerPort seahorseMemoryRecallRerankerPort() {
         return MemoryRecallRerankerPort.noop();
+    }
+
+    @Bean
+    @ConditionalOnBean({
+            ShortTermMemoryPort.class,
+            LongTermMemoryPort.class,
+            SemanticMemoryPort.class,
+            VectorSearchPort.class,
+            EmbeddingModelPort.class
+    })
+    @ConditionalOnExpression("'${seahorse-agent.memory.recall.hybrid-enabled:true}' == 'true'"
+            + " && '${seahorse-agent.memory.recall.vector-search-enabled:false}' == 'true'")
+    @ConditionalOnMissingBean(ScoredMemoryVectorPort.class)
+    public VectorSearchScoredMemoryVectorPort seahorseVectorSearchScoredMemoryVectorPort(
+            VectorSearchPort vectorSearchPort,
+            EmbeddingModelPort embeddingModelPort,
+            @Value("${seahorse-agent.memory.recall.vector-collection:memory_vectors}") String collectionName,
+            @Value("${seahorse-agent.memory.recall.embedding-model:}") String embeddingModel) {
+        return new VectorSearchScoredMemoryVectorPort(
+                vectorSearchPort,
+                embeddingModelPort,
+                collectionName,
+                embeddingModel);
     }
 
     @Bean
