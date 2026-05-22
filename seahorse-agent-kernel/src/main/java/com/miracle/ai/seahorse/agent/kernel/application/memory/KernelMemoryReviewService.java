@@ -143,6 +143,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                                              String source,
                                              String eventType) {
         String operationId = APPLY_OPERATION_PREFIX + current.candidateId();
+        String applyContent = reviewApplyContent(current, content);
         MemoryIngestionResult result = ingestionWorkflowPort.ingest(MemoryIngestionCommand.reviewApply(
                 operationId,
                 current.tenantId(),
@@ -151,7 +152,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                         .userId(current.userId())
                         .conversationId(current.conversationId())
                         .messageId(reviewMessageId(current))
-                        .message(ChatMessage.user(content))
+                        .message(ChatMessage.user(applyContent))
                         .build(),
                 reviewDirective(current, command)));
         if (result == null || result.status() != MemoryIngestionStatus.ACCEPTED) {
@@ -168,7 +169,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 MemoryReviewStatus.APPLIED,
                 operator(command.reviewerId()),
                 command.comment(),
-                content,
+                applyContent,
                 command.correctedMetadata(),
                 operationId,
                 current.targetLayer()));
@@ -180,6 +181,19 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 "reviewedLayer", reviewed.reviewedLayer()));
         recordFeedback(current, reviewed);
         return reviewed;
+    }
+
+    private String reviewApplyContent(MemoryReviewRecord current, String content) {
+        if (content != null && !content.isBlank()) {
+            return content;
+        }
+        if (MemoryIngestionAction.DELETE.name().equalsIgnoreCase(current.requestedAction())) {
+            if (current.targetKey() != null && !current.targetKey().isBlank()) {
+                return current.targetKey();
+            }
+            return "memory delete review";
+        }
+        return content;
     }
 
     private void recordFeedback(MemoryReviewRecord pending, MemoryReviewRecord reviewed) {

@@ -304,7 +304,7 @@ Gemini 设计中的 REVIEW 由三部分组成：
 
 差距：
 
-- DELETE 审核通过后的真实删除/obsolete 流程仍未开放，当前仍拒绝直接执行，避免误删四层记忆和派生索引。
+- DELETE 审核通过后已开放安全 apply：只在人工审核路径中按 `targetLayer + targetKey/targetMemoryId` 对四层 source-of-truth 做逻辑删除，并触发 vector/keyword/graph 派生索引删除；LLM Refiner 的 DELETE 仍必须先进入 REVIEW staging，不能自动直删。
 - 没有 UI 卡片或弱提醒。
 - feedback sample 已有基础持久化，但还没有进入 Refiner prompt/few-shot/评估集的自动回收链路。
 
@@ -1646,8 +1646,9 @@ flowchart TD
 - 已新增维护运行记录持久化：`MemoryMaintenanceRunRepositoryPort`、`MemoryMaintenanceRunRecord`、`MemoryMaintenanceRunQuery`、`MemoryMaintenanceRunPage`，JDBC 表 `t_memory_maintenance_run` 与 `JdbcMemoryMaintenanceRunRepositoryAdapter`。`DefaultMemoryMaintenanceService` 每次运行后记录请求开关、compaction 扫描/压缩统计、GC 统计、跳过项、错误和最终状态；记录失败不影响维护执行语义。
 - Web 侧已新增 `GET /memories/maintenance-runs`，支持按 `status` 分页查询维护运行历史，用于排查后台维护和手工维护结果。
 - 已新增可插拔 LLM Refiner 适配器：`LlmMemoryRefinerAdapter` 通过 `ChatModelPort` 调用模型，解析严格 JSON 或 fenced JSON，非法 action/解析失败降级为空结果；Spring 中由 `seahorse-agent-adapter-ai-openai-compatible` 的 `OpenAiCompatibleMemoryRefinerAutoConfiguration` 在 `seahorse-agent.memory.refiner.llm-enabled` 显式开启时注册，kernel starter 只依赖 `MemoryRefinerPort`，且不会绕过现有 `seahorse-agent.memory.refiner.enabled` 执行开关、policy gate 和 REVIEW staging。
-- 已新增 `MemoryReviewApplyDirective`：`KernelMemoryReviewService.approve/modify` 通过 `MemoryIngestionCommand.reviewApply()` 把审核候选的 `requestedAction`、`targetLayer`、`targetKind`、`targetKey`、confidence/importance/value/risk 和合并后的 metadata 带入 `DefaultMemoryEnginePort`。engine 对该路径跳过普通语义重分类，但保留 sanitizer/schema validator，并按 `targetLayer` 写入 `SHORT_TERM`、`LONG_TERM` 或 `SEMANTIC`，按 `PROFILE_SLOT + targetKey` 投影到 Profile KV；DELETE 仍不自动执行。
-- 仍未完成：LLM compactor、canonical entity 驱动的 compaction 分组、Alias 自动合并 job、复杂 alias REVIEW 闭环、真实 Graph 数据库 adapter、审核 DELETE 的安全执行策略。
+- 已新增 `MemoryReviewApplyDirective`：`KernelMemoryReviewService.approve/modify` 通过 `MemoryIngestionCommand.reviewApply()` 把审核候选的 `requestedAction`、`targetLayer`、`targetKind`、`targetKey`、confidence/importance/value/risk 和合并后的 metadata 带入 `DefaultMemoryEnginePort`。engine 对 ADD/UPDATE 路径跳过普通语义重分类，但保留 sanitizer/schema validator，并按 `targetLayer` 写入 `SHORT_TERM`、`LONG_TERM` 或 `SEMANTIC`，按 `PROFILE_SLOT + targetKey` 投影到 Profile KV；DELETE 路径不会写新记忆，而是按目标层逻辑删除目标 memory，并清理派生索引。
+- 已补齐审核 DELETE 的安全执行策略：空内容 DELETE apply 允许以 targetKey 作为审核回放内容；target 缺失时拒绝 apply 并保持候选 pending；成功删除后先调用 `MemoryVectorPort.delete()`，失败则入队 `VECTOR_DELETE`，keyword/graph delete 仍受派生索引开关控制。
+- 仍未完成：LLM compactor、canonical entity 驱动的 compaction 分组、Alias 自动合并 job、复杂 alias REVIEW 闭环、真实 Graph 数据库 adapter。
 
 测试文件：
 

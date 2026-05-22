@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewDecisionCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionStatus;
@@ -122,6 +123,35 @@ class KernelMemoryReviewServiceTests {
     }
 
     @Test
+    void shouldApproveDeleteCandidateWithTargetKeyAsApplyContent() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review(
+                "review-delete",
+                MemoryReviewStatus.PENDING,
+                "",
+                "DELETE",
+                "SHORT_TERM_MEMORY",
+                "stm-old-memory"));
+        RecordingIngestionWorkflow workflow = new RecordingIngestionWorkflow(
+                MemoryIngestionResult.accepted(MemoryIngestionAction.DELETE, List.of("SHORT_TERM_DELETE")));
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                repository,
+                workflow,
+                new RecordingReviewFeedbackRepository());
+
+        MemoryReviewRecord approved = service.approve("review-delete",
+                new MemoryReviewDecisionCommand("auditor", "delete confirmed", "", Map.of()));
+
+        assertThat(approved.reviewStatus()).isEqualTo(MemoryReviewStatus.APPLIED);
+        assertThat(approved.chosenContent()).isEqualTo("stm-old-memory");
+        assertThat(workflow.commands).hasSize(1);
+        assertThat(workflow.commands.get(0).writeRequest().message().getContent()).isEqualTo("stm-old-memory");
+        assertThat(workflow.commands.get(0).reviewApplyDirective().requestedAction())
+                .isEqualTo(MemoryIngestionAction.DELETE);
+        assertThat(workflow.commands.get(0).reviewApplyDirective().targetKey()).isEqualTo("stm-old-memory");
+    }
+
+    @Test
     void shouldRejectCandidateWithoutCallingIngestionWorkflow() {
         InMemoryReviewRepository repository = new InMemoryReviewRepository();
         repository.put(review("review-1", MemoryReviewStatus.PENDING, "do not write"));
@@ -213,6 +243,15 @@ class KernelMemoryReviewServiceTests {
     }
 
     private static MemoryReviewRecord review(String id, MemoryReviewStatus status, String content) {
+        return review(id, status, content, "REVIEW", "PROJECT_FACT", "project.fact");
+    }
+
+    private static MemoryReviewRecord review(String id,
+                                             MemoryReviewStatus status,
+                                             String content,
+                                             String requestedAction,
+                                             String targetKind,
+                                             String targetKey) {
         return new MemoryReviewRecord(
                 id,
                 "operation-1",
@@ -220,10 +259,10 @@ class KernelMemoryReviewServiceTests {
                 "user-1",
                 "conv-1",
                 "msg-1",
-                "REVIEW",
+                requestedAction,
                 "SHORT_TERM",
-                "PROJECT_FACT",
-                "project.fact",
+                targetKind,
+                targetKey,
                 content,
                 0.7D,
                 0.8D,

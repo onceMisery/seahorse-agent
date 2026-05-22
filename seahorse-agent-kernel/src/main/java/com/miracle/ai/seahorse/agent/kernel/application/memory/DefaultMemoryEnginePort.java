@@ -53,6 +53,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
@@ -100,6 +101,11 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String METADATA_SOURCE_MESSAGE_IDS = "sourceMessageIds";
     private static final String METADATA_TARGET_LAYER = "targetLayer";
     private static final String METADATA_REVIEW_REQUESTED_ACTION = "reviewRequestedAction";
+    private static final String METADATA_TARGET_MEMORY_ID = "targetMemoryId";
+    private static final String OPERATION_VECTOR_DELETE = "VECTOR_DELETE";
+    private static final String OPERATION_VECTOR_DELETE_OUTBOX_ENQUEUE = "VECTOR_DELETE_OUTBOX_ENQUEUE";
+    private static final String OPERATION_KEYWORD_DELETE_OUTBOX_ENQUEUE = "KEYWORD_DELETE_OUTBOX_ENQUEUE";
+    private static final String OPERATION_GRAPH_DELETE_OUTBOX_ENQUEUE = "GRAPH_DELETE_OUTBOX_ENQUEUE";
 
     private record IngestionExecution(MemoryIngestionResult result, MemoryClassificationResult classification) {
     }
@@ -383,7 +389,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return MemoryIngestionResult.ignored("invalid_request");
         }
         ChatMessage message = request.message();
-        if (message.getRole() != ChatRole.USER || isBlank(message.getContent())) {
+        boolean reviewDeleteApply = isReviewDeleteApply(command);
+        if (message.getRole() != ChatRole.USER || (isBlank(message.getContent()) && !reviewDeleteApply)) {
             return MemoryIngestionResult.ignored("non_user_or_blank_message");
         }
         String operationId = operationId(command, request);
@@ -445,15 +452,17 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                                 MemoryIngestionCommand command,
                                                 MemoryWriteRequest request,
                                                 ChatMessage message) {
+        MemoryReviewApplyDirective directive = command == null ? null : command.reviewApplyDirective();
+        if (directive != null && directive.requestedAction() == MemoryIngestionAction.DELETE) {
+            return executeReviewDeleteApply(tenantId, request, directive);
+        }
         SanitizedMemoryInput sanitized = memorySanitizer.sanitize(message.getContent());
         if (sanitized.rejected()) {
             return new IngestionExecution(
                     MemoryIngestionResult.rejected(sanitized.reason(), Map.of("signals", sanitized.signals())),
                     null);
         }
-        MemoryClassificationResult reviewClassification = reviewApplyClassification(
-                command.reviewApplyDirective(),
-                sanitized.content());
+        MemoryClassificationResult reviewClassification = reviewApplyClassification(directive, sanitized.content());
         if (reviewClassification != null) {
             if (reviewClassification.action() == MemoryIngestionAction.IGNORE) {
                 return new IngestionExecution(MemoryIngestionResult.rejected(reviewClassification.reason()),
@@ -495,6 +504,42 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     "correctValue", correction.correctValue())), classification);
         }
         return executeAcceptedClassification(operationId, tenantId, request, message, classification);
+    }
+
+    private IngestionExecution executeReviewDeleteApply(String tenantId,
+                                                        MemoryWriteRequest request,
+                                                        MemoryReviewApplyDirective directive) {
+        String targetMemoryId = targetMemoryId(directive);
+        MemoryLayer layer = targetLayer(directive.targetLayer());
+        if (isBlank(targetMemoryId)) {
+            return new IngestionExecution(MemoryIngestionResult.rejected(
+                    "review_delete_target_key_required",
+                    Map.of(
+                            METADATA_REVIEW_REQUESTED_ACTION, MemoryIngestionAction.DELETE.name(),
+                            METADATA_TARGET_LAYER, layer.name())),
+                    null);
+        }
+        boolean deleted = memoryStoreFor(layer).deleteById(targetMemoryId);
+        if (!deleted) {
+            return new IngestionExecution(MemoryIngestionResult.rejected(
+                    "review_delete_target_not_found",
+                    Map.of(
+                            METADATA_REVIEW_REQUESTED_ACTION, MemoryIngestionAction.DELETE.name(),
+                            METADATA_TARGET_LAYER, layer.name(),
+                            METADATA_TARGET_MEMORY_ID, targetMemoryId)),
+                    null);
+        }
+        List<String> operations = new ArrayList<>();
+        operations.add(layer.name() + "_DELETE");
+        operations.addAll(deleteIndexesOrEnqueueOutbox(targetMemoryId, request.userId(), tenantId));
+        return new IngestionExecution(MemoryIngestionResult.accepted(
+                MemoryIngestionAction.DELETE,
+                operations,
+                Map.of(
+                        METADATA_REVIEW_REQUESTED_ACTION, MemoryIngestionAction.DELETE.name(),
+                        METADATA_TARGET_LAYER, layer.name(),
+                        METADATA_TARGET_MEMORY_ID, targetMemoryId)),
+                null);
     }
 
     private IngestionExecution executeAcceptedClassification(String operationId,
@@ -553,6 +598,21 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return operations;
     }
 
+    private List<String> deleteIndexesOrEnqueueOutbox(String memoryId, String userId, String tenantId) {
+        List<String> operations = new ArrayList<>();
+        try {
+            memoryVectorPort.delete(memoryId, userId, tenantId);
+            operations.add(OPERATION_VECTOR_DELETE);
+        } catch (RuntimeException ex) {
+            LOG.warn("记忆向量删除失败，已转入outbox: memoryId={}, userId={}, error={}",
+                    memoryId, userId, Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorDelete(memoryId, userId, tenantId));
+            operations.add(OPERATION_VECTOR_DELETE_OUTBOX_ENQUEUE);
+        }
+        enqueueOptionalDerivedDelete(memoryId, userId, tenantId, operations);
+        return operations;
+    }
+
     private void enqueueOptionalDerivedIndex(MemoryRecord record,
                                              String userId,
                                              String tenantId,
@@ -567,13 +627,24 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
     }
 
+    private void enqueueOptionalDerivedDelete(String memoryId,
+                                              String userId,
+                                              String tenantId,
+                                              List<String> operations) {
+        if (options.keywordIndexOutboxEnabled()) {
+            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.keywordDelete(memoryId, userId, tenantId));
+            operations.add(OPERATION_KEYWORD_DELETE_OUTBOX_ENQUEUE);
+        }
+        if (options.graphIndexOutboxEnabled()) {
+            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.graphDelete(memoryId, userId, tenantId));
+            operations.add(OPERATION_GRAPH_DELETE_OUTBOX_ENQUEUE);
+        }
+    }
+
     private MemoryClassificationResult reviewApplyClassification(MemoryReviewApplyDirective directive,
                                                                  String content) {
         if (directive == null) {
             return null;
-        }
-        if (directive.requestedAction() == MemoryIngestionAction.DELETE) {
-            return MemoryClassificationResult.ignored("review_delete_apply_not_supported");
         }
         String targetKind = isBlank(directive.targetKind()) ? "FACT" : directive.targetKind();
         Map<String, Object> metadata = new LinkedHashMap<>(directive.metadata());
@@ -614,6 +685,17 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
         shortTermPort.save(record);
         return "SHORT_TERM_SAVE";
+    }
+
+    private MemoryStorePort memoryStoreFor(MemoryLayer targetLayer) {
+        MemoryLayer safeLayer = targetLayer == null ? MemoryLayer.SHORT_TERM : targetLayer;
+        if (safeLayer == MemoryLayer.LONG_TERM) {
+            return longTermPort;
+        }
+        if (safeLayer == MemoryLayer.SEMANTIC) {
+            return semanticPort;
+        }
+        return shortTermPort;
     }
 
     private MemoryLayer targetLayer(MemoryClassificationResult classification) {
@@ -1195,6 +1277,22 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return command.operationId();
         }
         return new MemoryIngestionCommand(request).operationId();
+    }
+
+    private boolean isReviewDeleteApply(MemoryIngestionCommand command) {
+        MemoryReviewApplyDirective directive = command == null ? null : command.reviewApplyDirective();
+        return directive != null && directive.requestedAction() == MemoryIngestionAction.DELETE;
+    }
+
+    private String targetMemoryId(MemoryReviewApplyDirective directive) {
+        if (directive == null) {
+            return "";
+        }
+        Object metadataTarget = directive.metadata().get(METADATA_TARGET_MEMORY_ID);
+        if (metadataTarget != null && !metadataTarget.toString().isBlank()) {
+            return metadataTarget.toString().trim();
+        }
+        return directive.targetKey();
     }
 
     private String tenantId(MemoryIngestionCommand command) {

@@ -1150,6 +1150,119 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldApplyReviewDirectiveDeleteTargetMemoryAndDerivedIndexes() {
+        MemoryRecord existing = new MemoryRecord(
+                "stm-old-memory",
+                "SHORT_TERM",
+                "SHORT_TERM_MEMORY",
+                "obsolete memory",
+                Map.of("userId", USER_ID, "tenantId", "tenant-1"),
+                Instant.now());
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(existing));
+        RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                new MemoryEngineOptions(5, 3, 10, true, false, true, true, true),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort,
+                new ThrowingMemoryVectorPort(),
+                outboxPort,
+                MemoryBusinessDocumentRetrieverPort.noop());
+
+        var result = engine.ingest(MemoryIngestionCommand.reviewApply(
+                "op-review-delete",
+                "tenant-1",
+                "memory-review-approve",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-review-delete")
+                        .messageId("msg-review-delete")
+                        .message(ChatMessage.user(""))
+                        .build(),
+                new MemoryReviewApplyDirective(
+                        MemoryIngestionAction.DELETE,
+                        "SHORT_TERM",
+                        "SHORT_TERM_MEMORY",
+                        "stm-old-memory",
+                        0.95D,
+                        0.40D,
+                        0.50D,
+                        0.10D,
+                        List.of("msg-original"),
+                        Map.of())));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.DELETE, result.action());
+        Assertions.assertTrue(result.operations().contains("SHORT_TERM_DELETE"));
+        Assertions.assertTrue(result.operations().contains("VECTOR_DELETE_OUTBOX_ENQUEUE"));
+        Assertions.assertTrue(result.operations().contains("KEYWORD_DELETE_OUTBOX_ENQUEUE"));
+        Assertions.assertTrue(result.operations().contains("GRAPH_DELETE_OUTBOX_ENQUEUE"));
+        Assertions.assertEquals(List.of("stm-old-memory"), shortTermPort.deletedIds);
+        Assertions.assertEquals(List.of("VECTOR_DELETE", "KEYWORD_DELETE", "GRAPH_DELETE"),
+                outboxPort.tasks.stream().map(MemoryOutboxPort.MemoryOutboxTask::taskType).toList());
+        Assertions.assertEquals(MemoryOperationType.DELETE, operationLogPort.started.get(0).operationType());
+        Assertions.assertEquals("SHORT_TERM_MEMORY", operationLogPort.started.get(0).targetKind());
+        Assertions.assertEquals("stm-old-memory", operationLogPort.started.get(0).targetKey());
+        Assertions.assertEquals(MemoryOperationStatus.SUCCEEDED,
+                operationLogPort.statusById.get("op-review-delete"));
+    }
+
+    @Test
+    void shouldRejectReviewDirectiveDeleteWhenTargetMemoryIsMissing() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort,
+                MemoryVectorPort.noop(),
+                outboxPort,
+                MemoryBusinessDocumentRetrieverPort.noop());
+
+        var result = engine.ingest(MemoryIngestionCommand.reviewApply(
+                "op-review-delete-missing",
+                "tenant-1",
+                "memory-review-approve",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-review-delete")
+                        .messageId("msg-review-delete")
+                        .message(ChatMessage.user("delete missing memory"))
+                        .build(),
+                new MemoryReviewApplyDirective(
+                        MemoryIngestionAction.DELETE,
+                        "SHORT_TERM",
+                        "SHORT_TERM_MEMORY",
+                        "stm-missing",
+                        0.95D,
+                        0.40D,
+                        0.50D,
+                        0.10D,
+                        List.of("msg-original"),
+                        Map.of())));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals("review_delete_target_not_found", result.reason());
+        Assertions.assertTrue(shortTermPort.deletedIds.isEmpty());
+        Assertions.assertTrue(outboxPort.tasks.isEmpty());
+        Assertions.assertEquals(MemoryOperationStatus.REJECTED,
+                operationLogPort.statusById.get("op-review-delete-missing"));
+    }
+
+    @Test
     void shouldEnqueueOutboxWhenVectorIndexingFailsWithoutRollingBackMemoryWrite() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
@@ -1480,6 +1593,7 @@ class DefaultMemoryEnginePortTests {
     private static class StubShortTermMemoryPort implements ShortTermMemoryPort {
         private final List<MemoryRecord> records;
         private final List<MemoryRecord> savedRecords = new java.util.ArrayList<>();
+        private final List<String> deletedIds = new ArrayList<>();
         private int lastListByUserLimit;
 
         StubShortTermMemoryPort(List<MemoryRecord> records) {
@@ -1509,12 +1623,17 @@ class DefaultMemoryEnginePortTests {
 
         @Override
         public boolean deleteById(String id) {
-            return false;
+            boolean exists = records.stream().anyMatch(r -> r.id().equals(id));
+            if (exists) {
+                deletedIds.add(id);
+            }
+            return exists;
         }
     }
 
     private static class StubLongTermMemoryPort implements LongTermMemoryPort {
         private final List<MemoryRecord> records;
+        private final List<String> deletedIds = new ArrayList<>();
         private int lastListByUserLimit;
 
         StubLongTermMemoryPort(List<MemoryRecord> records) {
@@ -1543,13 +1662,18 @@ class DefaultMemoryEnginePortTests {
 
         @Override
         public boolean deleteById(String id) {
-            return false;
+            boolean exists = records.stream().anyMatch(r -> r.id().equals(id));
+            if (exists) {
+                deletedIds.add(id);
+            }
+            return exists;
         }
     }
 
     private static class StubSemanticMemoryPort implements SemanticMemoryPort {
         private final List<MemoryRecord> records;
         private final List<MemoryRecord> savedRecords = new java.util.ArrayList<>();
+        private final List<String> deletedIds = new ArrayList<>();
         private int lastListByUserLimit;
 
         StubSemanticMemoryPort(List<MemoryRecord> records) {
@@ -1579,7 +1703,11 @@ class DefaultMemoryEnginePortTests {
 
         @Override
         public boolean deleteById(String id) {
-            return false;
+            boolean exists = records.stream().anyMatch(r -> r.id().equals(id));
+            if (exists) {
+                deletedIds.add(id);
+            }
+            return exists;
         }
     }
 
