@@ -839,6 +839,47 @@ class JdbcMemoryRepositoryAdapterTests {
     }
 
     @Test
+    void shouldBoostDurableMemoryConfidenceWhenRecordReadTouchesLongTermAndSemanticRows() {
+        jdbcTemplate.update("""
+                INSERT INTO t_long_term_memory
+                (id, user_id, tenant_id, memory_category, title, content, source_type, source_ids, tags,
+                 importance_score, confidence_level, status, last_referenced_at, update_time, create_time, deleted)
+                VALUES ('ltm-read-feedback', 'user-1', 'tenant-1', 'PROJECT_FACT', 'runtime', 'uses Java 17',
+                        'short_term', '[]', '{}', 0.8, 0.45, 'ACTIVE', NULL,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """);
+        jdbcTemplate.update("""
+                INSERT INTO t_semantic_memory
+                (id, user_id, tenant_id, semantic_key, semantic_type, value_json, confidence_level, source_memory_ids,
+                 status, last_referenced_at, update_time, create_time, deleted)
+                VALUES ('sem-read-feedback', 'user-1', 'tenant-1', 'project.runtime', 'PROJECT_FACT',
+                        '{"content":"uses Java 17"}', 0.85, '[]', 'ACTIVE', NULL,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """);
+
+        Instant referencedAt = Instant.parse("2026-05-21T00:00:00Z");
+        lifecycleAdapter.recordRead("long_term", "ltm-read-feedback", referencedAt);
+        lifecycleAdapter.recordRead("semantic", "sem-read-feedback", referencedAt);
+
+        Map<String, Object> longTermRow = jdbcTemplate.queryForMap("""
+                SELECT confidence_level, last_referenced_at, status
+                FROM t_long_term_memory
+                WHERE id = 'ltm-read-feedback'
+                """);
+        Map<String, Object> semanticRow = jdbcTemplate.queryForMap("""
+                SELECT confidence_level, last_referenced_at, status
+                FROM t_semantic_memory
+                WHERE id = 'sem-read-feedback'
+                """);
+        assertThat(((Number) longTermRow.get("CONFIDENCE_LEVEL")).doubleValue()).isEqualTo(0.75D);
+        assertThat(longTermRow.get("LAST_REFERENCED_AT")).isNotNull();
+        assertThat(longTermRow.get("STATUS")).isEqualTo("REFERENCED");
+        assertThat(((Number) semanticRow.get("CONFIDENCE_LEVEL")).doubleValue()).isEqualTo(1.0D);
+        assertThat(semanticRow.get("LAST_REFERENCED_AT")).isNotNull();
+        assertThat(semanticRow.get("STATUS")).isEqualTo("REFERENCED");
+    }
+
+    @Test
     void shouldMarkProfileSlotFragmentsObsoleteAcrossLayeredStores() {
         shortTermAdapter.save(new MemoryRecord("stm-profile", "short_term", "PROFILE", "student",
                 Map.of("userId", "user-1", "tenantId", "default", "profileSlot", "identity.occupation",

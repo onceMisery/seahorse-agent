@@ -42,6 +42,8 @@ public class JdbcMemoryLifecycleRepositoryAdapter
     private static final String DEFAULT_TENANT_ID = "default";
     private static final int DEFAULT_SCAN_LIMIT = 100;
     private static final int DEFAULT_COMPACTION_MIN_GROUP_SIZE = 3;
+    private static final double READ_CONFIDENCE_BOOST = 0.30D;
+    private static final double MAX_CONFIDENCE_LEVEL = 1.0D;
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -81,6 +83,8 @@ public class JdbcMemoryLifecycleRepositoryAdapter
         if (table.isBlank()) {
             return;
         }
+        Instant safeReferencedAt = Objects.requireNonNullElseGet(referencedAt, Instant::now);
+        Instant now = Instant.now();
         jdbcTemplate.update("""
                 UPDATE %s
                 SET last_referenced_at = ?,
@@ -90,8 +94,8 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                   AND deleted = 0
                   AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 """.formatted(table),
-                JdbcMemorySupport.timestamp(Objects.requireNonNullElseGet(referencedAt, Instant::now)),
-                JdbcMemorySupport.timestamp(Instant.now()),
+                JdbcMemorySupport.timestamp(safeReferencedAt),
+                JdbcMemorySupport.timestamp(now),
                 memoryId);
         if ("t_short_term_memory".equals(table)) {
             jdbcTemplate.update("""
@@ -102,9 +106,26 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                       AND deleted = 0
                       AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                     """,
-                    JdbcMemorySupport.timestamp(Objects.requireNonNullElseGet(referencedAt, Instant::now)),
+                    JdbcMemorySupport.timestamp(safeReferencedAt),
+                    memoryId);
+        } else if (isDurableMemoryTable(table)) {
+            jdbcTemplate.update("""
+                    UPDATE %s
+                    SET confidence_level = LEAST(?, COALESCE(confidence_level, 0) + ?),
+                        update_time = ?
+                    WHERE id = ?
+                      AND deleted = 0
+                      AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
+                    """.formatted(table),
+                    MAX_CONFIDENCE_LEVEL,
+                    READ_CONFIDENCE_BOOST,
+                    JdbcMemorySupport.timestamp(now),
                     memoryId);
         }
+    }
+
+    private boolean isDurableMemoryTable(String table) {
+        return "t_long_term_memory".equals(table) || "t_semantic_memory".equals(table);
     }
 
     @Override
