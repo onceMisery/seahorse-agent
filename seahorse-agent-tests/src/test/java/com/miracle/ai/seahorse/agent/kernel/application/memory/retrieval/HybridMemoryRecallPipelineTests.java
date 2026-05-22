@@ -312,6 +312,8 @@ class HybridMemoryRecallPipelineTests {
         assertThat(reranker.requests).hasSize(1);
         assertThat(reranker.inputs.get(0)).extracting(MemoryRecallCandidate::memoryId)
                 .containsExactly("semantic-first", "semantic-reranked");
+        assertThat(reranker.inputs.get(0)).extracting(MemoryRecallCandidate::content)
+                .containsExactly("First fused memory.", "Reranked memory.");
         assertThat(context.getSemanticMemories()).extracting(MemoryItem::getId)
                 .containsExactly("semantic-reranked", "semantic-first");
         assertThat(context.getSemanticMemories()).extracting(MemoryItem::getRelevanceScore)

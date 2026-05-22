@@ -381,15 +381,44 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
+        List<MemoryRecallCandidate> rerankInputs = candidates.stream()
+                .map(this::enrichCandidateForRerank)
+                .toList();
         try {
-            List<MemoryRecallCandidate> reranked = recallRerankerPort.rerank(request, candidates);
-            return reranked == null ? candidates : reranked.stream()
+            List<MemoryRecallCandidate> reranked = recallRerankerPort.rerank(request, rerankInputs);
+            return reranked == null ? rerankInputs : reranked.stream()
                     .filter(Objects::nonNull)
                     .toList();
         } catch (RuntimeException ex) {
             LOG.debug("memory recall reranker failed: userId={}, query={}", request.userId(), request.query(), ex);
-            return candidates;
+            return rerankInputs;
         }
+    }
+
+    private MemoryRecallCandidate enrichCandidateForRerank(MemoryRecallCandidate candidate) {
+        if (candidate == null || !candidate.content().isBlank()) {
+            return candidate;
+        }
+        Optional<MemoryRecord> record = findMemoryById(candidate.memoryId(), candidate.layer());
+        if (record.isEmpty() || !generationMatches(candidate, record.get())) {
+            return candidate;
+        }
+        MemoryRecord memoryRecord = record.get();
+        Map<String, Object> metadata = new LinkedHashMap<>(memoryRecord.metadata());
+        metadata.putAll(candidate.metadata());
+        return new MemoryRecallCandidate(
+                candidate.memoryId(),
+                candidate.channel(),
+                candidate.rank(),
+                candidate.rawScore(),
+                candidate.userId(),
+                candidate.tenantId(),
+                isBlank(candidate.layer()) ? memoryRecord.layer() : candidate.layer(),
+                isBlank(candidate.type()) ? memoryRecord.type() : candidate.type(),
+                memoryRecord.content(),
+                candidate.generationId(),
+                candidate.status(),
+                metadata);
     }
 
     private AliasResolvedQuery resolveRecallAlias(String userId, String query) {
