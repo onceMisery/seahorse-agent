@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceTaskOutcome;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolutionRunResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
@@ -138,20 +139,34 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 : command;
         List<String> skippedTasks = new ArrayList<>();
         List<String> errors = new ArrayList<>();
-        MemoryCompactionResult compactionResult = runCompaction(safeCommand, skippedTasks, errors);
-        MemoryAliasResolutionRunResult aliasResolutionResult = runAliasResolution(safeCommand, skippedTasks, errors);
+        List<MemoryMaintenanceTaskOutcome> taskOutcomes = new ArrayList<>();
+        MemoryCompactionResult compactionResult = runCompaction(safeCommand, skippedTasks, errors, taskOutcomes);
+        MemoryAliasResolutionRunResult aliasResolutionResult = runAliasResolution(
+                safeCommand, skippedTasks, errors, taskOutcomes);
         MemoryGarbageCollectionResult garbageCollectionResult = null;
         if (safeCommand.garbageCollectionEnabled()) {
             if (garbageCollectionEnabled && garbageCollectionService != null) {
                 try {
                     garbageCollectionResult = garbageCollectionService.run(safeCommand.reason());
                     errors.addAll(garbageCollectionResult.errors());
+                    taskOutcomes.add(outcomeFromErrors(
+                            MemoryMaintenanceTaskOutcome.TASK_GARBAGE_COLLECTION,
+                            garbageCollectionResult.errors()));
                 } catch (RuntimeException ex) {
-                    errors.add("garbageCollection:" + errorMessage(ex));
+                    String message = errorMessage(ex);
+                    errors.add("garbageCollection:" + message);
+                    taskOutcomes.add(MemoryMaintenanceTaskOutcome.failed(
+                            MemoryMaintenanceTaskOutcome.TASK_GARBAGE_COLLECTION, message));
                 }
             } else {
                 skippedTasks.add(MemoryMaintenanceRunResult.SKIP_GARBAGE_COLLECTION_DISABLED);
+                taskOutcomes.add(MemoryMaintenanceTaskOutcome.skipped(
+                        MemoryMaintenanceTaskOutcome.TASK_GARBAGE_COLLECTION,
+                        MemoryMaintenanceRunResult.SKIP_GARBAGE_COLLECTION_DISABLED));
             }
+        } else {
+            taskOutcomes.add(MemoryMaintenanceTaskOutcome.notRequested(
+                    MemoryMaintenanceTaskOutcome.TASK_GARBAGE_COLLECTION));
         }
         MemoryMaintenanceRunResult result = new MemoryMaintenanceRunResult(
                 safeCommand.reason(),
@@ -163,6 +178,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 garbageCollectionResult,
                 skippedTasks,
                 errors,
+                taskOutcomes,
                 Instant.now());
         persistRunRecord(result);
         recordTrace(result, compactionResult, aliasResolutionResult, garbageCollectionResult);
@@ -171,40 +187,59 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
 
     private MemoryCompactionResult runCompaction(MemoryMaintenanceRunCommand command,
                                                  List<String> skippedTasks,
-                                                 List<String> errors) {
+                                                 List<String> errors,
+                                                 List<MemoryMaintenanceTaskOutcome> taskOutcomes) {
         if (!command.compactionEnabled()) {
+            taskOutcomes.add(MemoryMaintenanceTaskOutcome.notRequested(
+                    MemoryMaintenanceTaskOutcome.TASK_COMPACTION));
             return null;
         }
         if (!compactionEnabled || compactionService == null) {
             skippedTasks.add(MemoryMaintenanceRunResult.SKIP_COMPACTION_UNAVAILABLE);
+            taskOutcomes.add(MemoryMaintenanceTaskOutcome.skipped(
+                    MemoryMaintenanceTaskOutcome.TASK_COMPACTION,
+                    MemoryMaintenanceRunResult.SKIP_COMPACTION_UNAVAILABLE));
             return null;
         }
         try {
             MemoryCompactionResult result = compactionService.run(command.reason());
             errors.addAll(result.errors());
+            taskOutcomes.add(outcomeFromErrors(MemoryMaintenanceTaskOutcome.TASK_COMPACTION, result.errors()));
             return result;
         } catch (RuntimeException ex) {
-            errors.add("compaction:" + errorMessage(ex));
+            String message = errorMessage(ex);
+            errors.add("compaction:" + message);
+            taskOutcomes.add(MemoryMaintenanceTaskOutcome.failed(
+                    MemoryMaintenanceTaskOutcome.TASK_COMPACTION, message));
             return null;
         }
     }
 
     private MemoryAliasResolutionRunResult runAliasResolution(MemoryMaintenanceRunCommand command,
                                                               List<String> skippedTasks,
-                                                              List<String> errors) {
+                                                              List<String> errors,
+                                                              List<MemoryMaintenanceTaskOutcome> taskOutcomes) {
         if (!command.aliasEnabled()) {
+            taskOutcomes.add(MemoryMaintenanceTaskOutcome.notRequested(MemoryMaintenanceTaskOutcome.TASK_ALIAS));
             return null;
         }
         if (!aliasEnabled || aliasResolutionService == null) {
             skippedTasks.add(MemoryMaintenanceRunResult.SKIP_ALIAS_UNAVAILABLE);
+            taskOutcomes.add(MemoryMaintenanceTaskOutcome.skipped(
+                    MemoryMaintenanceTaskOutcome.TASK_ALIAS,
+                    MemoryMaintenanceRunResult.SKIP_ALIAS_UNAVAILABLE));
             return null;
         }
         try {
             MemoryAliasResolutionRunResult result = aliasResolutionService.run(command.reason());
             errors.addAll(result.errors());
+            taskOutcomes.add(outcomeFromErrors(MemoryMaintenanceTaskOutcome.TASK_ALIAS, result.errors()));
             return result;
         } catch (RuntimeException ex) {
-            errors.add("alias:" + errorMessage(ex));
+            String message = errorMessage(ex);
+            errors.add("alias:" + message);
+            taskOutcomes.add(MemoryMaintenanceTaskOutcome.failed(
+                    MemoryMaintenanceTaskOutcome.TASK_ALIAS, message));
             return null;
         }
     }
@@ -253,6 +288,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
         details.put("garbageCollectionEnabled", result.garbageCollectionEnabled());
         details.put("skippedTasks", result.skippedTasks());
         details.put("errors", result.errors());
+        details.put("taskOutcomes", result.taskOutcomes());
         if (compactionResult != null) {
             details.put("compactionScannedCount", compactionResult.scannedGroupCount());
             details.put("compactionGroupCount", compactionResult.compactedGroupCount());
@@ -295,5 +331,13 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
 
     private String errorMessage(RuntimeException ex) {
         return ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage();
+    }
+
+    private MemoryMaintenanceTaskOutcome outcomeFromErrors(String task, List<String> errors) {
+        List<String> safeErrors = List.copyOf(Objects.requireNonNullElse(errors, List.of()));
+        if (safeErrors.isEmpty()) {
+            return MemoryMaintenanceTaskOutcome.succeeded(task);
+        }
+        return MemoryMaintenanceTaskOutcome.failed(task, String.join(";", safeErrors));
     }
 }

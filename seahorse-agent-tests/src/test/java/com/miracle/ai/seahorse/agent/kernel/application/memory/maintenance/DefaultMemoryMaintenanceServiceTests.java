@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceTaskOutcome;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolutionRunResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
@@ -38,6 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 class DefaultMemoryMaintenanceServiceTests {
 
@@ -229,6 +231,44 @@ class DefaultMemoryMaintenanceServiceTests {
         assertThat(traceRecorder.events.get(0).status()).isEqualTo(MemoryTraceEvent.STATUS_SUCCESS);
     }
 
+    @Test
+    void shouldContinueMaintenanceAndExposeTaskOutcomesWhenOneTrackFails() {
+        ThrowingCompactionService compactionService = new ThrowingCompactionService();
+        RecordingAliasResolutionService aliasResolutionService = new RecordingAliasResolutionService();
+        RecordingGarbageCollectionService garbageCollectionService = new RecordingGarbageCollectionService();
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                garbageCollectionService,
+                compactionService,
+                aliasResolutionService,
+                MemoryMaintenanceRunRepositoryPort.noop(),
+                traceRecorder,
+                true,
+                true,
+                true);
+
+        MemoryMaintenanceRunResult result = service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "scheduled-maintenance",
+                true,
+                true,
+                true));
+
+        assertThat(compactionService.reasons).containsExactly("scheduled-maintenance");
+        assertThat(aliasResolutionService.reasons).containsExactly("scheduled-maintenance");
+        assertThat(garbageCollectionService.reasons).containsExactly("scheduled-maintenance");
+        assertThat(result.errors()).containsExactly("compaction:compaction boom");
+        assertThat(result.taskOutcomes())
+                .extracting(MemoryMaintenanceTaskOutcome::task, MemoryMaintenanceTaskOutcome::status)
+                .containsExactly(
+                        tuple(MemoryMaintenanceTaskOutcome.TASK_COMPACTION, MemoryMaintenanceTaskOutcome.STATUS_FAILED),
+                        tuple(MemoryMaintenanceTaskOutcome.TASK_ALIAS, MemoryMaintenanceTaskOutcome.STATUS_SUCCEEDED),
+                        tuple(MemoryMaintenanceTaskOutcome.TASK_GARBAGE_COLLECTION,
+                                MemoryMaintenanceTaskOutcome.STATUS_SUCCEEDED));
+        assertThat(traceRecorder.events).hasSize(1);
+        assertThat(traceRecorder.events.get(0).status()).isEqualTo(MemoryTraceEvent.STATUS_FAILED);
+        assertThat(traceRecorder.events.get(0).details().get("taskOutcomes")).isEqualTo(result.taskOutcomes());
+    }
+
     private static class RecordingGarbageCollectionService extends MemoryGarbageCollectionService {
 
         private final List<String> reasons = new ArrayList<>();
@@ -265,6 +305,21 @@ class DefaultMemoryMaintenanceServiceTests {
         public MemoryCompactionResult run(String reason) {
             reasons.add(reason);
             return new MemoryCompactionResult(reason, 1, 1, 2, List.of(), Instant.EPOCH);
+        }
+    }
+
+    private static class ThrowingCompactionService extends MemoryCompactionService {
+
+        private final List<String> reasons = new ArrayList<>();
+
+        private ThrowingCompactionService() {
+            super();
+        }
+
+        @Override
+        public MemoryCompactionResult run(String reason) {
+            reasons.add(reason);
+            throw new IllegalStateException("compaction boom");
         }
     }
 

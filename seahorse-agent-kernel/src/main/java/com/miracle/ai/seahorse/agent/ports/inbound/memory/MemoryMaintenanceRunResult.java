@@ -35,6 +35,7 @@ public record MemoryMaintenanceRunResult(
         MemoryGarbageCollectionResult garbageCollectionResult,
         List<String> skippedTasks,
         List<String> errors,
+        List<MemoryMaintenanceTaskOutcome> taskOutcomes,
         Instant executedAt
 ) {
 
@@ -60,6 +61,7 @@ public record MemoryMaintenanceRunResult(
                 garbageCollectionResult,
                 skippedTasks,
                 errors,
+                List.of(),
                 executedAt);
     }
 
@@ -80,6 +82,7 @@ public record MemoryMaintenanceRunResult(
                 garbageCollectionResult,
                 skippedTasks,
                 errors,
+                List.of(),
                 executedAt);
     }
 
@@ -90,6 +93,7 @@ public record MemoryMaintenanceRunResult(
         }
         skippedTasks = List.copyOf(Objects.requireNonNullElse(skippedTasks, List.of()));
         errors = List.copyOf(Objects.requireNonNullElse(errors, List.of()));
+        taskOutcomes = List.copyOf(Objects.requireNonNullElse(taskOutcomes, List.of()));
         executedAt = Objects.requireNonNullElseGet(executedAt, Instant::now);
     }
 }

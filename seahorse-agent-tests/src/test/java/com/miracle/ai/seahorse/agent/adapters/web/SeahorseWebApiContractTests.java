@@ -48,6 +48,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceTaskOutcome;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationReport;
@@ -440,7 +441,9 @@ class SeahorseWebApiContractTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.reason").value("manual-maintenance"))
-                .andExpect(jsonPath("$.data.garbageCollectionResult.reason").value("manual-maintenance"));
+                .andExpect(jsonPath("$.data.garbageCollectionResult.reason").value("manual-maintenance"))
+                .andExpect(jsonPath("$.data.taskOutcomes[0].task").value("garbageCollection"))
+                .andExpect(jsonPath("$.data.taskOutcomes[0].status").value("SUCCEEDED"));
         ArgumentCaptor<MemoryMaintenanceRunCommand> maintenanceCaptor =
                 ArgumentCaptor.forClass(MemoryMaintenanceRunCommand.class);
         verify(maintenancePort).runMaintenance(maintenanceCaptor.capture());
@@ -2026,9 +2029,13 @@ class SeahorseWebApiContractTests {
                 false,
                 false,
                 true,
+                null,
+                null,
                 new MemoryGarbageCollectionResult(reason, 1, 1, 1, false, List.of(), Instant.EPOCH),
                 List.of(),
                 List.of(),
+                List.of(MemoryMaintenanceTaskOutcome.succeeded(
+                        MemoryMaintenanceTaskOutcome.TASK_GARBAGE_COLLECTION)),
                 Instant.EPOCH);
     }
 
