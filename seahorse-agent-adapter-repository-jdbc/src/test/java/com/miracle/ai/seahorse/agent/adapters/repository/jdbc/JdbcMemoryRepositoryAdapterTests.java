@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JdbcMemoryRepositoryAdapterTests {
 
@@ -644,6 +645,58 @@ class JdbcMemoryRepositoryAdapterTests {
         assertThat(reviewCandidateAdapter.pageReviewCandidates(
                 new MemoryReviewQuery("default", "user-1", MemoryReviewStatus.PENDING, 1, 10)).records())
                 .isEmpty();
+    }
+
+    @Test
+    void shouldRejectStaleMemoryReviewDecisionWithoutOverwritingReviewedCandidate() {
+        reviewCandidateAdapter.save(new MemoryReviewCandidate(
+                "review-op-1",
+                "op-1",
+                "default",
+                "user-1",
+                "conv-1",
+                "msg-1",
+                MemoryIngestionAction.REVIEW,
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.ambiguous",
+                "user might be changing the project stack",
+                0.62D,
+                0.70D,
+                0.70D,
+                0.20D,
+                "needs_review",
+                java.util.List.of("msg-1"),
+                Map.of("reviewReason", "low_confidence"),
+                Instant.now()));
+
+        reviewCandidateAdapter.applyReviewDecision(new MemoryReviewDecision(
+                "review-op-1",
+                MemoryReviewStatus.APPLIED,
+                "auditor-1",
+                "approved",
+                "approved content",
+                Map.of("source", "human"),
+                "memory-review-apply-review-op-1",
+                "SHORT_TERM"));
+
+        assertThatThrownBy(() -> reviewCandidateAdapter.applyReviewDecision(new MemoryReviewDecision(
+                "review-op-1",
+                MemoryReviewStatus.REJECTED,
+                "auditor-2",
+                "stale reject",
+                "",
+                Map.of(),
+                "",
+                "")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("review candidate is not pending");
+
+        MemoryReviewRecord stored = reviewCandidateAdapter.findReviewItem("review-op-1").orElseThrow();
+        assertThat(stored.reviewStatus()).isEqualTo(MemoryReviewStatus.APPLIED);
+        assertThat(stored.reviewerId()).isEqualTo("auditor-1");
+        assertThat(stored.reviewComment()).isEqualTo("approved");
+        assertThat(stored.chosenContent()).isEqualTo("approved content");
     }
 
     @Test

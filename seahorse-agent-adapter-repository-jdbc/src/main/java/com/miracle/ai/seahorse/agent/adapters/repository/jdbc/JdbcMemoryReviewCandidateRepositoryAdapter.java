@@ -131,7 +131,7 @@ public class JdbcMemoryReviewCandidateRepositoryAdapter implements MemoryReviewM
                     reviewed_memory_id = ?,
                     reviewed_layer = ?,
                     update_time = ?
-                WHERE id = ? AND deleted = 0
+                WHERE id = ? AND deleted = 0 AND review_status = ?
                 """,
                 decision.reviewStatus().name(),
                 decision.reviewerId(),
@@ -141,9 +141,13 @@ public class JdbcMemoryReviewCandidateRepositoryAdapter implements MemoryReviewM
                 decision.reviewedMemoryId(),
                 decision.reviewedLayer(),
                 JdbcMemorySupport.timestamp(Instant.now()),
-                decision.candidateId());
+                decision.candidateId(),
+                STATUS_PENDING.name());
         if (updated == 0) {
-            throw new IllegalArgumentException("memory review candidate not found: " + decision.candidateId());
+            MemoryReviewRecord current = findReviewItem(decision.candidateId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "memory review candidate not found: " + decision.candidateId()));
+            throw new IllegalStateException("review candidate is not pending: " + current.candidateId());
         }
         return findReviewItem(decision.candidateId())
                 .orElseThrow(() -> new IllegalArgumentException(
