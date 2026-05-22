@@ -32,10 +32,12 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, MemoryGraphIndexPort {
 
@@ -114,14 +116,28 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
             return List.of();
         }
         int limit = Math.max(1, request.topK());
-        List<MemoryRecallCandidate> candidates = new ArrayList<>();
-        for (String entityId : entityIds) {
-            candidates.addAll(recallByEntity(request.userId(), safeTenantId, entityId, limit));
-            if (candidates.size() >= limit) {
-                break;
+        int safeMaxHops = Math.max(1, maxHops);
+        Map<String, MemoryRecallCandidate> candidates = new LinkedHashMap<>();
+        Set<String> visitedEntities = new LinkedHashSet<>(entityIds);
+        List<String> frontier = entityIds;
+        for (int hop = 1; hop <= safeMaxHops && !frontier.isEmpty() && candidates.size() < limit; hop++) {
+            List<String> nextFrontier = new ArrayList<>();
+            for (String entityId : frontier) {
+                List<MemoryRecallCandidate> hits = recallByEntity(request.userId(), safeTenantId, entityId, limit, hop);
+                for (MemoryRecallCandidate hit : hits) {
+                    candidates.putIfAbsent(hit.memoryId(), hit);
+                    expandFrontier(hit, visitedEntities, nextFrontier);
+                    if (candidates.size() >= limit) {
+                        break;
+                    }
+                }
+                if (candidates.size() >= limit) {
+                    break;
+                }
             }
+            frontier = nextFrontier;
         }
-        return candidates.stream()
+        return candidates.values().stream()
                 .limit(limit)
                 .toList();
     }
@@ -160,7 +176,11 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
                 JdbcMemorySupport.timestamp(now));
     }
 
-    private List<MemoryRecallCandidate> recallByEntity(String userId, String tenantId, String entityId, int limit) {
+    private List<MemoryRecallCandidate> recallByEntity(String userId,
+                                                       String tenantId,
+                                                       String entityId,
+                                                       int limit,
+                                                       int hopDistance) {
         return jdbcTemplate.query("""
                 SELECT memory_id, layer_name, memory_type, content, source_entity_id, target_entity_id, relation_type,
                        weight, confidence_level, metadata_json, status
@@ -172,7 +192,7 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
                   AND (source_entity_id = ? OR target_entity_id = ?)
                 ORDER BY weight DESC, confidence_level DESC, update_time DESC
                 LIMIT ?
-                """, (rs, rowNum) -> mapCandidate(rs, userId, tenantId, rowNum + 1),
+                """, (rs, rowNum) -> mapCandidate(rs, userId, tenantId, rowNum + 1, hopDistance),
                 userId,
                 tenantId,
                 entityId,
@@ -180,7 +200,11 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
                 limit);
     }
 
-    private MemoryRecallCandidate mapCandidate(ResultSet rs, String userId, String tenantId, int rank)
+    private MemoryRecallCandidate mapCandidate(ResultSet rs,
+                                               String userId,
+                                               String tenantId,
+                                               int rank,
+                                               int hopDistance)
             throws SQLException {
         Map<String, Object> metadata = new LinkedHashMap<>(JdbcMemorySupport.parseJson(
                 objectMapper,
@@ -189,7 +213,8 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
         metadata.put("targetEntityId", rs.getString("target_entity_id"));
         metadata.put("relationType", rs.getString("relation_type"));
         metadata.put("graphMatch", "alias");
-        double score = rs.getDouble("weight") * rs.getDouble("confidence_level");
+        metadata.put("hopDistance", hopDistance);
+        double score = (rs.getDouble("weight") * rs.getDouble("confidence_level")) / Math.max(1, hopDistance);
         return new MemoryRecallCandidate(
                 rs.getString("memory_id"),
                 CHANNEL,
@@ -203,6 +228,20 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
                 "",
                 rs.getString("status"),
                 metadata);
+    }
+
+    private void expandFrontier(MemoryRecallCandidate candidate,
+                                Set<String> visitedEntities,
+                                List<String> nextFrontier) {
+        addEntity(candidate.metadata().get("canonicalEntityId"), visitedEntities, nextFrontier);
+        addEntity(candidate.metadata().get("targetEntityId"), visitedEntities, nextFrontier);
+    }
+
+    private void addEntity(Object value, Set<String> visitedEntities, List<String> nextFrontier) {
+        String entityId = text(value);
+        if (JdbcMemorySupport.hasText(entityId) && visitedEntities.add(entityId)) {
+            nextFrontier.add(entityId);
+        }
     }
 
     private List<String> entityIdsFromQuery(String userId, String tenantId, String query) {
