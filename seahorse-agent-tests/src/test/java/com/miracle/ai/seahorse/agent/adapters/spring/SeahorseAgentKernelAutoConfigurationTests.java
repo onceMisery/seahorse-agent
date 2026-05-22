@@ -95,6 +95,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenan
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceInboundPort;
@@ -161,6 +162,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFusionPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphIndexPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordIndexPort;
@@ -173,7 +175,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResul
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
@@ -225,8 +232,10 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.concurrent.Executor;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -808,6 +817,37 @@ class SeahorseAgentKernelAutoConfigurationTests {
                                     10L)
                             .records())
                             .isEmpty();
+                });
+    }
+
+    @Test
+    void shouldInjectAliasPortIntoMemoryReviewServiceForAliasApply() {
+        contextRunner.withUserConfiguration(
+                        MemoryReviewIngestionWorkflowConfiguration.class,
+                        MemoryReviewRepositoryConfiguration.class,
+                        MemoryAliasConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    MemoryReviewInboundPort reviewPort = context.getBean(MemoryReviewInboundPort.class);
+                    MemoryReviewRecord reviewed = reviewPort.approve(
+                            "review-alias",
+                            new MemoryReviewDecisionCommand("auditor", "alias confirmed", "", Map.of()));
+
+                    assertThat(reviewed.reviewStatus()).isEqualTo(MemoryReviewStatus.APPLIED);
+                    assertThat(reviewed.reviewedMemoryId()).isEqualTo("alias:ent-core-k8s:K8s");
+                    assertThat(reviewed.reviewedLayer()).isEqualTo("ALIAS");
+                    assertThat(context.getBean(RecordingMemoryIngestionWorkflow.class).commands).isEmpty();
+                    RecordingMemoryAliasPort aliasPort = context.getBean(RecordingMemoryAliasPort.class);
+                    assertThat(aliasPort.commands).hasSize(1);
+                    MemoryAliasCommand aliasCommand = aliasPort.commands.get(0);
+                    assertThat(aliasCommand.userId()).isEqualTo("user-1");
+                    assertThat(aliasCommand.tenantId()).isEqualTo("tenant-1");
+                    assertThat(aliasCommand.aliasText()).isEqualTo("K8s");
+                    assertThat(aliasCommand.canonicalEntityId()).isEqualTo("ent-core-k8s");
+                    assertThat(aliasCommand.canonicalName()).isEqualTo("Kubernetes");
+                    assertThat(aliasCommand.entityType()).isEqualTo("TECHNOLOGY");
+                    assertThat(aliasCommand.sourceType()).isEqualTo("memory-review-alias");
                 });
     }
 
@@ -1599,8 +1639,136 @@ class SeahorseAgentKernelAutoConfigurationTests {
     static class MemoryReviewIngestionWorkflowConfiguration {
 
         @Bean
-        MemoryIngestionWorkflowPort memoryIngestionWorkflowPort() {
-            return command -> MemoryIngestionResult.accepted(List.of("review"));
+        RecordingMemoryIngestionWorkflow memoryIngestionWorkflowPort() {
+            return new RecordingMemoryIngestionWorkflow();
+        }
+    }
+
+    static class RecordingMemoryIngestionWorkflow implements MemoryIngestionWorkflowPort {
+
+        private final List<MemoryIngestionCommand> commands = new ArrayList<>();
+
+        @Override
+        public MemoryIngestionResult ingest(MemoryIngestionCommand command) {
+            commands.add(command);
+            return MemoryIngestionResult.accepted(List.of("review"));
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class MemoryReviewRepositoryConfiguration {
+
+        @Bean
+        InMemoryMemoryReviewRepository memoryReviewManagementRepositoryPort() {
+            InMemoryMemoryReviewRepository repository = new InMemoryMemoryReviewRepository();
+            repository.put(aliasReviewRecord());
+            return repository;
+        }
+
+        private static MemoryReviewRecord aliasReviewRecord() {
+            return new MemoryReviewRecord(
+                    "review-alias",
+                    "operation-alias",
+                    "tenant-1",
+                    "user-1",
+                    "conv-1",
+                    "msg-1",
+                    "REVIEW",
+                    "SHORT_TERM",
+                    "ALIAS",
+                    "K8s",
+                    "K8s",
+                    0.96D,
+                    0.8D,
+                    0.8D,
+                    0.2D,
+                    "alias needs review",
+                    List.of("msg-1"),
+                    Map.of(
+                            "canonicalEntityId", "ent-core-k8s",
+                            "canonicalName", "Kubernetes",
+                            "entityType", "TECHNOLOGY",
+                            "confidenceLevel", 0.96D),
+                    MemoryReviewStatus.PENDING,
+                    "",
+                    "",
+                    "",
+                    Map.of(),
+                    "",
+                    "",
+                    Instant.EPOCH,
+                    Instant.EPOCH);
+        }
+    }
+
+    static class InMemoryMemoryReviewRepository implements MemoryReviewManagementRepositoryPort {
+
+        private final Map<String, MemoryReviewRecord> records = new LinkedHashMap<>();
+
+        void put(MemoryReviewRecord record) {
+            records.put(record.candidateId(), record);
+        }
+
+        @Override
+        public void save(MemoryReviewCandidate candidate) {
+            put(MemoryReviewRecord.pending(candidate));
+        }
+
+        @Override
+        public MemoryReviewPage pageReviewCandidates(MemoryReviewQuery query) {
+            List<MemoryReviewRecord> filtered = records.values().stream()
+                    .filter(record -> query.tenantId().isBlank() || record.tenantId().equals(query.tenantId()))
+                    .filter(record -> query.userId().isBlank() || record.userId().equals(query.userId()))
+                    .filter(record -> query.reviewStatus() == null || record.reviewStatus() == query.reviewStatus())
+                    .filter(record -> query.targetKind().isBlank() || record.targetKind().equals(query.targetKind()))
+                    .filter(record -> query.targetKey().isBlank() || record.targetKey().equals(query.targetKey()))
+                    .toList();
+            List<MemoryReviewRecord> pageRecords = filtered.stream()
+                    .skip(query.offset())
+                    .limit(query.size())
+                    .toList();
+            long pages = filtered.isEmpty() ? 0L : (filtered.size() + query.size() - 1L) / query.size();
+            return new MemoryReviewPage(pageRecords, filtered.size(), query.size(), query.current(), pages);
+        }
+
+        @Override
+        public Optional<MemoryReviewRecord> findReviewItem(String candidateId) {
+            return Optional.ofNullable(records.get(candidateId));
+        }
+
+        @Override
+        public MemoryReviewRecord applyReviewDecision(MemoryReviewDecision decision) {
+            MemoryReviewRecord current = findReviewItem(decision.candidateId()).orElseThrow();
+            MemoryReviewRecord updated = new MemoryReviewRecord(
+                    current.candidateId(),
+                    current.operationId(),
+                    current.tenantId(),
+                    current.userId(),
+                    current.conversationId(),
+                    current.messageId(),
+                    current.requestedAction(),
+                    current.targetLayer(),
+                    current.targetKind(),
+                    current.targetKey(),
+                    current.content(),
+                    current.confidence(),
+                    current.importance(),
+                    current.valueScore(),
+                    current.riskScore(),
+                    current.reason(),
+                    current.sourceMessageIds(),
+                    current.metadata(),
+                    decision.reviewStatus(),
+                    decision.reviewerId(),
+                    decision.reviewComment(),
+                    decision.chosenContent(),
+                    decision.chosenMetadata(),
+                    decision.reviewedMemoryId(),
+                    decision.reviewedLayer(),
+                    current.createdAt(),
+                    Instant.EPOCH);
+            records.put(updated.candidateId(), updated);
+            return updated;
         }
     }
 

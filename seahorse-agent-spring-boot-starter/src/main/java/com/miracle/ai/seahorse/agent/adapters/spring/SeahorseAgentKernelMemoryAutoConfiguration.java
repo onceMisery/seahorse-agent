@@ -712,12 +712,14 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryReviewManagementRepositoryPort> reviewRepositoryPort,
             ObjectProvider<MemoryReviewFeedbackRepositoryPort> reviewFeedbackRepositoryPort,
             MemoryIngestionWorkflowPort ingestionWorkflowPort,
-            ObjectProvider<MemoryTraceRecorder> traceRecorder) {
+            ObjectProvider<MemoryTraceRecorder> traceRecorder,
+            ObjectProvider<MemoryAliasPort> memoryAliasPort) {
         return new KernelMemoryReviewService(
                 reviewRepositoryPort.getIfAvailable(MemoryReviewManagementRepositoryPort::empty),
                 ingestionWorkflowPort,
                 reviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty),
-                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop));
+                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
+                memoryAliasPort.getIfAvailable(MemoryAliasPort::noop));
     }
 
     @Bean

@@ -21,6 +21,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
@@ -58,11 +60,22 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
     private static final String REVIEW_MESSAGE_PREFIX = "review-";
     private static final String SOURCE_APPROVE = "memory-review-approve";
     private static final String SOURCE_MODIFY = "memory-review-modify";
+    private static final String SOURCE_ALIAS = "memory-review-alias";
+    private static final String TARGET_KIND_ALIAS = "ALIAS";
+    private static final String REVIEWED_LAYER_ALIAS = "ALIAS";
+    private static final String ALIAS_REVIEWED_ID_PREFIX = "alias:";
+    private static final String METADATA_ALIAS_TEXT = "aliasText";
+    private static final String METADATA_CANONICAL_ENTITY_ID = "canonicalEntityId";
+    private static final String METADATA_CANONICAL_NAME = "canonicalName";
+    private static final String METADATA_ENTITY_TYPE = "entityType";
+    private static final String METADATA_CONFIDENCE_LEVEL = "confidenceLevel";
+    private static final String METADATA_SOURCE_MEMORY_IDS = "sourceMemoryIds";
 
     private final MemoryReviewManagementRepositoryPort reviewRepositoryPort;
     private final MemoryIngestionWorkflowPort ingestionWorkflowPort;
     private final MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort;
     private final MemoryTraceRecorder traceRecorder;
+    private final MemoryAliasPort aliasPort;
 
     public KernelMemoryReviewService(MemoryReviewManagementRepositoryPort reviewRepositoryPort,
                                      MemoryIngestionWorkflowPort ingestionWorkflowPort) {
@@ -80,6 +93,15 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                                      MemoryIngestionWorkflowPort ingestionWorkflowPort,
                                      MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort,
                                      MemoryTraceRecorder traceRecorder) {
+        this(reviewRepositoryPort, ingestionWorkflowPort, feedbackRepositoryPort, traceRecorder,
+                MemoryAliasPort.noop());
+    }
+
+    public KernelMemoryReviewService(MemoryReviewManagementRepositoryPort reviewRepositoryPort,
+                                     MemoryIngestionWorkflowPort ingestionWorkflowPort,
+                                     MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort,
+                                     MemoryTraceRecorder traceRecorder,
+                                     MemoryAliasPort aliasPort) {
         this.reviewRepositoryPort = Objects.requireNonNullElseGet(reviewRepositoryPort,
                 MemoryReviewManagementRepositoryPort::empty);
         this.ingestionWorkflowPort = Objects.requireNonNull(ingestionWorkflowPort,
@@ -87,6 +109,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
         this.feedbackRepositoryPort = Objects.requireNonNullElseGet(feedbackRepositoryPort,
                 MemoryReviewFeedbackRepositoryPort::empty);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
+        this.aliasPort = Objects.requireNonNullElseGet(aliasPort, MemoryAliasPort::noop);
     }
 
     @Override
@@ -198,6 +221,9 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                                              String content,
                                              String source,
                                              String eventType) {
+        if (isAliasTarget(current)) {
+            return applyAlias(current, command, content, eventType);
+        }
         String operationId = APPLY_OPERATION_PREFIX + current.candidateId();
         String applyContent = reviewApplyContent(current, content);
         claimForApply(current, command);
@@ -239,6 +265,138 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 "reviewedLayer", reviewed.reviewedLayer()));
         recordFeedback(current, reviewed);
         return reviewed;
+    }
+
+    private MemoryReviewRecord applyAlias(MemoryReviewRecord current,
+                                          MemoryReviewDecisionCommand command,
+                                          String content,
+                                          String eventType) {
+        String operationId = APPLY_OPERATION_PREFIX + current.candidateId();
+        Map<String, Object> metadata = mergedMetadata(current.metadata(), command.correctedMetadata());
+        String aliasText = aliasApplyContent(current, content, metadata);
+        claimForApply(current, command);
+        MemoryAliasCommand aliasCommand;
+        try {
+            aliasCommand = aliasCommand(current, aliasText, metadata);
+            aliasPort.upsertAlias(aliasCommand);
+        } catch (RuntimeException ex) {
+            releaseApplyClaim(current, command);
+            recordTrace(eventType, MemoryTraceEvent.STATUS_FAILED, current, command, Map.of(
+                    "operationId", operationId,
+                    "source", SOURCE_ALIAS,
+                    "reason", errorMessage(ex)));
+            throw new IllegalStateException("alias review apply failed: " + errorMessage(ex), ex);
+        }
+        Map<String, Object> chosenMetadata = aliasReviewMetadata(current, command, metadata);
+        MemoryReviewRecord reviewed = reviewRepositoryPort.applyReviewDecision(new MemoryReviewDecision(
+                current.candidateId(),
+                MemoryReviewStatus.APPLIED,
+                operator(command.reviewerId()),
+                command.comment(),
+                aliasText,
+                chosenMetadata,
+                reviewedAliasId(aliasCommand),
+                REVIEWED_LAYER_ALIAS));
+        recordTrace(eventType, reviewed.reviewStatus().name(), current, command, Map.of(
+                "operationId", operationId,
+                "source", SOURCE_ALIAS,
+                "reviewStatus", reviewed.reviewStatus().name(),
+                "reviewedMemoryId", reviewed.reviewedMemoryId(),
+                "reviewedLayer", reviewed.reviewedLayer()));
+        recordFeedback(current, reviewed);
+        return reviewed;
+    }
+
+    private boolean isAliasTarget(MemoryReviewRecord current) {
+        return TARGET_KIND_ALIAS.equalsIgnoreCase(current.targetKind());
+    }
+
+    private MemoryAliasCommand aliasCommand(MemoryReviewRecord current,
+                                            String aliasText,
+                                            Map<String, Object> metadata) {
+        String canonicalEntityId = requireText(stringMetadata(metadata, METADATA_CANONICAL_ENTITY_ID, ""),
+                METADATA_CANONICAL_ENTITY_ID);
+        String canonicalName = stringMetadata(metadata, METADATA_CANONICAL_NAME, canonicalEntityId);
+        String entityType = stringMetadata(metadata, METADATA_ENTITY_TYPE, "ENTITY");
+        double confidenceLevel = doubleMetadata(metadata, METADATA_CONFIDENCE_LEVEL);
+        if (confidenceLevel <= 0D) {
+            confidenceLevel = current.confidence();
+        }
+        return new MemoryAliasCommand(
+                current.userId(),
+                current.tenantId(),
+                requireText(aliasText, METADATA_ALIAS_TEXT),
+                canonicalEntityId,
+                canonicalName,
+                entityType,
+                confidenceLevel,
+                SOURCE_ALIAS,
+                sourceMemoryIds(metadata),
+                aliasReviewMetadata(current, null, metadata));
+    }
+
+    private Map<String, Object> aliasReviewMetadata(MemoryReviewRecord current,
+                                                    MemoryReviewDecisionCommand command,
+                                                    Map<String, Object> metadata) {
+        Map<String, Object> values = new LinkedHashMap<>(Objects.requireNonNullElse(metadata, Map.of()));
+        values.put("reviewCandidateId", current.candidateId());
+        values.put("reviewOperationId", current.operationId());
+        values.put("reviewSource", SOURCE_ALIAS);
+        if (command != null) {
+            values.put("reviewerId", operator(command.reviewerId()));
+        }
+        return values;
+    }
+
+    private String aliasApplyContent(MemoryReviewRecord current,
+                                     String content,
+                                     Map<String, Object> metadata) {
+        if (content != null && !content.isBlank()) {
+            return content;
+        }
+        String aliasText = stringMetadata(metadata, METADATA_ALIAS_TEXT, "");
+        if (!aliasText.isBlank()) {
+            return aliasText;
+        }
+        if (current.targetKey() != null && !current.targetKey().isBlank()) {
+            return current.targetKey();
+        }
+        return current.content();
+    }
+
+    private List<String> sourceMemoryIds(Map<String, Object> metadata) {
+        Object value = metadata.get(METADATA_SOURCE_MEMORY_IDS);
+        if (value instanceof List<?> list) {
+            return list.stream().filter(Objects::nonNull).map(Object::toString).toList();
+        }
+        return List.of();
+    }
+
+    private String reviewedAliasId(MemoryAliasCommand command) {
+        return ALIAS_REVIEWED_ID_PREFIX + command.canonicalEntityId() + ":" + command.aliasText();
+    }
+
+    private String stringMetadata(Map<String, Object> metadata, String key, String fallback) {
+        Object value = Objects.requireNonNullElse(metadata, Map.of()).get(key);
+        if (value == null || value.toString().isBlank()) {
+            return Objects.requireNonNullElse(fallback, "");
+        }
+        return value.toString().trim();
+    }
+
+    private double doubleMetadata(Map<String, Object> metadata, String key) {
+        Object value = Objects.requireNonNullElse(metadata, Map.of()).get(key);
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value != null) {
+            try {
+                return Double.parseDouble(value.toString());
+            } catch (NumberFormatException ignored) {
+                return 0D;
+            }
+        }
+        return 0D;
     }
 
     private MemoryReviewRecord claimForApply(MemoryReviewRecord current, MemoryReviewDecisionCommand command) {
@@ -361,6 +519,10 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value.trim();
+    }
+
+    private String errorMessage(RuntimeException ex) {
+        return ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage();
     }
 
     private void recordTrace(String eventType,

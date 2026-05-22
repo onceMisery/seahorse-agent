@@ -24,6 +24,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionComman
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
@@ -199,6 +202,101 @@ class KernelMemoryReviewServiceTests {
         assertThat(workflow.commands.get(0).reviewApplyDirective().requestedAction())
                 .isEqualTo(MemoryIngestionAction.DELETE);
         assertThat(workflow.commands.get(0).reviewApplyDirective().targetKey()).isEqualTo("stm-old-memory");
+    }
+
+    @Test
+    void shouldApproveAliasCandidateThroughAliasPortWithoutMemoryIngestion() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review(
+                "review-alias",
+                MemoryReviewStatus.PENDING,
+                "K8s",
+                "REVIEW",
+                "ALIAS",
+                "K8s",
+                Map.of(
+                        "canonicalEntityId", "ent-core-k8s",
+                        "canonicalName", "Kubernetes",
+                        "entityType", "TECHNOLOGY",
+                        "confidenceLevel", 0.96D,
+                        "sourceMemoryIds", List.of("memory-1"))));
+        RecordingIngestionWorkflow workflow = new RecordingIngestionWorkflow(
+                MemoryIngestionResult.accepted(List.of("SHORT_TERM_SAVE")));
+        RecordingAliasPort aliasPort = new RecordingAliasPort();
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                repository,
+                workflow,
+                new RecordingReviewFeedbackRepository(),
+                MemoryTraceRecorder.noop(),
+                aliasPort);
+
+        MemoryReviewRecord approved = service.approve("review-alias",
+                new MemoryReviewDecisionCommand("auditor", "alias confirmed", "", Map.of()));
+
+        assertThat(approved.reviewStatus()).isEqualTo(MemoryReviewStatus.APPLIED);
+        assertThat(approved.reviewedMemoryId()).isEqualTo("alias:ent-core-k8s:K8s");
+        assertThat(approved.reviewedLayer()).isEqualTo("ALIAS");
+        assertThat(workflow.commands).isEmpty();
+        assertThat(aliasPort.commands).hasSize(1);
+        MemoryAliasCommand command = aliasPort.commands.get(0);
+        assertThat(command.userId()).isEqualTo("user-1");
+        assertThat(command.tenantId()).isEqualTo("tenant-1");
+        assertThat(command.aliasText()).isEqualTo("K8s");
+        assertThat(command.canonicalEntityId()).isEqualTo("ent-core-k8s");
+        assertThat(command.canonicalName()).isEqualTo("Kubernetes");
+        assertThat(command.entityType()).isEqualTo("TECHNOLOGY");
+        assertThat(command.confidenceLevel()).isEqualTo(0.96D);
+        assertThat(command.sourceType()).isEqualTo("memory-review-alias");
+        assertThat(command.sourceMemoryIds()).containsExactly("memory-1");
+        assertThat(command.metadata()).containsEntry("reviewCandidateId", "review-alias");
+    }
+
+    @Test
+    void shouldModifyAliasCandidateBeforeApplyingThroughAliasPort() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review(
+                "review-alias",
+                MemoryReviewStatus.PENDING,
+                "K8s",
+                "REVIEW",
+                "ALIAS",
+                "K8s",
+                Map.of(
+                        "canonicalEntityId", "ent-core-k8s",
+                        "canonicalName", "Kubernetes",
+                        "entityType", "TECHNOLOGY",
+                        "confidenceLevel", 0.72D)));
+        RecordingIngestionWorkflow workflow = new RecordingIngestionWorkflow(
+                MemoryIngestionResult.accepted(List.of("SHORT_TERM_SAVE")));
+        RecordingAliasPort aliasPort = new RecordingAliasPort();
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                repository,
+                workflow,
+                new RecordingReviewFeedbackRepository(),
+                MemoryTraceRecorder.noop(),
+                aliasPort);
+
+        MemoryReviewRecord modified = service.modify("review-alias",
+                new MemoryReviewDecisionCommand(
+                        "auditor",
+                        "alias canonical target fixed",
+                        "Kubernetes",
+                        Map.of(
+                                "canonicalEntityId", "ent-platform-kubernetes",
+                                "canonicalName", "Kubernetes Platform",
+                                "entityType", "PLATFORM",
+                                "confidenceLevel", 0.91D)));
+
+        assertThat(modified.reviewStatus()).isEqualTo(MemoryReviewStatus.APPLIED);
+        assertThat(modified.chosenContent()).isEqualTo("Kubernetes");
+        assertThat(workflow.commands).isEmpty();
+        assertThat(aliasPort.commands).hasSize(1);
+        MemoryAliasCommand command = aliasPort.commands.get(0);
+        assertThat(command.aliasText()).isEqualTo("Kubernetes");
+        assertThat(command.canonicalEntityId()).isEqualTo("ent-platform-kubernetes");
+        assertThat(command.canonicalName()).isEqualTo("Kubernetes Platform");
+        assertThat(command.entityType()).isEqualTo("PLATFORM");
+        assertThat(command.confidenceLevel()).isEqualTo(0.91D);
     }
 
     @Test
@@ -488,6 +586,16 @@ class KernelMemoryReviewServiceTests {
                                              String requestedAction,
                                              String targetKind,
                                              String targetKey) {
+        return review(id, status, content, requestedAction, targetKind, targetKey, Map.of("source", "test"));
+    }
+
+    private static MemoryReviewRecord review(String id,
+                                             MemoryReviewStatus status,
+                                             String content,
+                                             String requestedAction,
+                                             String targetKind,
+                                             String targetKey,
+                                             Map<String, Object> metadata) {
         return new MemoryReviewRecord(
                 id,
                 "operation-1",
@@ -506,7 +614,7 @@ class KernelMemoryReviewServiceTests {
                 0.2D,
                 "needs_review",
                 List.of("msg-1"),
-                Map.of("source", "test"),
+                metadata,
                 status,
                 "",
                 "",
@@ -685,6 +793,21 @@ class KernelMemoryReviewServiceTests {
         @Override
         public List<MemoryReviewFeedbackSample> listByCandidate(String candidateId, int limit) {
             return List.of();
+        }
+    }
+
+    private static final class RecordingAliasPort implements MemoryAliasPort {
+
+        private final List<MemoryAliasCommand> commands = new ArrayList<>();
+
+        @Override
+        public Optional<MemoryAliasResolution> resolveAlias(String userId, String tenantId, String aliasText) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void upsertAlias(MemoryAliasCommand command) {
+            commands.add(command);
         }
     }
 
