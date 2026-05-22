@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallChannelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallFusionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRerankerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
@@ -86,6 +87,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private final MemoryLifecyclePort memoryLifecyclePort;
     private final List<MemoryRecallChannelPort> channels;
     private final MemoryRecallFusionPort fusionPort;
+    private final MemoryRecallRerankerPort recallRerankerPort;
     private final MemoryFusionPolicy fusionPolicy;
     private final int channelTopK;
     private final MemoryTraceRecorder traceRecorder;
@@ -214,6 +216,42 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                                       MemoryTraceRecorder traceRecorder,
                                       Executor recallExecutor,
                                       MemoryAliasPort memoryAliasPort) {
+        this(shortTermPort,
+                longTermPort,
+                semanticPort,
+                objectMapper,
+                profileMemoryPort,
+                correctionLedgerPort,
+                memoryRouterPort,
+                businessDocumentRetrieverPort,
+                memoryLifecyclePort,
+                channels,
+                fusionPort,
+                fusionPolicy,
+                channelTopK,
+                traceRecorder,
+                recallExecutor,
+                memoryAliasPort,
+                MemoryRecallRerankerPort.noop());
+    }
+
+    public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
+                                      LongTermMemoryPort longTermPort,
+                                      SemanticMemoryPort semanticPort,
+                                      ObjectMapper objectMapper,
+                                      ProfileMemoryPort profileMemoryPort,
+                                      CorrectionLedgerPort correctionLedgerPort,
+                                      MemoryRouterPort memoryRouterPort,
+                                      MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                      MemoryLifecyclePort memoryLifecyclePort,
+                                      List<MemoryRecallChannelPort> channels,
+                                      MemoryRecallFusionPort fusionPort,
+                                      MemoryFusionPolicy fusionPolicy,
+                                      int channelTopK,
+                                      MemoryTraceRecorder traceRecorder,
+                                      Executor recallExecutor,
+                                      MemoryAliasPort memoryAliasPort,
+                                      MemoryRecallRerankerPort recallRerankerPort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -226,6 +264,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         this.memoryLifecyclePort = Objects.requireNonNull(memoryLifecyclePort, "memoryLifecyclePort must not be null");
         this.channels = sortedChannels(channels);
         this.fusionPort = Objects.requireNonNull(fusionPort, "fusionPort must not be null");
+        this.recallRerankerPort = Objects.requireNonNullElseGet(recallRerankerPort, MemoryRecallRerankerPort::noop);
         this.fusionPolicy = Objects.requireNonNullElseGet(fusionPolicy, MemoryFusionPolicy::defaults);
         this.channelTopK = channelTopK > 0 ? channelTopK : MemoryFusionPolicy.DEFAULT_CHANNEL_TOP_K;
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
@@ -329,10 +368,28 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         List<List<MemoryRecallCandidate>> channelResults = collectChannelResults(tasks, userId);
         List<MemoryRecallCandidate> fused = fusionPort.fuse(channelResults, fusionPolicy, Instant.now());
         recordRecallFusion(userId, channelResults.size(), fused.size(), fusionPolicy.finalTopK());
-        return fused.stream()
+        List<MemoryRecallCandidate> reranked = rerankFusedCandidates(recallRequest, fused);
+        recordRecallRerank(userId, fused.size(), reranked.size());
+        return reranked.stream()
                 .map(this::toMemoryItem)
                 .flatMap(Optional::stream)
                 .toList();
+    }
+
+    private List<MemoryRecallCandidate> rerankFusedCandidates(MemoryRecallRequest request,
+                                                              List<MemoryRecallCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+        try {
+            List<MemoryRecallCandidate> reranked = recallRerankerPort.rerank(request, candidates);
+            return reranked == null ? candidates : reranked.stream()
+                    .filter(Objects::nonNull)
+                    .toList();
+        } catch (RuntimeException ex) {
+            LOG.debug("memory recall reranker failed: userId={}, query={}", request.userId(), request.query(), ex);
+            return candidates;
+        }
     }
 
     private AliasResolvedQuery resolveRecallAlias(String userId, String query) {
@@ -462,6 +519,24 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                         "channelCount", channelCount,
                         "fusedCount", fusedCount,
                         "finalTopK", finalTopK),
+                Instant.now()));
+    }
+
+    private void recordRecallRerank(String userId, int inputCount, int outputCount) {
+        traceRecorder.record(new MemoryTraceEvent(
+                "",
+                DEFAULT_TENANT_ID,
+                userId,
+                "",
+                "",
+                "memory-recall",
+                "rerank",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "",
+                "recall_rerank",
+                Map.of(
+                        "inputCount", inputCount,
+                        "outputCount", outputCount),
                 Instant.now()));
     }
 

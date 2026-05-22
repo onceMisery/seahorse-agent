@@ -32,6 +32,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFusionPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallChannelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRerankerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
@@ -279,6 +280,42 @@ class HybridMemoryRecallPipelineTests {
                 .containsEntry("memoryAliasEntityType", "TECHNOLOGY");
     }
 
+    @Test
+    void shouldRerankFusedRecallCandidatesBeforeMaterializingMemoryItems() {
+        RecordingMemoryStore semantic = new RecordingMemoryStore();
+        semantic.save(record("semantic-first", "SEMANTIC", "First fused memory."));
+        semantic.save(record("semantic-reranked", "SEMANTIC", "Reranked memory."));
+        RecordingReranker reranker = new RecordingReranker(List.of(
+                candidate("semantic-reranked", "reranker", 1, 0.98D, "SEMANTIC"),
+                candidate("semantic-first", "reranker", 2, 0.41D, "SEMANTIC")));
+
+        HybridMemoryRecallPipeline pipeline = pipeline(
+                new RecordingMemoryStore(),
+                new RecordingMemoryStore(),
+                semantic,
+                List.of(channel("semantic", List.of(
+                        candidate("semantic-first", "semantic", 1, 0.9D, "SEMANTIC"),
+                        candidate("semantic-reranked", "semantic", 2, 0.8D, "SEMANTIC")))),
+                MemoryTraceRecorder.noop(),
+                MemoryFusionPolicy.defaults().withFinalTopK(5).withTimeDecayEnabled(false),
+                MemoryAliasPort.noop(),
+                reranker);
+
+        MemoryContext context = pipeline.load(MemoryLoadRequest.builder()
+                .conversationId("conv-1")
+                .userId("user-1")
+                .currentQuestion("rerank")
+                .build());
+
+        assertThat(reranker.requests).hasSize(1);
+        assertThat(reranker.inputs.get(0)).extracting(MemoryRecallCandidate::memoryId)
+                .containsExactly("semantic-first", "semantic-reranked");
+        assertThat(context.getSemanticMemories()).extracting(MemoryItem::getId)
+                .containsExactly("semantic-reranked", "semantic-first");
+        assertThat(context.getSemanticMemories()).extracting(MemoryItem::getRelevanceScore)
+                .containsExactly(0.98D, 0.41D);
+    }
+
     private HybridMemoryRecallPipeline pipeline(RecordingMemoryStore shortTerm,
                                                 RecordingMemoryStore longTerm,
                                                 RecordingMemoryStore semantic,
@@ -315,6 +352,24 @@ class HybridMemoryRecallPipelineTests {
                                                 MemoryTraceRecorder traceRecorder,
                                                 MemoryFusionPolicy fusionPolicy,
                                                 MemoryAliasPort aliasPort) {
+        return pipeline(shortTerm,
+                longTerm,
+                semantic,
+                channels,
+                traceRecorder,
+                fusionPolicy,
+                aliasPort,
+                MemoryRecallRerankerPort.noop());
+    }
+
+    private HybridMemoryRecallPipeline pipeline(RecordingMemoryStore shortTerm,
+                                                RecordingMemoryStore longTerm,
+                                                RecordingMemoryStore semantic,
+                                                List<MemoryRecallChannelPort> channels,
+                                                MemoryTraceRecorder traceRecorder,
+                                                MemoryFusionPolicy fusionPolicy,
+                                                MemoryAliasPort aliasPort,
+                                                MemoryRecallRerankerPort recallRerankerPort) {
         return new HybridMemoryRecallPipeline(
                 shortTerm,
                 longTerm,
@@ -331,7 +386,8 @@ class HybridMemoryRecallPipelineTests {
                 10,
                 traceRecorder,
                 null,
-                aliasPort);
+                aliasPort,
+                recallRerankerPort);
     }
 
     private MemoryRecallChannelPort channel(String name, List<MemoryRecallCandidate> candidates) {
@@ -434,6 +490,25 @@ class HybridMemoryRecallPipelineTests {
 
         @Override
         public void upsertAlias(MemoryAliasCommand command) {
+        }
+    }
+
+    private static final class RecordingReranker implements MemoryRecallRerankerPort {
+
+        private final List<MemoryRecallCandidate> reranked;
+        private final List<MemoryRecallRequest> requests = new ArrayList<>();
+        private final List<List<MemoryRecallCandidate>> inputs = new ArrayList<>();
+
+        private RecordingReranker(List<MemoryRecallCandidate> reranked) {
+            this.reranked = reranked;
+        }
+
+        @Override
+        public List<MemoryRecallCandidate> rerank(MemoryRecallRequest request,
+                                                  List<MemoryRecallCandidate> candidates) {
+            requests.add(request);
+            inputs.add(List.copyOf(candidates));
+            return reranked;
         }
     }
 

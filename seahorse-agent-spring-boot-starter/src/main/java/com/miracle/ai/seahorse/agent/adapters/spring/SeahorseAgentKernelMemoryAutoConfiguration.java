@@ -91,6 +91,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPor
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallChannelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallFusionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRerankerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
@@ -380,6 +381,12 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(MemoryRecallRerankerPort.class)
+    public MemoryRecallRerankerPort seahorseMemoryRecallRerankerPort() {
+        return MemoryRecallRerankerPort.noop();
+    }
+
+    @Bean
     @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
             havingValue = "true")
     @ConditionalOnMissingBean(ScoredMemoryVectorPort.class)
@@ -433,6 +440,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<ObjectMapper> objectMapperProvider,
             List<MemoryRecallChannelPort> recallChannels,
             MemoryRecallFusionPort recallFusionPort,
+            MemoryRecallRerankerPort recallRerankerPort,
             MemoryFusionPolicy fusionPolicy,
             ObjectProvider<MemoryTraceRecorder> traceRecorder,
             @Qualifier("ragRetrievalThreadPoolExecutor") ObjectProvider<Executor> recallExecutor,
@@ -454,7 +462,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 channelTopK,
                 traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
                 recallExecutor.getIfAvailable(),
-                memoryAliasPort.getIfAvailable(MemoryAliasPort::noop));
+                memoryAliasPort.getIfAvailable(MemoryAliasPort::noop),
+                recallRerankerPort);
     }
 
     @Bean
