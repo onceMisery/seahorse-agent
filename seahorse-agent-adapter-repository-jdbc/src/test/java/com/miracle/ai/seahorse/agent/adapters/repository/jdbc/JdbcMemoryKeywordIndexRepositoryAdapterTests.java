@@ -33,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class JdbcMemoryKeywordIndexRepositoryAdapterTests {
 
     private JdbcMemoryKeywordIndexRepositoryAdapter adapter;
+    private JdbcMemoryKeywordSearchRepositoryAdapter searchAdapter;
     private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
@@ -44,7 +45,9 @@ class JdbcMemoryKeywordIndexRepositoryAdapterTests {
                 "");
         new JdbcChatSchemaUpgrade(dataSource).upgrade();
         jdbcTemplate = new JdbcTemplate(dataSource);
-        adapter = new JdbcMemoryKeywordIndexRepositoryAdapter(dataSource, new ObjectMapper());
+        ObjectMapper objectMapper = new ObjectMapper();
+        adapter = new JdbcMemoryKeywordIndexRepositoryAdapter(dataSource, objectMapper);
+        searchAdapter = new JdbcMemoryKeywordSearchRepositoryAdapter(dataSource, objectMapper);
     }
 
     @Test
@@ -130,5 +133,27 @@ class JdbcMemoryKeywordIndexRepositoryAdapterTests {
                 """);
         assertThat(row).containsEntry("STATUS", "DELETED");
         assertThat(((Number) row.get("DELETED")).intValue()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldSearchKeywordIndexDocumentWithoutLayeredSourceTables() {
+        adapter.upsert(new MemoryDerivedIndexDocument(
+                "memory-1",
+                "user-1",
+                "tenant-1",
+                "LONG_TERM",
+                "PROJECT_FACT",
+                "Pulsar PIP-459 rollback plan",
+                Map.of("semanticKey", "project:pulsar"),
+                Instant.now()));
+
+        var hits = searchAdapter.search("user-1", "tenant-1", "PIP-459", 10);
+
+        assertThat(hits).hasSize(1);
+        assertThat(hits.get(0).memoryId()).isEqualTo("memory-1");
+        assertThat(hits.get(0).layer()).isEqualTo("LONG_TERM");
+        assertThat(hits.get(0).metadata())
+                .containsEntry("type", "PROJECT_FACT")
+                .containsEntry("status", "ACTIVE");
     }
 }

@@ -58,14 +58,41 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
         int limit = topK > 0 ? topK : DEFAULT_TOP_K;
         String safeTenantId = JdbcMemorySupport.hasText(tenantId) ? tenantId : DEFAULT_TENANT_ID;
         List<MemoryKeywordHit> hits = new ArrayList<>();
+        hits.addAll(searchKeywordIndex(userId, safeTenantId, terms, limit));
+        if (!hits.isEmpty()) {
+            return sorted(hits, limit);
+        }
         hits.addAll(searchShortTerm(userId, safeTenantId, terms, limit));
         hits.addAll(searchLongTerm(userId, safeTenantId, terms, limit));
         hits.addAll(searchSemantic(userId, safeTenantId, terms, limit));
+        return sorted(hits, limit);
+    }
+
+    private List<MemoryKeywordHit> sorted(List<MemoryKeywordHit> hits, int limit) {
         return hits.stream()
                 .sorted(Comparator.comparing(MemoryKeywordHit::score).reversed()
                         .thenComparing(MemoryKeywordHit::memoryId))
                 .limit(limit)
                 .toList();
+    }
+
+    private List<MemoryKeywordHit> searchKeywordIndex(String userId, String tenantId, List<String> terms, int limit) {
+        if (!tableExists("t_memory_keyword_index")) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                SELECT memory_id AS id, layer_name, memory_type AS type, content, metadata_json,
+                       status, source_update_time
+                FROM t_memory_keyword_index
+                WHERE user_id = ?
+                  AND tenant_id = ?
+                  AND deleted = 0
+                  AND status = 'ACTIVE'
+                  AND (LOWER(content) LIKE ? OR LOWER(CAST(metadata_json AS VARCHAR)) LIKE ?)
+                ORDER BY update_time DESC
+                LIMIT ?
+                """, (rs, rowNum) -> mapKeywordIndexHit(rs, terms),
+                userId, tenantId, likeAny(terms), likeAny(terms), limit);
     }
 
     private List<MemoryKeywordHit> searchShortTerm(String userId, String tenantId, List<String> terms, int limit) {
@@ -132,6 +159,20 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
                 metadata);
     }
 
+    private MemoryKeywordHit mapKeywordIndexHit(ResultSet rs, List<String> terms) throws SQLException {
+        Map<String, Object> metadata = new LinkedHashMap<>(JdbcMemorySupport.parseJson(
+                objectMapper,
+                rs.getString("metadata_json")));
+        metadata.put("type", rs.getString("type"));
+        metadata.put("status", Objects.requireNonNullElse(rs.getString("status"), ACTIVE_STATUS));
+        metadata.put("updatedAt", JdbcMemorySupport.instant(rs.getTimestamp("source_update_time")));
+        return new MemoryKeywordHit(
+                rs.getString("id"),
+                score(rs.getString("content"), metadata, terms),
+                Objects.requireNonNullElse(rs.getString("layer_name"), ""),
+                metadata);
+    }
+
     private double score(String content, Map<String, Object> metadata, List<String> terms) {
         String haystack = (Objects.requireNonNullElse(content, "") + " " + metadata)
                 .toLowerCase(Locale.ROOT);
@@ -167,5 +208,17 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
         return "%" + term.replace("\\", "\\\\")
                 .replace("%", "\\%")
                 .replace("_", "\\_") + "%";
+    }
+
+    private boolean tableExists(String tableName) {
+        return !jdbcTemplate.query(
+                        """
+                        SELECT table_name
+                        FROM information_schema.tables
+                        WHERE lower(table_name) = lower(?)
+                        """,
+                        (rs, rowNum) -> rs.getString(1),
+                        tableName)
+                .isEmpty();
     }
 }
