@@ -43,6 +43,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
@@ -143,8 +144,14 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @ConditionalOnBean(ToolRegistryPort.class)
     @ConditionalOnMissingBean
     public ToolGatewayPort seahorseToolGatewayPort(ToolRegistryPort toolRegistry,
-                                                   ObjectProvider<ToolPolicyPort> toolPolicyPort) {
-        return new LocalToolGatewayPort(toolRegistry, toolPolicyPort.getIfAvailable(ToolPolicyPort::defaults));
+                                                   ObjectProvider<ToolPolicyPort> toolPolicyPort,
+                                                   ObjectProvider<ToolInvocationAuditPort> toolInvocationAuditPort,
+                                                   ObjectProvider<Clock> clockProvider) {
+        return new LocalToolGatewayPort(
+                toolRegistry,
+                toolPolicyPort.getIfAvailable(ToolPolicyPort::defaults),
+                toolInvocationAuditPort.getIfAvailable(ToolInvocationAuditPort::noop),
+                clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean

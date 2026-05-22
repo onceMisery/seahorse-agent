@@ -1,0 +1,244 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.kernel.application.agent;
+
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditCompletion;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditRecord;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import org.junit.jupiter.api.Test;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class LocalToolGatewayPortAuditTests {
+
+    private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-05-23T00:00:00Z"), ZoneOffset.UTC);
+
+    @Test
+    void shouldRecordRequestedDecisionAndCompletedEventsForAllowedTool() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertTrue(result.success());
+        assertEquals(1, tool.calls.get());
+        assertEquals(1, audit.requested.size());
+        assertEquals(1, audit.decisions.size());
+        assertEquals(1, audit.completed.size());
+        assertEquals(ToolInvocationStatus.REQUESTED, audit.requested.get(0).status());
+        assertEquals("run-1", audit.requested.get(0).runId());
+        assertTrue(audit.requested.get(0).argumentsSummary().contains("input"));
+        assertEquals(audit.requested.get(0).invocationId(), audit.decisions.get(0).invocationId());
+        assertEquals("allow-1", audit.decisions.get(0).policyDecisionId());
+        assertEquals(ToolInvocationStatus.ALLOWED, audit.decisions.get(0).status());
+        assertEquals(audit.requested.get(0).invocationId(), audit.completed.get(0).invocationId());
+        assertEquals(ToolInvocationStatus.SUCCEEDED, audit.completed.get(0).status());
+        assertTrue(audit.completed.get(0).resultSummary().contains("length"));
+        assertEquals(FIXED_CLOCK.instant(), audit.completed.get(0).finishedAt());
+    }
+
+    @Test
+    void shouldRecordDeniedDecisionAndCompletionWithoutExecutingTool() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.deny("deny-1",
+                        ToolPolicyReasonCodes.TOOL_NOT_BOUND,
+                        "Tool is not bound")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("memory-write"));
+
+        assertFalse(result.success());
+        assertEquals(ToolPolicyReasonCodes.TOOL_NOT_BOUND, result.error());
+        assertEquals(0, tool.calls.get());
+        assertEquals(ToolInvocationStatus.DENIED, audit.decisions.get(0).status());
+        assertEquals(ToolInvocationStatus.DENIED, audit.completed.get(0).status());
+        assertEquals(ToolPolicyReasonCodes.TOOL_NOT_BOUND, audit.completed.get(0).errorMessage());
+    }
+
+    @Test
+    void shouldRecordFailedCompletionWhenToolThrowsException() {
+        ThrowingToolPort tool = new ThrowingToolPort();
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertFalse(result.success());
+        assertEquals("tool boom", result.error());
+        assertEquals(1, audit.requested.size());
+        assertEquals(1, audit.decisions.size());
+        assertEquals(1, audit.completed.size());
+        assertEquals(ToolInvocationStatus.FAILED, audit.completed.get(0).status());
+        assertEquals("tool boom", audit.completed.get(0).errorMessage());
+    }
+
+    @Test
+    void shouldGenerateAuditRunIdForLegacyRequestWithoutRunId() {
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.ok("ok"))),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                FIXED_CLOCK);
+
+        gateway.invoke(new ToolInvocationRequest(
+                null,
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                null,
+                null,
+                "weather",
+                Map.of(),
+                Map.of(),
+                "call-1",
+                List.of("weather")));
+
+        assertTrue(audit.requested.get(0).runId().startsWith("legacy-run:"));
+        assertEquals("legacy-user", audit.requested.get(0).userId());
+    }
+
+    private static ToolInvocationRequest request(String toolId) {
+        return new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                toolId,
+                Map.of("input", "value"),
+                Map.of("knowledgeBaseId", "kb-1"),
+                "run-1:call-1",
+                List.of(toolId));
+    }
+
+    private static final class RecordingToolInvocationAuditPort implements ToolInvocationAuditPort {
+        private final List<ToolInvocationAuditRecord> requested = new ArrayList<>();
+        private final List<ToolInvocationAuditDecision> decisions = new ArrayList<>();
+        private final List<ToolInvocationAuditCompletion> completed = new ArrayList<>();
+
+        @Override
+        public void recordRequested(ToolInvocationAuditRecord record) {
+            requested.add(record);
+        }
+
+        @Override
+        public void recordDecision(ToolInvocationAuditDecision decision) {
+            decisions.add(decision);
+        }
+
+        @Override
+        public void recordCompleted(ToolInvocationAuditCompletion completion) {
+            completed.add(completion);
+        }
+    }
+
+    private static final class FixedToolPolicyPort implements ToolPolicyPort {
+        private final PolicyDecision decision;
+
+        private FixedToolPolicyPort(PolicyDecision decision) {
+            this.decision = decision;
+        }
+
+        @Override
+        public PolicyDecision decide(ToolPolicyRequest request) {
+            return decision;
+        }
+    }
+
+    private static final class SingleToolRegistry implements ToolRegistryPort {
+        private final ToolPort tool;
+
+        private SingleToolRegistry(ToolPort tool) {
+            this.tool = tool;
+        }
+
+        @Override
+        public List<ToolDescriptor> listTools() {
+            return List.of(new ToolDescriptor("weather", "Weather", "Weather lookup", "{}"));
+        }
+
+        @Override
+        public Optional<ToolPort> find(String toolId) {
+            return Optional.of(tool);
+        }
+    }
+
+    private static final class CountingToolPort implements ToolPort {
+        private final AtomicInteger calls = new AtomicInteger();
+        private final ToolInvocationResult result;
+
+        private CountingToolPort(ToolInvocationResult result) {
+            this.result = result;
+        }
+
+        @Override
+        public ToolInvocationResult invoke(String toolCallId, String toolId, Map<String, Object> arguments) {
+            calls.incrementAndGet();
+            return result;
+        }
+    }
+
+    private static final class ThrowingToolPort implements ToolPort {
+
+        @Override
+        public ToolInvocationResult invoke(String toolCallId, String toolId, Map<String, Object> arguments) {
+            throw new IllegalStateException("tool boom");
+        }
+    }
+}

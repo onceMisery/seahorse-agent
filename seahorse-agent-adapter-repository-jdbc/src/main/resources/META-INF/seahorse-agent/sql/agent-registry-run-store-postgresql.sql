@@ -113,3 +113,28 @@ CREATE TABLE IF NOT EXISTS sa_agent_tool_binding (
 
 CREATE INDEX IF NOT EXISTS idx_sa_agent_tool_binding_version
   ON sa_agent_tool_binding(agent_id, version_id);
+
+CREATE TABLE IF NOT EXISTS sa_tool_invocation (
+  invocation_id VARCHAR(64) PRIMARY KEY,
+  run_id VARCHAR(64) NOT NULL,
+  step_id VARCHAR(64) NOT NULL,
+  agent_id VARCHAR(64),
+  version_id VARCHAR(64),
+  tenant_id VARCHAR(64) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  tool_id VARCHAR(128) NOT NULL,
+  idempotency_key VARCHAR(128),
+  status VARCHAR(32) NOT NULL,
+  policy_decision_id VARCHAR(64),
+  arguments_summary TEXT,
+  result_summary TEXT,
+  error_message VARCHAR(1000),
+  started_at TIMESTAMP NOT NULL,
+  finished_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_tool_invocation_run_tool
+  ON sa_tool_invocation(run_id, tool_id, started_at);
+
+CREATE INDEX IF NOT EXISTS idx_sa_tool_invocation_tenant_user
+  ON sa_tool_invocation(tenant_id, user_id, started_at);

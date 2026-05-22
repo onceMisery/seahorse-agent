@@ -470,6 +470,76 @@ Remaining Phase 2 work:
 - MCP allowlist registration into the catalog.
 - Tool catalog/binding/audit management APIs.
 
+## 2026-05-23 Phase 2 Tool Invocation Audit slice
+
+RED/GREEN coverage:
+
+- `LocalToolGatewayPortAuditTests` first failed because `ToolInvocationAuditPort`, audit event records, and `ToolInvocationStatus` did not exist; it then verified Gateway records requested, policy decision, and completed events for allowed, denied, failed, and legacy no-runId/no-userId tool calls.
+- `JdbcToolInvocationAuditRepositoryAdapterTests` first failed because `JdbcToolInvocationAuditRepositoryAdapter` did not exist; it then verified requested/decision/completed lifecycle persistence into `sa_tool_invocation`.
+- `SeahorseAgentRegistryAutoConfigurationTests` now verifies the JDBC repository auto-configuration creates `ToolInvocationAuditPort` together with registry, run-store, catalog, and binding repositories.
+
+Focused kernel command:
+
+```powershell
+.\mvnw -pl seahorse-agent-kernel '-Dtest=LocalToolGatewayPortAuditTests,LocalToolGatewayPortPolicyTests,CatalogBackedToolPolicyPortTests,KernelAgentLoopToolGatewayTests' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 14
+- Failures: 0
+- Errors: 0
+- Covered: Tool Gateway audit lifecycle, policy enforcement, catalog-backed policy regression, and AgentLoop Gateway delegation.
+
+Focused JDBC command:
+
+```powershell
+.\mvnw -pl seahorse-agent-adapter-repository-jdbc -am '-Dtest=JdbcToolInvocationAuditRepositoryAdapterTests,JdbcToolCatalogRepositoryAdapterTests,JdbcAgentToolBindingRepositoryAdapterTests,JdbcAgentRunRepositoryAdapterTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 5
+- Failures: 0
+- Errors: 0
+- Covered: `sa_tool_invocation` audit lifecycle persistence plus existing tool catalog, binding, and run-store JDBC regressions.
+
+Focused starter command:
+
+```powershell
+.\mvnw -pl seahorse-agent-spring-boot-starter -am '-Dtest=SeahorseAgentRegistryAutoConfigurationTests,SeahorseAgentChatRunStoreAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 4
+- Failures: 0
+- Errors: 0
+- Covered: `ToolInvocationAuditPort` JDBC auto-configuration and existing Agent chat run-store / Tool Gateway wiring regressions.
+
+Debug note:
+
+- An earlier parallel Maven run failed with missing class files under `seahorse-agent-adapter-repository-jdbc/target/classes`. Root cause was concurrent Maven commands writing the same reactor module output directory; the same JDBC command passed when rerun sequentially.
+
+Fix boundary:
+
+- `ToolInvocationAuditPort`: added a narrow outbound audit port with noop fallback.
+- `ToolInvocationAuditRecord`, `ToolInvocationAuditDecision`, `ToolInvocationAuditCompletion`, and `ToolInvocationStatus`: added immutable audit event models with Chinese field documentation and database-aligned non-null constraints.
+- `LocalToolGatewayPort`: records requested, decision, and completed audit events around policy and tool execution; preserves legacy constructors and generates compatible audit run/user identifiers when older direct callers do not provide runtime identity.
+- `JdbcToolInvocationAuditRepositoryAdapter`: persists requested/decision/completed lifecycle updates into `sa_tool_invocation`.
+- `agent-registry-run-store-postgresql.sql`: added `sa_tool_invocation` table and indexes.
+- `SeahorseAgentRegistryRepositoryAutoConfiguration`: auto-configures the JDBC audit repository.
+- `SeahorseAgentKernelAgentAutoConfiguration`: injects audit port and clock into the local gateway while preserving noop fallback.
+
+Remaining Phase 2 work:
+
+- `maxCallsPerRun` and argument policy enforcement.
+- MCP allowlist registration into the catalog.
+- Tool catalog/binding/audit management APIs.
+
 ## 2026-05-23 Phase 2 Tool Catalog / Agent Binding persistence slice
 
 RED/GREEN coverage:
