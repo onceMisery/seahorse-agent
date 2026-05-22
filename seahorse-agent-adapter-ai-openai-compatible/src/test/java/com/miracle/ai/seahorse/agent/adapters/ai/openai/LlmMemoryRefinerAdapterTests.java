@@ -23,10 +23,16 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.RefinedMemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -154,6 +160,57 @@ class LlmMemoryRefinerAdapterTests {
         assertThat(result.reason()).isEqualTo("llm_refiner_no_supported_operations");
     }
 
+    @Test
+    void shouldInjectReviewFeedbackSamplesIntoPromptWhenAvailable() {
+        CapturingChatModelPort chatModelPort = new CapturingChatModelPort("""
+                {
+                  "refined": true,
+                  "reason": "guided by feedback",
+                  "operations": [
+                    {"action": "IGNORE", "content": "", "confidence": 0.9}
+                  ]
+                }
+                """);
+        RecordingFeedbackRepository feedbackRepository = new RecordingFeedbackRepository();
+        feedbackRepository.samples = List.of(new MemoryReviewFeedbackSample(
+                "sample-1",
+                "review-1",
+                "op-1",
+                "tenant-1",
+                "user-1",
+                "REVIEW",
+                MemoryReviewStatus.REJECTED,
+                "auditor",
+                "not a durable fact",
+                "SHORT_TERM",
+                "FACT",
+                "project.noise",
+                "User said the build is annoying.",
+                "",
+                Map.of(),
+                Map.of(),
+                List.of("message-1"),
+                "",
+                "",
+                Instant.EPOCH));
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                chatModelPort,
+                PromptTemplatePort.empty(),
+                new ObjectMapper(),
+                feedbackRepository,
+                2);
+
+        adapter.refine(request("The build is annoying again."));
+
+        String prompt = chatModelPort.lastRequest.get().getMessages().get(0).getContent();
+        assertThat(prompt).contains("Human review feedback examples:");
+        assertThat(prompt).contains("not a durable fact");
+        assertThat(prompt).contains("User said the build is annoying.");
+        assertThat(feedbackRepository.lastQuery.tenantId()).isEqualTo("tenant-1");
+        assertThat(feedbackRepository.lastQuery.userId()).isEqualTo("user-1");
+        assertThat(feedbackRepository.lastQuery.limit()).isEqualTo(2);
+    }
+
     private static MemoryRefinementRequest request(String content) {
         return new MemoryRefinementRequest(
                 "op-1",
@@ -182,6 +239,27 @@ class LlmMemoryRefinerAdapterTests {
         public String chat(ChatRequest request, String modelId) {
             lastRequest.set(request);
             return response;
+        }
+    }
+
+    private static final class RecordingFeedbackRepository implements MemoryReviewFeedbackRepositoryPort {
+
+        private List<MemoryReviewFeedbackSample> samples = List.of();
+        private MemoryReviewFeedbackQuery lastQuery;
+
+        @Override
+        public void save(MemoryReviewFeedbackSample sample) {
+        }
+
+        @Override
+        public List<MemoryReviewFeedbackSample> listByCandidate(String candidateId, int limit) {
+            return List.of();
+        }
+
+        @Override
+        public List<MemoryReviewFeedbackSample> listSamples(MemoryReviewFeedbackQuery query) {
+            lastQuery = query;
+            return samples;
         }
     }
 }

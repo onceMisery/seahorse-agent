@@ -13,6 +13,9 @@ baselineMemoryType: {baselineMemoryType}
 baselineReason: {baselineReason}
 baselineDetails: {baselineDetails}
 
+Human review feedback examples:
+{feedbackSamples}
+
 Sanitized user content:
 {sanitizedContent}
 
@@ -40,3 +43,4 @@ JSON schema:
 
 Use REVIEW for sensitive, conflicting, or uncertain profile changes.
 Use IGNORE when no durable memory should be written.
+When feedback examples are present, use them as few-shot guidance for what humans rejected or corrected.
