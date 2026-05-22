@@ -33,7 +33,10 @@ public record MemoryRefinementRequest(
         String baselineMemoryType,
         String baselineReason,
         Map<String, Object> baselineDetails,
-        List<MemoryRefinementMemory> existingMemories
+        List<MemoryRefinementMemory> existingMemories,
+        String referenceZone,
+        String targetZone,
+        List<MemoryRefinementMemory> stickyAnchors
 ) {
 
     private static final String DEFAULT_TENANT_ID = "default";
@@ -51,6 +54,38 @@ public record MemoryRefinementRequest(
         baselineReason = normalize(baselineReason, "");
         baselineDetails = Map.copyOf(Objects.requireNonNullElse(baselineDetails, Map.of()));
         existingMemories = List.copyOf(Objects.requireNonNullElse(existingMemories, List.of()));
+        referenceZone = Objects.requireNonNullElse(referenceZone, "");
+        targetZone = Objects.requireNonNullElse(targetZone, "");
+        stickyAnchors = List.copyOf(Objects.requireNonNullElse(stickyAnchors, List.of()));
+    }
+
+    public MemoryRefinementRequest(String operationId,
+                                   String tenantId,
+                                   String source,
+                                   String userId,
+                                   String conversationId,
+                                   String messageId,
+                                   String sanitizedContent,
+                                   MemoryIngestionAction baselineAction,
+                                   String baselineMemoryType,
+                                   String baselineReason,
+                                   Map<String, Object> baselineDetails,
+                                   List<MemoryRefinementMemory> existingMemories) {
+        this(operationId,
+                tenantId,
+                source,
+                userId,
+                conversationId,
+                messageId,
+                sanitizedContent,
+                baselineAction,
+                baselineMemoryType,
+                baselineReason,
+                baselineDetails,
+                existingMemories,
+                "",
+                "",
+                List.of());
     }
 
     public MemoryRefinementRequest(String operationId,
@@ -75,6 +110,9 @@ public record MemoryRefinementRequest(
                 baselineMemoryType,
                 baselineReason,
                 baselineDetails,
+                List.of(),
+                "",
+                "",
                 List.of());
     }
 

@@ -121,6 +121,9 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                 .replace("{baselineReason}", request.baselineReason())
                 .replace("{baselineDetails}", writeJson(request.baselineDetails()))
                 .replace("{existingMemories}", existingMemories(request))
+                .replace("{stickyAnchors}", stickyAnchors(request))
+                .replace("{referenceZone}", zoneOrEmpty(request.referenceZone()))
+                .replace("{targetZone}", zoneOrEmpty(request.targetZone()))
                 .replace("{feedbackSamples}", feedbackSamples(request));
     }
 
@@ -142,6 +145,15 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                 baselineDetails: %s
 
                 Current existing memories:
+                %s
+
+                Must-hold constraints:
+                %s
+
+                Reference Zone:
+                %s
+
+                Target Zone:
                 %s
 
                 Human review feedback examples:
@@ -190,6 +202,9 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                 request.baselineReason(),
                 writeJson(request.baselineDetails()),
                 existingMemories(request),
+                stickyAnchors(request),
+                zoneOrEmpty(request.referenceZone()),
+                zoneOrEmpty(request.targetZone()),
                 feedbackSamples(request),
                 truncate(request.sanitizedContent(), MAX_CONTENT_CHARS));
     }
@@ -202,6 +217,21 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                 .map(this::existingMemorySnapshot)
                 .toList();
         return writeJsonValue(snapshots);
+    }
+
+    private String stickyAnchors(MemoryRefinementRequest request) {
+        if (request.stickyAnchors().isEmpty()) {
+            return "[]";
+        }
+        List<Map<String, Object>> snapshots = request.stickyAnchors().stream()
+                .map(this::existingMemorySnapshot)
+                .toList();
+        return writeJsonValue(snapshots);
+    }
+
+    private String zoneOrEmpty(String value) {
+        String normalized = Objects.requireNonNullElse(value, "").trim();
+        return normalized.isBlank() ? "[]" : truncate(normalized, MAX_CONTENT_CHARS);
     }
 
     private Map<String, Object> existingMemorySnapshot(MemoryRefinementMemory memory) {

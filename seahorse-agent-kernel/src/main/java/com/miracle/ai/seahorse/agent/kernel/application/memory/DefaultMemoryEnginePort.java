@@ -73,6 +73,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 默认记忆引擎端口实现。
@@ -111,6 +113,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String METADATA_REFINER_BATCH_CIRCUIT_REASON = "refinerBatchCircuitReason";
     private static final String METADATA_REFINER_BATCH_CIRCUIT_TYPE = "refinerBatchCircuitType";
     private static final String METADATA_REFINER_BATCH_OPERATIONS = "refinerBatchOperations";
+    private static final String METADATA_IMPORTANCE_SCORE = "importanceScore";
+    private static final String METADATA_CONFIDENCE_LEVEL = "confidenceLevel";
     private static final String REFINER_BATCH_CIRCUIT_BREAKER_REASON = "refiner_batch_circuit_breaker";
     private static final String REFINER_STATUS_CIRCUIT_BREAKER = "circuit_breaker";
     private static final String REFINER_BATCH_TARGET_KIND = "REFINER_BATCH";
@@ -119,6 +123,11 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String REFINER_BATCH_REASON_OPERATION_COUNT_EXCEEDED = "operation_count_exceeded";
     private static final String REFINER_BATCH_REASON_DELETE_RATIO_EXCEEDED = "delete_ratio_exceeded";
     private static final int REFINER_READ_MASK_PER_LAYER_LIMIT = 3;
+    private static final int REFINER_TARGET_ZONE_TURN_COUNT = 3;
+    private static final int REFINER_STICKY_ANCHOR_LIMIT = 5;
+    private static final double REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD = 0.85D;
+    private static final double REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD = 0.90D;
+    private static final Pattern CONTEXT_TURN_HEADER_PATTERN = Pattern.compile("\\bturn_\\d+:");
     private static final String OPERATION_VECTOR_DELETE = "VECTOR_DELETE";
     private static final String OPERATION_VECTOR_DELETE_OUTBOX_ENQUEUE = "VECTOR_DELETE_OUTBOX_ENQUEUE";
     private static final String OPERATION_KEYWORD_DELETE_OUTBOX_ENQUEUE = "KEYWORD_DELETE_OUTBOX_ENQUEUE";
@@ -128,6 +137,14 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
         private IngestionExecution {
             Objects.requireNonNull(result, "result must not be null");
+        }
+    }
+
+    private record MemoryRefinementContextZones(String referenceZone, String targetZone) {
+
+        private MemoryRefinementContextZones {
+            referenceZone = Objects.requireNonNullElse(referenceZone, "");
+            targetZone = Objects.requireNonNullElse(targetZone, "");
         }
     }
 
@@ -819,6 +836,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return baseline;
         }
         try {
+            List<MemoryRefinementMemory> existingMemories = currentExistingMemories(request.userId());
+            MemoryRefinementContextZones contextZones = refinementContextZones(sanitizedContent);
             MemoryRefinementResult result = memoryRefinerPort.refine(new MemoryRefinementRequest(
                     operationId,
                     tenantId,
@@ -831,7 +850,10 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     baselineMemoryType(baseline),
                     baseline == null ? "" : baseline.reason(),
                     baselineDetails(baseline),
-                    currentExistingMemories(request.userId())));
+                    existingMemories,
+                    contextZones.referenceZone(),
+                    contextZones.targetZone(),
+                    stickyAnchors(existingMemories)));
             return applyRefinementResult(result, baseline);
         } catch (RuntimeException ex) {
             if (!options.refinerFailOpen()) {
@@ -896,6 +918,92 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 stringMetadata(metadata, "generationId", ""),
                 stringMetadata(metadata, "status", "ACTIVE"),
                 metadata);
+    }
+
+    private List<MemoryRefinementMemory> stickyAnchors(List<MemoryRefinementMemory> existingMemories) {
+        if (existingMemories == null || existingMemories.isEmpty()) {
+            return List.of();
+        }
+        return existingMemories.stream()
+                .filter(this::isStickyAnchor)
+                .limit(REFINER_STICKY_ANCHOR_LIMIT)
+                .toList();
+    }
+
+    private boolean isStickyAnchor(MemoryRefinementMemory memory) {
+        if (memory == null || !"ACTIVE".equalsIgnoreCase(memory.status())) {
+            return false;
+        }
+        String layer = memory.layer().toUpperCase(Locale.ROOT);
+        if (!MemoryLayer.LONG_TERM.name().equals(layer) && !MemoryLayer.SEMANTIC.name().equals(layer)) {
+            return false;
+        }
+        return memoryMetadataScore(memory, METADATA_IMPORTANCE_SCORE, METADATA_IMPORTANCE)
+                >= REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD
+                || memoryMetadataScore(memory, METADATA_CONFIDENCE_LEVEL, METADATA_CONFIDENCE)
+                >= REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD;
+    }
+
+    private double memoryMetadataScore(MemoryRefinementMemory memory, String primaryKey, String fallbackKey) {
+        double primary = doubleMetadata(memory.metadata(), primaryKey);
+        return primary > 0D ? primary : doubleMetadata(memory.metadata(), fallbackKey);
+    }
+
+    private MemoryRefinementContextZones refinementContextZones(String sanitizedContent) {
+        if (isBlank(sanitizedContent)) {
+            return new MemoryRefinementContextZones("", "");
+        }
+        List<String> turns = contextBlockTurns(sanitizedContent);
+        if (turns.isEmpty()) {
+            return new MemoryRefinementContextZones("", sanitizedContent);
+        }
+        int targetStart = Math.max(0, turns.size() - REFINER_TARGET_ZONE_TURN_COUNT);
+        return new MemoryRefinementContextZones(
+                joinBlocks(turns.subList(0, targetStart)),
+                joinBlocks(turns.subList(targetStart, turns.size())));
+    }
+
+    private List<String> contextBlockTurns(String content) {
+        String normalized = Objects.requireNonNullElse(content, "").replace("\r\n", "\n").replace('\r', '\n');
+        int turnsStart = normalized.indexOf("[turns]");
+        if (turnsStart < 0) {
+            return List.of();
+        }
+        int bodyStart = turnsStart + "[turns]".length();
+        int sourceSpansStart = normalized.indexOf("[source_spans]", bodyStart);
+        String turnsBody = sourceSpansStart > bodyStart
+                ? normalized.substring(bodyStart, sourceSpansStart)
+                : normalized.substring(bodyStart);
+        return splitContextTurns(turnsBody);
+    }
+
+    private List<String> splitContextTurns(String turnsBody) {
+        List<String> turns = new ArrayList<>();
+        Matcher matcher = CONTEXT_TURN_HEADER_PATTERN.matcher(Objects.requireNonNullElse(turnsBody, ""));
+        int currentStart = -1;
+        while (matcher.find()) {
+            if (currentStart >= 0) {
+                String block = turnsBody.substring(currentStart, matcher.start()).trim();
+                if (!block.isBlank()) {
+                    turns.add(block);
+                }
+            }
+            currentStart = matcher.start();
+        }
+        if (currentStart >= 0) {
+            String block = turnsBody.substring(currentStart).trim();
+            if (!block.isBlank()) {
+                turns.add(block);
+            }
+        }
+        return List.copyOf(turns);
+    }
+
+    private String joinBlocks(List<String> blocks) {
+        if (blocks == null || blocks.isEmpty()) {
+            return "";
+        }
+        return String.join("\n\n", blocks);
     }
 
     private MemoryClassificationResult applyRefinementResult(MemoryRefinementResult result,

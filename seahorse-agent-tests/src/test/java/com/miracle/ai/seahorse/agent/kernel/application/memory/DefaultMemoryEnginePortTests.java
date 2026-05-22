@@ -1014,13 +1014,15 @@ class DefaultMemoryEnginePortTests {
         StubLongTermMemoryPort longTermPort = new StubLongTermMemoryPort(List.of(new MemoryRecord(
                 "ltm-existing",
                 "LONG_TERM",
-                "PROJECT_FACT",
-                "User's project currently uses MySQL.",
-                Map.of("targetKind", "PROJECT_FACT",
-                        "targetKey", "project.database",
-                        "generationId", "project.database:old",
-                        "status", "ACTIVE"),
-                Instant.now())));
+                        "PROJECT_FACT",
+                        "User's project currently uses MySQL.",
+                        Map.of("targetKind", "PROJECT_FACT",
+                                "targetKey", "project.database",
+                                "generationId", "project.database:old",
+                                "status", "ACTIVE",
+                                "importanceScore", 0.92D,
+                                "confidenceLevel", 0.95D),
+                        Instant.now())));
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.empty(
                 "no_refined_delta"));
         DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
@@ -1057,6 +1059,33 @@ class DefaultMemoryEnginePortTests {
                 existingMemories.stream().map(MemoryRefinementMemory::layer).toList());
         Assertions.assertEquals("project.database", existingMemories.get(1).targetKey());
         Assertions.assertEquals("project.database:old", existingMemories.get(1).generationId());
+        Assertions.assertEquals(List.of("ltm-existing"),
+                refinerPort.requests.get(0).stickyAnchors().stream()
+                        .map(MemoryRefinementMemory::memoryId)
+                        .toList());
+    }
+
+    @Test
+    void shouldPassReferenceAndTargetZonesForAggregatedContextBlockToRefiner() {
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.empty(
+                "no_refined_delta"));
+        DefaultMemoryEnginePort engine = engineWithRefiner(new StubShortTermMemoryPort(List.of()), refinerPort, true);
+
+        engine.ingest(new MemoryIngestionCommand("op-refiner-zones", "default", "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-zones")
+                        .messageId("msg-refiner-zones")
+                        .message(ChatMessage.user(memoryContextBlock(5)))
+                        .build()));
+
+        Assertions.assertEquals(1, refinerPort.requests.size());
+        MemoryRefinementRequest request = refinerPort.requests.get(0);
+        Assertions.assertTrue(request.referenceZone().contains("turn_1:"));
+        Assertions.assertTrue(request.referenceZone().contains("turn_2:"));
+        Assertions.assertFalse(request.referenceZone().contains("turn_5:"));
+        Assertions.assertTrue(request.targetZone().contains("turn_3:"));
+        Assertions.assertTrue(request.targetZone().contains("turn_5:"));
     }
 
     @Test
@@ -1834,6 +1863,23 @@ class DefaultMemoryEnginePortTests {
                 (MemoryRetrievalPipelinePort) null,
                 refinerPort,
                 reviewCandidatePort);
+    }
+
+    private String memoryContextBlock(int turnCount) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("MEMORY_CONTEXT_BLOCK: v1\n");
+        builder.append("turn_count: ").append(turnCount).append("\n\n");
+        builder.append("[turns]\n");
+        for (int i = 1; i <= turnCount; i++) {
+            builder.append("turn_").append(i).append(":\n");
+            builder.append("  user: turn ").append(i).append(" user text\n");
+            builder.append("  assistant: turn ").append(i).append(" assistant text\n");
+        }
+        builder.append("\n[source_spans]\n");
+        for (int i = 1; i <= turnCount; i++) {
+            builder.append("span_").append(i).append(": msg-").append(i).append(" -> assistant-").append(i).append("\n");
+        }
+        return builder.toString();
     }
 
     private static class StubShortTermMemoryPort implements ShortTermMemoryPort {

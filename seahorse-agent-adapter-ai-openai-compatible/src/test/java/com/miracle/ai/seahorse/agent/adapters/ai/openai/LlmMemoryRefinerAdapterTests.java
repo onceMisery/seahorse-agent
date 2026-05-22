@@ -307,6 +307,55 @@ class LlmMemoryRefinerAdapterTests {
         assertThat(prompt).contains("User's project currently uses MySQL.");
     }
 
+    @Test
+    void shouldInjectContextZonesAndStickyAnchorsIntoPromptWhenAvailable() {
+        CapturingChatModelPort chatModelPort = new CapturingChatModelPort("""
+                {
+                  "refined": true,
+                  "reason": "uses enriched context",
+                  "operations": []
+                }
+                """);
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                chatModelPort,
+                PromptTemplatePort.empty(),
+                new ObjectMapper());
+
+        adapter.refine(new MemoryRefinementRequest(
+                "op-1",
+                "tenant-1",
+                "memory-aggregation-flush",
+                "user-1",
+                "conversation-1",
+                "message-1",
+                "target content",
+                MemoryIngestionAction.ADD,
+                "FACT",
+                "rule_based",
+                Map.<String, Object>of(),
+                List.<MemoryRefinementMemory>of(),
+                "turn_1: prior context",
+                "turn_3: current target",
+                List.of(new MemoryRefinementMemory(
+                        "anchor-1",
+                        "LONG_TERM",
+                        "PROJECT_FACT",
+                        "Runtime environment is Java 17.",
+                        "PROJECT_FACT",
+                        "runtime.env",
+                        "runtime.env:v1",
+                        "ACTIVE",
+                        Map.of("importanceScore", 0.95D)))));
+
+        String prompt = chatModelPort.lastRequest.get().getMessages().get(0).getContent();
+        assertThat(prompt).contains("Must-hold constraints:");
+        assertThat(prompt).contains("Reference Zone:");
+        assertThat(prompt).contains("Target Zone:");
+        assertThat(prompt).contains("turn_1: prior context");
+        assertThat(prompt).contains("turn_3: current target");
+        assertThat(prompt).contains("Runtime environment is Java 17.");
+    }
+
     private static MemoryRefinementRequest request(String content) {
         return new MemoryRefinementRequest(
                 "op-1",
