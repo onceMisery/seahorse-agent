@@ -271,6 +271,54 @@ class LlmMemoryRefinerAdapterTests {
     }
 
     @Test
+    void shouldPreferRequestFeedbackExamplesOverRepositoryFallback() {
+        CapturingChatModelPort chatModelPort = new CapturingChatModelPort("""
+                {
+                  "refined": true,
+                  "reason": "guided by request feedback",
+                  "operations": [
+                    {"action": "IGNORE", "content": "", "confidence": 0.9}
+                  ]
+                }
+                """);
+        RecordingFeedbackRepository feedbackRepository = new RecordingFeedbackRepository();
+        feedbackRepository.samples = List.of(feedbackSample(
+                "repo-sample",
+                "Repository fallback guidance should not be used."));
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                chatModelPort,
+                PromptTemplatePort.empty(),
+                new ObjectMapper(),
+                feedbackRepository,
+                3);
+
+        adapter.refine(new MemoryRefinementRequest(
+                "op-1",
+                "tenant-1",
+                "chat",
+                "user-1",
+                "conversation-1",
+                "message-1",
+                "The build is annoying again.",
+                MemoryIngestionAction.ADD,
+                "FACT",
+                "rule_based",
+                Map.<String, Object>of("valueScore", 0.6D),
+                List.<MemoryRefinementMemory>of(),
+                "",
+                "",
+                List.<MemoryRefinementMemory>of(),
+                List.of(feedbackSample("request-sample", "Request-scoped guidance should be used."))));
+
+        String prompt = chatModelPort.lastRequest.get().getMessages().get(0).getContent();
+        assertThat(prompt).contains("request-sample");
+        assertThat(prompt).contains("Request-scoped guidance should be used.");
+        assertThat(prompt).doesNotContain("repo-sample");
+        assertThat(prompt).doesNotContain("Repository fallback guidance should not be used.");
+        assertThat(feedbackRepository.lastQuery).isNull();
+    }
+
+    @Test
     void shouldInjectCurrentExistingMemoriesIntoPromptWhenAvailable() {
         CapturingChatModelPort chatModelPort = new CapturingChatModelPort("""
                 {
@@ -415,6 +463,30 @@ class LlmMemoryRefinerAdapterTests {
                 "FACT",
                 "rule_based",
                 Map.of("valueScore", 0.6D));
+    }
+
+    private static MemoryReviewFeedbackSample feedbackSample(String sampleId, String reviewerComment) {
+        return new MemoryReviewFeedbackSample(
+                sampleId,
+                "review-" + sampleId,
+                "op-" + sampleId,
+                "tenant-1",
+                "user-1",
+                "REVIEW",
+                MemoryReviewStatus.REJECTED,
+                "auditor",
+                reviewerComment,
+                "SHORT_TERM",
+                "FACT",
+                "project.noise",
+                "User said the build is annoying.",
+                "",
+                Map.of(),
+                Map.of(),
+                List.of("message-1"),
+                "",
+                "",
+                Instant.EPOCH);
     }
 
     private static final class CapturingChatModelPort implements ChatModelPort {

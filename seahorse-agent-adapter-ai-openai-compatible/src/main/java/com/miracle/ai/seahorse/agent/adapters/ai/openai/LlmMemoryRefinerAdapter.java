@@ -253,6 +253,11 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
         if (feedbackSampleLimit <= 0) {
             return "[]";
         }
+        if (!request.feedbackExamples().isEmpty()) {
+            return feedbackSamplesJson(request.feedbackExamples().stream()
+                    .limit(feedbackSampleLimit)
+                    .toList());
+        }
         try {
             List<MemoryReviewFeedbackSample> samples = feedbackRepositoryPort.listSamples(
                     new MemoryReviewFeedbackQuery(
@@ -265,15 +270,22 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
             if (samples.isEmpty()) {
                 return "[]";
             }
-            List<Map<String, Object>> examples = samples.stream()
-                    .map(MemoryRefinerFeedbackExportRecord::fromReviewFeedbackSample)
-                    .map(this::feedbackExample)
-                    .toList();
-            return writeJsonValue(examples);
+            return feedbackSamplesJson(samples);
         } catch (Exception ex) {
             LOG.debug("Failed to load memory review feedback samples", ex);
             return "[]";
         }
+    }
+
+    private String feedbackSamplesJson(List<MemoryReviewFeedbackSample> samples) {
+        if (samples == null || samples.isEmpty()) {
+            return "[]";
+        }
+        List<Map<String, Object>> examples = samples.stream()
+                .map(MemoryRefinerFeedbackExportRecord::fromReviewFeedbackSample)
+                .map(this::feedbackExample)
+                .toList();
+        return writeJsonValue(examples);
     }
 
     private Map<String, Object> feedbackExample(MemoryRefinerFeedbackExportRecord record) {
