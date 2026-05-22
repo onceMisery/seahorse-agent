@@ -29,6 +29,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
@@ -67,11 +69,14 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -115,6 +120,11 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String METADATA_REFINER_BATCH_OPERATIONS = "refinerBatchOperations";
     private static final String METADATA_IMPORTANCE_SCORE = "importanceScore";
     private static final String METADATA_CONFIDENCE_LEVEL = "confidenceLevel";
+    private static final String METADATA_CANONICAL_ENTITY_ID = "canonicalEntityId";
+    private static final String METADATA_CANONICAL_NAME = "canonicalName";
+    private static final String METADATA_CANONICAL_ENTITY_TYPE = "canonicalEntityType";
+    private static final String METADATA_ALIAS_TEXT = "aliasText";
+    private static final String METADATA_ALIAS_CONFIDENCE_LEVEL = "aliasConfidenceLevel";
     private static final String REFINER_BATCH_CIRCUIT_BREAKER_REASON = "refiner_batch_circuit_breaker";
     private static final String REFINER_STATUS_CIRCUIT_BREAKER = "circuit_breaker";
     private static final String REFINER_BATCH_TARGET_KIND = "REFINER_BATCH";
@@ -128,6 +138,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final double REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD = 0.85D;
     private static final double REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD = 0.90D;
     private static final Pattern CONTEXT_TURN_HEADER_PATTERN = Pattern.compile("\\bturn_\\d+:");
+    private static final Pattern ALIAS_TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._:+#-]{1,63}");
+    private static final int MAX_ALIAS_TOKEN_LOOKUPS = 16;
     private static final Pattern CONTEXT_TURN_INDEX_PATTERN = Pattern.compile("\\bturn_(\\d+):");
     private static final Pattern CONTEXT_SOURCE_SPAN_PATTERN = Pattern.compile(
             "\\bspan_(\\d+):\\s*(.*?)(?=\\s+span_\\d+:\\s*|\\s*$)", Pattern.DOTALL);
@@ -190,6 +202,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryValueAssessor memoryValueAssessor;
     private final MemoryRefinerPort memoryRefinerPort;
     private final MemoryReviewCandidatePort memoryReviewCandidatePort;
+    private final MemoryAliasPort memoryAliasPort;
     private final MemorySanitizer memorySanitizer;
     private final MemoryPreFilter memoryPreFilter;
     private final MemorySemanticClassifier memorySemanticClassifier;
@@ -387,6 +400,30 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
                                    MemoryRefinerPort memoryRefinerPort,
                                    MemoryReviewCandidatePort memoryReviewCandidatePort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
+                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
+                businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort,
+                memoryRetrievalPipelinePort, memoryRefinerPort, memoryReviewCandidatePort, MemoryAliasPort.noop());
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort,
+                                   MemoryVectorPort memoryVectorPort,
+                                   MemoryOutboxPort memoryOutboxPort,
+                                   MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                   MemoryLifecyclePort memoryLifecyclePort,
+                                   MemoryPolicyConfigPort memoryPolicyConfigPort,
+                                   MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
+                                   MemoryRefinerPort memoryRefinerPort,
+                                   MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                   MemoryAliasPort memoryAliasPort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -423,6 +460,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.memoryRefinerPort = Objects.requireNonNullElseGet(memoryRefinerPort, MemoryRefinerPort::noop);
         this.memoryReviewCandidatePort = Objects.requireNonNullElseGet(memoryReviewCandidatePort,
                 MemoryReviewCandidatePort::noop);
+        this.memoryAliasPort = Objects.requireNonNullElseGet(memoryAliasPort, MemoryAliasPort::noop);
         this.memorySanitizer = new MemorySanitizer();
         this.memoryPreFilter = new MemoryPreFilter();
         this.memorySemanticClassifier = new MemorySemanticClassifier(captureCandidateExtractor, memoryValueAssessor);
@@ -620,6 +658,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             metadata.put("profileSlot", profileSlot);
             metadata.put("generationId", profileGenerationId);
         }
+        attachCanonicalAliasMetadata(metadata, request, tenantId, decision.content());
         MemoryLayer targetLayer = targetLayer(classification);
         MemoryRecord record = new MemoryRecord(
                 memoryId(request, classification),
@@ -1657,6 +1696,50 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         metadata.put("captureSignals", decision.signals());
         metadata.put("captureReasons", decision.reasons());
         return metadata;
+    }
+
+    private void attachCanonicalAliasMetadata(Map<String, Object> metadata,
+                                              MemoryWriteRequest request,
+                                              String tenantId,
+                                              String content) {
+        if (metadata.containsKey(METADATA_CANONICAL_ENTITY_ID) || request == null || isBlank(request.userId())) {
+            return;
+        }
+        for (String aliasText : aliasLookupTokens(content)) {
+            try {
+                Optional<MemoryAliasResolution> resolved =
+                        memoryAliasPort.resolveAlias(request.userId(), tenantId, aliasText);
+                if (resolved.isEmpty() || isBlank(resolved.get().canonicalEntityId())) {
+                    continue;
+                }
+                MemoryAliasResolution alias = resolved.get();
+                metadata.put(METADATA_CANONICAL_ENTITY_ID, alias.canonicalEntityId());
+                metadata.put(METADATA_CANONICAL_NAME, alias.canonicalName());
+                metadata.put(METADATA_CANONICAL_ENTITY_TYPE, alias.entityType());
+                metadata.put(METADATA_ALIAS_TEXT, isBlank(alias.aliasText()) ? aliasText : alias.aliasText());
+                metadata.put(METADATA_ALIAS_CONFIDENCE_LEVEL, alias.confidenceLevel());
+                return;
+            } catch (RuntimeException ex) {
+                LOG.debug("Memory alias resolution failed during write: userId={}, tenantId={}, aliasText={}, error={}",
+                        request.userId(), tenantId, aliasText,
+                        Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            }
+        }
+    }
+
+    private List<String> aliasLookupTokens(String content) {
+        if (isBlank(content)) {
+            return List.of();
+        }
+        Set<String> tokens = new LinkedHashSet<>();
+        Matcher matcher = ALIAS_TOKEN_PATTERN.matcher(content);
+        while (matcher.find() && tokens.size() < MAX_ALIAS_TOKEN_LOOKUPS) {
+            String token = matcher.group();
+            if (!isBlank(token)) {
+                tokens.add(token.trim());
+            }
+        }
+        return List.copyOf(tokens);
     }
 
     private void addRefinedMetadata(Map<String, Object> metadata, MemoryClassificationResult classification) {

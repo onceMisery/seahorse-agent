@@ -281,6 +281,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryRetrievalPipelinePort> memoryRetrievalPipelinePort,
             ObjectProvider<MemoryRefinerPort> memoryRefinerPort,
             ObjectProvider<MemoryReviewCandidatePort> memoryReviewCandidatePort,
+            ObjectProvider<MemoryAliasPort> memoryAliasPort,
             ObjectProvider<MemoryKeywordIndexPort> memoryKeywordIndexPort,
             ObjectProvider<MemoryGraphIndexPort> memoryGraphIndexPort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
@@ -323,7 +324,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 memoryPolicyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults),
                 memoryRetrievalPipelinePort.getIfAvailable(),
                 memoryRefinerPort.getIfAvailable(MemoryRefinerPort::noop),
-                memoryReviewCandidatePort.getIfAvailable(MemoryReviewCandidatePort::noop));
+                memoryReviewCandidatePort.getIfAvailable(MemoryReviewCandidatePort::noop),
+                memoryAliasPort.getIfAvailable(MemoryAliasPort::noop));
     }
 
     @Bean

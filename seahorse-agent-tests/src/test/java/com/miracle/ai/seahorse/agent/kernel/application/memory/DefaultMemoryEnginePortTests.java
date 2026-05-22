@@ -29,6 +29,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
@@ -268,6 +271,54 @@ class DefaultMemoryEnginePortTests {
         Assertions.assertEquals("我喜欢使用 Java 编写后端服务", saved.content());
         Assertions.assertEquals(USER_ID, saved.metadata().get("userId"));
         Assertions.assertEquals("explicit_user_memory", saved.metadata().get("capturePolicy"));
+    }
+
+    @Test
+    void shouldAttachCanonicalAliasMetadataWhenWritingMemory() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingAliasPort aliasPort = new RecordingAliasPort(Map.of(
+                "K8s",
+                new MemoryAliasResolution(
+                        "K8s",
+                        "k8s",
+                        "ent-core-k8s",
+                        "Kubernetes",
+                        "TECHNOLOGY",
+                        0.99D)));
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                MemoryOperationLogPort.noop(),
+                MemoryVectorPort.noop(),
+                MemoryOutboxPort.noop(),
+                MemoryBusinessDocumentRetrieverPort.noop(),
+                MemoryLifecyclePort.noop(),
+                MemoryPolicyConfigPort.defaults(),
+                (MemoryRetrievalPipelinePort) null,
+                MemoryRefinerPort.noop(),
+                MemoryReviewCandidatePort.noop(),
+                aliasPort);
+
+        engine.writeMemory(MemoryWriteRequest.builder()
+                .userId(USER_ID)
+                .conversationId("conv-alias")
+                .messageId("msg-alias")
+                .message(ChatMessage.user("请记住：我喜欢使用 K8s 部署服务"))
+                .build());
+
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        MemoryRecord saved = shortTermPort.savedRecords.get(0);
+        Assertions.assertEquals("ent-core-k8s", saved.metadata().get("canonicalEntityId"));
+        Assertions.assertEquals("Kubernetes", saved.metadata().get("canonicalName"));
+        Assertions.assertEquals("TECHNOLOGY", saved.metadata().get("canonicalEntityType"));
+        Assertions.assertEquals("K8s", saved.metadata().get("aliasText"));
+        Assertions.assertTrue(aliasPort.lookups.contains("K8s"), aliasPort.lookups::toString);
     }
 
     @Test
@@ -1961,6 +2012,26 @@ class DefaultMemoryEnginePortTests {
                 deletedIds.add(id);
             }
             return exists;
+        }
+    }
+
+    private static class RecordingAliasPort implements MemoryAliasPort {
+
+        private final Map<String, MemoryAliasResolution> resolutions;
+        private final List<String> lookups = new ArrayList<>();
+
+        RecordingAliasPort(Map<String, MemoryAliasResolution> resolutions) {
+            this.resolutions = resolutions;
+        }
+
+        @Override
+        public Optional<MemoryAliasResolution> resolveAlias(String userId, String tenantId, String aliasText) {
+            lookups.add(aliasText);
+            return Optional.ofNullable(resolutions.get(aliasText));
+        }
+
+        @Override
+        public void upsertAlias(MemoryAliasCommand command) {
         }
     }
 

@@ -634,6 +634,33 @@ class SeahorseAgentKernelAutoConfigurationTests {
     }
 
     @Test
+    void shouldInjectAliasPortIntoMemoryEngineForCanonicalWriteMetadata() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class, StaticMemoryAliasConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    org.mockito.Mockito.when(context.getBean(MemoryOperationLogPort.class)
+                                    .tryStart(org.mockito.ArgumentMatchers.any()))
+                            .thenReturn(true);
+
+                    MemoryEnginePort memoryEnginePort = context.getBean(MemoryEnginePort.class);
+                    memoryEnginePort.writeMemory(MemoryWriteRequest.builder()
+                            .userId("user-alias-write")
+                            .conversationId("conv-alias-write")
+                            .messageId("msg-alias-write")
+                            .message(ChatMessage.user("请记住：我喜欢使用 K8s 部署服务"))
+                            .build());
+
+                    org.mockito.ArgumentCaptor<MemoryRecord> captor =
+                            org.mockito.ArgumentCaptor.forClass(MemoryRecord.class);
+                    verify(context.getBean(ShortTermMemoryPort.class)).save(captor.capture());
+                    assertThat(captor.getValue().metadata())
+                            .containsEntry("canonicalEntityId", "ent-core-k8s")
+                            .containsEntry("canonicalName", "Kubernetes")
+                            .containsEntry("canonicalEntityType", "TECHNOLOGY");
+                });
+    }
+
+    @Test
     void shouldRegisterHybridMemoryRecallPipelineOnlyWhenEnabled() {
         contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class)
                 .withPropertyValues(
@@ -1303,6 +1330,34 @@ class SeahorseAgentKernelAutoConfigurationTests {
         @Bean
         RecordingMemoryAliasPort memoryAliasPort() {
             return new RecordingMemoryAliasPort();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class StaticMemoryAliasConfiguration {
+
+        @Bean
+        MemoryAliasPort staticMemoryAliasPort() {
+            return new MemoryAliasPort() {
+                @Override
+                public java.util.Optional<MemoryAliasResolution> resolveAlias(String userId, String tenantId,
+                                                                              String aliasText) {
+                    if ("K8s".equals(aliasText)) {
+                        return java.util.Optional.of(new MemoryAliasResolution(
+                                "K8s",
+                                "k8s",
+                                "ent-core-k8s",
+                                "Kubernetes",
+                                "TECHNOLOGY",
+                                0.99D));
+                    }
+                    return java.util.Optional.empty();
+                }
+
+                @Override
+                public void upsertAlias(MemoryAliasCommand command) {
+                }
+            };
         }
     }
 
