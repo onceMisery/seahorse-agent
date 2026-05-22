@@ -18,7 +18,6 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.miracle.ai.seahorse.agent.adapters.ai.openai.LlmMemoryRefinerAdapter;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFactory;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
@@ -668,14 +667,12 @@ class SeahorseAgentKernelAutoConfigurationTests {
     }
 
     @Test
-    void shouldRegisterLlmMemoryRefinerWhenExplicitlyEnabledAndChatModelExists() {
+    void shouldLeaveLlmMemoryRefinerRegistrationToAdapterAutoConfiguration() {
         contextRunner.withUserConfiguration(LlmMemoryRefinerConfiguration.class)
                 .withPropertyValues("seahorse-agent.memory.refiner.llm-enabled=true")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
-                    assertThat(context).hasSingleBean(MemoryRefinerPort.class);
-                    assertThat(context.getBean(MemoryRefinerPort.class))
-                            .isInstanceOf(LlmMemoryRefinerAdapter.class);
+                    assertThat(context).doesNotHaveBean(MemoryRefinerPort.class);
                 });
     }
 
