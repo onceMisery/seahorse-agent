@@ -143,11 +143,23 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
     }
 
-    private record MemoryRefinementContextZones(String referenceZone, String targetZone) {
+    private record MemoryRefinementContextZones(String referenceZone,
+                                                String targetZone,
+                                                List<String> targetSourceMessageIds) {
+
+        private MemoryRefinementContextZones(String referenceZone, String targetZone) {
+            this(referenceZone, targetZone, List.of());
+        }
 
         private MemoryRefinementContextZones {
             referenceZone = Objects.requireNonNullElse(referenceZone, "");
             targetZone = Objects.requireNonNullElse(targetZone, "");
+            targetSourceMessageIds = targetSourceMessageIds == null
+                    ? List.of()
+                    : List.copyOf(targetSourceMessageIds.stream()
+                    .filter(messageId -> messageId != null && !messageId.isBlank())
+                    .distinct()
+                    .toList());
         }
     }
 
@@ -865,7 +877,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     contextZones.referenceZone(),
                     contextZones.targetZone(),
                     stickyAnchors(existingMemories)));
-            return applyRefinementResult(result, baseline);
+            return applyRefinementResult(result, baseline, contextZones);
         } catch (RuntimeException ex) {
             if (!options.refinerFailOpen()) {
                 return new MemoryClassificationResult(
@@ -969,9 +981,11 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return new MemoryRefinementContextZones("", sanitizedContent);
         }
         int targetStart = Math.max(0, turns.size() - REFINER_TARGET_ZONE_TURN_COUNT);
+        List<ContextBlockTurn> targetTurns = turns.subList(targetStart, turns.size());
         return new MemoryRefinementContextZones(
                 joinContextTurnBlocks(turns.subList(0, targetStart)),
-                joinContextTurnBlocks(turns.subList(targetStart, turns.size())));
+                joinContextTurnBlocks(targetTurns),
+                sourceMessageIdsFromSpans(targetTurns));
     }
 
     private List<ContextBlockTurn> contextBlockTurns(String content) {
@@ -1066,8 +1080,33 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return turnBlocks + "\n\n[source_spans]\n" + String.join("\n", sourceSpans);
     }
 
+    private List<String> sourceMessageIdsFromSpans(List<ContextBlockTurn> turns) {
+        if (turns == null || turns.isEmpty()) {
+            return List.of();
+        }
+        return turns.stream()
+                .map(ContextBlockTurn::sourceSpan)
+                .map(this::sourceMessageIdFromSpan)
+                .filter(messageId -> !isBlank(messageId))
+                .distinct()
+                .toList();
+    }
+
+    private String sourceMessageIdFromSpan(String sourceSpan) {
+        if (isBlank(sourceSpan)) {
+            return "";
+        }
+        String span = sourceSpan.trim();
+        int separatorIndex = span.indexOf(':');
+        String body = separatorIndex >= 0 ? span.substring(separatorIndex + 1) : span;
+        int assistantSeparatorIndex = body.indexOf("->");
+        String userMessageId = assistantSeparatorIndex >= 0 ? body.substring(0, assistantSeparatorIndex) : body;
+        return userMessageId.trim();
+    }
+
     private MemoryClassificationResult applyRefinementResult(MemoryRefinementResult result,
-                                                             MemoryClassificationResult baseline) {
+                                                             MemoryClassificationResult baseline,
+                                                             MemoryRefinementContextZones contextZones) {
         if (result == null || !result.refined() || result.operations().isEmpty()) {
             return withRefinerDelta(
                     baseline,
@@ -1087,7 +1126,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     "unsupported_refined_operation",
                     Map.of("status", "unsupported"));
         }
-        List<MemoryClassificationResult> classifications = supportedRefinedClassifications(result);
+        List<MemoryClassificationResult> classifications = supportedRefinedClassifications(result, contextZones);
         if (classifications.isEmpty()) {
             return withRefinerDelta(
                     baseline,
@@ -1216,7 +1255,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return null;
     }
 
-    private List<MemoryClassificationResult> supportedRefinedClassifications(MemoryRefinementResult result) {
+    private List<MemoryClassificationResult> supportedRefinedClassifications(MemoryRefinementResult result,
+                                                                             MemoryRefinementContextZones contextZones) {
         List<MemoryClassificationResult> classifications = new ArrayList<>();
         List<RefinedMemoryOperation> operations = result == null ? List.of() : result.operations();
         int supportedIndex = 0;
@@ -1230,8 +1270,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     METADATA_REFINER_OPERATION_INDEX, supportedIndex,
                     METADATA_REFINER_OPERATION_COUNT, supportedCount);
             MemoryClassificationResult classification = operation.action() == MemoryIngestionAction.ADD
-                    ? refinedAddClassification(operation, result, batchMetadata)
-                    : refinedReviewClassification(operation, result, batchMetadata);
+                    ? refinedAddClassification(operation, result, batchMetadata, contextZones.targetSourceMessageIds())
+                    : refinedReviewClassification(operation, result, batchMetadata, contextZones.targetSourceMessageIds());
             classifications.add(classification);
             supportedIndex++;
         }
@@ -1252,7 +1292,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
     private MemoryClassificationResult refinedAddClassification(RefinedMemoryOperation operation,
                                                                 MemoryRefinementResult result,
-                                                                Map<String, Object> extraMetadata) {
+                                                                Map<String, Object> extraMetadata,
+                                                                List<String> fallbackSourceMessageIds) {
         MemoryCaptureDecision decision = MemoryCaptureDecision.refinedAdd(
                 operation.content(),
                 isBlank(operation.targetKind()) ? "FACT" : operation.targetKind(),
@@ -1265,7 +1306,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         Map<String, Object> metadata = new LinkedHashMap<>(operation.metadata());
         metadata.putAll(result.metadata());
         metadata.put("status", "enabled");
-        metadata.put("sourceMessageIds", operation.sourceMessageIds());
+        metadata.put(METADATA_SOURCE_MESSAGE_IDS, effectiveSourceMessageIds(operation, fallbackSourceMessageIds));
         metadata.putAll(extraMetadata);
         return MemoryClassificationResult.refinedAdd(decision, new RefinedMemoryDelta(
                 operation.action(),
@@ -1283,6 +1324,13 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private MemoryClassificationResult refinedReviewClassification(RefinedMemoryOperation operation,
                                                                    MemoryRefinementResult result,
                                                                    Map<String, Object> extraMetadata) {
+        return refinedReviewClassification(operation, result, extraMetadata, List.of());
+    }
+
+    private MemoryClassificationResult refinedReviewClassification(RefinedMemoryOperation operation,
+                                                                   MemoryRefinementResult result,
+                                                                   Map<String, Object> extraMetadata,
+                                                                   List<String> fallbackSourceMessageIds) {
         Map<String, Object> metadata = new LinkedHashMap<>(operation.metadata());
         metadata.putAll(result.metadata());
         metadata.put("status", "pending_review");
@@ -1291,7 +1339,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         metadata.put(METADATA_IMPORTANCE, operation.importance());
         metadata.put(METADATA_VALUE_SCORE, operation.valueScore());
         metadata.put(METADATA_RISK_SCORE, operation.riskScore());
-        metadata.put(METADATA_SOURCE_MESSAGE_IDS, operation.sourceMessageIds());
+        metadata.put(METADATA_SOURCE_MESSAGE_IDS, effectiveSourceMessageIds(operation, fallbackSourceMessageIds));
         metadata.putAll(extraMetadata);
         return new MemoryClassificationResult(
                 MemoryIngestionAction.REVIEW,
@@ -1304,6 +1352,25 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                         result.reason(),
                         metadata),
                 result.reason());
+    }
+
+    private List<String> effectiveSourceMessageIds(RefinedMemoryOperation operation, List<String> fallbackSourceMessageIds) {
+        List<String> operationSourceMessageIds = operation == null ? List.of() : operation.sourceMessageIds();
+        List<String> sanitizedOperationSourceMessageIds = nonBlankDistinct(operationSourceMessageIds);
+        if (!sanitizedOperationSourceMessageIds.isEmpty()) {
+            return sanitizedOperationSourceMessageIds;
+        }
+        return nonBlankDistinct(fallbackSourceMessageIds);
+    }
+
+    private List<String> nonBlankDistinct(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(value -> !isBlank(value))
+                .distinct()
+                .toList();
     }
 
     private boolean requiresReviewStaging(MemoryIngestionAction action) {

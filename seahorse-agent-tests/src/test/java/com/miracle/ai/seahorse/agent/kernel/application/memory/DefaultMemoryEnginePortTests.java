@@ -1096,6 +1096,40 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldFallbackEmptyRefinerSourceMessageIdsToTargetZoneSourceSpans() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "uses source span fallback",
+                List.of(new RefinedMemoryOperation(
+                        MemoryIngestionAction.ADD,
+                        "PROJECT_FACT",
+                        "project.runtime",
+                        "User's current project runtime is Java 17.",
+                        0.90D,
+                        0.70D,
+                        0.80D,
+                        0.10D,
+                        List.of(),
+                        List.of("llm_refiner"),
+                        Map.of())),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefiner(shortTermPort, refinerPort, true);
+
+        engine.ingest(new MemoryIngestionCommand("op-refiner-source-span-fallback", "default",
+                "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-source-span-fallback")
+                        .messageId("memory-snapshot-1")
+                        .message(ChatMessage.user(memoryContextBlock(5)))
+                        .build()));
+
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        Object sourceMessageIds = shortTermPort.savedRecords.get(0).metadata().get("sourceMessageIds");
+        Assertions.assertEquals(List.of("msg-3", "msg-4", "msg-5"), sourceMessageIds);
+    }
+
+    @Test
     void shouldFailOpenToRuleClassificationWhenEnabledRefinerThrows() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
