@@ -18,9 +18,11 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.CatalogBackedToolPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.LocalToolGatewayPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
@@ -38,6 +40,10 @@ import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceReco
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
@@ -111,12 +117,34 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                    KernelAgentLoopOptions options,
                                                    ObjectProvider<KernelRagTraceRecorder> traceRecorder,
                                                    ObjectProvider<ContextWeaverPort> contextWeaverPort,
+                                                   ObjectProvider<ToolGatewayPort> toolGatewayPort,
                                                    ObjectProvider<AgentRunStepRecorder> runStepRecorder) {
-        return new KernelAgentLoop(modelPort, toolRegistry, options,
+        return new KernelAgentLoop(modelPort, toolRegistry,
+                toolGatewayPort.getIfAvailable(() -> new LocalToolGatewayPort(toolRegistry)),
+                options,
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
                 contextWeaverPort.getIfAvailable(
                         com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver::new),
                 runStepRecorder.getIfAvailable(AgentRunStepRecorder::noop));
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean({ToolCatalogRepositoryPort.class, AgentToolBindingRepositoryPort.class})
+    @ConditionalOnMissingBean
+    public ToolPolicyPort seahorseCatalogBackedToolPolicyPort(
+            ToolCatalogRepositoryPort toolCatalogRepositoryPort,
+            AgentToolBindingRepositoryPort agentToolBindingRepositoryPort) {
+        return new CatalogBackedToolPolicyPort(toolCatalogRepositoryPort, agentToolBindingRepositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean(ToolRegistryPort.class)
+    @ConditionalOnMissingBean
+    public ToolGatewayPort seahorseToolGatewayPort(ToolRegistryPort toolRegistry,
+                                                   ObjectProvider<ToolPolicyPort> toolPolicyPort) {
+        return new LocalToolGatewayPort(toolRegistry, toolPolicyPort.getIfAvailable(ToolPolicyPort::defaults));
     }
 
     @Bean

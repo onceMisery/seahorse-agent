@@ -418,3 +418,55 @@ Fix boundary:
 - `LocalToolGatewayPort`: resolves the registered tool, calls `ToolPolicyPort.decide(...)`, and only touches `ToolPort` after `PolicyDecision.Effect.ALLOW`.
 - `PolicyDecision`, `ToolPolicyRequest`, and `ToolPolicyPort`: added the Phase 2 minimum policy vocabulary and built-in existence/binding policy.
 - Core Agent definition/run/gateway records and ports now have Chinese Javadoc for entity fields and interface methods.
+
+## 2026-05-23 Phase 2 Tool Catalog / Agent Binding policy slice
+
+RED/GREEN coverage:
+
+- `CatalogBackedToolPolicyPortTests` verifies disabled tools are denied before binding lookup, unbound tools are denied, low-risk READ tools are allowed when catalog and binding both allow them, and `CRITICAL` / `DELETE` / `EXTERNAL_SEND` / explicit `requiresApproval` tools return `APPROVAL_REQUIRED`.
+- `SeahorseAgentChatRunStoreAutoConfigurationTests.shouldWireCatalogBackedToolPolicyIntoAgentLoop` verifies starter wiring injects the catalog-backed policy through `ToolGatewayPort` into `KernelAgentLoop`; an unbound catalog tool is blocked with `TOOL_NOT_BOUND` and the real `ToolPort` is not invoked.
+
+Focused kernel command:
+
+```powershell
+.\mvnw -pl seahorse-agent-kernel '-Dtest=CatalogBackedToolPolicyPortTests,LocalToolGatewayPortPolicyTests,KernelAgentLoopToolGatewayTests,KernelChatAgentRunStoreTests,KernelAgentRunServiceTests' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 18
+- Failures: 0
+- Errors: 0
+- Covered: catalog-backed policy decisions, local gateway policy enforcement, agent loop gateway delegation, chat run-store regression, and agent run lifecycle regression.
+
+Focused starter command:
+
+```powershell
+.\mvnw -pl seahorse-agent-spring-boot-starter -am '-Dtest=SeahorseAgentRegistryAutoConfigurationTests,SeahorseAgentChatRunStoreAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 4 in starter
+- Failures: 0
+- Errors: 0
+- Covered: registry/run store starter wiring plus catalog-backed `ToolPolicyPort` and injected `ToolGatewayPort` selection.
+
+Fix boundary:
+
+- `ToolCatalogEntry`, `ToolProvider`, `ToolRiskLevel`, and `ToolActionType`: added the kernel metadata model required for risk/action/provider-based policy decisions.
+- `AgentToolBinding`: added immutable Agent version to tool binding snapshot metadata, including max calls and argument policy placeholders for later enforcement.
+- `ToolCatalogRepositoryPort` and `AgentToolBindingRepositoryPort`: added narrow outbound ports with empty fallbacks for catalog and binding lookup.
+- `ToolPolicyReasonCodes`: centralized stable policy reason codes used by default and catalog-backed policies.
+- `CatalogBackedToolPolicyPort`: added catalog/binding-backed built-in policy while keeping tool execution in `LocalToolGatewayPort`.
+- `SeahorseAgentKernelAgentAutoConfiguration`: now creates catalog-backed policy only when both catalog and binding repositories exist, creates a local `ToolGatewayPort`, and injects the selected gateway into `KernelAgentLoop`.
+
+Remaining Phase 2 work:
+
+- Durable JDBC schema/adapters for tool catalog and bindings.
+- Invocation audit port and storage-backed invocation records.
+- `maxCallsPerRun` and argument policy enforcement.
+- MCP allowlist registration into the catalog.
+- Tool catalog/binding/audit management APIs.

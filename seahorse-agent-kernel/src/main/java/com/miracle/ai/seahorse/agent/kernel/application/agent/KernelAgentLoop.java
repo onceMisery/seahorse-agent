@@ -148,10 +148,21 @@ public class KernelAgentLoop {
                            KernelRagTraceRecorder traceRecorder,
                            ContextWeaverPort contextWeaver,
                            AgentRunStepRecorder runStepRecorder) {
+        this(modelPort, toolRegistry, null, options, traceRecorder, contextWeaver, runStepRecorder);
+    }
+
+    public KernelAgentLoop(StreamingChatModelPort modelPort,
+                           ToolRegistryPort toolRegistry,
+                           ToolGatewayPort toolGateway,
+                           KernelAgentLoopOptions options,
+                           KernelRagTraceRecorder traceRecorder,
+                           ContextWeaverPort contextWeaver,
+                           AgentRunStepRecorder runStepRecorder) {
         this.modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
         ToolRegistryPort effectiveToolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         this.toolRegistry = effectiveToolRegistry;
-        this.toolGateway = new LocalToolGatewayPort(effectiveToolRegistry);
+        this.toolGateway = Objects.requireNonNullElseGet(toolGateway,
+                () -> new LocalToolGatewayPort(effectiveToolRegistry));
         this.options = Objects.requireNonNullElseGet(options, KernelAgentLoopOptions::defaults);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
         this.contextWeaver = Objects.requireNonNullElseGet(contextWeaver, DefaultContextWeaver::new);

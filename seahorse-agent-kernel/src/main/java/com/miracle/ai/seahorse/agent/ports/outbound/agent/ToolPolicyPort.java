@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
 
 @FunctionalInterface
@@ -40,12 +41,12 @@ public interface ToolPolicyPort {
         return request -> {
             if (request == null || !request.toolRegistered()) {
                 return PolicyDecision.deny("builtin-tool-not-found",
-                        "TOOL_NOT_FOUND",
+                        ToolPolicyReasonCodes.TOOL_NOT_FOUND,
                         "Tool is not registered");
             }
             if (!request.allowedToolIds().isEmpty() && !request.allowedToolIds().contains(request.toolId())) {
                 return PolicyDecision.deny("builtin-tool-not-bound",
-                        "TOOL_NOT_BOUND",
+                        ToolPolicyReasonCodes.TOOL_NOT_BOUND,
                         "Tool is not bound to the current agent version");
             }
             return PolicyDecision.allow("builtin-tool-allow");

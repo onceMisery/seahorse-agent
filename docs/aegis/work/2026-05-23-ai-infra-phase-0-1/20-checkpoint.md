@@ -29,10 +29,12 @@ Completed:
 - Phase 2 Tool Gateway first slice is green: `KernelAgentLoop` no longer executes tools through `ToolRegistryPort.find(...)->ToolPort.invoke(...)`; it builds `ToolInvocationRequest` and delegates actual execution decisions to `ToolGatewayPort`.
 - Phase 2 Policy Engine baseline is green: `LocalToolGatewayPort` now calls `ToolPolicyPort.decide(...)` before touching `ToolPort`; `DENY` and `APPROVAL_REQUIRED` results do not execute tools.
 - Core AI Infra domain/port comments are aligned with the project convention: key entity fields, interface methods, and Tool Gateway policy boundary logic now have Chinese Javadoc or inline comments.
+- Phase 2 Tool Catalog policy slice is green: kernel now has `ToolCatalogEntry`, `AgentToolBinding`, risk/action/provider metadata, catalog/binding repository ports, stable policy reason codes, and `CatalogBackedToolPolicyPort`.
+- Starter wiring now prefers catalog-backed policy when both catalog and binding repositories exist, injects `ToolGatewayPort` into `KernelAgentLoop`, and preserves the default local gateway fallback when no custom gateway is present.
 
 Active slice:
 
-- Phase 2 `02-tool-gateway-policy-engine.md` baseline slice completed at kernel boundary. Next Phase 2 work should add tool catalog metadata, agent-tool binding persistence, invocation audit ports, and durable schema before exposing management APIs.
+- Phase 2 `02-tool-gateway-policy-engine.md` catalog-backed policy slice completed at kernel/starter boundary. Next Phase 2 work should add durable tool catalog/binding schema, invocation audit ports, call-limit enforcement, MCP catalog registration, and management APIs.
 
 Evidence refs:
 
@@ -41,6 +43,8 @@ Evidence refs:
 - `rg --files docs/company-agent/ai-infra-phases`
 - `.\mvnw -pl seahorse-agent-kernel '-Dtest=KernelAgentDefinitionServiceTests,KernelAgentRunServiceTests,KernelChatAgentRunStoreTests' test`
 - `.\mvnw -pl seahorse-agent-adapter-repository-jdbc -am '-Dtest=JdbcAgentDefinitionRepositoryAdapterTests,JdbcAgentRunRepositoryAdapterTests' '-Dsurefire.failIfNoSpecifiedTests=false' test`
+- `.\mvnw -pl seahorse-agent-spring-boot-starter -am '-Dtest=SeahorseAgentRegistryAutoConfigurationTests,SeahorseAgentChatRunStoreAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test`
+- `.\mvnw -pl seahorse-agent-kernel '-Dtest=CatalogBackedToolPolicyPortTests,LocalToolGatewayPortPolicyTests,KernelAgentLoopToolGatewayTests,KernelChatAgentRunStoreTests,KernelAgentRunServiceTests' test`
 - `.\mvnw -pl seahorse-agent-spring-boot-starter -am '-Dtest=SeahorseAgentRegistryAutoConfigurationTests,SeahorseAgentChatRunStoreAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test`
 - `.\mvnw -pl seahorse-agent-adapter-web -am '-Dtest=SeahorseAgentControllerTests' '-Dsurefire.failIfNoSpecifiedTests=false' test`
 - `.\mvnw -pl seahorse-agent-adapter-web '-Dtest=SeahorseSecurityWebMvcConfigurationTests,SeahorseAgentControllerTests' test`
@@ -64,12 +68,12 @@ Blockers:
 
 Next step:
 
-- Continue Phase 2 against `02-tool-gateway-policy-engine.md`: add `ToolCatalogEntry`, `AgentToolBinding`, invocation audit ports, and storage-backed policy metadata. Keep JDBC/web surfaces behind focused RED/GREEN slices.
+- Continue Phase 2 against `02-tool-gateway-policy-engine.md`: add durable tool catalog/binding persistence, invocation audit ports, call-limit enforcement, MCP catalog registration, and storage-backed management APIs. Keep JDBC/web surfaces behind focused RED/GREEN slices.
 
 Drift check:
 
 - Scope: aligned with Phase 0/1 and the first kernel-only part of Phase 2.
 - Compatibility: no existing class moved or deleted; no-repository AGENT fallback remains covered; old `KernelAgentLoop` and `LocalToolGatewayPort` constructors remain compatible.
 - New owners: documented Agent Registry, Agent Runtime, Tool Gateway, Tool Policy, starter wiring surfaces, stream meta run identity, public prototype route alias, and backend security public-path whitelist.
-- Phase boundary: Phase 2 is only partially implemented. Runtime-to-Gateway and minimal policy boundary are covered; catalog, risk/action metadata, durable invocation audit, and HITL remain future slices.
+- Phase boundary: Phase 2 is only partially implemented. Runtime-to-Gateway, minimal policy boundary, catalog metadata, binding metadata, and starter catalog-backed policy selection are covered; durable persistence, invocation audit, call limits, MCP catalog registration, and HITL remain future slices.
 - Decision: continue.

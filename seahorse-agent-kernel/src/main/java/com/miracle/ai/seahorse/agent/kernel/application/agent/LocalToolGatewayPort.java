@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
@@ -51,7 +52,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         // 策略裁决必须发生在真实工具执行之前；非 ALLOW 结果不得触达 ToolPort。
         PolicyDecision decision = Objects.requireNonNullElseGet(
                 toolPolicy.decide(ToolPolicyRequest.from(safeRequest, toolPort.isPresent())),
-                () -> PolicyDecision.deny("builtin-policy-null", "POLICY_DECISION_MISSING",
+                () -> PolicyDecision.deny("builtin-policy-null", ToolPolicyReasonCodes.POLICY_DECISION_MISSING,
                         "Tool policy did not return a decision"));
         if (!decision.allowsExecution()) {
             return ToolInvocationResult.failed(decision.reasonCode());

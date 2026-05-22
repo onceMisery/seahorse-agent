@@ -70,7 +70,7 @@ public record PolicyDecision(String decisionId,
     }
 
     public static PolicyDecision allow(String decisionId) {
-        return new PolicyDecision(decisionId, Effect.ALLOW, "ALLOW", "Allowed",
+        return new PolicyDecision(decisionId, Effect.ALLOW, ToolPolicyReasonCodes.ALLOW, "Allowed",
                 BUILTIN_POLICY_ID, BUILTIN_POLICY_VERSION, null, null);
     }
 

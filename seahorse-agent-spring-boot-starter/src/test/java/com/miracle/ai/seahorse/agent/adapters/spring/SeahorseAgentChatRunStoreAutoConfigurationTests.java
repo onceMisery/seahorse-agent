@@ -19,12 +19,18 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.AgentToolBinding;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
@@ -35,6 +41,11 @@ import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -54,6 +65,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -116,6 +128,32 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                 });
     }
 
+    @Test
+    void shouldWireCatalogBackedToolPolicyIntoAgentLoop() {
+        contextRunner.withUserConfiguration(TestCatalogBackedPolicyConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    RecordingCallback callback = new RecordingCallback();
+                    context.getBean(ChatInboundPort.class).streamChat(new StreamChatCommand(
+                            "Use memory write", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT),
+                            callback);
+
+                    assertThat(callback.awaitTerminal()).isTrue();
+                    assertThat(callback.errors).isEmpty();
+                    assertThat(callback.contents).containsExactly("Policy blocked");
+                    CountingToolPort tool = context.getBean(CountingToolPort.class);
+                    assertThat(tool.calls.get()).isZero();
+
+                    InMemoryAgentRunRepository runRepository = context.getBean(InMemoryAgentRunRepository.class);
+                    AgentRun run = runRepository.runs.values().iterator().next();
+                    assertThat(runRepository.listSteps(run.runId()))
+                            .filteredOn(step -> step.stepType() == AgentStepType.TOOL_CALL)
+                            .singleElement()
+                            .satisfies(step -> assertThat(step.errorMessage()).isEqualTo("TOOL_NOT_BOUND"));
+                });
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class TestAgentRunStoreConfiguration {
 
@@ -164,6 +202,55 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         }
     }
 
+    @Configuration(proxyBeanMethods = false)
+    static class TestCatalogBackedPolicyConfiguration {
+
+        @Bean
+        Clock clock() {
+            return FIXED_CLOCK;
+        }
+
+        @Bean
+        CurrentUserPort currentUserPort() {
+            return () -> Optional.of(new CurrentUser("user-1", "alice", "user", null));
+        }
+
+        @Bean
+        AgentDefinitionRepositoryPort agentDefinitionRepositoryPort() {
+            return new EmptyAgentDefinitionRepository();
+        }
+
+        @Bean
+        InMemoryAgentRunRepository agentRunRepositoryPort() {
+            return new InMemoryAgentRunRepository();
+        }
+
+        @Bean
+        CountingToolPort countingToolPort() {
+            return new CountingToolPort();
+        }
+
+        @Bean
+        ToolRegistryPort toolRegistryPort(CountingToolPort toolPort) {
+            return new SingleToolRegistry(toolPort);
+        }
+
+        @Bean
+        ToolCatalogRepositoryPort toolCatalogRepositoryPort() {
+            return new SingleToolCatalogRepository();
+        }
+
+        @Bean
+        AgentToolBindingRepositoryPort agentToolBindingRepositoryPort() {
+            return AgentToolBindingRepositoryPort.empty();
+        }
+
+        @Bean
+        StreamingChatModelPort streamingChatModelPort() {
+            return new ToolThenFinalStreamingChatModel();
+        }
+    }
+
     private static final class SingleTurnStreamingChatModel implements StreamingChatModelPort {
 
         @Override
@@ -178,6 +265,35 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                 ToolCallCollector toolCallCollector) {
             callback.onContent("Agent answer");
             toolCallCollector.onToolCalls(List.of());
+            callback.onComplete();
+            return () -> {
+            };
+        }
+    }
+
+    private static final class ToolThenFinalStreamingChatModel implements StreamingChatModelPort {
+        private int turns;
+
+        @Override
+        public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public StreamCancellationHandle streamChatWithTools(
+                ChatRequest request,
+                StreamCallback callback,
+                ToolCallCollector toolCallCollector) {
+            if (turns++ == 0) {
+                callback.onContent("Need tool");
+                toolCallCollector.onToolCalls(List.of(AgentToolCall.of(
+                        "call-1",
+                        "memory-write",
+                        Map.of("content", "remember this"))));
+            } else {
+                callback.onContent("Policy blocked");
+                toolCallCollector.onToolCalls(List.of());
+            }
             callback.onComplete();
             return () -> {
             };
@@ -279,6 +395,65 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
             return steps.stream()
                     .filter(step -> runId.equals(step.runId()))
                     .toList();
+        }
+    }
+
+    private static final class CountingToolPort implements ToolPort {
+        private final AtomicInteger calls = new AtomicInteger();
+
+        @Override
+        public ToolInvocationResult invoke(String toolCallId, String toolId, Map<String, Object> arguments) {
+            calls.incrementAndGet();
+            return ToolInvocationResult.ok("should-not-run");
+        }
+    }
+
+    private static final class SingleToolRegistry implements ToolRegistryPort {
+        private final CountingToolPort toolPort;
+
+        private SingleToolRegistry(CountingToolPort toolPort) {
+            this.toolPort = toolPort;
+        }
+
+        @Override
+        public List<ToolDescriptor> listTools() {
+            return List.of(new ToolDescriptor("memory-write", "Memory Write", "Write memory", "{}"));
+        }
+
+        @Override
+        public Optional<ToolPort> find(String toolId) {
+            return "memory-write".equals(toolId) ? Optional.of(toolPort) : Optional.empty();
+        }
+    }
+
+    private static final class SingleToolCatalogRepository implements ToolCatalogRepositoryPort {
+        private final ToolCatalogEntry entry = new ToolCatalogEntry(
+                "memory-write",
+                ToolProvider.BUILTIN,
+                "Memory Write",
+                "Write memory",
+                "{}",
+                null,
+                ToolRiskLevel.MEDIUM,
+                ToolActionType.WRITE,
+                "MEMORY",
+                "platform",
+                true,
+                false,
+                Instant.EPOCH,
+                Instant.EPOCH);
+
+        @Override
+        public void save(ToolCatalogEntry entry) {
+        }
+
+        @Override
+        public Optional<ToolCatalogEntry> findById(String toolId) {
+            return entry.toolId().equals(toolId) ? Optional.of(entry) : Optional.empty();
+        }
+
+        @Override
+        public void setEnabled(String toolId, boolean enabled) {
         }
     }
 }
