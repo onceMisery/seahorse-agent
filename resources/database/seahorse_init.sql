@@ -962,6 +962,25 @@ ON t_memory_trace_event (occurred_at, create_time);
 CREATE INDEX idx_memory_trace_filters
 ON t_memory_trace_event (tenant_id, user_id, component, status, occurred_at);
 
+CREATE TABLE t_memory_aggregation_buffer (
+    id VARCHAR(128) PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    user_id VARCHAR(64) NOT NULL,
+    conversation_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(128) NOT NULL,
+    turn_count INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    turns_json JSONB NOT NULL,
+    first_activity_at TIMESTAMP NOT NULL,
+    last_activity_at TIMESTAMP NOT NULL,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX uk_memory_aggregation_session
+ON t_memory_aggregation_buffer (tenant_id, session_id);
+CREATE INDEX idx_memory_aggregation_scan
+ON t_memory_aggregation_buffer (last_activity_at, update_time);
+
 CREATE TABLE t_memory_maintenance_run (
     id VARCHAR(128) PRIMARY KEY,
     reason VARCHAR(128),

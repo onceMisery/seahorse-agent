@@ -44,6 +44,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeChunk
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcKnowledgeDocumentRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLongTermMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryAliasRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryAggregationBufferAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflictLogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryGraphRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryKeywordIndexRepositoryAdapter;
@@ -105,6 +106,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphPort;
@@ -290,6 +292,7 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(JdbcMemoryReviewCandidateRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(JdbcMemoryReviewFeedbackRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(JdbcMemoryTraceRecorderAdapter.class);
+                    assertThat(context).doesNotHaveBean(JdbcMemoryAggregationBufferAdapter.class);
                     assertThat(context).hasSingleBean(JdbcMemoryMaintenanceRunRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(JdbcMemoryAliasRepositoryAdapter.class);
                     assertThat(context).hasSingleBean(JdbcMemoryGraphRepositoryAdapter.class);
@@ -333,6 +336,7 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryReviewManagementRepositoryPort.class);
                     assertThat(context).hasSingleBean(MemoryReviewFeedbackRepositoryPort.class);
                     assertThat(context).hasSingleBean(MemoryTraceRecorder.class);
+                    assertThat(context).doesNotHaveBean(MemoryAggregationBufferPort.class);
                     assertThat(context).hasSingleBean(MemoryMaintenanceRunRepositoryPort.class);
                     assertThat(context).hasSingleBean(MemoryAliasPort.class);
                     assertThat(context).hasSingleBean(MemoryGraphPort.class);
@@ -351,6 +355,22 @@ class SeahorseAgentNativeAdapterAutoConfigurationTests {
                             .isInstanceOf(JdbcKeywordSearchAdapter.class);
                     assertThat(context.getBean(KeywordIndexPort.class))
                             .isInstanceOf(JdbcKeywordIndexAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterJdbcMemoryAggregationBufferWhenAggregationIsEnabled() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:native-memory-aggregation;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+
+        contextRunner.withBean(DriverManagerDataSource.class, () -> dataSource)
+                .withBean(ObjectMapper.class, ObjectMapper::new)
+                .withBean(OkHttpClient.class, OkHttpClient::new)
+                .withPropertyValues("seahorse-agent.memory.aggregation.enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(JdbcMemoryAggregationBufferAdapter.class);
+                    assertThat(context).hasSingleBean(MemoryAggregationBufferPort.class);
                 });
     }
 

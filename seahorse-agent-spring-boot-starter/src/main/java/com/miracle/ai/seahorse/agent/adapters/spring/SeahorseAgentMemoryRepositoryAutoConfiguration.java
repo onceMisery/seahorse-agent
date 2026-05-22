@@ -18,11 +18,13 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcChatSchemaUpgrade;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationMemoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcCorrectionLedgerRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLongTermMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryAliasRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryAggregationBufferAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflictLogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryGraphRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryKeywordIndexRepositoryAdapter;
@@ -43,6 +45,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
@@ -227,6 +230,34 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
     public JdbcMemoryTraceRecorderAdapter seahorseJdbcMemoryTraceRecorderAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
         return new JdbcMemoryTraceRecorderAdapter(dataSource, objectMapper(objectMapperProvider));
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
+            matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled", havingValue = "true")
+    @ConditionalOnMissingBean(MemoryAggregationBufferPort.class)
+    public JdbcMemoryAggregationBufferAdapter seahorseJdbcMemoryAggregationBufferAdapter(
+            DataSource dataSource,
+            ObjectProvider<ObjectMapper> objectMapperProvider,
+            ObjectProvider<MemoryAggregationPolicy> policyProvider,
+            @Value("${seahorse-agent.memory.aggregation.enabled:false}") boolean enabled,
+            @Value("${seahorse-agent.memory.aggregation.idle-flush-millis:40000}") long idleFlushMillis,
+            @Value("${seahorse-agent.memory.aggregation.max-turns:10}") int maxTurns,
+            @Value("${seahorse-agent.memory.aggregation.max-tokens:2000}") int maxTokens,
+            @Value("${seahorse-agent.memory.aggregation.max-context-blocks:32}") int maxContextBlocks,
+            @Value("${seahorse-agent.memory.aggregation.buffer-ttl-millis:86400000}") long bufferTtlMillis,
+            @Value("${seahorse-agent.memory.aggregation.capture-on-error:false}") boolean captureOnError) {
+        MemoryAggregationPolicy policy = policyProvider.getIfAvailable(() -> new MemoryAggregationPolicy(
+                enabled,
+                idleFlushMillis,
+                maxTurns,
+                maxTokens,
+                maxContextBlocks,
+                bufferTtlMillis,
+                captureOnError));
+        return new JdbcMemoryAggregationBufferAdapter(dataSource, objectMapper(objectMapperProvider), policy);
     }
 
     @Bean
