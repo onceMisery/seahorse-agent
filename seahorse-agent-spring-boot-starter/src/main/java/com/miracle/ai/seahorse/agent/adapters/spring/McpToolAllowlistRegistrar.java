@@ -20,6 +20,11 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
@@ -29,6 +34,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,23 +48,41 @@ import java.util.Objects;
 public class McpToolAllowlistRegistrar implements ApplicationRunner {
 
     private static final Logger LOG = LoggerFactory.getLogger(McpToolAllowlistRegistrar.class);
+    private static final String MCP_RESOURCE_TYPE = "MCP";
+    private static final String MCP_OWNER_TEAM = "mcp";
 
     private final McpToolPortAdapter adapter;
     private final McpToolRegistryPort mcpRegistry;
     private final ToolRegistryPort toolRegistry;
+    private final ToolCatalogRepositoryPort toolCatalogRepository;
     private final List<String> includeToolIds;
     private final ObjectMapper objectMapper;
+    private final Clock clock;
 
     public McpToolAllowlistRegistrar(McpToolPortAdapter adapter,
                                      McpToolRegistryPort mcpRegistry,
                                      ToolRegistryPort toolRegistry,
                                      List<String> includeToolIds,
                                      ObjectMapper objectMapper) {
+        this(adapter, mcpRegistry, toolRegistry, ToolCatalogRepositoryPort.empty(), includeToolIds, objectMapper,
+                Clock.systemUTC());
+    }
+
+    public McpToolAllowlistRegistrar(McpToolPortAdapter adapter,
+                                     McpToolRegistryPort mcpRegistry,
+                                     ToolRegistryPort toolRegistry,
+                                     ToolCatalogRepositoryPort toolCatalogRepository,
+                                     List<String> includeToolIds,
+                                     ObjectMapper objectMapper,
+                                     Clock clock) {
         this.adapter = Objects.requireNonNull(adapter, "adapter must not be null");
         this.mcpRegistry = Objects.requireNonNull(mcpRegistry, "mcpRegistry must not be null");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry must not be null");
+        this.toolCatalogRepository = Objects.requireNonNullElseGet(toolCatalogRepository,
+                ToolCatalogRepositoryPort::empty);
         this.includeToolIds = List.copyOf(Objects.requireNonNullElse(includeToolIds, List.of()));
         this.objectMapper = Objects.requireNonNullElseGet(objectMapper, ObjectMapper::new);
+        this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
     @Override
@@ -80,9 +105,30 @@ public class McpToolAllowlistRegistrar implements ApplicationRunner {
     private void registerTool(McpToolDescriptor descriptor, String toolId) {
         try {
             toolRegistry.register(toToolDescriptor(descriptor), adapter);
+            // 运行时注册成功后再进入目录，避免策略层看到不可执行的 MCP 工具。
+            toolCatalogRepository.save(toCatalogEntry(descriptor));
         } catch (UnsupportedOperationException ex) {
             LOG.warn("ToolRegistryPort does not support dynamic MCP tool registration: toolId={}", toolId, ex);
         }
+    }
+
+    private ToolCatalogEntry toCatalogEntry(McpToolDescriptor descriptor) {
+        Instant now = clock.instant();
+        return new ToolCatalogEntry(
+                descriptor.toolId(),
+                ToolProvider.MCP,
+                descriptor.toolId(),
+                descriptor.description(),
+                toJsonSchema(descriptor),
+                null,
+                ToolRiskLevel.MEDIUM,
+                ToolActionType.EXECUTE,
+                MCP_RESOURCE_TYPE,
+                MCP_OWNER_TEAM,
+                true,
+                false,
+                now,
+                now);
     }
 
     private ToolDescriptor toToolDescriptor(McpToolDescriptor descriptor) {

@@ -268,13 +268,17 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                                         McpToolRegistryPort mcpRegistry,
                                                                         ToolRegistryPort toolRegistry,
                                                                         Environment environment,
-                                                                        ObjectProvider<ObjectMapper> objectMapper) {
+                                                                        ObjectProvider<ToolCatalogRepositoryPort> toolCatalogRepository,
+                                                                        ObjectProvider<ObjectMapper> objectMapper,
+                                                                        ObjectProvider<Clock> clockProvider) {
         return new McpToolAllowlistRegistrar(
                 adapter,
                 mcpRegistry,
                 toolRegistry,
+                toolCatalogRepository.getIfAvailable(ToolCatalogRepositoryPort::empty),
                 parseCsv(environment.getProperty(PROP_MCP_INCLUDE, "")),
-                objectMapper.getIfAvailable(ObjectMapper::new));
+                objectMapper.getIfAvailable(ObjectMapper::new),
+                clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
     private List<String> parseCsv(String value) {

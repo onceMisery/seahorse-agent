@@ -470,6 +470,71 @@ Remaining Phase 2 work:
 - MCP allowlist registration into the catalog.
 - Tool catalog/binding/audit management APIs.
 
+## 2026-05-23 Phase 2 MCP allowlist catalog registration slice
+
+RED coverage:
+
+- `McpToolAllowlistRegistrarTests.shouldWriteAllowlistedMcpToolToCatalogWithDefaultPolicyMetadata` first failed because `McpToolAllowlistRegistrar` registered `weather_query` into the runtime `ToolRegistryPort` but saved zero entries into `ToolCatalogRepositoryPort`.
+
+RED command:
+
+```powershell
+.\mvnw -pl seahorse-agent-spring-boot-starter -am '-Dtest=McpToolAllowlistRegistrarTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+RED result:
+
+- Exit status: 1
+- Failure shape: expected catalog saved entry count 1, actual 0.
+
+GREEN support command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' '-Dmaven.test.skip=true' -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc -am install
+```
+
+Result:
+
+- Exit status: 0
+- Covered: refreshed required kernel and JDBC main artifacts without compiling unrelated tests.
+
+Focused starter command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-spring-boot-starter clean test '-Dtest=McpToolAllowlistRegistrarTests,SeahorseAgentChatRunStoreAutoConfigurationTests,SeahorseAgentRegistryAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false'
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 6
+- Failures: 0
+- Errors: 0
+- Covered: MCP allowlist catalog registration, existing Agent chat run-store starter wiring, and registry repository auto-configuration.
+
+Blocked broader command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-spring-boot-starter -am clean test '-Dtest=McpToolAllowlistRegistrarTests,SeahorseAgentChatRunStoreAutoConfigurationTests,SeahorseAgentRegistryAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false'
+```
+
+Result:
+
+- Exit status: 1
+- Blocked before starter tests by unrelated `seahorse-agent-adapter-vector-pgvector` test compilation instability. The error shape referenced missing kernel class files under `seahorse-agent-kernel/target/classes` while compiling pgvector tests.
+- Decision: keep verification at the starter owner boundary after refreshing required main artifacts.
+
+Fix boundary:
+
+- `McpToolAllowlistRegistrar`: now accepts an optional `ToolCatalogRepositoryPort` and `Clock`, preserves the old constructor, and writes a catalog entry only after runtime MCP tool registration succeeds.
+- MCP catalog entries use provider `MCP`, default risk `MEDIUM`, default action `EXECUTE`, resource type `MCP`, owner team `mcp`, enabled=true, approval=false, and the same generated input schema used by runtime tool descriptors.
+- `SeahorseAgentKernelAgentAutoConfiguration`: injects the optional catalog repository and clock into `McpToolAllowlistRegistrar`, falling back to the empty catalog repository when no storage is configured.
+
+Remaining Phase 2 work:
+
+- Tool catalog/binding/audit management APIs.
+- HITL approval workflow, resource ACL, and output redaction policy remain later slices.
+
 ## 2026-05-23 Phase 2 Tool Invocation Audit slice
 
 RED/GREEN coverage:
