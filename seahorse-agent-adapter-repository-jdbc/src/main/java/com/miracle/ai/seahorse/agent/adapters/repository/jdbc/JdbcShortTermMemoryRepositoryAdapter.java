@@ -48,7 +48,7 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
                 SELECT * FROM t_short_term_memory
                 WHERE id = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 """, this::mapRecord, id).stream().findFirst();
     }
 
@@ -58,7 +58,7 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
                 SELECT * FROM t_short_term_memory
                 WHERE conversation_id = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY create_time DESC
                 LIMIT ?
                 """, this::mapRecord, conversationId, safeLimit(limit));
@@ -70,7 +70,7 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
                 SELECT * FROM t_short_term_memory
                 WHERE user_id = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY importance_score DESC, create_time DESC
                 LIMIT ?
                 """, this::mapRecord, userId, safeLimit(limit));
@@ -120,7 +120,7 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
         return jdbcTemplate.query("""
                 SELECT * FROM t_short_term_memory
                 WHERE deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                   AND (expires_time < ? OR decay_score <= ?)
                 ORDER BY expires_time ASC, decay_score ASC, create_time ASC
                 LIMIT ?

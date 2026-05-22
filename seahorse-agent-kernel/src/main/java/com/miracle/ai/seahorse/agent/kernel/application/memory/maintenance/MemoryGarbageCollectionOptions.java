@@ -26,15 +26,41 @@ public record MemoryGarbageCollectionOptions(
         boolean dryRun,
         boolean vectorIndexEnabled,
         boolean keywordIndexEnabled,
-        boolean graphIndexEnabled
+        boolean graphIndexEnabled,
+        boolean archiveEnabled,
+        Duration archiveIdleRetention,
+        double archiveScoreThreshold
 ) {
 
     private static final int DEFAULT_SCAN_LIMIT = 100;
     private static final Duration DEFAULT_RETENTION = Duration.ofDays(7);
+    private static final Duration DEFAULT_ARCHIVE_IDLE_RETENTION = Duration.ofDays(90);
+    private static final double DEFAULT_ARCHIVE_SCORE_THRESHOLD = 0.15D;
+
+    public MemoryGarbageCollectionOptions(int scanLimit,
+                                          Duration retention,
+                                          boolean dryRun,
+                                          boolean vectorIndexEnabled,
+                                          boolean keywordIndexEnabled,
+                                          boolean graphIndexEnabled) {
+        this(scanLimit,
+                retention,
+                dryRun,
+                vectorIndexEnabled,
+                keywordIndexEnabled,
+                graphIndexEnabled,
+                false,
+                DEFAULT_ARCHIVE_IDLE_RETENTION,
+                DEFAULT_ARCHIVE_SCORE_THRESHOLD);
+    }
 
     public MemoryGarbageCollectionOptions {
         scanLimit = scanLimit <= 0 ? DEFAULT_SCAN_LIMIT : scanLimit;
         retention = Objects.requireNonNullElse(retention, DEFAULT_RETENTION);
+        archiveIdleRetention = Objects.requireNonNullElse(archiveIdleRetention, DEFAULT_ARCHIVE_IDLE_RETENTION);
+        archiveScoreThreshold = archiveScoreThreshold <= 0D
+                ? DEFAULT_ARCHIVE_SCORE_THRESHOLD
+                : Math.min(1D, archiveScoreThreshold);
     }
 
     public static MemoryGarbageCollectionOptions vectorOnly() {
@@ -44,6 +70,9 @@ public record MemoryGarbageCollectionOptions(
                 false,
                 true,
                 false,
-                false);
+                false,
+                false,
+                DEFAULT_ARCHIVE_IDLE_RETENTION,
+                DEFAULT_ARCHIVE_SCORE_THRESHOLD);
     }
 }

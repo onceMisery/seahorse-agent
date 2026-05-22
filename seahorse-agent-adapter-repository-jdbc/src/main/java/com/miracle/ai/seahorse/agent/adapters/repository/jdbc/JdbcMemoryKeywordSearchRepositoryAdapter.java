@@ -103,7 +103,7 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
                 WHERE user_id = ?
                   AND COALESCE(tenant_id, 'default') = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                   AND (LOWER(content) LIKE ? OR LOWER(metadata_json) LIKE ?)
                 ORDER BY update_time DESC
                 LIMIT ?
@@ -119,7 +119,7 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
                 WHERE user_id = ?
                   AND COALESCE(tenant_id, 'default') = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                   AND (LOWER(content) LIKE ? OR LOWER(title) LIKE ? OR LOWER(tags) LIKE ?)
                 ORDER BY importance_score DESC, update_time DESC
                 LIMIT ?
@@ -135,7 +135,7 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
                 WHERE user_id = ?
                   AND COALESCE(tenant_id, 'default') = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                   AND (LOWER(value_json) LIKE ? OR LOWER(semantic_key) LIKE ?)
                 ORDER BY update_time DESC
                 LIMIT ?

@@ -88,7 +88,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                     update_time = ?
                 WHERE id = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 """.formatted(table),
                 JdbcMemorySupport.timestamp(Objects.requireNonNullElseGet(referencedAt, Instant::now)),
                 JdbcMemorySupport.timestamp(Instant.now()),
@@ -100,7 +100,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                         last_access_time = ?
                     WHERE id = ?
                       AND deleted = 0
-                      AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
+                      AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                     """,
                     JdbcMemorySupport.timestamp(Objects.requireNonNullElseGet(referencedAt, Instant::now)),
                     memoryId);
@@ -165,6 +165,43 @@ public class JdbcMemoryLifecycleRepositoryAdapter
     }
 
     @Override
+    public List<MemoryGarbageCollectionCandidate> scanLifecycleArchiveCandidates(
+            Instant now,
+            Duration idleRetention,
+            double scoreThreshold,
+            int limit) {
+        Instant cutoff = Objects.requireNonNullElseGet(now, Instant::now)
+                .minus(Objects.requireNonNullElse(idleRetention, Duration.ZERO));
+        int safeLimit = limit <= 0 ? DEFAULT_SCAN_LIMIT : limit;
+        double safeThreshold = scoreThreshold <= 0D ? 0.15D : Math.min(1D, scoreThreshold);
+        List<MemoryGarbageCollectionCandidate> candidates = new ArrayList<>();
+        candidates.addAll(scanLongTermArchiveCandidates(safeLimit, cutoff, safeThreshold));
+        if (candidates.size() >= safeLimit) {
+            return candidates.stream().limit(safeLimit).toList();
+        }
+        candidates.addAll(scanSemanticArchiveCandidates(safeLimit - candidates.size(), cutoff, safeThreshold));
+        return candidates.stream().limit(safeLimit).toList();
+    }
+
+    @Override
+    public int markArchived(List<String> memoryIds, Instant archivedAt, String reason) {
+        if (memoryIds == null || memoryIds.isEmpty()) {
+            return 0;
+        }
+        Instant now = Objects.requireNonNullElseGet(archivedAt, Instant::now);
+        String safeReason = JdbcMemorySupport.hasText(reason) ? reason : "generational gc archive";
+        int updated = 0;
+        for (String memoryId : memoryIds) {
+            if (!JdbcMemorySupport.hasText(memoryId)) {
+                continue;
+            }
+            updated += markLayerArchived("t_long_term_memory", memoryId, now, safeReason);
+            updated += markLayerArchived("t_semantic_memory", memoryId, now, safeReason);
+        }
+        return updated;
+    }
+
+    @Override
     public List<MemoryCompactionCandidate> scanCandidates(int limit) {
         return scanCompactionCandidates(limit, DEFAULT_COMPACTION_MIN_GROUP_SIZE);
     }
@@ -221,7 +258,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                 WHERE user_id = ?
                   AND COALESCE(tenant_id, 'default') = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                   AND COALESCE(generation_id, '') <> ?
                   AND (
                         memory_type = 'PROFILE'
@@ -263,7 +300,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                 WHERE user_id = ?
                   AND COALESCE(tenant_id, 'default') = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                   AND COALESCE(generation_id, '') <> ?
                   AND (
                         memory_category = 'PROFILE'
@@ -305,7 +342,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                 WHERE user_id = ?
                   AND COALESCE(tenant_id, 'default') = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                   AND COALESCE(generation_id, '') <> ?
                   AND (
                         semantic_type = 'PROFILE'
@@ -346,6 +383,92 @@ public class JdbcMemoryLifecycleRepositoryAdapter
         };
     }
 
+    private List<MemoryGarbageCollectionCandidate> scanLongTermArchiveCandidates(
+            int limit,
+            Instant cutoff,
+            double scoreThreshold) {
+        if (limit <= 0) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                SELECT id AS memory_id,
+                       user_id,
+                       COALESCE(tenant_id, 'default') AS tenant_id,
+                       COALESCE(status, '') AS status,
+                       update_time
+                FROM t_long_term_memory
+                WHERE deleted = 0
+                  AND COALESCE(status, 'ACTIVE') IN ('ACTIVE', 'REFERENCED')
+                  AND COALESCE(last_referenced_at, update_time, create_time) <= ?
+                  AND ((COALESCE(importance_score, 0) + COALESCE(confidence_level, 0)) / 2.0) <= ?
+                ORDER BY COALESCE(last_referenced_at, update_time, create_time) ASC,
+                         importance_score ASC,
+                         confidence_level ASC
+                LIMIT ?
+                """,
+                (rs, rowNum) -> new MemoryGarbageCollectionCandidate(
+                        rs.getString("memory_id"),
+                        rs.getString("user_id"),
+                        Objects.requireNonNullElse(rs.getString("tenant_id"), DEFAULT_TENANT_ID),
+                        "long_term",
+                        rs.getString("status"),
+                        JdbcMemorySupport.instant(rs.getTimestamp("update_time"))),
+                JdbcMemorySupport.timestamp(cutoff),
+                scoreThreshold,
+                limit);
+    }
+
+    private List<MemoryGarbageCollectionCandidate> scanSemanticArchiveCandidates(
+            int limit,
+            Instant cutoff,
+            double scoreThreshold) {
+        if (limit <= 0) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                SELECT id AS memory_id,
+                       user_id,
+                       COALESCE(tenant_id, 'default') AS tenant_id,
+                       COALESCE(status, '') AS status,
+                       update_time
+                FROM t_semantic_memory
+                WHERE deleted = 0
+                  AND COALESCE(status, 'ACTIVE') IN ('ACTIVE', 'REFERENCED')
+                  AND COALESCE(last_referenced_at, update_time, create_time) <= ?
+                  AND COALESCE(confidence_level, 0) <= ?
+                ORDER BY COALESCE(last_referenced_at, update_time, create_time) ASC,
+                         confidence_level ASC
+                LIMIT ?
+                """,
+                (rs, rowNum) -> new MemoryGarbageCollectionCandidate(
+                        rs.getString("memory_id"),
+                        rs.getString("user_id"),
+                        Objects.requireNonNullElse(rs.getString("tenant_id"), DEFAULT_TENANT_ID),
+                        "semantic",
+                        rs.getString("status"),
+                        JdbcMemorySupport.instant(rs.getTimestamp("update_time"))),
+                JdbcMemorySupport.timestamp(cutoff),
+                scoreThreshold,
+                limit);
+    }
+
+    private int markLayerArchived(String tableName, String memoryId, Instant archivedAt, String reason) {
+        return jdbcTemplate.update("""
+                UPDATE %s
+                SET status = 'ARCHIVED',
+                    obsolete_reason = ?,
+                    valid_until = ?,
+                    update_time = ?
+                WHERE id = ?
+                  AND deleted = 0
+                  AND COALESCE(status, 'ACTIVE') IN ('ACTIVE', 'REFERENCED')
+                """.formatted(tableName),
+                reason,
+                JdbcMemorySupport.timestamp(archivedAt),
+                JdbcMemorySupport.timestamp(archivedAt),
+                memoryId);
+    }
+
     private List<MemoryGarbageCollectionCandidate> scanLayerForDerivedIndexDeletes(
             String tableName,
             String layer,
@@ -364,7 +487,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                        update_time
                 FROM %s
                 WHERE deleted = 0
-                  AND COALESCE(status, 'ACTIVE') IN ('OBSOLETE', 'COMPACTED')
+                  AND COALESCE(status, 'ACTIVE') IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED')
                   AND derived_indexes_deleted_at IS NULL
                   AND update_time <= ?
                 ORDER BY update_time ASC
@@ -388,7 +511,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                     update_time = ?
                 WHERE id = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') IN ('OBSOLETE', 'COMPACTED')
+                  AND COALESCE(status, 'ACTIVE') IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED')
                   AND derived_indexes_deleted_at IS NULL
                 """.formatted(tableName),
                 JdbcMemorySupport.timestamp(markedAt),
@@ -408,7 +531,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                        update_time
                 FROM t_short_term_memory
                 WHERE deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                   AND metadata_json IS NOT NULL
                 ORDER BY update_time ASC
                 LIMIT ?
@@ -427,7 +550,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                        update_time
                 FROM t_long_term_memory
                 WHERE deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                   AND tags IS NOT NULL
                 ORDER BY update_time ASC
                 LIMIT ?
@@ -447,7 +570,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                        semantic_key
                 FROM t_semantic_memory
                 WHERE deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                   AND semantic_key IS NOT NULL
                 ORDER BY update_time ASC
                 LIMIT ?
@@ -510,7 +633,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                   AND user_id = ?
                   AND COALESCE(tenant_id, 'default') = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 """.formatted(table),
                 reason,
                 JdbcMemorySupport.timestamp(now),

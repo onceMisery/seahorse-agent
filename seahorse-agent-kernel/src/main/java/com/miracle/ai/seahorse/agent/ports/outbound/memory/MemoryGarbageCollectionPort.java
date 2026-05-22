@@ -28,6 +28,18 @@ public interface MemoryGarbageCollectionPort {
             Duration retention,
             int limit);
 
+    default List<MemoryGarbageCollectionCandidate> scanLifecycleArchiveCandidates(
+            Instant now,
+            Duration idleRetention,
+            double scoreThreshold,
+            int limit) {
+        return List.of();
+    }
+
+    default int markArchived(List<String> memoryIds, Instant archivedAt, String reason) {
+        return 0;
+    }
+
     int markDerivedIndexesDeleted(List<String> memoryIds, Instant markedAt);
 
     static MemoryGarbageCollectionPort noop() {

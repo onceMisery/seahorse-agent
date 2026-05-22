@@ -103,6 +103,41 @@ class MemoryGarbageCollectionServiceTests {
     }
 
     @Test
+    void shouldArchiveColdLifecycleCandidatesAndRemoveDerivedIndexes() {
+        RecordingGarbageCollectionPort gcPort = new RecordingGarbageCollectionPort();
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort();
+        gcPort.archiveCandidates.add(new MemoryGarbageCollectionCandidate(
+                "m-cold", "user-1", "tenant-1", "long_term", "ACTIVE", Instant.now()));
+        MemoryGarbageCollectionService service = new MemoryGarbageCollectionService(
+                gcPort,
+                outboxPort,
+                new MemoryGarbageCollectionOptions(
+                        20,
+                        Duration.ofDays(7),
+                        false,
+                        true,
+                        true,
+                        false,
+                        true,
+                        Duration.ofDays(90),
+                        0.15D));
+
+        MemoryGarbageCollectionResult result = service.run("generational-gc");
+
+        assertThat(result.scannedCount()).isEqualTo(1);
+        assertThat(result.archivedCount()).isEqualTo(1);
+        assertThat(result.enqueuedDeleteTaskCount()).isEqualTo(2);
+        assertThat(result.markedIndexDeletedCount()).isEqualTo(1);
+        assertThat(gcPort.archivedIds).containsExactly("m-cold");
+        assertThat(gcPort.markedIds).containsExactly("m-cold");
+        assertThat(outboxPort.tasks)
+                .extracting(MemoryOutboxPort.MemoryOutboxTask::taskType)
+                .containsExactly(
+                        MemoryOutboxTaskTypes.VECTOR_DELETE,
+                        MemoryOutboxTaskTypes.KEYWORD_DELETE);
+    }
+
+    @Test
     void shouldContinueOtherIndexTasksWhenOneIndexTaskCannotBeQueued() {
         RecordingGarbageCollectionPort gcPort = new RecordingGarbageCollectionPort();
         RecordingOutboxPort outboxPort = new RecordingOutboxPort();
@@ -131,7 +166,9 @@ class MemoryGarbageCollectionServiceTests {
     private static class RecordingGarbageCollectionPort implements MemoryGarbageCollectionPort {
 
         final List<MemoryGarbageCollectionCandidate> candidates = new ArrayList<>();
+        final List<MemoryGarbageCollectionCandidate> archiveCandidates = new ArrayList<>();
         final List<String> markedIds = new ArrayList<>();
+        final List<String> archivedIds = new ArrayList<>();
 
         @Override
         public List<MemoryGarbageCollectionCandidate> scanDerivedIndexDeleteCandidates(
@@ -139,6 +176,21 @@ class MemoryGarbageCollectionServiceTests {
                 Duration retention,
                 int limit) {
             return candidates.stream().limit(limit).toList();
+        }
+
+        @Override
+        public List<MemoryGarbageCollectionCandidate> scanLifecycleArchiveCandidates(
+                Instant now,
+                Duration idleRetention,
+                double scoreThreshold,
+                int limit) {
+            return archiveCandidates.stream().limit(limit).toList();
+        }
+
+        @Override
+        public int markArchived(List<String> memoryIds, Instant archivedAt, String reason) {
+            archivedIds.addAll(memoryIds);
+            return memoryIds.size();
         }
 
         @Override

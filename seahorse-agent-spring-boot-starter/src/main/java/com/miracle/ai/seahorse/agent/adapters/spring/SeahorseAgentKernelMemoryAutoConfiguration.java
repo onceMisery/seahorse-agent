@@ -698,7 +698,10 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             @Value("${seahorse-agent.memory.gc.dry-run:false}") boolean dryRun,
             @Value("${seahorse-agent.memory.gc.vector-index-enabled:true}") boolean vectorIndexEnabled,
             @Value("${seahorse-agent.memory.gc.keyword-index-enabled:true}") boolean keywordIndexEnabled,
-            @Value("${seahorse-agent.memory.gc.graph-index-enabled:true}") boolean graphIndexEnabled) {
+            @Value("${seahorse-agent.memory.gc.graph-index-enabled:true}") boolean graphIndexEnabled,
+            @Value("${seahorse-agent.memory.gc.archive-enabled:false}") boolean archiveEnabled,
+            @Value("${seahorse-agent.memory.gc.archive-idle-days:90}") long archiveIdleDays,
+            @Value("${seahorse-agent.memory.gc.archive-score-threshold:0.15}") double archiveScoreThreshold) {
         return new MemoryGarbageCollectionService(
                 garbageCollectionPort.getIfAvailable(MemoryGarbageCollectionPort::noop),
                 outboxPort,
@@ -708,7 +711,10 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                         dryRun,
                         vectorIndexEnabled,
                         keywordIndexEnabled && keywordIndexPort.getIfAvailable() != null,
-                        graphIndexEnabled && graphIndexPort.getIfAvailable() != null));
+                        graphIndexEnabled && graphIndexPort.getIfAvailable() != null,
+                        archiveEnabled,
+                        Duration.ofDays(Math.max(0L, archiveIdleDays)),
+                        archiveScoreThreshold));
     }
 
     @Bean

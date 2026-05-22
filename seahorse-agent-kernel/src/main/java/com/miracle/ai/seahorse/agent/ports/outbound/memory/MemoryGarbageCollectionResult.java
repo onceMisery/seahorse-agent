@@ -24,12 +24,30 @@ import java.util.Objects;
 public record MemoryGarbageCollectionResult(
         String reason,
         int scannedCount,
+        int archivedCount,
         int enqueuedDeleteTaskCount,
         int markedIndexDeletedCount,
         boolean dryRun,
         List<String> errors,
         Instant executedAt
 ) {
+
+    public MemoryGarbageCollectionResult(String reason,
+                                         int scannedCount,
+                                         int enqueuedDeleteTaskCount,
+                                         int markedIndexDeletedCount,
+                                         boolean dryRun,
+                                         List<String> errors,
+                                         Instant executedAt) {
+        this(reason,
+                scannedCount,
+                0,
+                enqueuedDeleteTaskCount,
+                markedIndexDeletedCount,
+                dryRun,
+                errors,
+                executedAt);
+    }
 
     public MemoryGarbageCollectionResult {
         reason = Objects.requireNonNullElse(reason, "");

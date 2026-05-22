@@ -48,7 +48,7 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
                 SELECT * FROM t_semantic_memory
                 WHERE id = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 """, this::mapRecord, id).stream().findFirst();
     }
 
@@ -63,7 +63,7 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
                 SELECT * FROM t_semantic_memory
                 WHERE user_id = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY update_time DESC
                 LIMIT ?
                 """, this::mapRecord, userId, safeLimit(limit));
@@ -123,7 +123,7 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
                     update_time = ?
                 WHERE id = ?
                   AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                  AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 """,
                 JdbcMemorySupport.writeJson(objectMapper, Map.of(
                         "type", record.type(),
@@ -180,7 +180,7 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
                       AND semantic_key = ?
                       AND semantic_type = ?
                       AND deleted = 0
-                      AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'DELETED', 'PHYSICAL_DELETED')
+                      AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                     LIMIT 1
                     """, String.class, userId, semanticKey, semanticType);
         } catch (EmptyResultDataAccessException ex) {

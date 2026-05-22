@@ -232,6 +232,66 @@ class JdbcMemoryRepositoryAdapterTests {
     }
 
     @Test
+    void shouldArchiveColdLowScoreLifecycleCandidates() {
+        Instant oldUpdateTime = Instant.now().minusSeconds(120L * 24 * 3600);
+        jdbcTemplate.update("""
+                INSERT INTO t_long_term_memory
+                (id, user_id, tenant_id, memory_category, title, content, source_type, source_ids, tags,
+                 importance_score, confidence_level, status, last_referenced_at, update_time, create_time, deleted)
+                VALUES ('cold-ltm', 'user-1', 'tenant-1', 'FACT', 'cold', 'low value long memory',
+                        'short_term', '[]', '{}', 0.1, 0.1, 'ACTIVE', ?, ?, ?, 0)
+                """,
+                java.sql.Timestamp.from(oldUpdateTime),
+                java.sql.Timestamp.from(oldUpdateTime),
+                java.sql.Timestamp.from(oldUpdateTime));
+        jdbcTemplate.update("""
+                INSERT INTO t_long_term_memory
+                (id, user_id, tenant_id, memory_category, title, content, source_type, source_ids, tags,
+                 importance_score, confidence_level, status, last_referenced_at, update_time, create_time, deleted)
+                VALUES ('strong-ltm', 'user-1', 'tenant-1', 'FACT', 'strong', 'important long memory',
+                        'short_term', '[]', '{}', 0.9, 0.9, 'ACTIVE', ?, ?, ?, 0)
+                """,
+                java.sql.Timestamp.from(oldUpdateTime),
+                java.sql.Timestamp.from(oldUpdateTime),
+                java.sql.Timestamp.from(oldUpdateTime));
+        jdbcTemplate.update("""
+                INSERT INTO t_semantic_memory
+                (id, user_id, tenant_id, semantic_key, semantic_type, value_json, confidence_level, source_memory_ids,
+                 status, last_referenced_at, update_time, create_time, deleted)
+                VALUES ('cold-sem', 'user-1', 'tenant-1', 'project:cold', 'FACT', '{}', 0.1, '[]',
+                        'ACTIVE', ?, ?, ?, 0)
+                """,
+                java.sql.Timestamp.from(oldUpdateTime),
+                java.sql.Timestamp.from(oldUpdateTime),
+                java.sql.Timestamp.from(oldUpdateTime));
+
+        var candidates = lifecycleAdapter.scanLifecycleArchiveCandidates(
+                Instant.now(),
+                java.time.Duration.ofDays(90),
+                0.15D,
+                10);
+
+        assertThat(candidates)
+                .extracting(MemoryGarbageCollectionCandidate::memoryId)
+                .containsExactly("cold-ltm", "cold-sem");
+        assertThat(lifecycleAdapter.markArchived(
+                candidates.stream().map(MemoryGarbageCollectionCandidate::memoryId).toList(),
+                Instant.now(),
+                "generational gc archive"))
+                .isEqualTo(2);
+        assertThat(longTermAdapter.listByUser("user-1", 10))
+                .extracting(MemoryRecord::id)
+                .containsExactly("strong-ltm");
+        assertThat(semanticAdapter.listByUser("user-1", 10)).isEmpty();
+        assertThat(lifecycleAdapter.scanDerivedIndexDeleteCandidates(
+                Instant.now(),
+                java.time.Duration.ZERO,
+                10))
+                .extracting(MemoryGarbageCollectionCandidate::memoryId)
+                .containsExactly("cold-ltm", "cold-sem");
+    }
+
+    @Test
     void shouldUpsertProfileFactAsStrongFactSource() {
         profileAdapter.upsert(new ProfileFactUpdate(
                 "user-1",

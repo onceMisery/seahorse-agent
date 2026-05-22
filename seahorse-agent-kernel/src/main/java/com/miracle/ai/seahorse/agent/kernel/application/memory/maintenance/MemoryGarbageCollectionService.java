@@ -46,12 +46,26 @@ public class MemoryGarbageCollectionService {
     public MemoryGarbageCollectionResult run(String reason) {
         Instant now = Instant.now();
         List<String> errors = new ArrayList<>();
-        List<MemoryGarbageCollectionCandidate> candidates = scanCandidates(now, errors);
+        List<MemoryGarbageCollectionCandidate> derivedIndexCandidates = scanDerivedIndexDeleteCandidates(now, errors);
+        List<MemoryGarbageCollectionCandidate> archiveCandidates = scanLifecycleArchiveCandidates(now, errors);
         int enqueued = 0;
         int marked = 0;
+        int archived = 0;
         if (!options.dryRun()) {
             List<String> successfullyQueuedIds = new ArrayList<>();
-            for (MemoryGarbageCollectionCandidate candidate : candidates) {
+            for (MemoryGarbageCollectionCandidate candidate : archiveCandidates) {
+                if (markArchived(candidate, now, errors)) {
+                    archived++;
+                    EnqueueResult enqueueResult = enqueueDeletes(candidate, errors);
+                    if (enqueueResult.queuedCount() > 0) {
+                        enqueued += enqueueResult.queuedCount();
+                    }
+                    if (enqueueResult.completed()) {
+                        successfullyQueuedIds.add(candidate.memoryId());
+                    }
+                }
+            }
+            for (MemoryGarbageCollectionCandidate candidate : derivedIndexCandidates) {
                 EnqueueResult enqueueResult = enqueueDeletes(candidate, errors);
                 if (enqueueResult.queuedCount() > 0) {
                     enqueued += enqueueResult.queuedCount();
@@ -64,7 +78,8 @@ public class MemoryGarbageCollectionService {
         }
         return new MemoryGarbageCollectionResult(
                 Objects.requireNonNullElse(reason, "manual-gc"),
-                candidates.size(),
+                derivedIndexCandidates.size() + archiveCandidates.size(),
+                archived,
                 enqueued,
                 marked,
                 options.dryRun(),
@@ -72,7 +87,7 @@ public class MemoryGarbageCollectionService {
                 now);
     }
 
-    private List<MemoryGarbageCollectionCandidate> scanCandidates(Instant now, List<String> errors) {
+    private List<MemoryGarbageCollectionCandidate> scanDerivedIndexDeleteCandidates(Instant now, List<String> errors) {
         try {
             return garbageCollectionPort.scanDerivedIndexDeleteCandidates(
                     now,
@@ -81,6 +96,37 @@ public class MemoryGarbageCollectionService {
         } catch (RuntimeException ex) {
             errors.add("scan:" + errorMessage(ex));
             return List.of();
+        }
+    }
+
+    private List<MemoryGarbageCollectionCandidate> scanLifecycleArchiveCandidates(Instant now, List<String> errors) {
+        if (!options.archiveEnabled()) {
+            return List.of();
+        }
+        try {
+            return garbageCollectionPort.scanLifecycleArchiveCandidates(
+                    now,
+                    options.archiveIdleRetention(),
+                    options.archiveScoreThreshold(),
+                    options.scanLimit());
+        } catch (RuntimeException ex) {
+            errors.add("archive-scan:" + errorMessage(ex));
+            return List.of();
+        }
+    }
+
+    private boolean markArchived(MemoryGarbageCollectionCandidate candidate, Instant now, List<String> errors) {
+        if (candidate == null || candidate.memoryId().isBlank()) {
+            return false;
+        }
+        try {
+            return garbageCollectionPort.markArchived(
+                    List.of(candidate.memoryId()),
+                    now,
+                    "generational gc archive") > 0;
+        } catch (RuntimeException ex) {
+            errors.add(candidate.memoryId() + ":archive:" + errorMessage(ex));
+            return false;
         }
     }
 
