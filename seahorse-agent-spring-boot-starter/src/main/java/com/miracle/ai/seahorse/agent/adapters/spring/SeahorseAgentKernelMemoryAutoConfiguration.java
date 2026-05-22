@@ -412,6 +412,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             List<MemoryRecallChannelPort> recallChannels,
             MemoryRecallFusionPort recallFusionPort,
             MemoryFusionPolicy fusionPolicy,
+            ObjectProvider<MemoryTraceRecorder> traceRecorder,
             @Value("${seahorse-agent.memory.recall.channel-top-k:20}") int channelTopK) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         return new HybridMemoryRecallPipeline(
@@ -427,7 +428,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 recallChannels,
                 recallFusionPort,
                 fusionPolicy,
-                channelTopK);
+                channelTopK,
+                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop));
     }
 
     @Bean

@@ -39,6 +39,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTrack;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
@@ -78,6 +80,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private final MemoryRecallFusionPort fusionPort;
     private final MemoryFusionPolicy fusionPolicy;
     private final int channelTopK;
+    private final MemoryTraceRecorder traceRecorder;
 
     public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
                                       LongTermMemoryPort longTermPort,
@@ -92,6 +95,36 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                                       MemoryRecallFusionPort fusionPort,
                                       MemoryFusionPolicy fusionPolicy,
                                       int channelTopK) {
+        this(shortTermPort,
+                longTermPort,
+                semanticPort,
+                objectMapper,
+                profileMemoryPort,
+                correctionLedgerPort,
+                memoryRouterPort,
+                businessDocumentRetrieverPort,
+                memoryLifecyclePort,
+                channels,
+                fusionPort,
+                fusionPolicy,
+                channelTopK,
+                MemoryTraceRecorder.noop());
+    }
+
+    public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
+                                      LongTermMemoryPort longTermPort,
+                                      SemanticMemoryPort semanticPort,
+                                      ObjectMapper objectMapper,
+                                      ProfileMemoryPort profileMemoryPort,
+                                      CorrectionLedgerPort correctionLedgerPort,
+                                      MemoryRouterPort memoryRouterPort,
+                                      MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                      MemoryLifecyclePort memoryLifecyclePort,
+                                      List<MemoryRecallChannelPort> channels,
+                                      MemoryRecallFusionPort fusionPort,
+                                      MemoryFusionPolicy fusionPolicy,
+                                      int channelTopK,
+                                      MemoryTraceRecorder traceRecorder) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -106,6 +139,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         this.fusionPort = Objects.requireNonNull(fusionPort, "fusionPort must not be null");
         this.fusionPolicy = Objects.requireNonNullElseGet(fusionPolicy, MemoryFusionPolicy::defaults);
         this.channelTopK = channelTopK > 0 ? channelTopK : MemoryFusionPolicy.DEFAULT_CHANNEL_TOP_K;
+        this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
     }
 
     @Override
@@ -199,18 +233,75 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 Map.of());
         List<List<MemoryRecallCandidate>> channelResults = new ArrayList<>();
         for (MemoryRecallChannelPort channel : channels) {
+            long startedAt = System.nanoTime();
             try {
                 List<MemoryRecallCandidate> result = channel.recall(recallRequest);
-                channelResults.add(result == null ? List.of() : result);
+                List<MemoryRecallCandidate> safeResult = result == null ? List.of() : result;
+                channelResults.add(safeResult);
+                recordRecallChannel(channel, userId, safeResult.size(),
+                        elapsedMillis(startedAt), MemoryTraceEvent.STATUS_SUCCESS, "");
             } catch (RuntimeException ex) {
                 LOG.warn("memory recall channel failed: channel={}, userId={}", channel.channelName(), userId, ex);
                 channelResults.add(List.of());
+                recordRecallChannel(channel, userId, 0,
+                        elapsedMillis(startedAt), MemoryTraceEvent.STATUS_FAILED,
+                        Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
             }
         }
-        return fusionPort.fuse(channelResults, fusionPolicy, Instant.now()).stream()
+        List<MemoryRecallCandidate> fused = fusionPort.fuse(channelResults, fusionPolicy, Instant.now());
+        recordRecallFusion(userId, channelResults.size(), fused.size(), fusionPolicy.finalTopK());
+        return fused.stream()
                 .map(this::toMemoryItem)
                 .flatMap(Optional::stream)
                 .toList();
+    }
+
+    private void recordRecallChannel(MemoryRecallChannelPort channel,
+                                     String userId,
+                                     int candidateCount,
+                                     long latencyMs,
+                                     String status,
+                                     String error) {
+        traceRecorder.record(new MemoryTraceEvent(
+                "",
+                DEFAULT_TENANT_ID,
+                userId,
+                "",
+                "",
+                "memory-recall",
+                "channel",
+                status,
+                channel.channelName(),
+                "recall_channel",
+                Map.of(
+                        "channel", channel.channelName(),
+                        "candidateCount", candidateCount,
+                        "latencyMs", latencyMs,
+                        "error", Objects.requireNonNullElse(error, "")),
+                Instant.now()));
+    }
+
+    private void recordRecallFusion(String userId, int channelCount, int fusedCount, int finalTopK) {
+        traceRecorder.record(new MemoryTraceEvent(
+                "",
+                DEFAULT_TENANT_ID,
+                userId,
+                "",
+                "",
+                "memory-recall",
+                "fusion",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "",
+                "recall_fusion",
+                Map.of(
+                        "channelCount", channelCount,
+                        "fusedCount", fusedCount,
+                        "finalTopK", finalTopK),
+                Instant.now()));
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
     }
 
     private Optional<MemoryItem> toMemoryItem(MemoryRecallCandidate candidate) {

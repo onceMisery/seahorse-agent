@@ -1685,6 +1685,7 @@ flowchart TD
 - `MemoryTraceEvent` 已包含 `traceId`、tenant/user/conversation/session 上下文、`component`、`eventType`、`status`、`subjectId`、`subjectType`、`details`、`occurredAt`，用于串联写入聚合、人工审核和维护任务。
 - `DefaultMemoryAggregationService` 已记录 `append-turn`、`flush-ready`、`submit`；`KernelMemoryReviewService` 已记录 `approve`、`modify`、`reject`；`DefaultMemoryMaintenanceService` 已记录 `run-maintenance`。这些事件只做横向观测，不改变四层记忆写入语义。
 - `MemoryOutboxRelayService` 已记录 `poll-batch` 和逐 task 的 `relay-task` 成功/失败事件，事件 details 包含 `processedCount`、`requestedLimit`、`taskType`、`targetId` 和错误信息。该能力通过构造器注入 `MemoryTraceRecorder`，旧构造器仍默认 noop。
+- `HybridMemoryRecallPipeline` 已记录每个 recall channel 的成功/失败、候选数和耗时，并记录 fusion 后的 `channelCount`、`fusedCount`、`finalTopK`。该 trace 只观察召回管线，不改变 RRF 融合、四层查询或 Profile/Correction 优先级。
 - `KernelMemoryManagementService.memoryHealth()` 已汇总 recent trace 的事件总数、失败数和 component 计数，并通过 `MemoryHealthReport.traceEventCount`、`traceFailureCount`、`traceComponentCounts` 暴露。
 - 四层记忆仍保持 `WORKING / SHORT_TERM / LONG_TERM / SEMANTIC` 作为唯一主记忆层级；trace 是可插拔观测层，不参与 source-of-truth 选择，也不新增第五层记忆。
 - 当前未落地完整持久化 trace 表和独立 trace 查询 API；默认实现定位为轻量内存观测。生产环境如需审计保留期、按 traceId 检索或跨实例聚合，应以 `MemoryTraceRecorder` 自定义 bean 扩展。
@@ -1851,7 +1852,7 @@ seahorse-agent.memory.maintenance.gc-enabled=false
 - `MemoryAliasResolutionService`
 - `JdbcMemoryAliasRepositoryAdapter` 的 scoped/global merge candidate scan
 - `MemoryTraceRecorder` / `MemoryTraceEvent` 可插拔观测端口
-- 聚合、人工审核、维护、outbox relay 主路径 trace 记录
+- 聚合、人工审核、维护、outbox relay、hybrid recall 主路径 trace 记录
 - `MemoryHealthReport` trace 摘要指标
 - Refiner `UPDATE` / `DELETE` 安全审核 staging，不直接修改四层记忆
 

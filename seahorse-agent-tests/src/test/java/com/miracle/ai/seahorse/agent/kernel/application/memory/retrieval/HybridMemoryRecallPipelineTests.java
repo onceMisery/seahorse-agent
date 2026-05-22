@@ -31,6 +31,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallCandidate
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallChannelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
@@ -91,6 +93,7 @@ class HybridMemoryRecallPipelineTests {
     void shouldContinueWhenOneRecallChannelFails() {
         RecordingMemoryStore semantic = new RecordingMemoryStore();
         semantic.save(record("semantic-keyword", "SEMANTIC", "Keyword fallback memory."));
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
         MemoryRecallChannelPort failing = new MemoryRecallChannelPort() {
             @Override
             public String channelName() {
@@ -109,7 +112,8 @@ class HybridMemoryRecallPipelineTests {
                 semantic,
                 List.of(
                         failing,
-                        channel("keyword", List.of(candidate("semantic-keyword", "keyword", 1, 3.0D, "SEMANTIC")))));
+                        channel("keyword", List.of(candidate("semantic-keyword", "keyword", 1, 3.0D, "SEMANTIC")))),
+                traceRecorder);
 
         MemoryContext context = pipeline.load(MemoryLoadRequest.builder()
                 .conversationId("conv-1")
@@ -119,6 +123,26 @@ class HybridMemoryRecallPipelineTests {
 
         assertThat(context.getSemanticMemories()).extracting(MemoryItem::getId)
                 .containsExactly("semantic-keyword");
+        assertThat(traceRecorder.events)
+                .anySatisfy(event -> {
+                    assertThat(event.component()).isEqualTo("memory-recall");
+                    assertThat(event.eventType()).isEqualTo("channel");
+                    assertThat(event.status()).isEqualTo(MemoryTraceEvent.STATUS_FAILED);
+                    assertThat(event.subjectId()).isEqualTo("vector");
+                    assertThat(event.details()).containsEntry("candidateCount", 0);
+                })
+                .anySatisfy(event -> {
+                    assertThat(event.eventType()).isEqualTo("channel");
+                    assertThat(event.status()).isEqualTo(MemoryTraceEvent.STATUS_SUCCESS);
+                    assertThat(event.subjectId()).isEqualTo("keyword");
+                    assertThat(event.details()).containsEntry("candidateCount", 1);
+                })
+                .anySatisfy(event -> {
+                    assertThat(event.eventType()).isEqualTo("fusion");
+                    assertThat(event.details()).containsEntry("channelCount", 2);
+                    assertThat(event.details()).containsEntry("fusedCount", 1);
+                    assertThat(event.details()).containsEntry("finalTopK", 5);
+                });
     }
 
     @Test
@@ -162,6 +186,14 @@ class HybridMemoryRecallPipelineTests {
                                                 RecordingMemoryStore longTerm,
                                                 RecordingMemoryStore semantic,
                                                 List<MemoryRecallChannelPort> channels) {
+        return pipeline(shortTerm, longTerm, semantic, channels, MemoryTraceRecorder.noop());
+    }
+
+    private HybridMemoryRecallPipeline pipeline(RecordingMemoryStore shortTerm,
+                                                RecordingMemoryStore longTerm,
+                                                RecordingMemoryStore semantic,
+                                                List<MemoryRecallChannelPort> channels,
+                                                MemoryTraceRecorder traceRecorder) {
         return new HybridMemoryRecallPipeline(
                 shortTerm,
                 longTerm,
@@ -175,7 +207,8 @@ class HybridMemoryRecallPipelineTests {
                 channels,
                 new RrfMemoryFusion(),
                 MemoryFusionPolicy.defaults().withFinalTopK(5).withTimeDecayEnabled(false),
-                10);
+                10,
+                traceRecorder);
     }
 
     private MemoryRecallChannelPort channel(String name, List<MemoryRecallCandidate> candidates) {
@@ -273,6 +306,21 @@ class HybridMemoryRecallPipelineTests {
                     .filter(store -> store.records.containsKey(memoryId))
                     .findFirst()
                     .ifPresent(store -> store.recordReadIds.add(memoryId));
+        }
+    }
+
+    private static final class RecordingTraceRecorder implements MemoryTraceRecorder {
+
+        private final List<MemoryTraceEvent> events = new ArrayList<>();
+
+        @Override
+        public void record(MemoryTraceEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public List<MemoryTraceEvent> listRecent(int limit) {
+            return List.copyOf(events);
         }
     }
 }
