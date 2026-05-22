@@ -356,6 +356,45 @@ class LlmMemoryRefinerAdapterTests {
         assertThat(prompt).contains("Runtime environment is Java 17.");
     }
 
+    @Test
+    void shouldInstructModelToUseContextBlockSourceSpansForSourceMessageIds() {
+        CapturingChatModelPort chatModelPort = new CapturingChatModelPort("""
+                {
+                  "refined": true,
+                  "reason": "uses source spans",
+                  "operations": []
+                }
+                """);
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                chatModelPort,
+                PromptTemplatePort.empty(),
+                new ObjectMapper());
+
+        adapter.refine(new MemoryRefinementRequest(
+                "op-1",
+                "tenant-1",
+                "memory-aggregation-flush",
+                "user-1",
+                "conversation-1",
+                "memory-snapshot-1",
+                "MEMORY_CONTEXT_BLOCK: v1 [turns] turn_1: user: remember Java assistant: noted "
+                        + "[source_spans] span_1: user-msg-1 -> assistant-msg-1",
+                MemoryIngestionAction.ADD,
+                "FACT",
+                "rule_based",
+                Map.<String, Object>of(),
+                List.<MemoryRefinementMemory>of(),
+                "",
+                "turn_1: user: remember Java\n\n[source_spans]\nspan_1: user-msg-1 -> assistant-msg-1",
+                List.<MemoryRefinementMemory>of()));
+
+        String prompt = chatModelPort.lastRequest.get().getMessages().get(0).getContent();
+        assertThat(prompt).contains("source_spans");
+        assertThat(prompt).contains("sourceMessageIds");
+        assertThat(prompt).contains("user-msg-1");
+        assertThat(prompt).contains("Do not use the snapshot messageId as the only sourceMessageIds");
+    }
+
     private static MemoryRefinementRequest request(String content) {
         return new MemoryRefinementRequest(
                 "op-1",

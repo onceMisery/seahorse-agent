@@ -56,6 +56,7 @@ JSON schema:
 }
 
 Return one operation per durable memory delta. A single context block may produce multiple ADD operations.
+When Target Zone or sanitized content contains source_spans, populate sourceMessageIds from the referenced user message ids for the turns that support each operation. Do not use the snapshot messageId as the only sourceMessageIds when more specific source_spans are available.
 Use metadata.targetLayer only when routing is clear. Omit it to use the default SHORT_TERM layer. Never invent a new layer.
 Use REVIEW for sensitive, conflicting, or uncertain profile changes.
 Use IGNORE only as an advisory signal when no durable memory should be written; Seahorse may still fall back to the baseline classifier.
