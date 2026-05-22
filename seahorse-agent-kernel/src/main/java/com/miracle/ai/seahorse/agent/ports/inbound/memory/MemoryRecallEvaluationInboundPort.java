@@ -15,22 +15,9 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval;
+package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 
-import java.util.List;
-import java.util.Objects;
+public interface MemoryRecallEvaluationInboundPort {
 
-public record MemoryRecallEvaluationReport(
-        int caseCount,
-        int scoredCaseCount,
-        int hitCount,
-        double hitRate,
-        double meanReciprocalRank,
-        double averageRecall,
-        List<MemoryRecallEvaluationResult> results
-) {
-
-    public MemoryRecallEvaluationReport {
-        results = List.copyOf(Objects.requireNonNullElse(results, List.of()));
-    }
+    MemoryRecallEvaluationReport evaluate(MemoryRecallEvaluationCommand command);
 }

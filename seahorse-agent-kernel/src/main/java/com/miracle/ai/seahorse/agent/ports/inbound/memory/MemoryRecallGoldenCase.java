@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval;
+package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 
 import java.util.List;
 import java.util.Objects;

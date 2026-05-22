@@ -49,6 +49,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceQuery;
@@ -1393,6 +1396,48 @@ class SeahorseWebApiContractTests {
         assertThat(queryCaptor.getValue().userId()).isEqualTo("user-1");
         assertThat(queryCaptor.getValue().component()).isEqualTo("memory-review");
         assertThat(queryCaptor.getValue().status()).isEqualTo("SUCCESS");
+    }
+
+    @Test
+    void shouldKeepMemoryRecallEvaluationContract() throws Exception {
+        MemoryRecallEvaluationInboundPort evaluationPort = mock(MemoryRecallEvaluationInboundPort.class);
+        when(evaluationPort.evaluate(any())).thenReturn(new MemoryRecallEvaluationReport(
+                1,
+                1,
+                1,
+                1.0D,
+                1.0D,
+                1.0D,
+                List.of(new MemoryRecallEvaluationResult(
+                        "case-1",
+                        "Pulsar PIP-459",
+                        List.of("mem-pip"),
+                        List.of("mem-pip"),
+                        List.of(),
+                        true,
+                        true,
+                        1.0D,
+                        1.0D))));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMemoryRecallEvaluationController(
+                        provider(MemoryRecallEvaluationInboundPort.class, evaluationPort))).build();
+
+        mvc.perform(post("/memories/recall-quality/evaluate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "topK", 3,
+                                "cases", List.of(Map.of(
+                                        "caseId", "case-1",
+                                        "userId", "user-1",
+                                        "conversationId", "conv-1",
+                                        "query", "Pulsar PIP-459",
+                                        "expectedMemoryIds", List.of("mem-pip")))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.hitRate").value(1.0D))
+                .andExpect(jsonPath("$.data.meanReciprocalRank").value(1.0D))
+                .andExpect(jsonPath("$.data.results[0].retrievedMemoryIds[0]").value("mem-pip"));
     }
 
     @Test

@@ -21,6 +21,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenCase;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import org.junit.jupiter.api.Test;
 

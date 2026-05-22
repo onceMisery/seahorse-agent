@@ -20,6 +20,11 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationReport;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenCase;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 
 import java.time.LocalDateTime;
@@ -32,7 +37,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-public class MemoryRecallEvaluationService {
+public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInboundPort {
 
     private static final int DEFAULT_TOP_K = 10;
 
@@ -41,6 +46,14 @@ public class MemoryRecallEvaluationService {
     public MemoryRecallEvaluationService(MemoryRetrievalPipelinePort retrievalPipelinePort) {
         this.retrievalPipelinePort = Objects.requireNonNull(retrievalPipelinePort,
                 "retrievalPipelinePort must not be null");
+    }
+
+    @Override
+    public MemoryRecallEvaluationReport evaluate(MemoryRecallEvaluationCommand command) {
+        MemoryRecallEvaluationCommand safeCommand = command == null
+                ? new MemoryRecallEvaluationCommand(DEFAULT_TOP_K, List.of())
+                : command;
+        return evaluate(safeCommand.cases(), safeCommand.topK());
     }
 
     public MemoryRecallEvaluationReport evaluate(List<MemoryRecallGoldenCase> cases, int topK) {
