@@ -190,6 +190,32 @@ public class JdbcChatSchemaUpgrade {
                 ON t_memory_review_feedback_sample (candidate_id, create_time)
                 """);
         jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_memory_trace_event (
+                    id VARCHAR(128) PRIMARY KEY,
+                    trace_id VARCHAR(128) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    user_id VARCHAR(64),
+                    conversation_id VARCHAR(64),
+                    session_id VARCHAR(128),
+                    component VARCHAR(64) NOT NULL,
+                    event_type VARCHAR(64) NOT NULL,
+                    status VARCHAR(32),
+                    subject_id VARCHAR(128),
+                    subject_type VARCHAR(64),
+                    details_json JSONB,
+                    occurred_at TIMESTAMP NOT NULL,
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_trace_recent
+                ON t_memory_trace_event (occurred_at, create_time)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_trace_filters
+                ON t_memory_trace_event (tenant_id, user_id, component, status, occurred_at)
+                """);
+        jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_user_profile_fact (
                     id VARCHAR(64) PRIMARY KEY,
                     user_id VARCHAR(64) NOT NULL,

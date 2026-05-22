@@ -941,6 +941,27 @@ CREATE TABLE t_memory_review_feedback_sample (
 CREATE INDEX idx_memory_review_feedback_candidate
 ON t_memory_review_feedback_sample (candidate_id, create_time);
 
+CREATE TABLE t_memory_trace_event (
+    id VARCHAR(128) PRIMARY KEY,
+    trace_id VARCHAR(128) NOT NULL,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    user_id VARCHAR(64),
+    conversation_id VARCHAR(64),
+    session_id VARCHAR(128),
+    component VARCHAR(64) NOT NULL,
+    event_type VARCHAR(64) NOT NULL,
+    status VARCHAR(32),
+    subject_id VARCHAR(128),
+    subject_type VARCHAR(64),
+    details_json JSONB,
+    occurred_at TIMESTAMP NOT NULL,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_memory_trace_recent
+ON t_memory_trace_event (occurred_at, create_time);
+CREATE INDEX idx_memory_trace_filters
+ON t_memory_trace_event (tenant_id, user_id, component, status, occurred_at);
+
 CREATE TABLE t_memory_maintenance_run (
     id VARCHAR(128) PRIMARY KEY,
     reason VARCHAR(128),

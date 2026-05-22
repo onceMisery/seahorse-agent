@@ -37,6 +37,8 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(initSql).contains("CREATE INDEX idx_memory_review_operation");
         assertThat(initSql).contains("CREATE TABLE t_memory_review_feedback_sample");
         assertThat(initSql).contains("CREATE INDEX idx_memory_review_feedback_candidate");
+        assertThat(initSql).contains("CREATE TABLE t_memory_trace_event");
+        assertThat(initSql).contains("CREATE INDEX idx_memory_trace_recent");
         assertThat(initSql).contains("CREATE TABLE t_memory_keyword_index");
         assertThat(initSql).contains("CREATE UNIQUE INDEX uk_memory_keyword_memory");
         assertThat(initSql).contains("CREATE INDEX idx_memory_keyword_lookup");
@@ -56,6 +58,7 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(tableExists(jdbcTemplate, "t_memory_outbox")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_review_candidate")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_review_feedback_sample")).isTrue();
+        assertThat(tableExists(jdbcTemplate, "t_memory_trace_event")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_maintenance_run")).isTrue();
         assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_scanned_count")).isTrue();
         assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_group_count")).isTrue();

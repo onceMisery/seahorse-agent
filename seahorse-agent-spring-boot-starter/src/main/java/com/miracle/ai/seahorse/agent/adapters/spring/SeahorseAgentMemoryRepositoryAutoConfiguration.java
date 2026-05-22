@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryOutboxRe
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryQualitySnapshotRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryReviewCandidateRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryReviewFeedbackRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryTraceRecorderAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcProfileMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSemanticMemoryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcShortTermMemoryRepositoryAdapter;
@@ -56,6 +57,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
@@ -215,6 +217,16 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
     public JdbcMemoryReviewFeedbackRepositoryAdapter seahorseJdbcMemoryReviewFeedbackRepositoryAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
         return new JdbcMemoryReviewFeedbackRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
+            matchIfMissing = true)
+    @ConditionalOnMissingBean(MemoryTraceRecorder.class)
+    public JdbcMemoryTraceRecorderAdapter seahorseJdbcMemoryTraceRecorderAdapter(
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcMemoryTraceRecorderAdapter(dataSource, objectMapper(objectMapperProvider));
     }
 
     @Bean
