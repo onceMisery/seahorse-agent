@@ -31,6 +31,10 @@ public record MemoryMaintenanceRunRecord(
         int compactionScannedCount,
         int compactionGroupCount,
         int compactionFragmentCount,
+        int aliasScannedCount,
+        int aliasNormalizedCount,
+        int aliasDictionaryMatchCount,
+        int aliasSkippedCount,
         int gcScannedCount,
         int gcEnqueuedCount,
         int gcMarkedCount,
@@ -44,6 +48,46 @@ public record MemoryMaintenanceRunRecord(
     public static final String STATUS_SUCCEEDED = "SUCCEEDED";
     public static final String STATUS_SUCCEEDED_WITH_WARNINGS = "SUCCEEDED_WITH_WARNINGS";
     public static final String STATUS_FAILED = "FAILED";
+
+    public MemoryMaintenanceRunRecord(String runId,
+                                      String reason,
+                                      String status,
+                                      boolean compactionRequested,
+                                      boolean aliasRequested,
+                                      boolean garbageCollectionRequested,
+                                      int compactionScannedCount,
+                                      int compactionGroupCount,
+                                      int compactionFragmentCount,
+                                      int gcScannedCount,
+                                      int gcEnqueuedCount,
+                                      int gcMarkedCount,
+                                      boolean gcDryRun,
+                                      List<String> skippedTasks,
+                                      List<String> errors,
+                                      Instant createTime,
+                                      Instant updateTime) {
+        this(runId,
+                reason,
+                status,
+                compactionRequested,
+                aliasRequested,
+                garbageCollectionRequested,
+                compactionScannedCount,
+                compactionGroupCount,
+                compactionFragmentCount,
+                0,
+                0,
+                0,
+                0,
+                gcScannedCount,
+                gcEnqueuedCount,
+                gcMarkedCount,
+                gcDryRun,
+                skippedTasks,
+                errors,
+                createTime,
+                updateTime);
+    }
 
     public MemoryMaintenanceRunRecord(String runId,
                                       String reason,
@@ -68,6 +112,10 @@ public record MemoryMaintenanceRunRecord(
                 0,
                 0,
                 0,
+                0,
+                0,
+                0,
+                0,
                 gcScannedCount,
                 gcEnqueuedCount,
                 gcMarkedCount,
@@ -85,6 +133,10 @@ public record MemoryMaintenanceRunRecord(
         compactionScannedCount = Math.max(0, compactionScannedCount);
         compactionGroupCount = Math.max(0, compactionGroupCount);
         compactionFragmentCount = Math.max(0, compactionFragmentCount);
+        aliasScannedCount = Math.max(0, aliasScannedCount);
+        aliasNormalizedCount = Math.max(0, aliasNormalizedCount);
+        aliasDictionaryMatchCount = Math.max(0, aliasDictionaryMatchCount);
+        aliasSkippedCount = Math.max(0, aliasSkippedCount);
         gcScannedCount = Math.max(0, gcScannedCount);
         gcEnqueuedCount = Math.max(0, gcEnqueuedCount);
         gcMarkedCount = Math.max(0, gcMarkedCount);

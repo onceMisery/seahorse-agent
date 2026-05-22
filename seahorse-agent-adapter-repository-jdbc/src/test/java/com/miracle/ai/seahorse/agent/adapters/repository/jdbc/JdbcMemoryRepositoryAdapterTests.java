@@ -769,6 +769,10 @@ class JdbcMemoryRepositoryAdapterTests {
                 4,
                 2,
                 7,
+                5,
+                3,
+                2,
+                1,
                 2,
                 3,
                 1,
@@ -789,6 +793,10 @@ class JdbcMemoryRepositoryAdapterTests {
         assertThat(page.records().get(0).compactionScannedCount()).isEqualTo(4);
         assertThat(page.records().get(0).compactionGroupCount()).isEqualTo(2);
         assertThat(page.records().get(0).compactionFragmentCount()).isEqualTo(7);
+        assertThat(page.records().get(0).aliasScannedCount()).isEqualTo(5);
+        assertThat(page.records().get(0).aliasNormalizedCount()).isEqualTo(3);
+        assertThat(page.records().get(0).aliasDictionaryMatchCount()).isEqualTo(2);
+        assertThat(page.records().get(0).aliasSkippedCount()).isEqualTo(1);
         assertThat(page.records().get(0).skippedTasks()).containsExactly("ALIAS_UNAVAILABLE");
         assertThat(page.records().get(0).errors()).containsExactly("gc:transient");
     }
@@ -1176,6 +1184,10 @@ class JdbcMemoryRepositoryAdapterTests {
                     compaction_scanned_count INTEGER NOT NULL DEFAULT 0,
                     compaction_group_count INTEGER NOT NULL DEFAULT 0,
                     compaction_fragment_count INTEGER NOT NULL DEFAULT 0,
+                    alias_scanned_count INTEGER NOT NULL DEFAULT 0,
+                    alias_normalized_count INTEGER NOT NULL DEFAULT 0,
+                    alias_dictionary_match_count INTEGER NOT NULL DEFAULT 0,
+                    alias_skipped_count INTEGER NOT NULL DEFAULT 0,
                     gc_scanned_count INTEGER NOT NULL DEFAULT 0,
                     gc_enqueued_count INTEGER NOT NULL DEFAULT 0,
                     gc_marked_count INTEGER NOT NULL DEFAULT 0,

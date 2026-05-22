@@ -122,6 +122,34 @@ class DefaultMemoryMaintenanceServiceTests {
     }
 
     @Test
+    void shouldPersistAliasResolutionCountsInMaintenanceRunRecord() {
+        RecordingGarbageCollectionService garbageCollectionService = new RecordingGarbageCollectionService();
+        RecordingAliasResolutionService aliasResolutionService = new RecordingAliasResolutionService();
+        RecordingMaintenanceRunRepository repository = new RecordingMaintenanceRunRepository();
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                garbageCollectionService,
+                null,
+                aliasResolutionService,
+                repository,
+                false,
+                true,
+                false);
+
+        service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "scheduled-alias-maintenance",
+                false,
+                true,
+                false));
+
+        assertThat(repository.records).hasSize(1);
+        MemoryMaintenanceRunRecord record = repository.records.get(0);
+        assertThat(record.aliasScannedCount()).isEqualTo(2);
+        assertThat(record.aliasNormalizedCount()).isEqualTo(1);
+        assertThat(record.aliasDictionaryMatchCount()).isEqualTo(0);
+        assertThat(record.aliasSkippedCount()).isEqualTo(0);
+    }
+
+    @Test
     void shouldSkipAliasResolutionCleanlyWhenUnavailable() {
         RecordingGarbageCollectionService garbageCollectionService = new RecordingGarbageCollectionService();
         DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(

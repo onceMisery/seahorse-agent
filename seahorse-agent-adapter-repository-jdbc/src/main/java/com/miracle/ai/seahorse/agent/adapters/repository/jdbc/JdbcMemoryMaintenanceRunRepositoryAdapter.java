@@ -49,9 +49,10 @@ public class JdbcMemoryMaintenanceRunRepositoryAdapter implements MemoryMaintena
                 INSERT INTO t_memory_maintenance_run
                 (id, reason, status, compaction_requested, alias_requested, gc_requested,
                  compaction_scanned_count, compaction_group_count, compaction_fragment_count,
+                 alias_scanned_count, alias_normalized_count, alias_dictionary_match_count, alias_skipped_count,
                  gc_scanned_count, gc_enqueued_count, gc_marked_count, gc_dry_run,
                  skipped_tasks, errors, create_time, update_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 record.runId(),
                 record.reason(),
@@ -62,6 +63,10 @@ public class JdbcMemoryMaintenanceRunRepositoryAdapter implements MemoryMaintena
                 record.compactionScannedCount(),
                 record.compactionGroupCount(),
                 record.compactionFragmentCount(),
+                record.aliasScannedCount(),
+                record.aliasNormalizedCount(),
+                record.aliasDictionaryMatchCount(),
+                record.aliasSkippedCount(),
                 record.gcScannedCount(),
                 record.gcEnqueuedCount(),
                 record.gcMarkedCount(),
@@ -113,6 +118,10 @@ public class JdbcMemoryMaintenanceRunRepositoryAdapter implements MemoryMaintena
                 rs.getInt("compaction_scanned_count"),
                 rs.getInt("compaction_group_count"),
                 rs.getInt("compaction_fragment_count"),
+                rs.getInt("alias_scanned_count"),
+                rs.getInt("alias_normalized_count"),
+                rs.getInt("alias_dictionary_match_count"),
+                rs.getInt("alias_skipped_count"),
                 rs.getInt("gc_scanned_count"),
                 rs.getInt("gc_enqueued_count"),
                 rs.getInt("gc_marked_count"),

@@ -143,6 +143,10 @@ public class JdbcChatSchemaUpgrade {
                     compaction_scanned_count INTEGER NOT NULL DEFAULT 0,
                     compaction_group_count INTEGER NOT NULL DEFAULT 0,
                     compaction_fragment_count INTEGER NOT NULL DEFAULT 0,
+                    alias_scanned_count INTEGER NOT NULL DEFAULT 0,
+                    alias_normalized_count INTEGER NOT NULL DEFAULT 0,
+                    alias_dictionary_match_count INTEGER NOT NULL DEFAULT 0,
+                    alias_skipped_count INTEGER NOT NULL DEFAULT 0,
                     gc_scanned_count INTEGER NOT NULL DEFAULT 0,
                     gc_enqueued_count INTEGER NOT NULL DEFAULT 0,
                     gc_marked_count INTEGER NOT NULL DEFAULT 0,
@@ -160,6 +164,10 @@ public class JdbcChatSchemaUpgrade {
         addColumnIfMissing("t_memory_maintenance_run", "compaction_scanned_count", "INTEGER NOT NULL DEFAULT 0");
         addColumnIfMissing("t_memory_maintenance_run", "compaction_group_count", "INTEGER NOT NULL DEFAULT 0");
         addColumnIfMissing("t_memory_maintenance_run", "compaction_fragment_count", "INTEGER NOT NULL DEFAULT 0");
+        addColumnIfMissing("t_memory_maintenance_run", "alias_scanned_count", "INTEGER NOT NULL DEFAULT 0");
+        addColumnIfMissing("t_memory_maintenance_run", "alias_normalized_count", "INTEGER NOT NULL DEFAULT 0");
+        addColumnIfMissing("t_memory_maintenance_run", "alias_dictionary_match_count", "INTEGER NOT NULL DEFAULT 0");
+        addColumnIfMissing("t_memory_maintenance_run", "alias_skipped_count", "INTEGER NOT NULL DEFAULT 0");
         ensureMemoryEntityAliasTables();
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_review_feedback_sample (
