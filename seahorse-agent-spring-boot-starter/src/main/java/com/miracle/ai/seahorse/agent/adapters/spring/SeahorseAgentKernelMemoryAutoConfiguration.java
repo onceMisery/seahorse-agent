@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngin
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryReviewService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryTraceQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.InMemoryMemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryDecayOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryEngineOptions;
@@ -56,6 +57,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
@@ -164,6 +166,12 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     public MemoryTraceRecorder seahorseMemoryTraceRecorder(
             @Value("${seahorse-agent.memory.trace.max-events:1000}") int maxEvents) {
         return new InMemoryMemoryTraceRecorder(maxEvents);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MemoryTraceInboundPort.class)
+    public KernelMemoryTraceQueryService seahorseMemoryTraceInboundPort(MemoryTraceRecorder traceRecorder) {
+        return new KernelMemoryTraceQueryService(traceRecorder);
     }
 
     @Bean

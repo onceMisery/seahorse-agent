@@ -1694,8 +1694,9 @@ flowchart TD
 - `MemoryOutboxRelayService` 已记录 `poll-batch` 和逐 task 的 `relay-task` 成功/失败事件，事件 details 包含 `processedCount`、`requestedLimit`、`taskType`、`targetId` 和错误信息。该能力通过构造器注入 `MemoryTraceRecorder`，旧构造器仍默认 noop。
 - `HybridMemoryRecallPipeline` 已记录每个 recall channel 的成功/失败、候选数和耗时，并记录 fusion 后的 `channelCount`、`fusedCount`、`finalTopK`。该 trace 只观察召回管线，不改变 RRF 融合、四层查询或 Profile/Correction 优先级。
 - `KernelMemoryManagementService.memoryHealth()` 已汇总 recent trace 的事件总数、失败数和 component 计数，并通过 `MemoryHealthReport.traceEventCount`、`traceFailureCount`、`traceComponentCounts` 暴露。
+- 已新增 `MemoryTraceInboundPort`、`MemoryTraceQuery`、`KernelMemoryTraceQueryService` 和 `GET /memories/traces`，支持按 `traceId`、tenant/user/conversation/session、component、status 查询 recent trace。查询服务只读取 `MemoryTraceRecorder`，因此默认内存实现和企业自定义持久化 recorder 都可复用同一 API。
 - 四层记忆仍保持 `WORKING / SHORT_TERM / LONG_TERM / SEMANTIC` 作为唯一主记忆层级；trace 是可插拔观测层，不参与 source-of-truth 选择，也不新增第五层记忆。
-- 当前未落地完整持久化 trace 表和独立 trace 查询 API；默认实现定位为轻量内存观测。生产环境如需审计保留期、按 traceId 检索或跨实例聚合，应以 `MemoryTraceRecorder` 自定义 bean 扩展。
+- 当前未落地内置 JDBC trace 表；默认实现定位为轻量内存观测。生产环境如需审计保留期、按 traceId 检索或跨实例聚合，应以 `MemoryTraceRecorder` 自定义 bean 扩展，并继续复用 `MemoryTraceInboundPort` 查询入口。
 
 接口：
 
@@ -1705,6 +1706,7 @@ GET /memories/operations
 GET /memories/outbox
 GET /memories/review-candidates
 GET /memories/maintenance-runs
+GET /memories/traces
 ```
 
 灰度配置：

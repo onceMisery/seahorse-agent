@@ -50,6 +50,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCo
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceQuery;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillRunResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataDictionaryInboundPort;
@@ -109,6 +111,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillCountItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobPage;
@@ -1297,6 +1300,46 @@ class SeahorseWebApiContractTests {
                         .content(json(Map.of("comment", "reject"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reviewStatus").value("REJECTED"));
+    }
+
+    @Test
+    void shouldKeepMemoryTraceQueryContract() throws Exception {
+        MemoryTraceInboundPort tracePort = mock(MemoryTraceInboundPort.class);
+        when(tracePort.listRecent(any())).thenReturn(List.of(new MemoryTraceEvent(
+                "trace-1",
+                "tenant-1",
+                "user-1",
+                "conv-1",
+                "session-1",
+                "memory-review",
+                "approve",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "review-1",
+                "memory-review",
+                Map.of("source", "test"),
+                Instant.EPOCH)));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMemoryTraceController(provider(MemoryTraceInboundPort.class, tracePort))).build();
+
+        mvc.perform(get("/memories/traces")
+                        .param("limit", "25")
+                        .param("tenantId", "tenant-1")
+                        .param("userId", "user-1")
+                        .param("component", "memory-review")
+                        .param("status", "SUCCESS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data[0].traceId").value("trace-1"))
+                .andExpect(jsonPath("$.data[0].component").value("memory-review"));
+
+        ArgumentCaptor<MemoryTraceQuery> queryCaptor = ArgumentCaptor.forClass(MemoryTraceQuery.class);
+        verify(tracePort).listRecent(queryCaptor.capture());
+        assertThat(queryCaptor.getValue().limit()).isEqualTo(25);
+        assertThat(queryCaptor.getValue().tenantId()).isEqualTo("tenant-1");
+        assertThat(queryCaptor.getValue().userId()).isEqualTo("user-1");
+        assertThat(queryCaptor.getValue().component()).isEqualTo("memory-review");
+        assertThat(queryCaptor.getValue().status()).isEqualTo("SUCCESS");
     }
 
     @Test
