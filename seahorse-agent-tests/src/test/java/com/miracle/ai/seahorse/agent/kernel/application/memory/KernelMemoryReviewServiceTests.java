@@ -33,6 +33,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate
 import org.junit.jupiter.api.Test;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -130,6 +132,27 @@ class KernelMemoryReviewServiceTests {
         assertThat(feedbackRepository.samples.get(0).reviewStatus()).isEqualTo(MemoryReviewStatus.REJECTED);
         assertThat(feedbackRepository.samples.get(0).rejectedContent()).isEqualTo("do not write");
         assertThat(feedbackRepository.samples.get(0).chosenContent()).isEmpty();
+    }
+
+    @Test
+    void shouldRecordTraceEventsForReviewDecisions() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-1", MemoryReviewStatus.PENDING, "original"));
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                repository,
+                new RecordingIngestionWorkflow(MemoryIngestionResult.accepted(List.of("SHORT_TERM_SAVE"))),
+                new RecordingReviewFeedbackRepository(),
+                traceRecorder);
+
+        service.approve("review-1",
+                new MemoryReviewDecisionCommand("auditor", "approve", "", Map.of()));
+
+        assertThat(traceRecorder.events).isNotEmpty();
+        assertThat(traceRecorder.events)
+                .anyMatch(event -> "memory-review".equals(event.component())
+                        && "approve".equals(event.eventType())
+                        && MemoryReviewStatus.APPLIED.name().equals(event.status()));
     }
 
     @Test
@@ -315,6 +338,21 @@ class KernelMemoryReviewServiceTests {
         @Override
         public List<MemoryReviewFeedbackSample> listByCandidate(String candidateId, int limit) {
             return List.of();
+        }
+    }
+
+    private static final class RecordingTraceRecorder implements MemoryTraceRecorder {
+
+        private final List<MemoryTraceEvent> events = new ArrayList<>();
+
+        @Override
+        public void record(MemoryTraceEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public List<MemoryTraceEvent> listRecent(int limit) {
+            return List.copyOf(events);
         }
     }
 }

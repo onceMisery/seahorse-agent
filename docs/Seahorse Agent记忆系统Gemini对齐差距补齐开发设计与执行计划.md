@@ -393,6 +393,7 @@ Verification:
 - [x] G4 Vector lifecycle schema guard 完成。
 - [x] G5 Profile slot 扩展完成。
 - [x] G6 观测与完整回归完成。
+- [x] G7 Memory trace plumbing 与 health 摘要完成。
 
 ## Execution Evidence
 
@@ -404,6 +405,7 @@ Verification:
 | G4 | Done | `JdbcChatSchemaUpgradeTests` covers backfilling vector lifecycle columns on an existing table; init SQL contains the same columns. |
 | G5 | Done | `DefaultMemoryEnginePortTests#shouldWriteProfileFactsForNameTechStackAndResponseStyle` verifies `identity.name`, `skills.tech_stack`, and `preferences.response_style` Profile slot writes. |
 | G6 | Done | `KernelMemoryObservabilityServiceTests` covers outbox backlog, schema failure, Profile completeness, and `memory.profile.low-completeness` alerts. |
+| G7 | Done | `InMemoryMemoryTraceRecorderTests`, `MemoryAggregationServiceTests`, `KernelMemoryReviewServiceTests`, `DefaultMemoryMaintenanceServiceTests`, and `KernelMemoryObservabilityServiceTests` cover trace recorder behavior, aggregation/review/maintenance trace emission, and health trace summary. |
 
 ## Acceptance Matrix Against Original P0-P6
 
@@ -416,3 +418,4 @@ Verification:
 | P4 向量/BM25/业务文档 | 补齐 Outbox Relay，vector schema 为 generation hard filter 做准备 |
 | P5 生命周期治理 | Profile 历史状态和 vector lifecycle 字段补齐 |
 | P6 观测与策略 | Outbox、schema failure、Profile completeness、conflict density 进入 health/alert |
+| M7 观测、灰度与回滚 | `MemoryTraceRecorder` 作为可插拔 outbound port 接入，默认内存实现可被自定义 bean 覆盖；trace 只作为横向观测层，不改变四层记忆模型。 |

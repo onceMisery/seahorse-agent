@@ -33,6 +33,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPor
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
@@ -109,8 +111,61 @@ class KernelMemoryObservabilityServiceTests {
         assertThat(report.policyBlockCount()).isEqualTo(1);
         assertThat(report.profileCompleteness()).isEqualTo(0.25D);
         assertThat(report.conflictDensity()).isEqualTo(1D / 6D);
+        assertThat(report.traceEventCount()).isZero();
+        assertThat(report.traceFailureCount()).isZero();
+        assertThat(report.traceComponentCounts()).isEmpty();
         assertThat(report.alerts())
                 .contains("memory.outbox.backlog", "memory.schema.failures", "memory.profile.low-completeness");
+    }
+
+    @Test
+    void shouldAggregateTraceSummaryFromTraceRecorder() {
+        InMemoryTraceRecorder traceRecorder = new InMemoryTraceRecorder();
+        traceRecorder.record(new MemoryTraceEvent(
+                "trace-1",
+                "default",
+                "user-1",
+                "conversation-1",
+                "session-1",
+                "memory-aggregation",
+                "flush-ready",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "snapshot-1",
+                "snapshot",
+                Map.of("trigger", "FORCE_TURNS"),
+                Instant.EPOCH));
+        traceRecorder.record(new MemoryTraceEvent(
+                "trace-2",
+                "default",
+                "user-1",
+                "conversation-1",
+                "session-1",
+                "memory-maintenance",
+                "run-maintenance",
+                MemoryTraceEvent.STATUS_FAILED,
+                "manual-maintenance",
+                "run",
+                Map.of("reason", "manual-maintenance"),
+                Instant.EPOCH));
+
+        KernelMemoryManagementService service = service(
+                new RecordingProfileMemoryPort(),
+                new RecordingCorrectionLedgerPort(),
+                new RecordingOperationLogPort(),
+                new RecordingConflictLogRepository(),
+                new RecordingMemoryOutboxPort(),
+                new RecordingQualitySnapshotRepository(),
+                MemoryReviewManagementRepositoryPort.empty(),
+                new RecordingPolicyConfigPort(MemoryPolicyConfig.defaults()),
+                traceRecorder);
+
+        var report = service.memoryHealth("user-1", "default");
+
+        assertThat(report.traceEventCount()).isEqualTo(2);
+        assertThat(report.traceFailureCount()).isEqualTo(1);
+        assertThat(report.traceComponentCounts())
+                .containsEntry("memory-aggregation", 1L)
+                .containsEntry("memory-maintenance", 1L);
     }
 
     @Test
@@ -148,6 +203,19 @@ class KernelMemoryObservabilityServiceTests {
                                                   RecordingQualitySnapshotRepository snapshots,
                                                   MemoryReviewManagementRepositoryPort reviewRepository,
                                                   RecordingPolicyConfigPort policyConfigPort) {
+        return service(profilePort, correctionPort, operationLog, conflicts, outbox, snapshots, reviewRepository,
+                policyConfigPort, MemoryTraceRecorder.noop());
+    }
+
+    private KernelMemoryManagementService service(RecordingProfileMemoryPort profilePort,
+                                                  RecordingCorrectionLedgerPort correctionPort,
+                                                  RecordingOperationLogPort operationLog,
+                                                  RecordingConflictLogRepository conflicts,
+                                                  RecordingMemoryOutboxPort outbox,
+                                                  RecordingQualitySnapshotRepository snapshots,
+                                                  MemoryReviewManagementRepositoryPort reviewRepository,
+                                                  RecordingPolicyConfigPort policyConfigPort,
+                                                  MemoryTraceRecorder traceRecorder) {
         return new KernelMemoryManagementService(new MemoryManagementServicePorts(
                 new RecordingMemoryPort(),
                 new RecordingShortTermMemoryPort(),
@@ -160,7 +228,8 @@ class KernelMemoryObservabilityServiceTests {
                 operationLog,
                 outbox,
                 reviewRepository,
-                policyConfigPort));
+                policyConfigPort,
+                traceRecorder));
     }
 
     private MemoryOperationRecord operation(String operationId, String status, Map<String, Object> decision) {
@@ -421,6 +490,24 @@ class KernelMemoryObservabilityServiceTests {
         public MemoryPolicyConfig update(MemoryPolicyConfig config) {
             current = config;
             return current;
+        }
+    }
+
+    private static final class InMemoryTraceRecorder implements MemoryTraceRecorder {
+
+        private final List<MemoryTraceEvent> events = new ArrayList<>();
+
+        @Override
+        public void record(MemoryTraceEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public List<MemoryTraceEvent> listRecent(int limit) {
+            int safeLimit = limit <= 0 ? events.size() : Math.min(limit, events.size());
+            return events.stream()
+                    .skip(Math.max(0, events.size() - safeLimit))
+                    .toList();
         }
     }
 }

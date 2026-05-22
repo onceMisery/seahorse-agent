@@ -29,6 +29,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQ
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -201,6 +203,32 @@ class DefaultMemoryMaintenanceServiceTests {
         assertThat(record.compactionFragmentCount()).isEqualTo(2);
     }
 
+    @Test
+    void shouldRecordTraceEventForMaintenanceRun() {
+        RecordingGarbageCollectionService garbageCollectionService = new RecordingGarbageCollectionService();
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                garbageCollectionService,
+                null,
+                null,
+                MemoryMaintenanceRunRepositoryPort.noop(),
+                traceRecorder,
+                false,
+                false,
+                true);
+
+        service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "manual-maintenance",
+                false,
+                false,
+                true));
+
+        assertThat(traceRecorder.events).hasSize(1);
+        assertThat(traceRecorder.events.get(0).component()).isEqualTo("memory-maintenance");
+        assertThat(traceRecorder.events.get(0).eventType()).isEqualTo("run-maintenance");
+        assertThat(traceRecorder.events.get(0).status()).isEqualTo(MemoryTraceEvent.STATUS_SUCCESS);
+    }
+
     private static class RecordingGarbageCollectionService extends MemoryGarbageCollectionService {
 
         private final List<String> reasons = new ArrayList<>();
@@ -252,6 +280,21 @@ class DefaultMemoryMaintenanceServiceTests {
         public MemoryAliasResolutionRunResult run(String reason) {
             reasons.add(reason);
             return new MemoryAliasResolutionRunResult(reason, 2, 1, 0, 0, List.of(), Instant.EPOCH);
+        }
+    }
+
+    private static class RecordingTraceRecorder implements MemoryTraceRecorder {
+
+        private final List<MemoryTraceEvent> events = new ArrayList<>();
+
+        @Override
+        public void record(MemoryTraceEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public List<MemoryTraceEvent> listRecent(int limit) {
+            return List.copyOf(events);
         }
     }
 

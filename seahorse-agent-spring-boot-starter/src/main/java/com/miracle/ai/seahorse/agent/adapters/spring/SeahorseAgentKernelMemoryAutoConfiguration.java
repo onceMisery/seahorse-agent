@@ -37,6 +37,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.RuleBasedMemoryCa
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.DefaultMemoryAggregationService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.InMemoryMemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.trace.InMemoryMemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.DefaultMemoryMaintenanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryAliasResolutionOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryAliasResolutionService;
@@ -92,6 +93,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagemen
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
@@ -162,6 +164,13 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(MemoryTraceRecorder.class)
+    public MemoryTraceRecorder seahorseMemoryTraceRecorder(
+            @Value("${seahorse-agent.memory.trace.max-events:1000}") int maxEvents) {
+        return new InMemoryMemoryTraceRecorder(maxEvents);
+    }
+
+    @Bean
     @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
             havingValue = "true")
     @ConditionalOnMissingBean(MemoryAggregationServicePort.class)
@@ -169,13 +178,15 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             MemoryAggregationPolicy policy,
             ObjectProvider<MemoryAggregationBufferPort> aggregationBufferPort,
             ObjectProvider<MemoryAggregationSchedulerPort> schedulerPort,
-            ObjectProvider<MemoryIngestionWorkflowPort> ingestionWorkflowPort) {
+            ObjectProvider<MemoryIngestionWorkflowPort> ingestionWorkflowPort,
+            ObjectProvider<MemoryTraceRecorder> traceRecorder) {
         return new DefaultMemoryAggregationService(
                 policy,
                 aggregationBufferPort.getIfAvailable(MemoryAggregationBufferPort::noop),
                 schedulerPort.getIfAvailable(MemoryAggregationSchedulerPort::noop),
                 ingestionWorkflowPort.getIfAvailable(() -> command ->
-                        com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult.ignored("noop")));
+                        com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult.ignored("noop")),
+                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop));
     }
 
     @Bean
@@ -539,7 +550,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryOperationLogPort> operationLogPort,
             ObjectProvider<MemoryOutboxPort> outboxPort,
             ObjectProvider<MemoryReviewManagementRepositoryPort> reviewRepositoryPort,
-            ObjectProvider<MemoryPolicyConfigPort> policyConfigPort) {
+            ObjectProvider<MemoryPolicyConfigPort> policyConfigPort,
+            ObjectProvider<MemoryTraceRecorder> traceRecorder) {
         return new MemoryManagementServicePorts(
                 workingMemoryPort,
                 shortTermMemoryPort,
@@ -552,7 +564,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 operationLogPort.getIfAvailable(MemoryOperationLogPort::noop),
                 outboxPort.getIfAvailable(MemoryOutboxPort::noop),
                 reviewRepositoryPort.getIfAvailable(MemoryReviewManagementRepositoryPort::empty),
-                policyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults));
+                policyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults),
+                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop));
     }
 
     @Bean
@@ -569,11 +582,13 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     public KernelMemoryReviewService seahorseMemoryReviewInboundPort(
             ObjectProvider<MemoryReviewManagementRepositoryPort> reviewRepositoryPort,
             ObjectProvider<MemoryReviewFeedbackRepositoryPort> reviewFeedbackRepositoryPort,
-            MemoryIngestionWorkflowPort ingestionWorkflowPort) {
+            MemoryIngestionWorkflowPort ingestionWorkflowPort,
+            ObjectProvider<MemoryTraceRecorder> traceRecorder) {
         return new KernelMemoryReviewService(
                 reviewRepositoryPort.getIfAvailable(MemoryReviewManagementRepositoryPort::empty),
                 ingestionWorkflowPort,
-                reviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty));
+                reviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty),
+                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop));
     }
 
     @Bean
@@ -711,6 +726,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryCompactionService> compactionService,
             ObjectProvider<MemoryAliasResolutionService> aliasResolutionService,
             ObjectProvider<MemoryMaintenanceRunRepositoryPort> maintenanceRunRepositoryPort,
+            ObjectProvider<MemoryTraceRecorder> traceRecorder,
             @Value("${seahorse-agent.memory.maintenance.compaction-enabled:false}") boolean compactionEnabled,
             @Value("${seahorse-agent.memory.maintenance.alias-enabled:false}") boolean aliasEnabled,
             @Value("${seahorse-agent.memory.maintenance.gc-enabled:true}") boolean garbageCollectionEnabled) {
@@ -719,6 +735,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 compactionService.getIfAvailable(),
                 aliasResolutionService.getIfAvailable(),
                 maintenanceRunRepositoryPort.getIfAvailable(MemoryMaintenanceRunRepositoryPort::noop),
+                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
                 compactionEnabled,
                 aliasEnabled,
                 garbageCollectionEnabled);

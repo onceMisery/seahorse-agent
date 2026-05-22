@@ -27,6 +27,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionComman
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTurnEvent;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -36,6 +38,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 class MemoryAggregationServiceTests {
 
@@ -110,14 +114,40 @@ class MemoryAggregationServiceTests {
         Assertions.assertEquals(1, workflow.commands.size());
     }
 
+    @Test
+    void shouldRecordTraceEventsForAggregationAndFlushLifecycle() {
+        RecordingWorkflow workflow = new RecordingWorkflow();
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        DefaultMemoryAggregationService service = service(policy(2, 60_000), workflow, new RecordingScheduler(),
+                traceRecorder);
+
+        service.appendTurn(turn("task-1", "Remember I use Java", "Noted", 8));
+        service.appendTurn(turn("task-2", "I prefer concise answers", "Understood", 9));
+
+        assertThat(traceRecorder.events).isNotEmpty();
+        assertThat(traceRecorder.events)
+                .anyMatch(event -> "memory-aggregation".equals(event.component())
+                        && "append-turn".equals(event.eventType()))
+                .anyMatch(event -> "flush-ready".equals(event.eventType())
+                        && MemoryTraceEvent.STATUS_SUCCESS.equals(event.status()));
+    }
+
     private DefaultMemoryAggregationService service(MemoryAggregationPolicy policy,
                                                     RecordingWorkflow workflow,
                                                     RecordingScheduler scheduler) {
+        return service(policy, workflow, scheduler, MemoryTraceRecorder.noop());
+    }
+
+    private DefaultMemoryAggregationService service(MemoryAggregationPolicy policy,
+                                                    RecordingWorkflow workflow,
+                                                    RecordingScheduler scheduler,
+                                                    MemoryTraceRecorder traceRecorder) {
         return new DefaultMemoryAggregationService(
                 policy,
                 new InMemoryMemoryAggregationBufferPort(policy),
                 scheduler,
                 workflow,
+                traceRecorder,
                 Clock.fixed(BASE_TIME, ZoneOffset.UTC));
     }
 
@@ -161,6 +191,21 @@ class MemoryAggregationServiceTests {
             this.sessionId = sessionId;
             this.tenantId = tenantId;
             this.runAt = runAt;
+        }
+    }
+
+    private static final class RecordingTraceRecorder implements MemoryTraceRecorder {
+
+        private final List<MemoryTraceEvent> events = new ArrayList<>();
+
+        @Override
+        public void record(MemoryTraceEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public List<MemoryTraceEvent> listRecent(int limit) {
+            return List.copyOf(events);
         }
     }
 }

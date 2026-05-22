@@ -1665,8 +1665,9 @@ flowchart TD
 
 创建文件：
 
-- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/memory/MemoryTraceEvent.java`
-- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/memory/MemoryTraceRecorder.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports/outbound/memory/MemoryTraceEvent.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports/outbound/memory/MemoryTraceRecorder.java`
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/memory/trace/InMemoryMemoryTraceRecorder.java`
 - 可选 `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/ports/outbound/memory/MemoryMaintenanceRunRepositoryPort.java`
 
 修改文件：
@@ -1677,6 +1678,15 @@ flowchart TD
 - `HybridMemoryRecallPipeline`：记录 channel latency、candidate count、fusion topK。
 - `DefaultContextWeaver`：记录 prompt memory chars、zone item count。
 - `MemoryOutboxRelayService`：按 task type 记录 backlog、success、failure。
+
+当前已落地切片（2026-05-22）：
+
+- 已新增可插拔 `MemoryTraceRecorder` outbound port，并提供 `MemoryTraceRecorder.noop()` 与 `InMemoryMemoryTraceRecorder` 默认实现。Spring 自动配置通过 `@ConditionalOnMissingBean(MemoryTraceRecorder.class)` 注册内存 recorder，可由企业侧替换为 Micrometer、OpenTelemetry、JDBC 或审计系统适配器。
+- `MemoryTraceEvent` 已包含 `traceId`、tenant/user/conversation/session 上下文、`component`、`eventType`、`status`、`subjectId`、`subjectType`、`details`、`occurredAt`，用于串联写入聚合、人工审核和维护任务。
+- `DefaultMemoryAggregationService` 已记录 `append-turn`、`flush-ready`、`submit`；`KernelMemoryReviewService` 已记录 `approve`、`modify`、`reject`；`DefaultMemoryMaintenanceService` 已记录 `run-maintenance`。这些事件只做横向观测，不改变四层记忆写入语义。
+- `KernelMemoryManagementService.memoryHealth()` 已汇总 recent trace 的事件总数、失败数和 component 计数，并通过 `MemoryHealthReport.traceEventCount`、`traceFailureCount`、`traceComponentCounts` 暴露。
+- 四层记忆仍保持 `WORKING / SHORT_TERM / LONG_TERM / SEMANTIC` 作为唯一主记忆层级；trace 是可插拔观测层，不参与 source-of-truth 选择，也不新增第五层记忆。
+- 当前未落地完整持久化 trace 表和独立 trace 查询 API；默认实现定位为轻量内存观测。生产环境如需审计保留期、按 traceId 检索或跨实例聚合，应以 `MemoryTraceRecorder` 自定义 bean 扩展。
 
 接口：
 
@@ -1839,8 +1849,12 @@ seahorse-agent.memory.maintenance.gc-enabled=false
 - `SeahorseMemoryMaintenanceJob`
 - `MemoryAliasResolutionService`
 - `JdbcMemoryAliasRepositoryAdapter` 的 scoped/global merge candidate scan
+- `MemoryTraceRecorder` / `MemoryTraceEvent` 可插拔观测端口
+- 聚合、人工审核、维护主路径 trace 记录
+- `MemoryHealthReport` trace 摘要指标
 
 保持不变：
 - 四层记忆 `WORKING / SHORT_TERM / LONG_TERM / SEMANTIC`
 - Gemini 能力以可插拔横向能力接入，不替换主记忆层级
 - alias / compaction / GC 通过维护入口和独立 service 组合实现
+- trace / observability 通过 outbound port 和 Spring bean 覆盖实现可插拔，不绑定具体存储。
