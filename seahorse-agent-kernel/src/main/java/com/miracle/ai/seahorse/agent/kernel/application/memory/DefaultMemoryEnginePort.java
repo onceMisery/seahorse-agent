@@ -614,27 +614,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     result.reason(),
                     metadata));
         }
-        if (operation.action() == MemoryIngestionAction.REVIEW) {
-            Map<String, Object> metadata = new LinkedHashMap<>(operation.metadata());
-            metadata.putAll(result.metadata());
-            metadata.put("status", "pending_review");
-            metadata.put(METADATA_CONTENT, operation.content());
-            metadata.put(METADATA_CONFIDENCE, operation.confidence());
-            metadata.put(METADATA_IMPORTANCE, operation.importance());
-            metadata.put(METADATA_VALUE_SCORE, operation.valueScore());
-            metadata.put(METADATA_RISK_SCORE, operation.riskScore());
-            metadata.put(METADATA_SOURCE_MESSAGE_IDS, operation.sourceMessageIds());
-            return new MemoryClassificationResult(
-                    MemoryIngestionAction.REVIEW,
-                    null,
-                    null,
-                    new RefinedMemoryDelta(
-                            operation.action(),
-                            operation.targetKind(),
-                            operation.targetKey(),
-                            result.reason(),
-                            metadata),
-                    result.reason());
+        if (requiresReviewStaging(operation.action())) {
+            return refinedReviewClassification(operation, result);
         }
         return withRefinerDelta(
                 baseline,
@@ -649,11 +630,41 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         for (RefinedMemoryOperation operation : operations) {
             if (operation != null
                     && (operation.action() == MemoryIngestionAction.ADD
-                    || operation.action() == MemoryIngestionAction.REVIEW)) {
+                    || requiresReviewStaging(operation.action()))) {
                 return operation;
             }
         }
         return null;
+    }
+
+    private MemoryClassificationResult refinedReviewClassification(RefinedMemoryOperation operation,
+                                                                   MemoryRefinementResult result) {
+        Map<String, Object> metadata = new LinkedHashMap<>(operation.metadata());
+        metadata.putAll(result.metadata());
+        metadata.put("status", "pending_review");
+        metadata.put(METADATA_CONTENT, operation.content());
+        metadata.put(METADATA_CONFIDENCE, operation.confidence());
+        metadata.put(METADATA_IMPORTANCE, operation.importance());
+        metadata.put(METADATA_VALUE_SCORE, operation.valueScore());
+        metadata.put(METADATA_RISK_SCORE, operation.riskScore());
+        metadata.put(METADATA_SOURCE_MESSAGE_IDS, operation.sourceMessageIds());
+        return new MemoryClassificationResult(
+                MemoryIngestionAction.REVIEW,
+                null,
+                null,
+                new RefinedMemoryDelta(
+                        operation.action(),
+                        operation.targetKind(),
+                        operation.targetKey(),
+                        result.reason(),
+                        metadata),
+                result.reason());
+    }
+
+    private boolean requiresReviewStaging(MemoryIngestionAction action) {
+        return action == MemoryIngestionAction.REVIEW
+                || action == MemoryIngestionAction.UPDATE
+                || action == MemoryIngestionAction.DELETE;
     }
 
     private MemoryClassificationResult withRefinerDelta(MemoryClassificationResult baseline,

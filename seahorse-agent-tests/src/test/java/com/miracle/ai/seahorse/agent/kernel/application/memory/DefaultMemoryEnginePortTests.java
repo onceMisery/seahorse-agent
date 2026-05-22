@@ -883,9 +883,10 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
-    void shouldIgnoreUnsupportedRefinedDeleteWithoutDeletingOrWritingMemory() {
+    void shouldStageRefinedDeleteForReviewWithoutDeletingOrWritingMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
                 "delete_requested",
                 List.of(new RefinedMemoryOperation(
@@ -901,10 +902,10 @@ class DefaultMemoryEnginePortTests {
                         List.of("llm_refiner"),
                         Map.of())),
                 Map.of("model", "test-refiner")));
-        DefaultMemoryEnginePort engine = engineWithRefiner(
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
                 shortTermPort,
                 refinerPort,
-                true,
+                reviewCandidatePort,
                 operationLogPort);
 
         var result = engine.ingest(new MemoryIngestionCommand("op-refiner-delete", "default", "memory-aggregation-flush",
@@ -915,15 +916,73 @@ class DefaultMemoryEnginePortTests {
                         .message(ChatMessage.user("delete the old memory about my previous project"))
                         .build()));
 
-        Assertions.assertEquals(MemoryIngestionStatus.IGNORED, result.status());
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.REVIEW, result.action());
         Assertions.assertEquals(1, refinerPort.requests.size());
         Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
-        Assertions.assertEquals(MemoryOperationStatus.IGNORED,
+        Assertions.assertEquals(1, reviewCandidatePort.candidates.size());
+        MemoryReviewCandidate candidate = reviewCandidatePort.candidates.get(0);
+        Assertions.assertEquals(MemoryIngestionAction.DELETE, candidate.requestedAction());
+        Assertions.assertEquals("SHORT_TERM_MEMORY", candidate.targetKind());
+        Assertions.assertEquals("stm-old-memory", candidate.targetKey());
+        Assertions.assertEquals(MemoryOperationStatus.REVIEW,
                 operationLogPort.statusById.get("op-refiner-delete"));
-        Assertions.assertEquals("unsupported_refined_operation",
+        Assertions.assertEquals("delete_requested",
                 operationLogPort.decisionById.get("op-refiner-delete").get("refinerReason"));
-        Assertions.assertEquals("unsupported",
+        Assertions.assertEquals("pending_review",
                 operationLogPort.decisionById.get("op-refiner-delete").get("refinerStatus"));
+        Assertions.assertEquals("DELETE",
+                operationLogPort.decisionById.get("op-refiner-delete").get("refinerAction"));
+    }
+
+    @Test
+    void shouldStageRefinedUpdateForReviewWithoutUpdatingDurableMemory() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "update_requested",
+                List.of(new RefinedMemoryOperation(
+                        MemoryIngestionAction.UPDATE,
+                        "PROFILE_SLOT",
+                        "preferences.response_style",
+                        "user now prefers detailed answers",
+                        0.88D,
+                        0.70D,
+                        0.80D,
+                        0.20D,
+                        List.of("msg-refiner-update"),
+                        List.of("llm_refiner"),
+                        Map.of("previousValue", "concise answers"))),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-update", "default", "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-update")
+                        .messageId("msg-refiner-update")
+                        .message(ChatMessage.user("actually I now prefer detailed answers"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.REVIEW, result.action());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(1, reviewCandidatePort.candidates.size());
+        MemoryReviewCandidate candidate = reviewCandidatePort.candidates.get(0);
+        Assertions.assertEquals(MemoryIngestionAction.UPDATE, candidate.requestedAction());
+        Assertions.assertEquals("PROFILE_SLOT", candidate.targetKind());
+        Assertions.assertEquals("preferences.response_style", candidate.targetKey());
+        Assertions.assertEquals("user now prefers detailed answers", candidate.content());
+        Assertions.assertEquals("concise answers", candidate.metadata().get("previousValue"));
+        Assertions.assertEquals(MemoryOperationStatus.REVIEW,
+                operationLogPort.statusById.get("op-refiner-update"));
+        Assertions.assertEquals("UPDATE",
+                operationLogPort.decisionById.get("op-refiner-update").get("refinerAction"));
     }
 
     @Test

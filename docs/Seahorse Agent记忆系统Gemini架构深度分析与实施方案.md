@@ -818,7 +818,7 @@ seahorse-agent.memory.refiner.max-context-chars=12000
 seahorse-agent.memory.refiner.prompt-version=memory-refiner-v1
 ```
 
-当前落地状态：`LlmMemoryRefinerAdapter` 已在 `seahorse-agent-adapter-ai-openai-compatible` 中实现，复用通用 `ChatModelPort`、`PromptTemplatePort`、`ObjectMapper`，提示词资源为 `prompt/memory-refiner.st`。Spring 装配在 `SeahorseAgentKernelMemoryAutoConfiguration` 中受 `seahorse-agent.memory.refiner.llm-enabled=true` 控制，并且要求存在 `ChatModelPort`；`seahorse-agent.memory.refiner.enabled` 仍是 `DefaultMemoryEnginePort` 是否调用 refiner 的执行开关。该适配器只输出结构化候选 `MemoryRefinementResult`，不会直接写入四层记忆、Profile、Correction 或 REVIEW 表。
+当前落地状态：`LlmMemoryRefinerAdapter` 已在 `seahorse-agent-adapter-ai-openai-compatible` 中实现，复用通用 `ChatModelPort`、`PromptTemplatePort`、`ObjectMapper`，提示词资源为 `prompt/memory-refiner.st`。Spring 装配在 `SeahorseAgentKernelMemoryAutoConfiguration` 中受 `seahorse-agent.memory.refiner.llm-enabled=true` 控制，并且要求存在 `ChatModelPort`；`seahorse-agent.memory.refiner.enabled` 仍是 `DefaultMemoryEnginePort` 是否调用 refiner 的执行开关。该适配器只输出结构化候选 `MemoryRefinementResult`，不会直接写入四层记忆、Profile、Correction 或 REVIEW 表。`DefaultMemoryEnginePort` 目前只允许 `ADD` 自动进入确定性写入；`REVIEW`、`UPDATE`、`DELETE` 均进入人工审核 staging，候选的 `requestedAction` 保留原始动作，避免 LLM 直接覆盖或删除四层记忆。
 
 规则：
 
@@ -1851,8 +1851,9 @@ seahorse-agent.memory.maintenance.gc-enabled=false
 - `MemoryAliasResolutionService`
 - `JdbcMemoryAliasRepositoryAdapter` 的 scoped/global merge candidate scan
 - `MemoryTraceRecorder` / `MemoryTraceEvent` 可插拔观测端口
-- 聚合、人工审核、维护主路径 trace 记录
+- 聚合、人工审核、维护、outbox relay 主路径 trace 记录
 - `MemoryHealthReport` trace 摘要指标
+- Refiner `UPDATE` / `DELETE` 安全审核 staging，不直接修改四层记忆
 
 保持不变：
 - 四层记忆 `WORKING / SHORT_TERM / LONG_TERM / SEMANTIC`
