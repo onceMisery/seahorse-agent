@@ -108,6 +108,14 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         }
 
         @Override
+        public void onRunStarted(String runId) {
+            if (streamTaskPort.isCancelled(taskId) || isBlank(runId)) {
+                return;
+            }
+            sender.sendEvent(StreamEventType.META.value(), new StreamMetaPayload(conversationId, taskId, runId));
+        }
+
+        @Override
         public void onComplete() {
             if (streamTaskPort.isCancelled(taskId)) {
                 return;

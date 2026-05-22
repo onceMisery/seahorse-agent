@@ -20,5 +20,9 @@ package com.miracle.ai.seahorse.agent.kernel.domain.stream;
 /**
  * 流式会话元信息载荷。
  */
-public record StreamMetaPayload(String conversationId, String taskId) {
+public record StreamMetaPayload(String conversationId, String taskId, String runId) {
+
+    public StreamMetaPayload(String conversationId, String taskId) {
+        this(conversationId, taskId, null);
+    }
 }

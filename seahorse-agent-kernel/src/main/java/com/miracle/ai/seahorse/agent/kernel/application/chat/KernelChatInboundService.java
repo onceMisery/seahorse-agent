@@ -20,6 +20,9 @@ package com.miracle.ai.seahorse.agent.kernel.application.chat;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
@@ -30,6 +33,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
@@ -60,6 +65,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     private final KernelRagTraceRecorder traceRecorder;
     private final ConversationMemoryPort memoryPort;
     private final MemoryEnginePort memoryEnginePort;
+    private final Optional<AgentRunInboundPort> agentRunPort;
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
         this(chatPipeline, streamTaskPort, KernelRagTraceRecorder.noop());
@@ -94,12 +100,23 @@ public class KernelChatInboundService implements ChatInboundPort {
                                     KernelRagTraceRecorder traceRecorder,
                                     ConversationMemoryPort memoryPort,
                                     MemoryEnginePort memoryEnginePort) {
+        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort, Optional.empty());
+    }
+
+    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+                                    StreamTaskPort streamTaskPort,
+                                    Optional<KernelAgentLoop> agentLoop,
+                                    KernelRagTraceRecorder traceRecorder,
+                                    ConversationMemoryPort memoryPort,
+                                    MemoryEnginePort memoryEnginePort,
+                                    Optional<AgentRunInboundPort> agentRunPort) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop;
-        this.traceRecorder = Objects.requireNonNull(traceRecorder, "traceRecorder must not be null");
+        this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
         this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
         this.memoryEnginePort = Objects.requireNonNullElse(memoryEnginePort, MemoryEnginePort.noop());
+        this.agentRunPort = agentRunPort == null ? Optional.empty() : agentRunPort;
     }
 
     @Override
@@ -115,9 +132,13 @@ public class KernelChatInboundService implements ChatInboundPort {
         try {
             if (safeCommand.chatMode() == ChatMode.AGENT) {
                 if (agentLoop.isPresent()) {
+                    AgentRun run = startAgentRun(safeCommand, traceRunScope);
+                    if (run != null) {
+                        safeCallback.onRunStarted(run.runId());
+                    }
                     StreamCancellationHandle handle = agentLoop.get().streamExecute(
-                            buildAgentLoopRequest(safeCommand),
-                            finishTraceOnTerminal(safeCallback, traceRunScope),
+                            buildAgentLoopRequest(safeCommand, run == null ? null : run.runId()),
+                            finishTraceOnTerminal(safeCallback, traceRunScope, run == null ? null : run.runId()),
                             traceRunScope);
                     streamTaskPort.bindHandle(safeCommand.taskId(), handle);
                     return;
@@ -152,7 +173,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .build();
     }
 
-    private AgentLoopRequest buildAgentLoopRequest(StreamChatCommand command) {
+    private AgentLoopRequest buildAgentLoopRequest(StreamChatCommand command, String runId) {
         return AgentLoopRequest.builder()
                 .question(command.question())
                 .history(loadAgentHistory(command))
@@ -161,7 +182,22 @@ public class KernelChatInboundService implements ChatInboundPort {
                         .temperature(0.3D)
                         .build())
                 .memoryContext(loadAgentMemoryContext(command))
+                .runId(runId)
                 .build();
+    }
+
+    private AgentRun startAgentRun(StreamChatCommand command, TraceRunScope traceRunScope) {
+        if (agentRunPort.isEmpty()) {
+            return null;
+        }
+        return agentRunPort.get().startRun(new AgentRunStartCommand(
+                AgentRuntimeConstants.LEGACY_REACT_AGENT_ID,
+                null,
+                null,
+                command.conversationId(),
+                AgentRunTriggerType.CHAT,
+                inputSummary(command.question()),
+                traceRunScope == null ? null : traceRunScope.traceId()));
     }
 
     private MemoryContext loadAgentMemoryContext(StreamChatCommand command) {
@@ -205,7 +241,15 @@ public class KernelChatInboundService implements ChatInboundPort {
                 ChatMessage.user(command.question()));
     }
 
-    private StreamCallback finishTraceOnTerminal(StreamCallback delegate, TraceRunScope traceRunScope) {
+    private String inputSummary(String question) {
+        String value = Objects.requireNonNullElse(question, "").trim();
+        if (value.length() <= 500) {
+            return value;
+        }
+        return value.substring(0, 500);
+    }
+
+    private StreamCallback finishTraceOnTerminal(StreamCallback delegate, TraceRunScope traceRunScope, String runId) {
         AtomicBoolean finished = new AtomicBoolean(false);
         return new StreamCallback() {
             @Override
@@ -221,6 +265,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             @Override
             public void onComplete() {
                 try {
+                    finishRun(runId, null);
                     delegate.onComplete();
                 } finally {
                     finishOnce(null);
@@ -230,6 +275,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             @Override
             public void onError(Throwable error) {
                 try {
+                    finishRun(runId, error);
                     delegate.onError(error);
                 } finally {
                     finishOnce(error);
@@ -247,5 +293,17 @@ public class KernelChatInboundService implements ChatInboundPort {
                 }
             }
         };
+    }
+
+    private void finishRun(String runId, Throwable error) {
+        if (runId == null || agentRunPort.isEmpty()) {
+            return;
+        }
+        if (error == null) {
+            agentRunPort.get().succeed(runId);
+            return;
+        }
+        agentRunPort.get().fail(runId, AgentRuntimeConstants.DEFAULT_AGENT_RUN_FAILURE_CODE,
+                Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()));
     }
 }

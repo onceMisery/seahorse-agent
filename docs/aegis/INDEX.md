@@ -42,3 +42,7 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p6-observability-policy/task-intent-draft.json | Memory P6 observability policy task intent draft |
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p6-observability-policy/todo-checkpoint-draft.json | Memory P6 observability policy todo checkpoint draft |
 | 2026-05-20 | artifact | docs/aegis/work/2026-05-20-memory-p6-observability-policy/drift-check-draft.json | Memory P6 observability policy drift check draft |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-ai-infra-phase-0-1/10-intent.md | AI Infra Phase 0/1 execution intent |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-ai-infra-phase-0-1/20-checkpoint.md | AI Infra Phase 0/1 execution checkpoint |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-ai-infra-phase-0-1/90-evidence.md | AI Infra Phase 0/1 execution evidence |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-ai-infra-phase-0-1/99-reflection.md | AI Infra Phase 0/1 execution reflection |

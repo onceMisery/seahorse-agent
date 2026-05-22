@@ -31,6 +31,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.chat.RuleBasedQueryOptim
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
@@ -65,7 +66,8 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKernelMemoryAutoConfiguration.class,
-        SeahorseAgentAiAdapterAutoConfiguration.class})
+        SeahorseAgentAiAdapterAutoConfiguration.class, SeahorseAgentKernelRegistryAutoConfiguration.class,
+        SeahorseAgentKernelAgentAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelChatAutoConfiguration {
 
@@ -172,11 +174,13 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    ObjectProvider<KernelAgentLoop> agentLoop,
                                                    ObjectProvider<KernelRagTraceRecorder> traceRecorder,
                                                    ObjectProvider<ConversationMemoryPort> memoryPort,
-                                                   ObjectProvider<MemoryEnginePort> memoryEnginePort) {
+                                                   ObjectProvider<MemoryEnginePort> memoryEnginePort,
+                                                   ObjectProvider<AgentRunInboundPort> agentRunPort) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
                 Optional.ofNullable(agentLoop.getIfAvailable()),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
-                memoryEnginePort.getIfAvailable(MemoryEnginePort::noop));
+                memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
+                Optional.ofNullable(agentRunPort.getIfAvailable()));
     }
 }

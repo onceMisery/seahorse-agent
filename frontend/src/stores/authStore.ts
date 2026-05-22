@@ -109,6 +109,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       storage.setUser(nextUser);
       set({ user: nextUser, token, isAuthenticated: true });
     } catch {
+      if (!storage.getToken()) {
+        setAuthToken(null);
+        set({ user: null, token: null, isAuthenticated: false });
+      }
       return;
     }
   }

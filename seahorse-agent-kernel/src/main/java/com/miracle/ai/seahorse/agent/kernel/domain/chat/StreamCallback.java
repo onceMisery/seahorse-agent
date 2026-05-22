@@ -27,6 +27,9 @@ public interface StreamCallback {
     default void onThinking(String content) {
     }
 
+    default void onRunStarted(String runId) {
+    }
+
     void onComplete();
 
     void onError(Throwable error);

@@ -7,6 +7,7 @@ import {
   ChevronsRight,
   ClipboardList,
   Database,
+  Cpu,
   GitBranch,
   Github,
   Layers,
@@ -134,6 +135,11 @@ const menuGroups: MenuGroup[] = [
         label: "链路追踪",
         icon: Workflow
       },
+      {
+        path: "/prototype/ai-infra",
+        label: "AI Infra 原型",
+        icon: Cpu
+      },
     ]
   },
   {
@@ -165,6 +171,7 @@ const breadcrumbMap: Record<string, string> = {
   "intent-list": "意图列表",
   ingestion: "数据通道",
   traces: "链路追踪",
+  "ai-infra": "AI Infra 原型",
   "sample-questions": "示例问题",
   mappings: "关键词映射",
   settings: "系统设置",

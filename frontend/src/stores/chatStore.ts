@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { toast } from "sonner";
 
-import type { CompletionPayload, Message, MessageDeltaPayload } from "@/types";
+import type { CompletionPayload, Message, MessageDeltaPayload, StreamMetaPayload } from "@/types";
 import {
   listMessages,
   listSessions,
@@ -216,7 +216,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const token = storage.getToken();
 
     const handlers = {
-      onMeta: (payload: { conversationId: string; taskId: string }) => {
+      onMeta: (payload: StreamMetaPayload) => {
         if (get().streamingMessageId !== assistantId) return;
         const nextId = payload.conversationId || get().currentSessionId;
         if (!nextId) return;
@@ -230,7 +230,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
             id: nextId,
             title: existing?.title || "New Chat",
             lastTime
-          })
+          }),
+          messages: payload.runId
+            ? state.messages.map((message) =>
+                message.id === state.streamingMessageId ? { ...message, agentRunId: payload.runId || undefined } : message
+              )
+            : state.messages
         }));
         if (get().cancelRequested) {
           stopTask(payload.taskId).catch(() => null);

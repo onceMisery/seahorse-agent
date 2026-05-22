@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.kernel.domain.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 
 import java.util.List;
@@ -39,6 +41,13 @@ public final class AgentLoopRequest {
     private final ChatSamplingOptions samplingOptions;
     private final int maxSteps;
     private final MemoryContext memoryContext;
+    // 以下上下文字段由 Agent Runtime 传入 Tool Gateway，用于策略、审计和资源权限判断。
+    private final String runId;
+    private final String agentId;
+    private final String versionId;
+    private final String tenantId;
+    private final String userId;
+    private final String agentIdentityId;
 
     private AgentLoopRequest(Builder b) {
         if (b.question == null || b.question.isBlank()) {
@@ -51,6 +60,12 @@ public final class AgentLoopRequest {
         this.samplingOptions = b.samplingOptions;
         this.maxSteps = b.maxSteps <= 0 ? DEFAULT_MAX_STEPS : b.maxSteps;
         this.memoryContext = b.memoryContext;
+        this.runId = trimToNull(b.runId);
+        this.agentId = defaultText(b.agentId, AgentRuntimeConstants.LEGACY_REACT_AGENT_ID);
+        this.versionId = trimToNull(b.versionId);
+        this.tenantId = defaultText(b.tenantId, AgentDefinition.DEFAULT_TENANT_ID);
+        this.userId = defaultText(b.userId, memoryContext == null ? "" : memoryContext.getUserId());
+        this.agentIdentityId = defaultText(b.agentIdentityId, this.userId);
     }
 
     public String question() {
@@ -77,6 +92,30 @@ public final class AgentLoopRequest {
         return memoryContext;
     }
 
+    public String runId() {
+        return runId;
+    }
+
+    public String agentId() {
+        return agentId;
+    }
+
+    public String versionId() {
+        return versionId;
+    }
+
+    public String tenantId() {
+        return tenantId;
+    }
+
+    public String userId() {
+        return userId;
+    }
+
+    public String agentIdentityId() {
+        return agentIdentityId;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -88,6 +127,12 @@ public final class AgentLoopRequest {
         private ChatSamplingOptions samplingOptions;
         private int maxSteps;
         private MemoryContext memoryContext;
+        private String runId;
+        private String agentId;
+        private String versionId;
+        private String tenantId;
+        private String userId;
+        private String agentIdentityId;
 
         public Builder question(String question) {
             this.question = question;
@@ -119,8 +164,50 @@ public final class AgentLoopRequest {
             return this;
         }
 
+        public Builder runId(String runId) {
+            this.runId = runId;
+            return this;
+        }
+
+        public Builder agentId(String agentId) {
+            this.agentId = agentId;
+            return this;
+        }
+
+        public Builder versionId(String versionId) {
+            this.versionId = versionId;
+            return this;
+        }
+
+        public Builder tenantId(String tenantId) {
+            this.tenantId = tenantId;
+            return this;
+        }
+
+        public Builder userId(String userId) {
+            this.userId = userId;
+            return this;
+        }
+
+        public Builder agentIdentityId(String agentIdentityId) {
+            this.agentIdentityId = agentIdentityId;
+            return this;
+        }
+
         public AgentLoopRequest build() {
             return new AgentLoopRequest(this);
         }
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private static String defaultText(String value, String fallback) {
+        String trimmed = trimToNull(value);
+        return trimmed == null ? Objects.requireNonNullElse(fallback, "") : trimmed;
     }
 }

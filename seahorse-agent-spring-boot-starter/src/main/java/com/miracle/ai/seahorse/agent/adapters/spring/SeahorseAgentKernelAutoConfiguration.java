@@ -70,6 +70,7 @@ import org.springframework.context.annotation.Import;
         SeahorseAgentKernelModelAutoConfiguration.class,
         SeahorseAgentKernelOpsAutoConfiguration.class,
         SeahorseAgentKernelPluginAutoConfiguration.class,
+        SeahorseAgentKernelRegistryAutoConfiguration.class,
         SeahorseAgentKernelRetrievalAutoConfiguration.class,
         SeahorseAgentKernelAgentAutoConfiguration.class,
         SeahorseAgentKernelTraceAutoConfiguration.class

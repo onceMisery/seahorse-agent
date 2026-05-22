@@ -19,6 +19,7 @@ import { SystemSettingsPage } from "@/pages/admin/settings/SystemSettingsPage";
 import { SampleQuestionPage } from "@/pages/admin/sample-questions/SampleQuestionPage";
 import { QueryTermMappingPage } from "@/pages/admin/query-term-mapping/QueryTermMappingPage";
 import { UserListPage } from "@/pages/admin/users/UserListPage";
+import { AiInfraPrototypePage } from "@/pages/admin/ai-infra/AiInfraPrototypePage";
 import { useAuthStore } from "@/stores/authStore";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -85,6 +86,14 @@ export const router = createBrowserRouter([
         <ChatPage />
       </RequireAuth>
     )
+  },
+  {
+    path: "/prototype/ai-infra",
+    element: <AiInfraPrototypePage />
+  },
+  {
+    path: "/admin/ai-infra",
+    element: <Navigate to="/prototype/ai-infra" replace />
   },
   {
     path: "/admin",

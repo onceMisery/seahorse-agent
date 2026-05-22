@@ -22,6 +22,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegist
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJsonSupport;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
@@ -35,6 +37,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrieva
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
@@ -55,6 +58,7 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
@@ -64,8 +68,8 @@ import java.util.List;
  */
 @AutoConfiguration
 @AutoConfigureAfter({
-        SeahorseAgentKernelChatAutoConfiguration.class,
         SeahorseAgentKernelMemoryAutoConfiguration.class,
+        SeahorseAgentKernelRegistryAutoConfiguration.class,
         SeahorseAgentKernelRetrievalAutoConfiguration.class
 })
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
@@ -106,11 +110,26 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                    ToolRegistryPort toolRegistry,
                                                    KernelAgentLoopOptions options,
                                                    ObjectProvider<KernelRagTraceRecorder> traceRecorder,
-                                                   ObjectProvider<ContextWeaverPort> contextWeaverPort) {
+                                                   ObjectProvider<ContextWeaverPort> contextWeaverPort,
+                                                   ObjectProvider<AgentRunStepRecorder> runStepRecorder) {
         return new KernelAgentLoop(modelPort, toolRegistry, options,
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
                 contextWeaverPort.getIfAvailable(
-                        com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver::new));
+                        com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver::new),
+                runStepRecorder.getIfAvailable(AgentRunStepRecorder::noop));
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnMissingBean
+    public AgentRunStepRecorder seahorseAgentRunStepRecorder(
+            ObjectProvider<AgentRunRepositoryPort> agentRunRepositoryPort,
+            ObjectProvider<Clock> clockProvider) {
+        AgentRunRepositoryPort repository = agentRunRepositoryPort.getIfAvailable();
+        if (repository == null) {
+            return AgentRunStepRecorder.noop();
+        }
+        return new RepositoryAgentRunStepRecorder(repository, clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean

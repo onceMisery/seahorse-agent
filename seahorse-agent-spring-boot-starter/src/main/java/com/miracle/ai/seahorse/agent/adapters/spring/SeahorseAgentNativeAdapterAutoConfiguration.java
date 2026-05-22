@@ -47,6 +47,7 @@ import org.springframework.context.annotation.Import;
         SeahorseAgentOpsRepositoryAutoConfiguration.class,
         SeahorseAgentOutboxRelayAutoConfiguration.class,
         SeahorseAgentRetrievalRepositoryAutoConfiguration.class,
+        SeahorseAgentRegistryRepositoryAutoConfiguration.class,
         SeahorseAgentStorageAdapterAutoConfiguration.class,
         SeahorseAgentVectorAdapterAutoConfiguration.class
 })

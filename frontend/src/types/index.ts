@@ -24,6 +24,7 @@ export interface Message {
   id: string;
   role: Role;
   content: string;
+  agentRunId?: string;
   thinking?: string;
   thinkingDuration?: number;
   isDeepThinking?: boolean;
@@ -36,6 +37,7 @@ export interface Message {
 export interface StreamMetaPayload {
   conversationId: string;
   taskId: string;
+  runId?: string | null;
 }
 
 export interface MessageDeltaPayload {

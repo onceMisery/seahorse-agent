@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
@@ -24,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
@@ -34,8 +36,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
-import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
@@ -60,14 +62,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Kernel 层 LLM-driven ReAct 循环。
+ * Kernel layer LLM-driven ReAct loop.
  */
 public class KernelAgentLoop {
 
-    private static final String TRUNCATED_MESSAGE = "任务步骤已达上限，请缩小问题范围或检查工具配置。";
+    private static final String TRUNCATED_MESSAGE =
+            "Task step limit reached. Narrow the question or check tool configuration.";
     private static final int MAX_TOOL_OBSERVATION_CHARS = 8 * 1024;
     private static final String TOOL_OBSERVATION_TRUNCATED_SUFFIX = "...[truncated]";
     private static final String RAW_ARGUMENTS_KEY = "_raw";
+    private static final String IDEMPOTENCY_KEY_SEPARATOR = ":";
     private static final String TRACE_TYPE_AGENT_STEP = "AGENT_STEP";
     private static final String TRACE_TYPE_AGENT_TOOL = "AGENT_TOOL";
     private static final String TRACE_CLASS_NAME =
@@ -75,9 +79,11 @@ public class KernelAgentLoop {
 
     private final StreamingChatModelPort modelPort;
     private final ToolRegistryPort toolRegistry;
+    private final ToolGatewayPort toolGateway;
     private final KernelAgentLoopOptions options;
     private final KernelRagTraceRecorder traceRecorder;
     private final ContextWeaverPort contextWeaver;
+    private final AgentRunStepRecorder runStepRecorder;
 
     public KernelAgentLoop(StreamingChatModelPort modelPort,
                            ToolRegistryPort toolRegistry,
@@ -87,9 +93,32 @@ public class KernelAgentLoop {
 
     public KernelAgentLoop(StreamingChatModelPort modelPort,
                            ToolRegistryPort toolRegistry,
+                           ToolGatewayPort toolGateway,
+                           KernelAgentLoopOptions options) {
+        this.modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
+        ToolRegistryPort effectiveToolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
+        this.toolRegistry = effectiveToolRegistry;
+        this.toolGateway = Objects.requireNonNullElseGet(toolGateway,
+                () -> new LocalToolGatewayPort(effectiveToolRegistry));
+        this.options = Objects.requireNonNullElseGet(options, KernelAgentLoopOptions::defaults);
+        this.traceRecorder = KernelRagTraceRecorder.noop();
+        this.contextWeaver = new DefaultContextWeaver();
+        this.runStepRecorder = AgentRunStepRecorder.noop();
+    }
+
+    public KernelAgentLoop(StreamingChatModelPort modelPort,
+                           ToolRegistryPort toolRegistry,
                            KernelAgentLoopOptions options,
                            KernelRagTraceRecorder traceRecorder) {
         this(modelPort, toolRegistry, options, traceRecorder, new DefaultContextWeaver());
+    }
+
+    public KernelAgentLoop(StreamingChatModelPort modelPort,
+                           ToolRegistryPort toolRegistry,
+                           KernelAgentLoopOptions options,
+                           AgentRunStepRecorder runStepRecorder) {
+        this(modelPort, toolRegistry, options, KernelRagTraceRecorder.noop(),
+                new DefaultContextWeaver(), runStepRecorder);
     }
 
     public KernelAgentLoop(StreamingChatModelPort modelPort,
@@ -104,11 +133,29 @@ public class KernelAgentLoop {
                            KernelAgentLoopOptions options,
                            KernelRagTraceRecorder traceRecorder,
                            ContextWeaverPort contextWeaver) {
-        this.modelPort = Objects.requireNonNull(modelPort, "modelPort 不能为 null");
+        this.modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
         this.toolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
+        this.toolGateway = new LocalToolGatewayPort(this.toolRegistry);
         this.options = Objects.requireNonNullElseGet(options, KernelAgentLoopOptions::defaults);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
         this.contextWeaver = Objects.requireNonNullElseGet(contextWeaver, DefaultContextWeaver::new);
+        this.runStepRecorder = AgentRunStepRecorder.noop();
+    }
+
+    public KernelAgentLoop(StreamingChatModelPort modelPort,
+                           ToolRegistryPort toolRegistry,
+                           KernelAgentLoopOptions options,
+                           KernelRagTraceRecorder traceRecorder,
+                           ContextWeaverPort contextWeaver,
+                           AgentRunStepRecorder runStepRecorder) {
+        this.modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
+        ToolRegistryPort effectiveToolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
+        this.toolRegistry = effectiveToolRegistry;
+        this.toolGateway = new LocalToolGatewayPort(effectiveToolRegistry);
+        this.options = Objects.requireNonNullElseGet(options, KernelAgentLoopOptions::defaults);
+        this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
+        this.contextWeaver = Objects.requireNonNullElseGet(contextWeaver, DefaultContextWeaver::new);
+        this.runStepRecorder = Objects.requireNonNullElseGet(runStepRecorder, AgentRunStepRecorder::noop);
     }
 
     public AgentLoopResult execute(AgentLoopRequest request) {
@@ -151,7 +198,7 @@ public class KernelAgentLoop {
                                 StreamCallback callback,
                                 AgentRunControl control,
                                 TraceRunScope traceRunScope) {
-        Objects.requireNonNull(request, "AgentLoopRequest 不能为 null");
+        Objects.requireNonNull(request, "AgentLoopRequest must not be null");
         AgentRunControl runControl = Objects.requireNonNullElseGet(control, AgentRunControl::direct);
         List<ChatMessage> messages = new ArrayList<>(request.history());
         installMemoryContext(messages, request.memoryContext());
@@ -162,8 +209,11 @@ public class KernelAgentLoop {
         for (int step = 0; step < maxSteps; step++) {
             runControl.checkCancelled();
             TraceNodeScope stepScope = traceRecorder.startNode(traceRunScope, agentStepCommand(step + 1));
+            boolean modelTurnRecorded = false;
             try {
                 ModelTurn turn = requestModelTurn(request, messages, runControl);
+                recordModelTurn(request, messages, turn, null);
+                modelTurnRecorded = true;
                 if (turn.toolCalls().isEmpty()) {
                     emitContent(callback, turn.content());
                     steps.add(AgentStep.finalAnswer(turn.content()));
@@ -183,6 +233,9 @@ public class KernelAgentLoop {
                 }
                 traceRecorder.finishNode(stepScope);
             } catch (RuntimeException ex) {
+                if (!modelTurnRecorded) {
+                    recordModelTurn(request, messages, null, ex);
+                }
                 traceRecorder.finishNode(stepScope, ex);
                 throw ex;
             }
@@ -206,10 +259,10 @@ public class KernelAgentLoop {
                 .toolChoice("auto")
                 .build(), callback, toolCalls -> {
                     if (callback.completed()) {
-                        throw new AgentLoopException("模型适配器协议错误：collector 晚于 onComplete 调用");
+                        throw new AgentLoopException("Model adapter protocol error: collector called after onComplete");
                     }
                     if (!collectorInvoked.compareAndSet(false, true)) {
-                        throw new AgentLoopException("工具调用 collector 被重复调用");
+                        throw new AgentLoopException("Tool call collector was called more than once");
                     }
                     collectedCalls.set(toolCalls == null ? List.of() : List.copyOf(toolCalls));
                 });
@@ -221,10 +274,10 @@ public class KernelAgentLoop {
         }
 
         if (callback.error() != null) {
-            throw new AgentLoopException("模型流式调用失败", callback.error());
+            throw new AgentLoopException("Model streaming call failed", callback.error());
         }
         if (!collectorInvoked.get()) {
-            throw new AgentLoopException("模型适配器协议错误：collector 未被调用");
+            throw new AgentLoopException("Model adapter protocol error: collector was not called");
         }
         return new ModelTurn(callback.content(), callback.thinking(),
                 Objects.requireNonNullElse(collectedCalls.get(), List.of()));
@@ -283,7 +336,7 @@ public class KernelAgentLoop {
                     toolCalls.subList(start, end), allowed, request, parallelism, control, traceRunScope, stepScope));
             if (Thread.currentThread().isInterrupted() && observations.size() < toolCalls.size()) {
                 for (int i = observations.size(); i < toolCalls.size(); i++) {
-                    observations.add(AgentObservation.failed(toolCalls.get(i).id(), "工具执行被中断"));
+                    observations.add(AgentObservation.failed(toolCalls.get(i).id(), "Tool execution was interrupted"));
                 }
                 break;
             }
@@ -309,7 +362,9 @@ public class KernelAgentLoop {
                     tasks, perToolTimeoutNanos(), TimeUnit.NANOSECONDS);
             List<AgentObservation> observations = new ArrayList<>(toolCalls.size());
             for (int i = 0; i < futures.size(); i++) {
-                observations.add(toObservation(toolCalls.get(i), futures.get(i)));
+                AgentObservation observation = toObservation(toolCalls.get(i), futures.get(i));
+                observations.add(observation);
+                runStepRecorder.recordToolCall(request.runId(), toolCalls.get(i), observation);
             }
             return observations;
         } catch (InterruptedException ex) {
@@ -318,7 +373,7 @@ public class KernelAgentLoop {
                 throw new AgentLoopCancelledException("Agent loop cancelled", ex);
             }
             return toolCalls.stream()
-                    .map(toolCall -> AgentObservation.failed(toolCall.id(), "工具执行被中断"))
+                    .map(toolCall -> AgentObservation.failed(toolCall.id(), "Tool execution was interrupted"))
                     .toList();
         } finally {
             control.clearToolExecutor(executor);
@@ -336,13 +391,13 @@ public class KernelAgentLoop {
 
     private AgentObservation toObservation(AgentToolCall toolCall, Future<AgentObservation> future) {
         if (future.isCancelled()) {
-            return AgentObservation.failed(toolCall.id(), "工具超时");
+            return AgentObservation.failed(toolCall.id(), "Tool execution timed out");
         }
         try {
             return future.get();
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            return AgentObservation.failed(toolCall.id(), "工具执行被中断");
+            return AgentObservation.failed(toolCall.id(), "Tool execution was interrupted");
         } catch (ExecutionException ex) {
             Throwable cause = Objects.requireNonNullElse(ex.getCause(), ex);
             return AgentObservation.failed(toolCall.id(),
@@ -354,14 +409,8 @@ public class KernelAgentLoop {
         if (hasRawArguments(toolCall)) {
             return AgentObservation.failed(toolCall.id(), "arguments is not valid JSON");
         }
-        if (!allowedToolIds.isEmpty() && !allowedToolIds.contains(toolCall.toolId())) {
-            return AgentObservation.failed(toolCall.id(), "Tool 不在 allowlist 中: " + toolCall.toolId());
-        }
         try {
-            ToolPort toolPort = toolRegistry.find(toolCall.toolId())
-                    .orElseGet(() -> ToolPort.notFound(toolCall.toolId()));
-            ToolInvocationResult result = toolPort.invoke(toolCall.id(), toolCall.toolId(),
-                    toolArguments(toolCall, request));
+            ToolInvocationResult result = toolGateway.invoke(toolInvocationRequest(toolCall, allowedToolIds, request));
             return result.success()
                     ? AgentObservation.ok(toolCall.id(), truncateObservationText(result.content()))
                     : AgentObservation.failed(toolCall.id(), truncateObservationText(result.error()));
@@ -369,6 +418,33 @@ public class KernelAgentLoop {
             return AgentObservation.failed(toolCall.id(),
                     truncateObservationText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
         }
+    }
+
+    private ToolInvocationRequest toolInvocationRequest(AgentToolCall toolCall,
+                                                        Set<String> allowedToolIds,
+                                                        AgentLoopRequest request) {
+        String runId = request == null ? null : request.runId();
+        return new ToolInvocationRequest(
+                runId,
+                toolCall.id(),
+                toolCall.id(),
+                request == null ? null : request.agentId(),
+                request == null ? null : request.versionId(),
+                request == null ? null : request.tenantId(),
+                request == null ? null : request.userId(),
+                request == null ? null : request.agentIdentityId(),
+                toolCall.toolId(),
+                toolArguments(toolCall, request),
+                java.util.Map.of(),
+                idempotencyKey(runId, toolCall.id()),
+                allowedToolIds == null ? List.of() : List.copyOf(allowedToolIds));
+    }
+
+    private String idempotencyKey(String runId, String toolCallId) {
+        if (runId == null || runId.isBlank()) {
+            return toolCallId;
+        }
+        return runId + IDEMPOTENCY_KEY_SEPARATOR + toolCallId;
     }
 
     private AgentObservation executeToolTraced(AgentToolCall toolCall,
@@ -418,6 +494,33 @@ public class KernelAgentLoop {
         return observation.success() ? observation.content() : observation.error();
     }
 
+    private void recordModelTurn(AgentLoopRequest request,
+                                 List<ChatMessage> messages,
+                                 ModelTurn turn,
+                                 Throwable error) {
+        runStepRecorder.recordModelTurn(
+                request.runId(),
+                AgentRunStepRecorder.modelTurnInput(messages, exposedTools(request.allowedToolIds())),
+                turn == null ? null : modelTurnOutputJson(turn),
+                error);
+    }
+
+    private String modelTurnOutputJson(ModelTurn turn) {
+        return "{\"content\":\"" + escapeJson(turn.content())
+                + "\",\"thinking\":\"" + escapeJson(turn.thinking())
+                + "\",\"toolCallCount\":" + turn.toolCalls().size() + "}";
+    }
+
+    private String escapeJson(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n");
+    }
+
     private void emitToolThinking(StreamCallback callback, ModelTurn turn, List<AgentObservation> observations) {
         if (callback == null) {
             return;
@@ -428,7 +531,7 @@ public class KernelAgentLoop {
         for (int i = 0; i < turn.toolCalls().size(); i++) {
             AgentToolCall toolCall = turn.toolCalls().get(i);
             AgentObservation observation = observations.get(i);
-            callback.onThinking("[工具调用] " + toolCall.toolId() + " -> "
+            callback.onThinking("[tool call] " + toolCall.toolId() + " -> "
                     + (observation.success() ? "ok" : "failed"));
         }
     }

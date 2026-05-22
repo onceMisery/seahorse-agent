@@ -31,9 +31,22 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 
 @Configuration(proxyBeanMethods = false)
 public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
+
+    private static final Set<String> PUBLIC_EXACT_PATHS = Set.of(
+            "/",
+            "/index.html",
+            "/login",
+            "/error",
+            "/admin/ai-infra",
+            "/prototype/ai-infra");
+    private static final Set<String> PUBLIC_PATH_PREFIXES = Set.of(
+            "/auth/",
+            "/assets/",
+            "/prototype/");
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -62,11 +75,31 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
                     }
                 })
                 .addPathPatterns("/**")
-                .excludePathPatterns("/auth/**", "/error");
+                .excludePathPatterns(
+                        "/",
+                        "/index.html",
+                        "/login",
+                        "/auth/**",
+                        "/error",
+                        "/assets/**",
+                        "/admin/ai-infra",
+                        "/prototype/**");
     }
 
     private boolean shouldSkip(HttpServletRequest request) {
         return request.getDispatcherType() == DispatcherType.ASYNC
-                || "OPTIONS".equalsIgnoreCase(request.getMethod());
+                || "OPTIONS".equalsIgnoreCase(request.getMethod())
+                || isPublicPath(request.getRequestURI());
+    }
+
+    static boolean isPublicPath(String uri) {
+        if (uri == null || uri.isBlank()) {
+            return false;
+        }
+        String path = uri.split("\\?", 2)[0];
+        if (PUBLIC_EXACT_PATHS.contains(path)) {
+            return true;
+        }
+        return PUBLIC_PATH_PREFIXES.stream().anyMatch(path::startsWith);
     }
 }

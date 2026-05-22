@@ -18,6 +18,23 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionUpdateDraftCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentVersionPublishCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.metadata.BackendFieldMapping;
@@ -79,6 +96,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundP
 import com.miracle.ai.seahorse.agent.ports.inbound.trace.RagTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.user.UserInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationMessageRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRecord;
@@ -162,6 +180,7 @@ import org.springframework.mock.env.MockEnvironment;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -244,6 +263,121 @@ class SeahorseWebApiContractTests {
                         .content(json(Map.of("currentPassword", "old", "newPassword", "new"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
+    }
+
+    @Test
+    void shouldKeepAgentRegistryAndRunStoreApiContracts() throws Exception {
+        AgentDefinitionInboundPort definitionPort = mock(AgentDefinitionInboundPort.class);
+        AgentDefinition definition = agentDefinition(AgentStatus.DRAFT);
+        when(definitionPort.createDraft(any())).thenReturn("agent-1");
+        when(definitionPort.page("tenant-a", 1L, 10L, "agent"))
+                .thenReturn(new AgentDefinitionPage(List.of(definition), 1L, 10L, 1L, 1L));
+        when(definitionPort.findById("agent-1")).thenReturn(Optional.of(definition));
+        when(definitionPort.updateDraft(eq("agent-1"), any())).thenReturn(definition);
+        when(definitionPort.publish(eq("agent-1"), any())).thenReturn(agentVersion());
+        when(definitionPort.disable("agent-1")).thenReturn(agentDefinition(AgentStatus.DISABLED));
+
+        AgentRunInboundPort runPort = mock(AgentRunInboundPort.class);
+        when(runPort.startRun(any())).thenReturn(agentRun(AgentRunStatus.RUNNING));
+        when(runPort.findRunById("run-1")).thenReturn(Optional.of(agentRun(AgentRunStatus.RUNNING)));
+        when(runPort.listSteps("run-1")).thenReturn(List.of(agentStep()));
+        when(runPort.cancel("run-1")).thenReturn(agentRun(AgentRunStatus.CANCELLED));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseAgentDefinitionController(provider(AgentDefinitionInboundPort.class, definitionPort)),
+                new SeahorseAgentRunController(provider(AgentRunInboundPort.class, runPort))).build();
+
+        mvc.perform(post("/agents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "agentId", "agent-1",
+                                "tenantId", "tenant-a",
+                                "name", "Agent One",
+                                "description", "desc",
+                                "ownerUserId", "owner-1",
+                                "ownerTeam", "platform",
+                                "agentType", "WORKFLOW",
+                                "riskLevel", "HIGH"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data").value("agent-1"));
+
+        ArgumentCaptor<AgentDefinitionCreateCommand> createCaptor =
+                ArgumentCaptor.forClass(AgentDefinitionCreateCommand.class);
+        verify(definitionPort).createDraft(createCaptor.capture());
+        assertThat(createCaptor.getValue().agentType()).isEqualTo(AgentType.WORKFLOW);
+        assertThat(createCaptor.getValue().riskLevel()).isEqualTo(AgentRiskLevel.HIGH);
+
+        mvc.perform(get("/agents")
+                        .param("tenantId", "tenant-a")
+                        .param("current", "1")
+                        .param("size", "10")
+                        .param("keyword", "agent"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].agentId").value("agent-1"));
+
+        mvc.perform(get("/agents/agent-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.agentId").value("agent-1"));
+
+        mvc.perform(put("/agents/agent-1/draft")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "name", "Agent One",
+                                "description", "desc",
+                                "ownerTeam", "platform",
+                                "agentType", "DOMAIN",
+                                "riskLevel", "MEDIUM"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DRAFT"));
+        verify(definitionPort).updateDraft(eq("agent-1"), any(AgentDefinitionUpdateDraftCommand.class));
+
+        mvc.perform(post("/agents/agent-1/publish")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "instructions", "Do the work",
+                                "toolSetJson", "{}",
+                                "modelConfigJson", "{}",
+                                "memoryConfigJson", "{}",
+                                "guardrailConfigJson", "{}",
+                                "changeSummary", "initial"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.versionId").value("agent-1-v1"));
+        verify(definitionPort).publish(eq("agent-1"), any(AgentVersionPublishCommand.class));
+
+        mvc.perform(post("/agents/agent-1/disable"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DISABLED"));
+
+        mvc.perform(post("/agents/agent-1/runs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "versionId", "agent-1-v1",
+                                "tenantId", "tenant-a",
+                                "conversationId", "conversation-1",
+                                "triggerType", "CHAT",
+                                "inputSummary", "summary",
+                                "traceId", "trace-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.runId").value("run-1"));
+
+        ArgumentCaptor<AgentRunStartCommand> runCaptor = ArgumentCaptor.forClass(AgentRunStartCommand.class);
+        verify(runPort).startRun(runCaptor.capture());
+        assertThat(runCaptor.getValue().agentId()).isEqualTo("agent-1");
+        assertThat(runCaptor.getValue().versionId()).isEqualTo("agent-1-v1");
+        assertThat(runCaptor.getValue().triggerType()).isEqualTo(AgentRunTriggerType.CHAT);
+
+        mvc.perform(get("/agent-runs/run-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("RUNNING"));
+
+        mvc.perform(get("/agent-runs/run-1/steps"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].stepId").value("step-1"));
+
+        mvc.perform(post("/agent-runs/run-1/cancel"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
     }
 
     @Test
@@ -1583,6 +1717,28 @@ class SeahorseWebApiContractTests {
 
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
+    }
+
+    private static AgentDefinition agentDefinition(AgentStatus status) {
+        return new AgentDefinition("agent-1", "tenant-a", "Agent One", "desc", "owner-1", "platform",
+                AgentType.WORKFLOW, null, status, AgentRiskLevel.HIGH, "agent-1-v1", Instant.EPOCH, Instant.EPOCH);
+    }
+
+    private static AgentVersion agentVersion() {
+        return new AgentVersion("agent-1-v1", "agent-1", 1L, "Do the work", "{}", "{}", "{}",
+                "{}", "admin-1", Instant.EPOCH, "initial");
+    }
+
+    private static AgentRun agentRun(AgentRunStatus status) {
+        return new AgentRun("run-1", "agent-1", "agent-1-v1", "tenant-a", "user-1",
+                "conversation-1", AgentRunTriggerType.CHAT, "summary", status, "trace-1",
+                0L, 0L, BigDecimal.ZERO, null, null, Instant.EPOCH,
+                status == AgentRunStatus.RUNNING ? null : Instant.EPOCH);
+    }
+
+    private static AgentStep agentStep() {
+        return new AgentStep("step-1", "run-1", 1, AgentStepType.MODEL_TURN, AgentStepStatus.SUCCEEDED,
+                "{\"prompt\":\"hi\"}", "{\"answer\":\"hello\"}", null, null, Instant.EPOCH, Instant.EPOCH);
     }
 
     private static StreamCallback noopCallback() {

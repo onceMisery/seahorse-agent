@@ -12,6 +12,7 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMqAdapterAutoConfigur
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentObservationAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentOpsRepositoryAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRetrievalRepositoryAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRegistryRepositoryAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentStorageAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentVectorAdapterAutoConfiguration
 
@@ -38,5 +39,6 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelMetadataAutoCon
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelModelAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelOpsAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelPluginAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelRegistryAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelRetrievalAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelTraceAutoConfiguration
