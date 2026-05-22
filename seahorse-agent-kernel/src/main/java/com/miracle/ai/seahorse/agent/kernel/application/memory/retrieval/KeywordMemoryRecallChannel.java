@@ -81,6 +81,6 @@ public class KeywordMemoryRecallChannel implements MemoryRecallChannelPort {
                     Objects.toString(metadata.getOrDefault("status", "ACTIVE"), "ACTIVE"),
                     metadata));
         }
-        return candidates;
+        return MemoryRecallAliasRanker.rank(candidates, request);
     }
 }
