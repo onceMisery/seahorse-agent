@@ -131,6 +131,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String METADATA_CANONICAL_ENTITY_TYPE = "canonicalEntityType";
     private static final String METADATA_ALIAS_TEXT = "aliasText";
     private static final String METADATA_ALIAS_CONFIDENCE_LEVEL = "aliasConfidenceLevel";
+    private static final String TARGET_KIND_PROFILE_SLOT = "PROFILE_SLOT";
+    private static final String TARGET_KEY_IDENTITY_OCCUPATION = "identity.occupation";
     private static final String REFINER_BATCH_CIRCUIT_BREAKER_REASON = "refiner_batch_circuit_breaker";
     private static final String REFINER_STATUS_CIRCUIT_BREAKER = "circuit_breaker";
     private static final String REFINER_BATCH_TARGET_KIND = "REFINER_BATCH";
@@ -192,6 +194,14 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         private ContextBlockTurn {
             turnBlock = Objects.requireNonNullElse(turnBlock, "");
             sourceSpan = Objects.requireNonNullElse(sourceSpan, "");
+        }
+    }
+
+    private record RefinerFeedbackScope(String targetKind, String targetKey) {
+
+        private RefinerFeedbackScope {
+            targetKind = Objects.requireNonNullElse(targetKind, "").trim();
+            targetKey = Objects.requireNonNullElse(targetKey, "").trim();
         }
     }
 
@@ -675,8 +685,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             List<String> operations = captureCorrection(request, tenantId, classification.correction());
             OccupationCorrection correction = classification.correction();
             return new IngestionExecution(MemoryIngestionResult.accepted(MemoryIngestionAction.UPDATE, operations, Map.of(
-                    "targetKind", "PROFILE_SLOT",
-                    "targetKey", "identity.occupation",
+                    "targetKind", TARGET_KIND_PROFILE_SLOT,
+                    "targetKey", TARGET_KEY_IDENTITY_OCCUPATION,
                     "incorrectValue", correction.incorrectValue(),
                     "correctValue", correction.correctValue())), classification);
         }
@@ -990,7 +1000,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         try {
             List<MemoryRefinementMemory> existingMemories = currentExistingMemories(request.userId());
             MemoryRefinementContextZones contextZones = refinementContextZones(sanitizedContent);
-            List<MemoryReviewFeedbackSample> feedbackExamples = recentReviewFeedbackExamples(tenantId, request.userId());
+            List<MemoryReviewFeedbackSample> feedbackExamples =
+                    recentReviewFeedbackExamples(tenantId, request.userId(), baseline);
             MemoryRefinementResult result = memoryRefinerPort.refine(new MemoryRefinementRequest(
                     operationId,
                     tenantId,
@@ -1033,18 +1044,21 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
     }
 
-    private List<MemoryReviewFeedbackSample> recentReviewFeedbackExamples(String tenantId, String userId) {
+    private List<MemoryReviewFeedbackSample> recentReviewFeedbackExamples(String tenantId,
+                                                                          String userId,
+                                                                          MemoryClassificationResult baseline) {
         if (isBlank(userId)) {
             return List.of();
         }
+        RefinerFeedbackScope scope = refinerFeedbackScope(baseline);
         try {
             List<MemoryReviewFeedbackSample> samples = memoryReviewFeedbackRepositoryPort.listSamples(
                     new MemoryReviewFeedbackQuery(
                             tenantId,
                             userId,
                             null,
-                            "",
-                            "",
+                            scope.targetKind(),
+                            scope.targetKey(),
                             REFINER_FEEDBACK_EXAMPLE_LIMIT));
             return samples.stream()
                     .filter(this::isResolvedFeedbackSample)
@@ -1054,6 +1068,24 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             LOG.debug("load refiner review-feedback examples failed: tenantId={}, userId={}", tenantId, userId, ex);
             return List.of();
         }
+    }
+
+    private RefinerFeedbackScope refinerFeedbackScope(MemoryClassificationResult baseline) {
+        if (baseline == null) {
+            return new RefinerFeedbackScope("", "");
+        }
+        RefinedMemoryDelta delta = baseline.refinedDelta();
+        if (delta != null && !isBlank(delta.targetKind()) && !isBlank(delta.targetKey())) {
+            return new RefinerFeedbackScope(delta.targetKind(), delta.targetKey());
+        }
+        if (baseline.action() == MemoryIngestionAction.UPDATE && baseline.correction() != null) {
+            return new RefinerFeedbackScope(TARGET_KIND_PROFILE_SLOT, TARGET_KEY_IDENTITY_OCCUPATION);
+        }
+        String profileSlot = baseline.decision() == null ? "" : profileSlot(baseline.decision(), baseline);
+        if (!isBlank(profileSlot)) {
+            return new RefinerFeedbackScope(TARGET_KIND_PROFILE_SLOT, profileSlot);
+        }
+        return new RefinerFeedbackScope("", "");
     }
 
     private boolean isResolvedFeedbackSample(MemoryReviewFeedbackSample sample) {
@@ -1710,8 +1742,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     request.userId(),
                     tenantId,
                     "PROFILE_CORRECTION",
-                    "PROFILE_SLOT",
-                    "identity.occupation",
+                    TARGET_KIND_PROFILE_SLOT,
+                    TARGET_KEY_IDENTITY_OCCUPATION,
                     correction.incorrectValue(),
                     correction.correctValue(),
                     "用户纠正职业画像：" + correction.incorrectValue() + " -> " + correction.correctValue(),
@@ -1720,13 +1752,13 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             profileMemoryPort.upsert(new ProfileFactUpdate(
                     request.userId(),
                     tenantId,
-                    "identity.occupation",
+                    TARGET_KEY_IDENTITY_OCCUPATION,
                     correction.correctValue(),
                     0.95D,
                     "explicit_user_correction",
                     sourceIds,
                     generationId));
-            markProfileSlotFragmentsObsolete(request.userId(), tenantId, "identity.occupation", generationId);
+            markProfileSlotFragmentsObsolete(request.userId(), tenantId, TARGET_KEY_IDENTITY_OCCUPATION, generationId);
         } catch (RuntimeException ex) {
             LOG.warn("写入Profile纠错失败: userId={}", request.userId(), ex);
         }
@@ -1782,7 +1814,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private String profileSlot(MemoryCaptureDecision decision, MemoryClassificationResult classification) {
         RefinedMemoryDelta delta = classification == null ? null : classification.refinedDelta();
         if (delta != null
-                && "PROFILE_SLOT".equalsIgnoreCase(delta.targetKind())
+                && TARGET_KIND_PROFILE_SLOT.equalsIgnoreCase(delta.targetKind())
                 && !isBlank(delta.targetKey())) {
             return delta.targetKey();
         }
@@ -2020,7 +2052,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return directive.targetKind();
         }
         if (operationType == MemoryOperationType.UPDATE || OccupationCorrection.extract(content) != null) {
-            return "PROFILE_SLOT";
+            return TARGET_KIND_PROFILE_SLOT;
         }
         if (operationType == MemoryOperationType.ADD) {
             return "SHORT_TERM_MEMORY";
@@ -2035,7 +2067,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return directive.targetKey();
         }
         if (operationType == MemoryOperationType.UPDATE || OccupationCorrection.extract(content) != null) {
-            return "identity.occupation";
+            return TARGET_KEY_IDENTITY_OCCUPATION;
         }
         return "";
     }

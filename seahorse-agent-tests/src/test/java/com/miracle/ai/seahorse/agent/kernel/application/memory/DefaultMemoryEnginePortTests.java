@@ -1365,11 +1365,15 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
-    void shouldPassRecentReviewFeedbackExamplesToRefiner() {
+    void shouldPassTargetScopedReviewFeedbackExamplesToRefiner() {
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.empty(
                 "no_refined_delta"));
         RecordingMemoryReviewFeedbackRepository feedbackRepository = new RecordingMemoryReviewFeedbackRepository(
-                List.of(reviewFeedbackSample("feedback-1", MemoryReviewStatus.APPLIED)));
+                List.of(reviewFeedbackSample(
+                        "feedback-1",
+                        MemoryReviewStatus.APPLIED,
+                        "PROFILE_SLOT",
+                        "preferences.response_style")));
         DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
                 new StubShortTermMemoryPort(List.of()),
                 new StubLongTermMemoryPort(List.of()),
@@ -1397,13 +1401,15 @@ class DefaultMemoryEnginePortTests {
                         .userId(USER_ID)
                         .conversationId("conv-refiner-feedback")
                         .messageId("msg-refiner-feedback")
-                        .message(ChatMessage.user("Actually keep OceanBase as the project database."))
+                        .message(ChatMessage.user("我喜欢简短回答"))
                         .build()));
 
         Assertions.assertEquals(1, feedbackRepository.queries.size());
         MemoryReviewFeedbackQuery query = feedbackRepository.queries.get(0);
         Assertions.assertEquals("default", query.tenantId());
         Assertions.assertEquals(USER_ID, query.userId());
+        Assertions.assertEquals("PROFILE_SLOT", query.targetKind());
+        Assertions.assertEquals("preferences.response_style", query.targetKey());
         Assertions.assertEquals(3, query.limit());
         Assertions.assertEquals(1, refinerPort.requests.size());
         Assertions.assertEquals(List.of("feedback-1"),
@@ -2472,6 +2478,13 @@ class DefaultMemoryEnginePortTests {
     }
 
     private MemoryReviewFeedbackSample reviewFeedbackSample(String sampleId, MemoryReviewStatus status) {
+        return reviewFeedbackSample(sampleId, status, "PROJECT_FACT", "project.database");
+    }
+
+    private MemoryReviewFeedbackSample reviewFeedbackSample(String sampleId,
+                                                            MemoryReviewStatus status,
+                                                            String targetKind,
+                                                            String targetKey) {
         return new MemoryReviewFeedbackSample(
                 sampleId,
                 "review-" + sampleId,
@@ -2483,8 +2496,8 @@ class DefaultMemoryEnginePortTests {
                 "reviewer-1",
                 "Prefer the corrected database fact.",
                 "SHORT_TERM",
-                "PROJECT_FACT",
-                "project.database",
+                targetKind,
+                targetKey,
                 "User's project uses MySQL.",
                 "User's project uses OceanBase.",
                 Map.of("model", "old-refiner"),

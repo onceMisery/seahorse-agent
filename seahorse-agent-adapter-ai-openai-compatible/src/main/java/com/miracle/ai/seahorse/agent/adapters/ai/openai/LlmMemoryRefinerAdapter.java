@@ -59,6 +59,8 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
     private static final int MAX_CONTENT_CHARS = 4000;
     private static final int DEFAULT_FEEDBACK_SAMPLE_LIMIT = 3;
     private static final int MAX_FEEDBACK_CONTENT_CHARS = 600;
+    private static final String METADATA_TARGET_KIND = "targetKind";
+    private static final String METADATA_TARGET_KEY = "targetKey";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
 
@@ -264,8 +266,8 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                             request.tenantId(),
                             request.userId(),
                             null,
-                            "",
-                            "",
+                            feedbackTarget(request, METADATA_TARGET_KIND),
+                            feedbackTarget(request, METADATA_TARGET_KEY),
                             feedbackSampleLimit));
             if (samples.isEmpty()) {
                 return "[]";
@@ -275,6 +277,11 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
             LOG.debug("Failed to load memory review feedback samples", ex);
             return "[]";
         }
+    }
+
+    private String feedbackTarget(MemoryRefinementRequest request, String key) {
+        Object value = request.baselineDetails().get(key);
+        return value == null ? "" : value.toString().trim();
     }
 
     private String feedbackSamplesJson(List<MemoryReviewFeedbackSample> samples) {

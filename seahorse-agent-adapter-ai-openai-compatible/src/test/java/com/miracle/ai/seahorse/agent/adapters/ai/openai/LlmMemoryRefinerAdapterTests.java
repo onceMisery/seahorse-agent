@@ -271,6 +271,52 @@ class LlmMemoryRefinerAdapterTests {
     }
 
     @Test
+    void shouldScopeRepositoryFeedbackFallbackByBaselineTarget() {
+        CapturingChatModelPort chatModelPort = new CapturingChatModelPort("""
+                {
+                  "refined": true,
+                  "reason": "guided by scoped feedback",
+                  "operations": [
+                    {"action": "IGNORE", "content": "", "confidence": 0.9}
+                  ]
+                }
+                """);
+        RecordingFeedbackRepository feedbackRepository = new RecordingFeedbackRepository();
+        feedbackRepository.samples = List.of(feedbackSample(
+                "profile-feedback",
+                "Use the profile slot correction style."));
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                chatModelPort,
+                PromptTemplatePort.empty(),
+                new ObjectMapper(),
+                feedbackRepository,
+                3);
+
+        adapter.refine(new MemoryRefinementRequest(
+                "op-1",
+                "tenant-1",
+                "chat",
+                "user-1",
+                "conversation-1",
+                "message-1",
+                "我喜欢简短回答",
+                MemoryIngestionAction.ADD,
+                "PREFERENCE",
+                "rule_based",
+                Map.<String, Object>of(
+                        "targetKind", "PROFILE_SLOT",
+                        "targetKey", "preferences.response_style"),
+                List.<MemoryRefinementMemory>of()));
+
+        assertThat(feedbackRepository.lastQuery).isNotNull();
+        assertThat(feedbackRepository.lastQuery.targetKind()).isEqualTo("PROFILE_SLOT");
+        assertThat(feedbackRepository.lastQuery.targetKey()).isEqualTo("preferences.response_style");
+        String prompt = chatModelPort.lastRequest.get().getMessages().get(0).getContent();
+        assertThat(prompt).contains("profile-feedback");
+        assertThat(prompt).contains("Use the profile slot correction style.");
+    }
+
+    @Test
     void shouldPreferRequestFeedbackExamplesOverRepositoryFallback() {
         CapturingChatModelPort chatModelPort = new CapturingChatModelPort("""
                 {
