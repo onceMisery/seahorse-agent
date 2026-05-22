@@ -25,6 +25,7 @@ public record MemoryFusionPolicy(
         double decayLambda,
         int finalTopK,
         boolean timeDecayEnabled,
+        long channelTimeoutMillis,
         Map<String, Double> channelWeights
 ) {
 
@@ -38,6 +39,7 @@ public record MemoryFusionPolicy(
         rrfK = rrfK > 0 ? rrfK : DEFAULT_RRF_K;
         decayLambda = decayLambda >= 0D ? decayLambda : DEFAULT_DECAY_LAMBDA;
         finalTopK = finalTopK > 0 ? finalTopK : DEFAULT_FINAL_TOP_K;
+        channelTimeoutMillis = channelTimeoutMillis > 0L ? channelTimeoutMillis : DEFAULT_CHANNEL_TIMEOUT_MILLIS;
         channelWeights = Map.copyOf(Objects.requireNonNullElse(channelWeights, Map.of()));
     }
 
@@ -45,7 +47,7 @@ public record MemoryFusionPolicy(
                               double decayLambda,
                               int finalTopK,
                               boolean timeDecayEnabled) {
-        this(rrfK, decayLambda, finalTopK, timeDecayEnabled, Map.of());
+        this(rrfK, decayLambda, finalTopK, timeDecayEnabled, DEFAULT_CHANNEL_TIMEOUT_MILLIS, Map.of());
     }
 
     public static MemoryFusionPolicy defaults() {
@@ -54,18 +56,26 @@ public record MemoryFusionPolicy(
                 DEFAULT_DECAY_LAMBDA,
                 DEFAULT_FINAL_TOP_K,
                 true,
+                DEFAULT_CHANNEL_TIMEOUT_MILLIS,
                 Map.of());
     }
 
     public MemoryFusionPolicy withFinalTopK(int newFinalTopK) {
-        return new MemoryFusionPolicy(rrfK, decayLambda, newFinalTopK, timeDecayEnabled, channelWeights);
+        return new MemoryFusionPolicy(
+                rrfK, decayLambda, newFinalTopK, timeDecayEnabled, channelTimeoutMillis, channelWeights);
     }
 
     public MemoryFusionPolicy withTimeDecayEnabled(boolean enabled) {
-        return new MemoryFusionPolicy(rrfK, decayLambda, finalTopK, enabled, channelWeights);
+        return new MemoryFusionPolicy(rrfK, decayLambda, finalTopK, enabled, channelTimeoutMillis, channelWeights);
     }
 
     public MemoryFusionPolicy withDecayLambda(double newDecayLambda) {
-        return new MemoryFusionPolicy(rrfK, newDecayLambda, finalTopK, timeDecayEnabled, channelWeights);
+        return new MemoryFusionPolicy(
+                rrfK, newDecayLambda, finalTopK, timeDecayEnabled, channelTimeoutMillis, channelWeights);
+    }
+
+    public MemoryFusionPolicy withChannelTimeoutMillis(long newChannelTimeoutMillis) {
+        return new MemoryFusionPolicy(
+                rrfK, decayLambda, finalTopK, timeDecayEnabled, newChannelTimeoutMillis, channelWeights);
     }
 }

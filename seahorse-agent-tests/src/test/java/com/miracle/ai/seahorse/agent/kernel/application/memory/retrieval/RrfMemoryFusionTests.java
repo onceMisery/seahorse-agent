@@ -46,6 +46,7 @@ class RrfMemoryFusionTests {
         assertThat(fused.get(0).rawScore()).isGreaterThan(fused.get(1).rawScore());
         assertThat(fused.get(0).metadata()).containsEntry("fusionStrategy", "RRF");
         assertThat(fused.get(0).metadata()).containsEntry("rrfK", 60);
+        assertThat(fused.get(0).metadata()).containsEntry("channelTimeoutMillis", 50L);
         assertThat(fused.get(0).metadata()).containsEntry("sourceChannels", List.of("vector", "keyword"));
         assertThat(fused.get(0).metadata().get("channelRanks"))
                 .isEqualTo(Map.of("vector", 2, "keyword", 1));

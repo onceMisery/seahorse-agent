@@ -130,6 +130,7 @@ class HybridMemoryRecallPipelineTests {
                     assertThat(event.status()).isEqualTo(MemoryTraceEvent.STATUS_FAILED);
                     assertThat(event.subjectId()).isEqualTo("vector");
                     assertThat(event.details()).containsEntry("candidateCount", 0);
+                    assertThat(event.details()).containsEntry("timeoutMs", 50L);
                 })
                 .anySatisfy(event -> {
                     assertThat(event.eventType()).isEqualTo("channel");

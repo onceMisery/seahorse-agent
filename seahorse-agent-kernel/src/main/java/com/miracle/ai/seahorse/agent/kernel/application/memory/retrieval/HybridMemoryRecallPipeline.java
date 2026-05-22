@@ -277,6 +277,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                         "channel", channel.channelName(),
                         "candidateCount", candidateCount,
                         "latencyMs", latencyMs,
+                        "timeoutMs", fusionPolicy.channelTimeoutMillis(),
                         "error", Objects.requireNonNullElse(error, "")),
                 Instant.now()));
     }

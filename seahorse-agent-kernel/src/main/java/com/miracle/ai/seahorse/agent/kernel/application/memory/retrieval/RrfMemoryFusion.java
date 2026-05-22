@@ -163,6 +163,7 @@ public class RrfMemoryFusion implements MemoryRecallFusionPort {
         metadata.put("rrfK", policy.rrfK());
         metadata.put("fusionScore", score);
         metadata.put("timeDecayEnabled", policy.timeDecayEnabled());
+        metadata.put("channelTimeoutMillis", policy.channelTimeoutMillis());
         metadata.put("channelRanks", new LinkedHashMap<>(channelRanks));
         metadata.put("channelScores", new LinkedHashMap<>(channelScores));
         metadata.put("channelContributions", new LinkedHashMap<>(channelContributions));

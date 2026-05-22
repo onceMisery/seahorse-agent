@@ -344,8 +344,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             @Value("${seahorse-agent.memory.recall.rrf-k:60}") int rrfK,
             @Value("${seahorse-agent.memory.recall.decay-lambda:0.05}") double decayLambda,
             @Value("${seahorse-agent.memory.recall.final-top-k:8}") int finalTopK,
-            @Value("${seahorse-agent.memory.recall.time-decay-enabled:true}") boolean timeDecayEnabled) {
-        return new MemoryFusionPolicy(rrfK, decayLambda, finalTopK, timeDecayEnabled);
+            @Value("${seahorse-agent.memory.recall.time-decay-enabled:true}") boolean timeDecayEnabled,
+            @Value("${seahorse-agent.memory.recall.channel-timeout-ms:50}") long channelTimeoutMs) {
+        return new MemoryFusionPolicy(rrfK, decayLambda, finalTopK, timeDecayEnabled, channelTimeoutMs, Map.of());
     }
 
     @Bean
