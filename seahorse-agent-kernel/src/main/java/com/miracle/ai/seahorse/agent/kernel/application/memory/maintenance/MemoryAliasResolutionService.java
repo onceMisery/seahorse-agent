@@ -133,7 +133,7 @@ public class MemoryAliasResolutionService {
                     candidate.entityType(),
                     candidate.confidenceLevel(),
                     SOURCE_TYPE,
-                    List.of(),
+                    candidate.sourceMemoryIds(),
                     metadata));
             return ApplyResult.apply();
         } catch (RuntimeException ex) {
@@ -159,6 +159,7 @@ public class MemoryAliasResolutionService {
         metadata.put("canonicalName", candidate.canonicalName());
         metadata.put("entityType", candidate.entityType());
         metadata.put("confidenceLevel", candidate.confidenceLevel());
+        metadata.put("sourceMemoryIds", candidate.sourceMemoryIds());
         metadata.put("sourceType", SOURCE_TYPE);
         return metadata;
     }

@@ -124,6 +124,7 @@ class JdbcMemoryAliasRepositoryAdapterTests {
         assertThat(candidates)
                 .extracting(MemoryAliasCandidate::canonicalEntityId)
                 .containsExactly("entity-low", "entity-high");
+        assertThat(candidates.get(0).sourceMemoryIds()).containsExactly("memory-low-1", "memory-low-2");
         assertThat(candidates)
                 .extracting(MemoryAliasCandidate::userId, MemoryAliasCandidate::tenantId)
                 .containsExactly(tuple("user-1", "tenant-1"), tuple("user-1", "tenant-1"));
@@ -171,6 +172,9 @@ class JdbcMemoryAliasRepositoryAdapterTests {
     }
 
     private void upsert(String userId, String tenantId, String aliasText, String canonicalEntityId, double confidenceLevel) {
+        List<String> sourceMemoryIds = "entity-low".equals(canonicalEntityId)
+                ? List.of("memory-low-1", "memory-low-2")
+                : List.of();
         adapter.upsertAlias(new MemoryAliasCommand(
                 userId,
                 tenantId,
@@ -180,7 +184,7 @@ class JdbcMemoryAliasRepositoryAdapterTests {
                 "ENTITY",
                 confidenceLevel,
                 "maintenance-test",
-                List.of(),
+                sourceMemoryIds,
                 Map.of()));
     }
 }

@@ -76,7 +76,8 @@ class MemoryAliasResolutionServiceMaintenanceTests {
                 "entity-booking",
                 "Booking",
                 "BUSINESS_TERM",
-                0.98D));
+                0.98D,
+                List.of("memory-1", "memory-2")));
         MemoryAliasResolutionService service = new MemoryAliasResolutionService(
                 aliasPort,
                 new MemoryAliasResolutionOptions(10, "user-1", "tenant-1", 0.95D, java.util.Map.of()));
@@ -93,6 +94,7 @@ class MemoryAliasResolutionServiceMaintenanceTests {
         assertThat(command.userId()).isEqualTo("user-1");
         assertThat(command.tenantId()).isEqualTo("tenant-1");
         assertThat(command.aliasText()).isEqualTo("bk");
+        assertThat(command.sourceMemoryIds()).containsExactly("memory-1", "memory-2");
         assertThat(command.metadata()).containsEntry("canonicalEntityId", "entity-booking");
         assertThat(command.metadata()).containsEntry("normalizationStrategy", "trim_case_whitespace");
     }

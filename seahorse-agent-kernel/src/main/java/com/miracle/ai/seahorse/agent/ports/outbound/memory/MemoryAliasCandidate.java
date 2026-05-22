@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import java.util.List;
 import java.util.Objects;
 
 public record MemoryAliasCandidate(
@@ -26,14 +27,25 @@ public record MemoryAliasCandidate(
         String canonicalEntityId,
         String canonicalName,
         String entityType,
-        double confidenceLevel) {
+        double confidenceLevel,
+        List<String> sourceMemoryIds) {
 
     public MemoryAliasCandidate(String aliasText,
                                 String canonicalEntityId,
                                 String canonicalName,
                                 String entityType,
                                 double confidenceLevel) {
-        this("", "default", aliasText, canonicalEntityId, canonicalName, entityType, confidenceLevel);
+        this("", "default", aliasText, canonicalEntityId, canonicalName, entityType, confidenceLevel, List.of());
+    }
+
+    public MemoryAliasCandidate(String userId,
+                                String tenantId,
+                                String aliasText,
+                                String canonicalEntityId,
+                                String canonicalName,
+                                String entityType,
+                                double confidenceLevel) {
+        this(userId, tenantId, aliasText, canonicalEntityId, canonicalName, entityType, confidenceLevel, List.of());
     }
 
     public MemoryAliasCandidate {
@@ -44,6 +56,7 @@ public record MemoryAliasCandidate(
         canonicalName = normalize(canonicalName, canonicalEntityId);
         entityType = normalize(entityType, "ENTITY");
         confidenceLevel = Math.max(0D, Math.min(1D, confidenceLevel));
+        sourceMemoryIds = List.copyOf(Objects.requireNonNullElse(sourceMemoryIds, List.of()));
     }
 
     private static String normalize(String value, String fallback) {

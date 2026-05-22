@@ -189,7 +189,8 @@ public class JdbcMemoryAliasRepositoryAdapter implements MemoryAliasPort {
                        canonical_entity_id,
                        canonical_name,
                        entity_type,
-                       confidence_level
+                       confidence_level,
+                       source_memory_ids
                 FROM t_memory_entity_alias
                 %s
                   AND status = 'ACTIVE'
@@ -203,7 +204,8 @@ public class JdbcMemoryAliasRepositoryAdapter implements MemoryAliasPort {
                         rs.getString("canonical_entity_id"),
                         rs.getString("canonical_name"),
                         rs.getString("entity_type"),
-                        rs.getDouble("confidence_level")),
+                        rs.getDouble("confidence_level"),
+                        sourceMemoryIds(rs.getString("source_memory_ids"))),
                 firstParam,
                 secondParam,
                 safeLimit);
@@ -218,7 +220,8 @@ public class JdbcMemoryAliasRepositoryAdapter implements MemoryAliasPort {
                        canonical_entity_id,
                        canonical_name,
                        entity_type,
-                       confidence_level
+                       confidence_level,
+                       source_memory_ids
                 FROM t_memory_entity_alias
                 %s
                   AND status = 'ACTIVE'
@@ -232,8 +235,20 @@ public class JdbcMemoryAliasRepositoryAdapter implements MemoryAliasPort {
                         rs.getString("canonical_entity_id"),
                         rs.getString("canonical_name"),
                         rs.getString("entity_type"),
-                        rs.getDouble("confidence_level")),
+                        rs.getDouble("confidence_level"),
+                        sourceMemoryIds(rs.getString("source_memory_ids"))),
                 safeLimit);
+    }
+
+    private List<String> sourceMemoryIds(String json) {
+        Object ids = JdbcMemorySupport.parseJson(objectMapper, json).get("ids");
+        if (ids instanceof List<?> list) {
+            return list.stream()
+                    .filter(Objects::nonNull)
+                    .map(Object::toString)
+                    .toList();
+        }
+        return List.of();
     }
 
     private Optional<String> existingId(String userId, String tenantId, String normalizedAlias) {
