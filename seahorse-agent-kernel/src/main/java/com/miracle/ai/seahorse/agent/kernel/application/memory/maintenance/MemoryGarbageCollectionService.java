@@ -48,9 +48,11 @@ public class MemoryGarbageCollectionService {
         List<String> errors = new ArrayList<>();
         List<MemoryGarbageCollectionCandidate> derivedIndexCandidates = scanDerivedIndexDeleteCandidates(now, errors);
         List<MemoryGarbageCollectionCandidate> archiveCandidates = scanLifecycleArchiveCandidates(now, errors);
+        List<MemoryGarbageCollectionCandidate> physicalDeleteCandidates = scanPhysicalDeleteCandidates(now, errors);
         int enqueued = 0;
         int marked = 0;
         int archived = 0;
+        int physicallyDeleted = 0;
         if (!options.dryRun()) {
             List<String> successfullyQueuedIds = new ArrayList<>();
             for (MemoryGarbageCollectionCandidate candidate : archiveCandidates) {
@@ -75,11 +77,13 @@ public class MemoryGarbageCollectionService {
                 }
             }
             marked = markDeleted(successfullyQueuedIds, now, errors);
+            physicallyDeleted = markPhysicallyDeleted(physicalDeleteCandidates, now, errors);
         }
         return new MemoryGarbageCollectionResult(
                 Objects.requireNonNullElse(reason, "manual-gc"),
-                derivedIndexCandidates.size() + archiveCandidates.size(),
+                derivedIndexCandidates.size() + archiveCandidates.size() + physicalDeleteCandidates.size(),
                 archived,
+                physicallyDeleted,
                 enqueued,
                 marked,
                 options.dryRun(),
@@ -95,6 +99,21 @@ public class MemoryGarbageCollectionService {
                     options.scanLimit());
         } catch (RuntimeException ex) {
             errors.add("scan:" + errorMessage(ex));
+            return List.of();
+        }
+    }
+
+    private List<MemoryGarbageCollectionCandidate> scanPhysicalDeleteCandidates(Instant now, List<String> errors) {
+        if (!options.physicalDeleteEnabled()) {
+            return List.of();
+        }
+        try {
+            return garbageCollectionPort.scanPhysicalDeleteCandidates(
+                    now,
+                    options.physicalDeleteRetention(),
+                    options.scanLimit());
+        } catch (RuntimeException ex) {
+            errors.add("physical-delete-scan:" + errorMessage(ex));
             return List.of();
         }
     }
@@ -127,6 +146,26 @@ public class MemoryGarbageCollectionService {
         } catch (RuntimeException ex) {
             errors.add(candidate.memoryId() + ":archive:" + errorMessage(ex));
             return false;
+        }
+    }
+
+    private int markPhysicallyDeleted(List<MemoryGarbageCollectionCandidate> candidates,
+                                      Instant now,
+                                      List<String> errors) {
+        List<String> safeIds = candidates.stream()
+                .filter(Objects::nonNull)
+                .map(MemoryGarbageCollectionCandidate::memoryId)
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .toList();
+        if (safeIds.isEmpty()) {
+            return 0;
+        }
+        try {
+            return garbageCollectionPort.markPhysicallyDeleted(safeIds, now);
+        } catch (RuntimeException ex) {
+            errors.add("physical-delete:" + errorMessage(ex));
+            return 0;
         }
     }
 

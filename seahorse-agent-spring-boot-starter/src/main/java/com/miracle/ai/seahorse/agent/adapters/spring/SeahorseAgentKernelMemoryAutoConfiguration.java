@@ -701,7 +701,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             @Value("${seahorse-agent.memory.gc.graph-index-enabled:true}") boolean graphIndexEnabled,
             @Value("${seahorse-agent.memory.gc.archive-enabled:false}") boolean archiveEnabled,
             @Value("${seahorse-agent.memory.gc.archive-idle-days:90}") long archiveIdleDays,
-            @Value("${seahorse-agent.memory.gc.archive-score-threshold:0.15}") double archiveScoreThreshold) {
+            @Value("${seahorse-agent.memory.gc.archive-score-threshold:0.15}") double archiveScoreThreshold,
+            @Value("${seahorse-agent.memory.gc.physical-delete-enabled:false}") boolean physicalDeleteEnabled,
+            @Value("${seahorse-agent.memory.gc.physical-delete-retention-days:30}") long physicalDeleteRetentionDays) {
         return new MemoryGarbageCollectionService(
                 garbageCollectionPort.getIfAvailable(MemoryGarbageCollectionPort::noop),
                 outboxPort,
@@ -714,7 +716,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                         graphIndexEnabled && graphIndexPort.getIfAvailable() != null,
                         archiveEnabled,
                         Duration.ofDays(Math.max(0L, archiveIdleDays)),
-                        archiveScoreThreshold));
+                        archiveScoreThreshold,
+                        physicalDeleteEnabled,
+                        Duration.ofDays(Math.max(0L, physicalDeleteRetentionDays))));
     }
 
     @Bean

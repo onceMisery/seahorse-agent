@@ -25,6 +25,7 @@ public record MemoryGarbageCollectionResult(
         String reason,
         int scannedCount,
         int archivedCount,
+        int physicallyDeletedCount,
         int enqueuedDeleteTaskCount,
         int markedIndexDeletedCount,
         boolean dryRun,
@@ -41,6 +42,26 @@ public record MemoryGarbageCollectionResult(
                                          Instant executedAt) {
         this(reason,
                 scannedCount,
+                0,
+                0,
+                enqueuedDeleteTaskCount,
+                markedIndexDeletedCount,
+                dryRun,
+                errors,
+                executedAt);
+    }
+
+    public MemoryGarbageCollectionResult(String reason,
+                                         int scannedCount,
+                                         int archivedCount,
+                                         int enqueuedDeleteTaskCount,
+                                         int markedIndexDeletedCount,
+                                         boolean dryRun,
+                                         List<String> errors,
+                                         Instant executedAt) {
+        this(reason,
+                scannedCount,
+                archivedCount,
                 0,
                 enqueuedDeleteTaskCount,
                 markedIndexDeletedCount,

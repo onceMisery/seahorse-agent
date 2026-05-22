@@ -40,6 +40,17 @@ public interface MemoryGarbageCollectionPort {
         return 0;
     }
 
+    default List<MemoryGarbageCollectionCandidate> scanPhysicalDeleteCandidates(
+            Instant now,
+            Duration retention,
+            int limit) {
+        return List.of();
+    }
+
+    default int markPhysicallyDeleted(List<String> memoryIds, Instant deletedAt) {
+        return 0;
+    }
+
     int markDerivedIndexesDeleted(List<String> memoryIds, Instant markedAt);
 
     static MemoryGarbageCollectionPort noop() {

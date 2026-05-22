@@ -202,6 +202,63 @@ public class JdbcMemoryLifecycleRepositoryAdapter
     }
 
     @Override
+    public List<MemoryGarbageCollectionCandidate> scanPhysicalDeleteCandidates(
+            Instant now,
+            Duration retention,
+            int limit) {
+        Instant cutoff = Objects.requireNonNullElseGet(now, Instant::now)
+                .minus(Objects.requireNonNullElse(retention, Duration.ZERO));
+        int safeLimit = limit <= 0 ? DEFAULT_SCAN_LIMIT : limit;
+        List<MemoryGarbageCollectionCandidate> candidates = new ArrayList<>();
+        candidates.addAll(scanLayerForPhysicalDeletes(
+                "t_short_term_memory",
+                "short_term",
+                "id",
+                "user_id",
+                safeLimit,
+                cutoff));
+        if (candidates.size() >= safeLimit) {
+            return candidates.stream().limit(safeLimit).toList();
+        }
+        candidates.addAll(scanLayerForPhysicalDeletes(
+                "t_long_term_memory",
+                "long_term",
+                "id",
+                "user_id",
+                safeLimit - candidates.size(),
+                cutoff));
+        if (candidates.size() >= safeLimit) {
+            return candidates.stream().limit(safeLimit).toList();
+        }
+        candidates.addAll(scanLayerForPhysicalDeletes(
+                "t_semantic_memory",
+                "semantic",
+                "id",
+                "user_id",
+                safeLimit - candidates.size(),
+                cutoff));
+        return candidates.stream().limit(safeLimit).toList();
+    }
+
+    @Override
+    public int markPhysicallyDeleted(List<String> memoryIds, Instant deletedAt) {
+        if (memoryIds == null || memoryIds.isEmpty()) {
+            return 0;
+        }
+        Instant now = Objects.requireNonNullElseGet(deletedAt, Instant::now);
+        int updated = 0;
+        for (String memoryId : memoryIds) {
+            if (!JdbcMemorySupport.hasText(memoryId)) {
+                continue;
+            }
+            updated += markLayerPhysicallyDeleted("t_short_term_memory", memoryId, now);
+            updated += markLayerPhysicallyDeleted("t_long_term_memory", memoryId, now);
+            updated += markLayerPhysicallyDeleted("t_semantic_memory", memoryId, now);
+        }
+        return updated;
+    }
+
+    @Override
     public List<MemoryCompactionCandidate> scanCandidates(int limit) {
         return scanCompactionCandidates(limit, DEFAULT_COMPACTION_MIN_GROUP_SIZE);
     }
@@ -466,6 +523,56 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                 reason,
                 JdbcMemorySupport.timestamp(archivedAt),
                 JdbcMemorySupport.timestamp(archivedAt),
+                memoryId);
+    }
+
+    private List<MemoryGarbageCollectionCandidate> scanLayerForPhysicalDeletes(
+            String tableName,
+            String layer,
+            String idColumn,
+            String userIdColumn,
+            int limit,
+            Instant cutoff) {
+        if (limit <= 0) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                SELECT %s AS memory_id,
+                       %s AS user_id,
+                       COALESCE(tenant_id, 'default') AS tenant_id,
+                       COALESCE(status, '') AS status,
+                       update_time
+                FROM %s
+                WHERE deleted = 0
+                  AND COALESCE(status, 'ACTIVE') IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED')
+                  AND derived_indexes_deleted_at IS NOT NULL
+                  AND update_time <= ?
+                ORDER BY update_time ASC
+                LIMIT ?
+                """.formatted(idColumn, userIdColumn, tableName),
+                (rs, rowNum) -> new MemoryGarbageCollectionCandidate(
+                        rs.getString("memory_id"),
+                        rs.getString("user_id"),
+                        Objects.requireNonNullElse(rs.getString("tenant_id"), DEFAULT_TENANT_ID),
+                        layer,
+                        rs.getString("status"),
+                        JdbcMemorySupport.instant(rs.getTimestamp("update_time"))),
+                JdbcMemorySupport.timestamp(cutoff),
+                limit);
+    }
+
+    private int markLayerPhysicallyDeleted(String tableName, String memoryId, Instant deletedAt) {
+        return jdbcTemplate.update("""
+                UPDATE %s
+                SET status = 'PHYSICAL_DELETED',
+                    deleted = 1,
+                    update_time = ?
+                WHERE id = ?
+                  AND deleted = 0
+                  AND COALESCE(status, 'ACTIVE') IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED')
+                  AND derived_indexes_deleted_at IS NOT NULL
+                """.formatted(tableName),
+                JdbcMemorySupport.timestamp(deletedAt),
                 memoryId);
     }
 

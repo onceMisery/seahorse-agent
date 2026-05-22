@@ -29,7 +29,9 @@ public record MemoryGarbageCollectionOptions(
         boolean graphIndexEnabled,
         boolean archiveEnabled,
         Duration archiveIdleRetention,
-        double archiveScoreThreshold
+        double archiveScoreThreshold,
+        boolean physicalDeleteEnabled,
+        Duration physicalDeleteRetention
 ) {
 
     private static final int DEFAULT_SCAN_LIMIT = 100;
@@ -51,7 +53,31 @@ public record MemoryGarbageCollectionOptions(
                 graphIndexEnabled,
                 false,
                 DEFAULT_ARCHIVE_IDLE_RETENTION,
-                DEFAULT_ARCHIVE_SCORE_THRESHOLD);
+                DEFAULT_ARCHIVE_SCORE_THRESHOLD,
+                false,
+                DEFAULT_RETENTION);
+    }
+
+    public MemoryGarbageCollectionOptions(int scanLimit,
+                                          Duration retention,
+                                          boolean dryRun,
+                                          boolean vectorIndexEnabled,
+                                          boolean keywordIndexEnabled,
+                                          boolean graphIndexEnabled,
+                                          boolean archiveEnabled,
+                                          Duration archiveIdleRetention,
+                                          double archiveScoreThreshold) {
+        this(scanLimit,
+                retention,
+                dryRun,
+                vectorIndexEnabled,
+                keywordIndexEnabled,
+                graphIndexEnabled,
+                archiveEnabled,
+                archiveIdleRetention,
+                archiveScoreThreshold,
+                false,
+                DEFAULT_RETENTION);
     }
 
     public MemoryGarbageCollectionOptions {
@@ -61,6 +87,7 @@ public record MemoryGarbageCollectionOptions(
         archiveScoreThreshold = archiveScoreThreshold <= 0D
                 ? DEFAULT_ARCHIVE_SCORE_THRESHOLD
                 : Math.min(1D, archiveScoreThreshold);
+        physicalDeleteRetention = Objects.requireNonNullElse(physicalDeleteRetention, DEFAULT_RETENTION);
     }
 
     public static MemoryGarbageCollectionOptions vectorOnly() {
@@ -73,6 +100,8 @@ public record MemoryGarbageCollectionOptions(
                 false,
                 false,
                 DEFAULT_ARCHIVE_IDLE_RETENTION,
-                DEFAULT_ARCHIVE_SCORE_THRESHOLD);
+                DEFAULT_ARCHIVE_SCORE_THRESHOLD,
+                false,
+                DEFAULT_RETENTION);
     }
 }

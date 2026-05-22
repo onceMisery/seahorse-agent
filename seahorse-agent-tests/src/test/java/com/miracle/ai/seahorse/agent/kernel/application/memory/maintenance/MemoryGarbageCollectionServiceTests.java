@@ -138,6 +138,37 @@ class MemoryGarbageCollectionServiceTests {
     }
 
     @Test
+    void shouldPhysicallyDeleteCandidatesAfterDerivedIndexesAreRemoved() {
+        RecordingGarbageCollectionPort gcPort = new RecordingGarbageCollectionPort();
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort();
+        gcPort.physicalDeleteCandidates.add(new MemoryGarbageCollectionCandidate(
+                "m-purge", "user-1", "tenant-1", "semantic", "ARCHIVED", Instant.now()));
+        MemoryGarbageCollectionService service = new MemoryGarbageCollectionService(
+                gcPort,
+                outboxPort,
+                new MemoryGarbageCollectionOptions(
+                        20,
+                        Duration.ofDays(7),
+                        false,
+                        true,
+                        true,
+                        true,
+                        false,
+                        Duration.ofDays(90),
+                        0.15D,
+                        true,
+                        Duration.ofDays(30)));
+
+        MemoryGarbageCollectionResult result = service.run("hard-gc");
+
+        assertThat(result.scannedCount()).isEqualTo(1);
+        assertThat(result.physicallyDeletedCount()).isEqualTo(1);
+        assertThat(result.enqueuedDeleteTaskCount()).isZero();
+        assertThat(result.markedIndexDeletedCount()).isZero();
+        assertThat(gcPort.physicallyDeletedIds).containsExactly("m-purge");
+    }
+
+    @Test
     void shouldContinueOtherIndexTasksWhenOneIndexTaskCannotBeQueued() {
         RecordingGarbageCollectionPort gcPort = new RecordingGarbageCollectionPort();
         RecordingOutboxPort outboxPort = new RecordingOutboxPort();
@@ -167,8 +198,10 @@ class MemoryGarbageCollectionServiceTests {
 
         final List<MemoryGarbageCollectionCandidate> candidates = new ArrayList<>();
         final List<MemoryGarbageCollectionCandidate> archiveCandidates = new ArrayList<>();
+        final List<MemoryGarbageCollectionCandidate> physicalDeleteCandidates = new ArrayList<>();
         final List<String> markedIds = new ArrayList<>();
         final List<String> archivedIds = new ArrayList<>();
+        final List<String> physicallyDeletedIds = new ArrayList<>();
 
         @Override
         public List<MemoryGarbageCollectionCandidate> scanDerivedIndexDeleteCandidates(
@@ -190,6 +223,20 @@ class MemoryGarbageCollectionServiceTests {
         @Override
         public int markArchived(List<String> memoryIds, Instant archivedAt, String reason) {
             archivedIds.addAll(memoryIds);
+            return memoryIds.size();
+        }
+
+        @Override
+        public List<MemoryGarbageCollectionCandidate> scanPhysicalDeleteCandidates(
+                Instant now,
+                Duration retention,
+                int limit) {
+            return physicalDeleteCandidates.stream().limit(limit).toList();
+        }
+
+        @Override
+        public int markPhysicallyDeleted(List<String> memoryIds, Instant deletedAt) {
+            physicallyDeletedIds.addAll(memoryIds);
             return memoryIds.size();
         }
 

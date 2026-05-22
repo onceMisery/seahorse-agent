@@ -292,6 +292,56 @@ class JdbcMemoryRepositoryAdapterTests {
     }
 
     @Test
+    void shouldPhysicallyDeleteInactiveRowsOnlyAfterDerivedIndexesAreRemoved() {
+        Instant oldUpdateTime = Instant.now().minusSeconds(40L * 24 * 3600);
+        jdbcTemplate.update("""
+                INSERT INTO t_long_term_memory
+                (id, user_id, tenant_id, memory_category, title, content, source_type, source_ids, tags,
+                 importance_score, confidence_level, status, derived_indexes_deleted_at, update_time, deleted)
+                VALUES ('purge-ltm', 'user-1', 'tenant-1', 'FACT', 'purge', 'archived long memory',
+                        'short_term', '[]', '{}', 0.1, 0.1, 'ARCHIVED', ?, ?, 0)
+                """,
+                java.sql.Timestamp.from(oldUpdateTime),
+                java.sql.Timestamp.from(oldUpdateTime));
+        jdbcTemplate.update("""
+                INSERT INTO t_semantic_memory
+                (id, user_id, tenant_id, semantic_key, semantic_type, value_json, confidence_level, source_memory_ids,
+                 status, derived_indexes_deleted_at, update_time, deleted)
+                VALUES ('waiting-sem', 'user-1', 'tenant-1', 'project:waiting', 'FACT', '{}', 0.1, '[]',
+                        'ARCHIVED', NULL, ?, 0)
+                """,
+                java.sql.Timestamp.from(oldUpdateTime));
+
+        var candidates = lifecycleAdapter.scanPhysicalDeleteCandidates(
+                Instant.now(),
+                java.time.Duration.ofDays(30),
+                10);
+
+        assertThat(candidates)
+                .extracting(MemoryGarbageCollectionCandidate::memoryId)
+                .containsExactly("purge-ltm");
+        assertThat(lifecycleAdapter.markPhysicallyDeleted(
+                candidates.stream().map(MemoryGarbageCollectionCandidate::memoryId).toList(),
+                Instant.now()))
+                .isEqualTo(1);
+        assertThat(longTermAdapter.findById("purge-ltm")).isEmpty();
+        Map<String, Object> purgedRow = jdbcTemplate.queryForMap("""
+                SELECT status, deleted
+                FROM t_long_term_memory
+                WHERE id = 'purge-ltm'
+                """);
+        assertThat(purgedRow).containsEntry("STATUS", "PHYSICAL_DELETED");
+        assertThat(((Number) purgedRow.get("DELETED")).intValue()).isEqualTo(1);
+        Map<String, Object> waitingRow = jdbcTemplate.queryForMap("""
+                SELECT status, deleted
+                FROM t_semantic_memory
+                WHERE id = 'waiting-sem'
+                """);
+        assertThat(waitingRow).containsEntry("STATUS", "ARCHIVED");
+        assertThat(((Number) waitingRow.get("DELETED")).intValue()).isZero();
+    }
+
+    @Test
     void shouldUpsertProfileFactAsStrongFactSource() {
         profileAdapter.upsert(new ProfileFactUpdate(
                 "user-1",
