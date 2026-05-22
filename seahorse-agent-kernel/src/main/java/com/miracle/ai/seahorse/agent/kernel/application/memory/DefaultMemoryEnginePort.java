@@ -48,6 +48,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementReque
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
@@ -98,6 +99,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String METADATA_RISK_SCORE = "riskScore";
     private static final String METADATA_SOURCE_MESSAGE_IDS = "sourceMessageIds";
     private static final String METADATA_TARGET_LAYER = "targetLayer";
+    private static final String METADATA_REVIEW_REQUESTED_ACTION = "reviewRequestedAction";
 
     private record IngestionExecution(MemoryIngestionResult result, MemoryClassificationResult classification) {
     }
@@ -449,6 +451,21 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     MemoryIngestionResult.rejected(sanitized.reason(), Map.of("signals", sanitized.signals())),
                     null);
         }
+        MemoryClassificationResult reviewClassification = reviewApplyClassification(
+                command.reviewApplyDirective(),
+                sanitized.content());
+        if (reviewClassification != null) {
+            if (reviewClassification.action() == MemoryIngestionAction.IGNORE) {
+                return new IngestionExecution(MemoryIngestionResult.rejected(reviewClassification.reason()),
+                        reviewClassification);
+            }
+            MemorySchemaValidationResult validation = memorySchemaValidator.validate(reviewClassification);
+            if (!validation.valid()) {
+                return new IngestionExecution(MemoryIngestionResult.rejected(validation.reason()),
+                        reviewClassification);
+            }
+            return executeAcceptedClassification(operationId, tenantId, request, message, reviewClassification);
+        }
         MemoryPreFilterResult preFilterResult = memoryPreFilter.filter(sanitized.content());
         if (!preFilterResult.accepted()) {
             return new IngestionExecution(MemoryIngestionResult.ignored(preFilterResult.reason()), null);
@@ -477,8 +494,16 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     "incorrectValue", correction.incorrectValue(),
                     "correctValue", correction.correctValue())), classification);
         }
+        return executeAcceptedClassification(operationId, tenantId, request, message, classification);
+    }
+
+    private IngestionExecution executeAcceptedClassification(String operationId,
+                                                             String tenantId,
+                                                             MemoryWriteRequest request,
+                                                             ChatMessage message,
+                                                             MemoryClassificationResult classification) {
         MemoryCaptureDecision decision = classification.decision();
-        String profileSlot = profileSlot(decision);
+        String profileSlot = profileSlot(decision, classification);
         String profileGenerationId = isBlank(profileSlot) ? "" : profileSlot + ":" + UUID.randomUUID();
         Map<String, Object> metadata = captureMetadata(operationId, tenantId, request, message, decision);
         addRefinedMetadata(metadata, classification);
@@ -486,21 +511,21 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             metadata.put("profileSlot", profileSlot);
             metadata.put("generationId", profileGenerationId);
         }
+        MemoryLayer targetLayer = targetLayer(classification);
         MemoryRecord record = new MemoryRecord(
                 memoryId(request),
-                MemoryLayer.SHORT_TERM.name(),
+                targetLayer.name(),
                 decision.type(),
                 decision.content(),
                 metadata,
                 java.time.Instant.now());
-        shortTermPort.save(record);
         List<String> operations = new ArrayList<>();
-        operations.add("SHORT_TERM_SAVE");
+        operations.add(saveMemory(record, targetLayer));
         if (captureProfileFact(request, tenantId, decision, profileSlot, profileGenerationId)) {
             operations.add("PROFILE_UPSERT");
         }
         operations.addAll(indexMemoryOrEnqueueOutbox(record, request.userId(), tenantId));
-        return new IngestionExecution(MemoryIngestionResult.accepted(MemoryIngestionAction.ADD, operations, Map.of(
+        return new IngestionExecution(MemoryIngestionResult.accepted(resultAction(classification), operations, Map.of(
                 "memoryType", decision.type(),
                 "valueScore", decision.valueScore(),
                 "riskScore", decision.riskScore(),
@@ -539,6 +564,78 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         if (options.graphIndexOutboxEnabled()) {
             memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.graphUpsert(record, userId, tenantId));
             operations.add("GRAPH_OUTBOX_ENQUEUE");
+        }
+    }
+
+    private MemoryClassificationResult reviewApplyClassification(MemoryReviewApplyDirective directive,
+                                                                 String content) {
+        if (directive == null) {
+            return null;
+        }
+        if (directive.requestedAction() == MemoryIngestionAction.DELETE) {
+            return MemoryClassificationResult.ignored("review_delete_apply_not_supported");
+        }
+        String targetKind = isBlank(directive.targetKind()) ? "FACT" : directive.targetKind();
+        Map<String, Object> metadata = new LinkedHashMap<>(directive.metadata());
+        metadata.put("status", "review_applied");
+        metadata.put(METADATA_REVIEW_REQUESTED_ACTION, directive.requestedAction().name());
+        metadata.put(METADATA_TARGET_LAYER, targetLayer(directive.targetLayer()).name());
+        metadata.put(METADATA_CONFIDENCE, directive.confidence());
+        metadata.put(METADATA_IMPORTANCE, directive.importance());
+        metadata.put(METADATA_VALUE_SCORE, directive.valueScore());
+        metadata.put(METADATA_RISK_SCORE, directive.riskScore());
+        metadata.put(METADATA_SOURCE_MESSAGE_IDS, directive.sourceMessageIds());
+        MemoryCaptureDecision decision = MemoryCaptureDecision.refinedAdd(
+                content,
+                targetKind,
+                directive.importance(),
+                directive.confidence(),
+                directive.valueScore(),
+                directive.riskScore(),
+                List.of("memory_review_applied"),
+                List.of("human_review"));
+        return MemoryClassificationResult.refinedAdd(decision, new RefinedMemoryDelta(
+                directive.requestedAction(),
+                targetKind,
+                directive.targetKey(),
+                "memory_review_applied",
+                metadata));
+    }
+
+    private String saveMemory(MemoryRecord record, MemoryLayer targetLayer) {
+        MemoryLayer safeLayer = targetLayer == null ? MemoryLayer.SHORT_TERM : targetLayer;
+        if (safeLayer == MemoryLayer.LONG_TERM) {
+            longTermPort.save(record);
+            return "LONG_TERM_SAVE";
+        }
+        if (safeLayer == MemoryLayer.SEMANTIC) {
+            semanticPort.save(record);
+            return "SEMANTIC_SAVE";
+        }
+        shortTermPort.save(record);
+        return "SHORT_TERM_SAVE";
+    }
+
+    private MemoryLayer targetLayer(MemoryClassificationResult classification) {
+        RefinedMemoryDelta delta = classification == null ? null : classification.refinedDelta();
+        if (delta != null) {
+            Object value = delta.metadata().get(METADATA_TARGET_LAYER);
+            if (value != null && !value.toString().isBlank()) {
+                return targetLayer(value.toString());
+            }
+        }
+        return MemoryLayer.SHORT_TERM;
+    }
+
+    private MemoryLayer targetLayer(String layer) {
+        if (isBlank(layer)) {
+            return MemoryLayer.SHORT_TERM;
+        }
+        try {
+            MemoryLayer parsed = MemoryLayer.valueOf(layer.trim().toUpperCase(Locale.ROOT));
+            return parsed == MemoryLayer.WORKING ? MemoryLayer.SHORT_TERM : parsed;
+        } catch (IllegalArgumentException ex) {
+            return MemoryLayer.SHORT_TERM;
         }
     }
 
@@ -682,6 +779,15 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return action == MemoryIngestionAction.REVIEW
                 || action == MemoryIngestionAction.UPDATE
                 || action == MemoryIngestionAction.DELETE;
+    }
+
+    private MemoryIngestionAction resultAction(MemoryClassificationResult classification) {
+        RefinedMemoryDelta delta = classification == null ? null : classification.refinedDelta();
+        if (delta != null && delta.metadata().containsKey(METADATA_REVIEW_REQUESTED_ACTION)
+                && delta.action() == MemoryIngestionAction.UPDATE) {
+            return MemoryIngestionAction.UPDATE;
+        }
+        return MemoryIngestionAction.ADD;
     }
 
     private MemoryClassificationResult withRefinerDelta(MemoryClassificationResult baseline,
@@ -875,7 +981,13 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
     }
 
-    private String profileSlot(MemoryCaptureDecision decision) {
+    private String profileSlot(MemoryCaptureDecision decision, MemoryClassificationResult classification) {
+        RefinedMemoryDelta delta = classification == null ? null : classification.refinedDelta();
+        if (delta != null
+                && "PROFILE_SLOT".equalsIgnoreCase(delta.targetKind())
+                && !isBlank(delta.targetKey())) {
+            return delta.targetKey();
+        }
         return decision == null ? "" : profileSlotResolver.resolve(decision.type(), decision.content(), "");
     }
 
@@ -991,20 +1103,30 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                            MemoryIngestionCommand command,
                                            MemoryWriteRequest request,
                                            String content) {
-        MemoryOperationType operationType = inferOperationType(content);
+        MemoryReviewApplyDirective directive = command == null ? null : command.reviewApplyDirective();
+        MemoryOperationType operationType = inferOperationType(directive, content);
         return new MemoryOperation(
                 operationId,
                 request.userId(),
                 tenantId,
                 operationType,
-                inferTargetKind(operationType, content),
-                inferTargetKey(operationType, content),
+                inferTargetKind(operationType, directive, content),
+                inferTargetKey(operationType, directive, content),
                 requestMap(command, request, content),
                 MemoryValueAssessor.POLICY_VERSION,
                 Instant.now());
     }
 
-    private MemoryOperationType inferOperationType(String content) {
+    private MemoryOperationType inferOperationType(MemoryReviewApplyDirective directive, String content) {
+        if (directive != null) {
+            return switch (directive.requestedAction()) {
+                case ADD -> MemoryOperationType.ADD;
+                case UPDATE -> MemoryOperationType.UPDATE;
+                case DELETE -> MemoryOperationType.DELETE;
+                case REVIEW -> MemoryOperationType.REVIEW;
+                case IGNORE -> MemoryOperationType.IGNORE;
+            };
+        }
         if (OccupationCorrection.extract(content) != null) {
             return MemoryOperationType.UPDATE;
         }
@@ -1029,7 +1151,12 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return MemoryOperationType.IGNORE;
     }
 
-    private String inferTargetKind(MemoryOperationType operationType, String content) {
+    private String inferTargetKind(MemoryOperationType operationType,
+                                   MemoryReviewApplyDirective directive,
+                                   String content) {
+        if (directive != null && !isBlank(directive.targetKind())) {
+            return directive.targetKind();
+        }
         if (operationType == MemoryOperationType.UPDATE || OccupationCorrection.extract(content) != null) {
             return "PROFILE_SLOT";
         }
@@ -1039,7 +1166,12 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return "NONE";
     }
 
-    private String inferTargetKey(MemoryOperationType operationType, String content) {
+    private String inferTargetKey(MemoryOperationType operationType,
+                                  MemoryReviewApplyDirective directive,
+                                  String content) {
+        if (directive != null && !isBlank(directive.targetKey())) {
+            return directive.targetKey();
+        }
         if (operationType == MemoryOperationType.UPDATE || OccupationCorrection.extract(content) != null) {
             return "identity.occupation";
         }

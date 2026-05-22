@@ -26,7 +26,8 @@ public record MemoryIngestionCommand(
         String operationId,
         String tenantId,
         String source,
-        MemoryWriteRequest writeRequest
+        MemoryWriteRequest writeRequest,
+        MemoryReviewApplyDirective reviewApplyDirective
 ) {
 
     public MemoryIngestionCommand {
@@ -38,12 +39,20 @@ public record MemoryIngestionCommand(
         source = Objects.requireNonNullElse(source, "").trim();
     }
 
+    public MemoryIngestionCommand(String operationId,
+                                  String tenantId,
+                                  String source,
+                                  MemoryWriteRequest writeRequest) {
+        this(operationId, tenantId, source, writeRequest, null);
+    }
+
     public MemoryIngestionCommand(MemoryWriteRequest writeRequest) {
-        this(defaultOperationId(writeRequest), "default", "memory-engine-write", writeRequest);
+        this(defaultOperationId(writeRequest), "default", "memory-engine-write", writeRequest, null);
     }
 
     public static MemoryIngestionCommand chatCompleted(MemoryWriteRequest writeRequest) {
-        return new MemoryIngestionCommand(defaultOperationId(writeRequest), "default", "chat-completed", writeRequest);
+        return new MemoryIngestionCommand(defaultOperationId(writeRequest), "default", "chat-completed",
+                writeRequest);
     }
 
     public static MemoryIngestionCommand toolWrite(String toolCallId, MemoryWriteRequest writeRequest) {
@@ -51,6 +60,14 @@ public record MemoryIngestionCommand(
                 ? defaultOperationId(writeRequest)
                 : "tool-memory-write-" + toolCallId.trim();
         return new MemoryIngestionCommand(id, "default", "agent-memory-write", writeRequest);
+    }
+
+    public static MemoryIngestionCommand reviewApply(String operationId,
+                                                     String tenantId,
+                                                     String source,
+                                                     MemoryWriteRequest writeRequest,
+                                                     MemoryReviewApplyDirective directive) {
+        return new MemoryIngestionCommand(operationId, tenantId, source, writeRequest, directive);
     }
 
     private static String defaultOperationId(MemoryWriteRequest writeRequest) {

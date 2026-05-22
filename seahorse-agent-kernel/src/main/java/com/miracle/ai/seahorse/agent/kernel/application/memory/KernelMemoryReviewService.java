@@ -21,10 +21,12 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
@@ -141,7 +143,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                                              String source,
                                              String eventType) {
         String operationId = APPLY_OPERATION_PREFIX + current.candidateId();
-        MemoryIngestionResult result = ingestionWorkflowPort.ingest(new MemoryIngestionCommand(
+        MemoryIngestionResult result = ingestionWorkflowPort.ingest(MemoryIngestionCommand.reviewApply(
                 operationId,
                 current.tenantId(),
                 source,
@@ -150,7 +152,8 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                         .conversationId(current.conversationId())
                         .messageId(reviewMessageId(current))
                         .message(ChatMessage.user(content))
-                        .build()));
+                        .build(),
+                reviewDirective(current, command)));
         if (result == null || result.status() != MemoryIngestionStatus.ACCEPTED) {
             String reason = result == null ? "empty_result" : result.reason();
             recordTrace(eventType, MemoryTraceEvent.STATUS_FAILED, current, command, Map.of(
@@ -189,6 +192,40 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
             LOG.warn("Failed to record memory review feedback sample: {} ({})", pending.candidateId(),
                     ex.toString());
         }
+    }
+
+    private MemoryReviewApplyDirective reviewDirective(MemoryReviewRecord current,
+                                                       MemoryReviewDecisionCommand command) {
+        return new MemoryReviewApplyDirective(
+                requestedAction(current.requestedAction()),
+                current.targetLayer(),
+                current.targetKind(),
+                current.targetKey(),
+                current.confidence(),
+                current.importance(),
+                current.valueScore(),
+                current.riskScore(),
+                current.sourceMessageIds(),
+                mergedMetadata(current.metadata(), command.correctedMetadata()));
+    }
+
+    private MemoryIngestionAction requestedAction(String value) {
+        if (value == null || value.isBlank()) {
+            return MemoryIngestionAction.REVIEW;
+        }
+        try {
+            return MemoryIngestionAction.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return MemoryIngestionAction.REVIEW;
+        }
+    }
+
+    private Map<String, Object> mergedMetadata(Map<String, Object> candidateMetadata,
+                                               Map<String, Object> correctedMetadata) {
+        Map<String, Object> merged = new LinkedHashMap<>();
+        merged.putAll(Objects.requireNonNullElse(candidateMetadata, Map.of()));
+        merged.putAll(Objects.requireNonNullElse(correctedMetadata, Map.of()));
+        return merged;
     }
 
     private String feedbackSampleId(MemoryReviewRecord record) {

@@ -45,6 +45,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
@@ -1039,6 +1040,116 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldApplyReviewDirectiveTargetProfileSlotWithoutReclassification() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingProfileMemoryPort profileMemoryPort = new RecordingProfileMemoryPort();
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                profileMemoryPort,
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort);
+
+        var result = engine.ingest(MemoryIngestionCommand.reviewApply(
+                "op-review-apply",
+                "tenant-1",
+                "memory-review-modify",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-review-apply")
+                        .messageId("msg-review-apply")
+                        .message(ChatMessage.user("detailed answers"))
+                        .build(),
+                new MemoryReviewApplyDirective(
+                        MemoryIngestionAction.UPDATE,
+                        "SHORT_TERM",
+                        "PROFILE_SLOT",
+                        "preferences.response_style",
+                        0.91D,
+                        0.70D,
+                        0.80D,
+                        0.10D,
+                        List.of("msg-original"),
+                        Map.of("reviewReason", "manual_fix"))));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.UPDATE, result.action());
+        Assertions.assertTrue(result.operations().contains("SHORT_TERM_SAVE"));
+        Assertions.assertTrue(result.operations().contains("PROFILE_UPSERT"));
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        MemoryRecord saved = shortTermPort.savedRecords.get(0);
+        Assertions.assertEquals("SHORT_TERM", saved.layer());
+        Assertions.assertEquals("PROFILE_SLOT", saved.metadata().get("targetKind"));
+        Assertions.assertEquals("preferences.response_style", saved.metadata().get("targetKey"));
+        Assertions.assertEquals("UPDATE", saved.metadata().get("refinerAction"));
+        Assertions.assertEquals("review_applied", saved.metadata().get("refinerStatus"));
+        Assertions.assertEquals(1, profileMemoryPort.updates.size());
+        ProfileFactUpdate profileUpdate = profileMemoryPort.updates.get(0);
+        Assertions.assertEquals("preferences.response_style", profileUpdate.slotKey());
+        Assertions.assertEquals("detailed answers", profileUpdate.valueText());
+        Assertions.assertEquals(MemoryOperationType.UPDATE, operationLogPort.started.get(0).operationType());
+        Assertions.assertEquals("PROFILE_SLOT", operationLogPort.started.get(0).targetKind());
+        Assertions.assertEquals("preferences.response_style", operationLogPort.started.get(0).targetKey());
+    }
+
+    @Test
+    void shouldApplyReviewDirectiveTargetSemanticLayerWithoutReclassification() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        StubSemanticMemoryPort semanticPort = new StubSemanticMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                semanticPort,
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort);
+
+        var result = engine.ingest(MemoryIngestionCommand.reviewApply(
+                "op-review-semantic",
+                "tenant-1",
+                "memory-review-approve",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-review-semantic")
+                        .messageId("msg-review-semantic")
+                        .message(ChatMessage.user("project Seahorse uses a four-layer memory model"))
+                        .build(),
+                new MemoryReviewApplyDirective(
+                        MemoryIngestionAction.ADD,
+                        "SEMANTIC",
+                        "PROJECT_FACT",
+                        "project.memory.layers",
+                        0.93D,
+                        0.80D,
+                        0.85D,
+                        0.05D,
+                        List.of("msg-original"),
+                        Map.of("reviewReason", "stable_fact"))));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertTrue(result.operations().contains("SEMANTIC_SAVE"));
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(1, semanticPort.savedRecords.size());
+        MemoryRecord saved = semanticPort.savedRecords.get(0);
+        Assertions.assertEquals("SEMANTIC", saved.layer());
+        Assertions.assertEquals("PROJECT_FACT", saved.type());
+        Assertions.assertEquals("project.memory.layers", saved.metadata().get("targetKey"));
+        Assertions.assertEquals("review_applied", saved.metadata().get("refinerStatus"));
+        Assertions.assertEquals(MemoryOperationType.ADD, operationLogPort.started.get(0).operationType());
+        Assertions.assertEquals("PROJECT_FACT", operationLogPort.started.get(0).targetKind());
+        Assertions.assertEquals("project.memory.layers", operationLogPort.started.get(0).targetKey());
+    }
+
+    @Test
     void shouldEnqueueOutboxWhenVectorIndexingFailsWithoutRollingBackMemoryWrite() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
@@ -1438,6 +1549,7 @@ class DefaultMemoryEnginePortTests {
 
     private static class StubSemanticMemoryPort implements SemanticMemoryPort {
         private final List<MemoryRecord> records;
+        private final List<MemoryRecord> savedRecords = new java.util.ArrayList<>();
         private int lastListByUserLimit;
 
         StubSemanticMemoryPort(List<MemoryRecord> records) {
@@ -1462,6 +1574,7 @@ class DefaultMemoryEnginePortTests {
 
         @Override
         public void save(MemoryRecord record) {
+            savedRecords.add(record);
         }
 
         @Override

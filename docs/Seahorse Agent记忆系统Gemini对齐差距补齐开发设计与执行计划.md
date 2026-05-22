@@ -408,6 +408,7 @@ Verification:
 | G7 | Done | `InMemoryMemoryTraceRecorderTests`, `MemoryAggregationServiceTests`, `KernelMemoryReviewServiceTests`, `DefaultMemoryMaintenanceServiceTests`, `MemoryOutboxRelayServiceTests`, and `KernelMemoryObservabilityServiceTests` cover trace recorder behavior, aggregation/review/maintenance/outbox trace emission, and health trace summary. |
 | M5-write-index | Done | `DefaultMemoryEnginePortTests#shouldEnqueueDerivedIndexOutboxTasksWhenConfigured` and `SeahorseAgentKernelAutoConfigurationTests#shouldEnqueueDerivedIndexTasksFromMemoryEngineOnlyWhenIndexPortsExist` cover main ADD writes enqueueing `KEYWORD_UPSERT` / `GRAPH_UPSERT` only when derived-index capability is explicitly available. |
 | M2-adapter-boundary | Done | `OpenAiCompatibleMemoryRefinerAutoConfigurationTests` and `SeahorseAgentKernelAutoConfigurationTests#shouldLeaveLlmMemoryRefinerRegistrationToAdapterAutoConfiguration` cover that OpenAI-compatible owns `LlmMemoryRefinerAdapter` auto-configuration while the kernel starter only consumes `MemoryRefinerPort`. |
+| M3-review-apply-directive | Done | `KernelMemoryReviewServiceTests` covers approve/modify passing `MemoryReviewApplyDirective`; `DefaultMemoryEnginePortTests#shouldApplyReviewDirectiveTargetProfileSlotWithoutReclassification` and `#shouldApplyReviewDirectiveTargetSemanticLayerWithoutReclassification` cover preserving `requestedAction`, `targetLayer`, `targetKind`, and `targetKey` during review apply. |
 
 ## Acceptance Matrix Against Original P0-P6
 

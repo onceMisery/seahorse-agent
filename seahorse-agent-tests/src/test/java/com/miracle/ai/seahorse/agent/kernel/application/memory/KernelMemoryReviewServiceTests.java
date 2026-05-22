@@ -33,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate
 import org.junit.jupiter.api.Test;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 
@@ -73,6 +74,12 @@ class KernelMemoryReviewServiceTests {
         assertThat(command.writeRequest().messageId()).isEqualTo("review-msg-1");
         assertThat(command.writeRequest().message().getRole()).isEqualTo(ChatRole.USER);
         assertThat(command.writeRequest().message().getContent()).isEqualTo("remember original project fact");
+        MemoryReviewApplyDirective directive = command.reviewApplyDirective();
+        assertThat(directive).isNotNull();
+        assertThat(directive.requestedAction().name()).isEqualTo("REVIEW");
+        assertThat(directive.targetLayer()).isEqualTo("SHORT_TERM");
+        assertThat(directive.targetKind()).isEqualTo("PROJECT_FACT");
+        assertThat(directive.targetKey()).isEqualTo("project.fact");
         assertThat(feedbackRepository.samples).hasSize(1);
         MemoryReviewFeedbackSample sample = feedbackRepository.samples.get(0);
         assertThat(sample.sampleId()).isEqualTo("memory-review-feedback-review-1");
@@ -106,6 +113,8 @@ class KernelMemoryReviewServiceTests {
         assertThat(workflow.commands.get(0).source()).isEqualTo("memory-review-modify");
         assertThat(workflow.commands.get(0).writeRequest().message().getContent())
                 .isEqualTo("remember corrected project fact");
+        assertThat(workflow.commands.get(0).reviewApplyDirective().metadata())
+                .containsEntry("reviewReason", "manual_fix");
         assertThat(feedbackRepository.samples).hasSize(1);
         assertThat(feedbackRepository.samples.get(0).rejectedContent()).isEqualTo("original");
         assertThat(feedbackRepository.samples.get(0).chosenContent()).isEqualTo("remember corrected project fact");
