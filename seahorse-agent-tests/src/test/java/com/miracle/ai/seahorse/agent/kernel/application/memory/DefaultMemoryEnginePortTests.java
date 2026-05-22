@@ -52,8 +52,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
@@ -1357,6 +1361,54 @@ class DefaultMemoryEnginePortTests {
         Assertions.assertEquals(List.of("ltm-existing"),
                 refinerPort.requests.get(0).stickyAnchors().stream()
                         .map(MemoryRefinementMemory::memoryId)
+                .toList());
+    }
+
+    @Test
+    void shouldPassRecentReviewFeedbackExamplesToRefiner() {
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.empty(
+                "no_refined_delta"));
+        RecordingMemoryReviewFeedbackRepository feedbackRepository = new RecordingMemoryReviewFeedbackRepository(
+                List.of(reviewFeedbackSample("feedback-1", MemoryReviewStatus.APPLIED)));
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                new StubShortTermMemoryPort(List.of()),
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                new MemoryEngineOptions(5, 3, 10, true, true, true),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                MemoryOperationLogPort.noop(),
+                MemoryVectorPort.noop(),
+                MemoryOutboxPort.noop(),
+                MemoryBusinessDocumentRetrieverPort.noop(),
+                MemoryLifecyclePort.noop(),
+                MemoryPolicyConfigPort.defaults(),
+                (MemoryRetrievalPipelinePort) null,
+                refinerPort,
+                MemoryReviewCandidatePort.noop(),
+                MemoryAliasPort.noop(),
+                MemoryReviewPolicyPort.defaults(),
+                feedbackRepository);
+
+        engine.ingest(new MemoryIngestionCommand("op-refiner-feedback", "default", "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-feedback")
+                        .messageId("msg-refiner-feedback")
+                        .message(ChatMessage.user("Actually keep OceanBase as the project database."))
+                        .build()));
+
+        Assertions.assertEquals(1, feedbackRepository.queries.size());
+        MemoryReviewFeedbackQuery query = feedbackRepository.queries.get(0);
+        Assertions.assertEquals("default", query.tenantId());
+        Assertions.assertEquals(USER_ID, query.userId());
+        Assertions.assertEquals(3, query.limit());
+        Assertions.assertEquals(1, refinerPort.requests.size());
+        Assertions.assertEquals(List.of("feedback-1"),
+                refinerPort.requests.get(0).feedbackExamples().stream()
+                        .map(MemoryReviewFeedbackSample::sampleId)
                         .toList());
     }
 
@@ -2419,6 +2471,30 @@ class DefaultMemoryEnginePortTests {
         return builder.toString();
     }
 
+    private MemoryReviewFeedbackSample reviewFeedbackSample(String sampleId, MemoryReviewStatus status) {
+        return new MemoryReviewFeedbackSample(
+                sampleId,
+                "review-" + sampleId,
+                "op-" + sampleId,
+                "default",
+                USER_ID,
+                MemoryIngestionAction.ADD.name(),
+                status,
+                "reviewer-1",
+                "Prefer the corrected database fact.",
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.database",
+                "User's project uses MySQL.",
+                "User's project uses OceanBase.",
+                Map.of("model", "old-refiner"),
+                Map.of("reviewReason", "manual_fix"),
+                List.of("msg-review-feedback"),
+                "stm-feedback",
+                "SHORT_TERM",
+                Instant.now());
+    }
+
     private static class StubShortTermMemoryPort implements ShortTermMemoryPort {
         private final List<MemoryRecord> records;
         private final List<MemoryRecord> savedRecords = new java.util.ArrayList<>();
@@ -2674,6 +2750,31 @@ class DefaultMemoryEnginePortTests {
         @Override
         public void save(MemoryReviewCandidate candidate) {
             candidates.add(candidate);
+        }
+    }
+
+    private static class RecordingMemoryReviewFeedbackRepository implements MemoryReviewFeedbackRepositoryPort {
+
+        private final List<MemoryReviewFeedbackSample> samples;
+        private final List<MemoryReviewFeedbackQuery> queries = new ArrayList<>();
+
+        RecordingMemoryReviewFeedbackRepository(List<MemoryReviewFeedbackSample> samples) {
+            this.samples = samples;
+        }
+
+        @Override
+        public void save(MemoryReviewFeedbackSample sample) {
+        }
+
+        @Override
+        public List<MemoryReviewFeedbackSample> listByCandidate(String candidateId, int limit) {
+            return List.of();
+        }
+
+        @Override
+        public List<MemoryReviewFeedbackSample> listSamples(MemoryReviewFeedbackQuery query) {
+            queries.add(query);
+            return samples.stream().limit(query.limit()).toList();
         }
     }
 

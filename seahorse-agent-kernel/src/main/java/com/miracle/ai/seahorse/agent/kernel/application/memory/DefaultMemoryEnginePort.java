@@ -54,8 +54,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
@@ -142,6 +146,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final int REFINER_READ_MASK_PER_LAYER_LIMIT = 3;
     private static final int REFINER_TARGET_ZONE_TURN_COUNT = 3;
     private static final int REFINER_STICKY_ANCHOR_LIMIT = 5;
+    private static final int REFINER_FEEDBACK_EXAMPLE_LIMIT = 3;
     private static final double REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD = 0.85D;
     private static final double REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD = 0.90D;
     private static final Pattern CONTEXT_TURN_HEADER_PATTERN = Pattern.compile("\\bturn_\\d+:");
@@ -211,6 +216,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryReviewCandidatePort memoryReviewCandidatePort;
     private final MemoryAliasPort memoryAliasPort;
     private final MemoryReviewPolicyPort memoryReviewPolicyPort;
+    private final MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort;
     private final MemorySanitizer memorySanitizer;
     private final MemoryPreFilter memoryPreFilter;
     private final MemorySemanticClassifier memorySemanticClassifier;
@@ -458,6 +464,33 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryReviewCandidatePort memoryReviewCandidatePort,
                                    MemoryAliasPort memoryAliasPort,
                                    MemoryReviewPolicyPort memoryReviewPolicyPort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
+                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
+                businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort,
+                memoryRetrievalPipelinePort, memoryRefinerPort, memoryReviewCandidatePort, memoryAliasPort,
+                memoryReviewPolicyPort, MemoryReviewFeedbackRepositoryPort.empty());
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort,
+                                   MemoryVectorPort memoryVectorPort,
+                                   MemoryOutboxPort memoryOutboxPort,
+                                   MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                   MemoryLifecyclePort memoryLifecyclePort,
+                                   MemoryPolicyConfigPort memoryPolicyConfigPort,
+                                   MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
+                                   MemoryRefinerPort memoryRefinerPort,
+                                   MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                   MemoryAliasPort memoryAliasPort,
+                                   MemoryReviewPolicyPort memoryReviewPolicyPort,
+                                   MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -497,6 +530,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.memoryAliasPort = Objects.requireNonNullElseGet(memoryAliasPort, MemoryAliasPort::noop);
         this.memoryReviewPolicyPort = Objects.requireNonNullElseGet(memoryReviewPolicyPort,
                 MemoryReviewPolicyPort::defaults);
+        this.memoryReviewFeedbackRepositoryPort = Objects.requireNonNullElseGet(memoryReviewFeedbackRepositoryPort,
+                MemoryReviewFeedbackRepositoryPort::empty);
         this.memorySanitizer = new MemorySanitizer();
         this.memoryPreFilter = new MemoryPreFilter();
         this.memorySemanticClassifier = new MemorySemanticClassifier(captureCandidateExtractor, memoryValueAssessor);
@@ -955,6 +990,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         try {
             List<MemoryRefinementMemory> existingMemories = currentExistingMemories(request.userId());
             MemoryRefinementContextZones contextZones = refinementContextZones(sanitizedContent);
+            List<MemoryReviewFeedbackSample> feedbackExamples = recentReviewFeedbackExamples(tenantId, request.userId());
             MemoryRefinementResult result = memoryRefinerPort.refine(new MemoryRefinementRequest(
                     operationId,
                     tenantId,
@@ -970,7 +1006,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     existingMemories,
                     contextZones.referenceZone(),
                     contextZones.targetZone(),
-                    stickyAnchors(existingMemories)));
+                    stickyAnchors(existingMemories),
+                    feedbackExamples));
             return applyRefinementResult(result, baseline, contextZones);
         } catch (RuntimeException ex) {
             if (!options.refinerFailOpen()) {
@@ -994,6 +1031,35 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     "failed_open:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()),
                     Map.of("status", "failed_open"));
         }
+    }
+
+    private List<MemoryReviewFeedbackSample> recentReviewFeedbackExamples(String tenantId, String userId) {
+        if (isBlank(userId)) {
+            return List.of();
+        }
+        try {
+            List<MemoryReviewFeedbackSample> samples = memoryReviewFeedbackRepositoryPort.listSamples(
+                    new MemoryReviewFeedbackQuery(
+                            tenantId,
+                            userId,
+                            null,
+                            "",
+                            "",
+                            REFINER_FEEDBACK_EXAMPLE_LIMIT));
+            return samples.stream()
+                    .filter(this::isResolvedFeedbackSample)
+                    .limit(REFINER_FEEDBACK_EXAMPLE_LIMIT)
+                    .toList();
+        } catch (RuntimeException ex) {
+            LOG.debug("load refiner review-feedback examples failed: tenantId={}, userId={}", tenantId, userId, ex);
+            return List.of();
+        }
+    }
+
+    private boolean isResolvedFeedbackSample(MemoryReviewFeedbackSample sample) {
+        return sample != null
+                && (sample.reviewStatus() == MemoryReviewStatus.APPLIED
+                || sample.reviewStatus() == MemoryReviewStatus.REJECTED);
     }
 
     private List<MemoryRefinementMemory> currentExistingMemories(String userId) {

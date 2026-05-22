@@ -36,7 +36,8 @@ public record MemoryRefinementRequest(
         List<MemoryRefinementMemory> existingMemories,
         String referenceZone,
         String targetZone,
-        List<MemoryRefinementMemory> stickyAnchors
+        List<MemoryRefinementMemory> stickyAnchors,
+        List<MemoryReviewFeedbackSample> feedbackExamples
 ) {
 
     private static final String DEFAULT_TENANT_ID = "default";
@@ -57,6 +58,40 @@ public record MemoryRefinementRequest(
         referenceZone = Objects.requireNonNullElse(referenceZone, "");
         targetZone = Objects.requireNonNullElse(targetZone, "");
         stickyAnchors = List.copyOf(Objects.requireNonNullElse(stickyAnchors, List.of()));
+        feedbackExamples = List.copyOf(Objects.requireNonNullElse(feedbackExamples, List.of()));
+    }
+
+    public MemoryRefinementRequest(String operationId,
+                                   String tenantId,
+                                   String source,
+                                   String userId,
+                                   String conversationId,
+                                   String messageId,
+                                   String sanitizedContent,
+                                   MemoryIngestionAction baselineAction,
+                                   String baselineMemoryType,
+                                   String baselineReason,
+                                   Map<String, Object> baselineDetails,
+                                   List<MemoryRefinementMemory> existingMemories,
+                                   String referenceZone,
+                                   String targetZone,
+                                   List<MemoryRefinementMemory> stickyAnchors) {
+        this(operationId,
+                tenantId,
+                source,
+                userId,
+                conversationId,
+                messageId,
+                sanitizedContent,
+                baselineAction,
+                baselineMemoryType,
+                baselineReason,
+                baselineDetails,
+                existingMemories,
+                referenceZone,
+                targetZone,
+                stickyAnchors,
+                List.of());
     }
 
     public MemoryRefinementRequest(String operationId,
@@ -85,6 +120,7 @@ public record MemoryRefinementRequest(
                 existingMemories,
                 "",
                 "",
+                List.of(),
                 List.of());
     }
 
@@ -113,6 +149,7 @@ public record MemoryRefinementRequest(
                 List.of(),
                 "",
                 "",
+                List.of(),
                 List.of());
     }
 
