@@ -186,4 +186,51 @@ class JdbcMemoryKeywordIndexRepositoryAdapterTests {
                 .containsExactly("memory-pip", "memory-seatunnel");
         assertThat(hits.get(0).score()).isGreaterThan(hits.get(1).score());
     }
+
+    @Test
+    void shouldRankRareExactKeywordAboveFrequentCommonTerm() {
+        Instant indexedAt = Instant.parse("2026-05-22T08:00:00Z");
+        adapter.upsert(new MemoryDerivedIndexDocument(
+                "z-rare-pip",
+                "user-1",
+                "tenant-1",
+                "LONG_TERM",
+                "PROJECT_FACT",
+                "Pulsar PIP-459 compatibility rollback note",
+                Map.of("semanticKey", "project:pulsar-pip"),
+                indexedAt));
+        adapter.upsert(new MemoryDerivedIndexDocument(
+                "a-common-seatunnel",
+                "user-1",
+                "tenant-1",
+                "LONG_TERM",
+                "PROJECT_FACT",
+                "SeaTunnel connector deployment note",
+                Map.of("semanticKey", "project:seatunnel-a"),
+                indexedAt.plusSeconds(10)));
+        adapter.upsert(new MemoryDerivedIndexDocument(
+                "b-common-seatunnel",
+                "user-1",
+                "tenant-1",
+                "LONG_TERM",
+                "PROJECT_FACT",
+                "SeaTunnel CDC connector rollout",
+                Map.of("semanticKey", "project:seatunnel-b"),
+                indexedAt.plusSeconds(20)));
+        adapter.upsert(new MemoryDerivedIndexDocument(
+                "c-common-seatunnel",
+                "user-1",
+                "tenant-1",
+                "LONG_TERM",
+                "PROJECT_FACT",
+                "SeaTunnel pipeline monitoring checklist",
+                Map.of("semanticKey", "project:seatunnel-c"),
+                indexedAt.plusSeconds(30)));
+
+        var hits = searchAdapter.search("user-1", "tenant-1", "PIP-459 SeaTunnel", 3);
+
+        assertThat(hits).extracting(MemoryKeywordSearchPort.MemoryKeywordHit::memoryId)
+                .startsWith("z-rare-pip");
+        assertThat(hits.get(0).score()).isGreaterThan(hits.get(1).score());
+    }
 }
