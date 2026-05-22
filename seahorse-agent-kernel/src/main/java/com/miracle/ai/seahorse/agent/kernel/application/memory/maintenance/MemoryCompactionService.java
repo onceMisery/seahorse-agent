@@ -106,7 +106,7 @@ public class MemoryCompactionService {
 
     private List<MemoryCompactionCandidate> scan(List<String> errors) {
         try {
-            return compactionPort.scanCandidates(options.scanLimit());
+            return compactionPort.scanCandidates(options.scanLimit(), options.minGroupSize());
         } catch (RuntimeException ex) {
             errors.add("scan:" + errorMessage(ex));
             return List.of();

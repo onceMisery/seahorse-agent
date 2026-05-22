@@ -263,6 +263,11 @@ public class JdbcMemoryLifecycleRepositoryAdapter
         return scanCompactionCandidates(limit, DEFAULT_COMPACTION_MIN_GROUP_SIZE);
     }
 
+    @Override
+    public List<MemoryCompactionCandidate> scanCandidates(int limit, int minGroupSize) {
+        return scanCompactionCandidates(limit, minGroupSize);
+    }
+
     public List<MemoryCompactionCandidate> scanCompactionCandidates(int limit, int minGroupSize) {
         int safeLimit = limit <= 0 ? DEFAULT_SCAN_LIMIT : limit;
         int safeMinGroupSize = minGroupSize <= 1 ? DEFAULT_COMPACTION_MIN_GROUP_SIZE : minGroupSize;

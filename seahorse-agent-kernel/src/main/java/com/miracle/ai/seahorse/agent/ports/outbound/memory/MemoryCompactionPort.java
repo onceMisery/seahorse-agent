@@ -24,6 +24,10 @@ public interface MemoryCompactionPort {
 
     List<MemoryCompactionCandidate> scanCandidates(int limit);
 
+    default List<MemoryCompactionCandidate> scanCandidates(int limit, int minGroupSize) {
+        return scanCandidates(limit);
+    }
+
     int markCompacted(MemoryCompactionCandidate candidate, String masterMemoryId, Instant compactedAt);
 
     static MemoryCompactionPort noop() {

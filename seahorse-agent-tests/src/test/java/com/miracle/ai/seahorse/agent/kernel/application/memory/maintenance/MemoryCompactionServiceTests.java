@@ -153,14 +153,39 @@ class MemoryCompactionServiceTests {
                         "importanceScore", 0.91D));
     }
 
+    @Test
+    void shouldPassConfiguredMinGroupSizeToCompactionPortScan() {
+        RecordingCompactionPort compactionPort = new RecordingCompactionPort();
+        MemoryCompactionService service = new MemoryCompactionService(
+                compactionPort,
+                new RecordingLongTermMemoryPort(),
+                new RecordingOutboxPort(),
+                new MemoryCompactionOptions(25, 5, false, false, false, "default"));
+
+        MemoryCompactionResult result = service.run("scheduled-maintenance");
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(compactionPort.requestedLimit).isEqualTo(25);
+        assertThat(compactionPort.requestedMinGroupSize).isEqualTo(5);
+    }
+
     private static class RecordingCompactionPort implements MemoryCompactionPort {
 
         final List<MemoryCompactionCandidate> candidates = new ArrayList<>();
         final List<String> markedMasterIds = new ArrayList<>();
+        int requestedLimit;
+        int requestedMinGroupSize;
 
         @Override
         public List<MemoryCompactionCandidate> scanCandidates(int limit) {
             return candidates.stream().limit(limit).toList();
+        }
+
+        @Override
+        public List<MemoryCompactionCandidate> scanCandidates(int limit, int minGroupSize) {
+            requestedLimit = limit;
+            requestedMinGroupSize = minGroupSize;
+            return scanCandidates(limit);
         }
 
         @Override
