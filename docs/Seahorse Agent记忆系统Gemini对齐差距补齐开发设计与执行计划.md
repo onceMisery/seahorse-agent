@@ -406,6 +406,7 @@ Verification:
 | G5 | Done | `DefaultMemoryEnginePortTests#shouldWriteProfileFactsForNameTechStackAndResponseStyle` verifies `identity.name`, `skills.tech_stack`, and `preferences.response_style` Profile slot writes. |
 | G6 | Done | `KernelMemoryObservabilityServiceTests` covers outbox backlog, schema failure, Profile completeness, and `memory.profile.low-completeness` alerts. |
 | G7 | Done | `InMemoryMemoryTraceRecorderTests`, `MemoryAggregationServiceTests`, `KernelMemoryReviewServiceTests`, `DefaultMemoryMaintenanceServiceTests`, `MemoryOutboxRelayServiceTests`, and `KernelMemoryObservabilityServiceTests` cover trace recorder behavior, aggregation/review/maintenance/outbox trace emission, and health trace summary. |
+| M5-write-index | Done | `DefaultMemoryEnginePortTests#shouldEnqueueDerivedIndexOutboxTasksWhenConfigured` and `SeahorseAgentKernelAutoConfigurationTests#shouldEnqueueDerivedIndexTasksFromMemoryEngineOnlyWhenIndexPortsExist` cover main ADD writes enqueueing `KEYWORD_UPSERT` / `GRAPH_UPSERT` only when derived-index capability is explicitly available. |
 
 ## Acceptance Matrix Against Original P0-P6
 
@@ -419,3 +420,4 @@ Verification:
 | P5 生命周期治理 | Profile 历史状态和 vector lifecycle 字段补齐 |
 | P6 观测与策略 | Outbox、schema failure、Profile completeness、conflict density 进入 health/alert |
 | M7 观测、灰度与回滚 | `MemoryTraceRecorder` 作为可插拔 outbound port 接入，默认内存实现可被自定义 bean 覆盖；trace 只作为横向观测层，不改变四层记忆模型。 |
+| M5 派生索引补齐 | 主 ADD 写入路径通过 `MemoryEngineOptions` 和 Spring index-port presence gate 可选生成 keyword/graph upsert outbox；派生索引保持插件化，不进入四层记忆 source-of-truth。 |

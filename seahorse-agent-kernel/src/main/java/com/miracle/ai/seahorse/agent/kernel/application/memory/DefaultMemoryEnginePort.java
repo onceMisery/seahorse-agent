@@ -499,7 +499,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         if (captureProfileFact(request, tenantId, decision, profileSlot, profileGenerationId)) {
             operations.add("PROFILE_UPSERT");
         }
-        operations.add(indexMemoryOrEnqueueOutbox(record, request.userId(), tenantId));
+        operations.addAll(indexMemoryOrEnqueueOutbox(record, request.userId(), tenantId));
         return new IngestionExecution(MemoryIngestionResult.accepted(MemoryIngestionAction.ADD, operations, Map.of(
                 "memoryType", decision.type(),
                 "valueScore", decision.valueScore(),
@@ -508,10 +508,11 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 "captureSignals", decision.signals())), classification);
     }
 
-    private String indexMemoryOrEnqueueOutbox(MemoryRecord record, String userId, String tenantId) {
+    private List<String> indexMemoryOrEnqueueOutbox(MemoryRecord record, String userId, String tenantId) {
+        List<String> operations = new ArrayList<>();
         try {
             memoryVectorPort.upsert(record.id(), userId, record.content(), DEFAULT_VECTOR_EMBEDDING_MODEL);
-            return "VECTOR_UPSERT";
+            operations.add("VECTOR_UPSERT");
         } catch (RuntimeException ex) {
             LOG.warn("记忆向量索引失败，已转入outbox: memoryId={}, userId={}, error={}",
                     record.id(), userId, Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
@@ -521,7 +522,23 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     tenantId,
                     DEFAULT_VECTOR_EMBEDDING_MODEL,
                     Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
-            return "VECTOR_OUTBOX_ENQUEUE";
+            operations.add("VECTOR_OUTBOX_ENQUEUE");
+        }
+        enqueueOptionalDerivedIndex(record, userId, tenantId, operations);
+        return operations;
+    }
+
+    private void enqueueOptionalDerivedIndex(MemoryRecord record,
+                                             String userId,
+                                             String tenantId,
+                                             List<String> operations) {
+        if (options.keywordIndexOutboxEnabled()) {
+            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.keywordUpsert(record, userId, tenantId));
+            operations.add("KEYWORD_OUTBOX_ENQUEUE");
+        }
+        if (options.graphIndexOutboxEnabled()) {
+            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.graphUpsert(record, userId, tenantId));
+            operations.add("GRAPH_OUTBOX_ENQUEUE");
         }
     }
 

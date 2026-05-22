@@ -261,13 +261,17 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryRetrievalPipelinePort> memoryRetrievalPipelinePort,
             ObjectProvider<MemoryRefinerPort> memoryRefinerPort,
             ObjectProvider<MemoryReviewCandidatePort> memoryReviewCandidatePort,
+            ObjectProvider<MemoryKeywordIndexPort> memoryKeywordIndexPort,
+            ObjectProvider<MemoryGraphIndexPort> memoryGraphIndexPort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
             @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
             @Value("${seahorse-agent.memory.semantic-limit:10}") int semanticLimit,
             @Value("${seahorse-agent.memory.capture-enabled:true}") boolean captureEnabled,
             @Value("${seahorse-agent.memory.refiner.enabled:false}") boolean refinerEnabled,
-            @Value("${seahorse-agent.memory.refiner.fail-open:true}") boolean refinerFailOpen) {
+            @Value("${seahorse-agent.memory.refiner.fail-open:true}") boolean refinerFailOpen,
+            @Value("${seahorse-agent.memory.derived-index.keyword-enabled:true}") boolean keywordIndexOutboxEnabled,
+            @Value("${seahorse-agent.memory.derived-index.graph-enabled:true}") boolean graphIndexOutboxEnabled) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         MemoryEngineOptions options = new MemoryEngineOptions(
                 shortTermLimit,
@@ -275,7 +279,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 semanticLimit,
                 captureEnabled,
                 refinerEnabled,
-                refinerFailOpen);
+                refinerFailOpen,
+                keywordIndexOutboxEnabled && memoryKeywordIndexPort.getIfAvailable() != null,
+                graphIndexOutboxEnabled && memoryGraphIndexPort.getIfAvailable() != null);
         return new DefaultMemoryEnginePort(
                 shortTermMemoryPort,
                 longTermMemoryPort,

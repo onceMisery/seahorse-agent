@@ -1072,6 +1072,43 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldEnqueueDerivedIndexOutboxTasksWhenConfigured() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                new MemoryEngineOptions(5, 3, 10, true, false, true, true, true),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                MemoryOperationLogPort.noop(),
+                new RecordingMemoryVectorPort(List.of()),
+                outboxPort,
+                MemoryBusinessDocumentRetrieverPort.noop());
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-derived-index", "default", "chat-completed",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-derived-index")
+                        .messageId("msg-derived-index")
+                        .message(ChatMessage.user("请记住：我喜欢简短回答"))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(1, shortTermPort.savedRecords.size());
+        Assertions.assertTrue(result.operations().contains("VECTOR_UPSERT"));
+        Assertions.assertTrue(result.operations().contains("KEYWORD_OUTBOX_ENQUEUE"));
+        Assertions.assertTrue(result.operations().contains("GRAPH_OUTBOX_ENQUEUE"));
+        Assertions.assertEquals(List.of("KEYWORD_UPSERT", "GRAPH_UPSERT"),
+                outboxPort.tasks.stream().map(MemoryOutboxPort.MemoryOutboxTask::taskType).toList());
+        Assertions.assertEquals(shortTermPort.savedRecords.get(0).id(), outboxPort.tasks.get(0).targetId());
+        Assertions.assertEquals(shortTermPort.savedRecords.get(0).id(), outboxPort.tasks.get(1).targetId());
+    }
+
+    @Test
     void shouldRecallVectorHitMemoriesAndFilterObsoleteProfileGeneration() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(
                 semanticRecord("stm-old-profile", "PROFILE", "我是一名学生", 0.9D,

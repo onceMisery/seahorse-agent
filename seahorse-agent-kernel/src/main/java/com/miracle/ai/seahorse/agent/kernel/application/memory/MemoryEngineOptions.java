@@ -28,7 +28,9 @@ public record MemoryEngineOptions(int shortTermLimit,
                                   int semanticLimit,
                                   boolean captureEnabled,
                                   boolean refinerEnabled,
-                                  boolean refinerFailOpen) {
+                                  boolean refinerFailOpen,
+                                  boolean keywordIndexOutboxEnabled,
+                                  boolean graphIndexOutboxEnabled) {
 
     public static final int DEFAULT_SHORT_TERM_LIMIT = 5;
     public static final int DEFAULT_LONG_TERM_LIMIT = 3;
@@ -43,8 +45,18 @@ public record MemoryEngineOptions(int shortTermLimit,
     public MemoryEngineOptions(int shortTermLimit,
                                int longTermLimit,
                                int semanticLimit,
+                               boolean captureEnabled,
+                               boolean refinerEnabled,
+                               boolean refinerFailOpen) {
+        this(shortTermLimit, longTermLimit, semanticLimit, captureEnabled, refinerEnabled, refinerFailOpen,
+                false, false);
+    }
+
+    public MemoryEngineOptions(int shortTermLimit,
+                               int longTermLimit,
+                               int semanticLimit,
                                boolean captureEnabled) {
-        this(shortTermLimit, longTermLimit, semanticLimit, captureEnabled, false, true);
+        this(shortTermLimit, longTermLimit, semanticLimit, captureEnabled, false, true, false, false);
     }
 
     public static MemoryEngineOptions defaults() {
@@ -54,7 +66,9 @@ public record MemoryEngineOptions(int shortTermLimit,
                 DEFAULT_SEMANTIC_LIMIT,
                 true,
                 false,
-                true);
+                true,
+                false,
+                false);
     }
 
     private static int positive(int value, int fallback) {

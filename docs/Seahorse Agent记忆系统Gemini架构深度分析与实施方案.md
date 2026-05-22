@@ -1582,7 +1582,10 @@ flowchart TD
 - `MemoryVectorPort` 已扩展 `delete(memoryId, userId, tenantId)`：默认实现显式抛出 unsupported，避免真实 adapter 未实现删除时被误判成功；`MemoryVectorPort.noop()` 覆盖为空操作，用于未接入向量派生索引的安全降级。
 - Spring 自动配置默认注册 vector upsert/delete handler；keyword/graph handler 只在对应 index port 存在时注册，不注册 noop handler，避免任务被错误标记成功。
 - `MemoryOutboxPort.MemoryOutboxTask` 已提供 `vectorDelete()`、`keywordUpsert()`、`keywordDelete()`、`graphUpsert()`、`graphDelete()`。
-- 仍未完成：真实 Lucene/Elasticsearch keyword index adapter、Graph index adapter，以及所有写入/审核路径上的全量派生索引 enqueue。当前 M5 已完成的是 outbox 协议和 handler 扩展点；压缩路径已在 M6 第一版接入 master upsert 与 fragment delete outbox。
+- 主 ADD 写入路径已补齐可插拔派生索引入队：`DefaultMemoryEnginePort` 仍同步尝试 `MemoryVectorPort.upsert()`，失败时按旧逻辑生成 `VECTOR_UPSERT` 补偿；当 `MemoryEngineOptions.keywordIndexOutboxEnabled()` / `graphIndexOutboxEnabled()` 打开时，会为同一四层源记录额外生成 `KEYWORD_UPSERT`、`GRAPH_UPSERT` outbox task。
+- Spring 自动配置只在 `MemoryKeywordIndexPort` / `MemoryGraphIndexPort` bean 存在，且 `seahorse-agent.memory.derived-index.keyword-enabled` / `graph-enabled` 未关闭时打开主写入派生索引入队。这样普通部署不会堆积无人消费的 keyword/graph 任务；接入 Lucene/Elasticsearch 或 Graph adapter 后，主写入会自动进入多路召回的最终一致索引链路。
+- 该能力不新增第五层记忆：`KEYWORD_UPSERT`、`GRAPH_UPSERT` 只是 `SHORT_TERM`/`LONG_TERM`/`SEMANTIC` 源记录的派生索引同步任务，source of truth 仍是四层记忆和 Profile/Correction 强事实投影。
+- 仍未完成：真实 Lucene/Elasticsearch keyword index adapter，以及审核 approve/modify 写入路径上的全量派生索引 enqueue。当前 M5 已完成的是 outbox 协议、handler 扩展点、主 ADD 写入入队和 compaction master/fragment 入队；真实 adapter 与 review apply 派生索引闭环继续作为后续差距。
 
 ### Phase M6：Compaction、Alias、GC 自动维护
 

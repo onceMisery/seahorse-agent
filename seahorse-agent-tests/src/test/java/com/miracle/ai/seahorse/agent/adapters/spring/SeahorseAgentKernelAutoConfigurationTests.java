@@ -580,6 +580,33 @@ class SeahorseAgentKernelAutoConfigurationTests {
     }
 
     @Test
+    void shouldEnqueueDerivedIndexTasksFromMemoryEngineOnlyWhenIndexPortsExist() {
+        contextRunner.withUserConfiguration(
+                        MemoryStorePortsConfiguration.class,
+                        MemoryOutboxConfiguration.class,
+                        MemoryDerivedIndexConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    MemoryEnginePort memoryEnginePort = context.getBean(MemoryEnginePort.class);
+                    RecordingMemoryOutboxPort outboxPort = context.getBean(RecordingMemoryOutboxPort.class);
+                    org.mockito.Mockito.when(context.getBean(MemoryOperationLogPort.class)
+                                    .tryStart(org.mockito.ArgumentMatchers.any()))
+                            .thenReturn(true);
+
+                    memoryEnginePort.writeMemory(MemoryWriteRequest.builder()
+                            .userId("user-derived-index")
+                            .conversationId("conv-derived-index")
+                            .messageId("msg-derived-index")
+                            .message(ChatMessage.user("请记住：我喜欢简短回答"))
+                            .build());
+
+                    assertThat(outboxPort.tasks)
+                            .extracting(MemoryOutboxPort.MemoryOutboxTask::taskType)
+                            .containsExactly("KEYWORD_UPSERT", "GRAPH_UPSERT");
+                });
+    }
+
+    @Test
     void shouldRegisterHybridMemoryRecallPipelineOnlyWhenEnabled() {
         contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class)
                 .withPropertyValues(
@@ -1131,8 +1158,8 @@ class SeahorseAgentKernelAutoConfigurationTests {
     static class MemoryOutboxConfiguration {
 
         @Bean
-        MemoryOutboxPort memoryOutboxPort() {
-            return MemoryOutboxPort.noop();
+        RecordingMemoryOutboxPort memoryOutboxPort() {
+            return new RecordingMemoryOutboxPort(List.of());
         }
 
         @Bean
