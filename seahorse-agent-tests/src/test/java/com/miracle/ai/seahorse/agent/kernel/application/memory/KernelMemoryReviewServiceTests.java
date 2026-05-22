@@ -174,6 +174,42 @@ class KernelMemoryReviewServiceTests {
     }
 
     @Test
+    void shouldListFeedbackSamplesForReviewCandidate() {
+        RecordingReviewFeedbackRepository feedbackRepository = new RecordingReviewFeedbackRepository();
+        feedbackRepository.save(new MemoryReviewFeedbackSample(
+                "sample-1",
+                "review-1",
+                "op-1",
+                "tenant-1",
+                "user-1",
+                "REVIEW",
+                MemoryReviewStatus.APPLIED,
+                "auditor",
+                "approved",
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.fact",
+                "old",
+                "chosen",
+                Map.of(),
+                Map.of("reviewReason", "human"),
+                List.of("msg-1"),
+                "memory-1",
+                "SHORT_TERM",
+                Instant.EPOCH));
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                new InMemoryReviewRepository(),
+                new RecordingIngestionWorkflow(MemoryIngestionResult.ignored("noop")),
+                feedbackRepository);
+
+        List<MemoryReviewFeedbackSample> samples = service.listFeedbackSamples("review-1", 5);
+
+        assertThat(samples).hasSize(1);
+        assertThat(samples.get(0).sampleId()).isEqualTo("sample-1");
+        assertThat(samples.get(0).chosenMetadata()).containsEntry("reviewReason", "human");
+    }
+
+    @Test
     void shouldRecordTraceEventsForReviewDecisions() {
         InMemoryReviewRepository repository = new InMemoryReviewRepository();
         repository.put(review("review-1", MemoryReviewStatus.PENDING, "original"));

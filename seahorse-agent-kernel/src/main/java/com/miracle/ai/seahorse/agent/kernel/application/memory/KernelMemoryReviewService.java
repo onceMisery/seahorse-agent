@@ -40,9 +40,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.LinkedHashMap;
 
 public class KernelMemoryReviewService implements MemoryReviewInboundPort {
 
@@ -135,6 +136,13 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 "reviewStatus", rejected.reviewStatus().name()));
         recordFeedback(current, rejected);
         return rejected;
+    }
+
+    @Override
+    public List<MemoryReviewFeedbackSample> listFeedbackSamples(String candidateId, int limit) {
+        return feedbackRepositoryPort.listByCandidate(
+                requireText(candidateId, "candidateId"),
+                limit > 0 ? limit : 20);
     }
 
     private MemoryReviewRecord applyAccepted(MemoryReviewRecord current,

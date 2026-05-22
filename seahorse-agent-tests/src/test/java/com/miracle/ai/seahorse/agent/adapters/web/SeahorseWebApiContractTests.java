@@ -108,6 +108,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunR
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
@@ -1260,6 +1261,8 @@ class SeahorseWebApiContractTests {
                 .thenReturn(memoryReview("review-1", MemoryReviewStatus.APPLIED));
         when(reviewPort.reject(eq("review-1"), any()))
                 .thenReturn(memoryReview("review-1", MemoryReviewStatus.REJECTED));
+        when(reviewPort.listFeedbackSamples("review-1", 5))
+                .thenReturn(List.of(memoryReviewFeedback("sample-1", "review-1")));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMemoryReviewController(provider(MemoryReviewInboundPort.class, reviewPort))).build();
@@ -1300,6 +1303,12 @@ class SeahorseWebApiContractTests {
                         .content(json(Map.of("comment", "reject"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reviewStatus").value("REJECTED"));
+        mvc.perform(get("/memory-review/items/review-1/feedback-samples")
+                        .param("limit", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].sampleId").value("sample-1"))
+                .andExpect(jsonPath("$.data[0].candidateId").value("review-1"))
+                .andExpect(jsonPath("$.data[0].chosenMetadata.reviewReason").value("human"));
     }
 
     @Test
@@ -1795,6 +1804,30 @@ class SeahorseWebApiContractTests {
                 MemoryReviewStatus.APPLIED.equals(status) ? "memory-review-apply-review-1" : "",
                 MemoryReviewStatus.APPLIED.equals(status) ? "SHORT_TERM" : "",
                 Instant.EPOCH,
+                Instant.EPOCH);
+    }
+
+    private static MemoryReviewFeedbackSample memoryReviewFeedback(String id, String candidateId) {
+        return new MemoryReviewFeedbackSample(
+                id,
+                candidateId,
+                "op-1",
+                "default",
+                "user-1",
+                "REVIEW",
+                MemoryReviewStatus.APPLIED,
+                "auditor",
+                "approved",
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.ambiguous",
+                "candidate content",
+                "chosen content",
+                Map.of("reviewReason", "low_confidence"),
+                Map.of("reviewReason", "human"),
+                List.of("msg-1"),
+                "memory-review-apply-review-1",
+                "SHORT_TERM",
                 Instant.EPOCH);
     }
 

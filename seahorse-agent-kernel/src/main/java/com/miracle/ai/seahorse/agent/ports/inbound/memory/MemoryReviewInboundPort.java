@@ -18,8 +18,11 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
+
+import java.util.List;
 
 public interface MemoryReviewInboundPort {
 
@@ -38,4 +41,6 @@ public interface MemoryReviewInboundPort {
     MemoryReviewRecord modify(String candidateId, MemoryReviewDecisionCommand command);
 
     MemoryReviewRecord reject(String candidateId, MemoryReviewDecisionCommand command);
+
+    List<MemoryReviewFeedbackSample> listFeedbackSamples(String candidateId, int limit);
 }
