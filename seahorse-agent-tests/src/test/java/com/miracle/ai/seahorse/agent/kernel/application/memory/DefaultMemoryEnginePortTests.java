@@ -1847,6 +1847,50 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldRejectReviewDirectiveWorkingLayerWithoutShortTermFallback() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort);
+
+        var result = engine.ingest(MemoryIngestionCommand.reviewApply(
+                "op-review-working-layer",
+                "tenant-1",
+                "memory-review-approve",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-review-working-layer")
+                        .messageId("msg-review-working-layer")
+                        .message(ChatMessage.user("transient working context"))
+                        .build(),
+                new MemoryReviewApplyDirective(
+                        MemoryIngestionAction.ADD,
+                        "WORKING",
+                        "PROJECT_FACT",
+                        "project.transient",
+                        0.93D,
+                        0.80D,
+                        0.85D,
+                        0.05D,
+                        List.of("msg-original"),
+                        Map.of())));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals("invalid_review_target_layer", result.reason());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(MemoryOperationStatus.REJECTED,
+                operationLogPort.statusById.get("op-review-working-layer"));
+    }
+
+    @Test
     void shouldApplyReviewDirectiveDeleteTargetMemoryAndDerivedIndexes() {
         MemoryRecord existing = new MemoryRecord(
                 "stm-old-memory",
@@ -1908,6 +1952,62 @@ class DefaultMemoryEnginePortTests {
         Assertions.assertEquals("stm-old-memory", operationLogPort.started.get(0).targetKey());
         Assertions.assertEquals(MemoryOperationStatus.SUCCEEDED,
                 operationLogPort.statusById.get("op-review-delete"));
+    }
+
+    @Test
+    void shouldRejectReviewDirectiveDeleteWorkingLayerWithoutShortTermFallback() {
+        MemoryRecord existing = new MemoryRecord(
+                "stm-old-memory",
+                "SHORT_TERM",
+                "SHORT_TERM_MEMORY",
+                "obsolete memory",
+                Map.of("userId", USER_ID, "tenantId", "tenant-1"),
+                Instant.now());
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(existing));
+        RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                new StubLongTermMemoryPort(List.of()),
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                MemoryEngineOptions.defaults(),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                operationLogPort,
+                MemoryVectorPort.noop(),
+                outboxPort,
+                MemoryBusinessDocumentRetrieverPort.noop());
+
+        var result = engine.ingest(MemoryIngestionCommand.reviewApply(
+                "op-review-delete-working-layer",
+                "tenant-1",
+                "memory-review-approve",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-review-delete-working-layer")
+                        .messageId("msg-review-delete-working-layer")
+                        .message(ChatMessage.user(""))
+                        .build(),
+                new MemoryReviewApplyDirective(
+                        MemoryIngestionAction.DELETE,
+                        "WORKING",
+                        "SHORT_TERM_MEMORY",
+                        "stm-old-memory",
+                        0.95D,
+                        0.40D,
+                        0.50D,
+                        0.10D,
+                        List.of("msg-original"),
+                        Map.of())));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals("invalid_review_target_layer", result.reason());
+        Assertions.assertTrue(shortTermPort.deletedIds.isEmpty());
+        Assertions.assertTrue(outboxPort.tasks.isEmpty());
+        Assertions.assertEquals(MemoryOperationStatus.REJECTED,
+                operationLogPort.statusById.get("op-review-delete-working-layer"));
     }
 
     @Test

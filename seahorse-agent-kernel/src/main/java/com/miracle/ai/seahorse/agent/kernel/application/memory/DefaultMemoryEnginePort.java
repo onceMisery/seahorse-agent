@@ -588,6 +588,10 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                                 MemoryWriteRequest request,
                                                 ChatMessage message) {
         MemoryReviewApplyDirective directive = command == null ? null : command.reviewApplyDirective();
+        MemorySchemaValidationResult reviewTargetLayerValidation = validateReviewDirectiveTargetLayer(directive);
+        if (!reviewTargetLayerValidation.valid()) {
+            return new IngestionExecution(MemoryIngestionResult.rejected(reviewTargetLayerValidation.reason()), null);
+        }
         if (directive != null && directive.requestedAction() == MemoryIngestionAction.DELETE) {
             return executeReviewDeleteApply(tenantId, request, directive);
         }
@@ -921,6 +925,21 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return parsed == MemoryLayer.WORKING ? MemoryLayer.SHORT_TERM : parsed;
         } catch (IllegalArgumentException ex) {
             return MemoryLayer.SHORT_TERM;
+        }
+    }
+
+    private MemorySchemaValidationResult validateReviewDirectiveTargetLayer(MemoryReviewApplyDirective directive) {
+        if (directive == null) {
+            return MemorySchemaValidationResult.ok();
+        }
+        try {
+            MemoryLayer parsed = MemoryLayer.valueOf(directive.targetLayer().trim().toUpperCase(Locale.ROOT));
+            if (parsed == MemoryLayer.WORKING) {
+                return MemorySchemaValidationResult.invalid("invalid_review_target_layer");
+            }
+            return MemorySchemaValidationResult.ok();
+        } catch (IllegalArgumentException ex) {
+            return MemorySchemaValidationResult.invalid("invalid_review_target_layer");
         }
     }
 
