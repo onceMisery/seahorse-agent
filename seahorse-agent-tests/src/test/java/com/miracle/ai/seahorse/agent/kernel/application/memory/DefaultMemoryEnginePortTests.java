@@ -971,6 +971,49 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldRejectRefinedAddWithUnsupportedTargetLayerWithoutShortTermFallback() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "invalid_target_layer",
+                List.of(new RefinedMemoryOperation(
+                        MemoryIngestionAction.ADD,
+                        "PROJECT_FACT",
+                        "project.runtime",
+                        "User runs Seahorse Agent on Java 17.",
+                        0.96D,
+                        0.90D,
+                        0.90D,
+                        0.10D,
+                        List.of("msg-refiner-working-layer"),
+                        List.of("llm_refiner"),
+                        Map.of("targetLayer", "WORKING"))),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-working-layer", "default",
+                "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-working-layer")
+                        .messageId("msg-refiner-working-layer")
+                        .message(ChatMessage.user("Remember the runtime layer fact."))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals("invalid_refiner_target_layer", result.reason());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertTrue(reviewCandidatePort.candidates.isEmpty());
+        Assertions.assertEquals(MemoryOperationStatus.REJECTED,
+                operationLogPort.statusById.get("op-refiner-working-layer"));
+    }
+
+    @Test
     void shouldDropVeryLowConfidenceRefinedAddBeforeDurableWrite() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();

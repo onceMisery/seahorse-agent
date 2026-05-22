@@ -17,9 +17,15 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 
+import java.util.Locale;
+import java.util.Map;
+
 class MemorySchemaValidator {
+
+    private static final String METADATA_TARGET_LAYER = "targetLayer";
 
     private final MemorySanitizer sanitizer;
 
@@ -30,6 +36,10 @@ class MemorySchemaValidator {
     MemorySchemaValidationResult validate(MemoryClassificationResult classification) {
         if (classification == null) {
             return MemorySchemaValidationResult.invalid("empty_classification");
+        }
+        MemorySchemaValidationResult refinedDeltaValidation = validateRefinedDelta(classification.refinedDelta());
+        if (!refinedDeltaValidation.valid()) {
+            return refinedDeltaValidation;
         }
         if (classification.action() == MemoryIngestionAction.ADD) {
             MemoryCaptureDecision decision = classification.decision();
@@ -51,5 +61,25 @@ class MemorySchemaValidator {
             }
         }
         return MemorySchemaValidationResult.ok();
+    }
+
+    private MemorySchemaValidationResult validateRefinedDelta(RefinedMemoryDelta delta) {
+        if (delta == null) {
+            return MemorySchemaValidationResult.ok();
+        }
+        Map<String, Object> metadata = delta.metadata();
+        Object targetLayer = metadata.get(METADATA_TARGET_LAYER);
+        if (targetLayer == null || targetLayer.toString().isBlank()) {
+            return MemorySchemaValidationResult.ok();
+        }
+        try {
+            MemoryLayer layer = MemoryLayer.valueOf(targetLayer.toString().trim().toUpperCase(Locale.ROOT));
+            if (layer == MemoryLayer.WORKING) {
+                return MemorySchemaValidationResult.invalid("invalid_refiner_target_layer");
+            }
+            return MemorySchemaValidationResult.ok();
+        } catch (IllegalArgumentException ex) {
+            return MemorySchemaValidationResult.invalid("invalid_refiner_target_layer");
+        }
     }
 }
