@@ -117,8 +117,11 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 import java.time.Duration;
 import java.util.List;
@@ -373,8 +376,21 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             @Value("${seahorse-agent.memory.recall.decay-lambda:0.05}") double decayLambda,
             @Value("${seahorse-agent.memory.recall.final-top-k:8}") int finalTopK,
             @Value("${seahorse-agent.memory.recall.time-decay-enabled:true}") boolean timeDecayEnabled,
-            @Value("${seahorse-agent.memory.recall.channel-timeout-ms:50}") long channelTimeoutMs) {
-        return new MemoryFusionPolicy(rrfK, decayLambda, finalTopK, timeDecayEnabled, channelTimeoutMs, Map.of());
+            @Value("${seahorse-agent.memory.recall.channel-timeout-ms:50}") long channelTimeoutMs,
+            Environment environment) {
+        return new MemoryFusionPolicy(
+                rrfK,
+                decayLambda,
+                finalTopK,
+                timeDecayEnabled,
+                channelTimeoutMs,
+                memoryRecallChannelWeights(environment));
+    }
+
+    private Map<String, Double> memoryRecallChannelWeights(Environment environment) {
+        return Binder.get(environment)
+                .bind("seahorse-agent.memory.recall.channel-weights", Bindable.mapOf(String.class, Double.class))
+                .orElse(Map.of());
     }
 
     @Bean

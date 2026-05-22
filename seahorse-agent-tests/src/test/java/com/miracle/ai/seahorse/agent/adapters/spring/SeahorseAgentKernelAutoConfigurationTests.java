@@ -150,6 +150,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServ
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryDerivedIndexDeleteCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryDerivedIndexDocument;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFusionPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
@@ -629,6 +630,23 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context.getBean(ScoredMemoryVectorPort.class))
                             .isInstanceOf(LayeredScoredMemoryVectorPort.class);
                     assertThat(context).doesNotHaveBean(DefaultMemoryRetrievalPipeline.class);
+                });
+    }
+
+    @Test
+    void shouldBindHybridMemoryRecallChannelWeights() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.memory.recall.hybrid-enabled=true",
+                        "seahorse-agent.memory.recall.channel-weights.vector=2.0",
+                        "seahorse-agent.memory.recall.channel-weights.keyword=1.5",
+                        "seahorse-agent.memory.recall.channel-weights.graph=1.25")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    MemoryFusionPolicy policy = context.getBean(MemoryFusionPolicy.class);
+                    assertThat(policy.channelWeights()).containsEntry("vector", 2.0D);
+                    assertThat(policy.channelWeights()).containsEntry("keyword", 1.5D);
+                    assertThat(policy.channelWeights()).containsEntry("graph", 1.25D);
                 });
     }
 
