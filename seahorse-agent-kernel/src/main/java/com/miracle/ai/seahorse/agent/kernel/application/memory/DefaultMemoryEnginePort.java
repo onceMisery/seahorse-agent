@@ -46,6 +46,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementMemory;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
@@ -117,6 +118,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String REFINER_BATCH_CIRCUIT_DELETE_RATIO = "DELETE_RATIO";
     private static final String REFINER_BATCH_REASON_OPERATION_COUNT_EXCEEDED = "operation_count_exceeded";
     private static final String REFINER_BATCH_REASON_DELETE_RATIO_EXCEEDED = "delete_ratio_exceeded";
+    private static final int REFINER_READ_MASK_PER_LAYER_LIMIT = 3;
     private static final String OPERATION_VECTOR_DELETE = "VECTOR_DELETE";
     private static final String OPERATION_VECTOR_DELETE_OUTBOX_ENQUEUE = "VECTOR_DELETE_OUTBOX_ENQUEUE";
     private static final String OPERATION_KEYWORD_DELETE_OUTBOX_ENQUEUE = "KEYWORD_DELETE_OUTBOX_ENQUEUE";
@@ -828,7 +830,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     baseline == null ? MemoryIngestionAction.IGNORE : baseline.action(),
                     baselineMemoryType(baseline),
                     baseline == null ? "" : baseline.reason(),
-                    baselineDetails(baseline)));
+                    baselineDetails(baseline),
+                    currentExistingMemories(request.userId())));
             return applyRefinementResult(result, baseline);
         } catch (RuntimeException ex) {
             if (!options.refinerFailOpen()) {
@@ -852,6 +855,47 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     "failed_open:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()),
                     Map.of("status", "failed_open"));
         }
+    }
+
+    private List<MemoryRefinementMemory> currentExistingMemories(String userId) {
+        if (isBlank(userId)) {
+            return List.of();
+        }
+        List<MemoryRefinementMemory> memories = new ArrayList<>();
+        collectExistingMemories(memories, MemoryLayer.SHORT_TERM, shortTermPort, userId);
+        collectExistingMemories(memories, MemoryLayer.LONG_TERM, longTermPort, userId);
+        collectExistingMemories(memories, MemoryLayer.SEMANTIC, semanticPort, userId);
+        return List.copyOf(memories);
+    }
+
+    private void collectExistingMemories(List<MemoryRefinementMemory> memories,
+                                         MemoryLayer layer,
+                                         MemoryStorePort store,
+                                         String userId) {
+        try {
+            for (MemoryRecord record : store.listByUser(userId, REFINER_READ_MASK_PER_LAYER_LIMIT)) {
+                if (record == null || isBlank(record.id())) {
+                    continue;
+                }
+                memories.add(toRefinementMemory(layer, record));
+            }
+        } catch (RuntimeException ex) {
+            LOG.debug("load refiner read-mask memories failed: layer={}, userId={}", layer, userId, ex);
+        }
+    }
+
+    private MemoryRefinementMemory toRefinementMemory(MemoryLayer layer, MemoryRecord record) {
+        Map<String, Object> metadata = record.metadata();
+        return new MemoryRefinementMemory(
+                record.id(),
+                layer.name(),
+                record.type(),
+                record.content(),
+                stringMetadata(metadata, "targetKind", record.type()),
+                stringMetadata(metadata, "targetKey", stringMetadata(metadata, "profileSlot", "")),
+                stringMetadata(metadata, "generationId", ""),
+                stringMetadata(metadata, "status", "ACTIVE"),
+                metadata);
     }
 
     private MemoryClassificationResult applyRefinementResult(MemoryRefinementResult result,

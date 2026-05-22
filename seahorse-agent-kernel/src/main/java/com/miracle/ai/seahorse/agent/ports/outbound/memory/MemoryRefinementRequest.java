@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -31,7 +32,8 @@ public record MemoryRefinementRequest(
         MemoryIngestionAction baselineAction,
         String baselineMemoryType,
         String baselineReason,
-        Map<String, Object> baselineDetails
+        Map<String, Object> baselineDetails,
+        List<MemoryRefinementMemory> existingMemories
 ) {
 
     private static final String DEFAULT_TENANT_ID = "default";
@@ -48,6 +50,32 @@ public record MemoryRefinementRequest(
         baselineMemoryType = normalize(baselineMemoryType, "");
         baselineReason = normalize(baselineReason, "");
         baselineDetails = Map.copyOf(Objects.requireNonNullElse(baselineDetails, Map.of()));
+        existingMemories = List.copyOf(Objects.requireNonNullElse(existingMemories, List.of()));
+    }
+
+    public MemoryRefinementRequest(String operationId,
+                                   String tenantId,
+                                   String source,
+                                   String userId,
+                                   String conversationId,
+                                   String messageId,
+                                   String sanitizedContent,
+                                   MemoryIngestionAction baselineAction,
+                                   String baselineMemoryType,
+                                   String baselineReason,
+                                   Map<String, Object> baselineDetails) {
+        this(operationId,
+                tenantId,
+                source,
+                userId,
+                conversationId,
+                messageId,
+                sanitizedContent,
+                baselineAction,
+                baselineMemoryType,
+                baselineReason,
+                baselineDetails,
+                List.of());
     }
 
     private static String normalize(String value, String fallback) {

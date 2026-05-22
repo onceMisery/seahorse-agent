@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementMemory;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
@@ -119,6 +120,7 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                 .replace("{baselineMemoryType}", request.baselineMemoryType())
                 .replace("{baselineReason}", request.baselineReason())
                 .replace("{baselineDetails}", writeJson(request.baselineDetails()))
+                .replace("{existingMemories}", existingMemories(request))
                 .replace("{feedbackSamples}", feedbackSamples(request));
     }
 
@@ -138,6 +140,9 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                 baselineMemoryType: %s
                 baselineReason: %s
                 baselineDetails: %s
+
+                Current existing memories:
+                %s
 
                 Human review feedback examples:
                 %s
@@ -184,8 +189,31 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                 request.baselineMemoryType(),
                 request.baselineReason(),
                 writeJson(request.baselineDetails()),
+                existingMemories(request),
                 feedbackSamples(request),
                 truncate(request.sanitizedContent(), MAX_CONTENT_CHARS));
+    }
+
+    private String existingMemories(MemoryRefinementRequest request) {
+        if (request.existingMemories().isEmpty()) {
+            return "[]";
+        }
+        List<Map<String, Object>> snapshots = request.existingMemories().stream()
+                .map(this::existingMemorySnapshot)
+                .toList();
+        return writeJsonValue(snapshots);
+    }
+
+    private Map<String, Object> existingMemorySnapshot(MemoryRefinementMemory memory) {
+        return Map.of(
+                "memoryId", memory.memoryId(),
+                "layer", memory.layer(),
+                "type", memory.type(),
+                "content", truncate(memory.content(), MAX_FEEDBACK_CONTENT_CHARS),
+                "targetKind", memory.targetKind(),
+                "targetKey", memory.targetKey(),
+                "generationId", memory.generationId(),
+                "status", memory.status());
     }
 
     private String feedbackSamples(MemoryRefinementRequest request) {
@@ -207,7 +235,7 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
             List<Map<String, Object>> examples = samples.stream()
                     .map(this::feedbackExample)
                     .toList();
-            return objectMapper.writeValueAsString(examples);
+            return writeJsonValue(examples);
         } catch (Exception ex) {
             LOG.debug("Failed to load memory review feedback samples", ex);
             return "[]";
@@ -331,8 +359,12 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
     }
 
     private String writeJson(Map<String, Object> values) {
+        return writeJsonValue(Objects.requireNonNullElse(values, Map.of()));
+    }
+
+    private String writeJsonValue(Object value) {
         try {
-            return objectMapper.writeValueAsString(Objects.requireNonNullElse(values, Map.of()));
+            return objectMapper.writeValueAsString(Objects.requireNonNullElse(value, Map.of()));
         } catch (Exception ex) {
             return "{}";
         }

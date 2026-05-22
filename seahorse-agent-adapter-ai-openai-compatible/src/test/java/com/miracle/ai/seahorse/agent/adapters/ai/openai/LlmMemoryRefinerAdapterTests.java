@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementMemory;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
@@ -260,6 +261,50 @@ class LlmMemoryRefinerAdapterTests {
         assertThat(feedbackRepository.lastQuery.tenantId()).isEqualTo("tenant-1");
         assertThat(feedbackRepository.lastQuery.userId()).isEqualTo("user-1");
         assertThat(feedbackRepository.lastQuery.limit()).isEqualTo(2);
+    }
+
+    @Test
+    void shouldInjectCurrentExistingMemoriesIntoPromptWhenAvailable() {
+        CapturingChatModelPort chatModelPort = new CapturingChatModelPort("""
+                {
+                  "refined": true,
+                  "reason": "uses read mask",
+                  "operations": []
+                }
+                """);
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                chatModelPort,
+                PromptTemplatePort.empty(),
+                new ObjectMapper());
+
+        adapter.refine(new MemoryRefinementRequest(
+                "op-1",
+                "tenant-1",
+                "chat",
+                "user-1",
+                "conversation-1",
+                "message-1",
+                "Actually the project moved to OceanBase.",
+                MemoryIngestionAction.ADD,
+                "FACT",
+                "rule_based",
+                Map.of("valueScore", 0.6D),
+                List.of(new MemoryRefinementMemory(
+                        "ltm-existing",
+                        "LONG_TERM",
+                        "PROJECT_FACT",
+                        "User's project currently uses MySQL.",
+                        "PROJECT_FACT",
+                        "project.database",
+                        "project.database:old",
+                        "ACTIVE",
+                        Map.of("confidenceLevel", 0.9D)))));
+
+        String prompt = chatModelPort.lastRequest.get().getMessages().get(0).getContent();
+        assertThat(prompt).contains("Current existing memories:");
+        assertThat(prompt).contains("ltm-existing");
+        assertThat(prompt).contains("project.database");
+        assertThat(prompt).contains("User's project currently uses MySQL.");
     }
 
     private static MemoryRefinementRequest request(String content) {

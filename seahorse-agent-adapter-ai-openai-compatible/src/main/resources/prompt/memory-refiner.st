@@ -13,6 +13,9 @@ baselineMemoryType: {baselineMemoryType}
 baselineReason: {baselineReason}
 baselineDetails: {baselineDetails}
 
+Current existing memories:
+{existingMemories}
+
 Human review feedback examples:
 {feedbackSamples}
 
@@ -47,4 +50,5 @@ Return one operation per durable memory delta. A single context block may produc
 Use metadata.targetLayer only when routing is clear. Omit it to use the default SHORT_TERM layer. Never invent a new layer.
 Use REVIEW for sensitive, conflicting, or uncertain profile changes.
 Use IGNORE only as an advisory signal when no durable memory should be written; Seahorse may still fall back to the baseline classifier.
+Use current existing memories as read-only context. Emit UPDATE or DELETE when the new content corrects or invalidates an existing memory.
 When feedback examples are present, use them as few-shot guidance for what humans rejected or corrected.

@@ -44,6 +44,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPor
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementMemory;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
@@ -996,6 +997,66 @@ class DefaultMemoryEnginePortTests {
                 operationLogPort.statusById.get("op-refiner-delete-heavy"));
         Assertions.assertEquals("DELETE_RATIO",
                 operationLogPort.decisionById.get("op-refiner-delete-heavy").get("refinerBatchCircuitType"));
+    }
+
+    @Test
+    void shouldPassCurrentExistingMemoriesToRefinerReadMask() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(new MemoryRecord(
+                "stm-existing",
+                "SHORT_TERM",
+                "PREFERENCE",
+                "User prefers concise answers.",
+                Map.of("targetKind", "PREFERENCE",
+                        "targetKey", "preferences.response_style",
+                        "importanceScore", 0.80D,
+                        "confidenceLevel", 0.90D),
+                Instant.now())));
+        StubLongTermMemoryPort longTermPort = new StubLongTermMemoryPort(List.of(new MemoryRecord(
+                "ltm-existing",
+                "LONG_TERM",
+                "PROJECT_FACT",
+                "User's project currently uses MySQL.",
+                Map.of("targetKind", "PROJECT_FACT",
+                        "targetKey", "project.database",
+                        "generationId", "project.database:old",
+                        "status", "ACTIVE"),
+                Instant.now())));
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.empty(
+                "no_refined_delta"));
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                longTermPort,
+                new StubSemanticMemoryPort(List.of()),
+                OBJECT_MAPPER,
+                new MemoryEngineOptions(5, 3, 10, true, true, true),
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                MemoryOperationLogPort.noop(),
+                MemoryVectorPort.noop(),
+                MemoryOutboxPort.noop(),
+                MemoryBusinessDocumentRetrieverPort.noop(),
+                MemoryLifecyclePort.noop(),
+                MemoryPolicyConfigPort.defaults(),
+                (MemoryRetrievalPipelinePort) null,
+                refinerPort);
+
+        engine.ingest(new MemoryIngestionCommand("op-refiner-read-mask", "default", "chat-completed",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-read-mask")
+                        .messageId("msg-refiner-read-mask")
+                        .message(ChatMessage.user("Actually the project has moved to OceanBase."))
+                        .build()));
+
+        Assertions.assertEquals(1, refinerPort.requests.size());
+        List<MemoryRefinementMemory> existingMemories = refinerPort.requests.get(0).existingMemories();
+        Assertions.assertEquals(List.of("stm-existing", "ltm-existing"),
+                existingMemories.stream().map(MemoryRefinementMemory::memoryId).toList());
+        Assertions.assertEquals(List.of("SHORT_TERM", "LONG_TERM"),
+                existingMemories.stream().map(MemoryRefinementMemory::layer).toList());
+        Assertions.assertEquals("project.database", existingMemories.get(1).targetKey());
+        Assertions.assertEquals("project.database:old", existingMemories.get(1).generationId());
     }
 
     @Test
