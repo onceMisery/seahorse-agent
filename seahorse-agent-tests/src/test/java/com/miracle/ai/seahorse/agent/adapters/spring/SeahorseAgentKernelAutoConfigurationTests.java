@@ -174,11 +174,15 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandl
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRerankerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyDecision;
@@ -873,6 +877,38 @@ class SeahorseAgentKernelAutoConfigurationTests {
                             .build());
 
                     verify(shortTermMemoryPort).save(any(MemoryRecord.class));
+                });
+    }
+
+    @Test
+    void shouldInjectReviewFeedbackRepositoryIntoMemoryEngineRefinerContext() {
+        contextRunner.withUserConfiguration(
+                        MemoryStorePortsConfiguration.class,
+                        CapturingMemoryRefinerConfiguration.class,
+                        MemoryReviewFeedbackConfiguration.class)
+                .withPropertyValues("seahorse-agent.memory.refiner.enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    when(context.getBean(MemoryOperationLogPort.class).tryStart(any())).thenReturn(true);
+
+                    context.getBean(MemoryEnginePort.class).writeMemory(MemoryWriteRequest.builder()
+                            .userId("user-feedback")
+                            .conversationId("conv-feedback")
+                            .messageId("msg-feedback")
+                            .message(ChatMessage.user("Actually keep OceanBase as the project database."))
+                            .build());
+
+                    CapturingMemoryRefinerPort refinerPort = context.getBean(CapturingMemoryRefinerPort.class);
+                    assertThat(refinerPort.requests).hasSize(1);
+                    assertThat(refinerPort.requests.get(0).feedbackExamples())
+                            .extracting(MemoryReviewFeedbackSample::sampleId)
+                            .containsExactly("feedback-1");
+
+                    RecordingMemoryReviewFeedbackRepository feedbackRepository =
+                            context.getBean(RecordingMemoryReviewFeedbackRepository.class);
+                    assertThat(feedbackRepository.queries).hasSize(1);
+                    assertThat(feedbackRepository.queries.get(0).tenantId()).isEqualTo("default");
+                    assertThat(feedbackRepository.queries.get(0).userId()).isEqualTo("user-feedback");
                 });
     }
 
@@ -1674,6 +1710,80 @@ class SeahorseAgentKernelAutoConfigurationTests {
                             List.of(request.messageId()),
                             List.of("test_refiner"))),
                     Map.of("model", "test"));
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class CapturingMemoryRefinerConfiguration {
+
+        @Bean
+        CapturingMemoryRefinerPort memoryRefinerPort() {
+            return new CapturingMemoryRefinerPort();
+        }
+    }
+
+    static class CapturingMemoryRefinerPort implements MemoryRefinerPort {
+
+        private final List<MemoryRefinementRequest> requests = new ArrayList<>();
+
+        @Override
+        public MemoryRefinementResult refine(MemoryRefinementRequest request) {
+            requests.add(request);
+            return MemoryRefinementResult.empty("captured");
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class MemoryReviewFeedbackConfiguration {
+
+        @Bean
+        RecordingMemoryReviewFeedbackRepository memoryReviewFeedbackRepositoryPort() {
+            return new RecordingMemoryReviewFeedbackRepository(List.of(new MemoryReviewFeedbackSample(
+                    "feedback-1",
+                    "review-feedback-1",
+                    "op-feedback-1",
+                    "default",
+                    "user-feedback",
+                    MemoryIngestionAction.ADD.name(),
+                    MemoryReviewStatus.APPLIED,
+                    "reviewer-1",
+                    "Use the corrected database fact.",
+                    "SHORT_TERM",
+                    "PROJECT_FACT",
+                    "project.database",
+                    "User's project uses MySQL.",
+                    "User's project uses OceanBase.",
+                    Map.of("model", "old-refiner"),
+                    Map.of("reviewReason", "manual_fix"),
+                    List.of("msg-feedback-old"),
+                    "stm-feedback",
+                    "SHORT_TERM",
+                    Instant.EPOCH)));
+        }
+    }
+
+    static class RecordingMemoryReviewFeedbackRepository implements MemoryReviewFeedbackRepositoryPort {
+
+        private final List<MemoryReviewFeedbackSample> samples;
+        private final List<MemoryReviewFeedbackQuery> queries = new ArrayList<>();
+
+        RecordingMemoryReviewFeedbackRepository(List<MemoryReviewFeedbackSample> samples) {
+            this.samples = samples;
+        }
+
+        @Override
+        public void save(MemoryReviewFeedbackSample sample) {
+        }
+
+        @Override
+        public List<MemoryReviewFeedbackSample> listByCandidate(String candidateId, int limit) {
+            return List.of();
+        }
+
+        @Override
+        public List<MemoryReviewFeedbackSample> listSamples(MemoryReviewFeedbackQuery query) {
+            queries.add(query);
+            return samples.stream().limit(query.limit()).toList();
         }
     }
 
