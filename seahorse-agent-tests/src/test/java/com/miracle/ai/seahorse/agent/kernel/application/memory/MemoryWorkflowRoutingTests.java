@@ -35,6 +35,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRoutePlan;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTrack;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
@@ -161,6 +163,35 @@ class MemoryWorkflowRoutingTests {
     }
 
     @Test
+    void shouldRecordContextWeaverTraceWithZoneCountsAndPromptBudget() {
+        RecordingMemoryTraceRecorder traceRecorder = new RecordingMemoryTraceRecorder();
+        ContextWeaverPort weaver = new DefaultContextWeaver(traceRecorder);
+        MemoryContext context = MemoryContext.builder()
+                .conversationId("conv-1")
+                .userId("user-1")
+                .profileMemories(List.of(MemoryItem.builder().content("teacher").build()))
+                .shortTermMemories(List.of(MemoryItem.builder().content("prefers concise answers").build()))
+                .businessDocumentMemories(List.of(MemoryItem.builder().content("expense policy").build()))
+                .build();
+
+        String prompt = weaver.weave(context, new ContextBudget(2, 1000));
+
+        Assertions.assertEquals(1, traceRecorder.events.size());
+        MemoryTraceEvent event = traceRecorder.events.get(0);
+        Assertions.assertEquals("memory-context-weaver", event.component());
+        Assertions.assertEquals("weave", event.eventType());
+        Assertions.assertEquals("user-1", event.userId());
+        Assertions.assertEquals("conv-1", event.conversationId());
+        Assertions.assertEquals(prompt.length(), event.details().get("promptChars"));
+        Assertions.assertEquals(2, event.details().get("selectedItemCount"));
+        Assertions.assertEquals(2, event.details().get("maxItems"));
+        Assertions.assertEquals(1000, event.details().get("maxChars"));
+        Assertions.assertEquals(1, event.details().get("profileCount"));
+        Assertions.assertEquals(1, event.details().get("shortTermCount"));
+        Assertions.assertEquals(1, event.details().get("businessDocumentCount"));
+    }
+
+    @Test
     void shouldTreatBusinessDocumentsAsPromptMemory() {
         PromptContext promptContext = PromptContext.builder()
                 .memoryContext(MemoryContext.builder()
@@ -234,6 +265,21 @@ class MemoryWorkflowRoutingTests {
         @Override
         public void upsert(ProfileFactUpdate update) {
             updates.add(update);
+        }
+    }
+
+    private static class RecordingMemoryTraceRecorder implements MemoryTraceRecorder {
+
+        private final List<MemoryTraceEvent> events = new ArrayList<>();
+
+        @Override
+        public void record(MemoryTraceEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public List<MemoryTraceEvent> listRecent(int limit) {
+            return events;
         }
     }
 

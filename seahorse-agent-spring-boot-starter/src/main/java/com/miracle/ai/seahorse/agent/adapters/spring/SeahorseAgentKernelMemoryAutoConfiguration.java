@@ -429,8 +429,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(ContextWeaverPort.class)
-    public DefaultContextWeaver seahorseDefaultContextWeaver() {
-        return new DefaultContextWeaver();
+    public DefaultContextWeaver seahorseDefaultContextWeaver(ObjectProvider<MemoryTraceRecorder> traceRecorder) {
+        return new DefaultContextWeaver(traceRecorder.getIfAvailable(MemoryTraceRecorder::noop));
     }
 
     @Bean

@@ -21,8 +21,12 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class DefaultContextWeaver implements ContextWeaverPort {
@@ -31,8 +35,16 @@ public class DefaultContextWeaver implements ContextWeaverPort {
     private static final String MEMORY_CONFLICT_NOTE =
             "注意：Correction Ledger 和 Profile KV 是用户画像强事实源；业务知识库事实优先于普通历史记忆。";
     private static final int MAX_MEMORY_ITEM_LENGTH = 220;
+    private static final String COMPONENT = "memory-context-weaver";
+
+    private final MemoryTraceRecorder traceRecorder;
 
     public DefaultContextWeaver() {
+        this(MemoryTraceRecorder.noop());
+    }
+
+    public DefaultContextWeaver(MemoryTraceRecorder traceRecorder) {
+        this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
     }
 
     @Override
@@ -50,7 +62,9 @@ public class DefaultContextWeaver implements ContextWeaverPort {
         appendZone(builder, "[Semantic Memory]", context.getSemanticMemories());
         appendZone(builder, "[Long-Term Episodic]", context.getLongTermMemories());
         builder.appendFooter(MEMORY_CONFLICT_NOTE);
-        return builder.build();
+        String prompt = builder.build();
+        recordTrace(context, safeBudget, builder, prompt);
+        return prompt;
     }
 
     private static boolean hasMemory(MemoryContext context) {
@@ -137,6 +151,36 @@ public class DefaultContextWeaver implements ContextWeaverPort {
             return valueEnd > valueStart ? metadataJson.substring(valueStart, valueEnd) : "";
         }
         return "";
+    }
+
+    private void recordTrace(MemoryContext context,
+                             ContextBudget budget,
+                             BudgetedBuilder builder,
+                             String prompt) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("promptChars", prompt.length());
+        details.put("selectedItemCount", builder.itemCount);
+        details.put("maxItems", budget.maxItems());
+        details.put("maxChars", budget.maxChars());
+        details.put("correctionCount", safeItems(context.getCorrectionMemories()).size());
+        details.put("profileCount", safeItems(context.getProfileMemories()).size());
+        details.put("shortTermCount", safeItems(context.getShortTermMemories()).size());
+        details.put("businessDocumentCount", safeItems(context.getBusinessDocumentMemories()).size());
+        details.put("semanticCount", safeItems(context.getSemanticMemories()).size());
+        details.put("longTermCount", safeItems(context.getLongTermMemories()).size());
+        traceRecorder.record(new MemoryTraceEvent(
+                "",
+                "default",
+                Objects.requireNonNullElse(context.getUserId(), ""),
+                Objects.requireNonNullElse(context.getConversationId(), ""),
+                "",
+                COMPONENT,
+                "weave",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                Objects.requireNonNullElse(context.getConversationId(), ""),
+                "memory-context",
+                details,
+                null));
     }
 
     private static final class BudgetedBuilder {

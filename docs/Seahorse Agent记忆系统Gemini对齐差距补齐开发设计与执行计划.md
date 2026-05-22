@@ -411,6 +411,7 @@ Verification:
 | M3-review-apply-directive | Done | `KernelMemoryReviewServiceTests` covers approve/modify passing `MemoryReviewApplyDirective`; `DefaultMemoryEnginePortTests#shouldApplyReviewDirectiveTargetProfileSlotWithoutReclassification` and `#shouldApplyReviewDirectiveTargetSemanticLayerWithoutReclassification` cover preserving `requestedAction`, `targetLayer`, `targetKind`, and `targetKey` during review apply. |
 | M3-review-delete-apply | Done | `DefaultMemoryEnginePortTests#shouldApplyReviewDirectiveDeleteTargetMemoryAndDerivedIndexes` covers human-approved DELETE logically deleting the targeted four-layer memory and enqueueing derived-index deletes; `#shouldRejectReviewDirectiveDeleteWhenTargetMemoryIsMissing` covers missing targets staying rejected; `KernelMemoryReviewServiceTests#shouldApproveDeleteCandidateWithTargetKeyAsApplyContent` covers blank DELETE candidate replay. |
 | M7-trace-query-api | Done | `KernelMemoryTraceQueryServiceTests` covers filtered recent trace query; `SeahorseWebApiContractTests#shouldKeepMemoryTraceQueryContract` covers `GET /memories/traces`; `SeahorseAgentKernelAutoConfigurationTests#shouldRegisterMemoryManagementAndGovernancePortsWhenMemoryStoresExist` covers auto-registration of `MemoryTraceInboundPort`. |
+| M7-context-weaver-trace | Done | `MemoryWorkflowRoutingTests#shouldRecordContextWeaverTraceWithZoneCountsAndPromptBudget` covers prompt chars, selected item count, budget, and zone input counts emitted by `DefaultContextWeaver`. |
 
 ## Acceptance Matrix Against Original P0-P6
 
