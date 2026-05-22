@@ -37,7 +37,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ScoredMemoryVectorHit;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
@@ -316,6 +318,46 @@ class HybridMemoryRecallPipelineTests {
                 .containsExactly(0.98D, 0.41D);
     }
 
+    @Test
+    void shouldEnrichLegacyVectorHitsFromLayeredStores() {
+        RecordingMemoryStore shortTerm = new RecordingMemoryStore();
+        RecordingMemoryStore longTerm = new RecordingMemoryStore();
+        RecordingMemoryStore semantic = new RecordingMemoryStore();
+        semantic.save(new MemoryRecord(
+                "semantic-1",
+                "SEMANTIC",
+                "PROJECT_FACT",
+                "User prefers concise answers.",
+                Map.of(
+                        "userId", "user-1",
+                        "tenantId", "tenant-1",
+                        "status", "REFERENCED",
+                        "generationId", "generation-9",
+                        "importanceScore", 0.7D,
+                        "confidenceLevel", 0.8D,
+                        "lastReferencedAt", "2026-05-21T09:00:00Z"),
+                Instant.parse("2026-05-20T08:00:00Z")));
+        MemoryVectorPort legacyVector = new StaticMemoryVectorPort(List.of("missing", "semantic-1"));
+        LayeredScoredMemoryVectorPort port = new LayeredScoredMemoryVectorPort(
+                legacyVector,
+                shortTerm,
+                longTerm,
+                semantic);
+
+        List<ScoredMemoryVectorHit> hits = port.search("user-1", "tenant-1", "concise", 5);
+
+        assertThat(hits).hasSize(1);
+        ScoredMemoryVectorHit hit = hits.get(0);
+        assertThat(hit.memoryId()).isEqualTo("semantic-1");
+        assertThat(hit.generationId()).isEqualTo("generation-9");
+        assertThat(hit.metadata())
+                .containsEntry("layer", "SEMANTIC")
+                .containsEntry("type", "PROJECT_FACT")
+                .containsEntry("status", "REFERENCED")
+                .containsEntry("updatedAt", "2026-05-20T08:00:00Z")
+                .containsEntry("lastReferencedAt", "2026-05-21T09:00:00Z");
+    }
+
     private HybridMemoryRecallPipeline pipeline(RecordingMemoryStore shortTerm,
                                                 RecordingMemoryStore longTerm,
                                                 RecordingMemoryStore semantic,
@@ -550,6 +592,24 @@ class HybridMemoryRecallPipelineTests {
         @Override
         public List<MemoryTraceEvent> listRecent(int limit) {
             return List.copyOf(events);
+        }
+    }
+
+    private static final class StaticMemoryVectorPort implements MemoryVectorPort {
+
+        private final List<String> hits;
+
+        private StaticMemoryVectorPort(List<String> hits) {
+            this.hits = hits;
+        }
+
+        @Override
+        public void upsert(String memoryId, String userId, String content, String embeddingModel) {
+        }
+
+        @Override
+        public List<String> search(String userId, String query, int topK) {
+            return hits.stream().limit(topK).toList();
         }
     }
 }

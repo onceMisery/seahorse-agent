@@ -52,6 +52,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.KeywordMem
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.GraphMemoryRecallChannel;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.HybridMemoryRecallPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.KeywordMemoryRecallChannel;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.LayeredScoredMemoryVectorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.ModelMemoryRecallReranker;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.RrfMemoryFusion;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.VectorMemoryRecallChannel;
@@ -405,8 +406,15 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "hybrid-enabled",
             havingValue = "true")
     @ConditionalOnMissingBean(ScoredMemoryVectorPort.class)
-    public ScoredMemoryVectorPort seahorseScoredMemoryVectorPort(ObjectProvider<MemoryVectorPort> memoryVectorPort) {
-        return ScoredMemoryVectorPort.fromLegacy(memoryVectorPort.getIfAvailable(MemoryVectorPort::noop));
+    public ScoredMemoryVectorPort seahorseScoredMemoryVectorPort(ObjectProvider<MemoryVectorPort> memoryVectorPort,
+                                                                 ShortTermMemoryPort shortTermPort,
+                                                                 LongTermMemoryPort longTermPort,
+                                                                 SemanticMemoryPort semanticPort) {
+        return new LayeredScoredMemoryVectorPort(
+                memoryVectorPort.getIfAvailable(MemoryVectorPort::noop),
+                shortTermPort,
+                longTermPort,
+                semanticPort);
     }
 
     @Bean

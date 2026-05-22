@@ -48,6 +48,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.KeywordMem
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.HybridMemoryRecallPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.ModelMemoryRecallReranker;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.LayeredScoredMemoryVectorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataBackfillService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataDictionaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataExtractionResultService;
@@ -171,6 +172,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.RefinedMemoryOperatio
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.ScoredMemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
@@ -624,6 +626,8 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryRetrievalPipelinePort.class);
                     assertThat(context.getBean(MemoryRetrievalPipelinePort.class))
                             .isInstanceOf(HybridMemoryRecallPipeline.class);
+                    assertThat(context.getBean(ScoredMemoryVectorPort.class))
+                            .isInstanceOf(LayeredScoredMemoryVectorPort.class);
                     assertThat(context).doesNotHaveBean(DefaultMemoryRetrievalPipeline.class);
                 });
     }
