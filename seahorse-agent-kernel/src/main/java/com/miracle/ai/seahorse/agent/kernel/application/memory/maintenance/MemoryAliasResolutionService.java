@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolution
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -92,9 +93,8 @@ public class MemoryAliasResolutionService {
         if (normalizedAlias.isBlank() || normalizedAlias.equals(candidate.aliasText())) {
             return ApplyResult.ignored();
         }
-        return upsertAlias(normalizedAlias, candidate, Map.of(
-                "originalAlias", candidate.aliasText(),
-                "normalizationStrategy", "trim_case_whitespace"), errors);
+        return upsertAlias(normalizedAlias, candidate,
+                metadata(candidate, "trim_case_whitespace", candidate.aliasText()), errors);
     }
 
     private ApplyResult applyDictionaryEntry(String aliasText,
@@ -104,9 +104,7 @@ public class MemoryAliasResolutionService {
         if (normalizedAlias.isBlank() || !autoResolvable(candidate)) {
             return ApplyResult.skip();
         }
-        return upsertAlias(normalizedAlias, candidate, Map.of(
-                "originalAlias", aliasText,
-                "normalizationStrategy", "dictionary"), errors);
+        return upsertAlias(normalizedAlias, candidate, metadata(candidate, "dictionary", aliasText), errors);
     }
 
     private boolean autoResolvable(MemoryAliasCandidate candidate) {
@@ -149,6 +147,20 @@ public class MemoryAliasResolutionService {
                 .trim()
                 .replaceAll("\\s+", " ")
                 .toLowerCase(Locale.ROOT);
+    }
+
+    private Map<String, Object> metadata(MemoryAliasCandidate candidate,
+                                         String normalizationStrategy,
+                                         String originalAlias) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("originalAlias", Objects.requireNonNullElse(originalAlias, ""));
+        metadata.put("normalizationStrategy", normalizationStrategy);
+        metadata.put("canonicalEntityId", candidate.canonicalEntityId());
+        metadata.put("canonicalName", candidate.canonicalName());
+        metadata.put("entityType", candidate.entityType());
+        metadata.put("confidenceLevel", candidate.confidenceLevel());
+        metadata.put("sourceType", SOURCE_TYPE);
+        return metadata;
     }
 
     private boolean hasText(String value) {

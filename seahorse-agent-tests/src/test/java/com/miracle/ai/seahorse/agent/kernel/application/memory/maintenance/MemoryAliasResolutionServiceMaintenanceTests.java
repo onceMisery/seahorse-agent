@@ -60,6 +60,10 @@ class MemoryAliasResolutionServiceMaintenanceTests {
         assertThat(command.userId()).isEqualTo("user-9");
         assertThat(command.tenantId()).isEqualTo("tenant-9");
         assertThat(command.aliasText()).isEqualTo("alpha team");
+        assertThat(command.metadata()).containsEntry("canonicalEntityId", "entity-alpha");
+        assertThat(command.metadata()).containsEntry("canonicalName", "Alpha Team");
+        assertThat(command.metadata()).containsEntry("entityType", "PROJECT");
+        assertThat(command.metadata()).containsEntry("normalizationStrategy", "trim_case_whitespace");
     }
 
     @Test
@@ -89,6 +93,8 @@ class MemoryAliasResolutionServiceMaintenanceTests {
         assertThat(command.userId()).isEqualTo("user-1");
         assertThat(command.tenantId()).isEqualTo("tenant-1");
         assertThat(command.aliasText()).isEqualTo("bk");
+        assertThat(command.metadata()).containsEntry("canonicalEntityId", "entity-booking");
+        assertThat(command.metadata()).containsEntry("normalizationStrategy", "trim_case_whitespace");
     }
 
     private static final class RecordingAliasPort implements MemoryAliasPort {
