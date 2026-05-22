@@ -56,6 +56,8 @@ class JdbcMemoryGraphRepositoryAdapterTests {
 
     @Test
     void shouldRecallOneHopMemoriesThroughAliasCanonicalEntity() {
+        Instant sourceUpdatedAt = Instant.parse("2026-05-20T08:00:00Z");
+        String lastReferencedAt = "2026-05-21T09:00:00Z";
         adapter.upsert(new MemoryDerivedIndexDocument(
                 "memory-1",
                 "user-1",
@@ -66,9 +68,10 @@ class JdbcMemoryGraphRepositoryAdapterTests {
                 Map.of(
                         "canonicalEntityId", "entity-oceanbase",
                         "canonicalName", "OceanBase",
+                        "lastReferencedAt", lastReferencedAt,
                         "relatedEntityIds", java.util.List.of("entity-backup"),
                         "relationType", "MENTIONS"),
-                Instant.now()));
+                sourceUpdatedAt));
 
         var hits = adapter.recallNeighborhood(new MemoryRecallRequest(
                 "user-1",
@@ -83,7 +86,9 @@ class JdbcMemoryGraphRepositoryAdapterTests {
         assertThat(hits.get(0).channel()).isEqualTo("graph");
         assertThat(hits.get(0).metadata())
                 .containsEntry("canonicalEntityId", "entity-oceanbase")
-                .containsEntry("graphMatch", "alias");
+                .containsEntry("graphMatch", "alias")
+                .containsEntry("updatedAt", sourceUpdatedAt.toString())
+                .containsEntry("lastReferencedAt", lastReferencedAt);
     }
 
     @Test

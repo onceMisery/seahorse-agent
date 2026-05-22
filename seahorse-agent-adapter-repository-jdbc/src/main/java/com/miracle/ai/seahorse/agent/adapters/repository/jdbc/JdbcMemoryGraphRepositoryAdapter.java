@@ -44,6 +44,7 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
     private static final String CHANNEL = "graph";
     private static final String DEFAULT_TENANT_ID = "default";
     private static final String DEFAULT_RELATION_TYPE = "MENTIONS";
+    private static final String METADATA_UPDATED_AT = "updatedAt";
     private static final double DEFAULT_WEIGHT = 1D;
 
     private final JdbcTemplate jdbcTemplate;
@@ -152,6 +153,7 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
         Map<String, Object> metadata = new LinkedHashMap<>(document.metadata());
         metadata.put("canonicalEntityId", sourceEntityId);
         metadata.put("canonicalName", canonicalName);
+        metadata.put(METADATA_UPDATED_AT, document.updatedAt().toString());
         jdbcTemplate.update("""
                 INSERT INTO t_memory_entity_relation
                     (id, user_id, tenant_id, memory_id, layer_name, memory_type, content, source_entity_id,
@@ -183,7 +185,7 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
                                                        int hopDistance) {
         return jdbcTemplate.query("""
                 SELECT memory_id, layer_name, memory_type, content, source_entity_id, target_entity_id, relation_type,
-                       weight, confidence_level, metadata_json, status
+                       weight, confidence_level, metadata_json, status, update_time
                 FROM t_memory_entity_relation
                 WHERE user_id = ?
                   AND tenant_id = ?
@@ -214,6 +216,7 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
         metadata.put("relationType", rs.getString("relation_type"));
         metadata.put("graphMatch", "alias");
         metadata.put("hopDistance", hopDistance);
+        metadata.putIfAbsent(METADATA_UPDATED_AT, JdbcMemorySupport.instant(rs.getTimestamp("update_time")).toString());
         double score = (rs.getDouble("weight") * rs.getDouble("confidence_level")) / Math.max(1, hopDistance);
         return new MemoryRecallCandidate(
                 rs.getString("memory_id"),
