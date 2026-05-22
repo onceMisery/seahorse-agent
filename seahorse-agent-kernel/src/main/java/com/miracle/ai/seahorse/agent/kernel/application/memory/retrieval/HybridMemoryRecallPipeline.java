@@ -61,6 +61,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
 
@@ -81,6 +87,14 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private final MemoryFusionPolicy fusionPolicy;
     private final int channelTopK;
     private final MemoryTraceRecorder traceRecorder;
+    private final Executor recallExecutor;
+
+    private record ChannelRecallTask(
+            MemoryRecallChannelPort channel,
+            long startedAt,
+            CompletableFuture<List<MemoryRecallCandidate>> future
+    ) {
+    }
 
     public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
                                       LongTermMemoryPort longTermPort,
@@ -108,7 +122,8 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 fusionPort,
                 fusionPolicy,
                 channelTopK,
-                MemoryTraceRecorder.noop());
+                MemoryTraceRecorder.noop(),
+                ForkJoinPool.commonPool());
     }
 
     public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
@@ -125,6 +140,38 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                                       MemoryFusionPolicy fusionPolicy,
                                       int channelTopK,
                                       MemoryTraceRecorder traceRecorder) {
+        this(shortTermPort,
+                longTermPort,
+                semanticPort,
+                objectMapper,
+                profileMemoryPort,
+                correctionLedgerPort,
+                memoryRouterPort,
+                businessDocumentRetrieverPort,
+                memoryLifecyclePort,
+                channels,
+                fusionPort,
+                fusionPolicy,
+                channelTopK,
+                traceRecorder,
+                ForkJoinPool.commonPool());
+    }
+
+    public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
+                                      LongTermMemoryPort longTermPort,
+                                      SemanticMemoryPort semanticPort,
+                                      ObjectMapper objectMapper,
+                                      ProfileMemoryPort profileMemoryPort,
+                                      CorrectionLedgerPort correctionLedgerPort,
+                                      MemoryRouterPort memoryRouterPort,
+                                      MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                      MemoryLifecyclePort memoryLifecyclePort,
+                                      List<MemoryRecallChannelPort> channels,
+                                      MemoryRecallFusionPort fusionPort,
+                                      MemoryFusionPolicy fusionPolicy,
+                                      int channelTopK,
+                                      MemoryTraceRecorder traceRecorder,
+                                      Executor recallExecutor) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -140,6 +187,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         this.fusionPolicy = Objects.requireNonNullElseGet(fusionPolicy, MemoryFusionPolicy::defaults);
         this.channelTopK = channelTopK > 0 ? channelTopK : MemoryFusionPolicy.DEFAULT_CHANNEL_TOP_K;
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
+        this.recallExecutor = Objects.requireNonNullElseGet(recallExecutor, ForkJoinPool::commonPool);
     }
 
     @Override
@@ -231,29 +279,60 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 activeTracks,
                 channelTopK,
                 Map.of());
-        List<List<MemoryRecallCandidate>> channelResults = new ArrayList<>();
-        for (MemoryRecallChannelPort channel : channels) {
-            long startedAt = System.nanoTime();
-            try {
-                List<MemoryRecallCandidate> result = channel.recall(recallRequest);
-                List<MemoryRecallCandidate> safeResult = result == null ? List.of() : result;
-                channelResults.add(safeResult);
-                recordRecallChannel(channel, userId, safeResult.size(),
-                        elapsedMillis(startedAt), MemoryTraceEvent.STATUS_SUCCESS, "");
-            } catch (RuntimeException ex) {
-                LOG.warn("memory recall channel failed: channel={}, userId={}", channel.channelName(), userId, ex);
-                channelResults.add(List.of());
-                recordRecallChannel(channel, userId, 0,
-                        elapsedMillis(startedAt), MemoryTraceEvent.STATUS_FAILED,
-                        Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
-            }
-        }
+        List<ChannelRecallTask> tasks = channels.stream()
+                .map(channel -> recallTask(channel, recallRequest))
+                .toList();
+        List<List<MemoryRecallCandidate>> channelResults = collectChannelResults(tasks, userId);
         List<MemoryRecallCandidate> fused = fusionPort.fuse(channelResults, fusionPolicy, Instant.now());
         recordRecallFusion(userId, channelResults.size(), fused.size(), fusionPolicy.finalTopK());
         return fused.stream()
                 .map(this::toMemoryItem)
                 .flatMap(Optional::stream)
                 .toList();
+    }
+
+    private ChannelRecallTask recallTask(MemoryRecallChannelPort channel, MemoryRecallRequest recallRequest) {
+        long startedAt = System.nanoTime();
+        CompletableFuture<List<MemoryRecallCandidate>> future = CompletableFuture.supplyAsync(
+                () -> channel.recall(recallRequest),
+                recallExecutor);
+        return new ChannelRecallTask(channel, startedAt, future);
+    }
+
+    private List<List<MemoryRecallCandidate>> collectChannelResults(List<ChannelRecallTask> tasks, String userId) {
+        List<List<MemoryRecallCandidate>> channelResults = new ArrayList<>();
+        for (ChannelRecallTask task : tasks) {
+            try {
+                List<MemoryRecallCandidate> result = task.future()
+                        .get(fusionPolicy.channelTimeoutMillis(), TimeUnit.MILLISECONDS);
+                List<MemoryRecallCandidate> safeResult = result == null ? List.of() : result;
+                channelResults.add(safeResult);
+                recordRecallChannel(task.channel(), userId, safeResult.size(),
+                        elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_SUCCESS, "");
+            } catch (TimeoutException ex) {
+                task.future().cancel(true);
+                channelResults.add(List.of());
+                LOG.warn("memory recall channel timed out: channel={}, userId={}, timeoutMs={}",
+                        task.channel().channelName(), userId, fusionPolicy.channelTimeoutMillis());
+                recordRecallChannel(task.channel(), userId, 0,
+                        elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_FAILED, "timeout");
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                task.future().cancel(true);
+                channelResults.add(List.of());
+                recordRecallChannel(task.channel(), userId, 0,
+                        elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_FAILED, "interrupted");
+            } catch (ExecutionException ex) {
+                Throwable cause = ex.getCause() == null ? ex : ex.getCause();
+                LOG.warn("memory recall channel failed: channel={}, userId={}", task.channel().channelName(), userId,
+                        cause);
+                channelResults.add(List.of());
+                recordRecallChannel(task.channel(), userId, 0,
+                        elapsedMillis(task.startedAt()), MemoryTraceEvent.STATUS_FAILED,
+                        Objects.requireNonNullElse(cause.getMessage(), cause.getClass().getName()));
+            }
+        }
+        return channelResults;
     }
 
     private void recordRecallChannel(MemoryRecallChannelPort channel,

@@ -105,6 +105,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMainte
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -116,6 +117,7 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 
 /**
  * 内核记忆能力自动配置。
@@ -123,7 +125,11 @@ import java.util.Map;
  * <p>四层记忆引擎、管理服务、治理服务和治理调度属于同一内核职责域，独立配置后主 kernel 配置不再承载记忆闭环细节。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentMemoryRepositoryAutoConfiguration.class})
+@AutoConfigureAfter({
+        SeahorseAgentKernelAutoConfiguration.class,
+        SeahorseAgentKernelRetrievalAutoConfiguration.class,
+        SeahorseAgentMemoryRepositoryAutoConfiguration.class
+})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelMemoryAutoConfiguration {
 
@@ -410,6 +416,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             MemoryRecallFusionPort recallFusionPort,
             MemoryFusionPolicy fusionPolicy,
             ObjectProvider<MemoryTraceRecorder> traceRecorder,
+            @Qualifier("ragRetrievalThreadPoolExecutor") ObjectProvider<Executor> recallExecutor,
             @Value("${seahorse-agent.memory.recall.channel-top-k:20}") int channelTopK) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         return new HybridMemoryRecallPipeline(
@@ -426,7 +433,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 recallFusionPort,
                 fusionPolicy,
                 channelTopK,
-                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop));
+                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
+                recallExecutor.getIfAvailable());
     }
 
     @Bean

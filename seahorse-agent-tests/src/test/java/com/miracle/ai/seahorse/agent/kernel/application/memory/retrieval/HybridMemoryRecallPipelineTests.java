@@ -147,6 +147,66 @@ class HybridMemoryRecallPipelineTests {
     }
 
     @Test
+    void shouldTimeoutSlowRecallChannelAndFuseRemainingChannels() {
+        RecordingMemoryStore semantic = new RecordingMemoryStore();
+        semantic.save(record("semantic-fast", "SEMANTIC", "Fast keyword memory."));
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        MemoryRecallChannelPort slow = new MemoryRecallChannelPort() {
+            @Override
+            public String channelName() {
+                return "slow-vector";
+            }
+
+            @Override
+            public List<MemoryRecallCandidate> recall(MemoryRecallRequest request) {
+                try {
+                    Thread.sleep(250L);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+                return List.of(candidate("semantic-slow", "slow-vector", 1, 9.0D, "SEMANTIC"));
+            }
+        };
+
+        HybridMemoryRecallPipeline pipeline = pipeline(
+                new RecordingMemoryStore(),
+                new RecordingMemoryStore(),
+                semantic,
+                List.of(
+                        slow,
+                        channel("keyword", List.of(candidate("semantic-fast", "keyword", 1, 5.0D, "SEMANTIC")))),
+                traceRecorder,
+                MemoryFusionPolicy.defaults()
+                        .withFinalTopK(5)
+                        .withTimeDecayEnabled(false)
+                        .withChannelTimeoutMillis(20L));
+
+        MemoryContext context = pipeline.load(MemoryLoadRequest.builder()
+                .conversationId("conv-1")
+                .userId("user-1")
+                .currentQuestion("fast")
+                .build());
+
+        assertThat(context.getSemanticMemories()).extracting(MemoryItem::getId)
+                .containsExactly("semantic-fast");
+        assertThat(traceRecorder.events)
+                .anySatisfy(event -> {
+                    assertThat(event.eventType()).isEqualTo("channel");
+                    assertThat(event.status()).isEqualTo(MemoryTraceEvent.STATUS_FAILED);
+                    assertThat(event.subjectId()).isEqualTo("slow-vector");
+                    assertThat(event.details()).containsEntry("candidateCount", 0);
+                    assertThat(event.details()).containsEntry("timeoutMs", 20L);
+                    assertThat(event.details()).containsEntry("error", "timeout");
+                })
+                .anySatisfy(event -> {
+                    assertThat(event.eventType()).isEqualTo("channel");
+                    assertThat(event.status()).isEqualTo(MemoryTraceEvent.STATUS_SUCCESS);
+                    assertThat(event.subjectId()).isEqualTo("keyword");
+                    assertThat(event.details()).containsEntry("candidateCount", 1);
+                });
+    }
+
+    @Test
     void shouldSkipCandidateWhenGenerationDoesNotMatchActiveRecord() {
         RecordingMemoryStore semantic = new RecordingMemoryStore();
         semantic.save(new MemoryRecord(
@@ -195,6 +255,20 @@ class HybridMemoryRecallPipelineTests {
                                                 RecordingMemoryStore semantic,
                                                 List<MemoryRecallChannelPort> channels,
                                                 MemoryTraceRecorder traceRecorder) {
+        return pipeline(shortTerm,
+                longTerm,
+                semantic,
+                channels,
+                traceRecorder,
+                MemoryFusionPolicy.defaults().withFinalTopK(5).withTimeDecayEnabled(false));
+    }
+
+    private HybridMemoryRecallPipeline pipeline(RecordingMemoryStore shortTerm,
+                                                RecordingMemoryStore longTerm,
+                                                RecordingMemoryStore semantic,
+                                                List<MemoryRecallChannelPort> channels,
+                                                MemoryTraceRecorder traceRecorder,
+                                                MemoryFusionPolicy fusionPolicy) {
         return new HybridMemoryRecallPipeline(
                 shortTerm,
                 longTerm,
@@ -207,7 +281,7 @@ class HybridMemoryRecallPipelineTests {
                 new RecordingLifecyclePort(List.of(shortTerm, longTerm, semantic)),
                 channels,
                 new RrfMemoryFusion(),
-                MemoryFusionPolicy.defaults().withFinalTopK(5).withTimeDecayEnabled(false),
+                fusionPolicy,
                 10,
                 traceRecorder);
     }
