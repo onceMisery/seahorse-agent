@@ -22,6 +22,9 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.Repository
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
@@ -45,7 +48,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingReposi
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -154,6 +159,35 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                 });
     }
 
+    @Test
+    void shouldWireToolInvocationUsageIntoCatalogBackedPolicy() {
+        contextRunner.withUserConfiguration(TestCatalogBackedCallLimitPolicyConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    ToolPolicyRequest request = new ToolPolicyRequest(
+                            "run-1",
+                            "step-1",
+                            "call-1",
+                            "agent-1",
+                            "version-1",
+                            "tenant-1",
+                            "user-1",
+                            "agent-identity-1",
+                            "memory-write",
+                            Map.of(),
+                            Map.of(),
+                            "run-1:call-1",
+                            List.of("memory-write"),
+                            true);
+
+                    PolicyDecision decision = context.getBean(ToolPolicyPort.class).decide(request);
+
+                    assertThat(decision.effect()).isEqualTo(PolicyDecision.Effect.DENY);
+                    assertThat(decision.reasonCode()).isEqualTo(ToolPolicyReasonCodes.TOOL_CALL_LIMIT_EXCEEDED);
+                });
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class TestAgentRunStoreConfiguration {
 
@@ -248,6 +282,33 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Bean
         StreamingChatModelPort streamingChatModelPort() {
             return new ToolThenFinalStreamingChatModel();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestCatalogBackedCallLimitPolicyConfiguration {
+
+        @Bean
+        ToolCatalogRepositoryPort toolCatalogRepositoryPort() {
+            return new SingleToolCatalogRepository();
+        }
+
+        @Bean
+        AgentToolBindingRepositoryPort agentToolBindingRepositoryPort() {
+            return new SingleAgentToolBindingRepository(new AgentToolBinding(
+                    "binding-1",
+                    "agent-1",
+                    "version-1",
+                    "memory-write",
+                    2,
+                    "{}",
+                    "admin-1",
+                    Instant.EPOCH));
+        }
+
+        @Bean
+        ToolInvocationUsagePort toolInvocationUsagePort() {
+            return (runId, agentId, versionId, toolId) -> 3L;
         }
     }
 
@@ -454,6 +515,35 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
 
         @Override
         public void setEnabled(String toolId, boolean enabled) {
+        }
+    }
+
+    private static final class SingleAgentToolBindingRepository implements AgentToolBindingRepositoryPort {
+        private final AgentToolBinding binding;
+
+        private SingleAgentToolBindingRepository(AgentToolBinding binding) {
+            this.binding = binding;
+        }
+
+        @Override
+        public void saveBindings(String agentId, String versionId, List<AgentToolBinding> bindings) {
+        }
+
+        @Override
+        public List<AgentToolBinding> listBindings(String agentId, String versionId) {
+            return agentId.equals(binding.agentId()) && versionId.equals(binding.versionId())
+                    ? List.of(binding)
+                    : List.of();
+        }
+
+        @Override
+        public Optional<AgentToolBinding> findBinding(String agentId, String versionId, String toolId) {
+            if (agentId.equals(binding.agentId())
+                    && versionId.equals(binding.versionId())
+                    && toolId.equals(binding.toolId())) {
+                return Optional.of(binding);
+            }
+            return Optional.empty();
         }
     }
 }

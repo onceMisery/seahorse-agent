@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAudi
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
@@ -31,7 +32,7 @@ import java.util.Objects;
 /**
  * 工具调用审计 JDBC 仓储适配器，负责持久化 Tool Gateway 的请求、策略裁决和完成状态。
  */
-public class JdbcToolInvocationAuditRepositoryAdapter implements ToolInvocationAuditPort {
+public class JdbcToolInvocationAuditRepositoryAdapter implements ToolInvocationAuditPort, ToolInvocationUsagePort {
 
     private static final String SQL_INSERT_REQUESTED = """
             INSERT INTO sa_tool_invocation
@@ -52,6 +53,14 @@ public class JdbcToolInvocationAuditRepositoryAdapter implements ToolInvocationA
                 error_message = ?,
                 finished_at = ?
             WHERE invocation_id = ?
+            """;
+    private static final String SQL_COUNT_REQUESTED = """
+            SELECT COUNT(1)
+            FROM sa_tool_invocation
+            WHERE run_id = ?
+              AND agent_id = ?
+              AND version_id = ?
+              AND tool_id = ?
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -99,7 +108,25 @@ public class JdbcToolInvocationAuditRepositoryAdapter implements ToolInvocationA
                 safeCompletion.invocationId());
     }
 
+    @Override
+    public long countRequestedCalls(String runId, String agentId, String versionId, String toolId) {
+        if (!hasText(runId) || !hasText(agentId) || !hasText(versionId) || !hasText(toolId)) {
+            return 0L;
+        }
+        Long count = jdbcTemplate.queryForObject(SQL_COUNT_REQUESTED,
+                Long.class,
+                runId.trim(),
+                agentId.trim(),
+                versionId.trim(),
+                toolId.trim());
+        return count == null ? 0L : count;
+    }
+
     private Timestamp toTimestamp(Instant instant) {
         return instant == null ? null : Timestamp.from(instant);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

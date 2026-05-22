@@ -15,21 +15,25 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.policy;
+package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 /**
- * Tool Policy 的稳定原因码，供策略、审计、前端展示和自动化告警复用。
+ * 工具调用用量查询端口。
  */
-public final class ToolPolicyReasonCodes {
+@FunctionalInterface
+public interface ToolInvocationUsagePort {
 
-    public static final String ALLOW = "ALLOW";
-    public static final String TOOL_NOT_FOUND = "TOOL_NOT_FOUND";
-    public static final String TOOL_DISABLED = "TOOL_DISABLED";
-    public static final String TOOL_NOT_BOUND = "TOOL_NOT_BOUND";
-    public static final String TOOL_CALL_LIMIT_EXCEEDED = "TOOL_CALL_LIMIT_EXCEEDED";
-    public static final String TOOL_APPROVAL_REQUIRED = "TOOL_APPROVAL_REQUIRED";
-    public static final String POLICY_DECISION_MISSING = "POLICY_DECISION_MISSING";
+    /**
+     * 统计单次 run 内指定 Agent 版本与工具的已请求调用次数。
+     *
+     * <p>Gateway 会先写入 REQUESTED 审计事件再进入策略裁决，因此该计数包含当前请求。
+     */
+    long countRequestedCalls(String runId, String agentId, String versionId, String toolId);
 
-    private ToolPolicyReasonCodes() {
+    /**
+     * 空用量实现，用于未配置持久审计仓储时保持策略兼容。
+     */
+    static ToolInvocationUsagePort empty() {
+        return (runId, agentId, versionId, toolId) -> 0L;
     }
 }

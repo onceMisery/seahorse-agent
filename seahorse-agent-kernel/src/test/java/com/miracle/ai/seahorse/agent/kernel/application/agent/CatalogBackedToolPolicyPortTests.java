@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -92,6 +93,36 @@ class CatalogBackedToolPolicyPortTests {
         assertEquals("TOOL_APPROVAL_REQUIRED", decision.reasonCode());
     }
 
+    @Test
+    void shouldDenyWhenRunExceedsBindingCallLimit() {
+        CatalogBackedToolPolicyPort policy = new CatalogBackedToolPolicyPort(
+                new SingleToolCatalogRepository(tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ,
+                        true, false)),
+                new SingleAgentToolBindingRepository(binding("knowledge-search", 2)),
+                new FixedToolInvocationUsagePort(3L),
+                ToolPolicyRequest::toolRegistered);
+
+        PolicyDecision decision = policy.decide(request("knowledge-search"));
+
+        assertEquals(PolicyDecision.Effect.DENY, decision.effect());
+        assertEquals("TOOL_CALL_LIMIT_EXCEEDED", decision.reasonCode());
+    }
+
+    @Test
+    void shouldAllowWhenRunIsAtBindingCallLimitIncludingCurrentRequest() {
+        CatalogBackedToolPolicyPort policy = new CatalogBackedToolPolicyPort(
+                new SingleToolCatalogRepository(tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ,
+                        true, false)),
+                new SingleAgentToolBindingRepository(binding("knowledge-search", 2)),
+                new FixedToolInvocationUsagePort(2L),
+                ToolPolicyRequest::toolRegistered);
+
+        PolicyDecision decision = policy.decide(request("knowledge-search"));
+
+        assertEquals(PolicyDecision.Effect.ALLOW, decision.effect());
+        assertEquals("ALLOW", decision.reasonCode());
+    }
+
     private static void assertApprovalRequired(ToolCatalogEntry tool) {
         CatalogBackedToolPolicyPort policy = policy(tool, binding(tool.toolId(), 3));
 
@@ -105,6 +136,7 @@ class CatalogBackedToolPolicyPortTests {
         return new CatalogBackedToolPolicyPort(
                 new SingleToolCatalogRepository(tool),
                 new SingleAgentToolBindingRepository(binding),
+                ToolInvocationUsagePort.empty(),
                 ToolPolicyRequest::toolRegistered);
     }
 
@@ -208,6 +240,19 @@ class CatalogBackedToolPolicyPortTests {
                 return Optional.empty();
             }
             return Optional.of(binding);
+        }
+    }
+
+    private static final class FixedToolInvocationUsagePort implements ToolInvocationUsagePort {
+        private final long callCount;
+
+        private FixedToolInvocationUsagePort(long callCount) {
+            this.callCount = callCount;
+        }
+
+        @Override
+        public long countRequestedCalls(String runId, String agentId, String versionId, String toolId) {
+            return callCount;
         }
     }
 }

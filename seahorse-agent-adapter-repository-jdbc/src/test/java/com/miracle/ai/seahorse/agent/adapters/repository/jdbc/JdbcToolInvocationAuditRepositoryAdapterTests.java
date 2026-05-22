@@ -84,6 +84,25 @@ class JdbcToolInvocationAuditRepositoryAdapterTests {
         assertThat(row.get("FINISHED_AT")).isNotNull();
     }
 
+    @Test
+    void shouldCountRequestedCallsByRunAgentVersionAndTool() {
+        DriverManagerDataSource dataSource = dataSource("tool-invocation-usage");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createToolInvocationSchema(jdbcTemplate);
+        JdbcToolInvocationAuditRepositoryAdapter adapter = new JdbcToolInvocationAuditRepositoryAdapter(dataSource);
+        Instant startedAt = Instant.parse("2026-05-23T00:00:00Z");
+
+        adapter.recordRequested(record("invocation-1", "run-1", "agent-1", "version-1", "weather", startedAt));
+        adapter.recordRequested(record("invocation-2", "run-1", "agent-1", "version-1", "weather", startedAt));
+        adapter.recordRequested(record("invocation-3", "run-1", "agent-1", "version-2", "weather", startedAt));
+        adapter.recordRequested(record("invocation-4", "run-1", "agent-1", "version-1", "memory-read", startedAt));
+        adapter.recordRequested(record("invocation-5", "run-2", "agent-1", "version-1", "weather", startedAt));
+
+        long count = adapter.countRequestedCalls("run-1", "agent-1", "version-1", "weather");
+
+        assertThat(count).isEqualTo(2L);
+    }
+
     private DriverManagerDataSource dataSource(String name) {
         return new DriverManagerDataSource(
                 "jdbc:h2:mem:" + name + "-" + System.nanoTime() + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
@@ -110,5 +129,26 @@ class JdbcToolInvocationAuditRepositoryAdapterTests {
                     finished_at TIMESTAMP
                 )
                 """);
+    }
+
+    private static ToolInvocationAuditRecord record(String invocationId,
+                                                    String runId,
+                                                    String agentId,
+                                                    String versionId,
+                                                    String toolId,
+                                                    Instant startedAt) {
+        return new ToolInvocationAuditRecord(
+                invocationId,
+                runId,
+                "step-" + invocationId,
+                agentId,
+                versionId,
+                "tenant-1",
+                "user-1",
+                toolId,
+                runId + ":" + invocationId,
+                ToolInvocationStatus.REQUESTED,
+                "keys=[], size=0",
+                startedAt);
     }
 }

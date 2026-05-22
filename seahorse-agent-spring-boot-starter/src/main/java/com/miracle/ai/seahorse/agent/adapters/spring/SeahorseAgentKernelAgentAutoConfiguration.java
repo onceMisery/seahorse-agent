@@ -44,6 +44,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingReposi
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
@@ -135,8 +136,12 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @ConditionalOnMissingBean
     public ToolPolicyPort seahorseCatalogBackedToolPolicyPort(
             ToolCatalogRepositoryPort toolCatalogRepositoryPort,
-            AgentToolBindingRepositoryPort agentToolBindingRepositoryPort) {
-        return new CatalogBackedToolPolicyPort(toolCatalogRepositoryPort, agentToolBindingRepositoryPort);
+            AgentToolBindingRepositoryPort agentToolBindingRepositoryPort,
+            ObjectProvider<ToolInvocationUsagePort> toolInvocationUsagePort) {
+        return new CatalogBackedToolPolicyPort(
+                toolCatalogRepositoryPort,
+                agentToolBindingRepositoryPort,
+                toolInvocationUsagePort.getIfAvailable(ToolInvocationUsagePort::empty));
     }
 
     @Bean

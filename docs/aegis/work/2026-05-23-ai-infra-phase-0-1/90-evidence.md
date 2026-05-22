@@ -540,6 +540,76 @@ Remaining Phase 2 work:
 - MCP allowlist registration into the catalog.
 - Tool catalog/binding/audit management APIs.
 
+## 2026-05-23 Phase 2 maxCallsPerRun enforcement slice
+
+RED/GREEN coverage:
+
+- `CatalogBackedToolPolicyPortTests` first failed because no `ToolInvocationUsagePort` existed; it then verified policy denies with `TOOL_CALL_LIMIT_EXCEEDED` when requested calls exceed `AgentToolBinding.maxCallsPerRun`, and allows when the count equals the limit because Gateway records the current `REQUESTED` event before policy decision.
+- `JdbcToolInvocationAuditRepositoryAdapterTests` verifies requested-call usage is counted by `runId + agentId + versionId + toolId` without leaking across other runs, versions, or tools.
+- `SeahorseAgentRegistryAutoConfigurationTests` verifies the JDBC audit adapter is exposed as `ToolInvocationUsagePort`.
+- `SeahorseAgentChatRunStoreAutoConfigurationTests` verifies starter catalog-backed policy receives `ToolInvocationUsagePort` and returns `TOOL_CALL_LIMIT_EXCEEDED`.
+
+Validation environment:
+
+- Main workspace verification was blocked before test execution by unrelated unstaged memory-maintenance changes: `DefaultMemoryMaintenanceService` called a `MemoryMaintenanceRunRecord` constructor signature that did not exist in the current dirty worktree.
+- Final verification was run in clean detached worktree `C:\Users\miracle\.config\aegis\worktrees\seahorse-agent\tool-call-limit-verify`, created from `HEAD=5862147`, with only the staged `maxCallsPerRun` patch applied.
+
+Focused kernel command:
+
+```powershell
+.\mvnw -pl seahorse-agent-kernel '-Dtest=CatalogBackedToolPolicyPortTests,LocalToolGatewayPortAuditTests,LocalToolGatewayPortPolicyTests,KernelAgentLoopToolGatewayTests' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 16
+- Failures: 0
+- Errors: 0
+- Covered: call-limit policy boundary, Tool Gateway audit lifecycle, policy enforcement, and AgentLoop Gateway delegation.
+
+Focused JDBC command:
+
+```powershell
+.\mvnw -pl seahorse-agent-adapter-repository-jdbc -am '-Dtest=JdbcToolInvocationAuditRepositoryAdapterTests,JdbcToolCatalogRepositoryAdapterTests,JdbcAgentToolBindingRepositoryAdapterTests,JdbcAgentRunRepositoryAdapterTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 6
+- Failures: 0
+- Errors: 0
+- Covered: requested-call usage counting plus audit, tool catalog, Agent tool binding, and Agent run JDBC regressions.
+
+Focused starter command:
+
+```powershell
+.\mvnw -pl seahorse-agent-spring-boot-starter -am '-Dtest=SeahorseAgentRegistryAutoConfigurationTests,SeahorseAgentChatRunStoreAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 5 in starter
+- Failures: 0
+- Errors: 0
+- Covered: `ToolInvocationUsagePort` repository exposure, catalog-backed policy usage injection, and existing Agent chat run-store / Tool Gateway wiring regressions.
+
+Fix boundary:
+
+- `ToolInvocationUsagePort`: added a narrow read-only outbound port for requested-call usage, preserving ISP instead of expanding the audit write port.
+- `CatalogBackedToolPolicyPort`: enforces `AgentToolBinding.maxCallsPerRun` only when `runId` is present; legacy no-runId calls keep the previous compatibility behavior.
+- `ToolPolicyReasonCodes`: added stable `TOOL_CALL_LIMIT_EXCEEDED`.
+- `JdbcToolInvocationAuditRepositoryAdapter`: implements usage counting over `sa_tool_invocation` requested records.
+- `SeahorseAgentKernelAgentAutoConfiguration`: injects usage port into catalog-backed policy with an empty fallback.
+
+Remaining Phase 2 work:
+
+- Argument policy enforcement.
+- MCP allowlist registration into the catalog.
+- Tool catalog/binding/audit management APIs.
+
 ## 2026-05-23 Phase 2 Tool Catalog / Agent Binding persistence slice
 
 RED/GREEN coverage:

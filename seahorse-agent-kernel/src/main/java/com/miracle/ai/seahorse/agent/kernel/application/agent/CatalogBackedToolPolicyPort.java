@@ -21,10 +21,12 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.AgentToolBinding;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 
 import java.util.EnumSet;
@@ -43,15 +45,30 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
 
     private final ToolCatalogRepositoryPort toolCatalogRepository;
     private final AgentToolBindingRepositoryPort bindingRepository;
+    private final ToolInvocationUsagePort invocationUsagePort;
     private final Predicate<ToolPolicyRequest> toolRegisteredPredicate;
 
     public CatalogBackedToolPolicyPort(ToolCatalogRepositoryPort toolCatalogRepository,
                                        AgentToolBindingRepositoryPort bindingRepository) {
-        this(toolCatalogRepository, bindingRepository, ToolPolicyRequest::toolRegistered);
+        this(toolCatalogRepository, bindingRepository, ToolInvocationUsagePort.empty(),
+                ToolPolicyRequest::toolRegistered);
     }
 
     public CatalogBackedToolPolicyPort(ToolCatalogRepositoryPort toolCatalogRepository,
                                        AgentToolBindingRepositoryPort bindingRepository,
+                                       Predicate<ToolPolicyRequest> toolRegisteredPredicate) {
+        this(toolCatalogRepository, bindingRepository, ToolInvocationUsagePort.empty(), toolRegisteredPredicate);
+    }
+
+    public CatalogBackedToolPolicyPort(ToolCatalogRepositoryPort toolCatalogRepository,
+                                       AgentToolBindingRepositoryPort bindingRepository,
+                                       ToolInvocationUsagePort invocationUsagePort) {
+        this(toolCatalogRepository, bindingRepository, invocationUsagePort, ToolPolicyRequest::toolRegistered);
+    }
+
+    public CatalogBackedToolPolicyPort(ToolCatalogRepositoryPort toolCatalogRepository,
+                                       AgentToolBindingRepositoryPort bindingRepository,
+                                       ToolInvocationUsagePort invocationUsagePort,
                                        Predicate<ToolPolicyRequest> toolRegisteredPredicate) {
         this.toolCatalogRepository = Objects.requireNonNullElseGet(
                 toolCatalogRepository,
@@ -59,6 +76,9 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         this.bindingRepository = Objects.requireNonNullElseGet(
                 bindingRepository,
                 AgentToolBindingRepositoryPort::empty);
+        this.invocationUsagePort = Objects.requireNonNullElseGet(
+                invocationUsagePort,
+                ToolInvocationUsagePort::empty);
         this.toolRegisteredPredicate = Objects.requireNonNullElseGet(
                 toolRegisteredPredicate,
                 () -> ToolPolicyRequest::toolRegistered);
@@ -79,8 +99,15 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         if (!tool.enabled()) {
             return deny(ToolPolicyReasonCodes.TOOL_DISABLED, "Tool is disabled");
         }
-        if (bindingRepository.findBinding(request.agentId(), request.versionId(), request.toolId()).isEmpty()) {
+        AgentToolBinding binding = bindingRepository
+                .findBinding(request.agentId(), request.versionId(), request.toolId())
+                .orElse(null);
+        if (binding == null) {
             return deny(ToolPolicyReasonCodes.TOOL_NOT_BOUND, "Tool is not bound to the current agent version");
+        }
+        if (exceedsCallLimit(request, binding)) {
+            return deny(ToolPolicyReasonCodes.TOOL_CALL_LIMIT_EXCEEDED,
+                    "Tool call limit exceeded for this run");
         }
         // 高风险、删除、对外发送或显式审批工具先中断执行，后续由 HITL 阶段接管审批流。
         if (requiresApproval(tool)) {
@@ -90,6 +117,16 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
                     "Tool requires approval");
         }
         return PolicyDecision.allow("builtin-tool-allow");
+    }
+
+    private boolean exceedsCallLimit(ToolPolicyRequest request, AgentToolBinding binding) {
+        if (request.runId() == null) {
+            return false;
+        }
+        // Gateway 在策略裁决前写入 REQUESTED 审计事件，因此这里的计数包含当前请求。
+        long requestedCalls = invocationUsagePort.countRequestedCalls(
+                request.runId(), request.agentId(), request.versionId(), request.toolId());
+        return requestedCalls > binding.maxCallsPerRun();
     }
 
     private boolean requiresApproval(ToolCatalogEntry tool) {
