@@ -37,6 +37,9 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(initSql).contains("CREATE INDEX idx_memory_review_operation");
         assertThat(initSql).contains("CREATE TABLE t_memory_review_feedback_sample");
         assertThat(initSql).contains("CREATE INDEX idx_memory_review_feedback_candidate");
+        assertThat(initSql).contains("CREATE TABLE t_memory_keyword_index");
+        assertThat(initSql).contains("CREATE UNIQUE INDEX uk_memory_keyword_memory");
+        assertThat(initSql).contains("CREATE INDEX idx_memory_keyword_lookup");
     }
 
     @Test
@@ -59,6 +62,7 @@ class JdbcChatSchemaUpgradeTests {
         assertThat(columnExists(jdbcTemplate, "t_memory_maintenance_run", "compaction_fragment_count")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_entity_alias")).isTrue();
         assertThat(tableExists(jdbcTemplate, "t_memory_entity_relation")).isTrue();
+        assertThat(tableExists(jdbcTemplate, "t_memory_keyword_index")).isTrue();
     }
 
     @Test

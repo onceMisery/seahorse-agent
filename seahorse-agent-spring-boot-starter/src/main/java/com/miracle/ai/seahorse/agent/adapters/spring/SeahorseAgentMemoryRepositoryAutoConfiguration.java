@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLongTermMemory
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryAliasRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryConflictLogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryGraphRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryKeywordIndexRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryKeywordSearchRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryLifecycleRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemoryMaintenanceRunRepositoryAdapter;
@@ -46,6 +47,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRepositoryPort;
@@ -143,6 +145,16 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
     public JdbcMemoryKeywordSearchRepositoryAdapter seahorseJdbcMemoryKeywordSearchRepositoryAdapter(
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
         return new JdbcMemoryKeywordSearchRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
+            matchIfMissing = true)
+    @ConditionalOnMissingBean(MemoryKeywordIndexPort.class)
+    public JdbcMemoryKeywordIndexRepositoryAdapter seahorseJdbcMemoryKeywordIndexRepositoryAdapter(
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcMemoryKeywordIndexRepositoryAdapter(dataSource, objectMapper(objectMapperProvider));
     }
 
     @Bean

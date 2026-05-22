@@ -317,6 +317,31 @@ public class JdbcChatSchemaUpgrade {
                 CREATE INDEX IF NOT EXISTS idx_memory_relation_memory
                 ON t_memory_entity_relation (user_id, tenant_id, memory_id, status)
                 """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_memory_keyword_index (
+                    id VARCHAR(128) PRIMARY KEY,
+                    user_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    memory_id VARCHAR(128) NOT NULL,
+                    layer_name VARCHAR(32),
+                    memory_type VARCHAR(64),
+                    content TEXT,
+                    metadata_json JSONB,
+                    source_update_time TIMESTAMP,
+                    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_memory_keyword_memory
+                ON t_memory_keyword_index (user_id, tenant_id, memory_id)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_keyword_lookup
+                ON t_memory_keyword_index (user_id, tenant_id, status, update_time)
+                """);
     }
 
     private void ensureProfileFactColumns() {

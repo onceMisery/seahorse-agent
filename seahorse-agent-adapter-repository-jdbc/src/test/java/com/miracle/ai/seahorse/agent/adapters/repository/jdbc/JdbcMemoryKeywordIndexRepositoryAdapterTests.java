@@ -1,0 +1,134 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryDerivedIndexDeleteCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryDerivedIndexDocument;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+
+import java.time.Instant;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class JdbcMemoryKeywordIndexRepositoryAdapterTests {
+
+    private JdbcMemoryKeywordIndexRepositoryAdapter adapter;
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void setUp() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:memory-keyword-index-" + System.nanoTime()
+                        + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        new JdbcChatSchemaUpgrade(dataSource).upgrade();
+        jdbcTemplate = new JdbcTemplate(dataSource);
+        adapter = new JdbcMemoryKeywordIndexRepositoryAdapter(dataSource, new ObjectMapper());
+    }
+
+    @Test
+    void shouldUpsertMemoryKeywordDocument() {
+        adapter.upsert(new MemoryDerivedIndexDocument(
+                "memory-1",
+                "user-1",
+                "tenant-1",
+                "LONG_TERM",
+                "PROJECT_FACT",
+                "OceanBase backup window is 03:00.",
+                Map.of("semanticKey", "project:oceanbase"),
+                Instant.parse("2026-05-22T08:00:00Z")));
+
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT memory_id, user_id, tenant_id, layer_name, memory_type, content, status, deleted
+                FROM t_memory_keyword_index
+                WHERE memory_id = 'memory-1'
+                """);
+
+        assertThat(row)
+                .containsEntry("MEMORY_ID", "memory-1")
+                .containsEntry("USER_ID", "user-1")
+                .containsEntry("TENANT_ID", "tenant-1")
+                .containsEntry("LAYER_NAME", "LONG_TERM")
+                .containsEntry("MEMORY_TYPE", "PROJECT_FACT")
+                .containsEntry("CONTENT", "OceanBase backup window is 03:00.")
+                .containsEntry("STATUS", "ACTIVE");
+        assertThat(((Number) row.get("DELETED")).intValue()).isZero();
+    }
+
+    @Test
+    void shouldReactivateDeletedRowOnUpsert() {
+        adapter.upsert(new MemoryDerivedIndexDocument(
+                "memory-1",
+                "user-1",
+                "tenant-1",
+                "SHORT_TERM",
+                "FACT",
+                "Old content",
+                Map.of(),
+                Instant.now()));
+        adapter.delete(new MemoryDerivedIndexDeleteCommand("memory-1", "user-1", "tenant-1"));
+
+        adapter.upsert(new MemoryDerivedIndexDocument(
+                "memory-1",
+                "user-1",
+                "tenant-1",
+                "SHORT_TERM",
+                "FACT",
+                "New content",
+                Map.of(),
+                Instant.now()));
+
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT content, status, deleted
+                FROM t_memory_keyword_index
+                WHERE memory_id = 'memory-1'
+                """);
+        assertThat(row).containsEntry("CONTENT", "New content")
+                .containsEntry("STATUS", "ACTIVE");
+        assertThat(((Number) row.get("DELETED")).intValue()).isZero();
+    }
+
+    @Test
+    void shouldSoftDeleteMemoryKeywordDocument() {
+        adapter.upsert(new MemoryDerivedIndexDocument(
+                "memory-1",
+                "user-1",
+                "tenant-1",
+                "SEMANTIC",
+                "PROFILE",
+                "{\"project\":\"OceanBase\"}",
+                Map.of(),
+                Instant.now()));
+
+        adapter.delete(new MemoryDerivedIndexDeleteCommand("memory-1", "user-1", "tenant-1"));
+
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT status, deleted
+                FROM t_memory_keyword_index
+                WHERE memory_id = 'memory-1'
+                """);
+        assertThat(row).containsEntry("STATUS", "DELETED");
+        assertThat(((Number) row.get("DELETED")).intValue()).isEqualTo(1);
+    }
+}
