@@ -158,6 +158,40 @@ class MemoryAggregationServiceTests {
                         && MemoryTraceEvent.STATUS_SUCCESS.equals(event.status()));
     }
 
+    @Test
+    void shouldRecordFlushTraceExplanationWithoutRawTurnContent() {
+        RecordingWorkflow workflow = new RecordingWorkflow();
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        DefaultMemoryAggregationService service = service(policy(2, 60_000), workflow, new RecordingScheduler(),
+                traceRecorder);
+        String rawFirstTurn = "Remember I use Java";
+        String rawSecondTurn = "I prefer concise answers";
+
+        service.appendTurn(turn("task-1", rawFirstTurn, "Noted", 8));
+        service.appendTurn(turn("task-2", rawSecondTurn, "Understood", 9));
+
+        assertThat(traceRecorder.events)
+                .filteredOn(event -> "flush-ready".equals(event.eventType())
+                        && MemoryTraceEvent.STATUS_SUCCESS.equals(event.status()))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.details())
+                            .containsEntry("trigger", MemoryFlushTrigger.FORCE_TURNS.name())
+                            .containsEntry("turnCount", 2)
+                            .containsEntry("totalTokens", 17)
+                            .containsEntry("sourceSpanCount", 2)
+                            .containsEntry("sourceUserMessageIds", List.of("task-1", "task-2"))
+                            .containsEntry("sourceAssistantMessageIds",
+                                    List.of("task-1-assistant", "task-2-assistant"))
+                            .containsEntry("from", BASE_TIME.toString())
+                            .containsEntry("to", BASE_TIME.toString())
+                            .containsEntry("windowDurationMillis", 0L);
+                    assertThat(event.details().toString())
+                            .doesNotContain(rawFirstTurn)
+                            .doesNotContain(rawSecondTurn);
+                });
+    }
+
     private DefaultMemoryAggregationService service(MemoryAggregationPolicy policy,
                                                     RecordingWorkflow workflow,
                                                     RecordingScheduler scheduler) {
