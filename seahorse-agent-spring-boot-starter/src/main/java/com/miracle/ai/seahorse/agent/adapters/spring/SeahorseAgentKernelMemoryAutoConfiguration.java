@@ -266,6 +266,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             @Value("${seahorse-agent.memory.capture-enabled:true}") boolean captureEnabled,
             @Value("${seahorse-agent.memory.refiner.enabled:false}") boolean refinerEnabled,
             @Value("${seahorse-agent.memory.refiner.fail-open:true}") boolean refinerFailOpen,
+            @Value("${seahorse-agent.memory.refiner.max-batch-operations:8}") int maxRefinerBatchOperations,
+            @Value("${seahorse-agent.memory.refiner.max-delete-ratio:0.7}") double maxRefinerDeleteRatio,
             @Value("${seahorse-agent.memory.derived-index.keyword-enabled:true}") boolean keywordIndexOutboxEnabled,
             @Value("${seahorse-agent.memory.derived-index.graph-enabled:true}") boolean graphIndexOutboxEnabled) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
@@ -277,7 +279,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 refinerEnabled,
                 refinerFailOpen,
                 keywordIndexOutboxEnabled && memoryKeywordIndexPort.getIfAvailable() != null,
-                graphIndexOutboxEnabled && memoryGraphIndexPort.getIfAvailable() != null);
+                graphIndexOutboxEnabled && memoryGraphIndexPort.getIfAvailable() != null,
+                maxRefinerBatchOperations,
+                maxRefinerDeleteRatio);
         return new DefaultMemoryEnginePort(
                 shortTermMemoryPort,
                 longTermMemoryPort,

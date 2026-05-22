@@ -865,6 +865,140 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldCircuitBreakOversizedRefinerBatchToReviewWithoutWritingMemory() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        List<RefinedMemoryOperation> operations = new ArrayList<>();
+        for (int i = 0; i < 9; i++) {
+            operations.add(RefinedMemoryOperation.add(
+                    "PROJECT_FACT",
+                    "project.fact." + i,
+                    "Fact " + i,
+                    0.80D,
+                    0.70D,
+                    List.of("msg-refiner-oversized"),
+                    List.of("llm_refiner")));
+        }
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "oversized_batch",
+                operations,
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-oversized", "default",
+                "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-oversized")
+                        .messageId("msg-refiner-oversized")
+                        .message(ChatMessage.user("Remember these nine project facts."))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.REVIEW, result.action());
+        Assertions.assertEquals("refiner_batch_circuit_breaker", result.reason());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(1, reviewCandidatePort.candidates.size());
+        MemoryReviewCandidate candidate = reviewCandidatePort.candidates.get(0);
+        Assertions.assertEquals(MemoryIngestionAction.REVIEW, candidate.requestedAction());
+        Assertions.assertEquals("REFINER_BATCH", candidate.targetKind());
+        Assertions.assertEquals(9, candidate.metadata().get("refinerBatchOperationCount"));
+        Assertions.assertEquals("operation_count_exceeded", candidate.metadata().get("refinerBatchCircuitReason"));
+        Assertions.assertEquals(MemoryOperationStatus.REVIEW,
+                operationLogPort.statusById.get("op-refiner-oversized"));
+        Assertions.assertEquals("circuit_breaker",
+                operationLogPort.decisionById.get("op-refiner-oversized").get("refinerStatus"));
+    }
+
+    @Test
+    void shouldCircuitBreakHighDeleteRatioRefinerBatchToReviewWithoutStagingDeletes() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "delete_heavy_batch",
+                List.of(
+                        new RefinedMemoryOperation(
+                                MemoryIngestionAction.DELETE,
+                                "SHORT_TERM_MEMORY",
+                                "stm-old-1",
+                                "",
+                                0.90D,
+                                0.60D,
+                                0.50D,
+                                0.10D,
+                                List.of("msg-refiner-delete-heavy"),
+                                List.of("llm_refiner"),
+                                Map.of()),
+                        new RefinedMemoryOperation(
+                                MemoryIngestionAction.DELETE,
+                                "SHORT_TERM_MEMORY",
+                                "stm-old-2",
+                                "",
+                                0.90D,
+                                0.60D,
+                                0.50D,
+                                0.10D,
+                                List.of("msg-refiner-delete-heavy"),
+                                List.of("llm_refiner"),
+                                Map.of()),
+                        new RefinedMemoryOperation(
+                                MemoryIngestionAction.DELETE,
+                                "SHORT_TERM_MEMORY",
+                                "stm-old-3",
+                                "",
+                                0.90D,
+                                0.60D,
+                                0.50D,
+                                0.10D,
+                                List.of("msg-refiner-delete-heavy"),
+                                List.of("llm_refiner"),
+                                Map.of()),
+                        RefinedMemoryOperation.add(
+                                "PROJECT_FACT",
+                                "project.current",
+                                "User is working on Seahorse memory alignment.",
+                                0.80D,
+                                0.70D,
+                                List.of("msg-refiner-delete-heavy"),
+                                List.of("llm_refiner"))),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-delete-heavy", "default",
+                "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-delete-heavy")
+                        .messageId("msg-refiner-delete-heavy")
+                        .message(ChatMessage.user("Clean up old memories and keep the current project fact."))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.REVIEW, result.action());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(1, reviewCandidatePort.candidates.size());
+        MemoryReviewCandidate candidate = reviewCandidatePort.candidates.get(0);
+        Assertions.assertEquals(MemoryIngestionAction.REVIEW, candidate.requestedAction());
+        Assertions.assertEquals(4, candidate.metadata().get("refinerBatchOperationCount"));
+        Assertions.assertEquals(0.75D, (Double) candidate.metadata().get("refinerBatchDeleteRatio"), 0.001D);
+        Assertions.assertEquals("delete_ratio_exceeded", candidate.metadata().get("refinerBatchCircuitReason"));
+        Assertions.assertEquals(MemoryOperationStatus.REVIEW,
+                operationLogPort.statusById.get("op-refiner-delete-heavy"));
+        Assertions.assertEquals("DELETE_RATIO",
+                operationLogPort.decisionById.get("op-refiner-delete-heavy").get("refinerBatchCircuitType"));
+    }
+
+    @Test
     void shouldFailOpenToRuleClassificationWhenEnabledRefinerThrows() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();

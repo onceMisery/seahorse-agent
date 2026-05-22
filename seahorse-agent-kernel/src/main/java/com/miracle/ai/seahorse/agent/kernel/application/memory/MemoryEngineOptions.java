@@ -30,16 +30,44 @@ public record MemoryEngineOptions(int shortTermLimit,
                                   boolean refinerEnabled,
                                   boolean refinerFailOpen,
                                   boolean keywordIndexOutboxEnabled,
-                                  boolean graphIndexOutboxEnabled) {
+                                  boolean graphIndexOutboxEnabled,
+                                  int maxRefinerBatchOperations,
+                                  double maxRefinerDeleteRatio) {
 
     public static final int DEFAULT_SHORT_TERM_LIMIT = 5;
     public static final int DEFAULT_LONG_TERM_LIMIT = 3;
     public static final int DEFAULT_SEMANTIC_LIMIT = 10;
+    public static final int DEFAULT_MAX_REFINER_BATCH_OPERATIONS = 8;
+    public static final double DEFAULT_MAX_REFINER_DELETE_RATIO = 0.7D;
 
     public MemoryEngineOptions {
         shortTermLimit = positive(shortTermLimit, DEFAULT_SHORT_TERM_LIMIT);
         longTermLimit = positive(longTermLimit, DEFAULT_LONG_TERM_LIMIT);
         semanticLimit = positive(semanticLimit, DEFAULT_SEMANTIC_LIMIT);
+        maxRefinerBatchOperations = positive(maxRefinerBatchOperations, DEFAULT_MAX_REFINER_BATCH_OPERATIONS);
+        maxRefinerDeleteRatio = maxRefinerDeleteRatio <= 0D
+                ? DEFAULT_MAX_REFINER_DELETE_RATIO
+                : Math.min(1D, maxRefinerDeleteRatio);
+    }
+
+    public MemoryEngineOptions(int shortTermLimit,
+                               int longTermLimit,
+                               int semanticLimit,
+                               boolean captureEnabled,
+                               boolean refinerEnabled,
+                               boolean refinerFailOpen,
+                               boolean keywordIndexOutboxEnabled,
+                               boolean graphIndexOutboxEnabled) {
+        this(shortTermLimit,
+                longTermLimit,
+                semanticLimit,
+                captureEnabled,
+                refinerEnabled,
+                refinerFailOpen,
+                keywordIndexOutboxEnabled,
+                graphIndexOutboxEnabled,
+                DEFAULT_MAX_REFINER_BATCH_OPERATIONS,
+                DEFAULT_MAX_REFINER_DELETE_RATIO);
     }
 
     public MemoryEngineOptions(int shortTermLimit,
