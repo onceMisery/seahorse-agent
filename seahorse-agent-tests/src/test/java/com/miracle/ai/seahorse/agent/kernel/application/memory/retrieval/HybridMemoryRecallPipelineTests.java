@@ -283,6 +283,84 @@ class HybridMemoryRecallPipelineTests {
     }
 
     @Test
+    void shouldRecordRecallTraceExplanationWithoutRawQuery() {
+        RecordingMemoryStore semantic = new RecordingMemoryStore();
+        semantic.save(record("semantic-k8s", "SEMANTIC", "Kubernetes project note."));
+        semantic.save(record("semantic-project", "SEMANTIC", "Previous project decision."));
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        RecordingReranker reranker = new RecordingReranker(List.of(
+                candidate("semantic-project", "reranker", 1, 0.99D, "SEMANTIC"),
+                candidate("semantic-k8s", "reranker", 2, 0.75D, "SEMANTIC")));
+        String rawQuery = "previous K8s project";
+
+        HybridMemoryRecallPipeline pipeline = pipeline(
+                new RecordingMemoryStore(),
+                new RecordingMemoryStore(),
+                semantic,
+                List.of(channel("keyword", List.of(
+                        candidate("semantic-k8s", "keyword", 1, 12.0D, "SEMANTIC"),
+                        candidate("semantic-project", "keyword", 2, 8.0D, "SEMANTIC")))),
+                traceRecorder,
+                MemoryFusionPolicy.defaults().withFinalTopK(5).withTimeDecayEnabled(false),
+                new StaticAliasPort(new MemoryAliasResolution(
+                        "K8s",
+                        "k8s",
+                        "ent-core-k8s",
+                        "Kubernetes",
+                        "TECHNOLOGY",
+                        0.98D)),
+                reranker);
+
+        pipeline.load(MemoryLoadRequest.builder()
+                .conversationId("conv-1")
+                .userId("user-1")
+                .currentQuestion(rawQuery)
+                .build());
+
+        assertThat(traceRecorder.events)
+                .filteredOn(event -> "channel".equals(event.eventType()))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.details())
+                            .containsEntry("candidateIds", List.of("semantic-k8s", "semantic-project"))
+                            .containsEntry("requestTopK", 10)
+                            .containsEntry("queryChangedByAlias", true)
+                            .containsEntry("aliasCanonicalEntityId", "ent-core-k8s")
+                            .containsEntry("aliasEntityType", "TECHNOLOGY");
+                    assertThat(event.details().get("activeTracks"))
+                            .asList()
+                            .contains("CORRECTION", "EPISODIC", "PROFILE", "SHORT_WINDOW");
+                    assertThat(event.details().get("originalQueryHash"))
+                            .asString()
+                            .matches("[0-9a-f]{64}");
+                    assertThat(event.details().get("resolvedQueryHash"))
+                            .asString()
+                            .matches("[0-9a-f]{64}");
+                    assertThat(event.details()).doesNotContainValue(rawQuery);
+                });
+        assertThat(traceRecorder.events)
+                .filteredOn(event -> "fusion".equals(event.eventType()))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.details())
+                            .containsEntry("inputCandidateIds", List.of("semantic-k8s", "semantic-project"))
+                            .containsEntry("fusedCandidateIds", List.of("semantic-k8s", "semantic-project"))
+                            .containsEntry("queryChangedByAlias", true);
+                    assertThat(event.details()).doesNotContainValue(rawQuery);
+                });
+        assertThat(traceRecorder.events)
+                .filteredOn(event -> "rerank".equals(event.eventType()))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.details())
+                            .containsEntry("inputCandidateIds", List.of("semantic-k8s", "semantic-project"))
+                            .containsEntry("outputCandidateIds", List.of("semantic-project", "semantic-k8s"))
+                            .containsEntry("queryChangedByAlias", true);
+                    assertThat(event.details()).doesNotContainValue(rawQuery);
+                });
+    }
+
+    @Test
     void shouldRerankFusedRecallCandidatesBeforeMaterializingMemoryItems() {
         RecordingMemoryStore semantic = new RecordingMemoryStore();
         semantic.save(record("semantic-first", "SEMANTIC", "First fused memory."));
