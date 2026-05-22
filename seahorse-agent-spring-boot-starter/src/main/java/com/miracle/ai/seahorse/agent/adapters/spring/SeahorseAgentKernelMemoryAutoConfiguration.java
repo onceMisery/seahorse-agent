@@ -115,6 +115,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.bind.Bindable;
@@ -853,6 +854,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnBean(MemoryGarbageCollectionService.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.memory.gc", name = "scheduler-enabled",
             havingValue = "true", matchIfMissing = true)
+    @ConditionalOnExpression("!${seahorse-agent.memory.maintenance.scheduler-enabled:false}"
+            + " || !${seahorse-agent.memory.maintenance.gc-enabled:true}")
     @ConditionalOnMissingBean
     public SeahorseMemoryGarbageCollectionJob seahorseMemoryGarbageCollectionJob(
             MemoryGarbageCollectionService garbageCollectionService,

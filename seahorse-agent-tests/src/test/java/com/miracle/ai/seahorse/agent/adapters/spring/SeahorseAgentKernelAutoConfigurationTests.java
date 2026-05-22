@@ -568,6 +568,20 @@ class SeahorseAgentKernelAutoConfigurationTests {
     }
 
     @Test
+    void shouldPreferUnifiedMaintenanceSchedulerAsGarbageCollectionOwner() {
+        contextRunner.withUserConfiguration(MemoryOutboxConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.memory.maintenance.scheduler-enabled=true",
+                        "seahorse-agent.memory.maintenance.gc-enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryGarbageCollectionService.class);
+                    assertThat(context).hasSingleBean(SeahorseMemoryMaintenanceJob.class);
+                    assertThat(context).doesNotHaveBean(SeahorseMemoryGarbageCollectionJob.class);
+                });
+    }
+
+    @Test
     void shouldRegisterDerivedIndexOutboxHandlersOnlyWhenIndexPortsExist() {
         contextRunner.withUserConfiguration(MemoryOutboxConfiguration.class, MemoryDerivedIndexConfiguration.class)
                 .run(context -> {
