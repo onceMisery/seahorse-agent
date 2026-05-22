@@ -33,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
 import org.junit.jupiter.api.Test;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
@@ -207,6 +208,63 @@ class KernelMemoryReviewServiceTests {
         assertThat(samples).hasSize(1);
         assertThat(samples.get(0).sampleId()).isEqualTo("sample-1");
         assertThat(samples.get(0).chosenMetadata()).containsEntry("reviewReason", "human");
+    }
+
+    @Test
+    void shouldListFeedbackSamplesForDatasetExport() {
+        RecordingReviewFeedbackRepository feedbackRepository = new RecordingReviewFeedbackRepository();
+        feedbackRepository.save(new MemoryReviewFeedbackSample(
+                "sample-1",
+                "review-1",
+                "op-1",
+                "tenant-1",
+                "user-1",
+                "REVIEW",
+                MemoryReviewStatus.APPLIED,
+                "auditor",
+                "approved",
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.fact",
+                "old",
+                "chosen",
+                Map.of(),
+                Map.of("reviewReason", "human"),
+                List.of("msg-1"),
+                "memory-1",
+                "SHORT_TERM",
+                Instant.EPOCH));
+        feedbackRepository.save(new MemoryReviewFeedbackSample(
+                "sample-2",
+                "review-2",
+                "op-2",
+                "tenant-1",
+                "user-2",
+                "REVIEW",
+                MemoryReviewStatus.REJECTED,
+                "auditor",
+                "rejected",
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.fact",
+                "bad",
+                "",
+                Map.of(),
+                Map.of(),
+                List.of("msg-2"),
+                "",
+                "",
+                Instant.EPOCH.plusSeconds(1)));
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                new InMemoryReviewRepository(),
+                new RecordingIngestionWorkflow(MemoryIngestionResult.ignored("noop")),
+                feedbackRepository);
+
+        List<MemoryReviewFeedbackSample> samples = service.listFeedbackSamples(
+                "tenant-1", "user-1", MemoryReviewStatus.APPLIED, "PROJECT_FACT", "project.fact", 10);
+
+        assertThat(samples).extracting(MemoryReviewFeedbackSample::sampleId)
+                .containsExactly("sample-1");
     }
 
     @Test
@@ -408,6 +466,18 @@ class KernelMemoryReviewServiceTests {
             return samples.stream()
                     .filter(sample -> sample.candidateId().equals(candidateId))
                     .limit(limit)
+                    .toList();
+        }
+
+        @Override
+        public List<MemoryReviewFeedbackSample> listSamples(MemoryReviewFeedbackQuery query) {
+            return samples.stream()
+                    .filter(sample -> query.tenantId().isBlank() || sample.tenantId().equals(query.tenantId()))
+                    .filter(sample -> query.userId().isBlank() || sample.userId().equals(query.userId()))
+                    .filter(sample -> query.reviewStatus() == null || sample.reviewStatus() == query.reviewStatus())
+                    .filter(sample -> query.targetKind().isBlank() || sample.targetKind().equals(query.targetKind()))
+                    .filter(sample -> query.targetKey().isBlank() || sample.targetKey().equals(query.targetKey()))
+                    .limit(query.limit())
                     .toList();
         }
     }

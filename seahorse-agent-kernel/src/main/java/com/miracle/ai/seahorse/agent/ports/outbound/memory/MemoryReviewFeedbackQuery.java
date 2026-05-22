@@ -17,28 +17,30 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
-import java.util.List;
+import java.util.Objects;
 
-public interface MemoryReviewFeedbackRepositoryPort {
+public record MemoryReviewFeedbackQuery(
+        String tenantId,
+        String userId,
+        MemoryReviewStatus reviewStatus,
+        String targetKind,
+        String targetKey,
+        int limit
+) {
 
-    void save(MemoryReviewFeedbackSample sample);
+    private static final int DEFAULT_LIMIT = 100;
+    private static final int MAX_LIMIT = 1000;
 
-    List<MemoryReviewFeedbackSample> listByCandidate(String candidateId, int limit);
-
-    default List<MemoryReviewFeedbackSample> listSamples(MemoryReviewFeedbackQuery query) {
-        return List.of();
+    public MemoryReviewFeedbackQuery {
+        tenantId = normalize(tenantId, "");
+        userId = normalize(userId, "");
+        targetKind = normalize(targetKind, "");
+        targetKey = normalize(targetKey, "");
+        limit = limit > 0 ? Math.min(limit, MAX_LIMIT) : DEFAULT_LIMIT;
     }
 
-    static MemoryReviewFeedbackRepositoryPort empty() {
-        return new MemoryReviewFeedbackRepositoryPort() {
-            @Override
-            public void save(MemoryReviewFeedbackSample sample) {
-            }
-
-            @Override
-            public List<MemoryReviewFeedbackSample> listByCandidate(String candidateId, int limit) {
-                return List.of();
-            }
-        };
+    private static String normalize(String value, String fallback) {
+        String normalized = Objects.requireNonNullElse(value, fallback).trim();
+        return normalized.isBlank() ? Objects.requireNonNullElse(fallback, "") : normalized;
     }
 }

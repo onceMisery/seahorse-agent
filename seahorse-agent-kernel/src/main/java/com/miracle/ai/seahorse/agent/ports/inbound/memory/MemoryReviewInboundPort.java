@@ -43,4 +43,11 @@ public interface MemoryReviewInboundPort {
     MemoryReviewRecord reject(String candidateId, MemoryReviewDecisionCommand command);
 
     List<MemoryReviewFeedbackSample> listFeedbackSamples(String candidateId, int limit);
+
+    List<MemoryReviewFeedbackSample> listFeedbackSamples(String tenantId,
+                                                         String userId,
+                                                         MemoryReviewStatus status,
+                                                         String targetKind,
+                                                         String targetKey,
+                                                         int limit);
 }

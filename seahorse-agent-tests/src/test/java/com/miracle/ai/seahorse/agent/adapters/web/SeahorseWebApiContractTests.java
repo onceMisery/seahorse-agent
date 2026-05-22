@@ -1263,6 +1263,9 @@ class SeahorseWebApiContractTests {
                 .thenReturn(memoryReview("review-1", MemoryReviewStatus.REJECTED));
         when(reviewPort.listFeedbackSamples("review-1", 5))
                 .thenReturn(List.of(memoryReviewFeedback("sample-1", "review-1")));
+        when(reviewPort.listFeedbackSamples("default", "user-1", MemoryReviewStatus.APPLIED,
+                "PROJECT_FACT", "project.ambiguous", 25))
+                .thenReturn(List.of(memoryReviewFeedback("sample-2", "review-2")));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMemoryReviewController(provider(MemoryReviewInboundPort.class, reviewPort))).build();
@@ -1309,6 +1312,16 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data[0].sampleId").value("sample-1"))
                 .andExpect(jsonPath("$.data[0].candidateId").value("review-1"))
                 .andExpect(jsonPath("$.data[0].chosenMetadata.reviewReason").value("human"));
+        mvc.perform(get("/memory-review/feedback-samples")
+                        .param("tenantId", "default")
+                        .param("userId", "user-1")
+                        .param("status", "APPLIED")
+                        .param("targetKind", "PROJECT_FACT")
+                        .param("targetKey", "project.ambiguous")
+                        .param("limit", "25"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].sampleId").value("sample-2"))
+                .andExpect(jsonPath("$.data[0].candidateId").value("review-2"));
     }
 
     @Test

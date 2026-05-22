@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionStatus
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
@@ -143,6 +144,22 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
         return feedbackRepositoryPort.listByCandidate(
                 requireText(candidateId, "candidateId"),
                 limit > 0 ? limit : 20);
+    }
+
+    @Override
+    public List<MemoryReviewFeedbackSample> listFeedbackSamples(String tenantId,
+                                                                String userId,
+                                                                MemoryReviewStatus status,
+                                                                String targetKind,
+                                                                String targetKey,
+                                                                int limit) {
+        return feedbackRepositoryPort.listSamples(new MemoryReviewFeedbackQuery(
+                tenantId,
+                userId,
+                status,
+                targetKind,
+                targetKey,
+                limit));
     }
 
     private MemoryReviewRecord applyAccepted(MemoryReviewRecord current,

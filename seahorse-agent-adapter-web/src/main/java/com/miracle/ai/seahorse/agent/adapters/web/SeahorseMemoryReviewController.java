@@ -82,6 +82,20 @@ public class SeahorseMemoryReviewController {
         return ok(port.listFeedbackSamples(itemId, limit));
     }
 
+    @GetMapping("/memory-review/feedback-samples")
+    public Map<String, Object> feedbackSamples(@RequestParam(defaultValue = "default") String tenantId,
+                                               @RequestParam(required = false) String userId,
+                                               @RequestParam(required = false) String status,
+                                               @RequestParam(required = false) String targetKind,
+                                               @RequestParam(required = false) String targetKey,
+                                               @RequestParam(defaultValue = "100") int limit) {
+        MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
+        if (port == null) {
+            return unavailable();
+        }
+        return ok(port.listFeedbackSamples(tenantId, userId, reviewStatus(status), targetKind, targetKey, limit));
+    }
+
     @PostMapping("/memory-review/items/{item-id}/approve")
     public Map<String, Object> approve(@PathVariable("item-id") String itemId,
                                        @RequestBody(required = false) MemoryReviewDecisionRequest request,

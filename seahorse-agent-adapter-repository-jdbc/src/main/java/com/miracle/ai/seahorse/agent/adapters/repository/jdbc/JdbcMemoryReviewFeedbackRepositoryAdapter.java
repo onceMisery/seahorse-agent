@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
@@ -26,6 +27,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import javax.sql.DataSource;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -87,6 +89,40 @@ public class JdbcMemoryReviewFeedbackRepositoryAdapter implements MemoryReviewFe
                 this::mapRecord,
                 Objects.requireNonNullElse(candidateId, ""),
                 safeLimit);
+    }
+
+    @Override
+    public List<MemoryReviewFeedbackSample> listSamples(MemoryReviewFeedbackQuery query) {
+        Objects.requireNonNull(query, "query must not be null");
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("""
+                SELECT *
+                FROM t_memory_review_feedback_sample
+                WHERE 1 = 1
+                """);
+        if (JdbcMemorySupport.hasText(query.tenantId())) {
+            sql.append(" AND tenant_id = ?");
+            args.add(query.tenantId());
+        }
+        if (JdbcMemorySupport.hasText(query.userId())) {
+            sql.append(" AND user_id = ?");
+            args.add(query.userId());
+        }
+        if (query.reviewStatus() != null) {
+            sql.append(" AND review_status = ?");
+            args.add(query.reviewStatus().name());
+        }
+        if (JdbcMemorySupport.hasText(query.targetKind())) {
+            sql.append(" AND target_kind = ?");
+            args.add(query.targetKind());
+        }
+        if (JdbcMemorySupport.hasText(query.targetKey())) {
+            sql.append(" AND target_key = ?");
+            args.add(query.targetKey());
+        }
+        sql.append(" ORDER BY create_time DESC, id DESC LIMIT ?");
+        args.add(query.limit());
+        return jdbcTemplate.query(sql.toString(), this::mapRecord, args.toArray());
     }
 
     private MemoryReviewFeedbackSample mapRecord(ResultSet rs, int rowNum) throws SQLException {
