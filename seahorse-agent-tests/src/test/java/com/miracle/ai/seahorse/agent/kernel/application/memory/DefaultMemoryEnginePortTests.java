@@ -1086,6 +1086,13 @@ class DefaultMemoryEnginePortTests {
         Assertions.assertFalse(request.referenceZone().contains("turn_5:"));
         Assertions.assertTrue(request.targetZone().contains("turn_3:"));
         Assertions.assertTrue(request.targetZone().contains("turn_5:"));
+        Assertions.assertTrue(request.referenceZone().contains("[source_spans]"), request.referenceZone());
+        Assertions.assertTrue(request.referenceZone().contains("span_1: msg-1 -> assistant-1"), request.referenceZone());
+        Assertions.assertFalse(request.referenceZone().contains("span_5: msg-5 -> assistant-5"), request.referenceZone());
+        Assertions.assertTrue(request.targetZone().contains("[source_spans]"), request.targetZone());
+        Assertions.assertTrue(request.targetZone().contains("span_3: msg-3 -> assistant-3"), request.targetZone());
+        Assertions.assertTrue(request.targetZone().contains("span_5: msg-5 -> assistant-5"), request.targetZone());
+        Assertions.assertFalse(request.targetZone().contains("span_1: msg-1 -> assistant-1"), request.targetZone());
     }
 
     @Test

@@ -128,6 +128,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final double REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD = 0.85D;
     private static final double REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD = 0.90D;
     private static final Pattern CONTEXT_TURN_HEADER_PATTERN = Pattern.compile("\\bturn_\\d+:");
+    private static final Pattern CONTEXT_TURN_INDEX_PATTERN = Pattern.compile("\\bturn_(\\d+):");
+    private static final Pattern CONTEXT_SOURCE_SPAN_PATTERN = Pattern.compile(
+            "\\bspan_(\\d+):\\s*(.*?)(?=\\s+span_\\d+:\\s*|\\s*$)", Pattern.DOTALL);
     private static final String OPERATION_VECTOR_DELETE = "VECTOR_DELETE";
     private static final String OPERATION_VECTOR_DELETE_OUTBOX_ENQUEUE = "VECTOR_DELETE_OUTBOX_ENQUEUE";
     private static final String OPERATION_KEYWORD_DELETE_OUTBOX_ENQUEUE = "KEYWORD_DELETE_OUTBOX_ENQUEUE";
@@ -145,6 +148,14 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         private MemoryRefinementContextZones {
             referenceZone = Objects.requireNonNullElse(referenceZone, "");
             targetZone = Objects.requireNonNullElse(targetZone, "");
+        }
+    }
+
+    private record ContextBlockTurn(int turnIndex, String turnBlock, String sourceSpan) {
+
+        private ContextBlockTurn {
+            turnBlock = Objects.requireNonNullElse(turnBlock, "");
+            sourceSpan = Objects.requireNonNullElse(sourceSpan, "");
         }
     }
 
@@ -953,17 +964,17 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         if (isBlank(sanitizedContent)) {
             return new MemoryRefinementContextZones("", "");
         }
-        List<String> turns = contextBlockTurns(sanitizedContent);
+        List<ContextBlockTurn> turns = contextBlockTurns(sanitizedContent);
         if (turns.isEmpty()) {
             return new MemoryRefinementContextZones("", sanitizedContent);
         }
         int targetStart = Math.max(0, turns.size() - REFINER_TARGET_ZONE_TURN_COUNT);
         return new MemoryRefinementContextZones(
-                joinBlocks(turns.subList(0, targetStart)),
-                joinBlocks(turns.subList(targetStart, turns.size())));
+                joinContextTurnBlocks(turns.subList(0, targetStart)),
+                joinContextTurnBlocks(turns.subList(targetStart, turns.size())));
     }
 
-    private List<String> contextBlockTurns(String content) {
+    private List<ContextBlockTurn> contextBlockTurns(String content) {
         String normalized = Objects.requireNonNullElse(content, "").replace("\r\n", "\n").replace('\r', '\n');
         int turnsStart = normalized.indexOf("[turns]");
         if (turnsStart < 0) {
@@ -974,18 +985,21 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         String turnsBody = sourceSpansStart > bodyStart
                 ? normalized.substring(bodyStart, sourceSpansStart)
                 : normalized.substring(bodyStart);
-        return splitContextTurns(turnsBody);
+        Map<Integer, String> sourceSpans = sourceSpansStart > bodyStart
+                ? splitContextSourceSpans(normalized.substring(sourceSpansStart + "[source_spans]".length()))
+                : Map.of();
+        return splitContextTurns(turnsBody, sourceSpans);
     }
 
-    private List<String> splitContextTurns(String turnsBody) {
-        List<String> turns = new ArrayList<>();
+    private List<ContextBlockTurn> splitContextTurns(String turnsBody, Map<Integer, String> sourceSpans) {
+        List<ContextBlockTurn> turns = new ArrayList<>();
         Matcher matcher = CONTEXT_TURN_HEADER_PATTERN.matcher(Objects.requireNonNullElse(turnsBody, ""));
         int currentStart = -1;
         while (matcher.find()) {
             if (currentStart >= 0) {
                 String block = turnsBody.substring(currentStart, matcher.start()).trim();
                 if (!block.isBlank()) {
-                    turns.add(block);
+                    turns.add(contextBlockTurn(block, sourceSpans));
                 }
             }
             currentStart = matcher.start();
@@ -993,17 +1007,63 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         if (currentStart >= 0) {
             String block = turnsBody.substring(currentStart).trim();
             if (!block.isBlank()) {
-                turns.add(block);
+                turns.add(contextBlockTurn(block, sourceSpans));
             }
         }
         return List.copyOf(turns);
     }
 
-    private String joinBlocks(List<String> blocks) {
-        if (blocks == null || blocks.isEmpty()) {
+    private Map<Integer, String> splitContextSourceSpans(String spansBody) {
+        Map<Integer, String> spans = new LinkedHashMap<>();
+        Matcher matcher = CONTEXT_SOURCE_SPAN_PATTERN.matcher(Objects.requireNonNullElse(spansBody, ""));
+        while (matcher.find()) {
+            int index = parsePositiveInt(matcher.group(1));
+            if (index > 0) {
+                spans.put(index, ("span_" + index + ": " + matcher.group(2).trim()).trim());
+            }
+        }
+        return Map.copyOf(spans);
+    }
+
+    private ContextBlockTurn contextBlockTurn(String block, Map<Integer, String> sourceSpans) {
+        int index = contextTurnIndex(block);
+        return new ContextBlockTurn(
+                index,
+                block,
+                index <= 0 ? "" : Objects.requireNonNullElse(sourceSpans.get(index), ""));
+    }
+
+    private int contextTurnIndex(String block) {
+        Matcher matcher = CONTEXT_TURN_INDEX_PATTERN.matcher(Objects.requireNonNullElse(block, ""));
+        if (!matcher.find()) {
+            return 0;
+        }
+        return parsePositiveInt(matcher.group(1));
+    }
+
+    private int parsePositiveInt(String value) {
+        try {
+            return Math.max(0, Integer.parseInt(value));
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
+    }
+
+    private String joinContextTurnBlocks(List<ContextBlockTurn> turns) {
+        if (turns == null || turns.isEmpty()) {
             return "";
         }
-        return String.join("\n\n", blocks);
+        String turnBlocks = String.join("\n\n", turns.stream()
+                .map(ContextBlockTurn::turnBlock)
+                .toList());
+        List<String> sourceSpans = turns.stream()
+                .map(ContextBlockTurn::sourceSpan)
+                .filter(span -> !span.isBlank())
+                .toList();
+        if (sourceSpans.isEmpty()) {
+            return turnBlocks;
+        }
+        return turnBlocks + "\n\n[source_spans]\n" + String.join("\n", sourceSpans);
     }
 
     private MemoryClassificationResult applyRefinementResult(MemoryRefinementResult result,
