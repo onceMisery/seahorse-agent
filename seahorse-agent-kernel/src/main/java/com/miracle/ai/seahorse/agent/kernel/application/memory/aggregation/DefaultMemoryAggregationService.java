@@ -196,7 +196,7 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                     .conversationId(snapshot.conversationId())
                     .userId(snapshot.userId())
                     .messageId(snapshot.snapshotId())
-                    .message(ChatMessage.user(formatContextBlock(snapshot)))
+                    .message(ChatMessage.user(MemoryContextBlockFormatter.format(snapshot)))
                     .build();
             MemoryIngestionResult result = ingestionWorkflowPort.ingest(new MemoryIngestionCommand(
                     operationId(snapshot),
@@ -224,23 +224,6 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                     "message", Objects.requireNonNullElse(ex.getMessage(), "")));
             return MemoryIngestionResult.failed("aggregation_flush_failed");
         }
-    }
-
-    private String formatContextBlock(MemoryBufferSnapshot snapshot) {
-        StringBuilder builder = new StringBuilder();
-        if (!snapshot.turns().isEmpty()) {
-            builder.append(snapshot.turns().get(0).userText());
-        }
-        for (int i = 0; i < snapshot.turns().size(); i++) {
-            MemoryTurnEvent turn = snapshot.turns().get(i);
-            if (i > 0 && !turn.userText().isBlank()) {
-                builder.append("\nUser: ").append(turn.userText());
-            }
-            if (!turn.assistantText().isBlank()) {
-                builder.append("\nAssistant: ").append(turn.assistantText());
-            }
-        }
-        return builder.toString().trim();
     }
 
     private String operationId(MemoryBufferSnapshot snapshot) {

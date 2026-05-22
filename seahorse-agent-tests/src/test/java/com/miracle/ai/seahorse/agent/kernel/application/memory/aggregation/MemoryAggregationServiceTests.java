@@ -80,9 +80,16 @@ class MemoryAggregationServiceTests {
         Assertions.assertEquals("conversation-1", command.writeRequest().conversationId());
         Assertions.assertEquals("user-1", command.writeRequest().userId());
         Assertions.assertEquals(ChatRole.USER, command.writeRequest().message().getRole());
-        Assertions.assertTrue(command.writeRequest().message().getContent().startsWith("Remember I use Java"));
-        Assertions.assertTrue(command.writeRequest().message().getContent().contains("I prefer concise answers"));
-        Assertions.assertTrue(command.writeRequest().message().getContent().contains("Assistant: Understood"));
+        String content = command.writeRequest().message().getContent();
+        Assertions.assertTrue(content.startsWith("MEMORY_CONTEXT_BLOCK: v1"));
+        Assertions.assertTrue(content.contains("snapshot_id:"));
+        Assertions.assertTrue(content.contains("turn_count: 2"));
+        Assertions.assertTrue(content.contains("[turns]"));
+        Assertions.assertTrue(content.contains("user: Remember I use Java"));
+        Assertions.assertTrue(content.contains("user: I prefer concise answers"));
+        Assertions.assertTrue(content.contains("assistant: Understood"));
+        Assertions.assertTrue(content.contains("[source_spans]"));
+        Assertions.assertTrue(content.contains("span_2: task-2 -> task-2-assistant"));
         Assertions.assertTrue(service.state("conversation-1", "default").isEmpty());
     }
 
