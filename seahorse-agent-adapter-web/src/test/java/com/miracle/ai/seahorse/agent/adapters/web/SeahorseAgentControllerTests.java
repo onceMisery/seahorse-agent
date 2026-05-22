@@ -29,13 +29,19 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTrigger
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionUpdateDraftCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentVersionPublishCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogPage;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -188,6 +194,47 @@ class SeahorseAgentControllerTests {
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"));
     }
 
+    @Test
+    void shouldExposeToolCatalogManagementApi() throws Exception {
+        ToolCatalogManagementInboundPort port = mock(ToolCatalogManagementInboundPort.class);
+        when(port.page("MCP", "weather", 2L, 20L, true))
+                .thenReturn(new ToolCatalogPage(List.of(tool(true)), 1L, 20L, 2L, 1L));
+        when(port.findById("weather_query")).thenReturn(Optional.of(tool(true)));
+        when(port.disable("weather_query")).thenReturn(tool(false));
+        when(port.enable("weather_query")).thenReturn(tool(true));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseToolCatalogController(provider(ToolCatalogManagementInboundPort.class, port))).build();
+
+        mvc.perform(get("/api/tools")
+                        .param("resourceType", "MCP")
+                        .param("keyword", "weather")
+                        .param("current", "2")
+                        .param("size", "20")
+                        .param("enabled", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.records[0].toolId").value("weather_query"));
+
+        mvc.perform(get("/api/tools/weather_query"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.provider").value("MCP"))
+                .andExpect(jsonPath("$.data.riskLevel").value("MEDIUM"));
+
+        mvc.perform(post("/api/tools/weather_query/disable"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.enabled").value(false));
+
+        mvc.perform(post("/api/tools/weather_query/enable"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.enabled").value(true));
+
+        verify(port).page("MCP", "weather", 2L, 20L, true);
+        verify(port).findById("weather_query");
+        verify(port).disable("weather_query");
+        verify(port).enable("weather_query");
+    }
+
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
     }
@@ -211,6 +258,24 @@ class SeahorseAgentControllerTests {
     private static AgentStep step() {
         return new AgentStep("step-1", "run-1", 1, AgentStepType.MODEL_TURN, AgentStepStatus.SUCCEEDED,
                 "{\"prompt\":\"hi\"}", "{\"answer\":\"hello\"}", null, null, NOW, NOW);
+    }
+
+    private static ToolCatalogEntry tool(boolean enabled) {
+        return new ToolCatalogEntry(
+                "weather_query",
+                ToolProvider.MCP,
+                "Weather Query",
+                "查询天气",
+                "{\"type\":\"object\"}",
+                null,
+                ToolRiskLevel.MEDIUM,
+                ToolActionType.EXECUTE,
+                "MCP",
+                "platform",
+                enabled,
+                false,
+                NOW,
+                NOW);
     }
 
     private static <T> ObjectProvider<T> provider(Class<T> type, T bean) {

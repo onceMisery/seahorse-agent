@@ -470,6 +470,80 @@ Remaining Phase 2 work:
 - MCP allowlist registration into the catalog.
 - Tool catalog/binding/audit management APIs.
 
+## 2026-05-23 Phase 2 Tool Catalog management API slice
+
+RED/GREEN coverage:
+
+- `KernelToolCatalogManagementServiceTests` first failed because `ToolCatalogManagementInboundPort` and the kernel management service did not exist; it then verified admin-only catalog page/detail plus enable/disable behavior through `ToolCatalogRepositoryPort`.
+- `SeahorseAgentControllerTests.shouldExposeToolCatalogManagementApi` first failed because no `/api/tools` controller existed; it then verified list, detail, disable, and enable web contracts.
+- `SeahorseAgentRegistryAutoConfigurationTests` verifies the starter creates `ToolCatalogManagementInboundPort` when `ToolCatalogRepositoryPort` and `CurrentUserPort` are present.
+
+Focused kernel command:
+
+```powershell
+.\mvnw -pl seahorse-agent-kernel '-Dtest=KernelToolCatalogManagementServiceTests' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 3
+- Failures: 0
+- Errors: 0
+- Covered: Tool Catalog management inbound port behavior and admin boundary.
+
+Focused web command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-adapter-web -am '-Dtest=SeahorseAgentControllerTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 3
+- Failures: 0
+- Errors: 0
+- Covered: existing Agent web contracts plus `/api/tools` management list/detail/enable/disable.
+
+Starter support command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' '-Dmaven.test.skip=true' -pl seahorse-agent-kernel install
+```
+
+Result:
+
+- Exit status: 0
+- Covered: refreshed kernel main artifact for starter-only verification without compiling unrelated reactor tests.
+
+Focused starter command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-spring-boot-starter clean test '-Dtest=SeahorseAgentRegistryAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false'
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 1
+- Failures: 0
+- Errors: 0
+- Covered: starter auto-configuration for Tool Catalog management inbound service.
+
+Fix boundary:
+
+- `ToolCatalogManagementInboundPort`: added the admin-facing inbound contract for catalog page/detail and enable/disable operations.
+- `KernelToolCatalogManagementService`: added admin role enforcement, repository-backed catalog queries, and state toggle behavior.
+- `SeahorseToolCatalogController`: added `/api/tools`, `/api/tools/{toolId}`, `/api/tools/{toolId}/enable`, and `/api/tools/{toolId}/disable` response contracts.
+- `SeahorseAgentKernelRegistryAutoConfiguration`: auto-configures the management service when catalog storage and current-user ports exist.
+
+Remaining Phase 2 work:
+
+- Agent version tool binding management API: `PUT /api/agents/{agentId}/versions/{versionId}/tools`.
+- Invocation audit query API: `GET /api/tool-invocations`.
+- HITL approval workflow, resource ACL, and output redaction policy remain later slices.
+
 ## 2026-05-23 Phase 2 MCP allowlist catalog registration slice
 
 RED coverage:

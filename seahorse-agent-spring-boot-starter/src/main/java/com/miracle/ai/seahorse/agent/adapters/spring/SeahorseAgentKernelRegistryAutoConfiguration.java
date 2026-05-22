@@ -19,10 +19,13 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCatalogManagementService;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -68,5 +71,14 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 agentRunRepositoryPort,
                 currentUserPort,
                 clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnBean({ToolCatalogRepositoryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(ToolCatalogManagementInboundPort.class)
+    public KernelToolCatalogManagementService seahorseToolCatalogManagementInboundPort(
+            ToolCatalogRepositoryPort toolCatalogRepositoryPort,
+            CurrentUserPort currentUserPort) {
+        return new KernelToolCatalogManagementService(toolCatalogRepositoryPort, currentUserPort);
     }
 }

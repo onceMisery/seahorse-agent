@@ -19,8 +19,10 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCatalogManagementService;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
@@ -61,8 +63,10 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(ToolInvocationUsagePort.class);
                     assertThat(context).hasSingleBean(AgentDefinitionInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunInboundPort.class);
+                    assertThat(context).hasSingleBean(ToolCatalogManagementInboundPort.class);
                     assertThat(context).hasSingleBean(KernelAgentDefinitionService.class);
                     assertThat(context).hasSingleBean(KernelAgentRunService.class);
+                    assertThat(context).hasSingleBean(KernelToolCatalogManagementService.class);
                 });
     }
 
