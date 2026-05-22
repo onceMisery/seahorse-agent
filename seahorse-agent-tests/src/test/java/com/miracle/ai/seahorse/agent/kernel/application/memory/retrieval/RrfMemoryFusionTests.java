@@ -81,14 +81,22 @@ class RrfMemoryFusionTests {
                 30.0D,
                 "OBSOLETE",
                 Map.of("lastReferencedAt", "2026-05-21T00:00:00Z"));
+        MemoryRecallCandidate archived = candidate(
+                "archived",
+                "vector",
+                1,
+                50.0D,
+                "ARCHIVED",
+                Map.of("lastReferencedAt", "2026-05-21T00:00:00Z"));
 
         List<MemoryRecallCandidate> fused = fusion.fuse(List.of(
-                List.of(oldTopRank, freshSecondRank, obsolete)
+                List.of(oldTopRank, freshSecondRank, obsolete, archived)
         ), policy, now);
 
         assertThat(fused).extracting(MemoryRecallCandidate::memoryId)
                 .containsExactly("fresh", "old");
         assertThat(fused).noneMatch(candidate -> "obsolete".equals(candidate.memoryId()));
+        assertThat(fused).noneMatch(candidate -> "archived".equals(candidate.memoryId()));
         assertThat(fused.get(0).metadata()).containsEntry("timeDecayEnabled", true);
     }
 

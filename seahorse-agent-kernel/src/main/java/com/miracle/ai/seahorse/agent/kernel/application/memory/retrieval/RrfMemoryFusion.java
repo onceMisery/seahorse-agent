@@ -39,6 +39,7 @@ public class RrfMemoryFusion implements MemoryRecallFusionPort {
     private static final String STATUS_ACTIVE = "ACTIVE";
     private static final String STATUS_COLD = "COLD";
     private static final String STATUS_OBSOLETE = "OBSOLETE";
+    private static final String STATUS_ARCHIVED = "ARCHIVED";
     private static final String STATUS_DELETED = "DELETED";
     private static final String STATUS_COMPACTED = "COMPACTED";
     private static final String METADATA_LAST_REFERENCED_AT = "lastReferencedAt";
@@ -102,6 +103,7 @@ public class RrfMemoryFusion implements MemoryRecallFusionPort {
     private boolean inactive(MemoryRecallCandidate candidate) {
         String status = candidate.status().toUpperCase(Locale.ROOT);
         return STATUS_OBSOLETE.equals(status)
+                || STATUS_ARCHIVED.equals(status)
                 || STATUS_DELETED.equals(status)
                 || STATUS_COMPACTED.equals(status)
                 || STATUS_COLD.equals(status);
