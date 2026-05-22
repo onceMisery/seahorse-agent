@@ -405,7 +405,7 @@ Verification:
 | G4 | Done | `JdbcChatSchemaUpgradeTests` covers backfilling vector lifecycle columns on an existing table; init SQL contains the same columns. |
 | G5 | Done | `DefaultMemoryEnginePortTests#shouldWriteProfileFactsForNameTechStackAndResponseStyle` verifies `identity.name`, `skills.tech_stack`, and `preferences.response_style` Profile slot writes. |
 | G6 | Done | `KernelMemoryObservabilityServiceTests` covers outbox backlog, schema failure, Profile completeness, and `memory.profile.low-completeness` alerts. |
-| G7 | Done | `InMemoryMemoryTraceRecorderTests`, `MemoryAggregationServiceTests`, `KernelMemoryReviewServiceTests`, `DefaultMemoryMaintenanceServiceTests`, and `KernelMemoryObservabilityServiceTests` cover trace recorder behavior, aggregation/review/maintenance trace emission, and health trace summary. |
+| G7 | Done | `InMemoryMemoryTraceRecorderTests`, `MemoryAggregationServiceTests`, `KernelMemoryReviewServiceTests`, `DefaultMemoryMaintenanceServiceTests`, `MemoryOutboxRelayServiceTests`, and `KernelMemoryObservabilityServiceTests` cover trace recorder behavior, aggregation/review/maintenance/outbox trace emission, and health trace summary. |
 
 ## Acceptance Matrix Against Original P0-P6
 

@@ -20,9 +20,12 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskTypes;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +35,7 @@ public class MemoryOutboxRelayService {
 
     private final MemoryOutboxPort outboxPort;
     private final Map<String, MemoryOutboxTaskHandler> taskHandlers;
+    private final MemoryTraceRecorder traceRecorder;
 
     public MemoryOutboxRelayService(MemoryOutboxPort outboxPort, MemoryVectorPort vectorPort) {
         this(outboxPort, List.of(
@@ -40,13 +44,21 @@ public class MemoryOutboxRelayService {
     }
 
     public MemoryOutboxRelayService(MemoryOutboxPort outboxPort, List<MemoryOutboxTaskHandler> taskHandlers) {
+        this(outboxPort, taskHandlers, MemoryTraceRecorder.noop());
+    }
+
+    public MemoryOutboxRelayService(MemoryOutboxPort outboxPort,
+                                    List<MemoryOutboxTaskHandler> taskHandlers,
+                                    MemoryTraceRecorder traceRecorder) {
         this.outboxPort = Objects.requireNonNull(outboxPort, "outboxPort must not be null");
         this.taskHandlers = registerHandlers(taskHandlers);
+        this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
     }
 
     public int processBatch(int limit) {
         int safeLimit = limit <= 0 ? 50 : limit;
         List<MemoryOutboxPort.MemoryOutboxTask> tasks = outboxPort.pollPending(safeLimit);
+        recordBatch(tasks.size(), safeLimit);
         for (MemoryOutboxPort.MemoryOutboxTask task : tasks) {
             processTask(task);
         }
@@ -64,9 +76,49 @@ public class MemoryOutboxRelayService {
             }
             handler.handle(task);
             outboxPort.markSucceeded(task.id());
+            recordTask(task, MemoryTraceEvent.STATUS_SUCCESS, "");
         } catch (RuntimeException ex) {
-            outboxPort.markFailed(task.id(), Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
+            String errorMessage = Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName());
+            outboxPort.markFailed(task.id(), errorMessage);
+            recordTask(task, MemoryTraceEvent.STATUS_FAILED, errorMessage);
         }
+    }
+
+    private void recordBatch(int processedCount, int requestedLimit) {
+        traceRecorder.record(new MemoryTraceEvent(
+                "",
+                "default",
+                "",
+                "",
+                "",
+                "memory-outbox",
+                "poll-batch",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "",
+                "outbox_batch",
+                Map.of(
+                        "processedCount", processedCount,
+                        "requestedLimit", requestedLimit),
+                Instant.now()));
+    }
+
+    private void recordTask(MemoryOutboxPort.MemoryOutboxTask task, String status, String errorMessage) {
+        traceRecorder.record(new MemoryTraceEvent(
+                "",
+                task.tenantId(),
+                task.userId(),
+                "",
+                "",
+                "memory-outbox",
+                "relay-task",
+                status,
+                task.id(),
+                "outbox_task",
+                Map.of(
+                        "taskType", task.taskType(),
+                        "targetId", task.targetId(),
+                        "error", Objects.requireNonNullElse(errorMessage, "")),
+                Instant.now()));
     }
 
     private Map<String, MemoryOutboxTaskHandler> registerHandlers(List<MemoryOutboxTaskHandler> handlers) {

@@ -493,10 +493,12 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnMissingBean
     public MemoryOutboxRelayService seahorseMemoryOutboxRelayService(
             MemoryOutboxPort memoryOutboxPort,
-            ObjectProvider<MemoryOutboxTaskHandler> taskHandlers) {
+            ObjectProvider<MemoryOutboxTaskHandler> taskHandlers,
+            ObjectProvider<MemoryTraceRecorder> traceRecorder) {
         return new MemoryOutboxRelayService(
                 memoryOutboxPort,
-                taskHandlers.orderedStream().toList());
+                taskHandlers.orderedStream().toList(),
+                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop));
     }
 
     @Bean

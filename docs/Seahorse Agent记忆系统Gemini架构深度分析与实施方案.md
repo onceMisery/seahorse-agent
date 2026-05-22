@@ -1684,6 +1684,7 @@ flowchart TD
 - 已新增可插拔 `MemoryTraceRecorder` outbound port，并提供 `MemoryTraceRecorder.noop()` 与 `InMemoryMemoryTraceRecorder` 默认实现。Spring 自动配置通过 `@ConditionalOnMissingBean(MemoryTraceRecorder.class)` 注册内存 recorder，可由企业侧替换为 Micrometer、OpenTelemetry、JDBC 或审计系统适配器。
 - `MemoryTraceEvent` 已包含 `traceId`、tenant/user/conversation/session 上下文、`component`、`eventType`、`status`、`subjectId`、`subjectType`、`details`、`occurredAt`，用于串联写入聚合、人工审核和维护任务。
 - `DefaultMemoryAggregationService` 已记录 `append-turn`、`flush-ready`、`submit`；`KernelMemoryReviewService` 已记录 `approve`、`modify`、`reject`；`DefaultMemoryMaintenanceService` 已记录 `run-maintenance`。这些事件只做横向观测，不改变四层记忆写入语义。
+- `MemoryOutboxRelayService` 已记录 `poll-batch` 和逐 task 的 `relay-task` 成功/失败事件，事件 details 包含 `processedCount`、`requestedLimit`、`taskType`、`targetId` 和错误信息。该能力通过构造器注入 `MemoryTraceRecorder`，旧构造器仍默认 noop。
 - `KernelMemoryManagementService.memoryHealth()` 已汇总 recent trace 的事件总数、失败数和 component 计数，并通过 `MemoryHealthReport.traceEventCount`、`traceFailureCount`、`traceComponentCounts` 暴露。
 - 四层记忆仍保持 `WORKING / SHORT_TERM / LONG_TERM / SEMANTIC` 作为唯一主记忆层级；trace 是可插拔观测层，不参与 source-of-truth 选择，也不新增第五层记忆。
 - 当前未落地完整持久化 trace 表和独立 trace 查询 API；默认实现定位为轻量内存观测。生产环境如需审计保留期、按 traceId 检索或跨实例聚合，应以 `MemoryTraceRecorder` 自定义 bean 扩展。

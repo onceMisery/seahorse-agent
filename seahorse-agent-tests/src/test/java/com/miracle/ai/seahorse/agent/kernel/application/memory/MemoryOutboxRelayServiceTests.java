@@ -20,6 +20,8 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskTypes;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
 import org.junit.jupiter.api.Test;
@@ -246,6 +248,46 @@ class MemoryOutboxRelayServiceTests {
         assertThat(outboxPort.failed).isEmpty();
     }
 
+    @Test
+    void shouldRecordTraceEventsForOutboxBatchAndTaskResults() {
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of(
+                task("outbox-failed", "VECTOR_UPSERT",
+                        Map.of("memoryId", "stm-fail", "content", "first", "embeddingModel", "default")),
+                task("outbox-succeeded", "VECTOR_UPSERT",
+                        Map.of("memoryId", "stm-ok", "content", "second", "embeddingModel", "default"))));
+        RecordingVectorPort vectorPort = new RecordingVectorPort();
+        vectorPort.failMemoryIds.add("stm-fail");
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        MemoryOutboxRelayService service = new MemoryOutboxRelayService(
+                outboxPort,
+                List.of(new VectorMemoryOutboxTaskHandler(vectorPort, MemoryOutboxTaskTypes.VECTOR_UPSERT)),
+                traceRecorder);
+
+        int processed = service.processBatch(10);
+
+        assertThat(processed).isEqualTo(2);
+        assertThat(traceRecorder.events)
+                .anySatisfy(event -> {
+                    assertThat(event.component()).isEqualTo("memory-outbox");
+                    assertThat(event.eventType()).isEqualTo("poll-batch");
+                    assertThat(event.details()).containsEntry("processedCount", 2);
+                    assertThat(event.details()).containsEntry("requestedLimit", 10);
+                })
+                .anySatisfy(event -> {
+                    assertThat(event.eventType()).isEqualTo("relay-task");
+                    assertThat(event.status()).isEqualTo(MemoryTraceEvent.STATUS_FAILED);
+                    assertThat(event.subjectId()).isEqualTo("outbox-failed");
+                    assertThat(event.details()).containsEntry("taskType", "VECTOR_UPSERT");
+                    assertThat(event.details()).containsEntry("targetId", "stm-fail");
+                })
+                .anySatisfy(event -> {
+                    assertThat(event.eventType()).isEqualTo("relay-task");
+                    assertThat(event.status()).isEqualTo(MemoryTraceEvent.STATUS_SUCCESS);
+                    assertThat(event.subjectId()).isEqualTo("outbox-succeeded");
+                    assertThat(event.details()).containsEntry("targetId", "stm-ok");
+                });
+    }
+
     private MemoryOutboxPort.MemoryOutboxTask task(String id, String type, Map<String, Object> payload) {
         return new MemoryOutboxPort.MemoryOutboxTask(
                 id,
@@ -312,6 +354,21 @@ class MemoryOutboxRelayServiceTests {
         @Override
         public void delete(String memoryId, String userId, String tenantId) {
             deletes.add(memoryId + "|" + userId + "|" + tenantId);
+        }
+    }
+
+    private static class RecordingTraceRecorder implements MemoryTraceRecorder {
+
+        private final List<MemoryTraceEvent> events = new ArrayList<>();
+
+        @Override
+        public void record(MemoryTraceEvent event) {
+            events.add(event);
+        }
+
+        @Override
+        public List<MemoryTraceEvent> listRecent(int limit) {
+            return List.copyOf(events);
         }
     }
 
