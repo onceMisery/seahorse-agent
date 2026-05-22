@@ -92,6 +92,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelinePa
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.DocumentRefreshInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeDocumentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryAggregationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
@@ -987,6 +988,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryAggregationSchedulerPort.class);
                     assertThat(context).hasSingleBean(InMemoryMemoryAggregationBufferPort.class);
                     assertThat(context).hasSingleBean(DefaultMemoryAggregationService.class);
+                    assertThat(context).hasSingleBean(MemoryAggregationInboundPort.class);
                     assertThat(context).hasSingleBean(SeahorseMemoryAggregationJob.class);
 
                     MemoryAggregationPolicy policy = context.getBean(MemoryAggregationPolicy.class);

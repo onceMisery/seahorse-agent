@@ -37,6 +37,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.RuleBasedMemoryCa
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.DefaultMemoryAggregationService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.ExplicitCueMemoryAggregationTopicShiftDetector;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.InMemoryMemoryAggregationBufferPort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.KernelMemoryAggregationControlService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationTopicShiftDetector;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.trace.InMemoryMemoryTraceRecorder;
@@ -59,6 +60,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.RrfMemo
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.VectorMemoryRecallChannel;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.VectorSearchScoredMemoryVectorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryAggregationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
@@ -228,6 +230,16 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
                 topicShiftDetector.getIfAvailable(ExplicitCueMemoryAggregationTopicShiftDetector::new),
                 java.time.Clock.systemUTC());
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
+            havingValue = "true")
+    @ConditionalOnBean(MemoryAggregationServicePort.class)
+    @ConditionalOnMissingBean(MemoryAggregationInboundPort.class)
+    public KernelMemoryAggregationControlService seahorseMemoryAggregationInboundPort(
+            MemoryAggregationServicePort aggregationServicePort) {
+        return new KernelMemoryAggregationControlService(aggregationServicePort);
     }
 
     @Bean
