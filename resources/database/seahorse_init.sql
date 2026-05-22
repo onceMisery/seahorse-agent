@@ -881,6 +881,66 @@ CREATE TABLE t_memory_outbox (
 CREATE INDEX idx_memory_outbox_status
 ON t_memory_outbox (status, next_retry_time, create_time);
 
+CREATE TABLE t_memory_review_candidate (
+    id VARCHAR(64) PRIMARY KEY,
+    operation_id VARCHAR(128),
+    user_id VARCHAR(64) NOT NULL,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    conversation_id VARCHAR(64),
+    message_id VARCHAR(64),
+    requested_action VARCHAR(32) NOT NULL,
+    target_layer VARCHAR(32) NOT NULL,
+    target_kind VARCHAR(64),
+    target_key VARCHAR(128),
+    candidate_content TEXT NOT NULL,
+    confidence_level NUMERIC(5, 4) DEFAULT 0,
+    importance_score NUMERIC(5, 4) DEFAULT 0,
+    value_score NUMERIC(5, 4) DEFAULT 0,
+    risk_score NUMERIC(5, 4) DEFAULT 0,
+    reason TEXT,
+    source_message_ids JSONB,
+    candidate_metadata JSONB,
+    review_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    reviewer_id VARCHAR(64),
+    reviewer_comment TEXT,
+    chosen_content TEXT,
+    chosen_metadata JSONB,
+    reviewed_memory_id VARCHAR(64),
+    reviewed_layer VARCHAR(32),
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted SMALLINT DEFAULT 0
+);
+CREATE INDEX idx_memory_review_queue
+ON t_memory_review_candidate (tenant_id, user_id, review_status, update_time);
+CREATE INDEX idx_memory_review_operation
+ON t_memory_review_candidate (operation_id);
+
+CREATE TABLE t_memory_review_feedback_sample (
+    id VARCHAR(128) PRIMARY KEY,
+    candidate_id VARCHAR(64) NOT NULL,
+    operation_id VARCHAR(128),
+    user_id VARCHAR(64) NOT NULL,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    requested_action VARCHAR(32) NOT NULL,
+    review_status VARCHAR(32) NOT NULL,
+    reviewer_id VARCHAR(64),
+    reviewer_comment TEXT,
+    target_layer VARCHAR(32),
+    target_kind VARCHAR(64),
+    target_key VARCHAR(128),
+    rejected_content TEXT,
+    chosen_content TEXT,
+    rejected_metadata JSONB,
+    chosen_metadata JSONB,
+    source_message_ids JSONB,
+    reviewed_memory_id VARCHAR(64),
+    reviewed_layer VARCHAR(32),
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_memory_review_feedback_candidate
+ON t_memory_review_feedback_sample (candidate_id, create_time);
+
 CREATE TABLE t_memory_maintenance_run (
     id VARCHAR(128) PRIMARY KEY,
     reason VARCHAR(128),

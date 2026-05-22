@@ -21,9 +21,23 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class JdbcChatSchemaUpgradeTests {
+
+    @Test
+    void shouldKeepInitSqlAlignedWithReviewSchemaUpgrade() throws Exception {
+        String initSql = Files.readString(Path.of("..", "resources", "database", "seahorse_init.sql"));
+
+        assertThat(initSql).contains("CREATE TABLE t_memory_review_candidate");
+        assertThat(initSql).contains("CREATE INDEX idx_memory_review_queue");
+        assertThat(initSql).contains("CREATE INDEX idx_memory_review_operation");
+        assertThat(initSql).contains("CREATE TABLE t_memory_review_feedback_sample");
+        assertThat(initSql).contains("CREATE INDEX idx_memory_review_feedback_candidate");
+    }
 
     @Test
     void shouldUpgradeEmptyDatabaseWithoutLayeredMemoryTables() {
