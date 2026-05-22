@@ -84,24 +84,33 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                                                      String tenantId,
                                                      MemoryFlushTrigger trigger,
                                                      Instant now) {
-        Optional<StoredBuffer> existing = findBuffer(sessionId, tenantId);
-        if (existing.isEmpty()) {
-            return Optional.empty();
-        }
-        StoredBuffer buffer = existing.get();
         MemoryFlushTrigger safeTrigger = Objects.requireNonNullElse(trigger, MemoryFlushTrigger.MANUAL);
         Instant safeNow = Objects.requireNonNullElseGet(now, Instant::now);
-        if (!isReady(buffer, safeTrigger, safeNow)) {
-            return Optional.empty();
+        for (int attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
+            Optional<StoredBuffer> existing = findBuffer(sessionId, tenantId);
+            if (existing.isEmpty()) {
+                return Optional.empty();
+            }
+            StoredBuffer buffer = existing.get();
+            if (!isReady(buffer, safeTrigger, safeNow)) {
+                return Optional.empty();
+            }
+            beforeFlushDeleteAttempt(buffer.tenantId(), buffer.sessionId(), buffer.version(), safeTrigger);
+            int deleted = jdbcTemplate.update("""
+                    DELETE FROM t_memory_aggregation_buffer
+                    WHERE tenant_id = ? AND session_id = ? AND version = ?
+                    """, buffer.tenantId(), buffer.sessionId(), buffer.version());
+            if (deleted == 1) {
+                return Optional.of(buffer.snapshot(safeTrigger));
+            }
         }
-        int deleted = jdbcTemplate.update("""
-                DELETE FROM t_memory_aggregation_buffer
-                WHERE tenant_id = ? AND session_id = ? AND version = ?
-                """, safeTenantId(tenantId), normalize(sessionId, ""), buffer.version());
-        if (deleted == 0) {
-            return Optional.empty();
-        }
-        return Optional.of(buffer.snapshot(safeTrigger));
+        return Optional.empty();
+    }
+
+    protected void beforeFlushDeleteAttempt(String tenantId,
+                                            String sessionId,
+                                            long expectedVersion,
+                                            MemoryFlushTrigger trigger) {
     }
 
     @Override

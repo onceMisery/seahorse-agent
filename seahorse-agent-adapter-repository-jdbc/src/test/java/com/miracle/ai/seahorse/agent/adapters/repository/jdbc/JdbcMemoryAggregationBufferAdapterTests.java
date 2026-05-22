@@ -35,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -42,10 +43,11 @@ class JdbcMemoryAggregationBufferAdapterTests {
 
     private JdbcMemoryAggregationBufferAdapter adapter;
     private JdbcTemplate jdbcTemplate;
+    private DriverManagerDataSource dataSource;
 
     @BeforeEach
     void setUp() {
-        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+        dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:memory-aggregation-" + UUID.randomUUID() + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
                 "sa",
                 "");
@@ -163,6 +165,52 @@ class JdbcMemoryAggregationBufferAdapterTests {
     }
 
     @Test
+    void shouldPostponeIdleFlushWhenConcurrentAppendRefreshesActivity() {
+        Instant firstAt = Instant.parse("2026-05-22T10:30:00Z");
+        HookedJdbcMemoryAggregationBufferAdapter hookedAdapter = hookedAdapter();
+        adapter = hookedAdapter;
+        adapter.appendTurn(turn("msg-1", "older", "ok", 1, firstAt));
+        AtomicBoolean appended = new AtomicBoolean();
+        hookedAdapter.beforeDelete = () -> {
+            if (appended.compareAndSet(false, true)) {
+                adapter.appendTurn(turn("msg-2", "newer", "ok", 1, firstAt.plusSeconds(45)));
+            }
+        };
+
+        assertThat(adapter.flushReady("session-1", "tenant-1", MemoryFlushTrigger.IDLE_TIMEOUT,
+                firstAt.plusSeconds(50))).isEmpty();
+
+        assertThat(adapter.state("session-1", "tenant-1"))
+                .hasValueSatisfying(state -> {
+                    assertThat(state.turnCount()).isEqualTo(2);
+                    assertThat(state.lastActivityAt()).isEqualTo(firstAt.plusSeconds(45));
+                });
+    }
+
+    @Test
+    void shouldRetryForceFlushAfterConcurrentAppendConflict() {
+        Instant firstAt = Instant.parse("2026-05-22T11:00:00Z");
+        HookedJdbcMemoryAggregationBufferAdapter hookedAdapter = hookedAdapter();
+        adapter = hookedAdapter;
+        adapter.appendTurn(turn("msg-1", "first", "ok", 1, firstAt));
+        adapter.appendTurn(turn("msg-2", "second", "ok", 1, firstAt.plusSeconds(1)));
+        adapter.appendTurn(turn("msg-3", "third", "ok", 1, firstAt.plusSeconds(2)));
+        AtomicBoolean appended = new AtomicBoolean();
+        hookedAdapter.beforeDelete = () -> {
+            if (appended.compareAndSet(false, true)) {
+                adapter.appendTurn(turn("msg-4", "fourth", "ok", 1, firstAt.plusSeconds(3)));
+            }
+        };
+
+        assertThat(adapter.flushReady("session-1", "tenant-1", MemoryFlushTrigger.FORCE_TURNS,
+                firstAt.plusSeconds(3)))
+                .hasValueSatisfying(snapshot -> assertThat(snapshot.turns())
+                        .extracting(MemoryTurnEvent::userMessageId)
+                        .containsExactly("msg-1", "msg-2", "msg-3", "msg-4"));
+        assertThat(adapter.state("session-1", "tenant-1")).isEmpty();
+    }
+
+    @Test
     void shouldListStatesOrderedByLastActivity() {
         adapter.appendTurn(turn("msg-1", "older", "ok", 1, Instant.parse("2026-05-22T08:00:00Z")));
         adapter.appendTurn(new MemoryTurnEvent(
@@ -199,12 +247,37 @@ class JdbcMemoryAggregationBufferAdapterTests {
                 tokens);
     }
 
+    private HookedJdbcMemoryAggregationBufferAdapter hookedAdapter() {
+        return new HookedJdbcMemoryAggregationBufferAdapter(dataSource, new ObjectMapper(),
+                new MemoryAggregationPolicy(true, 40_000, 3, 120, 32, 86_400_000, false));
+    }
+
     private void await(CountDownLatch latch) {
         try {
             latch.await(5, TimeUnit.SECONDS);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(ex);
+        }
+    }
+
+    private static final class HookedJdbcMemoryAggregationBufferAdapter extends JdbcMemoryAggregationBufferAdapter {
+
+        private Runnable beforeDelete = () -> {
+        };
+
+        private HookedJdbcMemoryAggregationBufferAdapter(DriverManagerDataSource dataSource,
+                                                        ObjectMapper objectMapper,
+                                                        MemoryAggregationPolicy policy) {
+            super(dataSource, objectMapper, policy);
+        }
+
+        @Override
+        protected void beforeFlushDeleteAttempt(String tenantId,
+                                                String sessionId,
+                                                long expectedVersion,
+                                                MemoryFlushTrigger trigger) {
+            beforeDelete.run();
         }
     }
 }
