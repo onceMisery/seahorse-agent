@@ -52,6 +52,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.KeywordMem
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.GraphMemoryRecallChannel;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.HybridMemoryRecallPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.KeywordMemoryRecallChannel;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.ModelMemoryRecallReranker;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.RrfMemoryFusion;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.VectorMemoryRecallChannel;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
@@ -107,6 +108,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMaintenancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -378,6 +380,19 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnMissingBean(MemoryRecallFusionPort.class)
     public RrfMemoryFusion seahorseRrfMemoryFusion() {
         return new RrfMemoryFusion();
+    }
+
+    @Bean
+    @ConditionalOnBean(RerankModelPort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.memory.recall", name = "rerank-enabled",
+            havingValue = "true")
+    @ConditionalOnMissingBean(MemoryRecallRerankerPort.class)
+    public ModelMemoryRecallReranker seahorseModelMemoryRecallReranker(
+            RerankModelPort rerankModelPort,
+            @Value("${seahorse-agent.memory.recall.rerank-model:}") String rerankModel,
+            @Value("${seahorse-agent.memory.recall.rerank-input-top-k:8}") int inputTopK,
+            @Value("${seahorse-agent.memory.recall.rerank-max-text-chars:4000}") int maxTextChars) {
+        return new ModelMemoryRecallReranker(rerankModelPort, rerankModel, inputTopK, maxTextChars);
     }
 
     @Bean

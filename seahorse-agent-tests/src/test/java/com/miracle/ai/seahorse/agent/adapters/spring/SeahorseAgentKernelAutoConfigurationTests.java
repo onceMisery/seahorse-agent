@@ -47,6 +47,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.GraphMemor
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.KeywordMemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.HybridMemoryRecallPipeline;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.ModelMemoryRecallReranker;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataBackfillService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataDictionaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataExtractionResultService;
@@ -157,6 +158,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPor
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRerankerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
@@ -185,6 +187,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionReposit
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
@@ -622,6 +625,21 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context.getBean(MemoryRetrievalPipelinePort.class))
                             .isInstanceOf(HybridMemoryRecallPipeline.class);
                     assertThat(context).doesNotHaveBean(DefaultMemoryRetrievalPipeline.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterModelMemoryRecallRerankerWhenEnabled() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class, RerankModelConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.memory.recall.hybrid-enabled=true",
+                        "seahorse-agent.memory.recall.rerank-enabled=true",
+                        "seahorse-agent.memory.recall.rerank-model=rerank-memory")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryRecallRerankerPort.class);
+                    assertThat(context.getBean(MemoryRecallRerankerPort.class))
+                            .isInstanceOf(ModelMemoryRecallReranker.class);
                 });
     }
 
@@ -1154,6 +1172,15 @@ class SeahorseAgentKernelAutoConfigurationTests {
         @Bean
         MemoryOperationLogPort memoryOperationLogPort() {
             return mock(MemoryOperationLogPort.class);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class RerankModelConfiguration {
+
+        @Bean
+        RerankModelPort rerankModelPort() {
+            return (modelId, query, chunks) -> chunks == null ? List.of() : List.copyOf(chunks);
         }
     }
 
