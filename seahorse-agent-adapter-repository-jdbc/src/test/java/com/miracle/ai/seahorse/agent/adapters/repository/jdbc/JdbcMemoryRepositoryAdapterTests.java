@@ -839,7 +839,7 @@ class JdbcMemoryRepositoryAdapterTests {
     }
 
     @Test
-    void shouldBoostDurableMemoryConfidenceWhenRecordReadTouchesLongTermAndSemanticRows() {
+    void shouldBoostDurableMemoryScoresWhenRecordReadTouchesLongTermAndSemanticRows() {
         jdbcTemplate.update("""
                 INSERT INTO t_long_term_memory
                 (id, user_id, tenant_id, memory_category, title, content, source_type, source_ids, tags,
@@ -862,7 +862,7 @@ class JdbcMemoryRepositoryAdapterTests {
         lifecycleAdapter.recordRead("semantic", "sem-read-feedback", referencedAt);
 
         Map<String, Object> longTermRow = jdbcTemplate.queryForMap("""
-                SELECT confidence_level, last_referenced_at, status
+                SELECT importance_score, confidence_level, last_referenced_at, status
                 FROM t_long_term_memory
                 WHERE id = 'ltm-read-feedback'
                 """);
@@ -871,6 +871,7 @@ class JdbcMemoryRepositoryAdapterTests {
                 FROM t_semantic_memory
                 WHERE id = 'sem-read-feedback'
                 """);
+        assertThat(((Number) longTermRow.get("IMPORTANCE_SCORE")).doubleValue()).isEqualTo(1.0D);
         assertThat(((Number) longTermRow.get("CONFIDENCE_LEVEL")).doubleValue()).isEqualTo(0.75D);
         assertThat(longTermRow.get("LAST_REFERENCED_AT")).isNotNull();
         assertThat(longTermRow.get("STATUS")).isEqualTo("REFERENCED");
