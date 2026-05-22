@@ -27,10 +27,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunP
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -40,6 +44,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
     private final MemoryCompactionService compactionService;
     private final MemoryAliasResolutionService aliasResolutionService;
     private final MemoryMaintenanceRunRepositoryPort maintenanceRunRepositoryPort;
+    private final MemoryTraceRecorder traceRecorder;
     private final boolean compactionEnabled;
     private final boolean aliasEnabled;
     private final boolean garbageCollectionEnabled;
@@ -52,6 +57,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 null,
                 null,
                 MemoryMaintenanceRunRepositoryPort.noop(),
+                MemoryTraceRecorder.noop(),
                 compactionEnabled,
                 aliasEnabled,
                 garbageCollectionEnabled);
@@ -66,6 +72,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 null,
                 null,
                 maintenanceRunRepositoryPort,
+                MemoryTraceRecorder.noop(),
                 compactionEnabled,
                 aliasEnabled,
                 garbageCollectionEnabled);
@@ -81,6 +88,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 compactionService,
                 null,
                 maintenanceRunRepositoryPort,
+                MemoryTraceRecorder.noop(),
                 compactionEnabled,
                 aliasEnabled,
                 garbageCollectionEnabled);
@@ -90,6 +98,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                                            MemoryCompactionService compactionService,
                                            MemoryAliasResolutionService aliasResolutionService,
                                            MemoryMaintenanceRunRepositoryPort maintenanceRunRepositoryPort,
+                                           MemoryTraceRecorder traceRecorder,
                                            boolean compactionEnabled,
                                            boolean aliasEnabled,
                                            boolean garbageCollectionEnabled) {
@@ -99,9 +108,27 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
         this.maintenanceRunRepositoryPort = Objects.requireNonNullElseGet(
                 maintenanceRunRepositoryPort,
                 MemoryMaintenanceRunRepositoryPort::noop);
+        this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
         this.compactionEnabled = compactionEnabled;
         this.aliasEnabled = aliasEnabled;
         this.garbageCollectionEnabled = garbageCollectionEnabled;
+    }
+
+    public DefaultMemoryMaintenanceService(MemoryGarbageCollectionService garbageCollectionService,
+                                           MemoryCompactionService compactionService,
+                                           MemoryAliasResolutionService aliasResolutionService,
+                                           MemoryMaintenanceRunRepositoryPort maintenanceRunRepositoryPort,
+                                           boolean compactionEnabled,
+                                           boolean aliasEnabled,
+                                           boolean garbageCollectionEnabled) {
+        this(garbageCollectionService,
+                compactionService,
+                aliasResolutionService,
+                maintenanceRunRepositoryPort,
+                MemoryTraceRecorder.noop(),
+                compactionEnabled,
+                aliasEnabled,
+                garbageCollectionEnabled);
     }
 
     @Override
@@ -138,6 +165,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 errors,
                 Instant.now());
         persistRunRecord(result);
+        recordTrace(result, compactionResult, aliasResolutionResult, garbageCollectionResult);
         return result;
     }
 
@@ -212,6 +240,47 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
         } catch (RuntimeException ignored) {
             // Maintenance records are observability data and must not change maintenance execution semantics.
         }
+    }
+
+    private void recordTrace(MemoryMaintenanceRunResult result,
+                             MemoryCompactionResult compactionResult,
+                             MemoryAliasResolutionRunResult aliasResolutionResult,
+                             MemoryGarbageCollectionResult garbageCollectionResult) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("reason", result.reason());
+        details.put("compactionEnabled", result.compactionEnabled());
+        details.put("aliasEnabled", result.aliasEnabled());
+        details.put("garbageCollectionEnabled", result.garbageCollectionEnabled());
+        details.put("skippedTasks", result.skippedTasks());
+        details.put("errors", result.errors());
+        if (compactionResult != null) {
+            details.put("compactionScannedCount", compactionResult.scannedGroupCount());
+            details.put("compactionGroupCount", compactionResult.compactedGroupCount());
+            details.put("compactionFragmentCount", compactionResult.compactedFragmentCount());
+        }
+        if (aliasResolutionResult != null) {
+            details.put("aliasScannedCount", aliasResolutionResult.scannedCount());
+            details.put("aliasNormalizedCount", aliasResolutionResult.normalizedCount());
+            details.put("aliasDictionaryMatchCount", aliasResolutionResult.dictionaryMatchCount());
+        }
+        if (garbageCollectionResult != null) {
+            details.put("gcScannedCount", garbageCollectionResult.scannedCount());
+            details.put("gcDeleteTaskCount", garbageCollectionResult.enqueuedDeleteTaskCount());
+            details.put("gcMarkedIndexDeletedCount", garbageCollectionResult.markedIndexDeletedCount());
+        }
+        traceRecorder.record(new MemoryTraceEvent(
+                result.reason(),
+                "default",
+                "",
+                "",
+                "",
+                "memory-maintenance",
+                "run-maintenance",
+                result.errors().isEmpty() ? MemoryTraceEvent.STATUS_SUCCESS : MemoryTraceEvent.STATUS_FAILED,
+                result.reason(),
+                "run",
+                details,
+                result.executedAt()));
     }
 
     private String status(MemoryMaintenanceRunResult result) {

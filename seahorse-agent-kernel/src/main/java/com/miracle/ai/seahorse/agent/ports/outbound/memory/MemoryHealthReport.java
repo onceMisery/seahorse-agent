@@ -38,6 +38,9 @@ public record MemoryHealthReport(
         double profileCompleteness,
         double conflictDensity,
         Map<String, Object> latestQualitySnapshot,
+        int traceEventCount,
+        int traceFailureCount,
+        Map<String, Long> traceComponentCounts,
         List<String> alerts,
         Instant generatedAt
 ) {
@@ -47,7 +50,47 @@ public record MemoryHealthReport(
         tenantId = Objects.requireNonNullElse(tenantId, "default");
         operationCounts = Map.copyOf(Objects.requireNonNullElse(operationCounts, Map.of()));
         latestQualitySnapshot = Map.copyOf(Objects.requireNonNullElse(latestQualitySnapshot, Map.of()));
+        traceComponentCounts = Map.copyOf(Objects.requireNonNullElse(traceComponentCounts, Map.of()));
         alerts = List.copyOf(Objects.requireNonNullElse(alerts, List.of()));
         generatedAt = Objects.requireNonNullElseGet(generatedAt, Instant::now);
+    }
+
+    public MemoryHealthReport(String userId,
+                              String tenantId,
+                              int profileFactCount,
+                              int correctionRuleCount,
+                              int pendingConflictCount,
+                              int outboxBacklogCount,
+                              int pendingReviewCount,
+                              Map<String, Long> operationCounts,
+                              double acceptRate,
+                              double rejectRate,
+                              int schemaFailureCount,
+                              int policyBlockCount,
+                              double profileCompleteness,
+                              double conflictDensity,
+                              Map<String, Object> latestQualitySnapshot,
+                              List<String> alerts,
+                              Instant generatedAt) {
+        this(userId,
+                tenantId,
+                profileFactCount,
+                correctionRuleCount,
+                pendingConflictCount,
+                outboxBacklogCount,
+                pendingReviewCount,
+                operationCounts,
+                acceptRate,
+                rejectRate,
+                schemaFailureCount,
+                policyBlockCount,
+                profileCompleteness,
+                conflictDensity,
+                latestQualitySnapshot,
+                0,
+                0,
+                Map.of(),
+                alerts,
+                generatedAt);
     }
 }

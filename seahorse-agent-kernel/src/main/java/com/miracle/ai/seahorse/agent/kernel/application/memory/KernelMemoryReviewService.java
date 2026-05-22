@@ -33,11 +33,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.LinkedHashMap;
 
 public class KernelMemoryReviewService implements MemoryReviewInboundPort {
 
@@ -53,21 +56,31 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
     private final MemoryReviewManagementRepositoryPort reviewRepositoryPort;
     private final MemoryIngestionWorkflowPort ingestionWorkflowPort;
     private final MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort;
+    private final MemoryTraceRecorder traceRecorder;
 
     public KernelMemoryReviewService(MemoryReviewManagementRepositoryPort reviewRepositoryPort,
                                      MemoryIngestionWorkflowPort ingestionWorkflowPort) {
-        this(reviewRepositoryPort, ingestionWorkflowPort, MemoryReviewFeedbackRepositoryPort.empty());
+        this(reviewRepositoryPort, ingestionWorkflowPort, MemoryReviewFeedbackRepositoryPort.empty(),
+                MemoryTraceRecorder.noop());
     }
 
     public KernelMemoryReviewService(MemoryReviewManagementRepositoryPort reviewRepositoryPort,
                                      MemoryIngestionWorkflowPort ingestionWorkflowPort,
                                      MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort) {
+        this(reviewRepositoryPort, ingestionWorkflowPort, feedbackRepositoryPort, MemoryTraceRecorder.noop());
+    }
+
+    public KernelMemoryReviewService(MemoryReviewManagementRepositoryPort reviewRepositoryPort,
+                                     MemoryIngestionWorkflowPort ingestionWorkflowPort,
+                                     MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort,
+                                     MemoryTraceRecorder traceRecorder) {
         this.reviewRepositoryPort = Objects.requireNonNullElseGet(reviewRepositoryPort,
                 MemoryReviewManagementRepositoryPort::empty);
         this.ingestionWorkflowPort = Objects.requireNonNull(ingestionWorkflowPort,
                 "ingestionWorkflowPort must not be null");
         this.feedbackRepositoryPort = Objects.requireNonNullElseGet(feedbackRepositoryPort,
                 MemoryReviewFeedbackRepositoryPort::empty);
+        this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
     }
 
     @Override
@@ -91,7 +104,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
     @Override
     public MemoryReviewRecord approve(String candidateId, MemoryReviewDecisionCommand command) {
         MemoryReviewRecord current = requirePending(candidateId);
-        return applyAccepted(current, safeCommand(command), current.content(), SOURCE_APPROVE);
+        return applyAccepted(current, safeCommand(command), current.content(), SOURCE_APPROVE, "approve");
     }
 
     @Override
@@ -99,7 +112,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
         MemoryReviewDecisionCommand safeCommand = safeCommand(command);
         requireText(safeCommand.correctedContent(), "correctedContent");
         MemoryReviewRecord current = requirePending(candidateId);
-        return applyAccepted(current, safeCommand, safeCommand.correctedContent(), SOURCE_MODIFY);
+        return applyAccepted(current, safeCommand, safeCommand.correctedContent(), SOURCE_MODIFY, "modify");
     }
 
     @Override
@@ -115,6 +128,9 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 Map.of(),
                 "",
                 ""));
+        recordTrace("reject", MemoryReviewStatus.REJECTED.name(), current, safeCommand, Map.of(
+                "reviewComment", safeCommand.comment(),
+                "reviewStatus", rejected.reviewStatus().name()));
         recordFeedback(current, rejected);
         return rejected;
     }
@@ -122,7 +138,8 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
     private MemoryReviewRecord applyAccepted(MemoryReviewRecord current,
                                              MemoryReviewDecisionCommand command,
                                              String content,
-                                             String source) {
+                                             String source,
+                                             String eventType) {
         String operationId = APPLY_OPERATION_PREFIX + current.candidateId();
         MemoryIngestionResult result = ingestionWorkflowPort.ingest(new MemoryIngestionCommand(
                 operationId,
@@ -136,6 +153,11 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                         .build()));
         if (result == null || result.status() != MemoryIngestionStatus.ACCEPTED) {
             String reason = result == null ? "empty_result" : result.reason();
+            recordTrace(eventType, MemoryTraceEvent.STATUS_FAILED, current, command, Map.of(
+                    "operationId", operationId,
+                    "source", source,
+                    "resultStatus", result == null ? "NULL" : result.status().name(),
+                    "reason", reason));
             throw new IllegalStateException("review ingestion was not accepted: " + reason);
         }
         MemoryReviewRecord reviewed = reviewRepositoryPort.applyReviewDecision(new MemoryReviewDecision(
@@ -147,6 +169,12 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 command.correctedMetadata(),
                 operationId,
                 current.targetLayer()));
+        recordTrace(eventType, reviewed.reviewStatus().name(), current, command, Map.of(
+                "operationId", operationId,
+                "source", source,
+                "reviewStatus", reviewed.reviewStatus().name(),
+                "reviewedMemoryId", reviewed.reviewedMemoryId(),
+                "reviewedLayer", reviewed.reviewedLayer()));
         recordFeedback(current, reviewed);
         return reviewed;
     }
@@ -196,5 +224,33 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value.trim();
+    }
+
+    private void recordTrace(String eventType,
+                             String status,
+                             MemoryReviewRecord current,
+                             MemoryReviewDecisionCommand command,
+                             Map<String, Object> extra) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("candidateId", current.candidateId());
+        details.put("operationId", current.operationId());
+        details.put("reviewerId", operator(command == null ? null : command.reviewerId()));
+        details.put("targetLayer", current.targetLayer());
+        details.put("targetKind", current.targetKind());
+        details.put("targetKey", current.targetKey());
+        details.putAll(extra);
+        traceRecorder.record(new MemoryTraceEvent(
+                current.candidateId(),
+                current.tenantId(),
+                current.userId(),
+                current.conversationId(),
+                current.messageId(),
+                "memory-review",
+                eventType,
+                status,
+                current.candidateId(),
+                "candidate",
+                details,
+                java.time.Instant.now()));
     }
 }

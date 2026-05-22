@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 
@@ -131,6 +132,7 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
         List<MemoryOperationRecord> operations = ports.operationLogPort()
                 .listByUser(safeUserId, safeTenantId, null, sampleLimit);
         List<MemoryQualitySnapshot> snapshots = ports.qualitySnapshotRepositoryPort().listByUser(safeUserId, 1);
+        List<MemoryTraceEvent> traceEvents = ports.traceRecorder().listRecent(sampleLimit);
 
         Map<String, Long> operationCounts = operationCounts(operations);
         int operationTotal = operations.size();
@@ -159,6 +161,9 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
                 profileCompleteness,
                 conflictDensity(latestSnapshot, pendingConflicts.size()),
                 latestSnapshot,
+                traceEvents.size(),
+                countTraceFailures(traceEvents),
+                traceComponentCounts(traceEvents),
                 alerts,
                 Instant.now());
     }
@@ -271,6 +276,33 @@ public class KernelMemoryManagementService implements MemoryManagementInboundPor
 
     private int safeCount(long count) {
         return count > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) Math.max(0L, count);
+    }
+
+    private int countTraceFailures(List<MemoryTraceEvent> traceEvents) {
+        int count = 0;
+        for (MemoryTraceEvent event : traceEvents) {
+            if (event != null && isFailureStatus(event.status())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private Map<String, Long> traceComponentCounts(List<MemoryTraceEvent> traceEvents) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (MemoryTraceEvent event : traceEvents) {
+            if (event == null) {
+                continue;
+            }
+            String component = hasText(event.component()) ? event.component() : "memory";
+            counts.put(component, counts.getOrDefault(component, 0L) + 1L);
+        }
+        return counts;
+    }
+
+    private boolean isFailureStatus(String status) {
+        String normalized = Objects.requireNonNullElse(status, "").trim().toUpperCase(Locale.ROOT);
+        return "FAILED".equals(normalized) || "ERROR".equals(normalized);
     }
 
     private List<String> alerts(int outboxBacklog,

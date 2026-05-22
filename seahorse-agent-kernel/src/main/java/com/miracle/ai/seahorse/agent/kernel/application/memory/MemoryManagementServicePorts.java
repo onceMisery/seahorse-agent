@@ -17,14 +17,15 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryConflictLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
@@ -44,7 +45,8 @@ public record MemoryManagementServicePorts(
         MemoryOperationLogPort operationLogPort,
         MemoryOutboxPort outboxPort,
         MemoryReviewManagementRepositoryPort reviewRepositoryPort,
-        MemoryPolicyConfigPort policyConfigPort
+        MemoryPolicyConfigPort policyConfigPort,
+        MemoryTraceRecorder traceRecorder
 ) {
 
     public MemoryManagementServicePorts(WorkingMemoryPort workingMemoryPort,
@@ -64,31 +66,8 @@ public record MemoryManagementServicePorts(
                 MemoryOperationLogPort.noop(),
                 MemoryOutboxPort.noop(),
                 MemoryReviewManagementRepositoryPort.empty(),
-                MemoryPolicyConfigPort.defaults());
-    }
-
-    public MemoryManagementServicePorts(WorkingMemoryPort workingMemoryPort,
-                                        ShortTermMemoryPort shortTermMemoryPort,
-                                        LongTermMemoryPort longTermMemoryPort,
-                                        SemanticMemoryPort semanticMemoryPort,
-                                        MemoryQualitySnapshotRepositoryPort qualitySnapshotRepositoryPort,
-                                        MemoryConflictLogRepositoryPort conflictLogRepositoryPort,
-                                        ProfileMemoryPort profileMemoryPort,
-                                        CorrectionLedgerPort correctionLedgerPort,
-                                        MemoryOperationLogPort operationLogPort,
-                                        MemoryOutboxPort outboxPort) {
-        this(workingMemoryPort,
-                shortTermMemoryPort,
-                longTermMemoryPort,
-                semanticMemoryPort,
-                qualitySnapshotRepositoryPort,
-                conflictLogRepositoryPort,
-                profileMemoryPort,
-                correctionLedgerPort,
-                operationLogPort,
-                outboxPort,
-                MemoryReviewManagementRepositoryPort.empty(),
-                MemoryPolicyConfigPort.defaults());
+                MemoryPolicyConfigPort.defaults(),
+                MemoryTraceRecorder.noop());
     }
 
     public MemoryManagementServicePorts(WorkingMemoryPort workingMemoryPort,
@@ -101,7 +80,7 @@ public record MemoryManagementServicePorts(
                                         CorrectionLedgerPort correctionLedgerPort,
                                         MemoryOperationLogPort operationLogPort,
                                         MemoryOutboxPort outboxPort,
-                                        MemoryPolicyConfigPort policyConfigPort) {
+                                        MemoryTraceRecorder traceRecorder) {
         this(workingMemoryPort,
                 shortTermMemoryPort,
                 longTermMemoryPort,
@@ -113,7 +92,35 @@ public record MemoryManagementServicePorts(
                 operationLogPort,
                 outboxPort,
                 MemoryReviewManagementRepositoryPort.empty(),
-                policyConfigPort);
+                MemoryPolicyConfigPort.defaults(),
+                traceRecorder);
+    }
+
+    public MemoryManagementServicePorts(WorkingMemoryPort workingMemoryPort,
+                                        ShortTermMemoryPort shortTermMemoryPort,
+                                        LongTermMemoryPort longTermMemoryPort,
+                                        SemanticMemoryPort semanticMemoryPort,
+                                        MemoryQualitySnapshotRepositoryPort qualitySnapshotRepositoryPort,
+                                        MemoryConflictLogRepositoryPort conflictLogRepositoryPort,
+                                        ProfileMemoryPort profileMemoryPort,
+                                        CorrectionLedgerPort correctionLedgerPort,
+                                        MemoryOperationLogPort operationLogPort,
+                                        MemoryOutboxPort outboxPort,
+                                        MemoryReviewManagementRepositoryPort reviewRepositoryPort,
+                                        MemoryPolicyConfigPort policyConfigPort) {
+        this(workingMemoryPort,
+                shortTermMemoryPort,
+                longTermMemoryPort,
+                semanticMemoryPort,
+                qualitySnapshotRepositoryPort,
+                conflictLogRepositoryPort,
+                profileMemoryPort,
+                correctionLedgerPort,
+                operationLogPort,
+                outboxPort,
+                reviewRepositoryPort,
+                policyConfigPort,
+                MemoryTraceRecorder.noop());
     }
 
     public MemoryManagementServicePorts {
@@ -129,5 +136,6 @@ public record MemoryManagementServicePorts(
         Objects.requireNonNull(outboxPort, "outboxPort must not be null");
         Objects.requireNonNull(reviewRepositoryPort, "reviewRepositoryPort must not be null");
         Objects.requireNonNull(policyConfigPort, "policyConfigPort must not be null");
+        Objects.requireNonNull(traceRecorder, "traceRecorder must not be null");
     }
 }
