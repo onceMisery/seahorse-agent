@@ -132,6 +132,11 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String REFINER_BATCH_CIRCUIT_DELETE_RATIO = "DELETE_RATIO";
     private static final String REFINER_BATCH_REASON_OPERATION_COUNT_EXCEEDED = "operation_count_exceeded";
     private static final String REFINER_BATCH_REASON_DELETE_RATIO_EXCEEDED = "delete_ratio_exceeded";
+    private static final String REFINER_ADD_LOW_CONFIDENCE = "refiner_add_low_confidence";
+    private static final String REFINER_ADD_REVIEW_CONFIDENCE = "confidence_below_auto_commit";
+    private static final String REFINER_ADD_REVIEW_RISK = "risk_score_threshold";
+    private static final String REFINER_STATUS_DROPPED = "dropped";
+    private static final String REFINER_STATUS_PENDING_REVIEW = "pending_review";
     private static final int REFINER_READ_MASK_PER_LAYER_LIMIT = 3;
     private static final int REFINER_TARGET_ZONE_TURN_COUNT = 3;
     private static final int REFINER_STICKY_ANCHOR_LIMIT = 5;
@@ -1333,6 +1338,46 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                                                 MemoryRefinementResult result,
                                                                 Map<String, Object> extraMetadata,
                                                                 List<String> fallbackSourceMessageIds) {
+        Map<String, Object> metadata = new LinkedHashMap<>(operation.metadata());
+        metadata.putAll(result.metadata());
+        metadata.put(METADATA_CONFIDENCE, operation.confidence());
+        metadata.put(METADATA_IMPORTANCE, operation.importance());
+        metadata.put(METADATA_VALUE_SCORE, operation.valueScore());
+        metadata.put(METADATA_RISK_SCORE, operation.riskScore());
+        metadata.put(METADATA_SOURCE_MESSAGE_IDS, effectiveSourceMessageIds(operation, fallbackSourceMessageIds));
+        metadata.putAll(extraMetadata);
+        String gateReason = refinedAddReviewReason(operation);
+        if (operation.confidence() < memoryPolicyConfigPort.current().refinerDropConfidenceThreshold()) {
+            metadata.put("status", REFINER_STATUS_DROPPED);
+            metadata.put("dropReason", REFINER_ADD_LOW_CONFIDENCE);
+            return new MemoryClassificationResult(
+                    MemoryIngestionAction.IGNORE,
+                    null,
+                    null,
+                    new RefinedMemoryDelta(
+                            MemoryIngestionAction.ADD,
+                            operation.targetKind(),
+                            operation.targetKey(),
+                            REFINER_ADD_LOW_CONFIDENCE,
+                            metadata),
+                    REFINER_ADD_LOW_CONFIDENCE);
+        }
+        if (!isBlank(gateReason)) {
+            metadata.put("status", REFINER_STATUS_PENDING_REVIEW);
+            metadata.put("reviewReason", gateReason);
+            metadata.put(METADATA_CONTENT, operation.content());
+            return new MemoryClassificationResult(
+                    MemoryIngestionAction.REVIEW,
+                    null,
+                    null,
+                    new RefinedMemoryDelta(
+                            MemoryIngestionAction.ADD,
+                            operation.targetKind(),
+                            operation.targetKey(),
+                            result.reason(),
+                            metadata),
+                    result.reason());
+        }
         MemoryCaptureDecision decision = MemoryCaptureDecision.refinedAdd(
                 operation.content(),
                 isBlank(operation.targetKind()) ? "FACT" : operation.targetKind(),
@@ -1342,17 +1387,24 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 operation.riskScore(),
                 List.of("llm_refiner"),
                 operation.signals());
-        Map<String, Object> metadata = new LinkedHashMap<>(operation.metadata());
-        metadata.putAll(result.metadata());
         metadata.put("status", "enabled");
-        metadata.put(METADATA_SOURCE_MESSAGE_IDS, effectiveSourceMessageIds(operation, fallbackSourceMessageIds));
-        metadata.putAll(extraMetadata);
         return MemoryClassificationResult.refinedAdd(decision, new RefinedMemoryDelta(
                 operation.action(),
                 operation.targetKind(),
                 operation.targetKey(),
                 result.reason(),
                 metadata));
+    }
+
+    private String refinedAddReviewReason(RefinedMemoryOperation operation) {
+        MemoryPolicyConfig policy = memoryPolicyConfigPort.current();
+        if (operation.riskScore() >= policy.refinerReviewRiskThreshold()) {
+            return REFINER_ADD_REVIEW_RISK;
+        }
+        if (policy.reviewEnabled() && operation.confidence() < policy.refinerAutoCommitConfidenceThreshold()) {
+            return REFINER_ADD_REVIEW_CONFIDENCE;
+        }
+        return "";
     }
 
     private MemoryClassificationResult refinedReviewClassification(RefinedMemoryOperation operation,

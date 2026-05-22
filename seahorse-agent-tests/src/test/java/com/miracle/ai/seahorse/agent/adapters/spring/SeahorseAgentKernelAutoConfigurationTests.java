@@ -908,6 +908,9 @@ class SeahorseAgentKernelAutoConfigurationTests {
                         "seahorse-agent.memory.policy.capture-accept-threshold=0.55",
                         "seahorse-agent.memory.policy.token-budget=1800",
                         "seahorse-agent.memory.policy.review-enabled=true",
+                        "seahorse-agent.memory.policy.refiner-drop-confidence-threshold=0.52",
+                        "seahorse-agent.memory.policy.refiner-auto-commit-confidence-threshold=0.88",
+                        "seahorse-agent.memory.policy.refiner-review-risk-threshold=0.62",
                         "seahorse-agent.memory.policy.grey-release-key=tenant-default")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
@@ -916,6 +919,9 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(port.current().captureAcceptThreshold()).isEqualTo(0.55D);
                     assertThat(port.current().tokenBudget()).isEqualTo(1800);
                     assertThat(port.current().reviewEnabled()).isTrue();
+                    assertThat(port.current().refinerDropConfidenceThreshold()).isEqualTo(0.52D);
+                    assertThat(port.current().refinerAutoCommitConfidenceThreshold()).isEqualTo(0.88D);
+                    assertThat(port.current().refinerReviewRiskThreshold()).isEqualTo(0.62D);
                     assertThat(port.current().greyReleaseKey()).isEqualTo("tenant-default");
                 });
     }

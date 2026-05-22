@@ -866,6 +866,156 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldStageMediumConfidenceRefinedAddWhenReviewEnabled() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "medium_confidence",
+                List.of(new RefinedMemoryOperation(
+                        MemoryIngestionAction.ADD,
+                        "PROJECT_FACT",
+                        "project.database",
+                        "User is considering a database migration.",
+                        0.70D,
+                        0.72D,
+                        0.80D,
+                        0.10D,
+                        List.of("msg-refiner-medium-confidence"),
+                        List.of("llm_refiner"),
+                        Map.of())),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-medium-confidence", "default",
+                "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-medium-confidence")
+                        .messageId("msg-refiner-medium-confidence")
+                        .message(ChatMessage.user("Maybe we should migrate the project database."))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.REVIEW, result.action());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(1, reviewCandidatePort.candidates.size());
+        MemoryReviewCandidate candidate = reviewCandidatePort.candidates.get(0);
+        Assertions.assertEquals(MemoryIngestionAction.ADD, candidate.requestedAction());
+        Assertions.assertEquals("PROJECT_FACT", candidate.targetKind());
+        Assertions.assertEquals("project.database", candidate.targetKey());
+        Assertions.assertEquals("User is considering a database migration.", candidate.content());
+        Assertions.assertEquals(0.70D, candidate.confidence(), 0.001D);
+        Assertions.assertEquals("confidence_below_auto_commit", candidate.metadata().get("reviewReason"));
+        Assertions.assertEquals(MemoryOperationStatus.REVIEW,
+                operationLogPort.statusById.get("op-refiner-medium-confidence"));
+        Assertions.assertEquals("pending_review",
+                operationLogPort.decisionById.get("op-refiner-medium-confidence").get("refinerStatus"));
+        Assertions.assertEquals("ADD",
+                operationLogPort.decisionById.get("op-refiner-medium-confidence").get("refinerAction"));
+    }
+
+    @Test
+    void shouldDropVeryLowConfidenceRefinedAddBeforeDurableWrite() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "very_low_confidence",
+                List.of(new RefinedMemoryOperation(
+                        MemoryIngestionAction.ADD,
+                        "PROJECT_FACT",
+                        "project.database",
+                        "User might use Spanner someday.",
+                        0.45D,
+                        0.70D,
+                        0.80D,
+                        0.10D,
+                        List.of("msg-refiner-low-confidence"),
+                        List.of("llm_refiner"),
+                        Map.of())),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-low-confidence", "default",
+                "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-low-confidence")
+                        .messageId("msg-refiner-low-confidence")
+                        .message(ChatMessage.user("Maybe someday Spanner, not sure."))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.IGNORED, result.status());
+        Assertions.assertEquals("refiner_add_low_confidence", result.reason());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertTrue(reviewCandidatePort.candidates.isEmpty());
+        Assertions.assertEquals(MemoryOperationStatus.IGNORED,
+                operationLogPort.statusById.get("op-refiner-low-confidence"));
+        Assertions.assertEquals("dropped",
+                operationLogPort.decisionById.get("op-refiner-low-confidence").get("refinerStatus"));
+        Assertions.assertEquals("refiner_add_low_confidence",
+                operationLogPort.decisionById.get("op-refiner-low-confidence").get("dropReason"));
+    }
+
+    @Test
+    void shouldStageRiskyRefinedAddEvenWhenActionIsAdd() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryReviewCandidatePort reviewCandidatePort = new RecordingMemoryReviewCandidatePort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "risky_add",
+                List.of(new RefinedMemoryOperation(
+                        MemoryIngestionAction.ADD,
+                        "PROJECT_FACT",
+                        "project.deprecation",
+                        "User is abandoning the PIP-459 implementation.",
+                        0.93D,
+                        0.82D,
+                        0.90D,
+                        0.78D,
+                        List.of("msg-refiner-risky-add"),
+                        List.of("llm_refiner", "conflict_detected"),
+                        Map.of("conflictDetected", true))),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefinerAndReview(
+                shortTermPort,
+                refinerPort,
+                reviewCandidatePort,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-risky-add", "default",
+                "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-risky-add")
+                        .messageId("msg-refiner-risky-add")
+                        .message(ChatMessage.user("Stop using PIP-459 for this project."))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.REJECTED, result.status());
+        Assertions.assertEquals(MemoryIngestionAction.REVIEW, result.action());
+        Assertions.assertTrue(shortTermPort.savedRecords.isEmpty());
+        Assertions.assertEquals(1, reviewCandidatePort.candidates.size());
+        MemoryReviewCandidate candidate = reviewCandidatePort.candidates.get(0);
+        Assertions.assertEquals(MemoryIngestionAction.ADD, candidate.requestedAction());
+        Assertions.assertEquals("project.deprecation", candidate.targetKey());
+        Assertions.assertEquals(0.78D, candidate.riskScore(), 0.001D);
+        Assertions.assertEquals("risk_score_threshold", candidate.metadata().get("reviewReason"));
+        Assertions.assertEquals(true, candidate.metadata().get("conflictDetected"));
+        Assertions.assertEquals(MemoryOperationStatus.REVIEW,
+                operationLogPort.statusById.get("op-refiner-risky-add"));
+    }
+
+    @Test
     void shouldExecuteAllSupportedRefinerAddOperationsInOneBatch() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();

@@ -27,6 +27,9 @@ public record MemoryPolicyConfig(
         double riskRejectThreshold,
         int tokenBudget,
         boolean reviewEnabled,
+        double refinerDropConfidenceThreshold,
+        double refinerAutoCommitConfidenceThreshold,
+        double refinerReviewRiskThreshold,
         Map<String, Boolean> enabledTracks,
         int schemaFailureAlertThreshold,
         int outboxBacklogAlertThreshold,
@@ -36,12 +39,20 @@ public record MemoryPolicyConfig(
     public static final double DEFAULT_CAPTURE_ACCEPT_THRESHOLD = 0.40D;
     public static final double DEFAULT_HIGH_VALUE_THRESHOLD = 0.75D;
     public static final double DEFAULT_RISK_REJECT_THRESHOLD = 0.70D;
+    public static final double DEFAULT_REFINER_DROP_CONFIDENCE_THRESHOLD = 0.50D;
+    public static final double DEFAULT_REFINER_AUTO_COMMIT_CONFIDENCE_THRESHOLD = 0.85D;
+    public static final double DEFAULT_REFINER_REVIEW_RISK_THRESHOLD = 0.70D;
     public static final int DEFAULT_TOKEN_BUDGET = 2400;
 
     public MemoryPolicyConfig {
         captureAcceptThreshold = ratioOrDefault(captureAcceptThreshold, DEFAULT_CAPTURE_ACCEPT_THRESHOLD);
         highValueThreshold = ratioOrDefault(highValueThreshold, DEFAULT_HIGH_VALUE_THRESHOLD);
         riskRejectThreshold = ratioOrDefault(riskRejectThreshold, DEFAULT_RISK_REJECT_THRESHOLD);
+        refinerDropConfidenceThreshold = ratioOrDefault(
+                refinerDropConfidenceThreshold, DEFAULT_REFINER_DROP_CONFIDENCE_THRESHOLD);
+        refinerAutoCommitConfidenceThreshold = ratioOrDefault(
+                refinerAutoCommitConfidenceThreshold, DEFAULT_REFINER_AUTO_COMMIT_CONFIDENCE_THRESHOLD);
+        refinerReviewRiskThreshold = ratioOrDefault(refinerReviewRiskThreshold, DEFAULT_REFINER_REVIEW_RISK_THRESHOLD);
         tokenBudget = tokenBudget > 0 ? tokenBudget : DEFAULT_TOKEN_BUDGET;
         enabledTracks = Map.copyOf(Objects.requireNonNullElseGet(enabledTracks, MemoryPolicyConfig::defaultTracks));
         schemaFailureAlertThreshold = Math.max(0, schemaFailureAlertThreshold);
@@ -56,6 +67,9 @@ public record MemoryPolicyConfig(
                 DEFAULT_RISK_REJECT_THRESHOLD,
                 DEFAULT_TOKEN_BUDGET,
                 false,
+                DEFAULT_REFINER_DROP_CONFIDENCE_THRESHOLD,
+                DEFAULT_REFINER_AUTO_COMMIT_CONFIDENCE_THRESHOLD,
+                DEFAULT_REFINER_REVIEW_RISK_THRESHOLD,
                 defaultTracks(),
                 0,
                 0,
@@ -64,31 +78,55 @@ public record MemoryPolicyConfig(
 
     public MemoryPolicyConfig withCaptureAcceptThreshold(double value) {
         return new MemoryPolicyConfig(value, highValueThreshold, riskRejectThreshold, tokenBudget,
-                reviewEnabled, enabledTracks, schemaFailureAlertThreshold, outboxBacklogAlertThreshold,
-                greyReleaseKey);
+                reviewEnabled, refinerDropConfidenceThreshold, refinerAutoCommitConfidenceThreshold,
+                refinerReviewRiskThreshold, enabledTracks, schemaFailureAlertThreshold,
+                outboxBacklogAlertThreshold, greyReleaseKey);
     }
 
     public MemoryPolicyConfig withHighValueThreshold(double value) {
         return new MemoryPolicyConfig(captureAcceptThreshold, value, riskRejectThreshold, tokenBudget,
-                reviewEnabled, enabledTracks, schemaFailureAlertThreshold, outboxBacklogAlertThreshold,
-                greyReleaseKey);
+                reviewEnabled, refinerDropConfidenceThreshold, refinerAutoCommitConfidenceThreshold,
+                refinerReviewRiskThreshold, enabledTracks, schemaFailureAlertThreshold,
+                outboxBacklogAlertThreshold, greyReleaseKey);
     }
 
     public MemoryPolicyConfig withRiskRejectThreshold(double value) {
         return new MemoryPolicyConfig(captureAcceptThreshold, highValueThreshold, value, tokenBudget,
-                reviewEnabled, enabledTracks, schemaFailureAlertThreshold, outboxBacklogAlertThreshold,
-                greyReleaseKey);
+                reviewEnabled, refinerDropConfidenceThreshold, refinerAutoCommitConfidenceThreshold,
+                refinerReviewRiskThreshold, enabledTracks, schemaFailureAlertThreshold,
+                outboxBacklogAlertThreshold, greyReleaseKey);
     }
 
     public MemoryPolicyConfig withTokenBudget(int value) {
         return new MemoryPolicyConfig(captureAcceptThreshold, highValueThreshold, riskRejectThreshold, value,
-                reviewEnabled, enabledTracks, schemaFailureAlertThreshold, outboxBacklogAlertThreshold,
-                greyReleaseKey);
+                reviewEnabled, refinerDropConfidenceThreshold, refinerAutoCommitConfidenceThreshold,
+                refinerReviewRiskThreshold, enabledTracks, schemaFailureAlertThreshold,
+                outboxBacklogAlertThreshold, greyReleaseKey);
     }
 
     public MemoryPolicyConfig withReviewEnabled(boolean value) {
         return new MemoryPolicyConfig(captureAcceptThreshold, highValueThreshold, riskRejectThreshold, tokenBudget,
-                value, enabledTracks, schemaFailureAlertThreshold, outboxBacklogAlertThreshold, greyReleaseKey);
+                value, refinerDropConfidenceThreshold, refinerAutoCommitConfidenceThreshold,
+                refinerReviewRiskThreshold, enabledTracks, schemaFailureAlertThreshold,
+                outboxBacklogAlertThreshold, greyReleaseKey);
+    }
+
+    public MemoryPolicyConfig withRefinerDropConfidenceThreshold(double value) {
+        return new MemoryPolicyConfig(captureAcceptThreshold, highValueThreshold, riskRejectThreshold, tokenBudget,
+                reviewEnabled, value, refinerAutoCommitConfidenceThreshold, refinerReviewRiskThreshold,
+                enabledTracks, schemaFailureAlertThreshold, outboxBacklogAlertThreshold, greyReleaseKey);
+    }
+
+    public MemoryPolicyConfig withRefinerAutoCommitConfidenceThreshold(double value) {
+        return new MemoryPolicyConfig(captureAcceptThreshold, highValueThreshold, riskRejectThreshold, tokenBudget,
+                reviewEnabled, refinerDropConfidenceThreshold, value, refinerReviewRiskThreshold,
+                enabledTracks, schemaFailureAlertThreshold, outboxBacklogAlertThreshold, greyReleaseKey);
+    }
+
+    public MemoryPolicyConfig withRefinerReviewRiskThreshold(double value) {
+        return new MemoryPolicyConfig(captureAcceptThreshold, highValueThreshold, riskRejectThreshold, tokenBudget,
+                reviewEnabled, refinerDropConfidenceThreshold, refinerAutoCommitConfidenceThreshold, value,
+                enabledTracks, schemaFailureAlertThreshold, outboxBacklogAlertThreshold, greyReleaseKey);
     }
 
     public MemoryPolicyConfig withTrackEnabled(String track, boolean enabled) {
@@ -97,22 +135,30 @@ public record MemoryPolicyConfig(
             tracks.put(track.trim(), enabled);
         }
         return new MemoryPolicyConfig(captureAcceptThreshold, highValueThreshold, riskRejectThreshold, tokenBudget,
-                reviewEnabled, tracks, schemaFailureAlertThreshold, outboxBacklogAlertThreshold, greyReleaseKey);
+                reviewEnabled, refinerDropConfidenceThreshold, refinerAutoCommitConfidenceThreshold,
+                refinerReviewRiskThreshold, tracks, schemaFailureAlertThreshold, outboxBacklogAlertThreshold,
+                greyReleaseKey);
     }
 
     public MemoryPolicyConfig withSchemaFailureAlertThreshold(int value) {
         return new MemoryPolicyConfig(captureAcceptThreshold, highValueThreshold, riskRejectThreshold, tokenBudget,
-                reviewEnabled, enabledTracks, value, outboxBacklogAlertThreshold, greyReleaseKey);
+                reviewEnabled, refinerDropConfidenceThreshold, refinerAutoCommitConfidenceThreshold,
+                refinerReviewRiskThreshold, enabledTracks, value, outboxBacklogAlertThreshold,
+                greyReleaseKey);
     }
 
     public MemoryPolicyConfig withOutboxBacklogAlertThreshold(int value) {
         return new MemoryPolicyConfig(captureAcceptThreshold, highValueThreshold, riskRejectThreshold, tokenBudget,
-                reviewEnabled, enabledTracks, schemaFailureAlertThreshold, value, greyReleaseKey);
+                reviewEnabled, refinerDropConfidenceThreshold, refinerAutoCommitConfidenceThreshold,
+                refinerReviewRiskThreshold, enabledTracks, schemaFailureAlertThreshold, value,
+                greyReleaseKey);
     }
 
     public MemoryPolicyConfig withGreyReleaseKey(String value) {
         return new MemoryPolicyConfig(captureAcceptThreshold, highValueThreshold, riskRejectThreshold, tokenBudget,
-                reviewEnabled, enabledTracks, schemaFailureAlertThreshold, outboxBacklogAlertThreshold, value);
+                reviewEnabled, refinerDropConfidenceThreshold, refinerAutoCommitConfidenceThreshold,
+                refinerReviewRiskThreshold, enabledTracks, schemaFailureAlertThreshold,
+                outboxBacklogAlertThreshold, value);
     }
 
     private static Map<String, Boolean> defaultTracks() {

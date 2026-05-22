@@ -252,6 +252,12 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             @Value("${seahorse-agent.memory.policy.risk-reject-threshold:0.7}") double riskRejectThreshold,
             @Value("${seahorse-agent.memory.policy.token-budget:2400}") int tokenBudget,
             @Value("${seahorse-agent.memory.policy.review-enabled:false}") boolean reviewEnabled,
+            @Value("${seahorse-agent.memory.policy.refiner-drop-confidence-threshold:0.5}")
+                    double refinerDropConfidenceThreshold,
+            @Value("${seahorse-agent.memory.policy.refiner-auto-commit-confidence-threshold:0.85}")
+                    double refinerAutoCommitConfidenceThreshold,
+            @Value("${seahorse-agent.memory.policy.refiner-review-risk-threshold:0.7}")
+                    double refinerReviewRiskThreshold,
             @Value("${seahorse-agent.memory.policy.schema-failure-alert-threshold:0}") int schemaFailureAlertThreshold,
             @Value("${seahorse-agent.memory.policy.outbox-backlog-alert-threshold:0}") int outboxBacklogAlertThreshold,
             @Value("${seahorse-agent.memory.policy.grey-release-key:}") String greyReleaseKey) {
@@ -261,6 +267,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 riskRejectThreshold,
                 tokenBudget,
                 reviewEnabled,
+                refinerDropConfidenceThreshold,
+                refinerAutoCommitConfidenceThreshold,
+                refinerReviewRiskThreshold,
                 MemoryPolicyConfig.defaults().enabledTracks(),
                 schemaFailureAlertThreshold,
                 outboxBacklogAlertThreshold,
