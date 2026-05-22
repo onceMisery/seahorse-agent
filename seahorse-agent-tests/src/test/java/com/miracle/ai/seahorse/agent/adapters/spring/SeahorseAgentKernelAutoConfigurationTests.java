@@ -492,7 +492,10 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryEnginePort.class);
                     assertThat(context).hasSingleBean(MemoryRetrievalPipelinePort.class);
                     assertThat(context.getBean(MemoryRetrievalPipelinePort.class))
-                            .isInstanceOf(DefaultMemoryRetrievalPipeline.class);
+                            .isInstanceOf(HybridMemoryRecallPipeline.class);
+                    assertThat(context.getBean(ScoredMemoryVectorPort.class))
+                            .isInstanceOf(LayeredScoredMemoryVectorPort.class);
+                    assertThat(context).doesNotHaveBean(DefaultMemoryRetrievalPipeline.class);
                     assertThat(context).hasSingleBean(MemoryRouterPort.class);
                     assertThat(context).hasSingleBean(ContextWeaverPort.class);
                     assertThat(context).hasSingleBean(MemoryIngestionWorkflowPort.class);
@@ -516,6 +519,20 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).doesNotHaveBean(SeahorseMemoryAggregationJob.class);
                     assertThat(context).doesNotHaveBean(MemoryGarbageCollectionService.class);
                     assertThat(context).doesNotHaveBean(SeahorseMemoryGarbageCollectionJob.class);
+                });
+    }
+
+    @Test
+    void shouldFallbackToDefaultMemoryRetrievalPipelineWhenHybridRecallIsDisabled() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class)
+                .withPropertyValues("seahorse-agent.memory.recall.hybrid-enabled=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MemoryRetrievalPipelinePort.class);
+                    assertThat(context.getBean(MemoryRetrievalPipelinePort.class))
+                            .isInstanceOf(DefaultMemoryRetrievalPipeline.class);
+                    assertThat(context).doesNotHaveBean(HybridMemoryRecallPipeline.class);
+                    assertThat(context).doesNotHaveBean(ScoredMemoryVectorPort.class);
                 });
     }
 
