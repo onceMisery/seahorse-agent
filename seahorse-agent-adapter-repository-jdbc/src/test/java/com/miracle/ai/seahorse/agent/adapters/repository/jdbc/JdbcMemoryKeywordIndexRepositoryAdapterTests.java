@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryDerivedIndexDeleteCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryDerivedIndexDocument;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -155,5 +156,34 @@ class JdbcMemoryKeywordIndexRepositoryAdapterTests {
         assertThat(hits.get(0).metadata())
                 .containsEntry("type", "PROJECT_FACT")
                 .containsEntry("status", "ACTIVE");
+    }
+
+    @Test
+    void shouldRankKeywordIndexHitsBySparseTermCoverage() {
+        Instant indexedAt = Instant.parse("2026-05-22T08:00:00Z");
+        adapter.upsert(new MemoryDerivedIndexDocument(
+                "memory-pip",
+                "user-1",
+                "tenant-1",
+                "LONG_TERM",
+                "PROJECT_FACT",
+                "Pulsar PIP-459 rollback plan",
+                Map.of("semanticKey", "project:pulsar"),
+                indexedAt));
+        adapter.upsert(new MemoryDerivedIndexDocument(
+                "memory-seatunnel",
+                "user-1",
+                "tenant-1",
+                "LONG_TERM",
+                "PROJECT_FACT",
+                "SeaTunnel connector rollout note",
+                Map.of("semanticKey", "project:seatunnel"),
+                indexedAt.plusSeconds(30)));
+
+        var hits = searchAdapter.search("user-1", "tenant-1", "Pulsar PIP-459 SeaTunnel", 10);
+
+        assertThat(hits).extracting(MemoryKeywordSearchPort.MemoryKeywordHit::memoryId)
+                .containsExactly("memory-pip", "memory-seatunnel");
+        assertThat(hits.get(0).score()).isGreaterThan(hits.get(1).score());
     }
 }

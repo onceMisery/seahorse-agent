@@ -88,11 +88,12 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
                   AND tenant_id = ?
                   AND deleted = 0
                   AND status = 'ACTIVE'
-                  AND (LOWER(content) LIKE ? OR LOWER(CAST(metadata_json AS VARCHAR)) LIKE ?)
+                  AND %s
                 ORDER BY update_time DESC
                 LIMIT ?
-                """, (rs, rowNum) -> mapKeywordIndexHit(rs, terms),
-                userId, tenantId, likeAny(terms), likeAny(terms), limit);
+                """.formatted(termFilter(terms, "LOWER(content)", "LOWER(CAST(metadata_json AS VARCHAR))")),
+                (rs, rowNum) -> mapKeywordIndexHit(rs, terms),
+                searchArgs(userId, tenantId, terms, 2, limit));
     }
 
     private List<MemoryKeywordHit> searchShortTerm(String userId, String tenantId, List<String> terms, int limit) {
@@ -104,11 +105,12 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
                   AND COALESCE(tenant_id, 'default') = ?
                   AND deleted = 0
                   AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
-                  AND (LOWER(content) LIKE ? OR LOWER(metadata_json) LIKE ?)
+                  AND %s
                 ORDER BY update_time DESC
                 LIMIT ?
-                """, (rs, rowNum) -> mapHit(rs, "SHORT_TERM", terms), userId, tenantId,
-                likeAny(terms), likeAny(terms), limit);
+                """.formatted(termFilter(terms, "LOWER(content)", "LOWER(metadata_json)")),
+                (rs, rowNum) -> mapHit(rs, "SHORT_TERM", terms),
+                searchArgs(userId, tenantId, terms, 2, limit));
     }
 
     private List<MemoryKeywordHit> searchLongTerm(String userId, String tenantId, List<String> terms, int limit) {
@@ -120,11 +122,12 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
                   AND COALESCE(tenant_id, 'default') = ?
                   AND deleted = 0
                   AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
-                  AND (LOWER(content) LIKE ? OR LOWER(title) LIKE ? OR LOWER(tags) LIKE ?)
+                  AND %s
                 ORDER BY importance_score DESC, update_time DESC
                 LIMIT ?
-                """, (rs, rowNum) -> mapHit(rs, "LONG_TERM", terms), userId, tenantId,
-                likeAny(terms), likeAny(terms), likeAny(terms), limit);
+                """.formatted(termFilter(terms, "LOWER(content)", "LOWER(title)", "LOWER(tags)")),
+                (rs, rowNum) -> mapHit(rs, "LONG_TERM", terms),
+                searchArgs(userId, tenantId, terms, 3, limit));
     }
 
     private List<MemoryKeywordHit> searchSemantic(String userId, String tenantId, List<String> terms, int limit) {
@@ -136,11 +139,12 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
                   AND COALESCE(tenant_id, 'default') = ?
                   AND deleted = 0
                   AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
-                  AND (LOWER(value_json) LIKE ? OR LOWER(semantic_key) LIKE ?)
+                  AND %s
                 ORDER BY update_time DESC
                 LIMIT ?
-                """, (rs, rowNum) -> mapHit(rs, "SEMANTIC", terms), userId, tenantId,
-                likeAny(terms), likeAny(terms), limit);
+                """.formatted(termFilter(terms, "LOWER(value_json)", "LOWER(semantic_key)")),
+                (rs, rowNum) -> mapHit(rs, "SEMANTIC", terms),
+                searchArgs(userId, tenantId, terms, 2, limit));
     }
 
     private MemoryKeywordHit mapHit(ResultSet rs, String layer, List<String> terms) throws SQLException {
@@ -180,9 +184,20 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
         for (String term : terms) {
             if (haystack.contains(term)) {
                 score += term.length() >= 4 ? 2D : 1D;
+                score += 1D / Math.max(1, frequency(haystack, term));
             }
         }
         return score;
+    }
+
+    private int frequency(String haystack, String term) {
+        int count = 0;
+        int index = haystack.indexOf(term);
+        while (index >= 0) {
+            count++;
+            index = haystack.indexOf(term, index + term.length());
+        }
+        return count;
     }
 
     private List<String> terms(String query) {
@@ -201,10 +216,32 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
         return values;
     }
 
-    private String likeAny(List<String> terms) {
-        String term = terms.stream()
-                .max(Comparator.comparingInt(String::length))
-                .orElse("");
+    private String termFilter(List<String> terms, String... columns) {
+        List<String> clauses = new ArrayList<>();
+        for (String ignored : terms) {
+            List<String> termClauses = new ArrayList<>();
+            for (String column : columns) {
+                termClauses.add(column + " LIKE ?");
+            }
+            clauses.add("(" + String.join(" OR ", termClauses) + ")");
+        }
+        return "(" + String.join(" OR ", clauses) + ")";
+    }
+
+    private Object[] searchArgs(String userId, String tenantId, List<String> terms, int columnCount, int limit) {
+        List<Object> args = new ArrayList<>();
+        args.add(userId);
+        args.add(tenantId);
+        for (String term : terms) {
+            for (int i = 0; i < columnCount; i++) {
+                args.add(like(term));
+            }
+        }
+        args.add(limit);
+        return args.toArray();
+    }
+
+    private String like(String term) {
         return "%" + term.replace("\\", "\\\\")
                 .replace("%", "\\%")
                 .replace("_", "\\_") + "%";
