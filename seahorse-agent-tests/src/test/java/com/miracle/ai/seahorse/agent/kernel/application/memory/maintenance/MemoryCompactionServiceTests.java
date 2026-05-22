@@ -131,7 +131,10 @@ class MemoryCompactionServiceTests {
                 candidate -> new MemoryCompactionSummary(
                         "Alpha project uses Spring and targets May.",
                         "llm-test",
-                        Map.of("model", "test-compactor")),
+                        Map.of(
+                                "model", "test-compactor",
+                                "confidenceLevel", 0.93D,
+                                "importanceScore", 0.91D)),
                 new MemoryCompactionOptions(10, 2, false, false, false, "default"));
 
         MemoryCompactionResult result = service.run("manual-maintenance");
@@ -141,8 +144,13 @@ class MemoryCompactionServiceTests {
         MemoryRecord master = longTermPort.savedRecords.get(0);
         assertThat(master.content()).isEqualTo("Alpha project uses Spring and targets May.");
         assertThat(master.metadata()).containsEntry("compactionSummaryStrategy", "llm-test");
+        assertThat(master.metadata()).containsEntry("confidenceLevel", 0.93D);
+        assertThat(master.metadata()).containsEntry("importanceScore", 0.91D);
         assertThat(master.metadata().get("compactionSummaryMetadata"))
-                .isEqualTo(Map.of("model", "test-compactor"));
+                .isEqualTo(Map.of(
+                        "model", "test-compactor",
+                        "confidenceLevel", 0.93D,
+                        "importanceScore", 0.91D));
     }
 
     private static class RecordingCompactionPort implements MemoryCompactionPort {

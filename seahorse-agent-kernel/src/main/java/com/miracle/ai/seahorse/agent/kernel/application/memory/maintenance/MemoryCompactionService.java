@@ -39,6 +39,10 @@ public class MemoryCompactionService {
 
     private static final String MASTER_TYPE = "COMPACTED_SUMMARY";
     private static final String SOURCE_TYPE = "memory_compaction";
+    private static final String METADATA_IMPORTANCE_SCORE = "importanceScore";
+    private static final String METADATA_CONFIDENCE_LEVEL = "confidenceLevel";
+    private static final double DEFAULT_MASTER_IMPORTANCE_SCORE = 0.8D;
+    private static final double DEFAULT_MASTER_CONFIDENCE_LEVEL = 0.8D;
 
     private final MemoryCompactionPort compactionPort;
     private final LongTermMemoryPort longTermMemoryPort;
@@ -131,8 +135,10 @@ public class MemoryCompactionService {
         }
         metadata.put("compactionGenerationId", "compaction-" + UUID.randomUUID());
         metadata.put("compactedAt", now.toString());
-        metadata.put("importanceScore", 0.8D);
-        metadata.put("confidenceLevel", 0.8D);
+        metadata.put(METADATA_IMPORTANCE_SCORE,
+                summaryScore(summary, METADATA_IMPORTANCE_SCORE, DEFAULT_MASTER_IMPORTANCE_SCORE));
+        metadata.put(METADATA_CONFIDENCE_LEVEL,
+                summaryScore(summary, METADATA_CONFIDENCE_LEVEL, DEFAULT_MASTER_CONFIDENCE_LEVEL));
         return new MemoryRecord(masterId, "long_term", MASTER_TYPE, content(candidate, summary), metadata, now);
     }
 
@@ -162,6 +168,31 @@ public class MemoryCompactionService {
             return summary.strategy();
         }
         return "rule:" + candidate.strategy();
+    }
+
+    private double summaryScore(MemoryCompactionSummary summary, String key, double fallback) {
+        if (summary == null || summary.metadata().isEmpty()) {
+            return fallback;
+        }
+        Object value = summary.metadata().get(key);
+        if (value instanceof Number number) {
+            return boundedScore(number.doubleValue(), fallback);
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return boundedScore(Double.parseDouble(text), fallback);
+            } catch (NumberFormatException ignored) {
+                return fallback;
+            }
+        }
+        return fallback;
+    }
+
+    private double boundedScore(double value, double fallback) {
+        if (Double.isNaN(value) || Double.isInfinite(value) || value < 0D || value > 1D) {
+            return fallback;
+        }
+        return value;
     }
 
     private void saveMaster(MemoryRecord master) {
