@@ -25,6 +25,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFusionPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallCandidate;
@@ -243,6 +246,39 @@ class HybridMemoryRecallPipelineTests {
         assertThat(context.getSemanticMemories()).isEmpty();
     }
 
+    @Test
+    void shouldCanonicalizeRecallQueryWhenAliasMatches() {
+        RecordingRecallChannel channel = new RecordingRecallChannel("keyword", List.of());
+        HybridMemoryRecallPipeline pipeline = pipeline(
+                new RecordingMemoryStore(),
+                new RecordingMemoryStore(),
+                new RecordingMemoryStore(),
+                List.of(channel),
+                MemoryTraceRecorder.noop(),
+                MemoryFusionPolicy.defaults().withFinalTopK(5).withTimeDecayEnabled(false),
+                new StaticAliasPort(new MemoryAliasResolution(
+                        "K8s",
+                        "k8s",
+                        "ent-core-k8s",
+                        "Kubernetes",
+                        "TECHNOLOGY",
+                        0.98D)));
+
+        pipeline.load(MemoryLoadRequest.builder()
+                .conversationId("conv-1")
+                .userId("user-1")
+                .currentQuestion("K8s")
+                .build());
+
+        assertThat(channel.requests).hasSize(1);
+        MemoryRecallRequest request = channel.requests.get(0);
+        assertThat(request.query()).contains("K8s", "Kubernetes", "ent-core-k8s");
+        assertThat(request.filters())
+                .containsEntry("memoryAliasCanonicalEntityId", "ent-core-k8s")
+                .containsEntry("memoryAliasCanonicalName", "Kubernetes")
+                .containsEntry("memoryAliasEntityType", "TECHNOLOGY");
+    }
+
     private HybridMemoryRecallPipeline pipeline(RecordingMemoryStore shortTerm,
                                                 RecordingMemoryStore longTerm,
                                                 RecordingMemoryStore semantic,
@@ -269,6 +305,16 @@ class HybridMemoryRecallPipelineTests {
                                                 List<MemoryRecallChannelPort> channels,
                                                 MemoryTraceRecorder traceRecorder,
                                                 MemoryFusionPolicy fusionPolicy) {
+        return pipeline(shortTerm, longTerm, semantic, channels, traceRecorder, fusionPolicy, MemoryAliasPort.noop());
+    }
+
+    private HybridMemoryRecallPipeline pipeline(RecordingMemoryStore shortTerm,
+                                                RecordingMemoryStore longTerm,
+                                                RecordingMemoryStore semantic,
+                                                List<MemoryRecallChannelPort> channels,
+                                                MemoryTraceRecorder traceRecorder,
+                                                MemoryFusionPolicy fusionPolicy,
+                                                MemoryAliasPort aliasPort) {
         return new HybridMemoryRecallPipeline(
                 shortTerm,
                 longTerm,
@@ -283,21 +329,13 @@ class HybridMemoryRecallPipelineTests {
                 new RrfMemoryFusion(),
                 fusionPolicy,
                 10,
-                traceRecorder);
+                traceRecorder,
+                null,
+                aliasPort);
     }
 
     private MemoryRecallChannelPort channel(String name, List<MemoryRecallCandidate> candidates) {
-        return new MemoryRecallChannelPort() {
-            @Override
-            public String channelName() {
-                return name;
-            }
-
-            @Override
-            public List<MemoryRecallCandidate> recall(MemoryRecallRequest request) {
-                return candidates;
-            }
-        };
+        return new RecordingRecallChannel(name, candidates);
     }
 
     private MemoryRecallCandidate candidate(String memoryId, String channel, int rank, double score, String layer) {
@@ -355,6 +393,47 @@ class HybridMemoryRecallPipelineTests {
         @Override
         public boolean deleteById(String id) {
             return records.remove(id) != null;
+        }
+    }
+
+    private static final class RecordingRecallChannel implements MemoryRecallChannelPort {
+
+        private final String name;
+        private final List<MemoryRecallCandidate> candidates;
+        private final List<MemoryRecallRequest> requests = new ArrayList<>();
+
+        private RecordingRecallChannel(String name, List<MemoryRecallCandidate> candidates) {
+            this.name = name;
+            this.candidates = candidates;
+        }
+
+        @Override
+        public String channelName() {
+            return name;
+        }
+
+        @Override
+        public List<MemoryRecallCandidate> recall(MemoryRecallRequest request) {
+            requests.add(request);
+            return candidates;
+        }
+    }
+
+    private static final class StaticAliasPort implements MemoryAliasPort {
+
+        private final MemoryAliasResolution resolution;
+
+        private StaticAliasPort(MemoryAliasResolution resolution) {
+            this.resolution = resolution;
+        }
+
+        @Override
+        public Optional<MemoryAliasResolution> resolveAlias(String userId, String tenantId, String aliasText) {
+            return Optional.ofNullable(resolution);
+        }
+
+        @Override
+        public void upsertAlias(MemoryAliasCommand command) {
         }
     }
 

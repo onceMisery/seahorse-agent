@@ -415,6 +415,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryRouterPort> memoryRouterPort,
             ObjectProvider<MemoryBusinessDocumentRetrieverPort> businessDocumentRetrieverPort,
             ObjectProvider<MemoryLifecyclePort> memoryLifecyclePort,
+            ObjectProvider<MemoryAliasPort> memoryAliasPort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             List<MemoryRecallChannelPort> recallChannels,
             MemoryRecallFusionPort recallFusionPort,
@@ -438,7 +439,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 fusionPolicy,
                 channelTopK,
                 traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
-                recallExecutor.getIfAvailable());
+                recallExecutor.getIfAvailable(),
+                memoryAliasPort.getIfAvailable(MemoryAliasPort::noop));
     }
 
     @Bean

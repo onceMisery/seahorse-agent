@@ -27,6 +27,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFusionPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallCandidate;
@@ -88,12 +90,16 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private final int channelTopK;
     private final MemoryTraceRecorder traceRecorder;
     private final Executor recallExecutor;
+    private final MemoryAliasPort memoryAliasPort;
 
     private record ChannelRecallTask(
             MemoryRecallChannelPort channel,
             long startedAt,
             CompletableFuture<List<MemoryRecallCandidate>> future
     ) {
+    }
+
+    private record AliasResolvedQuery(String query, Map<String, Object> filters) {
     }
 
     public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
@@ -123,7 +129,8 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 fusionPolicy,
                 channelTopK,
                 MemoryTraceRecorder.noop(),
-                ForkJoinPool.commonPool());
+                ForkJoinPool.commonPool(),
+                MemoryAliasPort.noop());
     }
 
     public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
@@ -154,7 +161,8 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 fusionPolicy,
                 channelTopK,
                 traceRecorder,
-                ForkJoinPool.commonPool());
+                ForkJoinPool.commonPool(),
+                MemoryAliasPort.noop());
     }
 
     public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
@@ -172,6 +180,40 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                                       int channelTopK,
                                       MemoryTraceRecorder traceRecorder,
                                       Executor recallExecutor) {
+        this(shortTermPort,
+                longTermPort,
+                semanticPort,
+                objectMapper,
+                profileMemoryPort,
+                correctionLedgerPort,
+                memoryRouterPort,
+                businessDocumentRetrieverPort,
+                memoryLifecyclePort,
+                channels,
+                fusionPort,
+                fusionPolicy,
+                channelTopK,
+                traceRecorder,
+                recallExecutor,
+                MemoryAliasPort.noop());
+    }
+
+    public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
+                                      LongTermMemoryPort longTermPort,
+                                      SemanticMemoryPort semanticPort,
+                                      ObjectMapper objectMapper,
+                                      ProfileMemoryPort profileMemoryPort,
+                                      CorrectionLedgerPort correctionLedgerPort,
+                                      MemoryRouterPort memoryRouterPort,
+                                      MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                      MemoryLifecyclePort memoryLifecyclePort,
+                                      List<MemoryRecallChannelPort> channels,
+                                      MemoryRecallFusionPort fusionPort,
+                                      MemoryFusionPolicy fusionPolicy,
+                                      int channelTopK,
+                                      MemoryTraceRecorder traceRecorder,
+                                      Executor recallExecutor,
+                                      MemoryAliasPort memoryAliasPort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -188,6 +230,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         this.channelTopK = channelTopK > 0 ? channelTopK : MemoryFusionPolicy.DEFAULT_CHANNEL_TOP_K;
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
         this.recallExecutor = Objects.requireNonNullElseGet(recallExecutor, ForkJoinPool::commonPool);
+        this.memoryAliasPort = Objects.requireNonNullElseGet(memoryAliasPort, MemoryAliasPort::noop);
     }
 
     @Override
@@ -272,13 +315,14 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         if (isBlank(query) || channels.isEmpty()) {
             return List.of();
         }
+        AliasResolvedQuery resolvedQuery = resolveRecallAlias(userId, query);
         MemoryRecallRequest recallRequest = new MemoryRecallRequest(
                 userId,
                 DEFAULT_TENANT_ID,
-                query,
+                resolvedQuery.query(),
                 activeTracks,
                 channelTopK,
-                Map.of());
+                resolvedQuery.filters());
         List<ChannelRecallTask> tasks = channels.stream()
                 .map(channel -> recallTask(channel, recallRequest))
                 .toList();
@@ -289,6 +333,47 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 .map(this::toMemoryItem)
                 .flatMap(Optional::stream)
                 .toList();
+    }
+
+    private AliasResolvedQuery resolveRecallAlias(String userId, String query) {
+        try {
+            Optional<MemoryAliasResolution> resolved = memoryAliasPort.resolveAlias(userId, DEFAULT_TENANT_ID, query);
+            if (resolved.isEmpty()) {
+                return new AliasResolvedQuery(query, Map.of());
+            }
+            MemoryAliasResolution alias = resolved.get();
+            Map<String, Object> filters = new LinkedHashMap<>();
+            filters.put("memoryAliasText", alias.aliasText());
+            filters.put("memoryAliasNormalized", alias.normalizedAlias());
+            filters.put("memoryAliasCanonicalEntityId", alias.canonicalEntityId());
+            filters.put("memoryAliasCanonicalName", alias.canonicalName());
+            filters.put("memoryAliasEntityType", alias.entityType());
+            filters.put("memoryAliasConfidenceLevel", alias.confidenceLevel());
+            return new AliasResolvedQuery(appendCanonicalAlias(query, alias), filters);
+        } catch (RuntimeException ex) {
+            LOG.debug("memory alias resolution failed: userId={}, query={}", userId, query, ex);
+            return new AliasResolvedQuery(query, Map.of());
+        }
+    }
+
+    private String appendCanonicalAlias(String query, MemoryAliasResolution alias) {
+        List<String> terms = new ArrayList<>();
+        terms.add(query);
+        addDistinctAliasTerm(terms, alias.canonicalName());
+        addDistinctAliasTerm(terms, alias.canonicalEntityId());
+        return String.join(" ", terms);
+    }
+
+    private void addDistinctAliasTerm(List<String> terms, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        for (String term : terms) {
+            if (term.equalsIgnoreCase(value)) {
+                return;
+            }
+        }
+        terms.add(value);
     }
 
     private ChannelRecallTask recallTask(MemoryRecallChannelPort channel, MemoryRecallRequest recallRequest) {
