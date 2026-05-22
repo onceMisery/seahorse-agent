@@ -161,13 +161,18 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                       "riskScore": 0.0,
                       "sourceMessageIds": ["message id"],
                       "signals": ["explicit_preference"],
-                      "metadata": {}
+                      "metadata": {
+                        "targetLayer": "SHORT_TERM|LONG_TERM|SEMANTIC"
+                      }
                     }
                   ],
                   "metadata": {}
                 }
+                Return one operation per durable memory delta. A single context block may produce multiple ADD operations.
+                Use metadata.targetLayer only when routing is clear. Omit it to use the default SHORT_TERM layer.
+                Never invent a new layer.
                 Use REVIEW for sensitive, conflicting, or uncertain profile changes.
-                Use IGNORE when no durable memory should be written.
+                Use IGNORE only as an advisory signal when no durable memory should be written; Seahorse may still fall back to the baseline classifier.
                 """.formatted(
                 request.operationId(),
                 request.tenantId(),

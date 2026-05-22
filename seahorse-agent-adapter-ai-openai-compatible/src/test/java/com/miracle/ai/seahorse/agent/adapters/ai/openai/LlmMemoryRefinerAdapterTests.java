@@ -125,6 +125,57 @@ class LlmMemoryRefinerAdapterTests {
     }
 
     @Test
+    void shouldParseMultipleOperationsAndPreserveTargetLayerMetadata() {
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                new CapturingChatModelPort("""
+                        {
+                          "refined": true,
+                          "reason": "multi delta",
+                          "operations": [
+                            {
+                              "action": "ADD",
+                              "targetKind": "PROJECT_FACT",
+                              "targetKey": "project.runtime",
+                              "content": "User's project runtime is Java 17.",
+                              "confidence": 0.91,
+                              "importance": 0.73,
+                              "valueScore": 0.8,
+                              "riskScore": 0.1,
+                              "sourceMessageIds": ["m1"],
+                              "signals": ["explicit_fact"],
+                              "metadata": {"targetLayer": "LONG_TERM"}
+                            },
+                            {
+                              "action": "ADD",
+                              "targetKind": "PREFERENCE",
+                              "targetKey": "preferences.response_style",
+                              "content": "User prefers implementation-first answers.",
+                              "confidence": 0.88,
+                              "importance": 0.66,
+                              "valueScore": 0.7,
+                              "riskScore": 0.1,
+                              "sourceMessageIds": ["m1"],
+                              "signals": ["explicit_preference"],
+                              "metadata": {"targetLayer": "SHORT_TERM"}
+                            }
+                          ],
+                          "metadata": {"model": "test"}
+                        }
+                        """),
+                PromptTemplatePort.empty(),
+                new ObjectMapper());
+
+        MemoryRefinementResult result = adapter.refine(request("Remember Java 17 and implementation-first answers."));
+
+        assertThat(result.refined()).isTrue();
+        assertThat(result.operations()).hasSize(2);
+        assertThat(result.operations()).extracting(RefinedMemoryOperation::targetKey)
+                .containsExactly("project.runtime", "preferences.response_style");
+        assertThat(result.operations().get(0).metadata()).containsEntry("targetLayer", "LONG_TERM");
+        assertThat(result.operations().get(1).metadata()).containsEntry("targetLayer", "SHORT_TERM");
+    }
+
+    @Test
     void shouldReturnEmptyResultWhenModelOutputIsInvalidJson() {
         LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
                 new CapturingChatModelPort("not json"),

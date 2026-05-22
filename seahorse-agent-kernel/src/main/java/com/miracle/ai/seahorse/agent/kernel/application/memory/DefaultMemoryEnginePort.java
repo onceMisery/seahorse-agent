@@ -102,12 +102,18 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String METADATA_TARGET_LAYER = "targetLayer";
     private static final String METADATA_REVIEW_REQUESTED_ACTION = "reviewRequestedAction";
     private static final String METADATA_TARGET_MEMORY_ID = "targetMemoryId";
+    private static final String METADATA_REFINER_OPERATION_INDEX = "refinerOperationIndex";
+    private static final String METADATA_REFINER_OPERATION_COUNT = "refinerOperationCount";
     private static final String OPERATION_VECTOR_DELETE = "VECTOR_DELETE";
     private static final String OPERATION_VECTOR_DELETE_OUTBOX_ENQUEUE = "VECTOR_DELETE_OUTBOX_ENQUEUE";
     private static final String OPERATION_KEYWORD_DELETE_OUTBOX_ENQUEUE = "KEYWORD_DELETE_OUTBOX_ENQUEUE";
     private static final String OPERATION_GRAPH_DELETE_OUTBOX_ENQUEUE = "GRAPH_DELETE_OUTBOX_ENQUEUE";
 
     private record IngestionExecution(MemoryIngestionResult result, MemoryClassificationResult classification) {
+
+        private IngestionExecution {
+            Objects.requireNonNull(result, "result must not be null");
+        }
     }
 
     private final ShortTermMemoryPort shortTermPort;
@@ -481,6 +487,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
         MemoryClassificationResult classification = memorySemanticClassifier.classify(sanitized.content());
         classification = refineClassification(operationId, tenantId, command, request, sanitized.content(), classification);
+        if (classification.refinedDelta() != null && classification.refinedDelta().metadata().containsKey("refinerBatch")) {
+            return executeRefinerBatch(operationId, tenantId, request, message, classification);
+        }
         if (classification.action() == MemoryIngestionAction.IGNORE && classification.decision() == null) {
             return new IngestionExecution(MemoryIngestionResult.ignored(classification.reason()), classification);
         }
@@ -558,7 +567,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
         MemoryLayer targetLayer = targetLayer(classification);
         MemoryRecord record = new MemoryRecord(
-                memoryId(request),
+                memoryId(request, classification),
                 targetLayer.name(),
                 decision.type(),
                 decision.content(),
@@ -576,6 +585,70 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 "riskScore", decision.riskScore(),
                 "captureReasons", decision.reasons(),
                 "captureSignals", decision.signals())), classification);
+    }
+
+    private IngestionExecution executeRefinerBatch(String operationId,
+                                                   String tenantId,
+                                                   MemoryWriteRequest request,
+                                                   ChatMessage message,
+                                                   MemoryClassificationResult batchClassification) {
+        Object batch = batchClassification.refinedDelta().metadata().get("refinerBatch");
+        if (!(batch instanceof List<?> rawClassifications) || rawClassifications.isEmpty()) {
+            return new IngestionExecution(MemoryIngestionResult.ignored("empty_refiner_batch"), batchClassification);
+        }
+        List<MemoryClassificationResult> classifications = rawClassifications.stream()
+                .filter(MemoryClassificationResult.class::isInstance)
+                .map(MemoryClassificationResult.class::cast)
+                .toList();
+        if (classifications.isEmpty()) {
+            return new IngestionExecution(MemoryIngestionResult.ignored("empty_refiner_batch"), batchClassification);
+        }
+        for (MemoryClassificationResult classification : classifications) {
+            MemorySchemaValidationResult validation = memorySchemaValidator.validate(classification);
+            if (!validation.valid()) {
+                return new IngestionExecution(MemoryIngestionResult.rejected(validation.reason()), classification);
+            }
+        }
+
+        List<String> operations = new ArrayList<>();
+        int acceptedCount = 0;
+        int reviewCount = 0;
+        int ignoredCount = 0;
+        for (MemoryClassificationResult classification : classifications) {
+            IngestionExecution execution = classification.action() == MemoryIngestionAction.REVIEW
+                    ? executeReviewStaging(operationId, tenantId, request, classification)
+                    : executeAcceptedClassification(operationId, tenantId, request, message, classification);
+            operations.addAll(execution.result().operations());
+            if (execution.result().status() == MemoryIngestionStatus.ACCEPTED) {
+                acceptedCount++;
+            }
+            if (execution.result().action() == MemoryIngestionAction.REVIEW) {
+                reviewCount++;
+            }
+            if (execution.result().status() == MemoryIngestionStatus.IGNORED) {
+                ignoredCount++;
+            }
+        }
+        if (acceptedCount == 0 && reviewCount > 0) {
+            return new IngestionExecution(MemoryIngestionResult.review(batchClassification.reason()), batchClassification);
+        }
+        if (acceptedCount == 0) {
+            return new IngestionExecution(MemoryIngestionResult.ignored(
+                    "refiner_batch_no_effect",
+                    Map.of(
+                            "ignoredRefinerOperations", ignoredCount,
+                            METADATA_REFINER_OPERATION_COUNT, classifications.size())),
+                    batchClassification);
+        }
+        return new IngestionExecution(MemoryIngestionResult.accepted(
+                MemoryIngestionAction.ADD,
+                operations,
+                Map.of(
+                        "acceptedRefinerOperations", acceptedCount,
+                        "reviewRefinerOperations", reviewCount,
+                        "ignoredRefinerOperations", ignoredCount,
+                        METADATA_REFINER_OPERATION_COUNT, classifications.size())),
+                batchClassification);
     }
 
     private List<String> indexMemoryOrEnqueueOutbox(MemoryRecord record, String userId, String tenantId) {
@@ -789,37 +862,29 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     "unsupported_refined_operation",
                     Map.of("status", "unsupported"));
         }
-        if (operation.action() == MemoryIngestionAction.ADD) {
-            MemoryCaptureDecision decision = MemoryCaptureDecision.refinedAdd(
-                    operation.content(),
-                    isBlank(operation.targetKind()) ? "FACT" : operation.targetKind(),
-                    operation.importance(),
-                    operation.confidence(),
-                    operation.valueScore(),
-                    operation.riskScore(),
-                    List.of("llm_refiner"),
-                    operation.signals());
-            Map<String, Object> metadata = new LinkedHashMap<>(operation.metadata());
-            metadata.putAll(result.metadata());
-            metadata.put("status", "enabled");
-            metadata.put("sourceMessageIds", operation.sourceMessageIds());
-            return MemoryClassificationResult.refinedAdd(decision, new RefinedMemoryDelta(
-                    operation.action(),
-                    operation.targetKind(),
-                    operation.targetKey(),
-                    result.reason(),
-                    metadata));
+        List<MemoryClassificationResult> classifications = supportedRefinedClassifications(result);
+        if (classifications.isEmpty()) {
+            return withRefinerDelta(
+                    baseline,
+                    MemoryIngestionAction.IGNORE,
+                    "",
+                    "",
+                    "unsupported_refined_operation",
+                    Map.of("status", "unsupported"));
         }
-        if (requiresReviewStaging(operation.action())) {
-            return refinedReviewClassification(operation, result);
+        if (classifications.size() == 1) {
+            return classifications.get(0);
         }
         return withRefinerDelta(
                 baseline,
-                operation.action(),
-                operation.targetKind(),
-                operation.targetKey(),
+                classifications.get(0).refinedDelta().action(),
+                classifications.get(0).refinedDelta().targetKind(),
+                classifications.get(0).refinedDelta().targetKey(),
                 result.reason(),
-                Map.of("status", "unsupported"));
+                Map.of(
+                        "status", "batch",
+                        "refinerBatch", classifications,
+                        METADATA_REFINER_OPERATION_COUNT, classifications.size()));
     }
 
     private RefinedMemoryOperation firstSupportedOperation(List<RefinedMemoryOperation> operations) {
@@ -833,8 +898,73 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return null;
     }
 
+    private List<MemoryClassificationResult> supportedRefinedClassifications(MemoryRefinementResult result) {
+        List<MemoryClassificationResult> classifications = new ArrayList<>();
+        List<RefinedMemoryOperation> operations = result == null ? List.of() : result.operations();
+        int supportedIndex = 0;
+        int supportedCount = supportedOperationCount(operations);
+        for (RefinedMemoryOperation operation : operations) {
+            if (operation == null
+                    || operation.action() != MemoryIngestionAction.ADD && !requiresReviewStaging(operation.action())) {
+                continue;
+            }
+            Map<String, Object> batchMetadata = Map.of(
+                    METADATA_REFINER_OPERATION_INDEX, supportedIndex,
+                    METADATA_REFINER_OPERATION_COUNT, supportedCount);
+            MemoryClassificationResult classification = operation.action() == MemoryIngestionAction.ADD
+                    ? refinedAddClassification(operation, result, batchMetadata)
+                    : refinedReviewClassification(operation, result, batchMetadata);
+            classifications.add(classification);
+            supportedIndex++;
+        }
+        return classifications;
+    }
+
+    private int supportedOperationCount(List<RefinedMemoryOperation> operations) {
+        int count = 0;
+        for (RefinedMemoryOperation operation : operations) {
+            if (operation != null
+                    && (operation.action() == MemoryIngestionAction.ADD
+                    || requiresReviewStaging(operation.action()))) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private MemoryClassificationResult refinedAddClassification(RefinedMemoryOperation operation,
+                                                                MemoryRefinementResult result,
+                                                                Map<String, Object> extraMetadata) {
+        MemoryCaptureDecision decision = MemoryCaptureDecision.refinedAdd(
+                operation.content(),
+                isBlank(operation.targetKind()) ? "FACT" : operation.targetKind(),
+                operation.importance(),
+                operation.confidence(),
+                operation.valueScore(),
+                operation.riskScore(),
+                List.of("llm_refiner"),
+                operation.signals());
+        Map<String, Object> metadata = new LinkedHashMap<>(operation.metadata());
+        metadata.putAll(result.metadata());
+        metadata.put("status", "enabled");
+        metadata.put("sourceMessageIds", operation.sourceMessageIds());
+        metadata.putAll(extraMetadata);
+        return MemoryClassificationResult.refinedAdd(decision, new RefinedMemoryDelta(
+                operation.action(),
+                operation.targetKind(),
+                operation.targetKey(),
+                result.reason(),
+                metadata));
+    }
+
     private MemoryClassificationResult refinedReviewClassification(RefinedMemoryOperation operation,
                                                                    MemoryRefinementResult result) {
+        return refinedReviewClassification(operation, result, Map.of());
+    }
+
+    private MemoryClassificationResult refinedReviewClassification(RefinedMemoryOperation operation,
+                                                                   MemoryRefinementResult result,
+                                                                   Map<String, Object> extraMetadata) {
         Map<String, Object> metadata = new LinkedHashMap<>(operation.metadata());
         metadata.putAll(result.metadata());
         metadata.put("status", "pending_review");
@@ -844,6 +974,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         metadata.put(METADATA_VALUE_SCORE, operation.valueScore());
         metadata.put(METADATA_RISK_SCORE, operation.riskScore());
         metadata.put(METADATA_SOURCE_MESSAGE_IDS, operation.sourceMessageIds());
+        metadata.putAll(extraMetadata);
         return new MemoryClassificationResult(
                 MemoryIngestionAction.REVIEW,
                 null,
@@ -1154,6 +1285,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         metadata.put("targetKind", delta.targetKind());
         metadata.put("targetKey", delta.targetKey());
         for (Map.Entry<String, Object> entry : delta.metadata().entrySet()) {
+            if ("refinerBatch".equals(entry.getKey())) {
+                continue;
+            }
             metadata.putIfAbsent(entry.getKey(), entry.getValue());
         }
         if (classification != null && classification.decision() != null
@@ -1173,11 +1307,28 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return delta.reason().startsWith("failed_open") ? "failed_open" : "ignored";
     }
 
-    private String memoryId(MemoryWriteRequest request) {
+    private String memoryId(MemoryWriteRequest request, MemoryClassificationResult classification) {
+        String suffix = refinerOperationSuffix(classification);
         if (!isBlank(request.messageId())) {
-            return "stm-" + request.messageId();
+            return "stm-" + request.messageId() + suffix;
         }
-        return "stm-" + UUID.randomUUID();
+        return "stm-" + UUID.randomUUID() + suffix;
+    }
+
+    private String refinerOperationSuffix(MemoryClassificationResult classification) {
+        RefinedMemoryDelta delta = classification == null ? null : classification.refinedDelta();
+        if (delta == null) {
+            return "";
+        }
+        Object count = delta.metadata().get(METADATA_REFINER_OPERATION_COUNT);
+        if (!(count instanceof Number number) || number.intValue() <= 1) {
+            return "";
+        }
+        Object index = delta.metadata().get(METADATA_REFINER_OPERATION_INDEX);
+        if (!(index instanceof Number indexNumber)) {
+            return "";
+        }
+        return "-r" + indexNumber.intValue();
     }
 
     private MemoryOperation buildOperation(String operationId,

@@ -814,6 +814,57 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldExecuteAllSupportedRefinerAddOperationsInOneBatch() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
+        RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(
+                "multi_refined",
+                List.of(
+                        RefinedMemoryOperation.add(
+                                "PROJECT_FACT",
+                                "project.runtime",
+                                "User's project runtime is Java 17.",
+                                0.90D,
+                                0.70D,
+                                List.of("msg-refiner-multi"),
+                                List.of("llm_refiner")),
+                        RefinedMemoryOperation.add(
+                                "PREFERENCE",
+                                "preferences.response_style",
+                                "User prefers implementation-first answers.",
+                                0.88D,
+                                0.65D,
+                                List.of("msg-refiner-multi"),
+                                List.of("llm_refiner"))),
+                Map.of("model", "test-refiner")));
+        DefaultMemoryEnginePort engine = engineWithRefiner(
+                shortTermPort,
+                refinerPort,
+                true,
+                operationLogPort);
+
+        var result = engine.ingest(new MemoryIngestionCommand("op-refiner-multi", "default", "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-multi")
+                        .messageId("msg-refiner-multi")
+                        .message(ChatMessage.user("Remember Java 17 and implementation-first answers."))
+                        .build()));
+
+        Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, result.status());
+        Assertions.assertEquals(2, shortTermPort.savedRecords.size());
+        Assertions.assertEquals(List.of("stm-msg-refiner-multi-r0", "stm-msg-refiner-multi-r1"),
+                shortTermPort.savedRecords.stream().map(MemoryRecord::id).toList());
+        Assertions.assertEquals(List.of("project.runtime", "preferences.response_style"),
+                shortTermPort.savedRecords.stream().map(record -> record.metadata().get("targetKey")).toList());
+        Assertions.assertEquals(2, result.details().get("acceptedRefinerOperations"));
+        Assertions.assertEquals(2, result.details().get("refinerOperationCount"));
+        Assertions.assertEquals(2, operationLogPort.decisionById.get("op-refiner-multi")
+                .get("refinerOperationCount"));
+        Assertions.assertFalse(operationLogPort.decisionById.get("op-refiner-multi").containsKey("refinerBatch"));
+    }
+
+    @Test
     void shouldFailOpenToRuleClassificationWhenEnabledRefinerThrows() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
