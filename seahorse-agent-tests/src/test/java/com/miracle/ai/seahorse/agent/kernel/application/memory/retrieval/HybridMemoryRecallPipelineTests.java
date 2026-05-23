@@ -508,11 +508,11 @@ class HybridMemoryRecallPipelineTests {
                 .build());
 
         assertThat(observationPort.events)
+                .filteredOn(event -> HybridMemoryRecallPipeline.OBSERVATION_CHANNEL_EVENT.equals(event.name()))
                 .as("each recall channel should emit exactly one observation event")
-                .extracting(ObservationEvent::name)
-                .containsOnly(HybridMemoryRecallPipeline.OBSERVATION_CHANNEL_EVENT);
-        assertThat(observationPort.events).hasSize(3);
+                .hasSize(3);
         assertThat(observationPort.events)
+                .filteredOn(event -> HybridMemoryRecallPipeline.OBSERVATION_CHANNEL_EVENT.equals(event.name()))
                 .anySatisfy(event -> assertThat(event.attributes())
                         .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_CHANNEL, "vector")
                         .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_OUTCOME,
@@ -527,6 +527,55 @@ class HybridMemoryRecallPipelineTests {
                                 HybridMemoryRecallPipeline.OBSERVATION_OUTCOME_SUCCESS));
         assertThat(observationPort.events)
                 .allSatisfy(event -> assertThat(event.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT));
+    }
+
+    @Test
+    void shouldEmitFusionAndRerankObservationEventsOnceEachPerRecall() {
+        RecordingMemoryStore semantic = new RecordingMemoryStore();
+        semantic.save(record("semantic-a", "SEMANTIC", "alpha"));
+        semantic.save(record("semantic-b", "SEMANTIC", "beta"));
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        RecordingReranker reranker = new RecordingReranker(List.of(
+                candidate("semantic-b", "reranker", 1, 0.9D, "SEMANTIC"),
+                candidate("semantic-a", "reranker", 2, 0.5D, "SEMANTIC")));
+
+        HybridMemoryRecallPipeline pipeline = pipeline(
+                new RecordingMemoryStore(),
+                new RecordingMemoryStore(),
+                semantic,
+                List.of(channel("keyword", List.of(
+                        candidate("semantic-a", "keyword", 1, 12.0D, "SEMANTIC"),
+                        candidate("semantic-b", "keyword", 2, 8.0D, "SEMANTIC")))),
+                MemoryTraceRecorder.noop(),
+                MemoryFusionPolicy.defaults().withFinalTopK(5).withTimeDecayEnabled(false),
+                MemoryAliasPort.noop(),
+                reranker,
+                observationPort);
+
+        pipeline.load(MemoryLoadRequest.builder()
+                .conversationId("conv-1")
+                .userId("user-1")
+                .currentQuestion("alpha beta")
+                .build());
+
+        assertThat(observationPort.events)
+                .filteredOn(event -> HybridMemoryRecallPipeline.OBSERVATION_FUSION_EVENT.equals(event.name()))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.attributes())
+                            .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_OUTCOME,
+                                    HybridMemoryRecallPipeline.OBSERVATION_OUTCOME_SUCCESS);
+                    assertThat(event.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT);
+                });
+        assertThat(observationPort.events)
+                .filteredOn(event -> HybridMemoryRecallPipeline.OBSERVATION_RERANK_EVENT.equals(event.name()))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.attributes())
+                            .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_OUTCOME,
+                                    HybridMemoryRecallPipeline.OBSERVATION_OUTCOME_SUCCESS);
+                    assertThat(event.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT);
+                });
     }
 
     private HybridMemoryRecallPipeline pipeline(RecordingMemoryStore shortTerm,

@@ -145,6 +145,8 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private final ObservationPort observationPort;
 
     static final String OBSERVATION_CHANNEL_EVENT = "memory-recall-channel";
+    static final String OBSERVATION_FUSION_EVENT = "memory-recall-fusion";
+    static final String OBSERVATION_RERANK_EVENT = "memory-recall-rerank";
     static final String OBSERVATION_ATTR_CHANNEL = "channel";
     static final String OBSERVATION_ATTR_OUTCOME = "outcome";
     static final String OBSERVATION_OUTCOME_SUCCESS = "success";
@@ -694,6 +696,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 TRACE_SUBJECT_RECALL_FUSION,
                 details,
                 Instant.now()));
+        emitStageMetric(OBSERVATION_FUSION_EVENT, OBSERVATION_OUTCOME_SUCCESS);
     }
 
     private void recordRecallRerank(String userId,
@@ -718,6 +721,19 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 TRACE_SUBJECT_RECALL_RERANK,
                 details,
                 Instant.now()));
+        emitStageMetric(OBSERVATION_RERANK_EVENT, OBSERVATION_OUTCOME_SUCCESS);
+    }
+
+    private void emitStageMetric(String eventName, String outcome) {
+        try {
+            observationPort.recordEvent(new ObservationEvent(
+                    eventName,
+                    Instant.now(),
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.of(OBSERVATION_ATTR_OUTCOME, outcome)));
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change recall execution semantics.
+        }
     }
 
     private RecallTraceContext traceContext(String originalQuery, MemoryRecallRequest request) {
