@@ -306,6 +306,9 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
         }
         if (garbageCollectionResult != null) {
             details.put("gcScannedCount", garbageCollectionResult.scannedCount());
+            details.put("gcDerivedIndexCandidateCount", garbageCollectionResult.derivedIndexCandidateCount());
+            details.put("gcArchiveCandidateCount", garbageCollectionResult.archiveCandidateCount());
+            details.put("gcPhysicalDeleteCandidateCount", garbageCollectionResult.physicalDeleteCandidateCount());
             details.put("gcDeleteTaskCount", garbageCollectionResult.enqueuedDeleteTaskCount());
             details.put("gcMarkedIndexDeletedCount", garbageCollectionResult.markedIndexDeletedCount());
         }

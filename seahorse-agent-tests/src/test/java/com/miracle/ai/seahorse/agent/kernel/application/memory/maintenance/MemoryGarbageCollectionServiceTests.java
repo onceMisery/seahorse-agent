@@ -169,6 +169,40 @@ class MemoryGarbageCollectionServiceTests {
     }
 
     @Test
+    void shouldReportCandidateCountsForEachGarbageCollectionStage() {
+        RecordingGarbageCollectionPort gcPort = new RecordingGarbageCollectionPort();
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort();
+        gcPort.candidates.add(new MemoryGarbageCollectionCandidate(
+                "m-index", "user-1", "tenant-1", "short_term", "OBSOLETE", Instant.now()));
+        gcPort.archiveCandidates.add(new MemoryGarbageCollectionCandidate(
+                "m-archive", "user-1", "tenant-1", "long_term", "ACTIVE", Instant.now()));
+        gcPort.physicalDeleteCandidates.add(new MemoryGarbageCollectionCandidate(
+                "m-delete", "user-1", "tenant-1", "semantic", "ARCHIVED", Instant.now()));
+        MemoryGarbageCollectionService service = new MemoryGarbageCollectionService(
+                gcPort,
+                outboxPort,
+                new MemoryGarbageCollectionOptions(
+                        20,
+                        Duration.ofDays(7),
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        Duration.ofDays(90),
+                        0.15D,
+                        true,
+                        Duration.ofDays(30)));
+
+        MemoryGarbageCollectionResult result = service.run("gc-observability");
+
+        assertThat(result.scannedCount()).isEqualTo(3);
+        assertThat(result.derivedIndexCandidateCount()).isEqualTo(1);
+        assertThat(result.archiveCandidateCount()).isEqualTo(1);
+        assertThat(result.physicalDeleteCandidateCount()).isEqualTo(1);
+    }
+
+    @Test
     void shouldContinueOtherIndexTasksWhenOneIndexTaskCannotBeQueued() {
         RecordingGarbageCollectionPort gcPort = new RecordingGarbageCollectionPort();
         RecordingOutboxPort outboxPort = new RecordingOutboxPort();

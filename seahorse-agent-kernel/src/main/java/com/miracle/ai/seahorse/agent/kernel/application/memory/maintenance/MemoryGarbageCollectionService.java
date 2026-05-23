@@ -82,6 +82,9 @@ public class MemoryGarbageCollectionService {
         return new MemoryGarbageCollectionResult(
                 Objects.requireNonNullElse(reason, "manual-gc"),
                 derivedIndexCandidates.size() + archiveCandidates.size() + physicalDeleteCandidates.size(),
+                derivedIndexCandidates.size(),
+                archiveCandidates.size(),
+                physicalDeleteCandidates.size(),
                 archived,
                 physicallyDeleted,
                 enqueued,

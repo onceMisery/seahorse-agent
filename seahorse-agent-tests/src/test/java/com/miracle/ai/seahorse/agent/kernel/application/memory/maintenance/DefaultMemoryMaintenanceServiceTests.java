@@ -257,6 +257,10 @@ class DefaultMemoryMaintenanceServiceTests {
         assertThat(traceRecorder.events.get(0).component()).isEqualTo("memory-maintenance");
         assertThat(traceRecorder.events.get(0).eventType()).isEqualTo("run-maintenance");
         assertThat(traceRecorder.events.get(0).status()).isEqualTo(MemoryTraceEvent.STATUS_SUCCESS);
+        assertThat(traceRecorder.events.get(0).details())
+                .containsEntry("gcDerivedIndexCandidateCount", 1)
+                .containsEntry("gcArchiveCandidateCount", 0)
+                .containsEntry("gcPhysicalDeleteCandidateCount", 0);
     }
 
     @Test

@@ -24,6 +24,9 @@ import java.util.Objects;
 public record MemoryGarbageCollectionResult(
         String reason,
         int scannedCount,
+        int derivedIndexCandidateCount,
+        int archiveCandidateCount,
+        int physicalDeleteCandidateCount,
         int archivedCount,
         int physicallyDeletedCount,
         int enqueuedDeleteTaskCount,
@@ -42,6 +45,9 @@ public record MemoryGarbageCollectionResult(
                                          Instant executedAt) {
         this(reason,
                 scannedCount,
+                scannedCount,
+                0,
+                0,
                 0,
                 0,
                 enqueuedDeleteTaskCount,
@@ -61,6 +67,9 @@ public record MemoryGarbageCollectionResult(
                                          Instant executedAt) {
         this(reason,
                 scannedCount,
+                0,
+                0,
+                0,
                 archivedCount,
                 0,
                 enqueuedDeleteTaskCount,
@@ -72,6 +81,14 @@ public record MemoryGarbageCollectionResult(
 
     public MemoryGarbageCollectionResult {
         reason = Objects.requireNonNullElse(reason, "");
+        scannedCount = Math.max(0, scannedCount);
+        derivedIndexCandidateCount = Math.max(0, derivedIndexCandidateCount);
+        archiveCandidateCount = Math.max(0, archiveCandidateCount);
+        physicalDeleteCandidateCount = Math.max(0, physicalDeleteCandidateCount);
+        archivedCount = Math.max(0, archivedCount);
+        physicallyDeletedCount = Math.max(0, physicallyDeletedCount);
+        enqueuedDeleteTaskCount = Math.max(0, enqueuedDeleteTaskCount);
+        markedIndexDeletedCount = Math.max(0, markedIndexDeletedCount);
         errors = List.copyOf(Objects.requireNonNullElse(errors, List.of()));
         executedAt = Objects.requireNonNullElse(executedAt, Instant.EPOCH);
     }
