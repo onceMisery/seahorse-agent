@@ -23,7 +23,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,15 +39,25 @@ public class DefaultContextWeaver implements ContextWeaverPort {
             "注意：Correction Ledger 和 Profile KV 是用户画像强事实源；业务知识库事实优先于普通历史记忆。";
     private static final int MAX_MEMORY_ITEM_LENGTH = 220;
     private static final String COMPONENT = "memory-context-weaver";
+    static final String OBSERVATION_WEAVE_EVENT = "memory-context-weave";
+    static final String OBSERVATION_ATTR_OUTCOME = "outcome";
+    static final String OBSERVATION_ATTR_TRUNCATED = "truncated";
+    static final String OBSERVATION_OUTCOME_SUCCESS = "success";
 
     private final MemoryTraceRecorder traceRecorder;
+    private final ObservationPort observationPort;
 
     public DefaultContextWeaver() {
         this(MemoryTraceRecorder.noop());
     }
 
     public DefaultContextWeaver(MemoryTraceRecorder traceRecorder) {
+        this(traceRecorder, ObservationPort.noop());
+    }
+
+    public DefaultContextWeaver(MemoryTraceRecorder traceRecorder, ObservationPort observationPort) {
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
+        this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
     }
 
     @Override
@@ -162,12 +175,18 @@ public class DefaultContextWeaver implements ContextWeaverPort {
         details.put("selectedItemCount", builder.itemCount);
         details.put("maxItems", budget.maxItems());
         details.put("maxChars", budget.maxChars());
-        details.put("correctionCount", safeItems(context.getCorrectionMemories()).size());
-        details.put("profileCount", safeItems(context.getProfileMemories()).size());
-        details.put("shortTermCount", safeItems(context.getShortTermMemories()).size());
-        details.put("businessDocumentCount", safeItems(context.getBusinessDocumentMemories()).size());
-        details.put("semanticCount", safeItems(context.getSemanticMemories()).size());
-        details.put("longTermCount", safeItems(context.getLongTermMemories()).size());
+        int correctionCount = safeItems(context.getCorrectionMemories()).size();
+        int profileCount = safeItems(context.getProfileMemories()).size();
+        int shortTermCount = safeItems(context.getShortTermMemories()).size();
+        int businessDocumentCount = safeItems(context.getBusinessDocumentMemories()).size();
+        int semanticCount = safeItems(context.getSemanticMemories()).size();
+        int longTermCount = safeItems(context.getLongTermMemories()).size();
+        details.put("correctionCount", correctionCount);
+        details.put("profileCount", profileCount);
+        details.put("shortTermCount", shortTermCount);
+        details.put("businessDocumentCount", businessDocumentCount);
+        details.put("semanticCount", semanticCount);
+        details.put("longTermCount", longTermCount);
         traceRecorder.record(new MemoryTraceEvent(
                 "",
                 "default",
@@ -181,6 +200,23 @@ public class DefaultContextWeaver implements ContextWeaverPort {
                 "memory-context",
                 details,
                 null));
+        int totalInputItems = correctionCount + profileCount + shortTermCount
+                + businessDocumentCount + semanticCount + longTermCount;
+        emitWeaveMetric(builder.itemCount < totalInputItems);
+    }
+
+    private void emitWeaveMetric(boolean truncated) {
+        try {
+            observationPort.recordEvent(new ObservationEvent(
+                    OBSERVATION_WEAVE_EVENT,
+                    Instant.now(),
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.of(
+                            OBSERVATION_ATTR_OUTCOME, OBSERVATION_OUTCOME_SUCCESS,
+                            OBSERVATION_ATTR_TRUNCATED, Boolean.toString(truncated))));
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change weave semantics.
+        }
     }
 
     private static final class BudgetedBuilder {
