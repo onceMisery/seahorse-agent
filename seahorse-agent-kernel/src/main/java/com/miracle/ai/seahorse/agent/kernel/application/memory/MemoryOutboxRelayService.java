@@ -24,6 +24,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -33,9 +35,17 @@ import java.util.Objects;
 
 public class MemoryOutboxRelayService {
 
+    static final String OBSERVATION_TASK_EVENT = "memory-outbox-task";
+    static final String OBSERVATION_BATCH_EVENT = "memory-outbox-batch";
+    static final String OBSERVATION_ATTR_TASK_TYPE = "taskType";
+    static final String OBSERVATION_ATTR_OUTCOME = "outcome";
+    static final String OBSERVATION_OUTCOME_SUCCESS = "success";
+    static final String OBSERVATION_OUTCOME_FAILED = "failed";
+
     private final MemoryOutboxPort outboxPort;
     private final Map<String, MemoryOutboxTaskHandler> taskHandlers;
     private final MemoryTraceRecorder traceRecorder;
+    private final ObservationPort observationPort;
 
     public MemoryOutboxRelayService(MemoryOutboxPort outboxPort, MemoryVectorPort vectorPort) {
         this(outboxPort, List.of(
@@ -50,9 +60,17 @@ public class MemoryOutboxRelayService {
     public MemoryOutboxRelayService(MemoryOutboxPort outboxPort,
                                     List<MemoryOutboxTaskHandler> taskHandlers,
                                     MemoryTraceRecorder traceRecorder) {
+        this(outboxPort, taskHandlers, traceRecorder, ObservationPort.noop());
+    }
+
+    public MemoryOutboxRelayService(MemoryOutboxPort outboxPort,
+                                    List<MemoryOutboxTaskHandler> taskHandlers,
+                                    MemoryTraceRecorder traceRecorder,
+                                    ObservationPort observationPort) {
         this.outboxPort = Objects.requireNonNull(outboxPort, "outboxPort must not be null");
         this.taskHandlers = registerHandlers(taskHandlers);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
+        this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
     }
 
     public int processBatch(int limit) {
@@ -77,10 +95,12 @@ public class MemoryOutboxRelayService {
             handler.handle(task);
             outboxPort.markSucceeded(task.id());
             recordTask(task, MemoryTraceEvent.STATUS_SUCCESS, "");
+            emitTaskMetric(task, OBSERVATION_OUTCOME_SUCCESS);
         } catch (RuntimeException ex) {
             String errorMessage = Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName());
             outboxPort.markFailed(task.id(), errorMessage);
             recordTask(task, MemoryTraceEvent.STATUS_FAILED, errorMessage);
+            emitTaskMetric(task, OBSERVATION_OUTCOME_FAILED);
         }
     }
 
@@ -100,6 +120,33 @@ public class MemoryOutboxRelayService {
                         "processedCount", processedCount,
                         "requestedLimit", requestedLimit),
                 Instant.now()));
+        emitBatchMetric();
+    }
+
+    private void emitTaskMetric(MemoryOutboxPort.MemoryOutboxTask task, String outcome) {
+        try {
+            observationPort.recordEvent(new ObservationEvent(
+                    OBSERVATION_TASK_EVENT,
+                    Instant.now(),
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.of(
+                            OBSERVATION_ATTR_TASK_TYPE, Objects.requireNonNullElse(task.taskType(), ""),
+                            OBSERVATION_ATTR_OUTCOME, outcome)));
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change relay semantics.
+        }
+    }
+
+    private void emitBatchMetric() {
+        try {
+            observationPort.recordEvent(new ObservationEvent(
+                    OBSERVATION_BATCH_EVENT,
+                    Instant.now(),
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.of(OBSERVATION_ATTR_OUTCOME, OBSERVATION_OUTCOME_SUCCESS)));
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change relay semantics.
+        }
     }
 
     private void recordTask(MemoryOutboxPort.MemoryOutboxTask task, String status, String errorMessage) {

@@ -24,6 +24,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.VectorMemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -290,6 +294,44 @@ class MemoryOutboxRelayServiceTests {
                 });
     }
 
+    @Test
+    void shouldEmitObservationCountersForTaskAndBatchOutcomes() {
+        RecordingOutboxPort outboxPort = new RecordingOutboxPort(List.of(
+                task("outbox-failed", "VECTOR_UPSERT",
+                        Map.of("memoryId", "stm-fail", "content", "first", "embeddingModel", "default")),
+                task("outbox-succeeded", "VECTOR_UPSERT",
+                        Map.of("memoryId", "stm-ok", "content", "second", "embeddingModel", "default"))));
+        RecordingVectorPort vectorPort = new RecordingVectorPort();
+        vectorPort.failMemoryIds.add("stm-fail");
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        MemoryOutboxRelayService service = new MemoryOutboxRelayService(
+                outboxPort,
+                List.of(new VectorMemoryOutboxTaskHandler(vectorPort, MemoryOutboxTaskTypes.VECTOR_UPSERT)),
+                MemoryTraceRecorder.noop(),
+                observationPort);
+
+        service.processBatch(10);
+
+        assertThat(observationPort.events)
+                .extracting(ObservationEvent::name)
+                .containsExactlyInAnyOrder(
+                        MemoryOutboxRelayService.OBSERVATION_BATCH_EVENT,
+                        MemoryOutboxRelayService.OBSERVATION_TASK_EVENT,
+                        MemoryOutboxRelayService.OBSERVATION_TASK_EVENT);
+        assertThat(observationPort.events)
+                .filteredOn(event -> MemoryOutboxRelayService.OBSERVATION_TASK_EVENT.equals(event.name()))
+                .anySatisfy(event -> assertThat(event.attributes())
+                        .containsEntry(MemoryOutboxRelayService.OBSERVATION_ATTR_TASK_TYPE, "VECTOR_UPSERT")
+                        .containsEntry(MemoryOutboxRelayService.OBSERVATION_ATTR_OUTCOME,
+                                MemoryOutboxRelayService.OBSERVATION_OUTCOME_FAILED))
+                .anySatisfy(event -> assertThat(event.attributes())
+                        .containsEntry(MemoryOutboxRelayService.OBSERVATION_ATTR_TASK_TYPE, "VECTOR_UPSERT")
+                        .containsEntry(MemoryOutboxRelayService.OBSERVATION_ATTR_OUTCOME,
+                                MemoryOutboxRelayService.OBSERVATION_OUTCOME_SUCCESS));
+        assertThat(observationPort.events)
+                .allSatisfy(event -> assertThat(event.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT));
+    }
+
     private MemoryOutboxPort.MemoryOutboxTask task(String id, String type, Map<String, Object> payload) {
         return new MemoryOutboxPort.MemoryOutboxTask(
                 id,
@@ -401,6 +443,30 @@ class MemoryOutboxRelayServiceTests {
             if (fail) {
                 throw new RuntimeException("handler down");
             }
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 }

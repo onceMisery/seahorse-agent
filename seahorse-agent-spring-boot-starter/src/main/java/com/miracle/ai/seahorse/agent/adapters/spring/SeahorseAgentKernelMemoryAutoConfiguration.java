@@ -669,11 +669,13 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     public MemoryOutboxRelayService seahorseMemoryOutboxRelayService(
             MemoryOutboxPort memoryOutboxPort,
             ObjectProvider<MemoryOutboxTaskHandler> taskHandlers,
-            ObjectProvider<MemoryTraceRecorder> traceRecorder) {
+            ObjectProvider<MemoryTraceRecorder> traceRecorder,
+            ObjectProvider<ObservationPort> observationPort) {
         return new MemoryOutboxRelayService(
                 memoryOutboxPort,
                 taskHandlers.orderedStream().toList(),
-                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop));
+                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
+                observationPort.getIfAvailable(ObservationPort::noop));
     }
 
     @Bean
