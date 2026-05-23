@@ -182,6 +182,7 @@ class MemoryWorkflowRoutingTests {
         Assertions.assertEquals("weave", event.eventType());
         Assertions.assertEquals("user-1", event.userId());
         Assertions.assertEquals("conv-1", event.conversationId());
+        Assertions.assertEquals("conv-1", event.sessionId());
         Assertions.assertEquals(prompt.length(), event.details().get("promptChars"));
         Assertions.assertEquals(2, event.details().get("selectedItemCount"));
         Assertions.assertEquals(2, event.details().get("maxItems"));

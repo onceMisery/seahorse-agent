@@ -173,7 +173,7 @@ public class DefaultContextWeaver implements ContextWeaverPort {
                 "default",
                 Objects.requireNonNullElse(context.getUserId(), ""),
                 Objects.requireNonNullElse(context.getConversationId(), ""),
-                "",
+                Objects.requireNonNullElse(context.getConversationId(), ""),
                 COMPONENT,
                 "weave",
                 MemoryTraceEvent.STATUS_SUCCESS,

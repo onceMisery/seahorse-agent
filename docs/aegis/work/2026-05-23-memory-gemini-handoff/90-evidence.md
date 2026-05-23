@@ -32,3 +32,13 @@ No evidence has been recorded yet.
 - `seahorse-agent-tests/src/test/java/com/miracle/ai/seahorse/agent/kernel/application/memory/aggregation/MemoryAggregationServiceTests.java`
 - Summary: Memory aggregation trace events now preserve tenant, user, conversation, and session context from the source turn/state/snapshot so trace query filters can find aggregation events.
 - Verifier: TDD red/green targeted aggregation test, broader trace/observability/web contract regression, and `git diff --check`
+
+## EvidenceBundleDraft - Context Weaver Trace Session Coverage
+
+- Artifact key: context-weaver-trace-session
+- Type: code
+- Sources:
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/memory/DefaultContextWeaver.java`
+- `seahorse-agent-tests/src/test/java/com/miracle/ai/seahorse/agent/kernel/application/memory/MemoryWorkflowRoutingTests.java`
+- Summary: Context-weaver trace events now carry the active conversation id in the session field so memory trace queries can filter them by the same session dimension used by aggregation traces.
+- Verifier: TDD red/green targeted workflow routing test plus related trace/query/web contract regression

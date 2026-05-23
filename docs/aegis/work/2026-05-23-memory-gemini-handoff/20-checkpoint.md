@@ -96,3 +96,25 @@
 - Retirement status: No fallback, adapter, or retirement track introduced.
 - New risk signals: Worktree still contains unrelated frontend and untracked changes; continue path-limited staging.
 - Advisory decision: continue
+
+## Checkpoint Update - Context Weaver Trace Session Coverage
+
+- Current todo: Keep the memory trace surface queryable by the dimensions already exposed by the API.
+- Active slice: Let context-weaver traces populate sessionId from the active conversation so trace filters can find them.
+- Completed todos:
+- Added a regression test that expects `DefaultContextWeaver` traces to carry the conversation as session context.
+- Updated context-weaver trace recording to reuse the conversation id for session id.
+- Left prompt weaving, memory selection, and trace payload details unchanged.
+- Evidence refs:
+- `./mvnw.cmd -pl seahorse-agent-tests -am test "-Dtest=MemoryWorkflowRoutingTests" "-Dmaven.compiler.testIncludes=**/MemoryWorkflowRoutingTests.java" "-Dspotless.apply.skip=true" "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"` failed before the implementation because `event.sessionId()` was empty.
+- `./mvnw.cmd -pl seahorse-agent-tests -am test "-Dtest=MemoryWorkflowRoutingTests,KernelMemoryTraceQueryServiceTests,SeahorseWebApiContractTests" "-Dmaven.compiler.testIncludes=**/MemoryWorkflowRoutingTests.java,**/KernelMemoryTraceQueryServiceTests.java,**/SeahorseWebApiContractTests.java" "-Dspotless.apply.skip=true" "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"` passed 34 tests after the implementation.
+- Blocked on: none
+- Next step: Inspect the next trace-producing memory path or stop if further slices would become speculative.
+
+## DriftCheckDraft - Context Weaver Trace Session Coverage
+
+- Scope status: Stayed inside observability metadata; no behavioral change to prompt assembly.
+- Compatibility status: Preserved the four-layer model and trace query contract; session now aligns with the active conversation dimension used elsewhere.
+- Retirement status: No fallback, adapter, or retirement track introduced.
+- New risk signals: sessionId is inferred from conversationId because `MemoryContext` does not carry a separate session field.
+- Advisory decision: continue
