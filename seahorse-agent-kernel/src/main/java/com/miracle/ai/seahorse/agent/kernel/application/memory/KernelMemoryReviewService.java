@@ -70,6 +70,17 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
     private static final String METADATA_ENTITY_TYPE = "entityType";
     private static final String METADATA_CONFIDENCE_LEVEL = "confidenceLevel";
     private static final String METADATA_SOURCE_MEMORY_IDS = "sourceMemoryIds";
+    private static final String DETAIL_APPLY_OPERATION_ID = "applyOperationId";
+    private static final String DETAIL_CANDIDATE_ID = "candidateId";
+    private static final String DETAIL_CANDIDATE_OPERATION_ID = "candidateOperationId";
+    private static final String DETAIL_FEEDBACK_SAMPLE_ID = "feedbackSampleId";
+    private static final String DETAIL_OPERATION_ID = "operationId";
+    private static final String DETAIL_REQUESTED_ACTION = "requestedAction";
+    private static final String DETAIL_REVIEWER_ID = "reviewerId";
+    private static final String DETAIL_SOURCE_MESSAGE_IDS = "sourceMessageIds";
+    private static final String DETAIL_TARGET_KEY = "targetKey";
+    private static final String DETAIL_TARGET_KIND = "targetKind";
+    private static final String DETAIL_TARGET_LAYER = "targetLayer";
 
     private final MemoryReviewManagementRepositoryPort reviewRepositoryPort;
     private final MemoryIngestionWorkflowPort ingestionWorkflowPort;
@@ -242,7 +253,8 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
             String reason = result == null ? "empty_result" : result.reason();
             releaseApplyClaim(current, command);
             recordTrace(eventType, MemoryTraceEvent.STATUS_FAILED, current, command, Map.of(
-                    "operationId", operationId,
+                    DETAIL_OPERATION_ID, operationId,
+                    DETAIL_APPLY_OPERATION_ID, operationId,
                     "source", source,
                     "resultStatus", result == null ? "NULL" : result.status().name(),
                     "reason", reason));
@@ -258,7 +270,8 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 operationId,
                 current.targetLayer()));
         recordTrace(eventType, reviewed.reviewStatus().name(), current, command, Map.of(
-                "operationId", operationId,
+                DETAIL_OPERATION_ID, operationId,
+                DETAIL_APPLY_OPERATION_ID, operationId,
                 "source", source,
                 "reviewStatus", reviewed.reviewStatus().name(),
                 "reviewedMemoryId", reviewed.reviewedMemoryId(),
@@ -282,7 +295,8 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
         } catch (RuntimeException ex) {
             releaseApplyClaim(current, command);
             recordTrace(eventType, MemoryTraceEvent.STATUS_FAILED, current, command, Map.of(
-                    "operationId", operationId,
+                    DETAIL_OPERATION_ID, operationId,
+                    DETAIL_APPLY_OPERATION_ID, operationId,
                     "source", SOURCE_ALIAS,
                     "reason", errorMessage(ex)));
             throw new IllegalStateException("alias review apply failed: " + errorMessage(ex), ex);
@@ -298,7 +312,8 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 reviewedAliasId(aliasCommand),
                 REVIEWED_LAYER_ALIAS));
         recordTrace(eventType, reviewed.reviewStatus().name(), current, command, Map.of(
-                "operationId", operationId,
+                DETAIL_OPERATION_ID, operationId,
+                DETAIL_APPLY_OPERATION_ID, operationId,
                 "source", SOURCE_ALIAS,
                 "reviewStatus", reviewed.reviewStatus().name(),
                 "reviewedMemoryId", reviewed.reviewedMemoryId(),
@@ -531,12 +546,16 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                              MemoryReviewDecisionCommand command,
                              Map<String, Object> extra) {
         Map<String, Object> details = new LinkedHashMap<>();
-        details.put("candidateId", current.candidateId());
-        details.put("operationId", current.operationId());
-        details.put("reviewerId", operator(command == null ? null : command.reviewerId()));
-        details.put("targetLayer", current.targetLayer());
-        details.put("targetKind", current.targetKind());
-        details.put("targetKey", current.targetKey());
+        details.put(DETAIL_CANDIDATE_ID, current.candidateId());
+        details.put(DETAIL_OPERATION_ID, current.operationId());
+        details.put(DETAIL_CANDIDATE_OPERATION_ID, current.operationId());
+        details.put(DETAIL_FEEDBACK_SAMPLE_ID, feedbackSampleId(current));
+        details.put(DETAIL_REVIEWER_ID, operator(command == null ? null : command.reviewerId()));
+        details.put(DETAIL_REQUESTED_ACTION, requestedAction(current.requestedAction()).name());
+        details.put(DETAIL_TARGET_LAYER, current.targetLayer());
+        details.put(DETAIL_TARGET_KIND, current.targetKind());
+        details.put(DETAIL_TARGET_KEY, current.targetKey());
+        details.put(DETAIL_SOURCE_MESSAGE_IDS, current.sourceMessageIds());
         details.putAll(extra);
         traceRecorder.record(new MemoryTraceEvent(
                 current.candidateId(),

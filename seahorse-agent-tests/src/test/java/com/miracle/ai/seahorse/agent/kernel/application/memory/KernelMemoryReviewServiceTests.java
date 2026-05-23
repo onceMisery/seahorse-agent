@@ -511,6 +511,48 @@ class KernelMemoryReviewServiceTests {
     }
 
     @Test
+    void shouldRecordReviewTraceExplanationWithoutRawCandidateContent() {
+        String rawOriginal = "User private original database note";
+        String rawCorrected = "User corrected database fact";
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-1", MemoryReviewStatus.PENDING, rawOriginal));
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                repository,
+                new RecordingIngestionWorkflow(MemoryIngestionResult.accepted(List.of("SHORT_TERM_SAVE"))),
+                new RecordingReviewFeedbackRepository(),
+                traceRecorder);
+
+        service.modify("review-1",
+                new MemoryReviewDecisionCommand("auditor", "fixed wording", rawCorrected, Map.of()));
+
+        assertThat(traceRecorder.events)
+                .filteredOn(event -> "memory-review".equals(event.component())
+                        && "modify".equals(event.eventType()))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.details())
+                            .containsEntry("candidateId", "review-1")
+                            .containsEntry("candidateOperationId", "operation-1")
+                            .containsEntry("applyOperationId", "memory-review-apply-review-1")
+                            .containsEntry("feedbackSampleId", "memory-review-feedback-review-1")
+                            .containsEntry("reviewerId", "auditor")
+                            .containsEntry("requestedAction", "REVIEW")
+                            .containsEntry("targetLayer", "SHORT_TERM")
+                            .containsEntry("targetKind", "PROJECT_FACT")
+                            .containsEntry("targetKey", "project.fact")
+                            .containsEntry("source", "memory-review-modify")
+                            .containsEntry("sourceMessageIds", List.of("msg-1"))
+                            .containsEntry("reviewStatus", MemoryReviewStatus.APPLIED.name())
+                            .containsEntry("reviewedMemoryId", "memory-review-apply-review-1")
+                            .containsEntry("reviewedLayer", "SHORT_TERM");
+                    assertThat(event.details().toString())
+                            .doesNotContain(rawOriginal)
+                            .doesNotContain(rawCorrected);
+                });
+    }
+
+    @Test
     void shouldKeepReviewDecisionWhenFeedbackRecordingFails() {
         InMemoryReviewRepository repository = new InMemoryReviewRepository();
         repository.put(review("review-1", MemoryReviewStatus.PENDING, "still apply"));
