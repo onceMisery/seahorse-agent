@@ -19,7 +19,8 @@ package com.miracle.ai.seahorse.agent.adapters.local;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventSender;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -30,8 +31,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Local Spring SseEmitter implementation for Seahorse stream events.
  */
-@Slf4j
 public class SpringSseEventSender implements StreamEventSender {
+
+    private static final Logger log = LoggerFactory.getLogger(SpringSseEventSender.class);
 
     private final SseEmitter emitter;
     private final AtomicBoolean closed = new AtomicBoolean(false);
