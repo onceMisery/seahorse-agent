@@ -6,14 +6,23 @@ interface ArtifactSandboxProps {
   artifact: ArtifactBlock;
 }
 
+function escapeScriptContent(code: string): string {
+  return code.replace(/<\/script/gi, "<\\/script");
+}
+
+function escapeStyleContent(code: string): string {
+  return code.replace(/<\/style/gi, "<\\/style");
+}
+
 function buildSrcDoc(artifact: ArtifactBlock): string {
   const { language, code } = artifact;
+  const safeCode = escapeScriptContent(code);
 
   switch (language) {
     case "html":
       return code;
     case "css":
-      return `<!DOCTYPE html><html><head><style>${code}</style></head><body><p style="color:#94a3b8;font:14px sans-serif;">CSS Preview</p></body></html>`;
+      return `<!DOCTYPE html><html><head><style>${escapeStyleContent(code)}</style></head><body><p style="color:#94a3b8;font:14px sans-serif;">CSS Preview</p></body></html>`;
     case "javascript":
     case "js":
       return `<!DOCTYPE html><html><head><style>body{margin:0;font:14px/1.6 system-ui,sans-serif;background:#1e1e2e;color:#cdd6f4;}</style></head><body><pre id="output"></pre><script>
@@ -21,13 +30,13 @@ try {
   const out = document.getElementById("output");
   const log = console.log;
   console.log = (...args) => { log(...args); out.textContent += args.map(a => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" ") + "\\n"; };
-  ${code}
+  ${safeCode}
 } catch(e) { document.body.innerHTML = '<pre style="color:#f38ba8">' + e + '</pre>'; }
 <\/script></body></html>`;
     case "tsx":
-      return `<!DOCTYPE html><html><head><style>body{margin:0;font:14px/1.6 system-ui,sans-serif;background:#1e1e2e;color:#cdd6f4;padding:16px;}</style></head><body><div id="root"></div><script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script><script type="text/babel">${code}<\/script></body></html>`;
+      return `<!DOCTYPE html><html><head><style>body{margin:0;font:14px/1.6 system-ui,sans-serif;background:#1e1e2e;color:#cdd6f4;padding:16px;}</style></head><body><div id="root"></div><script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script><script type="text/babel">${safeCode}<\/script></body></html>`;
     case "vue":
-      return `<!DOCTYPE html><html><head><style>body{margin:0;font:14px/1.6 system-ui,sans-serif;background:#1e1e2e;color:#cdd6f4;padding:16px;}</style></head><body><div id="app"></div><script src="https://unpkg.com/vue@3/dist/vue.global.js"><\/script><script>${code}<\/script></body></html>`;
+      return `<!DOCTYPE html><html><head><style>body{margin:0;font:14px/1.6 system-ui,sans-serif;background:#1e1e2e;color:#cdd6f4;padding:16px;}</style></head><body><div id="app"></div><script src="https://unpkg.com/vue@3/dist/vue.global.js"><\/script><script>${safeCode}<\/script></body></html>`;
     default:
       return `<!DOCTYPE html><html><body><pre>${code}</pre></body></html>`;
   }

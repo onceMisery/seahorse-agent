@@ -143,6 +143,7 @@ export const useChatStore = create<ChatState>()(
           id: String(item.id),
           role: item.role === "assistant" ? "assistant" : "user",
           content: item.content,
+          rawText: item.content,
           thinking: item.thinkingContent || undefined,
           thinkingDuration: item.thinkingDuration || undefined,
           isDeepThinking: Boolean(item.thinkingContent),
@@ -331,10 +332,11 @@ export const useChatStore = create<ChatState>()(
           set((state) => {
             const msg = state.messages.find((m) => m.id === state.streamingMessageId);
             if (msg) {
-              const suffix = msg.content.includes("(Stopped)") ? "" : "\n\n(Stopped)";
+              const suffix = msg.rawText?.includes("(Stopped)") ? "" : "\n\n(Stopped)";
               if (payload?.messageId) msg.id = String(payload.messageId);
-              msg.content = msg.content + suffix;
               msg.rawText = (msg.rawText ?? "") + suffix;
+              msg.content = msg.rawText;
+              msg.blocks = parseStreamingText(msg.rawText, msg.id);
               msg.status = "cancelled";
               msg.isThinking = false;
               msg.thinkingDuration = msg.thinkingDuration ?? computeThinkingDuration(state.thinkingStartAt);
@@ -379,6 +381,7 @@ export const useChatStore = create<ChatState>()(
         },
         onError: (error: Error) => {
           if (get().streamingMessageId !== assistantId) return;
+          buffer.flushImmediate();
           buffer.dispose();
           const unauthorized = (error as Error & { status?: number }).status === 401;
           set((state) => {

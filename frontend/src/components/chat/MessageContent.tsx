@@ -11,7 +11,7 @@ interface MessageContentProps {
 export const MessageContent = React.memo(function MessageContent({ blocks, rawText }: MessageContentProps) {
   // 历史消息没有 blocks 或 blocks 为空时，回退到纯 Markdown
   if (!blocks || blocks.length === 0) {
-    return <MarkdownRenderer content={rawText} />;
+    return <MarkdownRenderer content={rawText ?? ""} />;
   }
 
   return (

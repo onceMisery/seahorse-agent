@@ -19,6 +19,7 @@ export function parseStreamingText(rawText: string, messageId: string): ContentB
   let inCodeBlock = false;
   let codeBlockLang = "";
   let inArtifact = false;
+  let artifactOpenedByFence = false;
 
   let currentTextLines: string[] = [];
   let currentArtifactLines: string[] = [];
@@ -47,6 +48,7 @@ export function parseStreamingText(rawText: string, messageId: string): ContentB
       });
       currentArtifactLines = [];
       currentArtifact = null;
+      artifactOpenedByFence = false;
     }
   };
 
@@ -68,12 +70,16 @@ export function parseStreamingText(rawText: string, messageId: string): ContentB
           isComplete: false,
         };
         inArtifact = true;
+        artifactOpenedByFence = false;
         continue;
       }
     }
 
     if (inArtifact) {
-      if (ARTIFACT_CLOSE_RE.test(line.trim())) {
+      // 关闭条件：</artifact> 标签 或 代码围栏关闭（仅当通过围栏打开时）
+      const isCloseTag = ARTIFACT_CLOSE_RE.test(line.trim());
+      const isCloseFence = artifactOpenedByFence && CODE_FENCE_CLOSE_RE.test(line.trim());
+      if (isCloseTag || isCloseFence) {
         inArtifact = false;
         flushArtifact(true);
       } else {
@@ -100,6 +106,7 @@ export function parseStreamingText(rawText: string, messageId: string): ContentB
             isComplete: false,
           };
           inArtifact = true;
+          artifactOpenedByFence = true;
           continue;
         } else {
           inCodeBlock = true;
