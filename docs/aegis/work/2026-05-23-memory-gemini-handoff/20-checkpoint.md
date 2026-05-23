@@ -72,3 +72,27 @@
 - Retirement status: No new fallback or retirement track introduced.
 - New risk signals: none beyond existing dirty worktree caveat.
 - Advisory decision: continue
+
+## Checkpoint Update - Aggregation Trace Context
+
+- Current todo: Close low-risk memory observability gaps with narrow, verified slices.
+- Active slice: Preserve tenant, user, conversation, and session context on memory aggregation trace events.
+- Completed todos:
+- Added a regression test proving aggregation trace events carry the source turn context.
+- Propagated trace context from turn, buffer state, and buffer snapshot into aggregation trace recording.
+- Kept aggregation buffering, flush semantics, ingestion behavior, adapters, and storage model unchanged.
+- Evidence refs:
+- `./mvnw.cmd -pl seahorse-agent-tests -am test "-Dtest=MemoryAggregationServiceTests" "-Dmaven.compiler.testIncludes=**/MemoryAggregationServiceTests.java" "-Dspotless.apply.skip=true" "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"` failed before implementation with empty user/conversation/session fields.
+- `./mvnw.cmd -pl seahorse-agent-tests -am test "-Dtest=MemoryAggregationServiceTests" "-Dmaven.compiler.testIncludes=**/MemoryAggregationServiceTests.java" "-Dspotless.apply.skip=true" "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"` passed after implementation.
+- `./mvnw.cmd -pl seahorse-agent-tests -am test "-Dtest=MemoryAggregationServiceTests,KernelMemoryTraceQueryServiceTests,KernelMemoryObservabilityServiceTests,SeahorseWebApiContractTests" "-Dmaven.compiler.testIncludes=**/MemoryAggregationServiceTests.java,**/KernelMemoryTraceQueryServiceTests.java,**/KernelMemoryObservabilityServiceTests.java,**/SeahorseWebApiContractTests.java" "-Dspotless.apply.skip=true" "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"` passed 35 tests.
+- `git diff --check -- seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/memory/aggregation/DefaultMemoryAggregationService.java seahorse-agent-tests/src/test/java/com/miracle/ai/seahorse/agent/kernel/application/memory/aggregation/MemoryAggregationServiceTests.java`
+- Blocked on: none
+- Next step: Inspect the next memory trace/query contract gap before selecting a new implementation slice.
+
+## DriftCheckDraft - Aggregation Trace Context
+
+- Scope status: Stayed inside memory observability and aggregation trace metadata; no write-path semantic changes.
+- Compatibility status: Preserved the four-layer canonical storage model, aggregation ports, scheduler/buffer adapter boundary, and existing trace detail payload shape.
+- Retirement status: No fallback, adapter, or retirement track introduced.
+- New risk signals: Worktree still contains unrelated frontend and untracked changes; continue path-limited staging.
+- Advisory decision: continue

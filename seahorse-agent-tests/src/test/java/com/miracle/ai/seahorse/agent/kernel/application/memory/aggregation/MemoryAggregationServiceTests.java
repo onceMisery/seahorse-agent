@@ -159,6 +159,26 @@ class MemoryAggregationServiceTests {
     }
 
     @Test
+    void shouldRecordAggregationTraceWithTenantUserConversationAndSessionContext() {
+        RecordingWorkflow workflow = new RecordingWorkflow();
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        DefaultMemoryAggregationService service = service(policy(2, 60_000), workflow, new RecordingScheduler(),
+                traceRecorder);
+
+        service.appendTurn(turn("task-1", "Remember I use Java", "Noted", 8));
+        service.appendTurn(turn("task-2", "I prefer concise answers", "Understood", 9));
+
+        assertThat(traceRecorder.events)
+                .filteredOn(event -> "memory-aggregation".equals(event.component()))
+                .allSatisfy(event -> {
+                    assertThat(event.tenantId()).isEqualTo("default");
+                    assertThat(event.userId()).isEqualTo("user-1");
+                    assertThat(event.conversationId()).isEqualTo("conversation-1");
+                    assertThat(event.sessionId()).isEqualTo("conversation-1");
+                });
+    }
+
+    @Test
     void shouldRecordFlushTraceExplanationWithoutRawTurnContent() {
         RecordingWorkflow workflow = new RecordingWorkflow();
         RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();

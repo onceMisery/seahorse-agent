@@ -22,3 +22,13 @@ No evidence has been recorded yet.
 - `seahorse-agent-tests/src/test/java/com/miracle/ai/seahorse/agent/adapters/web/SeahorseWebApiContractTests.java`
 - Summary: Added retrieved-noise metrics alongside recall precision and verified the kernel and web contract tests.
 - Verifier: Maven targeted test run plus `git diff --check`
+
+## EvidenceBundleDraft - Aggregation Trace Context
+
+- Artifact key: aggregation-trace-context
+- Type: code
+- Sources:
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/memory/aggregation/DefaultMemoryAggregationService.java`
+- `seahorse-agent-tests/src/test/java/com/miracle/ai/seahorse/agent/kernel/application/memory/aggregation/MemoryAggregationServiceTests.java`
+- Summary: Memory aggregation trace events now preserve tenant, user, conversation, and session context from the source turn/state/snapshot so trace query filters can find aggregation events.
+- Verifier: TDD red/green targeted aggregation test, broader trace/observability/web contract regression, and `git diff --check`

@@ -143,12 +143,14 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
     public MemoryAggregationAppendResult appendTurn(MemoryTurnEvent event) {
         if (!policy.enabled()) {
             recordTrace(TRACE_EVENT_APPEND_TURN, MemoryTraceEvent.STATUS_IGNORED, event == null ? "" : event.sessionId(),
+                    traceContext(event),
                     details(DETAIL_REASON, REASON_AGGREGATION_DISABLED, DETAIL_FORCE_FLUSH_REQUIRED, false));
             return MemoryAggregationAppendResult.pending(noopState(event));
         }
         MemoryAggregationAppendResult topicShiftFlush = flushForTopicShiftIfNeeded(event);
         MemoryBufferState state = bufferPort.appendTurn(event);
         recordTrace(TRACE_EVENT_APPEND_TURN, MemoryTraceEvent.STATUS_SUCCESS, state.sessionId(),
+                traceContext(state),
                 details(DETAIL_TURN_COUNT, state.turnCount(),
                         DETAIL_TOKEN_COUNT, state.totalTokens(),
                         DETAIL_FORCE_FLUSH_REQUIRED, state.forceFlushRequired()));
@@ -170,7 +172,8 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                 recordTrace(TRACE_EVENT_FLUSH_READY, result.status() == MemoryIngestionStatus.ACCEPTED
                                 ? MemoryTraceEvent.STATUS_SUCCESS
                                 : MemoryTraceEvent.STATUS_FAILED,
-                        snapshot.get().snapshotId(), flushDetails(snapshot.get(), trigger, result));
+                        snapshot.get().snapshotId(), traceContext(snapshot.get()),
+                        flushDetails(snapshot.get(), trigger, result));
                 return MemoryAggregationAppendResult.flushed(state, snapshot.get(), result);
             }
         }
@@ -198,7 +201,8 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
         recordTrace(TRACE_EVENT_FLUSH_READY, result.status() == MemoryIngestionStatus.ACCEPTED
                         ? MemoryTraceEvent.STATUS_SUCCESS
                         : MemoryTraceEvent.STATUS_FAILED,
-                snapshot.get().snapshotId(), flushDetails(snapshot.get(), MemoryFlushTrigger.TOPIC_SHIFT, result));
+                snapshot.get().snapshotId(), traceContext(snapshot.get()),
+                flushDetails(snapshot.get(), MemoryFlushTrigger.TOPIC_SHIFT, result));
         return MemoryAggregationAppendResult.flushed(currentState.get(), snapshot.get(), result);
     }
 
@@ -209,6 +213,7 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                                             Instant now) {
         if (!policy.enabled()) {
             recordTrace(TRACE_EVENT_FLUSH_READY, MemoryTraceEvent.STATUS_IGNORED, sessionId,
+                    traceContext(tenantId, sessionId),
                     details(DETAIL_REASON, REASON_AGGREGATION_DISABLED,
                             DETAIL_TRIGGER, trigger == null ? "" : trigger.name()));
             return MemoryIngestionResult.ignored(REASON_AGGREGATION_DISABLED);
@@ -220,6 +225,7 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                         Objects.requireNonNullElseGet(now, () -> Instant.now(clock)));
         if (snapshot.isEmpty()) {
             recordTrace(TRACE_EVENT_FLUSH_READY, MemoryTraceEvent.STATUS_IGNORED, sessionId,
+                    traceContext(tenantId, sessionId),
                     details(DETAIL_REASON, REASON_AGGREGATION_NOT_READY,
                             DETAIL_TRIGGER, trigger == null ? "" : trigger.name()));
             return MemoryIngestionResult.ignored(REASON_AGGREGATION_NOT_READY);
@@ -228,7 +234,7 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
         recordTrace(TRACE_EVENT_FLUSH_READY, result.status() == MemoryIngestionStatus.ACCEPTED
                         ? MemoryTraceEvent.STATUS_SUCCESS
                         : MemoryTraceEvent.STATUS_FAILED,
-                snapshot.get().snapshotId(), flushDetails(
+                snapshot.get().snapshotId(), traceContext(snapshot.get()), flushDetails(
                         snapshot.get(),
                         Objects.requireNonNullElse(trigger, MemoryFlushTrigger.MANUAL),
                         result));
@@ -261,6 +267,7 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
     private MemoryIngestionResult submit(MemoryBufferSnapshot snapshot) {
         if (snapshot.turns().isEmpty()) {
             recordTrace(TRACE_EVENT_SUBMIT, MemoryTraceEvent.STATUS_IGNORED, snapshot.snapshotId(),
+                    traceContext(snapshot),
                     details(DETAIL_REASON, REASON_EMPTY_SNAPSHOT));
             return MemoryIngestionResult.ignored(REASON_EMPTY_SNAPSHOT);
         }
@@ -277,13 +284,15 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                     FLUSH_SOURCE,
                     writeRequest));
             if (result == null) {
-                recordTrace(TRACE_EVENT_SUBMIT, MemoryTraceEvent.STATUS_FAILED, snapshot.snapshotId(), details(
+                recordTrace(TRACE_EVENT_SUBMIT, MemoryTraceEvent.STATUS_FAILED, snapshot.snapshotId(),
+                        traceContext(snapshot), details(
                         DETAIL_OPERATION_ID, operationId(snapshot),
                         DETAIL_ERROR, REASON_NULL_RESULT,
                         DETAIL_MESSAGE, "ingestionWorkflowPort returned null"));
                 return MemoryIngestionResult.failed(REASON_AGGREGATION_FLUSH_FAILED);
             }
-            recordTrace(TRACE_EVENT_SUBMIT, MemoryTraceEvent.STATUS_SUCCESS, snapshot.snapshotId(), details(
+            recordTrace(TRACE_EVENT_SUBMIT, MemoryTraceEvent.STATUS_SUCCESS, snapshot.snapshotId(),
+                    traceContext(snapshot), details(
                     DETAIL_OPERATION_ID, operationId(snapshot),
                     DETAIL_CONVERSATION_ID, snapshot.conversationId(),
                     DETAIL_TURN_COUNT, snapshot.turns().size()));
@@ -291,7 +300,8 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
         } catch (Exception ex) {
             LOG.warn("Memory aggregation flush failed: snapshotId={}, userId={}, conversationId={}",
                     snapshot.snapshotId(), snapshot.userId(), snapshot.conversationId(), ex);
-            recordTrace(TRACE_EVENT_SUBMIT, MemoryTraceEvent.STATUS_FAILED, snapshot.snapshotId(), details(
+            recordTrace(TRACE_EVENT_SUBMIT, MemoryTraceEvent.STATUS_FAILED, snapshot.snapshotId(),
+                    traceContext(snapshot), details(
                     DETAIL_OPERATION_ID, operationId(snapshot),
                     DETAIL_ERROR, ex.getClass().getSimpleName(),
                     DETAIL_MESSAGE, Objects.requireNonNullElse(ex.getMessage(), "")));
@@ -321,13 +331,18 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
         return normalized.isBlank() ? DEFAULT_TENANT_ID : normalized;
     }
 
-    private void recordTrace(String eventType, String status, String subjectId, Map<String, Object> details) {
+    private void recordTrace(String eventType,
+                             String status,
+                             String subjectId,
+                             TraceContext context,
+                             Map<String, Object> details) {
+        TraceContext safeContext = Objects.requireNonNullElseGet(context, TraceContext::empty);
         traceRecorder.record(new MemoryTraceEvent(
                 "",
-                DEFAULT_TENANT_ID,
-                "",
-                "",
-                "",
+                safeContext.tenantId(),
+                safeContext.userId(),
+                safeContext.conversationId(),
+                safeContext.sessionId(),
                 TRACE_COMPONENT,
                 eventType,
                 status,
@@ -335,6 +350,51 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                 TRACE_SUBJECT_TYPE_SNAPSHOT,
                 details,
                 Instant.now(clock)));
+    }
+
+    private TraceContext traceContext(MemoryTurnEvent event) {
+        if (event == null) {
+            return TraceContext.empty();
+        }
+        return new TraceContext(event.tenantId(), event.userId(), event.conversationId(), event.sessionId());
+    }
+
+    private TraceContext traceContext(MemoryBufferState state) {
+        if (state == null) {
+            return TraceContext.empty();
+        }
+        return new TraceContext(state.tenantId(), state.userId(), state.conversationId(), state.sessionId());
+    }
+
+    private TraceContext traceContext(MemoryBufferSnapshot snapshot) {
+        if (snapshot == null) {
+            return TraceContext.empty();
+        }
+        return new TraceContext(snapshot.tenantId(), snapshot.userId(), snapshot.conversationId(),
+                snapshot.sessionId());
+    }
+
+    private TraceContext traceContext(String tenantId, String sessionId) {
+        return new TraceContext(tenantId, "", "", sessionId);
+    }
+
+    private record TraceContext(String tenantId, String userId, String conversationId, String sessionId) {
+
+        private TraceContext {
+            tenantId = normalizeTraceValue(tenantId, DEFAULT_TENANT_ID);
+            userId = normalizeTraceValue(userId, "");
+            conversationId = normalizeTraceValue(conversationId, "");
+            sessionId = normalizeTraceValue(sessionId, conversationId);
+        }
+
+        private static TraceContext empty() {
+            return new TraceContext(DEFAULT_TENANT_ID, "", "", "");
+        }
+    }
+
+    private static String normalizeTraceValue(String value, String fallback) {
+        String normalized = Objects.requireNonNullElse(value, fallback).trim();
+        return normalized.isBlank() ? Objects.requireNonNullElse(fallback, "") : normalized;
     }
 
     private Map<String, Object> flushDetails(MemoryBufferSnapshot snapshot,
