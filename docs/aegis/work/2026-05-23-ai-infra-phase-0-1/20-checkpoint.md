@@ -37,10 +37,11 @@ Completed:
 - Phase 2 argument policy slice is green: catalog-backed policy now enforces binding-level `argumentPolicyJson` required arguments and allowed-argument whitelist, fails closed on invalid policy JSON, and preserves the existing call-limit, approval, audit, and gateway delegation behavior.
 - Phase 2 MCP allowlist catalog slice is green: allowlisted MCP tools now enter `ToolCatalogRepositoryPort` after successful runtime registration, with provider `MCP`, default risk `MEDIUM`, default action `EXECUTE`, generated input schema, enabled=true, and approval=false.
 - Phase 2 Tool Catalog management API slice is green: admin-only kernel inbound service and `/api/tools` web endpoints now expose catalog page/detail plus enable/disable operations backed by `ToolCatalogRepositoryPort`.
+- Phase 2 Agent tool binding management API slice is green: admin-only kernel inbound service and `PUT /api/agents/{agentId}/versions/{versionId}/tools` now replace a version-scoped tool binding snapshot through `AgentToolBindingRepositoryPort`.
 
 Active slice:
 
-- Phase 2 `02-tool-gateway-policy-engine.md` Tool Catalog management API slice completed across kernel, web, and starter boundaries. Next Phase 2 work should add Agent version tool binding management API.
+- Phase 2 `02-tool-gateway-policy-engine.md` Agent tool binding management API slice completed across kernel, web, and starter boundaries. Next Phase 2 work should add invocation audit query API.
 
 Evidence refs:
 
@@ -83,6 +84,10 @@ Evidence refs:
 - `.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-adapter-web -am '-Dtest=SeahorseAgentControllerTests' '-Dsurefire.failIfNoSpecifiedTests=false' test`
 - `.\mvnw '-Dspotless.apply.skip=true' '-Dmaven.test.skip=true' -pl seahorse-agent-kernel install`
 - `.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-spring-boot-starter clean test '-Dtest=SeahorseAgentRegistryAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false'`
+- `.\mvnw -pl seahorse-agent-kernel '-Dtest=KernelAgentToolBindingManagementServiceTests,KernelToolCatalogManagementServiceTests' test`
+- `.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-adapter-web -am '-Dtest=SeahorseAgentControllerTests' '-Dsurefire.failIfNoSpecifiedTests=false' test`
+- `.\mvnw '-Dspotless.apply.skip=true' '-Dmaven.test.skip=true' -pl seahorse-agent-kernel install`
+- `.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-spring-boot-starter clean test '-Dtest=SeahorseAgentRegistryAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false'`
 
 Blockers:
 
@@ -91,12 +96,12 @@ Blockers:
 
 Next step:
 
-- Continue Phase 2 against `02-tool-gateway-policy-engine.md`: add `PUT /api/agents/{agentId}/versions/{versionId}/tools` for Agent version tool binding snapshots, then add invocation audit query API. Keep JDBC/web surfaces behind focused RED/GREEN slices.
+- Continue Phase 2 against `02-tool-gateway-policy-engine.md`: add invocation audit query API `GET /api/tool-invocations`. Keep JDBC/web surfaces behind focused RED/GREEN slices.
 
 Drift check:
 
 - Scope: aligned with Phase 0/1 and the first kernel-only part of Phase 2.
 - Compatibility: no existing class moved or deleted; no-repository AGENT fallback remains covered; old `KernelAgentLoop` and `LocalToolGatewayPort` constructors remain compatible.
 - New owners: documented Agent Registry, Agent Runtime, Tool Gateway, Tool Policy, starter wiring surfaces, stream meta run identity, public prototype route alias, and backend security public-path whitelist.
-- Phase boundary: Phase 2 is only partially implemented. Runtime-to-Gateway, minimal policy boundary, catalog metadata, binding metadata, starter catalog-backed policy selection, durable catalog/binding persistence, invocation audit persistence, run-level call limits, basic argument policy, MCP allowlist catalog registration, and Tool Catalog management APIs are covered; Agent tool binding management API, invocation audit query API, and HITL remain future slices.
+- Phase boundary: Phase 2 is only partially implemented. Runtime-to-Gateway, minimal policy boundary, catalog metadata, binding metadata, starter catalog-backed policy selection, durable catalog/binding persistence, invocation audit persistence, run-level call limits, basic argument policy, MCP allowlist catalog registration, Tool Catalog management APIs, and Agent tool binding management APIs are covered; invocation audit query API and HITL remain future slices.
 - Decision: continue.

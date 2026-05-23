@@ -470,6 +470,79 @@ Remaining Phase 2 work:
 - MCP allowlist registration into the catalog.
 - Tool catalog/binding/audit management APIs.
 
+## 2026-05-23 Phase 2 Agent tool binding management API slice
+
+RED/GREEN coverage:
+
+- `KernelAgentToolBindingManagementServiceTests` first failed because `AgentToolBindingItemCommand`, `AgentToolBindingReplaceCommand`, `AgentToolBindingManagementInboundPort`, and the kernel management service did not exist; it then verified admin-only replacement of Agent version tool binding snapshots, duplicate `toolId` rejection, generated binding IDs, current-user ownership, and fixed-clock timestamps.
+- `SeahorseAgentControllerTests.shouldExposeAgentToolBindingManagementApi` first failed because `SeahorseAgentToolBindingController` did not exist; it then verified `PUT /api/agents/{agentId}/versions/{versionId}/tools` request conversion and response contract.
+- `SeahorseAgentRegistryAutoConfigurationTests` first failed because no `AgentToolBindingManagementInboundPort` bean was created; it then verified starter auto-configuration wires `KernelAgentToolBindingManagementService`.
+
+Focused kernel command:
+
+```powershell
+.\mvnw -pl seahorse-agent-kernel '-Dtest=KernelAgentToolBindingManagementServiceTests,KernelToolCatalogManagementServiceTests' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 6
+- Failures: 0
+- Errors: 0
+- Covered: Agent tool binding management behavior plus Tool Catalog management regression.
+
+Focused web command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-adapter-web -am '-Dtest=SeahorseAgentControllerTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 4
+- Failures: 0
+- Errors: 0
+- Covered: existing Agent definition/run contracts, Tool Catalog management contract, and Agent tool binding management contract.
+
+Starter support command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' '-Dmaven.test.skip=true' -pl seahorse-agent-kernel install
+```
+
+Result:
+
+- Exit status: 0
+- Covered: refreshed kernel main artifact for starter-only verification.
+
+Focused starter command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-spring-boot-starter clean test '-Dtest=SeahorseAgentRegistryAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false'
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 1
+- Failures: 0
+- Errors: 0
+- Covered: starter auto-configuration for Agent tool binding management inbound service.
+
+Fix boundary:
+
+- `AgentToolBindingItemCommand`, `AgentToolBindingReplaceCommand`, and `AgentToolBindingManagementInboundPort`: added the inbound contract for replacing version-scoped binding snapshots.
+- `KernelAgentToolBindingManagementService`: adds admin role enforcement, current-user attribution, duplicate tool validation, generated binding IDs, and whole-snapshot persistence through `AgentToolBindingRepositoryPort`.
+- `AgentToolBindingItemRequest`, `AgentToolBindingReplaceRequest`, and `SeahorseAgentToolBindingController`: added the web API for `PUT /api/agents/{agentId}/versions/{versionId}/tools`.
+- `SeahorseAgentKernelRegistryAutoConfiguration`: auto-configures the binding management service when `AgentToolBindingRepositoryPort` and `CurrentUserPort` exist.
+
+Remaining Phase 2 work:
+
+- Invocation audit query API: `GET /api/tool-invocations`.
+- HITL approval workflow, resource ACL, and output redaction policy remain later slices.
+
 ## 2026-05-23 Phase 2 Tool Catalog management API slice
 
 RED/GREEN coverage:

@@ -19,12 +19,15 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCatalogManagementService;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -80,5 +83,18 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             ToolCatalogRepositoryPort toolCatalogRepositoryPort,
             CurrentUserPort currentUserPort) {
         return new KernelToolCatalogManagementService(toolCatalogRepositoryPort, currentUserPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({AgentToolBindingRepositoryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(AgentToolBindingManagementInboundPort.class)
+    public KernelAgentToolBindingManagementService seahorseAgentToolBindingManagementInboundPort(
+            AgentToolBindingRepositoryPort agentToolBindingRepositoryPort,
+            CurrentUserPort currentUserPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelAgentToolBindingManagementService(
+                agentToolBindingRepositoryPort,
+                currentUserPort,
+                clockProvider.getIfAvailable(Clock::systemUTC));
     }
 }

@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTrigger
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.AgentToolBinding;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
@@ -38,6 +39,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundP
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionUpdateDraftCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingReplaceCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentVersionPublishCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
@@ -235,6 +238,35 @@ class SeahorseAgentControllerTests {
         verify(port).enable("weather_query");
     }
 
+    @Test
+    void shouldExposeAgentToolBindingManagementApi() throws Exception {
+        AgentToolBindingManagementInboundPort port = mock(AgentToolBindingManagementInboundPort.class);
+        when(port.replaceBindings(eq("agent-1"), eq("agent-1-v1"), any()))
+                .thenReturn(List.of(binding("weather_query", 3)));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseAgentToolBindingController(provider(AgentToolBindingManagementInboundPort.class, port)))
+                .build();
+
+        mvc.perform(put("/api/agents/agent-1/versions/agent-1-v1/tools")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("tools", List.of(Map.of(
+                                "toolId", "weather_query",
+                                "maxCallsPerRun", 3,
+                                "argumentPolicyJson", "{\"required\":[\"query\"],\"allowed\":[\"query\"]}"))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data[0].toolId").value("weather_query"))
+                .andExpect(jsonPath("$.data[0].maxCallsPerRun").value(3));
+
+        ArgumentCaptor<AgentToolBindingReplaceCommand> captor =
+                ArgumentCaptor.forClass(AgentToolBindingReplaceCommand.class);
+        verify(port).replaceBindings(eq("agent-1"), eq("agent-1-v1"), captor.capture());
+        assertThat(captor.getValue().tools()).hasSize(1);
+        assertThat(captor.getValue().tools().get(0).toolId()).isEqualTo("weather_query");
+        assertThat(captor.getValue().tools().get(0).maxCallsPerRun()).isEqualTo(3);
+    }
+
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
     }
@@ -275,6 +307,18 @@ class SeahorseAgentControllerTests {
                 enabled,
                 false,
                 NOW,
+                NOW);
+    }
+
+    private static AgentToolBinding binding(String toolId, int maxCallsPerRun) {
+        return new AgentToolBinding(
+                "atb-1",
+                "agent-1",
+                "agent-1-v1",
+                toolId,
+                maxCallsPerRun,
+                "{\"required\":[\"query\"],\"allowed\":[\"query\"]}",
+                "admin-1",
                 NOW);
     }
 
