@@ -64,10 +64,13 @@ public class MicrometerObservationAdapter implements ObservationPort {
     @Override
     public void recordEvent(ObservationEvent event) {
         ObservationEvent safeEvent = Objects.requireNonNull(event, "event must not be null");
+        if (safeEvent.amount() <= 0L) {
+            return;
+        }
         Counter.builder(METRIC_EVENT)
                 .tags(eventTags(safeEvent))
                 .register(meterRegistry)
-                .increment();
+                .increment(safeEvent.amount());
     }
 
     private Tags commandTags(ObservationCommand command) {
@@ -117,10 +120,13 @@ public class MicrometerObservationAdapter implements ObservationPort {
         @Override
         public void recordEvent(ObservationEvent event) {
             ObservationEvent safeEvent = Objects.requireNonNull(event, "event must not be null");
+            if (safeEvent.amount() <= 0L) {
+                return;
+            }
             Counter.builder(METRIC_EVENT)
                     .tags(tags.and(TAG_EVENT, safeEvent.name()))
                     .register(meterRegistry)
-                    .increment();
+                    .increment(safeEvent.amount());
         }
 
         @Override

@@ -17,33 +17,29 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.observation;
 
-import com.miracle.ai.seahorse.agent.kernel.plugin.AgentSPI;
+final class NoopObservationPort implements ObservationPort {
 
-/**
- * 观测端口。
- */
-@AgentSPI(defaultName = "noop")
-public interface ObservationPort {
+    static final NoopObservationPort INSTANCE = new NoopObservationPort();
 
-    /**
-     * 开始一次观测。
-     *
-     * @param command 观测命令
-     * @return 观测生命周期句柄
-     */
-    ObservationScope start(ObservationCommand command);
+    private static final ObservationScope NOOP_SCOPE = new ObservationScope() {
+        @Override
+        public void recordEvent(ObservationEvent event) {
+        }
 
-    /**
-     * 记录独立观测事件。
-     *
-     * @param event 观测事件
-     */
-    void recordEvent(ObservationEvent event);
+        @Override
+        public void close() {
+        }
+    };
 
-    /**
-     * 返回一个不进行任何观测记录的默认实现，供没有接入真实观测后端的运行时回退。
-     */
-    static ObservationPort noop() {
-        return NoopObservationPort.INSTANCE;
+    private NoopObservationPort() {
+    }
+
+    @Override
+    public ObservationScope start(ObservationCommand command) {
+        return NOOP_SCOPE;
+    }
+
+    @Override
+    public void recordEvent(ObservationEvent event) {
     }
 }

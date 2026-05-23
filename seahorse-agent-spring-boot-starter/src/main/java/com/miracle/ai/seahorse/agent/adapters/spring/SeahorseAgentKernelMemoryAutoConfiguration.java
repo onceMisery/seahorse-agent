@@ -107,6 +107,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackR
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
@@ -979,6 +980,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryAliasResolutionService> aliasResolutionService,
             ObjectProvider<MemoryMaintenanceRunRepositoryPort> maintenanceRunRepositoryPort,
             ObjectProvider<MemoryTraceRecorder> traceRecorder,
+            ObjectProvider<ObservationPort> observationPort,
             @Value("${seahorse-agent.memory.maintenance.compaction-enabled:false}") boolean compactionEnabled,
             @Value("${seahorse-agent.memory.maintenance.alias-enabled:false}") boolean aliasEnabled,
             @Value("${seahorse-agent.memory.maintenance.gc-enabled:true}") boolean garbageCollectionEnabled) {
@@ -988,6 +990,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 aliasResolutionService.getIfAvailable(),
                 maintenanceRunRepositoryPort.getIfAvailable(MemoryMaintenanceRunRepositoryPort::noop),
                 traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
+                observationPort.getIfAvailable(ObservationPort::noop),
                 compactionEnabled,
                 aliasEnabled,
                 garbageCollectionEnabled);

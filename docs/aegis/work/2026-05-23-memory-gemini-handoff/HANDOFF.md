@@ -198,12 +198,12 @@
 - maintenance trace 已暴露 GC 分阶段计数。
 - maintenance run repository 会记录 compaction / alias / GC 运行结果，保存失败只影响观测，不改变维护执行语义。
 - maintenance aggregate 视图已通过 `MemoryMaintenanceInboundPort.aggregateRecent(limit)` 暴露：聚合最近 N 次 run 的 status 分布与各 stage 累计计数；Web 端点 `GET /memories/maintenance-runs/aggregate?limit=N`。
+- maintenance run / 各 stage 计数已通过 `ObservationPort` 发射为 micrometer counter（`seahorse.agent.observation.events` 上 `event=memory-maintenance-run|memory-maintenance-stage` + `stage=<compaction|alias|gc>.<scanned|group|fragment|normalized|dictionary|skipped|enqueued|marked>`），可对接 Prometheus / Grafana。
 
 剩余差距：
 
 - Compaction 测试文件当前有并行脏改，暂时不要碰，除非先确认这些改动归属。
 - 真实物理索引 GC 和归档存储策略仍是 adapter/ops 深水区。
-- maintenance Micrometer 专属指标（Counter / Timer）尚未接入，仅有 trace 事件粒度。
 
 适配建议：
 
@@ -360,12 +360,12 @@ git commit -m "feat(memory): report recall precision metrics"
 
 1. ~~Recall evaluation precision / retrieved noise metrics。~~ 已完成（`86defb8b`、`498e3308`）。
 2. Review Web API / Console contract gap 核对，只补 inbound port 暴露和 contract tests，不改 review 核心状态机。**核查结果：inbound port 9 个方法已 100% 暴露并被 contract test 覆盖，无缺口。**
-3. Maintenance observability：补 Micrometer 或 trace 查询侧对 compaction/alias/GC 结果的聚合视图。**Aggregate 视图已落地，Micrometer 专属指标尚未接入。**
+3. Maintenance observability：补 Micrometer 或 trace 查询侧对 compaction/alias/GC 结果的聚合视图。**Aggregate 视图 + Micrometer counter 均已落地。**
 4. Hybrid recall 默认装配核对：确认 starter 是否在 port 可用时启用 hybrid pipeline，并保留 classic fallback。**核查结果：`hybrid-enabled` 默认 `true`，`HybridMemoryRecallPipeline` 默认装配，置为 `false` 时回退到 `DefaultMemoryRetrievalPipeline`，无缺口。**
 5. Redis/distributed aggregation adapter：实现 `MemoryAggregationBufferPort` / scheduler 的生产后端。
 6. 真实 BM25/vector/graph 后端质量评估：建立 golden cases，衡量 channel contribution、recall、precision、MRR。
 7. Compaction 深化：等 `MemoryCompactionServiceTests` 的并行改动归属明确后再接。
-8. Maintenance Micrometer Counter / Timer：扩展 `MicrometerObservationAdapter` 暴露 stage 级别专属指标（compaction candidates、alias regions、gc derived index cleanups）。
+8. ~~Maintenance Micrometer Counter / Timer：扩展 `MicrometerObservationAdapter` 暴露 stage 级别专属指标（compaction candidates、alias regions、gc derived index cleanups）。~~ 已通过 `ObservationEvent.amount` 字段叠加并由 maintenance service 发射，无需 adapter 侧专属代码改动。
 
 ## 8. 可用 subagents 的建议
 

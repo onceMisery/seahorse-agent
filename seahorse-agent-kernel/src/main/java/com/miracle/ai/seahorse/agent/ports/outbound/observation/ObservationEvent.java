@@ -26,15 +26,23 @@ import java.util.Objects;
  *
  * @param name       事件名称
  * @param occurredAt 发生时间
+ * @param amount     事件累计幅度（默认 1，表示单次发生；用于上报 batch 计数等场景）
  * @param attributes 事件属性
  */
-public record ObservationEvent(String name, Instant occurredAt, Map<String, String> attributes) {
+public record ObservationEvent(String name, Instant occurredAt, long amount, Map<String, String> attributes) {
+
+    public static final long DEFAULT_AMOUNT = 1L;
+
+    public ObservationEvent(String name, Instant occurredAt, Map<String, String> attributes) {
+        this(name, occurredAt, DEFAULT_AMOUNT, attributes);
+    }
 
     public ObservationEvent {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("name must not be blank");
         }
         occurredAt = Objects.requireNonNullElseGet(occurredAt, Instant::now);
+        amount = Math.max(0L, amount);
         attributes = Map.copyOf(Objects.requireNonNullElse(attributes, Map.of()));
     }
 }

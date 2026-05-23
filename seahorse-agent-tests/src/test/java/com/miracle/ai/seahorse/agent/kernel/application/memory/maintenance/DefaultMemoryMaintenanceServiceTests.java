@@ -33,6 +33,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunR
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -392,6 +396,83 @@ class DefaultMemoryMaintenanceServiceTests {
         assertThat(hugeAggregate.limit()).isEqualTo(MemoryMaintenanceRunAggregate.MAX_LIMIT);
     }
 
+    @Test
+    void shouldEmitMaintenanceObservationEventsForRunAndStageCounts() {
+        RecordingGarbageCollectionService garbageCollectionService = new RecordingGarbageCollectionService();
+        RecordingAliasResolutionService aliasResolutionService = new RecordingAliasResolutionService();
+        RecordingCompactionService compactionService = new RecordingCompactionService();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                garbageCollectionService,
+                compactionService,
+                aliasResolutionService,
+                MemoryMaintenanceRunRepositoryPort.noop(),
+                MemoryTraceRecorder.noop(),
+                observationPort,
+                true,
+                true,
+                true);
+
+        service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "scheduled-maintenance",
+                true,
+                true,
+                true));
+
+        assertThat(observationPort.events).isNotEmpty();
+        ObservationEvent runEvent = observationPort.findFirst(DefaultMemoryMaintenanceService.OBSERVATION_RUN_EVENT);
+        assertThat(runEvent.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT);
+        assertThat(runEvent.attributes())
+                .containsEntry(DefaultMemoryMaintenanceService.OBSERVATION_ATTR_STATUS,
+                        MemoryMaintenanceRunRecord.STATUS_SUCCEEDED);
+        assertThat(observationPort.totalForStage(DefaultMemoryMaintenanceService.STAGE_COMPACTION_SCANNED))
+                .isEqualTo(1L);
+        assertThat(observationPort.totalForStage(DefaultMemoryMaintenanceService.STAGE_COMPACTION_GROUP))
+                .isEqualTo(1L);
+        assertThat(observationPort.totalForStage(DefaultMemoryMaintenanceService.STAGE_COMPACTION_FRAGMENT))
+                .isEqualTo(2L);
+        assertThat(observationPort.totalForStage(DefaultMemoryMaintenanceService.STAGE_ALIAS_SCANNED))
+                .isEqualTo(2L);
+        assertThat(observationPort.totalForStage(DefaultMemoryMaintenanceService.STAGE_ALIAS_NORMALIZED))
+                .isEqualTo(1L);
+        assertThat(observationPort.totalForStage(DefaultMemoryMaintenanceService.STAGE_GC_SCANNED))
+                .isEqualTo(1L);
+        assertThat(observationPort.totalForStage(DefaultMemoryMaintenanceService.STAGE_GC_ENQUEUED))
+                .isEqualTo(1L);
+        assertThat(observationPort.totalForStage(DefaultMemoryMaintenanceService.STAGE_GC_MARKED))
+                .isEqualTo(1L);
+    }
+
+    @Test
+    void shouldSkipObservationStageEventsWithZeroAmount() {
+        RecordingGarbageCollectionService garbageCollectionService = new RecordingGarbageCollectionService();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                garbageCollectionService,
+                null,
+                null,
+                MemoryMaintenanceRunRepositoryPort.noop(),
+                MemoryTraceRecorder.noop(),
+                observationPort,
+                false,
+                false,
+                false);
+
+        service.runMaintenance(new MemoryMaintenanceRunCommand(
+                "manual-maintenance",
+                true,
+                true,
+                true));
+
+        ObservationEvent runEvent = observationPort.findFirst(DefaultMemoryMaintenanceService.OBSERVATION_RUN_EVENT);
+        assertThat(runEvent.attributes())
+                .containsEntry(DefaultMemoryMaintenanceService.OBSERVATION_ATTR_STATUS,
+                        MemoryMaintenanceRunRecord.STATUS_SUCCEEDED_WITH_WARNINGS);
+        assertThat(observationPort.events)
+                .filteredOn(event -> event.name().equals(DefaultMemoryMaintenanceService.OBSERVATION_STAGE_EVENT))
+                .isEmpty();
+    }
+
     private static MemoryMaintenanceRunRecord maintenanceRunRecord(String runId,
                                                                    String status,
                                                                    int compactionScanned,
@@ -524,6 +605,47 @@ class DefaultMemoryMaintenanceServiceTests {
         @Override
         public MemoryMaintenanceRunPage pageMaintenanceRuns(MemoryMaintenanceRunQuery query) {
             return new MemoryMaintenanceRunPage(records, records.size(), query.size(), query.current(), 1);
+        }
+    }
+
+    private static class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
+        }
+
+        ObservationEvent findFirst(String name) {
+            return events.stream()
+                    .filter(event -> event.name().equals(name))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError(
+                            "Observation event " + name + " not found among " + events));
+        }
+
+        long totalForStage(String stage) {
+            return events.stream()
+                    .filter(event -> event.name().equals(DefaultMemoryMaintenanceService.OBSERVATION_STAGE_EVENT))
+                    .filter(event -> stage.equals(event.attributes()
+                            .get(DefaultMemoryMaintenanceService.OBSERVATION_ATTR_STAGE)))
+                    .mapToLong(ObservationEvent::amount)
+                    .sum();
         }
     }
 }

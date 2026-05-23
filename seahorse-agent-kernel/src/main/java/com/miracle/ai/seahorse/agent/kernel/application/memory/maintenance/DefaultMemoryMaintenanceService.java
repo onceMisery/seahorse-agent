@@ -31,6 +31,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunR
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -42,11 +44,27 @@ import java.util.UUID;
 
 public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInboundPort {
 
+    static final String OBSERVATION_RUN_EVENT = "memory-maintenance-run";
+    static final String OBSERVATION_STAGE_EVENT = "memory-maintenance-stage";
+    static final String OBSERVATION_ATTR_STATUS = "status";
+    static final String OBSERVATION_ATTR_STAGE = "stage";
+    static final String STAGE_COMPACTION_SCANNED = "compaction.scanned";
+    static final String STAGE_COMPACTION_GROUP = "compaction.group";
+    static final String STAGE_COMPACTION_FRAGMENT = "compaction.fragment";
+    static final String STAGE_ALIAS_SCANNED = "alias.scanned";
+    static final String STAGE_ALIAS_NORMALIZED = "alias.normalized";
+    static final String STAGE_ALIAS_DICTIONARY = "alias.dictionary";
+    static final String STAGE_ALIAS_SKIPPED = "alias.skipped";
+    static final String STAGE_GC_SCANNED = "gc.scanned";
+    static final String STAGE_GC_ENQUEUED = "gc.enqueued";
+    static final String STAGE_GC_MARKED = "gc.marked";
+
     private final MemoryGarbageCollectionService garbageCollectionService;
     private final MemoryCompactionService compactionService;
     private final MemoryAliasResolutionService aliasResolutionService;
     private final MemoryMaintenanceRunRepositoryPort maintenanceRunRepositoryPort;
     private final MemoryTraceRecorder traceRecorder;
+    private final ObservationPort observationPort;
     private final boolean compactionEnabled;
     private final boolean aliasEnabled;
     private final boolean garbageCollectionEnabled;
@@ -104,6 +122,26 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                                            boolean compactionEnabled,
                                            boolean aliasEnabled,
                                            boolean garbageCollectionEnabled) {
+        this(garbageCollectionService,
+                compactionService,
+                aliasResolutionService,
+                maintenanceRunRepositoryPort,
+                traceRecorder,
+                ObservationPort.noop(),
+                compactionEnabled,
+                aliasEnabled,
+                garbageCollectionEnabled);
+    }
+
+    public DefaultMemoryMaintenanceService(MemoryGarbageCollectionService garbageCollectionService,
+                                           MemoryCompactionService compactionService,
+                                           MemoryAliasResolutionService aliasResolutionService,
+                                           MemoryMaintenanceRunRepositoryPort maintenanceRunRepositoryPort,
+                                           MemoryTraceRecorder traceRecorder,
+                                           ObservationPort observationPort,
+                                           boolean compactionEnabled,
+                                           boolean aliasEnabled,
+                                           boolean garbageCollectionEnabled) {
         this.garbageCollectionService = garbageCollectionService;
         this.compactionService = compactionService;
         this.aliasResolutionService = aliasResolutionService;
@@ -111,6 +149,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 maintenanceRunRepositoryPort,
                 MemoryMaintenanceRunRepositoryPort::noop);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
+        this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
         this.compactionEnabled = compactionEnabled;
         this.aliasEnabled = aliasEnabled;
         this.garbageCollectionEnabled = garbageCollectionEnabled;
@@ -183,6 +222,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 Instant.now());
         persistRunRecord(result);
         recordTrace(result, compactionResult, aliasResolutionResult, garbageCollectionResult);
+        recordObservation(result, compactionResult, aliasResolutionResult, garbageCollectionResult);
         return result;
     }
 
@@ -331,6 +371,49 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
                 "run",
                 details,
                 result.executedAt()));
+    }
+
+    private void recordObservation(MemoryMaintenanceRunResult result,
+                                   MemoryCompactionResult compactionResult,
+                                   MemoryAliasResolutionRunResult aliasResolutionResult,
+                                   MemoryGarbageCollectionResult garbageCollectionResult) {
+        try {
+            Instant occurredAt = result.executedAt();
+            observationPort.recordEvent(new ObservationEvent(
+                    OBSERVATION_RUN_EVENT,
+                    occurredAt,
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.of(OBSERVATION_ATTR_STATUS, status(result))));
+            if (compactionResult != null) {
+                emitStage(occurredAt, STAGE_COMPACTION_SCANNED, compactionResult.scannedGroupCount());
+                emitStage(occurredAt, STAGE_COMPACTION_GROUP, compactionResult.compactedGroupCount());
+                emitStage(occurredAt, STAGE_COMPACTION_FRAGMENT, compactionResult.compactedFragmentCount());
+            }
+            if (aliasResolutionResult != null) {
+                emitStage(occurredAt, STAGE_ALIAS_SCANNED, aliasResolutionResult.scannedCount());
+                emitStage(occurredAt, STAGE_ALIAS_NORMALIZED, aliasResolutionResult.normalizedCount());
+                emitStage(occurredAt, STAGE_ALIAS_DICTIONARY, aliasResolutionResult.dictionaryMatchCount());
+                emitStage(occurredAt, STAGE_ALIAS_SKIPPED, aliasResolutionResult.skippedCount());
+            }
+            if (garbageCollectionResult != null) {
+                emitStage(occurredAt, STAGE_GC_SCANNED, garbageCollectionResult.scannedCount());
+                emitStage(occurredAt, STAGE_GC_ENQUEUED, garbageCollectionResult.enqueuedDeleteTaskCount());
+                emitStage(occurredAt, STAGE_GC_MARKED, garbageCollectionResult.markedIndexDeletedCount());
+            }
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change maintenance execution semantics.
+        }
+    }
+
+    private void emitStage(Instant occurredAt, String stage, int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        observationPort.recordEvent(new ObservationEvent(
+                OBSERVATION_STAGE_EVENT,
+                occurredAt,
+                amount,
+                Map.of(OBSERVATION_ATTR_STAGE, stage)));
     }
 
     private String status(MemoryMaintenanceRunResult result) {
