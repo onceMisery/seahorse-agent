@@ -18,9 +18,12 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditCompletion;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditEntry;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditRecord;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQuery;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -101,6 +104,54 @@ class JdbcToolInvocationAuditRepositoryAdapterTests {
         long count = adapter.countRequestedCalls("run-1", "agent-1", "version-1", "weather");
 
         assertThat(count).isEqualTo(2L);
+    }
+
+    @Test
+    void shouldPageToolInvocationAuditEntriesByFilters() {
+        DriverManagerDataSource dataSource = dataSource("tool-invocation-query");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createToolInvocationSchema(jdbcTemplate);
+        JdbcToolInvocationAuditRepositoryAdapter adapter = new JdbcToolInvocationAuditRepositoryAdapter(dataSource);
+        Instant startedAt = Instant.parse("2026-05-23T00:00:00Z");
+
+        adapter.recordRequested(record("invocation-1", "run-1", "agent-1", "version-1", "weather", startedAt));
+        adapter.recordDecision(new ToolInvocationAuditDecision(
+                "invocation-1",
+                "decision-1",
+                ToolInvocationStatus.ALLOWED));
+        adapter.recordCompleted(new ToolInvocationAuditCompletion(
+                "invocation-1",
+                ToolInvocationStatus.SUCCEEDED,
+                "length=16",
+                null,
+                startedAt.plusSeconds(1)));
+        adapter.recordRequested(record("invocation-2", "run-1", "agent-1", "version-1", "weather", startedAt.plusSeconds(2)));
+        adapter.recordCompleted(new ToolInvocationAuditCompletion(
+                "invocation-2",
+                ToolInvocationStatus.FAILED,
+                null,
+                "boom",
+                startedAt.plusSeconds(3)));
+        adapter.recordRequested(record("invocation-3", "run-2", "agent-2", "version-1", "weather", startedAt.plusSeconds(4)));
+
+        ToolInvocationAuditPage page = adapter.page(new ToolInvocationAuditQuery(
+                "tenant-1",
+                "agent-1",
+                "version-1",
+                "run-1",
+                "weather",
+                ToolInvocationStatus.SUCCEEDED,
+                1L,
+                10L));
+
+        assertThat(page.total()).isEqualTo(1L);
+        assertThat(page.pages()).isEqualTo(1L);
+        assertThat(page.records()).hasSize(1);
+        ToolInvocationAuditEntry record = page.records().get(0);
+        assertThat(record.invocationId()).isEqualTo("invocation-1");
+        assertThat(record.status()).isEqualTo(ToolInvocationStatus.SUCCEEDED);
+        assertThat(record.policyDecisionId()).isEqualTo("decision-1");
+        assertThat(record.resultSummary()).isEqualTo("length=16");
     }
 
     private DriverManagerDataSource dataSource(String name) {

@@ -21,15 +21,18 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAge
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCatalogManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolInvocationAuditQueryService;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -62,15 +65,18 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(ToolCatalogRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentToolBindingRepositoryPort.class);
                     assertThat(context).hasSingleBean(ToolInvocationAuditPort.class);
+                    assertThat(context).hasSingleBean(ToolInvocationAuditQueryPort.class);
                     assertThat(context).hasSingleBean(ToolInvocationUsagePort.class);
                     assertThat(context).hasSingleBean(AgentDefinitionInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunInboundPort.class);
                     assertThat(context).hasSingleBean(ToolCatalogManagementInboundPort.class);
                     assertThat(context).hasSingleBean(AgentToolBindingManagementInboundPort.class);
+                    assertThat(context).hasSingleBean(ToolInvocationAuditQueryInboundPort.class);
                     assertThat(context).hasSingleBean(KernelAgentDefinitionService.class);
                     assertThat(context).hasSingleBean(KernelAgentRunService.class);
                     assertThat(context).hasSingleBean(KernelToolCatalogManagementService.class);
                     assertThat(context).hasSingleBean(KernelAgentToolBindingManagementService.class);
+                    assertThat(context).hasSingleBean(KernelToolInvocationAuditQueryService.class);
                 });
     }
 

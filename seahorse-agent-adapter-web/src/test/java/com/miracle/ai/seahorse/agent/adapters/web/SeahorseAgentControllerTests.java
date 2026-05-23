@@ -32,6 +32,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.AgentToolBinding;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditEntry;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionCreateCommand;
@@ -43,8 +45,10 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagem
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingReplaceCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentVersionPublishCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPage;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -267,6 +271,49 @@ class SeahorseAgentControllerTests {
         assertThat(captor.getValue().tools().get(0).maxCallsPerRun()).isEqualTo(3);
     }
 
+    @Test
+    void shouldExposeToolInvocationAuditQueryApi() throws Exception {
+        ToolInvocationAuditQueryInboundPort port = mock(ToolInvocationAuditQueryInboundPort.class);
+        when(port.page(
+                        "tenant-a",
+                        "agent-1",
+                        "agent-1-v1",
+                        "run-1",
+                        "weather_query",
+                        ToolInvocationStatus.SUCCEEDED,
+                        2L,
+                        20L))
+                .thenReturn(new ToolInvocationAuditPage(List.of(invocation()), 1L, 20L, 2L, 1L));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseToolInvocationAuditController(provider(ToolInvocationAuditQueryInboundPort.class, port)))
+                .build();
+
+        mvc.perform(get("/api/tool-invocations")
+                        .param("tenantId", "tenant-a")
+                        .param("agentId", "agent-1")
+                        .param("versionId", "agent-1-v1")
+                        .param("runId", "run-1")
+                        .param("toolId", "weather_query")
+                        .param("status", "SUCCEEDED")
+                        .param("current", "2")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.records[0].invocationId").value("invocation-1"))
+                .andExpect(jsonPath("$.data.records[0].status").value("SUCCEEDED"));
+
+        verify(port).page(
+                "tenant-a",
+                "agent-1",
+                "agent-1-v1",
+                "run-1",
+                "weather_query",
+                ToolInvocationStatus.SUCCEEDED,
+                2L,
+                20L);
+    }
+
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
     }
@@ -320,6 +367,26 @@ class SeahorseAgentControllerTests {
                 "{\"required\":[\"query\"],\"allowed\":[\"query\"]}",
                 "admin-1",
                 NOW);
+    }
+
+    private static ToolInvocationAuditEntry invocation() {
+        return new ToolInvocationAuditEntry(
+                "invocation-1",
+                "run-1",
+                "step-1",
+                "agent-1",
+                "agent-1-v1",
+                "tenant-a",
+                "user-1",
+                "weather_query",
+                "run-1:call-1",
+                ToolInvocationStatus.SUCCEEDED,
+                "decision-1",
+                "keys=[query], size=1",
+                "length=16",
+                null,
+                NOW,
+                NOW.plusSeconds(1));
     }
 
     private static <T> ObjectProvider<T> provider(Class<T> type, T bean) {

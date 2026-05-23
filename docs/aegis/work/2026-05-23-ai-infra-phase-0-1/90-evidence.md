@@ -470,6 +470,96 @@ Remaining Phase 2 work:
 - MCP allowlist registration into the catalog.
 - Tool catalog/binding/audit management APIs.
 
+## 2026-05-23 Phase 2 Tool Invocation audit query API slice
+
+RED/GREEN coverage:
+
+- `KernelToolInvocationAuditQueryServiceTests` first failed because the audit query entry/page/query models, inbound port, outbound query port, and kernel query service did not exist; it then verified admin-only query behavior and filter propagation.
+- `JdbcToolInvocationAuditRepositoryAdapterTests.shouldPageToolInvocationAuditEntriesByFilters` first failed because `JdbcToolInvocationAuditRepositoryAdapter` did not implement `page(ToolInvocationAuditQuery)`; it then verified tenant/agent/version/run/tool/status filters and persisted lifecycle fields.
+- `SeahorseAgentControllerTests.shouldExposeToolInvocationAuditQueryApi` first failed because `SeahorseToolInvocationAuditController` did not exist; it then verified `GET /api/tool-invocations` request parameters and response contract.
+- `SeahorseAgentRegistryAutoConfigurationTests` first failed because `ToolInvocationAuditQueryPort` and `ToolInvocationAuditQueryInboundPort` were not auto-configured; it then verified JDBC query port exposure and kernel query service wiring.
+
+Focused kernel command:
+
+```powershell
+.\mvnw -pl seahorse-agent-kernel '-Dtest=KernelToolInvocationAuditQueryServiceTests' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 2
+- Failures: 0
+- Errors: 0
+- Covered: admin boundary and audit query condition propagation.
+
+Focused JDBC command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-adapter-repository-jdbc -am '-Dtest=JdbcToolInvocationAuditRepositoryAdapterTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 3
+- Failures: 0
+- Errors: 0
+- Covered: audit lifecycle persistence, requested-call usage counting, and filtered audit pagination.
+
+Focused web command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-adapter-web -am '-Dtest=SeahorseAgentControllerTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 5
+- Failures: 0
+- Errors: 0
+- Covered: existing Agent API contracts plus Tool Catalog, Agent tool binding, and Tool Invocation audit query management APIs.
+
+Starter support command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' '-Dmaven.test.skip=true' -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc -am install
+```
+
+Result:
+
+- Exit status: 0
+- Covered: refreshed kernel and JDBC main artifacts for starter-only verification.
+
+Focused starter command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-spring-boot-starter clean test '-Dtest=SeahorseAgentRegistryAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false'
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 1
+- Failures: 0
+- Errors: 0
+- Covered: `ToolInvocationAuditQueryPort` repository exposure and `ToolInvocationAuditQueryInboundPort` kernel service auto-configuration.
+
+Fix boundary:
+
+- `ToolInvocationAuditEntry`, `ToolInvocationAuditQuery`, `ToolInvocationAuditPage`, `ToolInvocationAuditQueryPort`, and `ToolInvocationAuditQueryInboundPort`: added the read-only audit query contract.
+- `KernelToolInvocationAuditQueryService`: added admin-only query access and query condition normalization.
+- `JdbcToolInvocationAuditRepositoryAdapter`: now implements filtered, ordered, paginated audit reads while preserving existing write and usage-count behavior.
+- `SeahorseToolInvocationAuditController`: added `GET /api/tool-invocations` management API.
+- `SeahorseAgentKernelRegistryAutoConfiguration`: auto-configures the audit query service when query storage and current-user ports exist.
+
+Remaining Phase 2 work:
+
+- HITL approval workflow.
+- Resource ACL policy.
+- Output redaction policy.
+
 ## 2026-05-23 Phase 2 Agent tool binding management API slice
 
 RED/GREEN coverage:
