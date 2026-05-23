@@ -189,3 +189,55 @@ CREATE INDEX IF NOT EXISTS idx_sa_approval_request_status
 
 CREATE INDEX IF NOT EXISTS idx_sa_approval_request_run
   ON sa_approval_request(run_id, step_id);
+
+CREATE TABLE IF NOT EXISTS sa_context_pack (
+  context_pack_id VARCHAR(64) PRIMARY KEY,
+  run_id VARCHAR(64) NOT NULL,
+  agent_id VARCHAR(64),
+  version_id VARCHAR(64),
+  tenant_id VARCHAR(64) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  task_goal VARCHAR(1000) NOT NULL,
+  budget_tokens INT NOT NULL,
+  item_count INT NOT NULL,
+  created_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_context_pack_run
+  ON sa_context_pack(run_id, created_at);
+
+CREATE TABLE IF NOT EXISTS sa_context_item (
+  item_id VARCHAR(64) PRIMARY KEY,
+  context_pack_id VARCHAR(64) NOT NULL,
+  source_type VARCHAR(32) NOT NULL,
+  source_id VARCHAR(128) NOT NULL,
+  content TEXT NOT NULL,
+  summary VARCHAR(1000),
+  score DOUBLE PRECISION,
+  confidence DOUBLE PRECISION,
+  sensitivity VARCHAR(32) NOT NULL,
+  acl_decision_id VARCHAR(64) NOT NULL,
+  citation_json TEXT NOT NULL,
+  estimated_tokens INT NOT NULL,
+  expires_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_context_item_pack
+  ON sa_context_item(context_pack_id);
+
+CREATE TABLE IF NOT EXISTS sa_access_decision_log (
+  decision_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  subject_type VARCHAR(32) NOT NULL,
+  subject_id VARCHAR(64) NOT NULL,
+  action VARCHAR(32) NOT NULL,
+  resource_type VARCHAR(64) NOT NULL,
+  resource_id VARCHAR(128) NOT NULL,
+  effect VARCHAR(32) NOT NULL,
+  reason_code VARCHAR(128),
+  created_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_access_decision_resource
+  ON sa_access_decision_log(tenant_id, resource_type, resource_id, created_at);

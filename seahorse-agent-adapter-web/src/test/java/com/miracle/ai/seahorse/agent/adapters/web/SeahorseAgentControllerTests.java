@@ -21,6 +21,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItemSourceType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentStatus;
@@ -54,6 +58,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentVersionPublishComm
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalModifyCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
@@ -409,6 +414,32 @@ class SeahorseAgentControllerTests {
         assertThat(modifyCaptor.getValue().decisionComment()).isEqualTo("Reduced scope");
     }
 
+    @Test
+    void shouldExposeContextPackQueryApi() throws Exception {
+        ContextPackQueryInboundPort port = mock(ContextPackQueryInboundPort.class);
+        when(port.findById("context-pack-1")).thenReturn(Optional.of(contextPack()));
+        when(port.listItems("context-pack-1")).thenReturn(List.of(contextItem()));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseContextPackController(provider(ContextPackQueryInboundPort.class, port))).build();
+
+        mvc.perform(get("/api/context-packs/context-pack-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.contextPackId").value("context-pack-1"))
+                .andExpect(jsonPath("$.data.runId").value("run-1"))
+                .andExpect(jsonPath("$.data.items[0].aclDecisionId").value("decision-doc-1"));
+
+        mvc.perform(get("/api/context-packs/context-pack-1/items"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].itemId").value("item-1"))
+                .andExpect(jsonPath("$.data[0].sourceType").value("RAG_CHUNK"))
+                .andExpect(jsonPath("$.data[0].sensitivity").value("INTERNAL"));
+
+        verify(port).findById("context-pack-1");
+        verify(port).listItems("context-pack-1");
+    }
+
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
     }
@@ -518,6 +549,38 @@ class SeahorseAgentControllerTests {
                 status == ApprovalRequestStatus.PENDING ? null : "admin-1",
                 status == ApprovalRequestStatus.PENDING ? null : NOW.plusSeconds(60),
                 status == ApprovalRequestStatus.PENDING ? null : "decided");
+    }
+
+    private static ContextPack contextPack() {
+        return new ContextPack(
+                "context-pack-1",
+                "run-1",
+                "agent-1",
+                "version-1",
+                "tenant-a",
+                "user-1",
+                "answer question",
+                300,
+                List.of(contextItem()),
+                NOW);
+    }
+
+    private static ContextItem contextItem() {
+        return new ContextItem(
+                "item-1",
+                "context-pack-1",
+                ContextItemSourceType.RAG_CHUNK,
+                "doc-1",
+                "content for doc-1",
+                "summary for doc-1",
+                0.91,
+                0.88,
+                ContextSensitivity.INTERNAL,
+                "decision-doc-1",
+                "{\"sourceId\":\"doc-1\"}",
+                64,
+                null,
+                NOW);
     }
 
     private static <T> ObjectProvider<T> provider(Class<T> type, T bean) {
