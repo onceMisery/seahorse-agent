@@ -100,6 +100,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private static final String TRACE_KEY_FINAL_TOP_K = "finalTopK";
     private static final String TRACE_KEY_FUSED_CANDIDATE_IDS = "fusedCandidateIds";
     private static final String TRACE_KEY_FUSED_COUNT = "fusedCount";
+    private static final String TRACE_KEY_FUSION_EXPLANATIONS = "fusionExplanations";
     private static final String TRACE_KEY_INPUT_CANDIDATE_IDS = "inputCandidateIds";
     private static final String TRACE_KEY_INPUT_COUNT = "inputCount";
     private static final String TRACE_KEY_LATENCY_MS = "latencyMs";
@@ -116,6 +117,11 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private static final String FILTER_MEMORY_ALIAS_CANONICAL_NAME = "memoryAliasCanonicalName";
     private static final String FILTER_MEMORY_ALIAS_ENTITY_TYPE = "memoryAliasEntityType";
     private static final String FILTER_MEMORY_ALIAS_CONFIDENCE_LEVEL = "memoryAliasConfidenceLevel";
+    private static final String FUSION_METADATA_CHANNEL_CONTRIBUTIONS = "channelContributions";
+    private static final String FUSION_METADATA_CHANNEL_RANKS = "channelRanks";
+    private static final String FUSION_METADATA_CHANNEL_SCORES = "channelScores";
+    private static final String FUSION_METADATA_STRATEGY = "fusionStrategy";
+    private static final String FUSION_METADATA_SOURCE_CHANNELS = "sourceChannels";
 
     private final ShortTermMemoryPort shortTermPort;
     private final LongTermMemoryPort longTermPort;
@@ -600,6 +606,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         details.put(TRACE_KEY_FINAL_TOP_K, finalTopK);
         details.put(TRACE_KEY_INPUT_CANDIDATE_IDS, candidateIdsFromChannelResults(channelResults));
         details.put(TRACE_KEY_FUSED_CANDIDATE_IDS, candidateIds(fusedCandidates));
+        details.put(TRACE_KEY_FUSION_EXPLANATIONS, fusionExplanations(fusedCandidates));
         traceRecorder.record(new MemoryTraceEvent(
                 "",
                 DEFAULT_TENANT_ID,
@@ -688,6 +695,33 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         putIfPresent(details, TRACE_KEY_ALIAS_ENTITY_TYPE, filters.get(FILTER_MEMORY_ALIAS_ENTITY_TYPE));
         putIfPresent(details, TRACE_KEY_ALIAS_CONFIDENCE_LEVEL, filters.get(FILTER_MEMORY_ALIAS_CONFIDENCE_LEVEL));
         return details;
+    }
+
+    private List<Map<String, Object>> fusionExplanations(List<MemoryRecallCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> explanations = new ArrayList<>();
+        for (MemoryRecallCandidate candidate : candidates) {
+            if (candidate == null || candidate.memoryId().isBlank()) {
+                continue;
+            }
+            explanations.add(fusionExplanation(candidate));
+        }
+        return explanations;
+    }
+
+    private Map<String, Object> fusionExplanation(MemoryRecallCandidate candidate) {
+        Map<String, Object> metadata = candidate.metadata();
+        Map<String, Object> explanation = new LinkedHashMap<>();
+        explanation.put("memoryId", candidate.memoryId());
+        putIfPresent(explanation, FUSION_METADATA_STRATEGY, metadata.get(FUSION_METADATA_STRATEGY));
+        putIfPresent(explanation, FUSION_METADATA_SOURCE_CHANNELS, metadata.get(FUSION_METADATA_SOURCE_CHANNELS));
+        putIfPresent(explanation, FUSION_METADATA_CHANNEL_RANKS, metadata.get(FUSION_METADATA_CHANNEL_RANKS));
+        putIfPresent(explanation, FUSION_METADATA_CHANNEL_SCORES, metadata.get(FUSION_METADATA_CHANNEL_SCORES));
+        putIfPresent(explanation, FUSION_METADATA_CHANNEL_CONTRIBUTIONS,
+                metadata.get(FUSION_METADATA_CHANNEL_CONTRIBUTIONS));
+        return explanation;
     }
 
     private void putIfPresent(Map<String, Object> target, String key, Object value) {

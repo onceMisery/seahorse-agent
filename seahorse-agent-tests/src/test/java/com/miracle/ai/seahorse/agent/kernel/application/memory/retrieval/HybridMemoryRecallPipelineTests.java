@@ -346,6 +346,15 @@ class HybridMemoryRecallPipelineTests {
                             .containsEntry("inputCandidateIds", List.of("semantic-k8s", "semantic-project"))
                             .containsEntry("fusedCandidateIds", List.of("semantic-k8s", "semantic-project"))
                             .containsEntry("queryChangedByAlias", true);
+                    List<Map<String, Object>> explanations = fusionExplanations(event);
+                    assertThat(explanations).hasSize(2);
+                    assertThat(explanations.get(0))
+                            .containsEntry("memoryId", "semantic-k8s")
+                            .containsEntry("fusionStrategy", "RRF")
+                            .containsEntry("sourceChannels", List.of("keyword"))
+                            .containsEntry("channelRanks", Map.of("keyword", 1));
+                    assertThat(explanations.get(0).get("channelContributions"))
+                            .isInstanceOf(Map.class);
                     assertThat(event.details()).doesNotContainValue(rawQuery);
                 });
         assertThat(traceRecorder.events)
@@ -540,6 +549,11 @@ class HybridMemoryRecallPipelineTests {
                 content,
                 Map.of("userId", "user-1", "importanceScore", 0.8D, "confidenceLevel", 0.9D),
                 Instant.parse("2026-05-21T00:00:00Z"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> fusionExplanations(MemoryTraceEvent event) {
+        return (List<Map<String, Object>>) event.details().get("fusionExplanations");
     }
 
     private static class RecordingMemoryStore
