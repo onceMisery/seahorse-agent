@@ -96,7 +96,18 @@ public record MemoryRefinerFeedbackExportRecord(
         if (sample.reviewStatus() == MemoryReviewStatus.REJECTED) {
             return refinerOutput(REFINER_ACTION_IGNORE, "", Map.of());
         }
-        return refinerOutput(REFINER_ACTION_ADD, sample.chosenContent(), sample.chosenMetadata());
+        return refinerOutput(appliedAction(sample), sample.chosenContent(), sample.chosenMetadata());
+    }
+
+    private static String appliedAction(MemoryReviewFeedbackSample sample) {
+        try {
+            MemoryIngestionAction action = MemoryIngestionAction.valueOf(sample.requestedAction());
+            return action == MemoryIngestionAction.REVIEW || action == MemoryIngestionAction.IGNORE
+                    ? REFINER_ACTION_ADD
+                    : action.name();
+        } catch (IllegalArgumentException ex) {
+            return REFINER_ACTION_ADD;
+        }
     }
 
     private static Map<String, Object> refinerOutput(String action, String content, Map<String, Object> metadata) {

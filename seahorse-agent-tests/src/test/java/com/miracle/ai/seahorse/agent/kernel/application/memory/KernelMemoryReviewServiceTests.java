@@ -490,6 +490,69 @@ class KernelMemoryReviewServiceTests {
     }
 
     @Test
+    void shouldPreserveAppliedReviewActionWhenExportingRefinerTrainingRecords() {
+        RecordingReviewFeedbackRepository feedbackRepository = new RecordingReviewFeedbackRepository();
+        feedbackRepository.save(new MemoryReviewFeedbackSample(
+                "sample-update",
+                "review-update",
+                "op-update",
+                "tenant-1",
+                "user-1",
+                MemoryIngestionAction.UPDATE.name(),
+                MemoryReviewStatus.APPLIED,
+                "auditor",
+                "updated stale memory",
+                "SHORT_TERM",
+                "SHORT_TERM_MEMORY",
+                "memory-1",
+                "old content",
+                "updated content",
+                Map.of("targetMemoryId", "memory-1"),
+                Map.of("targetMemoryId", "memory-1"),
+                List.of("msg-1"),
+                "memory-1",
+                "SHORT_TERM",
+                Instant.EPOCH));
+        feedbackRepository.save(new MemoryReviewFeedbackSample(
+                "sample-delete",
+                "review-delete",
+                "op-delete",
+                "tenant-1",
+                "user-1",
+                MemoryIngestionAction.DELETE.name(),
+                MemoryReviewStatus.APPLIED,
+                "auditor",
+                "deleted stale memory",
+                "SHORT_TERM",
+                "SHORT_TERM_MEMORY",
+                "memory-2",
+                "obsolete content",
+                "",
+                Map.of("targetMemoryId", "memory-2"),
+                Map.of("targetMemoryId", "memory-2"),
+                List.of("msg-2"),
+                "memory-2",
+                "SHORT_TERM",
+                Instant.EPOCH.plusSeconds(1)));
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                new InMemoryReviewRepository(),
+                new RecordingIngestionWorkflow(MemoryIngestionResult.ignored("noop")),
+                feedbackRepository);
+
+        List<MemoryRefinerFeedbackExportRecord> records = service.exportRefinerFeedbackSamples(
+                "tenant-1", "user-1", MemoryReviewStatus.APPLIED, "SHORT_TERM_MEMORY", "", 10);
+
+        assertThat(records).extracting(MemoryRefinerFeedbackExportRecord::sampleId)
+                .containsExactly("sample-update", "sample-delete");
+        assertThat(records.get(0).chosenOutput())
+                .containsEntry("action", MemoryIngestionAction.UPDATE.name())
+                .containsEntry("content", "updated content");
+        assertThat(records.get(1).chosenOutput())
+                .containsEntry("action", MemoryIngestionAction.DELETE.name())
+                .containsEntry("content", "");
+    }
+
+    @Test
     void shouldRecordTraceEventsForReviewDecisions() {
         InMemoryReviewRepository repository = new InMemoryReviewRepository();
         repository.put(review("review-1", MemoryReviewStatus.PENDING, "original"));
