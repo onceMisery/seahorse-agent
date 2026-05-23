@@ -70,6 +70,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenHarnessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceQuery;
@@ -1610,6 +1611,50 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.results[0].retrievedMemoryIds[0]").value("mem-pip"))
                 .andExpect(jsonPath("$.data.results[0].precision").value(1.0D))
                 .andExpect(jsonPath("$.data.results[0].noiseRate").value(0.0D));
+    }
+
+    @Test
+    void shouldKeepMemoryRecallGoldenHarnessContract() throws Exception {
+        MemoryRecallGoldenHarnessInboundPort harnessPort = mock(MemoryRecallGoldenHarnessInboundPort.class);
+        when(harnessPort.listProfiles()).thenReturn(List.of("smoke", "regression"));
+        when(harnessPort.runProfile("smoke")).thenReturn(new MemoryRecallEvaluationReport(
+                1,
+                1,
+                1,
+                1.0D,
+                1.0D,
+                1.0D,
+                1.0D,
+                0.0D,
+                List.of(new MemoryRecallEvaluationResult(
+                        "smoke-1",
+                        "Pulsar PIP-459",
+                        List.of("mem-pip"),
+                        List.of("mem-pip"),
+                        List.of(),
+                        true,
+                        true,
+                        1.0D,
+                        1.0D,
+                        1.0D,
+                        0.0D))));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseMemoryRecallGoldenHarnessController(
+                        provider(MemoryRecallGoldenHarnessInboundPort.class, harnessPort))).build();
+
+        mvc.perform(get("/memories/recall-quality/golden/profiles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data[0]").value("smoke"))
+                .andExpect(jsonPath("$.data[1]").value("regression"));
+
+        mvc.perform(post("/memories/recall-quality/golden/profiles/smoke/run"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.caseCount").value(1))
+                .andExpect(jsonPath("$.data.hitRate").value(1.0D))
+                .andExpect(jsonPath("$.data.results[0].caseId").value("smoke-1"));
     }
 
     @Test

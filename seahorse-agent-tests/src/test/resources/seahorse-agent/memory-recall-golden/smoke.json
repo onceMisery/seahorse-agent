@@ -1,0 +1,20 @@
+{
+  "name": "smoke",
+  "topK": 3,
+  "cases": [
+    {
+      "caseId": "smoke-1",
+      "userId": "user-1",
+      "conversationId": "conv-1",
+      "query": "Pulsar PIP-459",
+      "expectedMemoryIds": ["mem-pip", "mem-java"]
+    },
+    {
+      "caseId": "smoke-2",
+      "userId": "user-1",
+      "conversationId": "conv-1",
+      "query": "K8s alias",
+      "expectedMemoryIds": ["mem-kubernetes"]
+    }
+  ]
+}

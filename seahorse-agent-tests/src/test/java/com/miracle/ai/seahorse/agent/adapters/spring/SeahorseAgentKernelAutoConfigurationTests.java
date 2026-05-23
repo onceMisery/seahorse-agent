@@ -99,6 +99,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenHarnessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataDictionaryInboundPort;
@@ -194,6 +195,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallGoldenCaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.RefinedMemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
@@ -533,6 +535,8 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(context).hasSingleBean(MemoryManagementInboundPort.class);
                     assertThat(context).hasSingleBean(MemoryGovernanceInboundPort.class);
                     assertThat(context).hasSingleBean(MemoryRecallEvaluationInboundPort.class);
+                    assertThat(context).hasSingleBean(MemoryRecallGoldenHarnessInboundPort.class);
+                    assertThat(context).hasSingleBean(MemoryRecallGoldenCaseRepositoryPort.class);
                     assertThat(context).hasSingleBean(MemoryTraceInboundPort.class);
                     assertThat(context).hasSingleBean(SeahorseMemoryGovernanceJob.class);
                     assertThat(context).hasSingleBean(MemoryAggregationPolicy.class);

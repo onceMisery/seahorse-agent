@@ -1,0 +1,13 @@
+{
+  "name": "regression",
+  "topK": 10,
+  "cases": [
+    {
+      "caseId": "reg-1",
+      "userId": "user-2",
+      "conversationId": "conv-9",
+      "query": "Spring Boot reactive transactions",
+      "expectedMemoryIds": ["mem-springboot", "mem-reactive"]
+    }
+  ]
+}

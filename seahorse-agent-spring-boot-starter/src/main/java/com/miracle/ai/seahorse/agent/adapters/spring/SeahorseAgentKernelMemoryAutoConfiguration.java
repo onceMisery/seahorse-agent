@@ -50,11 +50,13 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.Memor
 import com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance.MemoryGarbageCollectionService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.GraphMemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.outbox.KeywordMemoryOutboxTaskHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.ClasspathMemoryRecallGoldenCaseRepository;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.GraphMemoryRecallChannel;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.HybridMemoryRecallPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.KeywordMemoryRecallChannel;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.LayeredScoredMemoryVectorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.MemoryRecallEvaluationService;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.MemoryRecallGoldenHarnessService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.ModelMemoryRecallReranker;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.RrfMemoryFusion;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.VectorMemoryRecallChannel;
@@ -65,6 +67,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenHarnessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
@@ -98,6 +101,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshotRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallChannelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallGoldenCaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallFusionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRerankerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
@@ -605,6 +609,29 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<ObservationPort> observationPort) {
         return new MemoryRecallEvaluationService(
                 retrievalPipelinePort,
+                observationPort.getIfAvailable(ObservationPort::noop));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MemoryRecallGoldenCaseRepositoryPort.class)
+    public ClasspathMemoryRecallGoldenCaseRepository seahorseClasspathGoldenCaseRepository(
+            ObjectProvider<ObjectMapper> objectMapper) {
+        return new ClasspathMemoryRecallGoldenCaseRepository(
+                objectMapper.getIfAvailable(ObjectMapper::new),
+                Thread.currentThread().getContextClassLoader(),
+                ClasspathMemoryRecallGoldenCaseRepository.DEFAULT_ROOT);
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryRetrievalPipelinePort.class)
+    @ConditionalOnMissingBean(MemoryRecallGoldenHarnessInboundPort.class)
+    public MemoryRecallGoldenHarnessService seahorseMemoryRecallGoldenHarnessService(
+            MemoryRecallEvaluationInboundPort evaluationPort,
+            ObjectProvider<MemoryRecallGoldenCaseRepositoryPort> repositoryPort,
+            ObjectProvider<ObservationPort> observationPort) {
+        return new MemoryRecallGoldenHarnessService(
+                repositoryPort.getIfAvailable(MemoryRecallGoldenCaseRepositoryPort::empty),
+                evaluationPort,
                 observationPort.getIfAvailable(ObservationPort::noop));
     }
 
