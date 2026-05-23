@@ -22,6 +22,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunLeaseService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.approval.KernelApprovalManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackBuilderService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCatalogManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolInvocationAuditQueryService;
@@ -31,6 +33,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
@@ -40,6 +44,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingReposi
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestDecisionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ContextPackRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAccessPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -109,6 +115,34 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             AgentCheckpointRepositoryPort agentCheckpointRepositoryPort,
             CurrentUserPort currentUserPort) {
         return new KernelAgentCheckpointQueryService(agentCheckpointRepositoryPort, currentUserPort);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(ResourceAccessPolicyPort.class)
+    public ResourceAccessPolicyPort seahorseResourceAccessPolicyPort() {
+        return ResourceAccessPolicyPort.denyAll();
+    }
+
+    @Bean
+    @ConditionalOnBean({ContextPackRepositoryPort.class, ResourceAccessPolicyPort.class})
+    @ConditionalOnMissingBean(ContextPackBuilderInboundPort.class)
+    public KernelContextPackBuilderService seahorseContextPackBuilderInboundPort(
+            ContextPackRepositoryPort contextPackRepositoryPort,
+            ResourceAccessPolicyPort resourceAccessPolicyPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelContextPackBuilderService(
+                resourceAccessPolicyPort,
+                contextPackRepositoryPort,
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnBean({ContextPackRepositoryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(ContextPackQueryInboundPort.class)
+    public KernelContextPackQueryService seahorseContextPackQueryInboundPort(
+            ContextPackRepositoryPort contextPackRepositoryPort,
+            CurrentUserPort currentUserPort) {
+        return new KernelContextPackQueryService(contextPackRepositoryPort, currentUserPort);
     }
 
     @Bean
