@@ -65,8 +65,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -210,6 +213,33 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     }
 
     @Test
+    void shouldWireResourceAccessIntoCatalogBackedPolicy() {
+        contextRunner.withUserConfiguration(TestCatalogBackedResourceAccessPolicyConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    PolicyDecision decision = context.getBean(ToolPolicyPort.class).decide(new ToolPolicyRequest(
+                            "run-1",
+                            "step-1",
+                            "call-1",
+                            "agent-1",
+                            "version-1",
+                            "tenant-1",
+                            "user-1",
+                            "agent-identity-1",
+                            "memory-write",
+                            Map.of(),
+                            Map.of("knowledgeBaseId", "kb-1"),
+                            "run-1:call-1",
+                            List.of("memory-write"),
+                            true));
+
+                    assertThat(decision.effect()).isEqualTo(PolicyDecision.Effect.DENY);
+                    assertThat(decision.reasonCode()).isEqualTo(ToolPolicyReasonCodes.RESOURCE_FORBIDDEN);
+                });
+    }
+
+    @Test
     void shouldWireApprovalRepositoryIntoToolGateway() {
         contextRunner.withUserConfiguration(TestApprovalGatewayConfiguration.class)
                 .run(context -> {
@@ -272,6 +302,33 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                     RecordingToolApprovalRequestRepository approvals =
                             context.getBean(RecordingToolApprovalRequestRepository.class);
                     assertThat(approvals.saved).isEmpty();
+                });
+    }
+
+    @Test
+    void shouldWireOutputRedactionIntoToolGateway() {
+        contextRunner.withUserConfiguration(TestOutputRedactionGatewayConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    ToolInvocationResult result = context.getBean(ToolGatewayPort.class)
+                            .invoke(new ToolInvocationRequest(
+                                    "run-1",
+                                    "step-1",
+                                    "call-1",
+                                    "agent-1",
+                                    "version-1",
+                                    "tenant-1",
+                                    "user-1",
+                                    "agent-identity-1",
+                                    "memory-write",
+                                    Map.of(),
+                                    Map.of(),
+                                    "run-1:call-1",
+                                    List.of("memory-write")));
+
+                    assertThat(result.success()).isTrue();
+                    assertThat(result.content()).isEqualTo("token=[REDACTED]");
                 });
     }
 
@@ -416,6 +473,22 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     }
 
     @Configuration(proxyBeanMethods = false)
+    static class TestCatalogBackedResourceAccessPolicyConfiguration
+            extends TestCatalogBackedCallLimitPolicyConfiguration {
+
+        @Bean
+        @Override
+        ToolInvocationUsagePort toolInvocationUsagePort() {
+            return (runId, agentId, versionId, toolId) -> 1L;
+        }
+
+        @Bean
+        ToolResourceAccessPort toolResourceAccessPort() {
+            return request -> ToolResourceAccessDecision.deny("resource denied");
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
     static class TestApprovalGatewayConfiguration {
 
         @Bean
@@ -443,6 +516,30 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Bean
         RecordingToolApprovalRequestRepository toolApprovalRequestRepositoryPort() {
             return new RecordingToolApprovalRequestRepository();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestOutputRedactionGatewayConfiguration {
+
+        @Bean
+        Clock clock() {
+            return FIXED_CLOCK;
+        }
+
+        @Bean
+        ToolRegistryPort toolRegistryPort() {
+            return new SecretToolRegistry();
+        }
+
+        @Bean
+        ToolPolicyPort toolPolicyPort() {
+            return request -> PolicyDecision.allow("allow-1");
+        }
+
+        @Bean
+        ToolOutputRedactionPort toolOutputRedactionPort() {
+            return ToolOutputRedactionPort.basicSecretPatterns();
         }
     }
 
@@ -675,6 +772,21 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Override
         public Optional<ToolPort> find(String toolId) {
             return "memory-write".equals(toolId) ? Optional.of(toolPort) : Optional.empty();
+        }
+    }
+
+    private static final class SecretToolRegistry implements ToolRegistryPort {
+
+        @Override
+        public List<ToolDescriptor> listTools() {
+            return List.of(new ToolDescriptor("memory-write", "Memory Write", "Write memory", "{}"));
+        }
+
+        @Override
+        public Optional<ToolPort> find(String toolId) {
+            return "memory-write".equals(toolId)
+                    ? Optional.of((toolCallId, id, arguments) -> ToolInvocationResult.ok("token=sk-live-secret"))
+                    : Optional.empty();
         }
     }
 

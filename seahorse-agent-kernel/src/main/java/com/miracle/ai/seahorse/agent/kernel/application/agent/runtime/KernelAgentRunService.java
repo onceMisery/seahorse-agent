@@ -121,7 +121,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     @Override
     public AgentRun succeed(String runId) {
         AgentRun current = loadRun(runId);
-        if (isTerminal(current.status()) || current.status() == AgentRunStatus.WAITING_APPROVAL) {
+        if (current.status().isTerminal() || current.status() == AgentRunStatus.WAITING_APPROVAL) {
             return current;
         }
         AgentRun succeeded = current.withStatus(AgentRunStatus.SUCCEEDED, null, null, clock.instant());
@@ -132,7 +132,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     @Override
     public AgentRun fail(String runId, String errorCode, String errorMessage) {
         AgentRun current = loadRun(runId);
-        if (isTerminal(current.status())) {
+        if (current.status().isTerminal()) {
             return current;
         }
         AgentRun failed = current.withStatus(
@@ -159,14 +159,6 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     private AgentRun loadRun(String runId) {
         return runRepository.findRunById(requireText(runId, "runId must not be blank"))
                 .orElseThrow(() -> new IllegalArgumentException("Agent run does not exist"));
-    }
-
-    private boolean isTerminal(AgentRunStatus status) {
-        return status == AgentRunStatus.SUCCEEDED
-                || status == AgentRunStatus.FAILED
-                || status == AgentRunStatus.REJECTED
-                || status == AgentRunStatus.EXPIRED
-                || status == AgentRunStatus.CANCELLED;
     }
 
     private String nextRunId() {

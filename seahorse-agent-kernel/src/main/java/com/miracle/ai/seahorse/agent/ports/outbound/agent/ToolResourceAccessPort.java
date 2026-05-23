@@ -15,23 +15,14 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
+package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
-public enum AgentRunStatus {
-    CREATED,
-    RUNNING,
-    WAITING_APPROVAL,
-    SUCCEEDED,
-    FAILED,
-    REJECTED,
-    EXPIRED,
-    CANCELLED;
+@FunctionalInterface
+public interface ToolResourceAccessPort {
 
-    public boolean isTerminal() {
-        return this == SUCCEEDED
-                || this == FAILED
-                || this == REJECTED
-                || this == EXPIRED
-                || this == CANCELLED;
+    ToolResourceAccessDecision decide(ToolResourceAccessRequest request);
+
+    static ToolResourceAccessPort allowAll() {
+        return request -> ToolResourceAccessDecision.allow();
     }
 }

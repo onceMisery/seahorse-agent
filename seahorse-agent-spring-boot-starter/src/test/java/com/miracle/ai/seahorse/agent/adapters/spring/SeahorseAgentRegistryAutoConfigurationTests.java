@@ -27,12 +27,14 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolInv
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestDecisionPort;
@@ -71,6 +73,7 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(AgentDefinitionRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentRunRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentCheckpointRepositoryPort.class);
+                    assertThat(context).hasSingleBean(AgentRunLeaseRepositoryPort.class);
                     assertThat(context).hasSingleBean(ToolCatalogRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentToolBindingRepositoryPort.class);
                     assertThat(context).hasSingleBean(ToolInvocationAuditPort.class);
@@ -81,6 +84,7 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(ApprovalRequestDecisionPort.class);
                     assertThat(context).hasSingleBean(AgentDefinitionInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunInboundPort.class);
+                    assertThat(context).hasSingleBean(AgentRunLeaseInboundPort.class);
                     assertThat(context).hasSingleBean(AgentCheckpointQueryInboundPort.class);
                     assertThat(context).hasSingleBean(ToolCatalogManagementInboundPort.class);
                     assertThat(context).hasSingleBean(AgentToolBindingManagementInboundPort.class);

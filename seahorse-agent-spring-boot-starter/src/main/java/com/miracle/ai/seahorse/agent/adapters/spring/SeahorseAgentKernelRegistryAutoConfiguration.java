@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentCheckpointQueryService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunLeaseService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.approval.KernelApprovalManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
@@ -27,11 +28,13 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolInv
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestDecisionPort;
@@ -83,6 +86,19 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 agentDefinitionRepositoryPort,
                 agentRunRepositoryPort,
                 currentUserPort,
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnBean({AgentRunRepositoryPort.class, AgentRunLeaseRepositoryPort.class})
+    @ConditionalOnMissingBean(AgentRunLeaseInboundPort.class)
+    public KernelAgentRunLeaseService seahorseAgentRunLeaseInboundPort(
+            AgentRunRepositoryPort agentRunRepositoryPort,
+            AgentRunLeaseRepositoryPort agentRunLeaseRepositoryPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelAgentRunLeaseService(
+                agentRunRepositoryPort,
+                agentRunLeaseRepositoryPort,
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 

@@ -265,17 +265,9 @@ public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
                 status,
                 errorCode,
                 errorMessage,
-                terminal(status) ? clock.instant() : null);
+                status.isTerminal() ? clock.instant() : null);
         runRepository.updateRun(next);
         return next;
-    }
-
-    private boolean terminal(AgentRunStatus status) {
-        return status == AgentRunStatus.SUCCEEDED
-                || status == AgentRunStatus.FAILED
-                || status == AgentRunStatus.REJECTED
-                || status == AgentRunStatus.EXPIRED
-                || status == AgentRunStatus.CANCELLED;
     }
 
     private List<ChatMessage> messageHistory(String messageHistoryJson) {

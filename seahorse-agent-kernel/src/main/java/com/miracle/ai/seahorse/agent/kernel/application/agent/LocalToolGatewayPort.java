@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRep
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
@@ -60,6 +61,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private final ToolInvocationAuditPort auditPort;
     private final ToolApprovalRequestRepositoryPort approvalRequestRepository;
     private final ApprovalRequestQueryPort approvalQueryPort;
+    private final ToolOutputRedactionPort outputRedactionPort;
     private final Clock clock;
 
     public LocalToolGatewayPort(ToolRegistryPort toolRegistry) {
@@ -86,6 +88,20 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
                                 ToolPolicyPort toolPolicy,
                                 ToolInvocationAuditPort auditPort,
+                                ToolOutputRedactionPort outputRedactionPort,
+                                Clock clock) {
+        this(toolRegistry,
+                toolPolicy,
+                auditPort,
+                ToolApprovalRequestRepositoryPort.noop(),
+                ApprovalRequestQueryPort.empty(),
+                outputRedactionPort,
+                clock);
+    }
+
+    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
+                                ToolPolicyPort toolPolicy,
+                                ToolInvocationAuditPort auditPort,
                                 ToolApprovalRequestRepositoryPort approvalRequestRepository,
                                 Clock clock) {
         this(toolRegistry, toolPolicy, auditPort, approvalRequestRepository, ApprovalRequestQueryPort.empty(), clock);
@@ -97,6 +113,22 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                                 ToolApprovalRequestRepositoryPort approvalRequestRepository,
                                 ApprovalRequestQueryPort approvalQueryPort,
                                 Clock clock) {
+        this(toolRegistry,
+                toolPolicy,
+                auditPort,
+                approvalRequestRepository,
+                approvalQueryPort,
+                ToolOutputRedactionPort.noop(),
+                clock);
+    }
+
+    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
+                                ToolPolicyPort toolPolicy,
+                                ToolInvocationAuditPort auditPort,
+                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
+                                ApprovalRequestQueryPort approvalQueryPort,
+                                ToolOutputRedactionPort outputRedactionPort,
+                                Clock clock) {
         this.toolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         this.toolPolicy = Objects.requireNonNullElseGet(toolPolicy, ToolPolicyPort::defaults);
         this.auditPort = Objects.requireNonNullElseGet(auditPort, ToolInvocationAuditPort::noop);
@@ -104,6 +136,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                 approvalRequestRepository,
                 ToolApprovalRequestRepositoryPort::noop);
         this.approvalQueryPort = Objects.requireNonNullElseGet(approvalQueryPort, ApprovalRequestQueryPort::empty);
+        this.outputRedactionPort = Objects.requireNonNullElseGet(outputRedactionPort, ToolOutputRedactionPort::noop);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -154,8 +187,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         try {
             ToolPort executableTool = toolPort
                     .orElseGet(() -> ToolPort.notFound(safeRequest.toolId()));
-            ToolInvocationResult result = executableTool.invoke(
+            ToolInvocationResult rawResult = executableTool.invoke(
                     safeRequest.toolCallId(), safeRequest.toolId(), safeRequest.arguments());
+            ToolInvocationResult result = outputRedactionPort.redact(safeRequest, rawResult);
             auditPort.recordCompleted(new ToolInvocationAuditCompletion(
                     invocationId,
                     result.success() ? ToolInvocationStatus.SUCCEEDED : ToolInvocationStatus.FAILED,
