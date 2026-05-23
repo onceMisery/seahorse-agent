@@ -43,6 +43,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerFeedback
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -319,6 +323,49 @@ class KernelMemoryReviewServiceTests {
         assertThat(feedbackRepository.samples.get(0).reviewStatus()).isEqualTo(MemoryReviewStatus.REJECTED);
         assertThat(feedbackRepository.samples.get(0).rejectedContent()).isEqualTo("do not write");
         assertThat(feedbackRepository.samples.get(0).chosenContent()).isEmpty();
+    }
+
+    @Test
+    void shouldEmitObservationDecisionEventOnApproveModifyAndReject() {
+        InMemoryReviewRepository repository = new InMemoryReviewRepository();
+        repository.put(review("review-approve", MemoryReviewStatus.PENDING, "approve content"));
+        repository.put(review("review-modify", MemoryReviewStatus.PENDING, "modify content"));
+        repository.put(review("review-reject", MemoryReviewStatus.PENDING, "reject content"));
+        RecordingIngestionWorkflow workflow = new RecordingIngestionWorkflow(
+                MemoryIngestionResult.accepted(List.of("SHORT_TERM_SAVE")));
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        KernelMemoryReviewService service = new KernelMemoryReviewService(
+                repository,
+                workflow,
+                MemoryReviewFeedbackRepositoryPort.empty(),
+                MemoryTraceRecorder.noop(),
+                MemoryAliasPort.noop(),
+                observationPort);
+
+        service.approve("review-approve",
+                new MemoryReviewDecisionCommand("auditor", "ok", "", Map.of()));
+        service.modify("review-modify",
+                new MemoryReviewDecisionCommand("auditor", "tweak", "tweaked content", Map.of()));
+        service.reject("review-reject",
+                new MemoryReviewDecisionCommand("auditor", "no thanks", "", Map.of()));
+
+        assertThat(observationPort.events).hasSize(3);
+        assertThat(observationPort.events)
+                .extracting(event -> event.attributes()
+                        .get(KernelMemoryReviewService.OBSERVATION_ATTR_DECISION))
+                .containsExactly("approve", "modify", "reject");
+        assertThat(observationPort.events)
+                .extracting(event -> event.attributes()
+                        .get(KernelMemoryReviewService.OBSERVATION_ATTR_STATUS))
+                .containsExactly(
+                        MemoryReviewStatus.APPLIED.name(),
+                        MemoryReviewStatus.APPLIED.name(),
+                        MemoryReviewStatus.REJECTED.name());
+        assertThat(observationPort.events)
+                .extracting(ObservationEvent::name)
+                .containsOnly(KernelMemoryReviewService.OBSERVATION_DECISION_EVENT);
+        assertThat(observationPort.events)
+                .allMatch(event -> event.amount() == ObservationEvent.DEFAULT_AMOUNT);
     }
 
     @Test
@@ -928,6 +975,30 @@ class KernelMemoryReviewServiceTests {
         @Override
         public List<MemoryTraceEvent> listRecent(int limit) {
             return List.copyOf(events);
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 }

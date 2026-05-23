@@ -42,6 +42,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,11 +84,17 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
     private static final String DETAIL_TARGET_KIND = "targetKind";
     private static final String DETAIL_TARGET_LAYER = "targetLayer";
 
+    static final String OBSERVATION_DECISION_EVENT = "memory-review-decision";
+    static final String OBSERVATION_ATTR_DECISION = "decision";
+    static final String OBSERVATION_ATTR_STATUS = "status";
+    static final String OBSERVATION_ATTR_TARGET_KIND = "targetKind";
+
     private final MemoryReviewManagementRepositoryPort reviewRepositoryPort;
     private final MemoryIngestionWorkflowPort ingestionWorkflowPort;
     private final MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort;
     private final MemoryTraceRecorder traceRecorder;
     private final MemoryAliasPort aliasPort;
+    private final ObservationPort observationPort;
 
     public KernelMemoryReviewService(MemoryReviewManagementRepositoryPort reviewRepositoryPort,
                                      MemoryIngestionWorkflowPort ingestionWorkflowPort) {
@@ -113,6 +121,16 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                                      MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort,
                                      MemoryTraceRecorder traceRecorder,
                                      MemoryAliasPort aliasPort) {
+        this(reviewRepositoryPort, ingestionWorkflowPort, feedbackRepositoryPort, traceRecorder, aliasPort,
+                ObservationPort.noop());
+    }
+
+    public KernelMemoryReviewService(MemoryReviewManagementRepositoryPort reviewRepositoryPort,
+                                     MemoryIngestionWorkflowPort ingestionWorkflowPort,
+                                     MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort,
+                                     MemoryTraceRecorder traceRecorder,
+                                     MemoryAliasPort aliasPort,
+                                     ObservationPort observationPort) {
         this.reviewRepositoryPort = Objects.requireNonNullElseGet(reviewRepositoryPort,
                 MemoryReviewManagementRepositoryPort::empty);
         this.ingestionWorkflowPort = Objects.requireNonNull(ingestionWorkflowPort,
@@ -121,6 +139,7 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 MemoryReviewFeedbackRepositoryPort::empty);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
         this.aliasPort = Objects.requireNonNullElseGet(aliasPort, MemoryAliasPort::noop);
+        this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
     }
 
     @Override
@@ -570,5 +589,21 @@ public class KernelMemoryReviewService implements MemoryReviewInboundPort {
                 "candidate",
                 details,
                 java.time.Instant.now()));
+        recordDecisionMetric(eventType, status, current);
+    }
+
+    private void recordDecisionMetric(String eventType, String status, MemoryReviewRecord current) {
+        try {
+            observationPort.recordEvent(new ObservationEvent(
+                    OBSERVATION_DECISION_EVENT,
+                    java.time.Instant.now(),
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.of(
+                            OBSERVATION_ATTR_DECISION, Objects.requireNonNullElse(eventType, ""),
+                            OBSERVATION_ATTR_STATUS, Objects.requireNonNullElse(status, ""),
+                            OBSERVATION_ATTR_TARGET_KIND, Objects.requireNonNullElse(current.targetKind(), ""))));
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change review execution semantics.
+        }
     }
 }
