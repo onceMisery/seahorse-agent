@@ -79,6 +79,23 @@ CREATE TABLE IF NOT EXISTS sa_agent_step (
 CREATE INDEX IF NOT EXISTS idx_sa_agent_step_run
   ON sa_agent_step(run_id, step_no);
 
+CREATE TABLE IF NOT EXISTS sa_agent_checkpoint (
+  checkpoint_id VARCHAR(64) PRIMARY KEY,
+  run_id VARCHAR(64) NOT NULL,
+  step_id VARCHAR(64),
+  sequence_no BIGINT NOT NULL,
+  checkpoint_type VARCHAR(32) NOT NULL,
+  state_json TEXT NOT NULL,
+  message_history_json TEXT,
+  context_pack_id VARCHAR(64),
+  pending_tool_call_json TEXT,
+  created_at TIMESTAMP NOT NULL,
+  UNIQUE(run_id, sequence_no)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_checkpoint_run
+  ON sa_agent_checkpoint(run_id, sequence_no);
+
 CREATE TABLE IF NOT EXISTS sa_tool_catalog (
   tool_id VARCHAR(128) PRIMARY KEY,
   provider VARCHAR(32) NOT NULL,

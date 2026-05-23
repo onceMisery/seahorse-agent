@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.domain.agent;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Agent ReAct 循环结果。
@@ -26,9 +27,18 @@ import java.util.List;
  * @param steps       完整步骤列表（不可变）
  * @param truncated   true 表示因 maxSteps 截断
  */
-public record AgentLoopResult(String finalAnswer, List<AgentStep> steps, boolean truncated) {
+public record AgentLoopResult(String finalAnswer,
+                              List<AgentStep> steps,
+                              boolean truncated,
+                              AgentLoopExitReason exitReason) {
+
+    public AgentLoopResult(String finalAnswer, List<AgentStep> steps, boolean truncated) {
+        this(finalAnswer, steps, truncated,
+                truncated ? AgentLoopExitReason.TRUNCATED : AgentLoopExitReason.FINAL_ANSWER);
+    }
 
     public AgentLoopResult {
         steps = steps == null ? List.of() : List.copyOf(steps);
+        exitReason = Objects.requireNonNull(exitReason, "exitReason must not be null");
     }
 }

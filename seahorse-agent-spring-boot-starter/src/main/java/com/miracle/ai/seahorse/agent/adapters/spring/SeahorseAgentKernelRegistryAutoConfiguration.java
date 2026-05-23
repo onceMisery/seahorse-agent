@@ -18,18 +18,25 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentCheckpointQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.approval.KernelApprovalManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCatalogManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolInvocationAuditQueryService;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestDecisionPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -80,6 +87,15 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({AgentCheckpointRepositoryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(AgentCheckpointQueryInboundPort.class)
+    public KernelAgentCheckpointQueryService seahorseAgentCheckpointQueryInboundPort(
+            AgentCheckpointRepositoryPort agentCheckpointRepositoryPort,
+            CurrentUserPort currentUserPort) {
+        return new KernelAgentCheckpointQueryService(agentCheckpointRepositoryPort, currentUserPort);
+    }
+
+    @Bean
     @ConditionalOnBean({ToolCatalogRepositoryPort.class, CurrentUserPort.class})
     @ConditionalOnMissingBean(ToolCatalogManagementInboundPort.class)
     public KernelToolCatalogManagementService seahorseToolCatalogManagementInboundPort(
@@ -108,5 +124,20 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             ToolInvocationAuditQueryPort toolInvocationAuditQueryPort,
             CurrentUserPort currentUserPort) {
         return new KernelToolInvocationAuditQueryService(toolInvocationAuditQueryPort, currentUserPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({ApprovalRequestQueryPort.class, ApprovalRequestDecisionPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(ApprovalManagementInboundPort.class)
+    public KernelApprovalManagementService seahorseApprovalManagementInboundPort(
+            ApprovalRequestQueryPort approvalRequestQueryPort,
+            ApprovalRequestDecisionPort approvalRequestDecisionPort,
+            CurrentUserPort currentUserPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelApprovalManagementService(
+                approvalRequestQueryPort,
+                approvalRequestDecisionPort,
+                currentUserPort,
+                clockProvider.getIfAvailable(Clock::systemUTC));
     }
 }

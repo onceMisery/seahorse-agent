@@ -17,14 +17,18 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitCommand;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopExitReason;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
@@ -70,6 +74,7 @@ public class KernelAgentLoop {
             "Task step limit reached. Narrow the question or check tool configuration.";
     private static final int MAX_TOOL_OBSERVATION_CHARS = 8 * 1024;
     private static final String TOOL_OBSERVATION_TRUNCATED_SUFFIX = "...[truncated]";
+    private static final String WAITING_APPROVAL_MESSAGE = "Waiting for tool approval.";
     private static final String RAW_ARGUMENTS_KEY = "_raw";
     private static final String IDEMPOTENCY_KEY_SEPARATOR = ":";
     private static final String TRACE_TYPE_AGENT_STEP = "AGENT_STEP";
@@ -84,6 +89,7 @@ public class KernelAgentLoop {
     private final KernelRagTraceRecorder traceRecorder;
     private final ContextWeaverPort contextWeaver;
     private final AgentRunStepRecorder runStepRecorder;
+    private final AgentApprovalWaitHandler approvalWaitHandler;
 
     public KernelAgentLoop(StreamingChatModelPort modelPort,
                            ToolRegistryPort toolRegistry,
@@ -104,6 +110,22 @@ public class KernelAgentLoop {
         this.traceRecorder = KernelRagTraceRecorder.noop();
         this.contextWeaver = new DefaultContextWeaver();
         this.runStepRecorder = AgentRunStepRecorder.noop();
+        this.approvalWaitHandler = AgentApprovalWaitHandler.noop();
+    }
+
+    public KernelAgentLoop(StreamingChatModelPort modelPort,
+                           ToolRegistryPort toolRegistry,
+                           ToolGatewayPort toolGateway,
+                           KernelAgentLoopOptions options,
+                           AgentApprovalWaitHandler approvalWaitHandler) {
+        this(modelPort,
+                toolRegistry,
+                toolGateway,
+                options,
+                KernelRagTraceRecorder.noop(),
+                new DefaultContextWeaver(),
+                AgentRunStepRecorder.noop(),
+                approvalWaitHandler);
     }
 
     public KernelAgentLoop(StreamingChatModelPort modelPort,
@@ -140,6 +162,7 @@ public class KernelAgentLoop {
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
         this.contextWeaver = Objects.requireNonNullElseGet(contextWeaver, DefaultContextWeaver::new);
         this.runStepRecorder = AgentRunStepRecorder.noop();
+        this.approvalWaitHandler = AgentApprovalWaitHandler.noop();
     }
 
     public KernelAgentLoop(StreamingChatModelPort modelPort,
@@ -148,7 +171,8 @@ public class KernelAgentLoop {
                            KernelRagTraceRecorder traceRecorder,
                            ContextWeaverPort contextWeaver,
                            AgentRunStepRecorder runStepRecorder) {
-        this(modelPort, toolRegistry, null, options, traceRecorder, contextWeaver, runStepRecorder);
+        this(modelPort, toolRegistry, null, options, traceRecorder, contextWeaver, runStepRecorder,
+                AgentApprovalWaitHandler.noop());
     }
 
     public KernelAgentLoop(StreamingChatModelPort modelPort,
@@ -158,6 +182,18 @@ public class KernelAgentLoop {
                            KernelRagTraceRecorder traceRecorder,
                            ContextWeaverPort contextWeaver,
                            AgentRunStepRecorder runStepRecorder) {
+        this(modelPort, toolRegistry, toolGateway, options, traceRecorder, contextWeaver, runStepRecorder,
+                AgentApprovalWaitHandler.noop());
+    }
+
+    public KernelAgentLoop(StreamingChatModelPort modelPort,
+                           ToolRegistryPort toolRegistry,
+                           ToolGatewayPort toolGateway,
+                           KernelAgentLoopOptions options,
+                           KernelRagTraceRecorder traceRecorder,
+                           ContextWeaverPort contextWeaver,
+                           AgentRunStepRecorder runStepRecorder,
+                           AgentApprovalWaitHandler approvalWaitHandler) {
         this.modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
         ToolRegistryPort effectiveToolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         this.toolRegistry = effectiveToolRegistry;
@@ -167,6 +203,7 @@ public class KernelAgentLoop {
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
         this.contextWeaver = Objects.requireNonNullElseGet(contextWeaver, DefaultContextWeaver::new);
         this.runStepRecorder = Objects.requireNonNullElseGet(runStepRecorder, AgentRunStepRecorder::noop);
+        this.approvalWaitHandler = Objects.requireNonNullElseGet(approvalWaitHandler, AgentApprovalWaitHandler::noop);
     }
 
     public AgentLoopResult execute(AgentLoopRequest request) {
@@ -235,6 +272,24 @@ public class KernelAgentLoop {
 
                 List<AgentObservation> observations = executeTools(
                         turn.toolCalls(), request.allowedToolIds(), request, runControl, traceRunScope, stepScope);
+                if (requiresApproval(observations)) {
+                    emitToolThinking(callback, turn, observations);
+                    AgentStep pendingStep = AgentStep.thought(turn.thought(), turn.toolCalls(), observations);
+                    steps.add(pendingStep);
+                    AgentToolCall pendingToolCall = pendingToolCall(turn.toolCalls(), observations);
+                    approvalWaitHandler.waitForApproval(new AgentApprovalWaitCommand(
+                            toolInvocationRequest(pendingToolCall, allowedToolIdSet(request.allowedToolIds()), request),
+                            waitingApprovalStateJson(turn, observations),
+                            waitingApprovalMessages(messages, turn)));
+                    emitContent(callback, WAITING_APPROVAL_MESSAGE);
+                    emitComplete(callback);
+                    traceRecorder.finishNode(stepScope);
+                    return new AgentLoopResult(
+                            WAITING_APPROVAL_MESSAGE,
+                            steps,
+                            false,
+                            AgentLoopExitReason.WAITING_APPROVAL);
+                }
                 runControl.checkCancelled();
                 emitToolThinking(callback, turn, observations);
                 steps.add(AgentStep.thought(turn.thought(), turn.toolCalls(), observations));
@@ -254,6 +309,43 @@ public class KernelAgentLoop {
         emitContent(callback, TRUNCATED_MESSAGE);
         emitComplete(callback);
         return new AgentLoopResult(TRUNCATED_MESSAGE, steps, true);
+    }
+
+    private boolean requiresApproval(List<AgentObservation> observations) {
+        return observations.stream().anyMatch(this::isApprovalRequired);
+    }
+
+    private boolean isApprovalRequired(AgentObservation observation) {
+        return observation != null
+                && !observation.success()
+                && ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED.equals(observation.error());
+    }
+
+    private AgentToolCall pendingToolCall(List<AgentToolCall> toolCalls, List<AgentObservation> observations) {
+        for (int i = 0; i < observations.size(); i++) {
+            if (isApprovalRequired(observations.get(i))) {
+                return toolCalls.get(i);
+            }
+        }
+        throw new AgentLoopException("Approval required observation missing matching tool call");
+    }
+
+    private Set<String> allowedToolIdSet(List<String> allowedToolIds) {
+        return allowedToolIds == null || allowedToolIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(allowedToolIds);
+    }
+
+    private List<ChatMessage> waitingApprovalMessages(List<ChatMessage> messages, ModelTurn turn) {
+        List<ChatMessage> snapshot = new ArrayList<>(messages);
+        snapshot.add(ChatMessage.assistantToolCalls(turn.content(), turn.toolCalls()));
+        return snapshot;
+    }
+
+    private String waitingApprovalStateJson(ModelTurn turn, List<AgentObservation> observations) {
+        return "{\"exitReason\":\"" + AgentLoopExitReason.WAITING_APPROVAL.name()
+                + "\",\"toolCallCount\":" + turn.toolCalls().size()
+                + ",\"observationCount\":" + observations.size() + "}";
     }
 
     private ModelTurn requestModelTurn(AgentLoopRequest request,

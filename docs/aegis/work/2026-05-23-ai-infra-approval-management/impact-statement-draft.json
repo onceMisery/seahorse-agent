@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "seahorse-agent-kernel",
+    "seahorse-agent-adapter-repository-jdbc",
+    "seahorse-agent-adapter-web",
+    "seahorse-agent-spring-boot-starter"
+  ],
+  "owners": [
+    "kernel ports and application services own business rules",
+    "JDBC adapters own persistence mapping",
+    "Web adapters own HTTP transport",
+    "Spring auto-configuration owns bean wiring"
+  ],
+  "invariants": [
+    "Approval APIs do not execute tools directly.",
+    "Resume executes pending tools from checkpoint through ToolGatewayPort.",
+    "Kernel depends only on ports and domain objects.",
+    "Approval and checkpoint statuses use enums."
+  ],
+  "compatBoundary": "Existing agent run APIs and constructors remain compatible; new behavior is exposed through additive ports, services, adapters, and endpoints.",
+  "nonGoals": [
+    "No workflow engine.",
+    "No remote agent mesh.",
+    "No worker lease.",
+    "No resource ACL implementation in this slice."
+  ]
+}

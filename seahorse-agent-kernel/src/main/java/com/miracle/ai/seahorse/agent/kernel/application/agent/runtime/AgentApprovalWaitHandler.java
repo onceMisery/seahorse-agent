@@ -15,18 +15,15 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
+package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
-public final class AgentRuntimeConstants {
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 
-    public static final String LEGACY_REACT_AGENT_ID = "legacy-react-agent";
-    public static final String DEFAULT_AGENT_RUN_FAILURE_CODE = "AGENT_RUN_FAILED";
-    public static final String AGENT_RUN_RESUME_FAILED_CODE = "AGENT_RUN_RESUME_FAILED";
-    public static final String AGENT_RUN_APPROVAL_REJECTED_CODE = "AGENT_RUN_APPROVAL_REJECTED";
-    public static final String AGENT_RUN_APPROVAL_EXPIRED_CODE = "AGENT_RUN_APPROVAL_EXPIRED";
-    public static final String AGENT_STEP_ID_PREFIX = "step_";
-    public static final String AGENT_STEP_FAILURE_CODE = "AGENT_STEP_FAILED";
+public interface AgentApprovalWaitHandler {
 
-    private AgentRuntimeConstants() {
+    AgentCheckpoint waitForApproval(AgentApprovalWaitCommand command);
+
+    static AgentApprovalWaitHandler noop() {
+        return command -> null;
     }
 }

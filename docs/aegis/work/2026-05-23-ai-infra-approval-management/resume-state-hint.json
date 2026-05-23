@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-23-ai-infra-approval-management",
+  "lastCheckpointRef": "docs/aegis/work/2026-05-23-ai-infra-approval-management/todo-checkpoint-draft.json",
+  "resumeInstruction": "Continue in D:\\code\\seahorse-agent\\.worktrees\\ai-infra-approval-management; do not edit the root worktree for this task.",
+  "knownPartialWork": [
+    "All planned implementation slices are complete.",
+    "Focused verification passed.",
+    "Full repository-wide test suite was not run."
+  ],
+  "mustReadBeforeContinuing": [
+    "docs/company-agent/ai-infra-phases/99-current-implementation-handoff.md",
+    "docs/aegis/work/2026-05-23-ai-infra-approval-management/20-checkpoint.md",
+    "docs/aegis/work/2026-05-23-ai-infra-approval-management/90-evidence.md"
+  ],
+  "unsafeToAssume": [
+    "Do not assume resource ACL, worker lease, or full output desensitization are complete.",
+    "Do not assume the Maven wrapper works in PowerShell."
+  ]
+}

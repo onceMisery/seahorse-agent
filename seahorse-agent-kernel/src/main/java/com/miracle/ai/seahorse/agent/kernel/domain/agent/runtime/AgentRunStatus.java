@@ -23,5 +23,7 @@ public enum AgentRunStatus {
     WAITING_APPROVAL,
     SUCCEEDED,
     FAILED,
+    REJECTED,
+    EXPIRED,
     CANCELLED
 }

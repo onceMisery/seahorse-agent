@@ -20,16 +20,20 @@ package com.miracle.ai.seahorse.agent.kernel.application.chat;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
@@ -37,10 +41,12 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
@@ -54,6 +60,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -114,6 +121,55 @@ class KernelChatAgentRunStoreTests {
         assertEquals(AgentStepStatus.SUCCEEDED, steps.get(1).status());
         assertTrue(steps.get(1).inputJson().contains("weather"));
         assertTrue(steps.get(1).outputJson().contains("temp"));
+    }
+
+    @Test
+    void shouldKeepRunWaitingApprovalWhenAgentLoopPausesForApproval() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
+        KernelAgentRunService runService = new KernelAgentRunService(
+                new EmptyAgentDefinitionRepository(), runRepository,
+                () -> Optional.of(new CurrentUser("user-1", "alice", "user", null)), FIXED_CLOCK);
+        AgentToolCall toolCall = AgentToolCall.of("call-1", "memory-forget", Map.of("memoryId", "mem-1"));
+        ScriptedModel model = new ScriptedModel(List.of(Turn.toolCalls("need approval", List.of(toolCall))));
+        InMemoryToolRegistry toolRegistry = new InMemoryToolRegistry();
+        toolRegistry.register(new ToolDescriptor("memory-forget", "Memory Forget", "Forget memory", "{}"),
+                (callId, toolId, arguments) -> ToolInvocationResult.ok("should-not-run"));
+        KernelAgentLoop agentLoop = new KernelAgentLoop(
+                model,
+                toolRegistry,
+                approvalRequiredGateway(),
+                KernelAgentLoopOptions.defaults(),
+                com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder.noop(),
+                new com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver(),
+                new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK),
+                RepositoryAgentApprovalWaitHandler.fromRepositories(
+                        runRepository,
+                        checkpointRepository,
+                        FIXED_CLOCK));
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runService));
+
+        service.streamChat(new StreamChatCommand(
+                "Forget memory", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
+
+        assertTrue(callback.awaitTerminal());
+        AgentRun run = runRepository.runs.values().iterator().next();
+        assertEquals(AgentRunStatus.WAITING_APPROVAL, run.status());
+        assertTrue(checkpointRepository.findLatestByRunId(run.runId()).orElseThrow()
+                .pendingToolCallJson()
+                .contains("\"toolId\":\"memory-forget\""));
+    }
+
+    private static ToolGatewayPort approvalRequiredGateway() {
+        return request -> ToolInvocationResult.failed(ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED);
     }
 
     private static KernelChatPipeline newPipeline() {
@@ -273,6 +329,30 @@ class KernelChatAgentRunStoreTests {
         public List<AgentStep> listSteps(String runId) {
             return steps.stream()
                     .filter(step -> runId.equals(step.runId()))
+                    .toList();
+        }
+    }
+
+    private static final class MemoryAgentCheckpointRepository implements AgentCheckpointRepositoryPort {
+        private final List<AgentCheckpoint> checkpoints = new ArrayList<>();
+
+        @Override
+        public void save(AgentCheckpoint checkpoint) {
+            checkpoints.add(checkpoint);
+        }
+
+        @Override
+        public Optional<AgentCheckpoint> findLatestByRunId(String runId) {
+            return checkpoints.stream()
+                    .filter(checkpoint -> runId.equals(checkpoint.runId()))
+                    .max(Comparator.comparingLong(AgentCheckpoint::sequenceNo));
+        }
+
+        @Override
+        public List<AgentCheckpoint> listByRunId(String runId) {
+            return checkpoints.stream()
+                    .filter(checkpoint -> runId.equals(checkpoint.runId()))
+                    .sorted(Comparator.comparingLong(AgentCheckpoint::sequenceNo))
                     .toList();
         }
     }

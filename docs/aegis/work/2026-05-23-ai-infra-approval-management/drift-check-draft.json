@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-23-ai-infra-approval-management",
+  "taskIntentRef": "docs/aegis/work/2026-05-23-ai-infra-approval-management/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/company-agent/ai-infra-phases/99-current-implementation-handoff.md",
+    "docs/company-agent/ai-infra-phases/02-tool-gateway-policy-engine.md",
+    "docs/company-agent/ai-infra-phases/03-durable-runtime-hitl.md"
+  ],
+  "scopeStatus": "implemented handoff approval/checkpoint/resume slice",
+  "compatStatus": "aligned with kernel port boundary and additive adapter wiring",
+  "retirementStatus": "no old owner retired; approval API remains separate from resume execution",
+  "newRiskSignals": [
+    "Full repository-wide test suite not run.",
+    "Resource ACL, worker lease, and output desensitization remain future work."
+  ],
+  "decision": "continue"
+}

@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,9 +40,19 @@ public class SeahorseAgentRunController {
     private static final String SERVICE_NOT_AVAILABLE = "Service not available";
 
     private final ObjectProvider<AgentRunInboundPort> agentRunPortProvider;
+    private final ObjectProvider<AgentRunResumeInboundPort> agentRunResumePortProvider;
+    private final ObjectProvider<AgentCheckpointQueryInboundPort> checkpointQueryPortProvider;
 
     public SeahorseAgentRunController(ObjectProvider<AgentRunInboundPort> agentRunPortProvider) {
+        this(agentRunPortProvider, null, null);
+    }
+
+    public SeahorseAgentRunController(ObjectProvider<AgentRunInboundPort> agentRunPortProvider,
+                                      ObjectProvider<AgentRunResumeInboundPort> agentRunResumePortProvider,
+                                      ObjectProvider<AgentCheckpointQueryInboundPort> checkpointQueryPortProvider) {
         this.agentRunPortProvider = agentRunPortProvider;
+        this.agentRunResumePortProvider = agentRunResumePortProvider;
+        this.checkpointQueryPortProvider = checkpointQueryPortProvider;
     }
 
     @PostMapping("/agents/{agentId}/runs")
@@ -77,8 +89,40 @@ public class SeahorseAgentRunController {
         return ok(port.cancel(runId));
     }
 
+    @PostMapping({"/agent-runs/{runId}/resume", "/api/agent-runs/{runId}/resume"})
+    public Map<String, Object> resume(@PathVariable String runId) {
+        AgentRunResumeInboundPort port = requireResumePort();
+        return ok(port.resume(runId));
+    }
+
+    @GetMapping({"/agent-runs/{runId}/checkpoints", "/api/agent-runs/{runId}/checkpoints"})
+    public Map<String, Object> listCheckpoints(@PathVariable String runId) {
+        AgentCheckpointQueryInboundPort port = requireCheckpointQueryPort();
+        return ok(port.listByRunId(runId));
+    }
+
     private AgentRunInboundPort requirePort() {
         AgentRunInboundPort port = agentRunPortProvider.getIfAvailable();
+        if (port == null) {
+            throw new IllegalStateException(SERVICE_NOT_AVAILABLE);
+        }
+        return port;
+    }
+
+    private AgentRunResumeInboundPort requireResumePort() {
+        AgentRunResumeInboundPort port = agentRunResumePortProvider == null
+                ? null
+                : agentRunResumePortProvider.getIfAvailable();
+        if (port == null) {
+            throw new IllegalStateException(SERVICE_NOT_AVAILABLE);
+        }
+        return port;
+    }
+
+    private AgentCheckpointQueryInboundPort requireCheckpointQueryPort() {
+        AgentCheckpointQueryInboundPort port = checkpointQueryPortProvider == null
+                ? null
+                : checkpointQueryPortProvider.getIfAvailable();
         if (port == null) {
             throw new IllegalStateException(SERVICE_NOT_AVAILABLE);
         }
