@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "candidateDocs": [
+    "docs/company-agent/ai-infra-phases/99-current-implementation-handoff.md",
+    "docs/company-agent/ai-infra-phases/02-tool-gateway-policy-engine.md",
+    "docs/company-agent/ai-infra-phases/03-durable-runtime-hitl.md"
+  ],
+  "whyRelevant": "The handoff defines the implementation order and boundaries for approval management, checkpoints, WAITING_APPROVAL pause, and resume.",
+  "missingAuthority": []
+}

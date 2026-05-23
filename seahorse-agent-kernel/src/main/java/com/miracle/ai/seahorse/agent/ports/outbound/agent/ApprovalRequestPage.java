@@ -15,18 +15,29 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
+package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
-public final class AgentRuntimeConstants {
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 
-    public static final String LEGACY_REACT_AGENT_ID = "legacy-react-agent";
-    public static final String DEFAULT_AGENT_RUN_FAILURE_CODE = "AGENT_RUN_FAILED";
-    public static final String AGENT_RUN_RESUME_FAILED_CODE = "AGENT_RUN_RESUME_FAILED";
-    public static final String AGENT_RUN_APPROVAL_REJECTED_CODE = "AGENT_RUN_APPROVAL_REJECTED";
-    public static final String AGENT_RUN_APPROVAL_EXPIRED_CODE = "AGENT_RUN_APPROVAL_EXPIRED";
-    public static final String AGENT_STEP_ID_PREFIX = "step_";
-    public static final String AGENT_STEP_FAILURE_CODE = "AGENT_STEP_FAILED";
+import java.util.List;
 
-    private AgentRuntimeConstants() {
+/**
+ * 审批请求分页结果。
+ *
+ * @param records 当前页审批请求
+ * @param total   总记录数
+ * @param size    每页大小
+ * @param current 当前页码
+ * @param pages   总页数
+ */
+public record ApprovalRequestPage(List<ApprovalRequest> records,
+                                  long total,
+                                  long size,
+                                  long current,
+                                  long pages) {
+
+    public ApprovalRequestPage {
+        records = records == null ? List.of() : List.copyOf(records);
     }
 }
+

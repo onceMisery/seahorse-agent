@@ -31,6 +31,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAudi
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
@@ -58,6 +59,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private final ToolPolicyPort toolPolicy;
     private final ToolInvocationAuditPort auditPort;
     private final ToolApprovalRequestRepositoryPort approvalRequestRepository;
+    private final ApprovalRequestQueryPort approvalQueryPort;
     private final Clock clock;
 
     public LocalToolGatewayPort(ToolRegistryPort toolRegistry) {
@@ -86,12 +88,22 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                                 ToolInvocationAuditPort auditPort,
                                 ToolApprovalRequestRepositoryPort approvalRequestRepository,
                                 Clock clock) {
+        this(toolRegistry, toolPolicy, auditPort, approvalRequestRepository, ApprovalRequestQueryPort.empty(), clock);
+    }
+
+    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
+                                ToolPolicyPort toolPolicy,
+                                ToolInvocationAuditPort auditPort,
+                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
+                                ApprovalRequestQueryPort approvalQueryPort,
+                                Clock clock) {
         this.toolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         this.toolPolicy = Objects.requireNonNullElseGet(toolPolicy, ToolPolicyPort::defaults);
         this.auditPort = Objects.requireNonNullElseGet(auditPort, ToolInvocationAuditPort::noop);
         this.approvalRequestRepository = Objects.requireNonNullElseGet(
                 approvalRequestRepository,
                 ToolApprovalRequestRepositoryPort::noop);
+        this.approvalQueryPort = Objects.requireNonNullElseGet(approvalQueryPort, ApprovalRequestQueryPort::empty);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -122,9 +134,10 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                 toolPolicy.decide(ToolPolicyRequest.from(safeRequest, toolPort.isPresent())),
                 () -> PolicyDecision.deny("builtin-policy-null", ToolPolicyReasonCodes.POLICY_DECISION_MISSING,
                         "Tool policy did not return a decision"));
-        ToolInvocationStatus decisionStatus = decisionStatus(decision);
+        boolean approvalSatisfied = approvalSatisfied(safeRequest, decision);
+        ToolInvocationStatus decisionStatus = approvalSatisfied ? ToolInvocationStatus.ALLOWED : decisionStatus(decision);
         auditPort.recordDecision(new ToolInvocationAuditDecision(invocationId, decision.decisionId(), decisionStatus));
-        if (!decision.allowsExecution()) {
+        if (!decision.allowsExecution() && !approvalSatisfied) {
             if (decision.effect() == PolicyDecision.Effect.APPROVAL_REQUIRED) {
                 createApprovalRequest(safeRequest, decision, invocationId, effectiveRunId, effectiveUserId, startedAt);
             }
@@ -232,6 +245,16 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             case APPROVAL_REQUIRED -> ToolInvocationStatus.APPROVAL_REQUIRED;
             default -> ToolInvocationStatus.DENIED;
         };
+    }
+
+    private boolean approvalSatisfied(ToolInvocationRequest request, PolicyDecision decision) {
+        if (decision.effect() != PolicyDecision.Effect.APPROVAL_REQUIRED) {
+            return false;
+        }
+        return approvalQueryPort.findLatestByRunIdAndStepId(request.runId(), request.stepId())
+                .filter(approval -> approval.status() == ApprovalRequestStatus.APPROVED
+                        || approval.status() == ApprovalRequestStatus.MODIFIED)
+                .isPresent();
     }
 
     private String summarizeArguments(ToolInvocationRequest request) {

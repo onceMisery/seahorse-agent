@@ -29,6 +29,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAudi
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
@@ -142,6 +145,31 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldExecuteToolWhenApprovalWasAlreadyApprovedForRunStep() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+                        ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
+                        "Tool requires approval")),
+                audit,
+                approvals,
+                new FixedApprovalQueryPort(approval(ApprovalRequestStatus.APPROVED)),
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("memory-forget"));
+
+        assertTrue(result.success());
+        assertEquals("{\"ok\":true}", result.content());
+        assertEquals(1, tool.calls.get());
+        assertEquals(0, approvals.saved.size());
+        assertEquals(ToolInvocationStatus.ALLOWED, audit.decisions.get(0).status());
+        assertEquals(ToolInvocationStatus.SUCCEEDED, audit.completed.get(0).status());
+    }
+
+    @Test
     void shouldRecordFailedCompletionWhenToolThrowsException() {
         ThrowingToolPort tool = new ThrowingToolPort();
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
@@ -207,6 +235,28 @@ class LocalToolGatewayPortAuditTests {
                 List.of(toolId));
     }
 
+    private static ApprovalRequest approval(ApprovalRequestStatus status) {
+        return new ApprovalRequest(
+                "approval-1",
+                "run-1",
+                "step-1",
+                "invocation-1",
+                "tenant-1",
+                "user-1",
+                "agent-1",
+                "memory-forget",
+                ApprovalType.TOOL_EXECUTION,
+                com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel.HIGH,
+                "Tool memory-forget requires approval",
+                "{\"argumentKeys\":[\"input\"]}",
+                status,
+                FIXED_CLOCK.instant().minusSeconds(60),
+                null,
+                status == ApprovalRequestStatus.PENDING ? null : "admin-1",
+                status == ApprovalRequestStatus.PENDING ? null : FIXED_CLOCK.instant().minusSeconds(1),
+                status == ApprovalRequestStatus.PENDING ? null : "decided");
+    }
+
     private static final class RecordingToolInvocationAuditPort implements ToolInvocationAuditPort {
         private final List<ToolInvocationAuditRecord> requested = new ArrayList<>();
         private final List<ToolInvocationAuditDecision> decisions = new ArrayList<>();
@@ -234,6 +284,31 @@ class LocalToolGatewayPortAuditTests {
         @Override
         public void save(ApprovalRequest request) {
             saved.add(request);
+        }
+    }
+
+    private static final class FixedApprovalQueryPort implements ApprovalRequestQueryPort {
+        private final ApprovalRequest approval;
+
+        private FixedApprovalQueryPort(ApprovalRequest approval) {
+            this.approval = approval;
+        }
+
+        @Override
+        public Optional<ApprovalRequest> findById(String approvalId) {
+            return approval.approvalId().equals(approvalId) ? Optional.of(approval) : Optional.empty();
+        }
+
+        @Override
+        public Optional<ApprovalRequest> findLatestByRunIdAndStepId(String runId, String stepId) {
+            return runId.equals(approval.runId()) && stepId.equals(approval.stepId())
+                    ? Optional.of(approval)
+                    : Optional.empty();
+        }
+
+        @Override
+        public ApprovalRequestPage page(ApprovalRequestQuery query) {
+            return new ApprovalRequestPage(List.of(approval), 1L, query.size(), query.current(), 1L);
         }
     }
 

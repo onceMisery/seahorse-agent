@@ -18,11 +18,16 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
@@ -39,14 +44,20 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionUpdateDraftCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingReplaceCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentVersionPublishCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalDecisionCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalModifyCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPage;
 import org.junit.jupiter.api.Test;
@@ -162,14 +173,21 @@ class SeahorseAgentControllerTests {
     @Test
     void shouldExposeAgentRunApi() throws Exception {
         AgentRunInboundPort port = mock(AgentRunInboundPort.class);
+        AgentRunResumeInboundPort resumePort = mock(AgentRunResumeInboundPort.class);
+        AgentCheckpointQueryInboundPort checkpointPort = mock(AgentCheckpointQueryInboundPort.class);
         AgentRun run = run(AgentRunStatus.RUNNING);
         when(port.startRun(any())).thenReturn(run);
         when(port.findRunById("run-1")).thenReturn(Optional.of(run));
         when(port.listSteps("run-1")).thenReturn(List.of(step()));
         when(port.cancel("run-1")).thenReturn(run(AgentRunStatus.CANCELLED));
+        when(resumePort.resume("run-1")).thenReturn(run(AgentRunStatus.SUCCEEDED));
+        when(checkpointPort.listByRunId("run-1")).thenReturn(List.of(checkpoint()));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseAgentRunController(provider(AgentRunInboundPort.class, port))).build();
+                new SeahorseAgentRunController(
+                        provider(AgentRunInboundPort.class, port),
+                        provider(AgentRunResumeInboundPort.class, resumePort),
+                        provider(AgentCheckpointQueryInboundPort.class, checkpointPort))).build();
 
         mvc.perform(post("/agents/agent-1/runs")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -199,6 +217,17 @@ class SeahorseAgentControllerTests {
         mvc.perform(post("/agent-runs/run-1/cancel"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+
+        mvc.perform(post("/api/agent-runs/run-1/resume"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCEEDED"));
+        verify(resumePort).resume("run-1");
+
+        mvc.perform(get("/api/agent-runs/run-1/checkpoints"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].checkpointId").value("checkpoint-1"))
+                .andExpect(jsonPath("$.data[0].checkpointType").value("WAITING_APPROVAL"));
+        verify(checkpointPort).listByRunId("run-1");
     }
 
     @Test
@@ -314,6 +343,72 @@ class SeahorseAgentControllerTests {
                 20L);
     }
 
+    @Test
+    void shouldExposeApprovalManagementApi() throws Exception {
+        ApprovalManagementInboundPort port = mock(ApprovalManagementInboundPort.class);
+        when(port.page("tenant-a", ApprovalRequestStatus.PENDING, 2L, 20L))
+                .thenReturn(new ApprovalRequestPage(List.of(approval(ApprovalRequestStatus.PENDING)), 1L, 20L, 2L,
+                        1L));
+        when(port.findById("approval-1")).thenReturn(Optional.of(approval(ApprovalRequestStatus.PENDING)));
+        when(port.approve(eq("approval-1"), any())).thenReturn(approval(ApprovalRequestStatus.APPROVED));
+        when(port.reject(eq("approval-1"), any())).thenReturn(approval(ApprovalRequestStatus.REJECTED));
+        when(port.modify(eq("approval-1"), any())).thenReturn(approval(ApprovalRequestStatus.MODIFIED));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseApprovalController(provider(ApprovalManagementInboundPort.class, port))).build();
+
+        mvc.perform(get("/api/approvals")
+                        .param("tenantId", "tenant-a")
+                        .param("status", "PENDING")
+                        .param("current", "2")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.records[0].approvalId").value("approval-1"))
+                .andExpect(jsonPath("$.data.records[0].status").value("PENDING"));
+
+        mvc.perform(get("/api/approvals/approval-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approvalId").value("approval-1"))
+                .andExpect(jsonPath("$.data.toolId").value("memory-forget"));
+
+        mvc.perform(post("/api/approvals/approval-1/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("decisionComment", "Looks safe"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"));
+
+        ArgumentCaptor<ApprovalDecisionCommand> approveCaptor =
+                ArgumentCaptor.forClass(ApprovalDecisionCommand.class);
+        verify(port).approve(eq("approval-1"), approveCaptor.capture());
+        assertThat(approveCaptor.getValue().decisionComment()).isEqualTo("Looks safe");
+
+        mvc.perform(post("/api/approvals/approval-1/reject")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("decisionComment", "Risk too high"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("REJECTED"));
+
+        ArgumentCaptor<ApprovalDecisionCommand> rejectCaptor =
+                ArgumentCaptor.forClass(ApprovalDecisionCommand.class);
+        verify(port).reject(eq("approval-1"), rejectCaptor.capture());
+        assertThat(rejectCaptor.getValue().decisionComment()).isEqualTo("Risk too high");
+
+        mvc.perform(post("/api/approvals/approval-1/modify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "argumentsPreviewJson", "{\"argumentKeys\":[\"input\"],\"modified\":true}",
+                                "decisionComment", "Reduced scope"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("MODIFIED"));
+
+        ArgumentCaptor<ApprovalModifyCommand> modifyCaptor = ArgumentCaptor.forClass(ApprovalModifyCommand.class);
+        verify(port).modify(eq("approval-1"), modifyCaptor.capture());
+        assertThat(modifyCaptor.getValue().argumentsPreviewJson())
+                .isEqualTo("{\"argumentKeys\":[\"input\"],\"modified\":true}");
+        assertThat(modifyCaptor.getValue().decisionComment()).isEqualTo("Reduced scope");
+    }
+
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
     }
@@ -337,6 +432,20 @@ class SeahorseAgentControllerTests {
     private static AgentStep step() {
         return new AgentStep("step-1", "run-1", 1, AgentStepType.MODEL_TURN, AgentStepStatus.SUCCEEDED,
                 "{\"prompt\":\"hi\"}", "{\"answer\":\"hello\"}", null, null, NOW, NOW);
+    }
+
+    private static AgentCheckpoint checkpoint() {
+        return new AgentCheckpoint(
+                "checkpoint-1",
+                "run-1",
+                "step-1",
+                1L,
+                AgentCheckpointType.WAITING_APPROVAL,
+                "{\"exitReason\":\"WAITING_APPROVAL\"}",
+                "[]",
+                null,
+                "{\"toolId\":\"memory-forget\"}",
+                NOW);
     }
 
     private static ToolCatalogEntry tool(boolean enabled) {
@@ -387,6 +496,28 @@ class SeahorseAgentControllerTests {
                 null,
                 NOW,
                 NOW.plusSeconds(1));
+    }
+
+    private static ApprovalRequest approval(ApprovalRequestStatus status) {
+        return new ApprovalRequest(
+                "approval-1",
+                "run-1",
+                "step-1",
+                "invocation-1",
+                "tenant-a",
+                "user-1",
+                "agent-1",
+                "memory-forget",
+                ApprovalType.TOOL_EXECUTION,
+                ToolRiskLevel.HIGH,
+                "Tool memory-forget requires approval",
+                "{\"argumentKeys\":[\"input\"]}",
+                status,
+                NOW,
+                null,
+                status == ApprovalRequestStatus.PENDING ? null : "admin-1",
+                status == ApprovalRequestStatus.PENDING ? null : NOW.plusSeconds(60),
+                status == ApprovalRequestStatus.PENDING ? null : "decided");
     }
 
     private static <T> ObjectProvider<T> provider(Class<T> type, T bean) {

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-23-ai-infra-approval-management",
+  "currentTodo": "Hand off completed AI-Infra approval management, checkpoint, WAITING_APPROVAL, and resume slice.",
+  "completedTodos": [
+    "Created isolated worktree D:\\code\\seahorse-agent\\.worktrees\\ai-infra-approval-management on branch codex/ai-infra-approval-management.",
+    "Implemented Approval query and decision API.",
+    "Implemented AgentCheckpoint repository and JDBC adapter.",
+    "Implemented WAITING_APPROVAL runtime interruption.",
+    "Implemented resume from checkpoint.",
+    "Implemented Web resume and checkpoint query APIs.",
+    "Implemented Spring auto-configuration wiring.",
+    "Ran focused kernel, JDBC, Web, and Spring verification."
+  ],
+  "activeSlice": "final verification and handoff",
+  "evidenceRefs": [
+    "docs/aegis/work/2026-05-23-ai-infra-approval-management/evidence-bundle-draft-verification.json"
+  ],
+  "blockedOn": null,
+  "nextStep": "Review the completed worktree changes or prepare a commit/PR.",
+  "updatedAt": "2026-05-24"
+}

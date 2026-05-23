@@ -121,7 +121,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     @Override
     public AgentRun succeed(String runId) {
         AgentRun current = loadRun(runId);
-        if (isTerminal(current.status())) {
+        if (isTerminal(current.status()) || current.status() == AgentRunStatus.WAITING_APPROVAL) {
             return current;
         }
         AgentRun succeeded = current.withStatus(AgentRunStatus.SUCCEEDED, null, null, clock.instant());
@@ -164,6 +164,8 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     private boolean isTerminal(AgentRunStatus status) {
         return status == AgentRunStatus.SUCCEEDED
                 || status == AgentRunStatus.FAILED
+                || status == AgentRunStatus.REJECTED
+                || status == AgentRunStatus.EXPIRED
                 || status == AgentRunStatus.CANCELLED;
     }
 

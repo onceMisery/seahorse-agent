@@ -58,3 +58,16 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-23 | artifact | docs/aegis/work/2026-05-23-memory-gemini-handoff/resume-state-hint.json | 2026-05-23-memory-gemini-handoff resume state hint |
 | 2026-05-23 | artifact | docs/aegis/work/2026-05-23-memory-gemini-handoff/evidence-bundle-draft-handoff-md.json | 2026-05-23-memory-gemini-handoff evidence handoff-md |
 | 2026-05-23 | work | docs/aegis/work/2026-05-23-memory-gemini-handoff/HANDOFF.md | Memory Gemini alignment handoff document |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-ai-infra-approval-management/10-intent.md | AI Infra approval management intent |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-ai-infra-approval-management/20-checkpoint.md | AI Infra approval management checkpoint |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-ai-infra-approval-management/90-evidence.md | AI Infra approval management evidence |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-ai-infra-approval-management/99-reflection.md | AI Infra approval management reflection |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-ai-infra-approval-management/task-intent-draft.json | AI Infra approval management task intent draft |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-ai-infra-approval-management/baseline-read-set-hint.json | AI Infra approval management baseline read-set hint |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-ai-infra-approval-management/impact-statement-draft.json | AI Infra approval management impact statement draft |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-ai-infra-approval-management/todo-checkpoint-draft.json | AI Infra approval management todo checkpoint draft |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-ai-infra-approval-management/resume-state-hint.json | AI Infra approval management resume state hint |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-ai-infra-approval-management/drift-check-draft.json | AI Infra approval management drift check draft |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-ai-infra-approval-management/evidence-bundle-draft-verification.json | AI Infra approval management verification evidence bundle |
+| 2026-05-24 | artifact | docs/aegis/work/2026-05-23-ai-infra-approval-management/gate-input-pack.json | 2026-05-23-ai-infra-approval-management gate input pack |
+| 2026-05-24 | work | docs/aegis/work/2026-05-23-ai-infra-approval-management/proof-bundle.md | 2026-05-23-ai-infra-approval-management proof bundle |

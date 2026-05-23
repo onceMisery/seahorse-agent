@@ -15,18 +15,20 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
+package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
-public final class AgentRuntimeConstants {
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 
-    public static final String LEGACY_REACT_AGENT_ID = "legacy-react-agent";
-    public static final String DEFAULT_AGENT_RUN_FAILURE_CODE = "AGENT_RUN_FAILED";
-    public static final String AGENT_RUN_RESUME_FAILED_CODE = "AGENT_RUN_RESUME_FAILED";
-    public static final String AGENT_RUN_APPROVAL_REJECTED_CODE = "AGENT_RUN_APPROVAL_REJECTED";
-    public static final String AGENT_RUN_APPROVAL_EXPIRED_CODE = "AGENT_RUN_APPROVAL_EXPIRED";
-    public static final String AGENT_STEP_ID_PREFIX = "step_";
-    public static final String AGENT_STEP_FAILURE_CODE = "AGENT_STEP_FAILED";
+import java.util.Optional;
 
-    private AgentRuntimeConstants() {
-    }
+/**
+ * 审批决策出站端口。替代实现必须遵守不可变审批记录和乐观状态更新语义。
+ */
+public interface ApprovalRequestDecisionPort {
+
+    /**
+     * 按 fromStatus 乐观更新审批状态，并返回更新后的审批记录。
+     */
+    Optional<ApprovalRequest> decide(ApprovalRequestDecision decision);
 }
+

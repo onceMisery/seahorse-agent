@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "baselineRefs": [
+    "docs/company-agent/ai-infra-phases/99-current-implementation-handoff.md",
+    "docs/company-agent/ai-infra-phases/02-tool-gateway-policy-engine.md",
+    "docs/company-agent/ai-infra-phases/03-durable-runtime-hitl.md"
+  ],
+  "impactStatement": "docs/aegis/work/2026-05-23-ai-infra-approval-management/impact-statement-draft.json",
+  "compatPlan": "Existing agent run APIs and constructors remain compatible; new behavior is exposed through additive ports, services, adapters, and endpoints.",
+  "retirementPlan": "no old owner retired; approval API remains separate from resume execution",
+  "evidenceBundle": [
+    "docs/aegis/work/2026-05-23-ai-infra-approval-management/evidence-bundle-draft-verification.json"
+  ]
+}

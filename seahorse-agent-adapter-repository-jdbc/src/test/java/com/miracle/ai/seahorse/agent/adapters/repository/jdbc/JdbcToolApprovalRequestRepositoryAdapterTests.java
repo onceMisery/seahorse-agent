@@ -21,16 +21,24 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalReques
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class JdbcToolApprovalRequestRepositoryAdapterTests {
+
+    private static final Instant REQUESTED_AT = Instant.parse("2026-05-23T00:00:00Z");
+    private static final Instant DECIDED_AT = Instant.parse("2026-05-23T00:05:00Z");
 
     @Test
     void shouldSavePendingApprovalRequest() {
@@ -38,27 +46,13 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         createApprovalRequestSchema(jdbcTemplate);
         JdbcToolApprovalRequestRepositoryAdapter adapter = new JdbcToolApprovalRequestRepositoryAdapter(dataSource);
-        Instant requestedAt = Instant.parse("2026-05-23T00:00:00Z");
 
-        adapter.save(new ApprovalRequest(
+        adapter.save(pendingApproval(
                 "approval-1",
                 "run-1",
-                "step-1",
                 "invocation-1",
                 "tenant-1",
-                "user-1",
-                "agent-1",
-                "memory-forget",
-                ApprovalType.TOOL_EXECUTION,
-                ToolRiskLevel.HIGH,
-                "Tool memory-forget requires approval",
-                "{\"argumentKeys\":[\"input\"]}",
-                ApprovalRequestStatus.PENDING,
-                requestedAt,
-                null,
-                null,
-                null,
-                null));
+                REQUESTED_AT));
 
         Map<String, Object> row = jdbcTemplate.queryForMap("""
                 SELECT approval_id, run_id, step_id, tool_invocation_id, tenant_id, user_id, agent_id,
@@ -85,6 +79,105 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
         assertThat(row.get("DECIDED_BY")).isNull();
         assertThat(row.get("DECIDED_AT")).isNull();
         assertThat(row.get("DECISION_COMMENT")).isNull();
+    }
+
+    @Test
+    void shouldFindAndPagePendingApprovalRequests() {
+        DriverManagerDataSource dataSource = dataSource("tool-approval-query");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createApprovalRequestSchema(jdbcTemplate);
+        JdbcToolApprovalRequestRepositoryAdapter adapter = new JdbcToolApprovalRequestRepositoryAdapter(dataSource);
+        adapter.save(pendingApproval("approval-1", "tenant-1", REQUESTED_AT));
+        adapter.save(pendingApproval("approval-2", "tenant-1", REQUESTED_AT.plusSeconds(60)));
+        adapter.save(pendingApproval("approval-3", "tenant-2", REQUESTED_AT.plusSeconds(120)));
+
+        Optional<ApprovalRequest> found = adapter.findById("approval-1");
+        ApprovalRequestPage page = adapter.page(new ApprovalRequestQuery(
+                "tenant-1",
+                ApprovalRequestStatus.PENDING,
+                1L,
+                10L));
+
+        assertThat(found).isPresent();
+        assertThat(found.orElseThrow().approvalId()).isEqualTo("approval-1");
+        assertThat(page.total()).isEqualTo(2L);
+        assertThat(page.records())
+                .extracting(ApprovalRequest::approvalId)
+                .containsExactly("approval-2", "approval-1");
+    }
+
+    @Test
+    void shouldFindLatestApprovalByRunAndStep() {
+        DriverManagerDataSource dataSource = dataSource("tool-approval-run-step");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createApprovalRequestSchema(jdbcTemplate);
+        JdbcToolApprovalRequestRepositoryAdapter adapter = new JdbcToolApprovalRequestRepositoryAdapter(dataSource);
+        adapter.save(pendingApproval("approval-old", "run-1", "invocation-old", "tenant-1", REQUESTED_AT));
+        adapter.save(pendingApproval("approval-new", "run-1", "invocation-new", "tenant-1", REQUESTED_AT.plusSeconds(60)));
+        adapter.save(pendingApproval("approval-other", "run-2", "invocation-other", "tenant-1", REQUESTED_AT.plusSeconds(120)));
+
+        Optional<ApprovalRequest> found = adapter.findLatestByRunIdAndStepId("run-1", "step-1");
+
+        assertThat(found).isPresent();
+        assertThat(found.orElseThrow().approvalId()).isEqualTo("approval-new");
+        assertThat(adapter.findLatestByRunIdAndStepId("run-1", "missing-step")).isEmpty();
+    }
+
+    @Test
+    void shouldDecidePendingApprovalWithOptimisticStatusUpdate() {
+        DriverManagerDataSource dataSource = dataSource("tool-approval-decide");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createApprovalRequestSchema(jdbcTemplate);
+        JdbcToolApprovalRequestRepositoryAdapter adapter = new JdbcToolApprovalRequestRepositoryAdapter(dataSource);
+        adapter.save(pendingApproval("approval-1", "tenant-1", REQUESTED_AT));
+
+        Optional<ApprovalRequest> decided = adapter.decide(new ApprovalRequestDecision(
+                "approval-1",
+                ApprovalRequestStatus.PENDING,
+                ApprovalRequestStatus.APPROVED,
+                "admin-1",
+                DECIDED_AT,
+                "Looks safe",
+                null));
+        Optional<ApprovalRequest> staleDecision = adapter.decide(new ApprovalRequestDecision(
+                "approval-1",
+                ApprovalRequestStatus.PENDING,
+                ApprovalRequestStatus.REJECTED,
+                "admin-2",
+                DECIDED_AT.plusSeconds(1),
+                "Too late",
+                null));
+
+        assertThat(decided).isPresent();
+        assertThat(decided.orElseThrow().status()).isEqualTo(ApprovalRequestStatus.APPROVED);
+        assertThat(decided.orElseThrow().decidedBy()).isEqualTo("admin-1");
+        assertThat(decided.orElseThrow().decidedAt()).isEqualTo(DECIDED_AT);
+        assertThat(decided.orElseThrow().decisionComment()).isEqualTo("Looks safe");
+        assertThat(staleDecision).isEmpty();
+    }
+
+    @Test
+    void shouldModifyArgumentsPreviewWhenDecisionCarriesPreview() {
+        DriverManagerDataSource dataSource = dataSource("tool-approval-modify");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createApprovalRequestSchema(jdbcTemplate);
+        JdbcToolApprovalRequestRepositoryAdapter adapter = new JdbcToolApprovalRequestRepositoryAdapter(dataSource);
+        adapter.save(pendingApproval("approval-1", "tenant-1", REQUESTED_AT));
+
+        Optional<ApprovalRequest> decided = adapter.decide(new ApprovalRequestDecision(
+                "approval-1",
+                ApprovalRequestStatus.PENDING,
+                ApprovalRequestStatus.MODIFIED,
+                "admin-1",
+                DECIDED_AT,
+                "Reduced scope",
+                "{\"argumentKeys\":[\"input\"],\"modified\":true}"));
+
+        assertThat(decided).isPresent();
+        assertThat(decided.orElseThrow().status()).isEqualTo(ApprovalRequestStatus.MODIFIED);
+        assertThat(decided.orElseThrow().argumentsPreviewJson())
+                .isEqualTo("{\"argumentKeys\":[\"input\"],\"modified\":true}");
+        assertThat(decided.orElseThrow().decisionComment()).isEqualTo("Reduced scope");
     }
 
     private DriverManagerDataSource dataSource(String name) {
@@ -115,5 +208,40 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
                     decision_comment VARCHAR(1000)
                 )
                 """);
+    }
+
+    private ApprovalRequest pendingApproval(String approvalId, String tenantId, Instant requestedAt) {
+        return pendingApproval(
+                approvalId,
+                "run-" + approvalId,
+                "invocation-" + approvalId,
+                tenantId,
+                requestedAt);
+    }
+
+    private ApprovalRequest pendingApproval(String approvalId,
+                                            String runId,
+                                            String toolInvocationId,
+                                            String tenantId,
+                                            Instant requestedAt) {
+        return new ApprovalRequest(
+                approvalId,
+                runId,
+                "step-1",
+                toolInvocationId,
+                tenantId,
+                "user-1",
+                "agent-1",
+                "memory-forget",
+                ApprovalType.TOOL_EXECUTION,
+                ToolRiskLevel.HIGH,
+                "Tool memory-forget requires approval",
+                "{\"argumentKeys\":[\"input\"]}",
+                ApprovalRequestStatus.PENDING,
+                requestedAt,
+                null,
+                null,
+                null,
+                null);
     }
 }

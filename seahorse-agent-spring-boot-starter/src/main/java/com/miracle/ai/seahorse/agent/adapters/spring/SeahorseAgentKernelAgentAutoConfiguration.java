@@ -24,7 +24,10 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.LocalToolGatewayPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunResumeService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJsonSupport;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
@@ -37,10 +40,13 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowled
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
@@ -53,6 +59,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -121,14 +128,16 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                    ObjectProvider<KernelRagTraceRecorder> traceRecorder,
                                                    ObjectProvider<ContextWeaverPort> contextWeaverPort,
                                                    ObjectProvider<ToolGatewayPort> toolGatewayPort,
-                                                   ObjectProvider<AgentRunStepRecorder> runStepRecorder) {
+                                                   ObjectProvider<AgentRunStepRecorder> runStepRecorder,
+                                                   ObjectProvider<AgentApprovalWaitHandler> approvalWaitHandler) {
         return new KernelAgentLoop(modelPort, toolRegistry,
                 toolGatewayPort.getIfAvailable(() -> new LocalToolGatewayPort(toolRegistry)),
                 options,
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
                 contextWeaverPort.getIfAvailable(
                         com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver::new),
-                runStepRecorder.getIfAvailable(AgentRunStepRecorder::noop));
+                runStepRecorder.getIfAvailable(AgentRunStepRecorder::noop),
+                approvalWaitHandler.getIfAvailable(AgentApprovalWaitHandler::noop));
     }
 
     @Bean
@@ -153,12 +162,57 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                    ObjectProvider<ToolPolicyPort> toolPolicyPort,
                                                    ObjectProvider<ToolInvocationAuditPort> toolInvocationAuditPort,
                                                    ObjectProvider<ToolApprovalRequestRepositoryPort> toolApprovalRequestRepositoryPort,
+                                                   ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
                                                    ObjectProvider<Clock> clockProvider) {
         return new LocalToolGatewayPort(
                 toolRegistry,
                 toolPolicyPort.getIfAvailable(ToolPolicyPort::defaults),
                 toolInvocationAuditPort.getIfAvailable(ToolInvocationAuditPort::noop),
                 toolApprovalRequestRepositoryPort.getIfAvailable(ToolApprovalRequestRepositoryPort::noop),
+                approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty),
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean({AgentRunRepositoryPort.class, AgentCheckpointRepositoryPort.class})
+    @ConditionalOnMissingBean
+    public AgentApprovalWaitHandler seahorseAgentApprovalWaitHandler(
+            AgentRunRepositoryPort agentRunRepositoryPort,
+            AgentCheckpointRepositoryPort agentCheckpointRepositoryPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new RepositoryAgentApprovalWaitHandler(
+                agentRunRepositoryPort,
+                agentCheckpointRepositoryPort,
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean({
+            AgentRunRepositoryPort.class,
+            AgentCheckpointRepositoryPort.class,
+            ApprovalRequestQueryPort.class,
+            ToolGatewayPort.class,
+            StreamingChatModelPort.class,
+            CurrentUserPort.class
+    })
+    @ConditionalOnMissingBean(AgentRunResumeInboundPort.class)
+    public KernelAgentRunResumeService seahorseAgentRunResumeInboundPort(
+            AgentRunRepositoryPort agentRunRepositoryPort,
+            AgentCheckpointRepositoryPort agentCheckpointRepositoryPort,
+            ApprovalRequestQueryPort approvalRequestQueryPort,
+            ToolGatewayPort toolGatewayPort,
+            StreamingChatModelPort streamingChatModelPort,
+            CurrentUserPort currentUserPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelAgentRunResumeService(
+                agentRunRepositoryPort,
+                agentCheckpointRepositoryPort,
+                approvalRequestQueryPort,
+                toolGatewayPort,
+                streamingChatModelPort,
+                currentUserPort,
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
