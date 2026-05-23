@@ -20,11 +20,14 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalCacheAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.local.LocalSemaphoreAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisCacheAdapter;
+import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisMemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisSemaphoreAdapter;
 import com.miracle.ai.seahorse.agent.adapters.cache.redis.RedisStreamTaskPort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedSemaphorePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
@@ -117,6 +120,17 @@ public class SeahorseAgentCacheAdapterAutoConfiguration {
         @ConditionalOnMissingBean(StreamTaskPort.class)
         public RedisStreamTaskPort seahorseRedisStreamTaskPort(RedissonClient redissonClient) {
             return new RedisStreamTaskPort(redissonClient);
+        }
+
+        @Bean
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.memory-aggregation", name = "type",
+                havingValue = "redis")
+        @ConditionalOnBean({RedissonClient.class, MemoryAggregationPolicy.class})
+        @ConditionalOnMissingBean(MemoryAggregationBufferPort.class)
+        public RedisMemoryAggregationBufferPort seahorseRedisMemoryAggregationBufferPort(
+                RedissonClient redissonClient,
+                MemoryAggregationPolicy policy) {
+            return new RedisMemoryAggregationBufferPort(redissonClient, policy);
         }
     }
 
