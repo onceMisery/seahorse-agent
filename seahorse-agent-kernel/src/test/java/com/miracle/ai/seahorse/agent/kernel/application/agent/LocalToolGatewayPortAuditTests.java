@@ -35,6 +35,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPo
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
@@ -167,6 +168,25 @@ class LocalToolGatewayPortAuditTests {
         assertEquals(0, approvals.saved.size());
         assertEquals(ToolInvocationStatus.ALLOWED, audit.decisions.get(0).status());
         assertEquals(ToolInvocationStatus.SUCCEEDED, audit.completed.get(0).status());
+    }
+
+    @Test
+    void shouldRedactSensitiveToolOutputBeforeReturningAndAuditing() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("token=sk-live-secret"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                ToolOutputRedactionPort.basicSecretPatterns(),
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertTrue(result.success());
+        assertEquals("token=[REDACTED]", result.content());
+        assertEquals(ToolInvocationStatus.SUCCEEDED, audit.completed.get(0).status());
+        assertEquals("length=16", audit.completed.get(0).resultSummary());
     }
 
     @Test

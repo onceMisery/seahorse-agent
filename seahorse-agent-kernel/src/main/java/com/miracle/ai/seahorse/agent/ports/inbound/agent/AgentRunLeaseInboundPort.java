@@ -15,23 +15,19 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
+package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
-public enum AgentRunStatus {
-    CREATED,
-    RUNNING,
-    WAITING_APPROVAL,
-    SUCCEEDED,
-    FAILED,
-    REJECTED,
-    EXPIRED,
-    CANCELLED;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunLease;
 
-    public boolean isTerminal() {
-        return this == SUCCEEDED
-                || this == FAILED
-                || this == REJECTED
-                || this == EXPIRED
-                || this == CANCELLED;
-    }
+import java.util.Optional;
+
+public interface AgentRunLeaseInboundPort {
+
+    boolean acquire(AgentRunLeaseCommand command);
+
+    boolean heartbeat(AgentRunLeaseCommand command);
+
+    boolean release(String runId, String workerId);
+
+    Optional<AgentRunLease> findByRunId(String runId);
 }

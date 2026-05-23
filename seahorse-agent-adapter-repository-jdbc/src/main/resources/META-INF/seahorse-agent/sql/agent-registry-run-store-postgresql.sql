@@ -96,6 +96,13 @@ CREATE TABLE IF NOT EXISTS sa_agent_checkpoint (
 CREATE INDEX IF NOT EXISTS idx_sa_agent_checkpoint_run
   ON sa_agent_checkpoint(run_id, sequence_no);
 
+CREATE TABLE IF NOT EXISTS sa_agent_run_lease (
+  run_id VARCHAR(64) PRIMARY KEY,
+  worker_id VARCHAR(128) NOT NULL,
+  lease_until TIMESTAMP NOT NULL,
+  heartbeat_at TIMESTAMP NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sa_tool_catalog (
   tool_id VARCHAR(128) PRIMARY KEY,
   provider VARCHAR(32) NOT NULL,

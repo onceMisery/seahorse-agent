@@ -31,6 +31,7 @@ public final class ToolPolicyReasonCodes {
     public static final String TOOL_ARGUMENT_REQUIRED_MISSING = "TOOL_ARGUMENT_REQUIRED_MISSING";
     public static final String TOOL_ARGUMENT_NOT_ALLOWED = "TOOL_ARGUMENT_NOT_ALLOWED";
     public static final String TOOL_APPROVAL_REQUIRED = "TOOL_APPROVAL_REQUIRED";
+    public static final String RESOURCE_FORBIDDEN = "RESOURCE_FORBIDDEN";
     public static final String POLICY_DECISION_MISSING = "POLICY_DECISION_MISSING";
 
     private ToolPolicyReasonCodes() {

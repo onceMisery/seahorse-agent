@@ -20,23 +20,23 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.AgentToolBinding;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessRequest;
 
 import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 
-/**
- * 基于工具目录与 Agent 版本绑定的内置策略实现。
- */
 public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
 
     private static final Set<ToolActionType> APPROVAL_ACTION_TYPES = EnumSet.of(
@@ -47,6 +47,7 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
     private final AgentToolBindingRepositoryPort bindingRepository;
     private final ToolInvocationUsagePort invocationUsagePort;
     private final Predicate<ToolPolicyRequest> toolRegisteredPredicate;
+    private final ToolResourceAccessPort resourceAccessPort;
 
     public CatalogBackedToolPolicyPort(ToolCatalogRepositoryPort toolCatalogRepository,
                                        AgentToolBindingRepositoryPort bindingRepository) {
@@ -70,6 +71,15 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
                                        AgentToolBindingRepositoryPort bindingRepository,
                                        ToolInvocationUsagePort invocationUsagePort,
                                        Predicate<ToolPolicyRequest> toolRegisteredPredicate) {
+        this(toolCatalogRepository, bindingRepository, invocationUsagePort, toolRegisteredPredicate,
+                ToolResourceAccessPort.allowAll());
+    }
+
+    public CatalogBackedToolPolicyPort(ToolCatalogRepositoryPort toolCatalogRepository,
+                                       AgentToolBindingRepositoryPort bindingRepository,
+                                       ToolInvocationUsagePort invocationUsagePort,
+                                       Predicate<ToolPolicyRequest> toolRegisteredPredicate,
+                                       ToolResourceAccessPort resourceAccessPort) {
         this.toolCatalogRepository = Objects.requireNonNullElseGet(
                 toolCatalogRepository,
                 ToolCatalogRepositoryPort::empty);
@@ -82,6 +92,9 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         this.toolRegisteredPredicate = Objects.requireNonNullElseGet(
                 toolRegisteredPredicate,
                 () -> ToolPolicyRequest::toolRegistered);
+        this.resourceAccessPort = Objects.requireNonNullElseGet(
+                resourceAccessPort,
+                ToolResourceAccessPort::allowAll);
     }
 
     @Override
@@ -113,7 +126,10 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         if (argumentDecision != null) {
             return argumentDecision;
         }
-        // 高风险、删除、对外发送或显式审批工具先中断执行，后续由 HITL 阶段接管审批流。
+        PolicyDecision resourceDecision = validateResourceAccess(request, tool);
+        if (resourceDecision != null) {
+            return resourceDecision;
+        }
         if (requiresApproval(tool)) {
             return PolicyDecision.approvalRequired(
                     "builtin-tool-approval-required",
@@ -125,7 +141,6 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
 
     private PolicyDecision validateArguments(ToolPolicyRequest request, AgentToolBinding binding) {
         try {
-            // 参数策略来源于 Agent 版本绑定快照，避免发布后动态工具约束漂移。
             return ToolArgumentPolicy.parse(binding.argumentPolicyJson())
                     .validate(request.arguments())
                     .map(violation -> deny(violation.reasonCode(), violation.reasonMessage()))
@@ -136,11 +151,31 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         }
     }
 
+    private PolicyDecision validateResourceAccess(ToolPolicyRequest request, ToolCatalogEntry tool) {
+        if (request.resourceRefs().isEmpty()) {
+            return null;
+        }
+        ToolResourceAccessDecision accessDecision = resourceAccessPort.decide(new ToolResourceAccessRequest(
+                request.runId(),
+                request.agentId(),
+                request.versionId(),
+                request.tenantId(),
+                request.userId(),
+                request.agentIdentityId(),
+                request.toolId(),
+                tool.resourceType(),
+                request.resourceRefs()));
+        if (accessDecision != null && accessDecision.allowed()) {
+            return null;
+        }
+        String reason = accessDecision == null ? "Resource access decision missing" : accessDecision.reason();
+        return deny(ToolPolicyReasonCodes.RESOURCE_FORBIDDEN, reason);
+    }
+
     private boolean exceedsCallLimit(ToolPolicyRequest request, AgentToolBinding binding) {
         if (request.runId() == null) {
             return false;
         }
-        // Gateway 在策略裁决前写入 REQUESTED 审计事件，因此这里的计数包含当前请求。
         long requestedCalls = invocationUsagePort.countRequestedCalls(
                 request.runId(), request.agentId(), request.versionId(), request.toolId());
         return requestedCalls > binding.maxCallsPerRun();

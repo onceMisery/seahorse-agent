@@ -26,6 +26,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import org.junit.jupiter.api.Test;
@@ -163,6 +166,25 @@ class CatalogBackedToolPolicyPortTests {
     }
 
     @Test
+    void shouldDenyWhenResourceAccessPolicyRejectsReferencedResource() {
+        CatalogBackedToolPolicyPort policy = new CatalogBackedToolPolicyPort(
+                new SingleToolCatalogRepository(tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ,
+                        true, false)),
+                new SingleAgentToolBindingRepository(binding("knowledge-search", 3)),
+                ToolInvocationUsagePort.empty(),
+                request -> true,
+                request -> ToolResourceAccessDecision.deny("kb-1 forbidden"));
+
+        PolicyDecision decision = policy.decide(request(
+                "knowledge-search",
+                Map.of("input", "value"),
+                Map.of("knowledgeBaseId", "kb-1")));
+
+        assertEquals(PolicyDecision.Effect.DENY, decision.effect());
+        assertEquals(ToolPolicyReasonCodes.RESOURCE_FORBIDDEN, decision.reasonCode());
+    }
+
+    @Test
     void shouldDenyWhenArgumentPolicyJsonIsInvalid() {
         CatalogBackedToolPolicyPort policy = policy(
                 tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ, true, false),
@@ -197,6 +219,12 @@ class CatalogBackedToolPolicyPortTests {
     }
 
     private static ToolPolicyRequest request(String toolId, Map<String, Object> arguments) {
+        return request(toolId, arguments, Map.of());
+    }
+
+    private static ToolPolicyRequest request(String toolId,
+                                             Map<String, Object> arguments,
+                                             Map<String, String> resourceRefs) {
         return new ToolPolicyRequest(
                 "run-1",
                 "step-1",
@@ -208,7 +236,7 @@ class CatalogBackedToolPolicyPortTests {
                 "agent-identity-1",
                 toolId,
                 arguments,
-                Map.of(),
+                resourceRefs,
                 "run-1:call-1",
                 List.of(toolId),
                 true);

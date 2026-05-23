@@ -37,6 +37,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToo
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.QueryMetadataToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
@@ -52,7 +53,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
@@ -147,11 +150,14 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     public ToolPolicyPort seahorseCatalogBackedToolPolicyPort(
             ToolCatalogRepositoryPort toolCatalogRepositoryPort,
             AgentToolBindingRepositoryPort agentToolBindingRepositoryPort,
-            ObjectProvider<ToolInvocationUsagePort> toolInvocationUsagePort) {
+            ObjectProvider<ToolInvocationUsagePort> toolInvocationUsagePort,
+            ObjectProvider<ToolResourceAccessPort> toolResourceAccessPort) {
         return new CatalogBackedToolPolicyPort(
                 toolCatalogRepositoryPort,
                 agentToolBindingRepositoryPort,
-                toolInvocationUsagePort.getIfAvailable(ToolInvocationUsagePort::empty));
+                toolInvocationUsagePort.getIfAvailable(ToolInvocationUsagePort::empty),
+                ToolPolicyRequest::toolRegistered,
+                toolResourceAccessPort.getIfAvailable(ToolResourceAccessPort::allowAll));
     }
 
     @Bean
@@ -163,6 +169,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                    ObjectProvider<ToolInvocationAuditPort> toolInvocationAuditPort,
                                                    ObjectProvider<ToolApprovalRequestRepositoryPort> toolApprovalRequestRepositoryPort,
                                                    ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
+                                                   ObjectProvider<ToolOutputRedactionPort> toolOutputRedactionPort,
                                                    ObjectProvider<Clock> clockProvider) {
         return new LocalToolGatewayPort(
                 toolRegistry,
@@ -170,6 +177,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 toolInvocationAuditPort.getIfAvailable(ToolInvocationAuditPort::noop),
                 toolApprovalRequestRepositoryPort.getIfAvailable(ToolApprovalRequestRepositoryPort::noop),
                 approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty),
+                toolOutputRedactionPort.getIfAvailable(ToolOutputRedactionPort::noop),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
