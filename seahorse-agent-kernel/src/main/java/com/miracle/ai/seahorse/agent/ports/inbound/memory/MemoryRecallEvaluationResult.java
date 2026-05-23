@@ -17,7 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public record MemoryRecallEvaluationResult(
@@ -31,7 +34,8 @@ public record MemoryRecallEvaluationResult(
         double reciprocalRank,
         double recall,
         double precision,
-        double noiseRate
+        double noiseRate,
+        Map<String, Integer> channelHitCounts
 ) {
 
     public MemoryRecallEvaluationResult {
@@ -40,6 +44,32 @@ public record MemoryRecallEvaluationResult(
         expectedMemoryIds = copyIds(expectedMemoryIds);
         retrievedMemoryIds = copyIds(retrievedMemoryIds);
         missingExpectedMemoryIds = copyIds(missingExpectedMemoryIds);
+        channelHitCounts = freezeChannelHitCounts(channelHitCounts);
+    }
+
+    public MemoryRecallEvaluationResult(String caseId,
+                                        String query,
+                                        List<String> expectedMemoryIds,
+                                        List<String> retrievedMemoryIds,
+                                        List<String> missingExpectedMemoryIds,
+                                        boolean scored,
+                                        boolean hit,
+                                        double reciprocalRank,
+                                        double recall,
+                                        double precision,
+                                        double noiseRate) {
+        this(caseId,
+                query,
+                expectedMemoryIds,
+                retrievedMemoryIds,
+                missingExpectedMemoryIds,
+                scored,
+                hit,
+                reciprocalRank,
+                recall,
+                precision,
+                noiseRate,
+                Collections.emptyMap());
     }
 
     private static List<String> copyIds(List<String> ids) {
@@ -55,5 +85,19 @@ public record MemoryRecallEvaluationResult(
 
     private static String normalize(String value) {
         return Objects.requireNonNullElse(value, "").trim();
+    }
+
+    private static Map<String, Integer> freezeChannelHitCounts(Map<String, Integer> source) {
+        if (source == null || source.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, Integer> frozen = new LinkedHashMap<>();
+        source.forEach((channel, count) -> {
+            if (channel == null || channel.isBlank() || count == null) {
+                return;
+            }
+            frozen.put(channel, Math.max(0, count));
+        });
+        return Collections.unmodifiableMap(frozen);
     }
 }

@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolution;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryContextAttribution;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFusionPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallCandidate;
@@ -171,6 +172,12 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
             int requestTopK,
             Map<String, Object> aliasDetails
     ) {
+    }
+
+    private record RecallOutcome(List<MemoryItem> items, Map<String, List<String>> channelAttribution) {
+    }
+
+    private record LoadOutcome(MemoryContext context, Map<String, List<String>> channelAttribution) {
     }
 
     public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
@@ -382,8 +389,18 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
 
     @Override
     public MemoryContext load(MemoryLoadRequest request) {
+        return loadInternal(request).context();
+    }
+
+    @Override
+    public MemoryContextAttribution loadWithAttribution(MemoryLoadRequest request) {
+        LoadOutcome outcome = loadInternal(request);
+        return new MemoryContextAttribution(outcome.context(), outcome.channelAttribution());
+    }
+
+    private LoadOutcome loadInternal(MemoryLoadRequest request) {
         if (request == null || isBlank(request.userId())) {
-            return emptyContext(request);
+            return new LoadOutcome(emptyContext(request), Map.of());
         }
         String userId = request.userId();
         var routePlan = memoryRouterPort.route(new MemoryRouteRequest(userId, DEFAULT_TENANT_ID,
@@ -403,11 +420,14 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         List<MemoryItem> shortTerm = Collections.emptyList();
         List<MemoryItem> longTerm = Collections.emptyList();
         List<MemoryItem> semantic = Collections.emptyList();
+        Map<String, List<String>> channelAttribution = Map.of();
         if (loadEpisodic || (!channels.isEmpty() && !isBlank(request.currentQuestion()))) {
-            List<MemoryItem> recalled = recallUserMemories(userId, request.currentQuestion(), routePlan.activeTracks());
-            shortTerm = filterByLayer(recalled, MemoryLayer.SHORT_TERM);
-            longTerm = filterByLayer(recalled, MemoryLayer.LONG_TERM);
-            semantic = filterByLayer(recalled, MemoryLayer.SEMANTIC);
+            RecallOutcome recalled = recallUserMemoriesWithAttribution(
+                    userId, request.currentQuestion(), routePlan.activeTracks());
+            shortTerm = filterByLayer(recalled.items(), MemoryLayer.SHORT_TERM);
+            longTerm = filterByLayer(recalled.items(), MemoryLayer.LONG_TERM);
+            semantic = filterByLayer(recalled.items(), MemoryLayer.SEMANTIC);
+            channelAttribution = recalled.channelAttribution();
         }
         List<MemoryItem> businessDocuments = loadBusinessDocument
                 ? loadBusinessDocuments(userId, request.currentQuestion(), fusionPolicy.finalTopK())
@@ -432,7 +452,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         recordProfileReadFeedback(profile, referencedAt);
         recordLayerReadFeedback(shortTerm, longTerm, semantic, referencedAt);
 
-        return MemoryContext.builder()
+        MemoryContext context = MemoryContext.builder()
                 .conversationId(request.conversationId())
                 .userId(userId)
                 .currentQuestion(request.currentQuestion())
@@ -445,6 +465,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 .semanticMemories(semantic)
                 .promptMessages(Collections.emptyList())
                 .build();
+        return new LoadOutcome(context, channelAttribution);
     }
 
     private List<MemoryRecallChannelPort> sortedChannels(List<MemoryRecallChannelPort> source) {
@@ -459,8 +480,14 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     }
 
     private List<MemoryItem> recallUserMemories(String userId, String query, Set<MemoryTrack> activeTracks) {
+        return recallUserMemoriesWithAttribution(userId, query, activeTracks).items();
+    }
+
+    private RecallOutcome recallUserMemoriesWithAttribution(String userId,
+                                                            String query,
+                                                            Set<MemoryTrack> activeTracks) {
         if (isBlank(query) || channels.isEmpty()) {
-            return List.of();
+            return new RecallOutcome(List.of(), Map.of());
         }
         AliasResolvedQuery resolvedQuery = resolveRecallAlias(userId, query);
         MemoryRecallRequest recallRequest = new MemoryRecallRequest(
@@ -479,10 +506,31 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         recordRecallFusion(userId, channelResults, fused, fusionPolicy.finalTopK(), traceContext);
         List<MemoryRecallCandidate> reranked = rerankFusedCandidates(recallRequest, fused);
         recordRecallRerank(userId, fused, reranked, traceContext);
-        return reranked.stream()
+        List<MemoryItem> items = reranked.stream()
                 .map(this::toMemoryItem)
                 .flatMap(Optional::stream)
                 .toList();
+        return new RecallOutcome(items, buildChannelAttribution(channelResults));
+    }
+
+    private Map<String, List<String>> buildChannelAttribution(List<List<MemoryRecallCandidate>> channelResults) {
+        if (channelResults == null || channelResults.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, List<String>> attribution = new LinkedHashMap<>();
+        int columns = Math.min(channels.size(), channelResults.size());
+        for (int index = 0; index < columns; index++) {
+            String channelName = channels.get(index).channelName();
+            if (channelName == null || channelName.isBlank()) {
+                continue;
+            }
+            List<String> candidateIds = channelResults.get(index).stream()
+                    .map(MemoryRecallCandidate::memoryId)
+                    .filter(id -> id != null && !id.isBlank())
+                    .toList();
+            attribution.put(channelName, candidateIds);
+        }
+        return attribution;
     }
 
     private List<MemoryRecallCandidate> rerankFusedCandidates(MemoryRecallRequest request,

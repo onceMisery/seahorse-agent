@@ -23,4 +23,16 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 public interface MemoryRetrievalPipelinePort {
 
     MemoryContext load(MemoryLoadRequest request);
+
+    /**
+     * Load the memory context together with the per-channel candidate attribution that produced it.
+     *
+     * <p>Default implementations delegate to {@link #load(MemoryLoadRequest)} and return an empty
+     * attribution map. Pipelines that fan out across multiple recall channels (e.g. the hybrid
+     * pipeline) should override this method to expose which channels contributed each candidate so
+     * downstream callers can score channel quality.
+     */
+    default MemoryContextAttribution loadWithAttribution(MemoryLoadRequest request) {
+        return MemoryContextAttribution.withoutChannels(load(request));
+    }
 }

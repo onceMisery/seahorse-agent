@@ -17,7 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public record MemoryRecallEvaluationReport(
@@ -29,10 +32,47 @@ public record MemoryRecallEvaluationReport(
         double averageRecall,
         double averagePrecision,
         double averageNoiseRate,
-        List<MemoryRecallEvaluationResult> results
+        List<MemoryRecallEvaluationResult> results,
+        Map<String, Integer> channelHitCounts
 ) {
 
     public MemoryRecallEvaluationReport {
         results = List.copyOf(Objects.requireNonNullElse(results, List.of()));
+        channelHitCounts = freezeChannelHitCounts(channelHitCounts);
+    }
+
+    public MemoryRecallEvaluationReport(int caseCount,
+                                        int scoredCaseCount,
+                                        int hitCount,
+                                        double hitRate,
+                                        double meanReciprocalRank,
+                                        double averageRecall,
+                                        double averagePrecision,
+                                        double averageNoiseRate,
+                                        List<MemoryRecallEvaluationResult> results) {
+        this(caseCount,
+                scoredCaseCount,
+                hitCount,
+                hitRate,
+                meanReciprocalRank,
+                averageRecall,
+                averagePrecision,
+                averageNoiseRate,
+                results,
+                Collections.emptyMap());
+    }
+
+    private static Map<String, Integer> freezeChannelHitCounts(Map<String, Integer> source) {
+        if (source == null || source.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, Integer> frozen = new LinkedHashMap<>();
+        source.forEach((channel, count) -> {
+            if (channel == null || channel.isBlank() || count == null) {
+                return;
+            }
+            frozen.put(channel, Math.max(0, count));
+        });
+        return Collections.unmodifiableMap(frozen);
     }
 }

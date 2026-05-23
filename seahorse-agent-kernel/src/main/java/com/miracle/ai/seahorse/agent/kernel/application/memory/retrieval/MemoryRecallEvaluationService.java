@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenCase;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryContextAttribution;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
@@ -95,6 +96,7 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
                 .filter(MemoryRecallEvaluationResult::scored)
                 .mapToDouble(MemoryRecallEvaluationResult::noiseRate)
                 .sum();
+        Map<String, Integer> aggregatedChannelHitCounts = aggregateChannelHitCounts(results);
         MemoryRecallEvaluationReport report = new MemoryRecallEvaluationReport(
                 results.size(),
                 scoredCaseCount,
@@ -104,9 +106,25 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
                 average(recallSum, scoredCaseCount),
                 average(precisionSum, scoredCaseCount),
                 average(noiseRateSum, scoredCaseCount),
-                results);
+                results,
+                aggregatedChannelHitCounts);
         emitEvaluationMetric(scoredCaseCount);
         return report;
+    }
+
+    private Map<String, Integer> aggregateChannelHitCounts(List<MemoryRecallEvaluationResult> results) {
+        if (results.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Integer> aggregated = new LinkedHashMap<>();
+        for (MemoryRecallEvaluationResult result : results) {
+            Map<String, Integer> caseChannels = result.channelHitCounts();
+            if (caseChannels.isEmpty()) {
+                continue;
+            }
+            caseChannels.forEach((channel, count) -> aggregated.merge(channel, count, Integer::sum));
+        }
+        return aggregated;
     }
 
     private void emitEvaluationMetric(int scoredCaseCount) {
@@ -123,13 +141,15 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
     }
 
     private MemoryRecallEvaluationResult evaluateCase(MemoryRecallGoldenCase goldenCase, int topK) {
-        MemoryContext context = retrievalPipelinePort.load(MemoryLoadRequest.builder()
+        MemoryContextAttribution attribution = retrievalPipelinePort.loadWithAttribution(MemoryLoadRequest.builder()
                 .conversationId(goldenCase.conversationId())
                 .userId(goldenCase.userId())
                 .currentQuestion(goldenCase.query())
                 .build());
+        MemoryContext context = attribution.context();
         List<String> retrievedIds = rankedMemoryIds(context, topK);
         List<String> expectedIds = goldenCase.expectedMemoryIds();
+        Map<String, Integer> channelHitCounts = countChannelHits(attribution.channelCandidateIds(), expectedIds);
         if (expectedIds.isEmpty()) {
             return new MemoryRecallEvaluationResult(
                     goldenCase.caseId(),
@@ -142,7 +162,8 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
                     0D,
                     0D,
                     0D,
-                    0D);
+                    0D,
+                    channelHitCounts);
         }
         Set<String> retrievedSet = new LinkedHashSet<>(retrievedIds);
         List<String> missing = expectedIds.stream()
@@ -163,7 +184,30 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
                 firstHitRank > 0 ? 1D / firstHitRank : 0D,
                 (double) matchedCount / expectedIds.size(),
                 precision,
-                noiseRate);
+                noiseRate,
+                channelHitCounts);
+    }
+
+    private Map<String, Integer> countChannelHits(Map<String, List<String>> channelCandidateIds,
+                                                  List<String> expectedMemoryIds) {
+        if (channelCandidateIds == null || channelCandidateIds.isEmpty()) {
+            return Map.of();
+        }
+        if (expectedMemoryIds == null || expectedMemoryIds.isEmpty()) {
+            return Map.of();
+        }
+        Set<String> expectedSet = new LinkedHashSet<>(expectedMemoryIds);
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        channelCandidateIds.forEach((channel, candidateIds) -> {
+            if (channel == null || channel.isBlank() || candidateIds == null) {
+                return;
+            }
+            int hits = (int) candidateIds.stream()
+                    .filter(id -> id != null && expectedSet.contains(id))
+                    .count();
+            counts.put(channel, hits);
+        });
+        return counts;
     }
 
     private List<String> rankedMemoryIds(MemoryContext context, int topK) {

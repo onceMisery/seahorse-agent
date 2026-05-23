@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenCase;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryContextAttribution;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
@@ -32,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -145,6 +147,54 @@ class MemoryRecallEvaluationServiceTests {
                                 MemoryRecallEvaluationService.OBSERVATION_OUTCOME_EMPTY));
     }
 
+    @Test
+    void shouldReportPerChannelHitCountsWhenPipelineExposesAttribution() {
+        Map<String, MemoryContext> contexts = Map.of(
+                "alpha", context(List.of(item("mem-a", MemoryLayer.SEMANTIC, 0.9D),
+                        item("mem-b", MemoryLayer.SEMANTIC, 0.8D))));
+        Map<String, Map<String, List<String>>> attributionByQuery = Map.of(
+                "alpha", Map.of(
+                        "vector", List.of("mem-a", "mem-b"),
+                        "keyword", List.of("mem-a", "mem-noise")));
+        MemoryRecallEvaluationService service = new MemoryRecallEvaluationService(
+                new AttributingStaticPipeline(contexts, attributionByQuery));
+
+        MemoryRecallEvaluationReport report = service.evaluate(List.of(
+                new MemoryRecallGoldenCase("case-channels", "user-1", "conv-1", "alpha",
+                        List.of("mem-a", "mem-b"))),
+                5);
+
+        assertThat(report.channelHitCounts())
+                .containsEntry("vector", 2)
+                .containsEntry("keyword", 1);
+        assertThat(report.results()).singleElement()
+                .extracting(MemoryRecallEvaluationResult::channelHitCounts)
+                .satisfies(channels -> {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Integer> typed = (Map<String, Integer>) channels;
+                    assertThat(typed)
+                            .containsEntry("vector", 2)
+                            .containsEntry("keyword", 1);
+                });
+    }
+
+    @Test
+    void shouldReportEmptyChannelHitCountsWhenPipelineLacksAttribution() {
+        MemoryRecallEvaluationService service = new MemoryRecallEvaluationService(
+                new StaticPipeline(Map.of("plain", context(List.of(
+                        item("mem-1", MemoryLayer.SEMANTIC, 0.9D))))));
+
+        MemoryRecallEvaluationReport report = service.evaluate(List.of(
+                new MemoryRecallGoldenCase("case-plain", "user-1", "conv-1", "plain",
+                        List.of("mem-1"))),
+                3);
+
+        assertThat(report.channelHitCounts()).isEmpty();
+        assertThat(report.results()).singleElement()
+                .extracting(MemoryRecallEvaluationResult::channelHitCounts)
+                .satisfies(channels -> assertThat((Map<?, ?>) channels).isEmpty());
+    }
+
     private static MemoryContext context(List<MemoryItem> items) {
         return MemoryContext.builder()
                 .userId("user-1")
@@ -194,6 +244,45 @@ class MemoryRecallEvaluationServiceTests {
                             .workingMemory(List.of())
                             .promptMessages(List.of())
                             .build());
+        }
+    }
+
+    private static final class AttributingStaticPipeline implements MemoryRetrievalPipelinePort {
+
+        private final Map<String, MemoryContext> contexts;
+        private final Map<String, Map<String, List<String>>> attributionByQuery;
+
+        AttributingStaticPipeline(Map<String, MemoryContext> contexts,
+                                  Map<String, Map<String, List<String>>> attributionByQuery) {
+            this.contexts = Map.copyOf(contexts);
+            Map<String, Map<String, List<String>>> frozen = new LinkedHashMap<>();
+            attributionByQuery.forEach((query, channels) -> frozen.put(query, Map.copyOf(channels)));
+            this.attributionByQuery = Map.copyOf(frozen);
+        }
+
+        @Override
+        public MemoryContext load(MemoryLoadRequest request) {
+            return contexts.getOrDefault(
+                    Objects.requireNonNullElse(request.currentQuestion(), ""),
+                    MemoryContext.builder()
+                            .userId(request.userId())
+                            .conversationId(request.conversationId())
+                            .shortTermMemories(List.of())
+                            .longTermMemories(List.of())
+                            .semanticMemories(List.of())
+                            .profileMemories(List.of())
+                            .correctionMemories(List.of())
+                            .businessDocumentMemories(List.of())
+                            .workingMemory(List.of())
+                            .promptMessages(List.of())
+                            .build());
+        }
+
+        @Override
+        public MemoryContextAttribution loadWithAttribution(MemoryLoadRequest request) {
+            Map<String, List<String>> attribution = attributionByQuery.getOrDefault(
+                    Objects.requireNonNullElse(request.currentQuestion(), ""), Map.of());
+            return new MemoryContextAttribution(load(request), attribution);
         }
     }
 
