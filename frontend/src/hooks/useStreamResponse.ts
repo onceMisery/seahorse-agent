@@ -19,6 +19,8 @@ export interface StreamOptions {
   signal?: AbortSignal;
   retryCount?: number;
   retryDelayMs?: number;
+  /** 看门狗超时时间 (毫秒)，默认 30 秒 */
+  timeoutMs?: number;
 }
 
 type HttpError = Error & {
@@ -34,7 +36,7 @@ function parseData(raw: string): unknown {
   }
 }
 
-async function readSseStream(response: Response, handlers: StreamHandlers, signal?: AbortSignal) {
+async function readSseStream(response: Response, handlers: StreamHandlers, signal?: AbortSignal, timeoutMs?: number) {
   if (!response.body) {
     throw new Error("Stream response body is empty");
   }
@@ -44,6 +46,26 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
   let buffer = "";
   let eventName = "message";
   let dataLines: string[] = [];
+
+  // 看门狗：每次收到数据重置定时器，超时则报错
+  const watchdogMs = timeoutMs ?? 30000;
+  let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const resetWatchdog = () => {
+    if (watchdogTimer !== null) clearTimeout(watchdogTimer);
+    watchdogTimer = setTimeout(() => {
+      handlers.onError?.(new Error("Stream timeout: 服务器未在规定时间内响应"));
+    }, watchdogMs);
+  };
+
+  const clearWatchdog = () => {
+    if (watchdogTimer !== null) {
+      clearTimeout(watchdogTimer);
+      watchdogTimer = null;
+    }
+  };
+
+  resetWatchdog();
 
   const dispatchEvent = () => {
     if (dataLines.length === 0) {
@@ -94,14 +116,17 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
 
   while (true) {
     if (signal?.aborted) {
+      clearWatchdog();
       reader.cancel();
       break;
     }
     const { value, done } = await reader.read();
     if (done) {
       dispatchEvent();
+      clearWatchdog();
       break;
     }
+    resetWatchdog();
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() ?? "";
@@ -153,7 +178,7 @@ async function streamWithRetry(
   options: StreamOptions,
   handlers: StreamHandlers
 ): Promise<void> {
-  const { url, headers, signal } = options;
+  const { url, headers, signal, timeoutMs } = options;
   const retryCount = options.retryCount ?? 2;
   const retryDelayMs = options.retryDelayMs ?? 600;
 
@@ -173,7 +198,7 @@ async function streamWithRetry(
         throw await buildHttpError(response);
       }
 
-      await readSseStream(response, handlers, signal);
+      await readSseStream(response, handlers, signal, timeoutMs);
       return;
     } catch (error) {
       const err = error as Error;

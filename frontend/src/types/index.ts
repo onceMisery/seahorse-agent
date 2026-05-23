@@ -20,6 +20,20 @@ export interface Session {
   lastTime?: string;
 }
 
+export type ArtifactLanguage = "html" | "css" | "javascript" | "js" | "tsx" | "vue";
+
+export interface ArtifactBlock {
+  id: string;
+  language: ArtifactLanguage;
+  title: string;
+  code: string;
+  isComplete: boolean;
+}
+
+export type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "artifact"; artifact: ArtifactBlock };
+
 export interface Message {
   id: string;
   role: Role;
@@ -32,6 +46,9 @@ export interface Message {
   createdAt?: string;
   feedback?: FeedbackValue;
   status?: MessageStatus;
+  blocks?: ContentBlock[];
+  rawText?: string;
+  error?: string;
 }
 
 export interface StreamMetaPayload {

@@ -2,7 +2,7 @@ import * as React from "react";
 import { Brain, ChevronDown } from "lucide-react";
 
 import { FeedbackButtons } from "@/components/chat/FeedbackButtons";
-import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
+import { MessageContent } from "@/components/chat/MessageContent";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types";
@@ -109,7 +109,7 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
               </span>
             </div>
           ) : null}
-          {hasContent ? <MarkdownRenderer content={message.content} /> : null}
+          {hasContent ? <MessageContent blocks={message.blocks ?? []} rawText={message.content} /> : null}
           {showEmptyResult ? (
             <p className="text-sm" style={{ color: "var(--theme-text-muted)" }}>
               {EMPTY_RESULT_TEXT}

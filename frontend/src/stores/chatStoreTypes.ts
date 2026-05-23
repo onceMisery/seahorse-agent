@@ -1,7 +1,6 @@
 import type { FeedbackValue, Message, Session } from "@/types";
 
 export interface ChatState {
-  // 保持 useChatStore 的门面契约稳定，内部职责可逐步拆到 session/message/stream slice。
   sessions: Session[];
   currentSessionId: string | null;
   messages: Message[];
