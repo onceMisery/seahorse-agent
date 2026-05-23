@@ -77,6 +77,10 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
                 .filter(MemoryRecallEvaluationResult::scored)
                 .mapToDouble(MemoryRecallEvaluationResult::precision)
                 .sum();
+        double noiseRateSum = results.stream()
+                .filter(MemoryRecallEvaluationResult::scored)
+                .mapToDouble(MemoryRecallEvaluationResult::noiseRate)
+                .sum();
         return new MemoryRecallEvaluationReport(
                 results.size(),
                 scoredCaseCount,
@@ -85,6 +89,7 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
                 average(reciprocalRankSum, scoredCaseCount),
                 average(recallSum, scoredCaseCount),
                 average(precisionSum, scoredCaseCount),
+                average(noiseRateSum, scoredCaseCount),
                 results);
     }
 
@@ -107,6 +112,7 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
                     false,
                     0D,
                     0D,
+                    0D,
                     0D);
         }
         Set<String> retrievedSet = new LinkedHashSet<>(retrievedIds);
@@ -116,6 +122,7 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
         int firstHitRank = firstHitRank(retrievedIds, expectedIds);
         int matchedCount = expectedIds.size() - missing.size();
         double precision = retrievedIds.isEmpty() ? 0D : (double) matchedCount / retrievedIds.size();
+        double noiseRate = retrievedIds.isEmpty() ? 0D : (double) (retrievedIds.size() - matchedCount) / retrievedIds.size();
         return new MemoryRecallEvaluationResult(
                 goldenCase.caseId(),
                 goldenCase.query(),
@@ -126,7 +133,8 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
                 firstHitRank > 0,
                 firstHitRank > 0 ? 1D / firstHitRank : 0D,
                 (double) matchedCount / expectedIds.size(),
-                precision);
+                precision,
+                noiseRate);
     }
 
     private List<String> rankedMemoryIds(MemoryContext context, int topK) {

@@ -1553,6 +1553,7 @@ class SeahorseWebApiContractTests {
                 1.0D,
                 1.0D,
                 1.0D,
+                0.0D,
                 List.of(new MemoryRecallEvaluationResult(
                         "case-1",
                         "Pulsar PIP-459",
@@ -1563,7 +1564,8 @@ class SeahorseWebApiContractTests {
                         true,
                         1.0D,
                         1.0D,
-                        1.0D))));
+                        1.0D,
+                        0.0D))));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMemoryRecallEvaluationController(
@@ -1584,8 +1586,10 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.hitRate").value(1.0D))
                 .andExpect(jsonPath("$.data.meanReciprocalRank").value(1.0D))
                 .andExpect(jsonPath("$.data.averagePrecision").value(1.0D))
+                .andExpect(jsonPath("$.data.averageNoiseRate").value(0.0D))
                 .andExpect(jsonPath("$.data.results[0].retrievedMemoryIds[0]").value("mem-pip"))
-                .andExpect(jsonPath("$.data.results[0].precision").value(1.0D));
+                .andExpect(jsonPath("$.data.results[0].precision").value(1.0D))
+                .andExpect(jsonPath("$.data.results[0].noiseRate").value(0.0D));
     }
 
     @Test

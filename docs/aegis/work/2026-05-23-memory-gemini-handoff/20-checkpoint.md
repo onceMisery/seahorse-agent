@@ -49,3 +49,26 @@
 - Retirement status: No new fallback or retirement track introduced.
 - New risk signals: none beyond existing dirty worktree caveat.
 - Advisory decision: continue
+
+## Checkpoint Update - Recall Noise Metric
+
+- Current todo: Extend recall evaluation with a complementary retrieved-noise metric.
+- Active slice: Add per-case noiseRate and report averageNoiseRate alongside precision.
+- Completed todos:
+- Added `noiseRate` to per-case recall evaluation results.
+- Added `averageNoiseRate` to recall evaluation reports.
+- Updated web contract coverage for recall evaluation noise metrics.
+- Verified the recall evaluation and web contract tests after implementation.
+- Evidence refs:
+- `./mvnw.cmd -pl seahorse-agent-tests -am test "-Dtest=MemoryRecallEvaluationServiceTests,SeahorseWebApiContractTests" "-Dmaven.compiler.testIncludes=**/MemoryRecallEvaluationServiceTests.java,**/SeahorseWebApiContractTests.java" "-Dspotless.apply.skip=true" "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"`
+- `git diff --check`
+- Blocked on: none
+- Next step: Continue with the next lowest-risk memory contract gap or observability slice.
+
+## DriftCheckDraft - Recall Noise Metric
+
+- Scope status: Stayed inside the memory alignment scope; only recall evaluation records, service math, and contract coverage changed.
+- Compatibility status: Preserved the four-layer canonical storage model and adapter boundary.
+- Retirement status: No new fallback or retirement track introduced.
+- New risk signals: none beyond existing dirty worktree caveat.
+- Advisory decision: continue

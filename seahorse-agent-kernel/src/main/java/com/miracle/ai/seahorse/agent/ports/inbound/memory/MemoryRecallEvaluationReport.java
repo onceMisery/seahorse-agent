@@ -28,6 +28,7 @@ public record MemoryRecallEvaluationReport(
         double meanReciprocalRank,
         double averageRecall,
         double averagePrecision,
+        double averageNoiseRate,
         List<MemoryRecallEvaluationResult> results
 ) {
 

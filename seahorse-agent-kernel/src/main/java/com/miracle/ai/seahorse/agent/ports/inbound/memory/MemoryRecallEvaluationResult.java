@@ -30,7 +30,8 @@ public record MemoryRecallEvaluationResult(
         boolean hit,
         double reciprocalRank,
         double recall,
-        double precision
+        double precision,
+        double noiseRate
 ) {
 
     public MemoryRecallEvaluationResult {

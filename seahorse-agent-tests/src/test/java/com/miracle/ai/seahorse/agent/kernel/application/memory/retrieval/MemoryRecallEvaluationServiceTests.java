@@ -68,14 +68,17 @@ class MemoryRecallEvaluationServiceTests {
         assertThat(report.meanReciprocalRank()).isEqualTo(1.0D);
         assertThat(report.averageRecall()).isEqualTo(0.75D);
         assertThat(report.averagePrecision()).isCloseTo(7.0D / 12.0D, offset(1.0E-15));
+        assertThat(report.averageNoiseRate()).isCloseTo(5.0D / 12.0D, offset(1.0E-15));
         assertThat(report.results()).extracting(MemoryRecallEvaluationResult::caseId)
                 .containsExactly("case-keyword", "case-alias");
         assertThat(report.results().get(0).retrievedMemoryIds())
                 .containsExactly("mem-pip", "mem-java", "mem-noise");
         assertThat(report.results().get(0).missingExpectedMemoryIds()).isEmpty();
         assertThat(report.results().get(0).precision()).isEqualTo(2.0D / 3.0D);
+        assertThat(report.results().get(0).noiseRate()).isEqualTo(1.0D / 3.0D);
         assertThat(report.results().get(1).missingExpectedMemoryIds()).containsExactly("missing-graph");
         assertThat(report.results().get(1).precision()).isEqualTo(0.5D);
+        assertThat(report.results().get(1).noiseRate()).isEqualTo(0.5D);
     }
 
     @Test
@@ -94,8 +97,10 @@ class MemoryRecallEvaluationServiceTests {
         assertThat(report.meanReciprocalRank()).isZero();
         assertThat(report.averageRecall()).isZero();
         assertThat(report.averagePrecision()).isZero();
+        assertThat(report.averageNoiseRate()).isZero();
         assertThat(report.results().get(0).hit()).isFalse();
         assertThat(report.results().get(0).precision()).isZero();
+        assertThat(report.results().get(0).noiseRate()).isZero();
     }
 
     private static MemoryContext context(List<MemoryItem> items) {
