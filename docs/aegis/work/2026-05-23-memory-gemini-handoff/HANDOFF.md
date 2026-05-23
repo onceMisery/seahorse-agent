@@ -97,6 +97,7 @@
 - `MemoryEngineOptions` 已包含 `maxRefinerBatchOperations=8` 和 `maxRefinerDeleteRatio=0.7`。
 - `DefaultMemoryEnginePort` 已把超量 batch 或 DELETE-heavy batch 转入 REVIEW，避免模型误删造成大面积污染。
 - Review feedback export 已能反哺 Refiner。
+- Refiner outcome (success/empty/error) 已通过 `ObservationPort` 发射为 `memory-refine` micrometer counter，便于灰度对比和故障告警。
 
 剩余差距：
 
@@ -132,6 +133,7 @@
 - reranker port 可插拔。
 - alias resolve 会改写 query，并把 canonical alias filters 传给通道。
 - trace 已暴露 `fusionExplanations`，能解释来源通道、rank、score、contribution，同时不暴露 raw query/content。
+- channel / fusion / rerank 计数已通过 `ObservationPort` 发射为 micrometer counter（`memory-recall-channel` 标签 `channel`/`outcome`，`memory-recall-fusion` 与 `memory-recall-rerank` 标签 `outcome`）。
 
 剩余差距：
 
@@ -362,10 +364,14 @@ git commit -m "feat(memory): report recall precision metrics"
 2. Review Web API / Console contract gap 核对，只补 inbound port 暴露和 contract tests，不改 review 核心状态机。**核查结果：inbound port 9 个方法已 100% 暴露并被 contract test 覆盖，无缺口。**
 3. Maintenance observability：补 Micrometer 或 trace 查询侧对 compaction/alias/GC 结果的聚合视图。**Aggregate 视图 + Micrometer counter 均已落地。**
 4. Hybrid recall 默认装配核对：确认 starter 是否在 port 可用时启用 hybrid pipeline，并保留 classic fallback。**核查结果：`hybrid-enabled` 默认 `true`，`HybridMemoryRecallPipeline` 默认装配，置为 `false` 时回退到 `DefaultMemoryRetrievalPipeline`，无缺口。**
-5. Redis/distributed aggregation adapter：实现 `MemoryAggregationBufferPort` / scheduler 的生产后端。
-6. 真实 BM25/vector/graph 后端质量评估：建立 golden cases，衡量 channel contribution、recall、precision、MRR。
-7. Compaction 深化：等 `MemoryCompactionServiceTests` 的并行改动归属明确后再接。
-8. ~~Maintenance Micrometer Counter / Timer：扩展 `MicrometerObservationAdapter` 暴露 stage 级别专属指标（compaction candidates、alias regions、gc derived index cleanups）。~~ 已通过 `ObservationEvent.amount` 字段叠加并由 maintenance service 发射，无需 adapter 侧专属代码改动。
+5. ~~Hybrid recall channel observability：channel/fusion/rerank counter。~~ 已完成（`52800895`、`3b1f02f5`）。
+6. ~~Review apply / Aggregation flush counter via ObservationPort。~~ 已完成（`c3726e52`、`0ad01f3f`）。
+7. ~~Refiner outcome counter via ObservationPort（`memory-refine`：success/empty/error）。~~ 已完成（`5adc3964`）。
+8. ~~Outbox relay batch/task counter via ObservationPort（`memory-outbox-batch` / `memory-outbox-task`，标签 taskType + outcome）。~~ 已完成（`3b8d4844`）。
+9. Redis/distributed aggregation adapter：实现 `MemoryAggregationBufferPort` / scheduler 的生产后端。
+10. 真实 BM25/vector/graph 后端质量评估：建立 golden cases，衡量 channel contribution、recall、precision、MRR。
+11. Compaction 深化：等 `MemoryCompactionServiceTests` 的并行改动归属明确后再接。
+12. ~~Maintenance Micrometer Counter / Timer：扩展 `MicrometerObservationAdapter` 暴露 stage 级别专属指标（compaction candidates、alias regions、gc derived index cleanups）。~~ 已通过 `ObservationEvent.amount` 字段叠加并由 maintenance service 发射，无需 adapter 侧专属代码改动。
 
 ## 8. 可用 subagents 的建议
 
