@@ -1449,6 +1449,89 @@ class DefaultMemoryEnginePortTests {
     }
 
     @Test
+    void shouldApplyConfiguredRefinerContextPolicy() {
+        StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(
+                record("stm-existing-1", "PREFERENCE", "User prefers short answers.", 0.60D),
+                record("stm-existing-2", "PROJECT_FACT", "User works on Seahorse.", 0.60D)));
+        StubLongTermMemoryPort longTermPort = new StubLongTermMemoryPort(List.of(
+                record("ltm-anchor-1", "PROJECT_FACT", "User's project uses Java 17.", 0.94D),
+                record("ltm-anchor-2", "PROJECT_FACT", "User's project uses WebFlux.", 0.93D)));
+        StubSemanticMemoryPort semanticPort = new StubSemanticMemoryPort(List.of(
+                semanticRecord("sem-anchor-1", "TECH_TOPIC", "User investigates memory retrieval.", 0.92D,
+                        Instant.now(), "memory.retrieval", "sem:1")));
+        RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.empty(
+                "no_refined_delta"));
+        RecordingMemoryReviewFeedbackRepository feedbackRepository = new RecordingMemoryReviewFeedbackRepository(
+                List.of(
+                        reviewFeedbackSample("feedback-1", MemoryReviewStatus.APPLIED, "PROFILE_SLOT",
+                                "preferences.response_style"),
+                        reviewFeedbackSample("feedback-2", MemoryReviewStatus.APPLIED, "PROFILE_SLOT",
+                                "preferences.response_style"),
+                        reviewFeedbackSample("feedback-3", MemoryReviewStatus.APPLIED, "PROFILE_SLOT",
+                                "preferences.response_style")));
+        MemoryEngineOptions options = new MemoryEngineOptions(
+                5,
+                3,
+                10,
+                true,
+                true,
+                true,
+                false,
+                false,
+                8,
+                0.7D,
+                1,
+                2,
+                1,
+                2,
+                0.90D,
+                0.90D);
+        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                shortTermPort,
+                longTermPort,
+                semanticPort,
+                OBJECT_MAPPER,
+                options,
+                ProfileMemoryPort.noop(),
+                CorrectionLedgerPort.noop(),
+                new DefaultMemoryRouter(),
+                MemoryOperationLogPort.noop(),
+                MemoryVectorPort.noop(),
+                MemoryOutboxPort.noop(),
+                MemoryBusinessDocumentRetrieverPort.noop(),
+                MemoryLifecyclePort.noop(),
+                MemoryPolicyConfigPort.defaults(),
+                (MemoryRetrievalPipelinePort) null,
+                refinerPort,
+                MemoryReviewCandidatePort.noop(),
+                MemoryAliasPort.noop(),
+                MemoryReviewPolicyPort.defaults(),
+                feedbackRepository);
+
+        engine.ingest(new MemoryIngestionCommand("op-refiner-policy", "default", "memory-aggregation-flush",
+                MemoryWriteRequest.builder()
+                        .userId(USER_ID)
+                        .conversationId("conv-refiner-policy")
+                        .messageId("msg-refiner-policy")
+                        .message(ChatMessage.user(memoryContextBlock(5)))
+                        .build()));
+
+        Assertions.assertEquals(1, refinerPort.requests.size());
+        MemoryRefinementRequest request = refinerPort.requests.get(0);
+        Assertions.assertEquals(List.of("stm-existing-1", "ltm-anchor-1", "sem-anchor-1"),
+                request.existingMemories().stream().map(MemoryRefinementMemory::memoryId).toList());
+        Assertions.assertEquals(List.of("ltm-anchor-1"),
+                request.stickyAnchors().stream().map(MemoryRefinementMemory::memoryId).toList());
+        Assertions.assertTrue(request.referenceZone().contains("turn_3:"), request.referenceZone());
+        Assertions.assertFalse(request.targetZone().contains("turn_3:"), request.targetZone());
+        Assertions.assertTrue(request.targetZone().contains("turn_4:"), request.targetZone());
+        Assertions.assertTrue(request.targetZone().contains("turn_5:"), request.targetZone());
+        Assertions.assertEquals(List.of("feedback-1", "feedback-2"),
+                request.feedbackExamples().stream().map(MemoryReviewFeedbackSample::sampleId).toList());
+        Assertions.assertEquals(2, feedbackRepository.queries.get(0).limit());
+    }
+
+    @Test
     void shouldFallbackEmptyRefinerSourceMessageIdsToTargetZoneSourceSpans() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.refined(

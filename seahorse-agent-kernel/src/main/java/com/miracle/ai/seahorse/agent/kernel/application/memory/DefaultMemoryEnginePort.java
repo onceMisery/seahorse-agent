@@ -145,12 +145,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String REFINER_ADD_REVIEW_RISK = MemoryReviewPolicyPort.REFINER_ADD_REVIEW_RISK;
     private static final String REFINER_STATUS_DROPPED = "dropped";
     private static final String REFINER_STATUS_PENDING_REVIEW = "pending_review";
-    private static final int REFINER_READ_MASK_PER_LAYER_LIMIT = 3;
-    private static final int REFINER_TARGET_ZONE_TURN_COUNT = 3;
-    private static final int REFINER_STICKY_ANCHOR_LIMIT = 5;
-    private static final int REFINER_FEEDBACK_EXAMPLE_LIMIT = 3;
-    private static final double REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD = 0.85D;
-    private static final double REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD = 0.90D;
     private static final Pattern CONTEXT_TURN_HEADER_PATTERN = Pattern.compile("\\bturn_\\d+:");
     private static final Pattern ALIAS_TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._:+#-]{1,63}");
     private static final int MAX_ALIAS_TOKEN_LOOKUPS = 16;
@@ -1059,10 +1053,10 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                             null,
                             scope.targetKind(),
                             scope.targetKey(),
-                            REFINER_FEEDBACK_EXAMPLE_LIMIT));
+                            options.refinerFeedbackExampleLimit()));
             return samples.stream()
                     .filter(this::isResolvedFeedbackSample)
-                    .limit(REFINER_FEEDBACK_EXAMPLE_LIMIT)
+                    .limit(options.refinerFeedbackExampleLimit())
                     .toList();
         } catch (RuntimeException ex) {
             LOG.debug("load refiner review-feedback examples failed: tenantId={}, userId={}", tenantId, userId, ex);
@@ -1110,7 +1104,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                          MemoryStorePort store,
                                          String userId) {
         try {
-            for (MemoryRecord record : store.listByUser(userId, REFINER_READ_MASK_PER_LAYER_LIMIT)) {
+            for (MemoryRecord record : store.listByUser(userId, options.refinerReadMaskPerLayerLimit())) {
                 if (record == null || isBlank(record.id())) {
                     continue;
                 }
@@ -1141,7 +1135,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
         return existingMemories.stream()
                 .filter(this::isStickyAnchor)
-                .limit(REFINER_STICKY_ANCHOR_LIMIT)
+                .limit(options.refinerStickyAnchorLimit())
                 .toList();
     }
 
@@ -1154,9 +1148,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return false;
         }
         return memoryMetadataScore(memory, METADATA_IMPORTANCE_SCORE, METADATA_IMPORTANCE)
-                >= REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD
+                >= options.refinerStickyAnchorImportanceThreshold()
                 || memoryMetadataScore(memory, METADATA_CONFIDENCE_LEVEL, METADATA_CONFIDENCE)
-                >= REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD;
+                >= options.refinerStickyAnchorConfidenceThreshold();
     }
 
     private double memoryMetadataScore(MemoryRefinementMemory memory, String primaryKey, String fallbackKey) {
@@ -1172,7 +1166,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         if (turns.isEmpty()) {
             return new MemoryRefinementContextZones("", sanitizedContent);
         }
-        int targetStart = Math.max(0, turns.size() - REFINER_TARGET_ZONE_TURN_COUNT);
+        int targetStart = Math.max(0, turns.size() - options.refinerTargetZoneTurnCount());
         List<ContextBlockTurn> targetTurns = turns.subList(targetStart, turns.size());
         return new MemoryRefinementContextZones(
                 joinContextTurnBlocks(turns.subList(0, targetStart)),

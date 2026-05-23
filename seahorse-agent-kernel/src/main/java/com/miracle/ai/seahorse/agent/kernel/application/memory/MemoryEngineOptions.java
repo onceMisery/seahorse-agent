@@ -32,13 +32,25 @@ public record MemoryEngineOptions(int shortTermLimit,
                                   boolean keywordIndexOutboxEnabled,
                                   boolean graphIndexOutboxEnabled,
                                   int maxRefinerBatchOperations,
-                                  double maxRefinerDeleteRatio) {
+                                  double maxRefinerDeleteRatio,
+                                  int refinerReadMaskPerLayerLimit,
+                                  int refinerTargetZoneTurnCount,
+                                  int refinerStickyAnchorLimit,
+                                  int refinerFeedbackExampleLimit,
+                                  double refinerStickyAnchorImportanceThreshold,
+                                  double refinerStickyAnchorConfidenceThreshold) {
 
     public static final int DEFAULT_SHORT_TERM_LIMIT = 5;
     public static final int DEFAULT_LONG_TERM_LIMIT = 3;
     public static final int DEFAULT_SEMANTIC_LIMIT = 10;
     public static final int DEFAULT_MAX_REFINER_BATCH_OPERATIONS = 8;
     public static final double DEFAULT_MAX_REFINER_DELETE_RATIO = 0.7D;
+    public static final int DEFAULT_REFINER_READ_MASK_PER_LAYER_LIMIT = 3;
+    public static final int DEFAULT_REFINER_TARGET_ZONE_TURN_COUNT = 3;
+    public static final int DEFAULT_REFINER_STICKY_ANCHOR_LIMIT = 5;
+    public static final int DEFAULT_REFINER_FEEDBACK_EXAMPLE_LIMIT = 3;
+    public static final double DEFAULT_REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD = 0.85D;
+    public static final double DEFAULT_REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD = 0.90D;
 
     public MemoryEngineOptions {
         shortTermLimit = positive(shortTermLimit, DEFAULT_SHORT_TERM_LIMIT);
@@ -48,6 +60,43 @@ public record MemoryEngineOptions(int shortTermLimit,
         maxRefinerDeleteRatio = maxRefinerDeleteRatio <= 0D
                 ? DEFAULT_MAX_REFINER_DELETE_RATIO
                 : Math.min(1D, maxRefinerDeleteRatio);
+        refinerReadMaskPerLayerLimit = positive(refinerReadMaskPerLayerLimit,
+                DEFAULT_REFINER_READ_MASK_PER_LAYER_LIMIT);
+        refinerTargetZoneTurnCount = positive(refinerTargetZoneTurnCount, DEFAULT_REFINER_TARGET_ZONE_TURN_COUNT);
+        refinerStickyAnchorLimit = positive(refinerStickyAnchorLimit, DEFAULT_REFINER_STICKY_ANCHOR_LIMIT);
+        refinerFeedbackExampleLimit = positive(refinerFeedbackExampleLimit, DEFAULT_REFINER_FEEDBACK_EXAMPLE_LIMIT);
+        refinerStickyAnchorImportanceThreshold = ratio(refinerStickyAnchorImportanceThreshold,
+                DEFAULT_REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD);
+        refinerStickyAnchorConfidenceThreshold = ratio(refinerStickyAnchorConfidenceThreshold,
+                DEFAULT_REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD);
+    }
+
+    public MemoryEngineOptions(int shortTermLimit,
+                               int longTermLimit,
+                               int semanticLimit,
+                               boolean captureEnabled,
+                               boolean refinerEnabled,
+                               boolean refinerFailOpen,
+                               boolean keywordIndexOutboxEnabled,
+                               boolean graphIndexOutboxEnabled,
+                               int maxRefinerBatchOperations,
+                               double maxRefinerDeleteRatio) {
+        this(shortTermLimit,
+                longTermLimit,
+                semanticLimit,
+                captureEnabled,
+                refinerEnabled,
+                refinerFailOpen,
+                keywordIndexOutboxEnabled,
+                graphIndexOutboxEnabled,
+                maxRefinerBatchOperations,
+                maxRefinerDeleteRatio,
+                DEFAULT_REFINER_READ_MASK_PER_LAYER_LIMIT,
+                DEFAULT_REFINER_TARGET_ZONE_TURN_COUNT,
+                DEFAULT_REFINER_STICKY_ANCHOR_LIMIT,
+                DEFAULT_REFINER_FEEDBACK_EXAMPLE_LIMIT,
+                DEFAULT_REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD,
+                DEFAULT_REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD);
     }
 
     public MemoryEngineOptions(int shortTermLimit,
@@ -101,5 +150,12 @@ public record MemoryEngineOptions(int shortTermLimit,
 
     private static int positive(int value, int fallback) {
         return value > 0 ? value : fallback;
+    }
+
+    private static double ratio(double value, double fallback) {
+        if (Double.isNaN(value) || Double.isInfinite(value) || value < 0D) {
+            return fallback;
+        }
+        return Math.min(1D, value);
     }
 }
