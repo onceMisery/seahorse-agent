@@ -111,3 +111,51 @@ Drift check:
 - New owners: documented Agent Registry, Agent Runtime, Tool Gateway, Tool Policy, starter wiring surfaces, stream meta run identity, public prototype route alias, and backend security public-path whitelist.
 - Phase boundary: Phase 2 is only partially implemented. Runtime-to-Gateway, minimal policy boundary, catalog metadata, binding metadata, starter catalog-backed policy selection, durable catalog/binding persistence, invocation audit persistence/query APIs, run-level call limits, basic argument policy, MCP allowlist catalog registration, Tool Catalog management APIs, and Agent tool binding management APIs are covered; HITL, resource ACL, and output redaction remain future slices.
 - Decision: continue.
+
+## 2026-05-23 Phase 2/3 HITL approval request minimal slice
+
+Current todo:
+
+- Finish the minimal HITL seam: create and persist a pending approval request when Tool Policy returns `APPROVAL_REQUIRED`.
+- Preserve the existing Tool Gateway no-execution behavior for approval-required decisions.
+- Keep full approval API, checkpoint, resume, resource ACL and redaction out of scope.
+- Write a direct handoff document for the next developer.
+- Stage and commit only this approval-request slice.
+
+Completed:
+
+- Added `ApprovalRequest`, `ApprovalRequestStatus`, and `ApprovalType` under the kernel approval domain.
+- Added `ToolApprovalRequestRepositoryPort` with a noop compatibility fallback.
+- Updated `LocalToolGatewayPort` to save a `PENDING` approval request when policy requires approval, while still not executing the real tool.
+- Added `JdbcToolApprovalRequestRepositoryAdapter` and `sa_approval_request` schema/indexes.
+- Updated starter repository auto-configuration to expose the JDBC approval repository.
+- Updated starter Tool Gateway auto-configuration to inject the approval repository.
+- Added focused kernel, JDBC, and starter tests for the approval request seam.
+- Added `docs/company-agent/ai-infra-phases/99-current-implementation-handoff.md`.
+
+Active slice:
+
+- Phase 2/3 boundary: pending approval request creation and persistence only.
+
+Evidence refs:
+
+- `.\mvnw -pl seahorse-agent-kernel '-Dtest=LocalToolGatewayPortAuditTests' test`
+- `.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-adapter-repository-jdbc -am '-Dtest=JdbcToolApprovalRequestRepositoryAdapterTests' '-Dsurefire.failIfNoSpecifiedTests=false' test`
+- `.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-spring-boot-starter -am '-Dtest=SeahorseAgentRegistryAutoConfigurationTests,SeahorseAgentChatRunStoreAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test`
+
+Blockers:
+
+- None for this minimal slice.
+- Full Phase 3 remains blocked on future checkpoint/resume/runtime work by design.
+
+Next step:
+
+- Start the next slice with approval query/decision API, then checkpoint repository, then `WAITING_APPROVAL` runtime transition and resume.
+
+Drift check:
+
+- Scope: aligned with Phase 2 Tool Gateway approval-required rule and Phase 3 HITL model.
+- Compatibility: old `LocalToolGatewayPort` constructors remain compatible through noop approval storage fallback.
+- New owners: kernel owns approval domain/port, JDBC owns approval persistence, starter owns wiring.
+- Non-goals respected: no web approval API, no checkpoint, no run status transition, no resume, no resource ACL, no redaction.
+- Decision: continue.

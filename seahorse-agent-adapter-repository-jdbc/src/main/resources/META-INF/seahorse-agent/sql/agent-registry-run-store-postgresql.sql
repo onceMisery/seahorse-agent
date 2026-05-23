@@ -138,3 +138,30 @@ CREATE INDEX IF NOT EXISTS idx_sa_tool_invocation_run_tool
 
 CREATE INDEX IF NOT EXISTS idx_sa_tool_invocation_tenant_user
   ON sa_tool_invocation(tenant_id, user_id, started_at);
+
+CREATE TABLE IF NOT EXISTS sa_approval_request (
+  approval_id VARCHAR(64) PRIMARY KEY,
+  run_id VARCHAR(64) NOT NULL,
+  step_id VARCHAR(64),
+  tool_invocation_id VARCHAR(64),
+  tenant_id VARCHAR(64) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  agent_id VARCHAR(64),
+  tool_id VARCHAR(128) NOT NULL,
+  approval_type VARCHAR(32) NOT NULL,
+  risk_level VARCHAR(32) NOT NULL,
+  summary VARCHAR(1000) NOT NULL,
+  arguments_preview_json TEXT,
+  status VARCHAR(32) NOT NULL,
+  requested_at TIMESTAMP NOT NULL,
+  expires_at TIMESTAMP,
+  decided_by VARCHAR(64),
+  decided_at TIMESTAMP,
+  decision_comment VARCHAR(1000)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_approval_request_status
+  ON sa_approval_request(tenant_id, status, requested_at);
+
+CREATE INDEX IF NOT EXISTS idx_sa_approval_request_run
+  ON sa_approval_request(run_id, step_id);

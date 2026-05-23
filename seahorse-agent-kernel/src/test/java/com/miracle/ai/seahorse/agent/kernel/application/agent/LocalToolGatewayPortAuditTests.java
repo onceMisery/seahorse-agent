@@ -20,11 +20,15 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditCompletion;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditRecord;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
@@ -99,6 +103,42 @@ class LocalToolGatewayPortAuditTests {
         assertEquals(ToolInvocationStatus.DENIED, audit.decisions.get(0).status());
         assertEquals(ToolInvocationStatus.DENIED, audit.completed.get(0).status());
         assertEquals(ToolPolicyReasonCodes.TOOL_NOT_BOUND, audit.completed.get(0).errorMessage());
+    }
+
+    @Test
+    void shouldCreatePendingApprovalRequestWhenPolicyRequiresApproval() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+                        ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
+                        "Tool requires approval")),
+                audit,
+                approvals,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("memory-forget"));
+
+        assertFalse(result.success());
+        assertEquals(ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED, result.error());
+        assertEquals(0, tool.calls.get());
+        assertEquals(ToolInvocationStatus.APPROVAL_REQUIRED, audit.decisions.get(0).status());
+        assertEquals(ToolInvocationStatus.APPROVAL_REQUIRED, audit.completed.get(0).status());
+        assertEquals(1, approvals.saved.size());
+        ApprovalRequest approval = approvals.saved.get(0);
+        assertEquals(ApprovalRequestStatus.PENDING, approval.status());
+        assertEquals(ApprovalType.TOOL_EXECUTION, approval.approvalType());
+        assertEquals("run-1", approval.runId());
+        assertEquals("step-1", approval.stepId());
+        assertEquals(audit.requested.get(0).invocationId(), approval.toolInvocationId());
+        assertEquals("tenant-1", approval.tenantId());
+        assertEquals("user-1", approval.userId());
+        assertEquals("agent-1", approval.agentId());
+        assertEquals("memory-forget", approval.toolId());
+        assertEquals(FIXED_CLOCK.instant(), approval.requestedAt());
+        assertTrue(approval.argumentsPreviewJson().contains("input"));
     }
 
     @Test
@@ -185,6 +225,15 @@ class LocalToolGatewayPortAuditTests {
         @Override
         public void recordCompleted(ToolInvocationAuditCompletion completion) {
             completed.add(completion);
+        }
+    }
+
+    private static final class RecordingToolApprovalRequestRepositoryPort implements ToolApprovalRequestRepositoryPort {
+        private final List<ApprovalRequest> saved = new ArrayList<>();
+
+        @Override
+        public void save(ApprovalRequest request) {
+            saved.add(request);
         }
     }
 

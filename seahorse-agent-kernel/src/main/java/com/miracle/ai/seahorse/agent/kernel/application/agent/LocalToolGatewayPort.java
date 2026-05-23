@@ -17,6 +17,11 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
@@ -25,6 +30,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAudi
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditRecord;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
@@ -34,6 +41,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,12 +49,15 @@ import java.util.UUID;
 public class LocalToolGatewayPort implements ToolGatewayPort {
 
     private static final int SUMMARY_MAX_LENGTH = 1000;
+    private static final String APPROVAL_ID_PREFIX = "approval:";
     private static final String LEGACY_RUN_ID_PREFIX = "legacy-run:";
     private static final String LEGACY_USER_ID = "legacy-user";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final ToolRegistryPort toolRegistry;
     private final ToolPolicyPort toolPolicy;
     private final ToolInvocationAuditPort auditPort;
+    private final ToolApprovalRequestRepositoryPort approvalRequestRepository;
     private final Clock clock;
 
     public LocalToolGatewayPort(ToolRegistryPort toolRegistry) {
@@ -67,9 +78,20 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                                 ToolPolicyPort toolPolicy,
                                 ToolInvocationAuditPort auditPort,
                                 Clock clock) {
+        this(toolRegistry, toolPolicy, auditPort, ToolApprovalRequestRepositoryPort.noop(), clock);
+    }
+
+    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
+                                ToolPolicyPort toolPolicy,
+                                ToolInvocationAuditPort auditPort,
+                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
+                                Clock clock) {
         this.toolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         this.toolPolicy = Objects.requireNonNullElseGet(toolPolicy, ToolPolicyPort::defaults);
         this.auditPort = Objects.requireNonNullElseGet(auditPort, ToolInvocationAuditPort::noop);
+        this.approvalRequestRepository = Objects.requireNonNullElseGet(
+                approvalRequestRepository,
+                ToolApprovalRequestRepositoryPort::noop);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -77,15 +99,17 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     public ToolInvocationResult invoke(ToolInvocationRequest request) {
         ToolInvocationRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
         String invocationId = nextInvocationId();
+        String effectiveRunId = auditRunId(safeRequest.runId(), invocationId);
+        String effectiveUserId = auditUserId(safeRequest.userId());
         Instant startedAt = clock.instant();
         auditPort.recordRequested(new ToolInvocationAuditRecord(
                 invocationId,
-                auditRunId(safeRequest.runId(), invocationId),
+                effectiveRunId,
                 safeRequest.stepId(),
                 safeRequest.agentId(),
                 safeRequest.versionId(),
                 safeRequest.tenantId(),
-                auditUserId(safeRequest.userId()),
+                effectiveUserId,
                 safeRequest.toolId(),
                 safeRequest.idempotencyKey(),
                 ToolInvocationStatus.REQUESTED,
@@ -101,6 +125,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         ToolInvocationStatus decisionStatus = decisionStatus(decision);
         auditPort.recordDecision(new ToolInvocationAuditDecision(invocationId, decision.decisionId(), decisionStatus));
         if (!decision.allowsExecution()) {
+            if (decision.effect() == PolicyDecision.Effect.APPROVAL_REQUIRED) {
+                createApprovalRequest(safeRequest, decision, invocationId, effectiveRunId, effectiveUserId, startedAt);
+            }
             ToolInvocationResult result = ToolInvocationResult.failed(decision.reasonCode());
             auditPort.recordCompleted(new ToolInvocationAuditCompletion(
                     invocationId,
@@ -138,6 +165,49 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
 
     private String nextInvocationId() {
         return UUID.randomUUID().toString();
+    }
+
+    private void createApprovalRequest(ToolInvocationRequest request,
+                                       PolicyDecision decision,
+                                       String invocationId,
+                                       String effectiveRunId,
+                                       String effectiveUserId,
+                                       Instant requestedAt) {
+        // 审批请求保存的是可展示的参数预览，不保存完整敏感入参；真正恢复执行由后续 durable runtime 切片接管。
+        approvalRequestRepository.save(new ApprovalRequest(
+                APPROVAL_ID_PREFIX + invocationId,
+                effectiveRunId,
+                request.stepId(),
+                invocationId,
+                request.tenantId(),
+                effectiveUserId,
+                request.agentId(),
+                request.toolId(),
+                ApprovalType.TOOL_EXECUTION,
+                ToolRiskLevel.HIGH,
+                approvalSummary(request, decision),
+                argumentsPreviewJson(request),
+                ApprovalRequestStatus.PENDING,
+                requestedAt,
+                null,
+                null,
+                null,
+                null));
+    }
+
+    private String approvalSummary(ToolInvocationRequest request, PolicyDecision decision) {
+        return truncate("Tool " + request.toolId() + " requires approval: " + decision.reasonCode());
+    }
+
+    private String argumentsPreviewJson(ToolInvocationRequest request) {
+        try {
+            return truncate(OBJECT_MAPPER.writeValueAsString(Map.of(
+                    "argumentKeys", request.arguments().keySet(),
+                    "argumentCount", request.arguments().size(),
+                    "resourceRefs", request.resourceRefs())));
+        } catch (JsonProcessingException ex) {
+            return truncate("keys=" + request.arguments().keySet() + ", size=" + request.arguments().size());
+        }
     }
 
     private String auditRunId(String runId, String invocationId) {

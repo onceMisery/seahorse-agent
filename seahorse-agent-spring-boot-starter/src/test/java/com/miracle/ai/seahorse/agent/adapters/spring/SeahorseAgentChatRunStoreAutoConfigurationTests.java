@@ -20,6 +20,8 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
@@ -32,6 +34,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.AgentToolBinding;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
@@ -45,8 +48,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
@@ -188,6 +193,42 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                 });
     }
 
+    @Test
+    void shouldWireApprovalRepositoryIntoToolGateway() {
+        contextRunner.withUserConfiguration(TestApprovalGatewayConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    ToolInvocationResult result = context.getBean(ToolGatewayPort.class)
+                            .invoke(new ToolInvocationRequest(
+                                    "run-1",
+                                    "step-1",
+                                    "call-1",
+                                    "agent-1",
+                                    "version-1",
+                                    "tenant-1",
+                                    "user-1",
+                                    "agent-identity-1",
+                                    "memory-write",
+                                    Map.of("input", "forget this"),
+                                    Map.of(),
+                                    "run-1:call-1",
+                                    List.of("memory-write")));
+
+                    assertThat(result.success()).isFalse();
+                    assertThat(result.error()).isEqualTo(ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED);
+                    RecordingToolApprovalRequestRepository approvals =
+                            context.getBean(RecordingToolApprovalRequestRepository.class);
+                    assertThat(approvals.saved).singleElement().satisfies(approval -> {
+                        assertThat(approval.status()).isEqualTo(ApprovalRequestStatus.PENDING);
+                        assertThat(approval.runId()).isEqualTo("run-1");
+                        assertThat(approval.toolId()).isEqualTo("memory-write");
+                        assertThat(approval.requestedAt()).isEqualTo(FIXED_CLOCK.instant());
+                    });
+                    assertThat(context.getBean(CountingToolPort.class).calls.get()).isZero();
+                });
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class TestAgentRunStoreConfiguration {
 
@@ -309,6 +350,37 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Bean
         ToolInvocationUsagePort toolInvocationUsagePort() {
             return (runId, agentId, versionId, toolId) -> 3L;
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestApprovalGatewayConfiguration {
+
+        @Bean
+        Clock clock() {
+            return FIXED_CLOCK;
+        }
+
+        @Bean
+        CountingToolPort countingToolPort() {
+            return new CountingToolPort();
+        }
+
+        @Bean
+        ToolRegistryPort toolRegistryPort(CountingToolPort toolPort) {
+            return new SingleToolRegistry(toolPort);
+        }
+
+        @Bean
+        ToolPolicyPort toolPolicyPort() {
+            return request -> PolicyDecision.approvalRequired("approval-1",
+                    ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
+                    "Tool requires approval");
+        }
+
+        @Bean
+        RecordingToolApprovalRequestRepository toolApprovalRequestRepositoryPort() {
+            return new RecordingToolApprovalRequestRepository();
         }
     }
 
@@ -544,6 +616,15 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                 return Optional.of(binding);
             }
             return Optional.empty();
+        }
+    }
+
+    static final class RecordingToolApprovalRequestRepository implements ToolApprovalRequestRepositoryPort {
+        private final List<ApprovalRequest> saved = new ArrayList<>();
+
+        @Override
+        public void save(ApprovalRequest request) {
+            saved.add(request);
         }
     }
 }

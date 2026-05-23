@@ -470,6 +470,75 @@ Remaining Phase 2 work:
 - MCP allowlist registration into the catalog.
 - Tool catalog/binding/audit management APIs.
 
+## 2026-05-23 Phase 2/3 HITL approval request minimal slice
+
+RED/GREEN coverage:
+
+- `LocalToolGatewayPortAuditTests.shouldCreatePendingApprovalRequestWhenPolicyRequiresApproval` verifies `APPROVAL_REQUIRED` creates one `PENDING` approval request, keeps the real tool unexecuted, and records approval-required audit completion.
+- `JdbcToolApprovalRequestRepositoryAdapterTests.shouldSavePendingApprovalRequest` verifies `ApprovalRequest` fields persist into `sa_approval_request`.
+- `SeahorseAgentRegistryAutoConfigurationTests` verifies `ToolApprovalRequestRepositoryPort` is auto-configured in JDBC repository mode.
+- `SeahorseAgentChatRunStoreAutoConfigurationTests.shouldWireApprovalRepositoryIntoToolGateway` verifies starter wiring injects approval storage into the active `ToolGatewayPort`.
+
+Focused kernel command:
+
+```powershell
+.\mvnw -pl seahorse-agent-kernel '-Dtest=LocalToolGatewayPortAuditTests' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 5
+- Failures: 0
+- Errors: 0
+- Covered: Tool Gateway audit lifecycle plus approval-required pending request creation.
+
+Focused JDBC command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-adapter-repository-jdbc -am '-Dtest=JdbcToolApprovalRequestRepositoryAdapterTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 1
+- Failures: 0
+- Errors: 0
+- Covered: approval request JDBC persistence.
+
+Focused starter command:
+
+```powershell
+.\mvnw '-Dspotless.apply.skip=true' -pl seahorse-agent-spring-boot-starter -am '-Dtest=SeahorseAgentRegistryAutoConfigurationTests,SeahorseAgentChatRunStoreAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+Result:
+
+- Exit status: 0
+- Tests run: 6
+- Failures: 0
+- Errors: 0
+- Covered: approval repository auto-configuration and active Tool Gateway wiring.
+
+Fix boundary:
+
+- `ApprovalRequest`, `ApprovalRequestStatus`, `ApprovalType`: added the HITL approval domain shape described in Phase 3.
+- `ToolApprovalRequestRepositoryPort`: added a narrow save-only outbound port with noop fallback.
+- `LocalToolGatewayPort`: writes a pending approval request only when policy returns `APPROVAL_REQUIRED`; it still does not execute the real tool.
+- `JdbcToolApprovalRequestRepositoryAdapter`: persists approval requests into `sa_approval_request`.
+- `agent-registry-run-store-postgresql.sql`: added `sa_approval_request` and query indexes.
+- `SeahorseAgentRegistryRepositoryAutoConfiguration`: auto-configures the JDBC approval repository.
+- `SeahorseAgentKernelAgentAutoConfiguration`: injects approval storage into `LocalToolGatewayPort`.
+
+Remaining Phase 3 work:
+
+- Approval list/detail/approve/reject/modify API.
+- `AgentCheckpoint` repository and schema.
+- Runtime `WAITING_APPROVAL` transition.
+- Resume from checkpoint after approval.
+- Resource ACL and output redaction.
+
 ## 2026-05-23 Phase 2 Tool Invocation audit query API slice
 
 RED/GREEN coverage:

@@ -41,6 +41,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboun
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
@@ -151,11 +152,13 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     public ToolGatewayPort seahorseToolGatewayPort(ToolRegistryPort toolRegistry,
                                                    ObjectProvider<ToolPolicyPort> toolPolicyPort,
                                                    ObjectProvider<ToolInvocationAuditPort> toolInvocationAuditPort,
+                                                   ObjectProvider<ToolApprovalRequestRepositoryPort> toolApprovalRequestRepositoryPort,
                                                    ObjectProvider<Clock> clockProvider) {
         return new LocalToolGatewayPort(
                 toolRegistry,
                 toolPolicyPort.getIfAvailable(ToolPolicyPort::defaults),
                 toolInvocationAuditPort.getIfAvailable(ToolInvocationAuditPort::noop),
+                toolApprovalRequestRepositoryPort.getIfAvailable(ToolApprovalRequestRepositoryPort::noop),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
