@@ -36,3 +36,10 @@
 - No code implementation, no broad git add, no reverting parallel worktree changes.
 
 These records are Method Pack drafts / hints, not authoritative runtime decisions.
+
+## Continuation Update - 2026-05-23
+
+- Requested outcome: Continue implementing the handoff in narrow, verified memory-system slices.
+- Scope: recall evaluation precision metrics, web contract coverage, and maintenance GC contract assertions.
+- Non-goals: no architecture rewrite, no storage model change, no new adapters, no UI changes.
+- Impact statement: the continuation stays inside memory evaluation and API contract surfaces.

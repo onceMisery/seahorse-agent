@@ -576,6 +576,9 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.reason").value("manual-maintenance"))
                 .andExpect(jsonPath("$.data.garbageCollectionResult.reason").value("manual-maintenance"))
+                .andExpect(jsonPath("$.data.garbageCollectionResult.derivedIndexCandidateCount").value(1))
+                .andExpect(jsonPath("$.data.garbageCollectionResult.archiveCandidateCount").value(1))
+                .andExpect(jsonPath("$.data.garbageCollectionResult.physicalDeleteCandidateCount").value(1))
                 .andExpect(jsonPath("$.data.taskOutcomes[0].task").value("garbageCollection"))
                 .andExpect(jsonPath("$.data.taskOutcomes[0].status").value("SUCCEEDED"));
         ArgumentCaptor<MemoryMaintenanceRunCommand> maintenanceCaptor =
@@ -589,7 +592,11 @@ class SeahorseWebApiContractTests {
                         .param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
-                .andExpect(jsonPath("$.data.records[0].runId").value("run-1"));
+                .andExpect(jsonPath("$.data.records[0].runId").value("run-1"))
+                .andExpect(jsonPath("$.data.records[0].gcScannedCount").value(1))
+                .andExpect(jsonPath("$.data.records[0].gcEnqueuedCount").value(1))
+                .andExpect(jsonPath("$.data.records[0].gcMarkedCount").value(1))
+                .andExpect(jsonPath("$.data.records[0].gcDryRun").value(false));
         ArgumentCaptor<MemoryMaintenanceRunQuery> maintenanceQueryCaptor =
                 ArgumentCaptor.forClass(MemoryMaintenanceRunQuery.class);
         verify(maintenancePort).pageMaintenanceRuns(maintenanceQueryCaptor.capture());
@@ -1545,6 +1552,7 @@ class SeahorseWebApiContractTests {
                 1.0D,
                 1.0D,
                 1.0D,
+                1.0D,
                 List.of(new MemoryRecallEvaluationResult(
                         "case-1",
                         "Pulsar PIP-459",
@@ -1553,6 +1561,7 @@ class SeahorseWebApiContractTests {
                         List.of(),
                         true,
                         true,
+                        1.0D,
                         1.0D,
                         1.0D))));
 
@@ -1574,7 +1583,9 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.hitRate").value(1.0D))
                 .andExpect(jsonPath("$.data.meanReciprocalRank").value(1.0D))
-                .andExpect(jsonPath("$.data.results[0].retrievedMemoryIds[0]").value("mem-pip"));
+                .andExpect(jsonPath("$.data.averagePrecision").value(1.0D))
+                .andExpect(jsonPath("$.data.results[0].retrievedMemoryIds[0]").value("mem-pip"))
+                .andExpect(jsonPath("$.data.results[0].precision").value(1.0D));
     }
 
     @Test
@@ -2187,7 +2198,7 @@ class SeahorseWebApiContractTests {
                 true,
                 null,
                 null,
-                new MemoryGarbageCollectionResult(reason, 1, 1, 1, false, List.of(), Instant.EPOCH),
+                new MemoryGarbageCollectionResult(reason, 1, 1, 1, 1, 1, 1, 1, 1, false, List.of(), Instant.EPOCH),
                 List.of(),
                 List.of(),
                 List.of(MemoryMaintenanceTaskOutcome.succeeded(

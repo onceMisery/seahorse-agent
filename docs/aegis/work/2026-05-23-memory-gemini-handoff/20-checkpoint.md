@@ -26,3 +26,26 @@
 - New risk signals:
 - Worktree contains unrelated parallel changes; future slices must path-limit staging and tests.
 - Advisory decision: continue
+
+## Checkpoint Update - Recall Precision / Maintenance Contract
+
+- Current todo: Keep extending the memory contract surface in small, verified slices.
+- Active slice: Recall quality metrics and low-risk contract coverage.
+- Completed todos:
+- Added `precision` to per-case recall evaluation results.
+- Added `averagePrecision` to recall evaluation reports.
+- Updated web contract coverage for recall evaluation.
+- Expanded maintenance contract coverage for GC candidate counts and run-record GC counters.
+- Evidence refs:
+- `./mvnw.cmd -pl seahorse-agent-tests -am test "-Dtest=MemoryRecallEvaluationServiceTests,SeahorseWebApiContractTests,SeahorseMemoryMaintenanceJobTests" "-Dmaven.compiler.testIncludes=**/MemoryRecallEvaluationServiceTests.java,**/SeahorseWebApiContractTests.java,**/SeahorseMemoryMaintenanceJobTests.java" "-Dspotless.apply.skip=true" "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"`
+- `./mvnw.cmd -pl seahorse-agent-tests -am test "-Dtest=SeahorseWebApiContractTests" "-Dmaven.compiler.testIncludes=**/SeahorseWebApiContractTests.java" "-Dspotless.apply.skip=true" "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"`
+- Blocked on: none
+- Next step: Continue with the next lowest-risk contract gap or observability slice.
+
+## DriftCheckDraft - Recall Precision / Maintenance Contract
+
+- Scope status: Stayed inside the handoff's memory alignment scope.
+- Compatibility status: Preserved the four-layer canonical storage model and adapter boundary.
+- Retirement status: No new fallback or retirement track introduced.
+- New risk signals: none beyond existing dirty worktree caveat.
+- Advisory decision: continue

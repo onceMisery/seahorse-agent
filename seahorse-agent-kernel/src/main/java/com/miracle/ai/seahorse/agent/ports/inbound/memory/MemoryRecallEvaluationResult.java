@@ -29,7 +29,8 @@ public record MemoryRecallEvaluationResult(
         boolean scored,
         boolean hit,
         double reciprocalRank,
-        double recall
+        double recall,
+        double precision
 ) {
 
     public MemoryRecallEvaluationResult {
