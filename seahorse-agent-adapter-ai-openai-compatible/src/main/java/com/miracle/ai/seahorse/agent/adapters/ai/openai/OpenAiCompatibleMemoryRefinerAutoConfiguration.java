@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -42,12 +43,14 @@ public class OpenAiCompatibleMemoryRefinerAutoConfiguration {
             ObjectProvider<PromptTemplatePort> promptTemplatePort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             ObjectProvider<MemoryReviewFeedbackRepositoryPort> feedbackRepositoryPort,
+            ObjectProvider<ObservationPort> observationPort,
             @Value("${seahorse-agent.memory.refiner.feedback-sample-limit:3}") int feedbackSampleLimit) {
         return new LlmMemoryRefinerAdapter(
                 chatModelPort,
                 promptTemplatePort.getIfAvailable(PromptTemplatePort::empty),
                 objectMapperProvider.getIfAvailable(ObjectMapper::new),
                 feedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty),
-                feedbackSampleLimit);
+                feedbackSampleLimit,
+                observationPort.getIfAvailable(ObservationPort::noop));
     }
 }

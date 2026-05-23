@@ -30,9 +30,14 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackS
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.RefinedMemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -496,6 +501,84 @@ class LlmMemoryRefinerAdapterTests {
         assertThat(prompt).contains("Do not use the snapshot messageId as the only sourceMessageIds");
     }
 
+    @Test
+    void shouldEmitSuccessObservationWhenLlmReturnsOperations() {
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                new CapturingChatModelPort("""
+                        {
+                          "refined": true,
+                          "reason": "stable preference",
+                          "operations": [
+                            {"action": "ADD", "content": "User prefers Java.", "confidence": 0.8}
+                          ]
+                        }
+                        """),
+                PromptTemplatePort.empty(),
+                new ObjectMapper(),
+                MemoryReviewFeedbackRepositoryPort.empty(),
+                0,
+                observationPort);
+
+        adapter.refine(request("Please use Java."));
+
+        assertThat(observationPort.events).hasSize(1);
+        ObservationEvent event = observationPort.events.get(0);
+        assertThat(event.name()).isEqualTo(LlmMemoryRefinerAdapter.OBSERVATION_REFINE_EVENT);
+        assertThat(event.attributes())
+                .containsEntry(LlmMemoryRefinerAdapter.OBSERVATION_ATTR_OUTCOME,
+                        LlmMemoryRefinerAdapter.OBSERVATION_OUTCOME_SUCCESS);
+        assertThat(event.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT);
+    }
+
+    @Test
+    void shouldEmitEmptyObservationWhenLlmReturnsNoSupportedOperations() {
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                new CapturingChatModelPort("""
+                        {
+                          "refined": true,
+                          "reason": "no actionable delta",
+                          "operations": [
+                            {"action": "MERGE", "content": "bad", "confidence": 0.9}
+                          ]
+                        }
+                        """),
+                PromptTemplatePort.empty(),
+                new ObjectMapper(),
+                MemoryReviewFeedbackRepositoryPort.empty(),
+                0,
+                observationPort);
+
+        adapter.refine(request("merge"));
+
+        assertThat(observationPort.events).hasSize(1);
+        assertThat(observationPort.events.get(0).attributes())
+                .containsEntry(LlmMemoryRefinerAdapter.OBSERVATION_ATTR_OUTCOME,
+                        LlmMemoryRefinerAdapter.OBSERVATION_OUTCOME_EMPTY);
+    }
+
+    @Test
+    void shouldEmitErrorObservationWhenLlmCallFails() {
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        LlmMemoryRefinerAdapter adapter = new LlmMemoryRefinerAdapter(
+                new FailingChatModelPort(),
+                PromptTemplatePort.empty(),
+                new ObjectMapper(),
+                MemoryReviewFeedbackRepositoryPort.empty(),
+                0,
+                observationPort);
+
+        MemoryRefinementResult result = adapter.refine(request("anything"));
+
+        assertThat(result.operations()).isEmpty();
+        assertThat(result.reason()).isEqualTo("llm_refiner_failed");
+        assertThat(observationPort.events).hasSize(1);
+        assertThat(observationPort.events.get(0).attributes())
+                .containsEntry(LlmMemoryRefinerAdapter.OBSERVATION_ATTR_OUTCOME,
+                        LlmMemoryRefinerAdapter.OBSERVATION_OUTCOME_ERROR);
+    }
+
     private static MemoryRefinementRequest request(String content) {
         return new MemoryRefinementRequest(
                 "op-1",
@@ -569,6 +652,38 @@ class LlmMemoryRefinerAdapterTests {
         public List<MemoryReviewFeedbackSample> listSamples(MemoryReviewFeedbackQuery query) {
             lastQuery = query;
             return samples;
+        }
+    }
+
+    private static final class FailingChatModelPort implements ChatModelPort {
+
+        @Override
+        public String chat(ChatRequest request, String modelId) {
+            throw new IllegalStateException("chat backend offline");
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 }

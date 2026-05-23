@@ -35,9 +35,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackR
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.RefinedMemoryOperation;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -61,6 +64,11 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
     private static final int MAX_FEEDBACK_CONTENT_CHARS = 600;
     private static final String METADATA_TARGET_KIND = "targetKind";
     private static final String METADATA_TARGET_KEY = "targetKey";
+    static final String OBSERVATION_REFINE_EVENT = "memory-refine";
+    static final String OBSERVATION_ATTR_OUTCOME = "outcome";
+    static final String OBSERVATION_OUTCOME_SUCCESS = "success";
+    static final String OBSERVATION_OUTCOME_EMPTY = "empty";
+    static final String OBSERVATION_OUTCOME_ERROR = "error";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
 
@@ -69,6 +77,7 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
     private final ObjectMapper objectMapper;
     private final MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort;
     private final int feedbackSampleLimit;
+    private final ObservationPort observationPort;
 
     public LlmMemoryRefinerAdapter(ChatModelPort chatModelPort,
                                    PromptTemplatePort promptTemplatePort,
@@ -82,17 +91,30 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                                    ObjectMapper objectMapper,
                                    MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort,
                                    int feedbackSampleLimit) {
+        this(chatModelPort, promptTemplatePort, objectMapper, feedbackRepositoryPort, feedbackSampleLimit,
+                ObservationPort.noop());
+    }
+
+    public LlmMemoryRefinerAdapter(ChatModelPort chatModelPort,
+                                   PromptTemplatePort promptTemplatePort,
+                                   ObjectMapper objectMapper,
+                                   MemoryReviewFeedbackRepositoryPort feedbackRepositoryPort,
+                                   int feedbackSampleLimit,
+                                   ObservationPort observationPort) {
         this.chatModelPort = Objects.requireNonNull(chatModelPort, "chatModelPort must not be null");
         this.promptTemplatePort = Objects.requireNonNull(promptTemplatePort, "promptTemplatePort must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.feedbackRepositoryPort = Objects.requireNonNullElseGet(
                 feedbackRepositoryPort, MemoryReviewFeedbackRepositoryPort::empty);
         this.feedbackSampleLimit = Math.max(0, feedbackSampleLimit);
+        this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
     }
 
     @Override
     public MemoryRefinementResult refine(MemoryRefinementRequest request) {
         MemoryRefinementRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+        MemoryRefinementResult result;
+        String outcome;
         try {
             String response = chatModelPort.chat(ChatRequest.builder()
                     .messages(List.of(ChatMessage.user(buildPrompt(safeRequest))))
@@ -100,10 +122,26 @@ public class LlmMemoryRefinerAdapter implements MemoryRefinerPort {
                             .temperature(TEMPERATURE)
                             .build())
                     .build(), null);
-            return parseResponse(response);
+            result = parseResponse(response);
+            outcome = result.operations().isEmpty() ? OBSERVATION_OUTCOME_EMPTY : OBSERVATION_OUTCOME_SUCCESS;
         } catch (RuntimeException ex) {
             LOG.debug("LLM memory refiner failed", ex);
-            return MemoryRefinementResult.empty("llm_refiner_failed");
+            result = MemoryRefinementResult.empty("llm_refiner_failed");
+            outcome = OBSERVATION_OUTCOME_ERROR;
+        }
+        emitRefineMetric(outcome);
+        return result;
+    }
+
+    private void emitRefineMetric(String outcome) {
+        try {
+            observationPort.recordEvent(new ObservationEvent(
+                    OBSERVATION_REFINE_EVENT,
+                    Instant.now(),
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.of(OBSERVATION_ATTR_OUTCOME, outcome)));
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change refiner semantics.
         }
     }
 
