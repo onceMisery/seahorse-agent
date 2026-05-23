@@ -124,6 +124,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingReco
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionRule;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryHealthReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunAggregate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRecord;
@@ -483,6 +484,12 @@ class SeahorseWebApiContractTests {
         when(maintenancePort.runMaintenance(any())).thenReturn(maintenanceResult("manual-maintenance"));
         when(maintenancePort.pageMaintenanceRuns(any())).thenReturn(new MemoryMaintenanceRunPage(
                 List.of(maintenanceRunRecord("run-1")), 1, 10, 1, 1));
+        when(maintenancePort.aggregateRecent(anyInt())).thenReturn(new MemoryMaintenanceRunAggregate(
+                MemoryMaintenanceRunAggregate.DEFAULT_LIMIT, 3, 2, 1, 0,
+                4L, 2L, 6L,
+                5L, 3L, 1L, 2L,
+                8L, 5L, 3L,
+                Instant.EPOCH, Instant.EPOCH.plusSeconds(60)));
 
         IngestionTaskInboundPort ingestionTaskPort = mock(IngestionTaskInboundPort.class);
         when(ingestionTaskPort.execute(any()))
@@ -601,6 +608,19 @@ class SeahorseWebApiContractTests {
                 ArgumentCaptor.forClass(MemoryMaintenanceRunQuery.class);
         verify(maintenancePort).pageMaintenanceRuns(maintenanceQueryCaptor.capture());
         assertThat(maintenanceQueryCaptor.getValue().status()).isEqualTo("SUCCEEDED");
+
+        mvc.perform(get("/memories/maintenance-runs/aggregate")
+                        .param("limit", "30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.sampleCount").value(3))
+                .andExpect(jsonPath("$.data.succeededCount").value(2))
+                .andExpect(jsonPath("$.data.succeededWithWarningsCount").value(1))
+                .andExpect(jsonPath("$.data.failedCount").value(0))
+                .andExpect(jsonPath("$.data.compactionScannedTotal").value(4))
+                .andExpect(jsonPath("$.data.aliasScannedTotal").value(5))
+                .andExpect(jsonPath("$.data.gcScannedTotal").value(8));
+        verify(maintenancePort).aggregateRecent(30);
 
         mvc.perform(post("/ingestion/tasks")
                         .contentType(MediaType.APPLICATION_JSON)

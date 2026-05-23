@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunAggregate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,6 +35,7 @@ public class SeahorseMemoryMaintenanceController {
     private static final String KEY_CODE = "code";
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
+    private static final String DEFAULT_AGGREGATE_LIMIT = MemoryMaintenanceRunAggregate.DEFAULT_LIMIT_LITERAL;
 
     private final ObjectProvider<MemoryMaintenanceInboundPort> maintenancePortProvider;
 
@@ -64,6 +66,16 @@ public class SeahorseMemoryMaintenanceController {
             return Map.of(KEY_CODE, "1", "message", "Service not available");
         }
         return ok(maintenancePort.pageMaintenanceRuns(new MemoryMaintenanceRunQuery(status, current, size)));
+    }
+
+    @GetMapping("/memories/maintenance-runs/aggregate")
+    public Map<String, Object> aggregateMaintenanceRuns(
+            @RequestParam(defaultValue = DEFAULT_AGGREGATE_LIMIT) int limit) {
+        MemoryMaintenanceInboundPort maintenancePort = maintenancePortProvider.getIfAvailable();
+        if (maintenancePort == null) {
+            return Map.of(KEY_CODE, "1", "message", "Service not available");
+        }
+        return ok(maintenancePort.aggregateRecent(limit));
     }
 
     private Map<String, Object> ok(Object data) {

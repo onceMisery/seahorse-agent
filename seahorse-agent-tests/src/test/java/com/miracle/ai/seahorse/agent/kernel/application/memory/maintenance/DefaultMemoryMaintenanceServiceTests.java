@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolution
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunAggregate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRecord;
@@ -299,6 +300,132 @@ class DefaultMemoryMaintenanceServiceTests {
         assertThat(traceRecorder.events).hasSize(1);
         assertThat(traceRecorder.events.get(0).status()).isEqualTo(MemoryTraceEvent.STATUS_FAILED);
         assertThat(traceRecorder.events.get(0).details().get("taskOutcomes")).isEqualTo(result.taskOutcomes());
+    }
+
+    @Test
+    void shouldAggregateMaintenanceRunStatusAndStageCountsOverRecentWindow() {
+        RecordingMaintenanceRunRepository repository = new RecordingMaintenanceRunRepository();
+        repository.save(maintenanceRunRecord("run-1",
+                MemoryMaintenanceRunRecord.STATUS_SUCCEEDED,
+                5, 3, 7,
+                8, 4, 2, 1,
+                10, 6, 4));
+        repository.save(maintenanceRunRecord("run-2",
+                MemoryMaintenanceRunRecord.STATUS_SUCCEEDED_WITH_WARNINGS,
+                1, 0, 2,
+                0, 0, 0, 0,
+                5, 2, 1));
+        repository.save(maintenanceRunRecord("run-3",
+                MemoryMaintenanceRunRecord.STATUS_FAILED,
+                0, 0, 0,
+                3, 1, 0, 2,
+                0, 0, 0));
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                new RecordingGarbageCollectionService(),
+                null,
+                null,
+                repository,
+                false,
+                false,
+                true);
+
+        MemoryMaintenanceRunAggregate aggregate = service.aggregateRecent(10);
+
+        assertThat(aggregate.limit()).isEqualTo(10);
+        assertThat(aggregate.sampleCount()).isEqualTo(3);
+        assertThat(aggregate.succeededCount()).isEqualTo(1);
+        assertThat(aggregate.succeededWithWarningsCount()).isEqualTo(1);
+        assertThat(aggregate.failedCount()).isEqualTo(1);
+        assertThat(aggregate.compactionScannedTotal()).isEqualTo(6L);
+        assertThat(aggregate.compactionGroupTotal()).isEqualTo(3L);
+        assertThat(aggregate.compactionFragmentTotal()).isEqualTo(9L);
+        assertThat(aggregate.aliasScannedTotal()).isEqualTo(11L);
+        assertThat(aggregate.aliasNormalizedTotal()).isEqualTo(5L);
+        assertThat(aggregate.aliasDictionaryMatchTotal()).isEqualTo(2L);
+        assertThat(aggregate.aliasSkippedTotal()).isEqualTo(3L);
+        assertThat(aggregate.gcScannedTotal()).isEqualTo(15L);
+        assertThat(aggregate.gcEnqueuedTotal()).isEqualTo(8L);
+        assertThat(aggregate.gcMarkedTotal()).isEqualTo(5L);
+    }
+
+    @Test
+    void shouldReturnEmptyMaintenanceAggregateWhenNoRunsExist() {
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                new RecordingGarbageCollectionService(),
+                null,
+                null,
+                MemoryMaintenanceRunRepositoryPort.noop(),
+                false,
+                false,
+                true);
+
+        MemoryMaintenanceRunAggregate aggregate = service.aggregateRecent(5);
+
+        assertThat(aggregate.limit()).isEqualTo(5);
+        assertThat(aggregate.sampleCount()).isZero();
+        assertThat(aggregate.succeededCount()).isZero();
+        assertThat(aggregate.succeededWithWarningsCount()).isZero();
+        assertThat(aggregate.failedCount()).isZero();
+        assertThat(aggregate.compactionScannedTotal()).isZero();
+        assertThat(aggregate.aliasScannedTotal()).isZero();
+        assertThat(aggregate.gcScannedTotal()).isZero();
+        assertThat(aggregate.windowStart()).isNull();
+        assertThat(aggregate.windowEnd()).isNull();
+    }
+
+    @Test
+    void shouldClampMaintenanceAggregateLimitToSafeBounds() {
+        RecordingMaintenanceRunRepository repository = new RecordingMaintenanceRunRepository();
+        DefaultMemoryMaintenanceService service = new DefaultMemoryMaintenanceService(
+                new RecordingGarbageCollectionService(),
+                null,
+                null,
+                repository,
+                false,
+                false,
+                true);
+
+        MemoryMaintenanceRunAggregate negativeAggregate = service.aggregateRecent(-3);
+        MemoryMaintenanceRunAggregate hugeAggregate = service.aggregateRecent(10_000);
+
+        assertThat(negativeAggregate.limit()).isEqualTo(1);
+        assertThat(hugeAggregate.limit()).isEqualTo(MemoryMaintenanceRunAggregate.MAX_LIMIT);
+    }
+
+    private static MemoryMaintenanceRunRecord maintenanceRunRecord(String runId,
+                                                                   String status,
+                                                                   int compactionScanned,
+                                                                   int compactionGroup,
+                                                                   int compactionFragment,
+                                                                   int aliasScanned,
+                                                                   int aliasNormalized,
+                                                                   int aliasDictionaryMatch,
+                                                                   int aliasSkipped,
+                                                                   int gcScanned,
+                                                                   int gcEnqueued,
+                                                                   int gcMarked) {
+        return new MemoryMaintenanceRunRecord(
+                runId,
+                "scheduled-maintenance",
+                status,
+                compactionScanned > 0 || compactionGroup > 0 || compactionFragment > 0,
+                aliasScanned > 0 || aliasNormalized > 0 || aliasSkipped > 0,
+                gcScanned > 0 || gcEnqueued > 0 || gcMarked > 0,
+                compactionScanned,
+                compactionGroup,
+                compactionFragment,
+                aliasScanned,
+                aliasNormalized,
+                aliasDictionaryMatch,
+                aliasSkipped,
+                gcScanned,
+                gcEnqueued,
+                gcMarked,
+                false,
+                List.of(),
+                List.of(),
+                Instant.EPOCH,
+                Instant.EPOCH);
     }
 
     private static class RecordingGarbageCollectionService extends MemoryGarbageCollectionService {

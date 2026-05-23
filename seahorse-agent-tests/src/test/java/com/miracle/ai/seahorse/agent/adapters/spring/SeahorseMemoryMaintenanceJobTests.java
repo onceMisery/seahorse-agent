@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunAggregate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
 import org.junit.jupiter.api.Test;
@@ -74,6 +75,11 @@ class SeahorseMemoryMaintenanceJobTests {
         @Override
         public MemoryMaintenanceRunPage pageMaintenanceRuns(MemoryMaintenanceRunQuery query) {
             return MemoryMaintenanceRunPage.empty(query.current(), query.size());
+        }
+
+        @Override
+        public MemoryMaintenanceRunAggregate aggregateRecent(int limit) {
+            return MemoryMaintenanceRunAggregate.empty(MemoryMaintenanceRunAggregate.clampLimit(limit));
         }
     }
 }

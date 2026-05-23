@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.memory;
 
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunAggregate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
 
@@ -25,4 +26,6 @@ public interface MemoryMaintenanceInboundPort {
     MemoryMaintenanceRunResult runMaintenance(MemoryMaintenanceRunCommand command);
 
     MemoryMaintenanceRunPage pageMaintenanceRuns(MemoryMaintenanceRunQuery query);
+
+    MemoryMaintenanceRunAggregate aggregateRecent(int limit);
 }

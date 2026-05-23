@@ -23,6 +23,13 @@ public interface MemoryMaintenanceRunRepositoryPort {
 
     MemoryMaintenanceRunPage pageMaintenanceRuns(MemoryMaintenanceRunQuery query);
 
+    default MemoryMaintenanceRunAggregate aggregateRecent(int limit) {
+        int effectiveLimit = MemoryMaintenanceRunAggregate.clampLimit(limit);
+        MemoryMaintenanceRunPage page = pageMaintenanceRuns(
+                new MemoryMaintenanceRunQuery("", 1L, effectiveLimit));
+        return MemoryMaintenanceRunAggregate.of(page.records(), effectiveLimit);
+    }
+
     static MemoryMaintenanceRunRepositoryPort noop() {
         return new MemoryMaintenanceRunRepositoryPort() {
             @Override

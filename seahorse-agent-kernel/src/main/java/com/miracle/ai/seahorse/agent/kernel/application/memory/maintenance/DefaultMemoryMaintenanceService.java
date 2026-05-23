@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceTaskO
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolutionRunResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollectionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunAggregate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunRecord;
@@ -248,6 +249,11 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
     public MemoryMaintenanceRunPage pageMaintenanceRuns(MemoryMaintenanceRunQuery query) {
         MemoryMaintenanceRunQuery safeQuery = query == null ? new MemoryMaintenanceRunQuery(null, 1L, 20L) : query;
         return maintenanceRunRepositoryPort.pageMaintenanceRuns(safeQuery);
+    }
+
+    @Override
+    public MemoryMaintenanceRunAggregate aggregateRecent(int limit) {
+        return maintenanceRunRepositoryPort.aggregateRecent(limit);
     }
 
     private void persistRunRecord(MemoryMaintenanceRunResult result) {
