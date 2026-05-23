@@ -223,7 +223,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryAggregationSchedulerPort> schedulerPort,
             ObjectProvider<MemoryIngestionWorkflowPort> ingestionWorkflowPort,
             ObjectProvider<MemoryTraceRecorder> traceRecorder,
-            ObjectProvider<MemoryAggregationTopicShiftDetector> topicShiftDetector) {
+            ObjectProvider<MemoryAggregationTopicShiftDetector> topicShiftDetector,
+            ObjectProvider<ObservationPort> observationPort) {
         return new DefaultMemoryAggregationService(
                 policy,
                 aggregationBufferPort.getIfAvailable(MemoryAggregationBufferPort::noop),
@@ -232,6 +233,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                         com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult.ignored("noop")),
                 traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
                 topicShiftDetector.getIfAvailable(ExplicitCueMemoryAggregationTopicShiftDetector::new),
+                observationPort.getIfAvailable(ObservationPort::noop),
                 java.time.Clock.systemUTC());
     }
 

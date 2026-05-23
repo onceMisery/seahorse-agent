@@ -33,6 +33,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkfl
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTurnEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,12 +82,17 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
     private static final String REASON_NULL_RESULT = "null_result";
     private static final String REASON_AGGREGATION_FLUSH_FAILED = "aggregation_flush_failed";
 
+    static final String OBSERVATION_FLUSH_EVENT = "memory-aggregation-flush";
+    static final String OBSERVATION_ATTR_TRIGGER = "trigger";
+    static final String OBSERVATION_ATTR_STATUS = "status";
+
     private final MemoryAggregationPolicy policy;
     private final MemoryAggregationBufferPort bufferPort;
     private final MemoryAggregationSchedulerPort schedulerPort;
     private final MemoryIngestionWorkflowPort ingestionWorkflowPort;
     private final MemoryTraceRecorder traceRecorder;
     private final MemoryAggregationTopicShiftDetector topicShiftDetector;
+    private final ObservationPort observationPort;
     private final Clock clock;
 
     public DefaultMemoryAggregationService(MemoryAggregationPolicy policy,
@@ -128,6 +135,18 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                                            MemoryTraceRecorder traceRecorder,
                                            MemoryAggregationTopicShiftDetector topicShiftDetector,
                                            Clock clock) {
+        this(policy, bufferPort, schedulerPort, ingestionWorkflowPort, traceRecorder, topicShiftDetector,
+                ObservationPort.noop(), clock);
+    }
+
+    public DefaultMemoryAggregationService(MemoryAggregationPolicy policy,
+                                           MemoryAggregationBufferPort bufferPort,
+                                           MemoryAggregationSchedulerPort schedulerPort,
+                                           MemoryIngestionWorkflowPort ingestionWorkflowPort,
+                                           MemoryTraceRecorder traceRecorder,
+                                           MemoryAggregationTopicShiftDetector topicShiftDetector,
+                                           ObservationPort observationPort,
+                                           Clock clock) {
         this.policy = Objects.requireNonNullElseGet(policy, MemoryAggregationPolicy::defaults);
         this.bufferPort = Objects.requireNonNullElseGet(bufferPort, MemoryAggregationBufferPort::noop);
         this.schedulerPort = Objects.requireNonNullElseGet(schedulerPort, MemoryAggregationSchedulerPort::noop);
@@ -136,6 +155,7 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
         this.topicShiftDetector = Objects.requireNonNullElseGet(topicShiftDetector,
                 ExplicitCueMemoryAggregationTopicShiftDetector::new);
+        this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -350,6 +370,26 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
                 TRACE_SUBJECT_TYPE_SNAPSHOT,
                 details,
                 Instant.now(clock)));
+        emitFlushMetricIfApplicable(eventType, status, details);
+    }
+
+    private void emitFlushMetricIfApplicable(String eventType, String status, Map<String, Object> details) {
+        if (!TRACE_EVENT_FLUSH_READY.equals(eventType)) {
+            return;
+        }
+        Object trigger = details == null ? null : details.get(DETAIL_TRIGGER);
+        String triggerLabel = trigger == null ? "" : trigger.toString();
+        try {
+            observationPort.recordEvent(new ObservationEvent(
+                    OBSERVATION_FLUSH_EVENT,
+                    Instant.now(clock),
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.of(
+                            OBSERVATION_ATTR_TRIGGER, triggerLabel,
+                            OBSERVATION_ATTR_STATUS, Objects.requireNonNullElse(status, ""))));
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change aggregation execution semantics.
+        }
     }
 
     private TraceContext traceContext(MemoryTurnEvent event) {

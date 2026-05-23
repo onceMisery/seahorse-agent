@@ -30,6 +30,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkfl
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTurnEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -212,6 +216,50 @@ class MemoryAggregationServiceTests {
                 });
     }
 
+    @Test
+    void shouldEmitFlushObservationCounterTaggedWithTriggerAndStatus() {
+        RecordingWorkflow workflow = new RecordingWorkflow();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        DefaultMemoryAggregationService service = service(policy(2, 60_000),
+                workflow,
+                new RecordingScheduler(),
+                MemoryTraceRecorder.noop(),
+                observationPort);
+
+        service.appendTurn(turn("task-1", "Remember I use Java", "Noted", 8));
+        service.appendTurn(turn("task-2", "I prefer concise answers", "Understood", 9));
+
+        assertThat(observationPort.events)
+                .as("flush observation events should be emitted on force-flush")
+                .extracting(ObservationEvent::name)
+                .containsOnly(DefaultMemoryAggregationService.OBSERVATION_FLUSH_EVENT);
+        assertThat(observationPort.events).hasSize(1);
+        ObservationEvent flushEvent = observationPort.events.get(0);
+        assertThat(flushEvent.attributes())
+                .containsEntry(DefaultMemoryAggregationService.OBSERVATION_ATTR_TRIGGER,
+                        MemoryFlushTrigger.FORCE_TURNS.name())
+                .containsEntry(DefaultMemoryAggregationService.OBSERVATION_ATTR_STATUS,
+                        MemoryTraceEvent.STATUS_SUCCESS);
+        assertThat(flushEvent.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT);
+    }
+
+    @Test
+    void shouldNotEmitFlushObservationForNonFlushTraceEvents() {
+        RecordingWorkflow workflow = new RecordingWorkflow();
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        DefaultMemoryAggregationService service = service(policy(3, 60_000),
+                workflow,
+                new RecordingScheduler(),
+                MemoryTraceRecorder.noop(),
+                observationPort);
+
+        service.appendTurn(turn("task-1", "Remember I use Java", "Noted", 8));
+
+        assertThat(observationPort.events)
+                .as("append-turn alone should not emit flush counter")
+                .isEmpty();
+    }
+
     private DefaultMemoryAggregationService service(MemoryAggregationPolicy policy,
                                                     RecordingWorkflow workflow,
                                                     RecordingScheduler scheduler) {
@@ -222,12 +270,22 @@ class MemoryAggregationServiceTests {
                                                     RecordingWorkflow workflow,
                                                     RecordingScheduler scheduler,
                                                     MemoryTraceRecorder traceRecorder) {
+        return service(policy, workflow, scheduler, traceRecorder, ObservationPort.noop());
+    }
+
+    private DefaultMemoryAggregationService service(MemoryAggregationPolicy policy,
+                                                    RecordingWorkflow workflow,
+                                                    RecordingScheduler scheduler,
+                                                    MemoryTraceRecorder traceRecorder,
+                                                    ObservationPort observationPort) {
         return new DefaultMemoryAggregationService(
                 policy,
                 new InMemoryMemoryAggregationBufferPort(policy),
                 scheduler,
                 workflow,
                 traceRecorder,
+                new ExplicitCueMemoryAggregationTopicShiftDetector(),
+                observationPort,
                 Clock.fixed(BASE_TIME, ZoneOffset.UTC));
     }
 
@@ -290,6 +348,30 @@ class MemoryAggregationServiceTests {
         @Override
         public List<MemoryTraceEvent> listRecent(int limit) {
             return List.copyOf(events);
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 }
