@@ -37,6 +37,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ScoredMemoryVectorHit;
@@ -447,6 +451,84 @@ class HybridMemoryRecallPipelineTests {
                 .containsEntry("lastReferencedAt", "2026-05-21T09:00:00Z");
     }
 
+    @Test
+    void shouldEmitChannelObservationCounterTaggedWithChannelAndOutcome() {
+        RecordingMemoryStore semantic = new RecordingMemoryStore();
+        semantic.save(record("semantic-fast", "SEMANTIC", "Fast keyword memory."));
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        MemoryRecallChannelPort failing = new MemoryRecallChannelPort() {
+            @Override
+            public String channelName() {
+                return "vector";
+            }
+
+            @Override
+            public List<MemoryRecallCandidate> recall(MemoryRecallRequest request) {
+                throw new IllegalStateException("vector unavailable");
+            }
+        };
+        MemoryRecallChannelPort slow = new MemoryRecallChannelPort() {
+            @Override
+            public String channelName() {
+                return "slow-vector";
+            }
+
+            @Override
+            public List<MemoryRecallCandidate> recall(MemoryRecallRequest request) {
+                try {
+                    Thread.sleep(250L);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+                return List.of(candidate("semantic-slow", "slow-vector", 1, 9.0D, "SEMANTIC"));
+            }
+        };
+
+        HybridMemoryRecallPipeline pipeline = pipeline(
+                new RecordingMemoryStore(),
+                new RecordingMemoryStore(),
+                semantic,
+                List.of(
+                        failing,
+                        slow,
+                        channel("keyword", List.of(candidate("semantic-fast", "keyword", 1, 5.0D, "SEMANTIC")))),
+                MemoryTraceRecorder.noop(),
+                MemoryFusionPolicy.defaults()
+                        .withFinalTopK(5)
+                        .withTimeDecayEnabled(false)
+                        .withChannelTimeoutMillis(20L),
+                MemoryAliasPort.noop(),
+                MemoryRecallRerankerPort.noop(),
+                observationPort);
+
+        pipeline.load(MemoryLoadRequest.builder()
+                .conversationId("conv-1")
+                .userId("user-1")
+                .currentQuestion("metrics")
+                .build());
+
+        assertThat(observationPort.events)
+                .as("each recall channel should emit exactly one observation event")
+                .extracting(ObservationEvent::name)
+                .containsOnly(HybridMemoryRecallPipeline.OBSERVATION_CHANNEL_EVENT);
+        assertThat(observationPort.events).hasSize(3);
+        assertThat(observationPort.events)
+                .anySatisfy(event -> assertThat(event.attributes())
+                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_CHANNEL, "vector")
+                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_OUTCOME,
+                                HybridMemoryRecallPipeline.OBSERVATION_OUTCOME_ERROR))
+                .anySatisfy(event -> assertThat(event.attributes())
+                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_CHANNEL, "slow-vector")
+                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_OUTCOME,
+                                HybridMemoryRecallPipeline.OBSERVATION_OUTCOME_TIMEOUT))
+                .anySatisfy(event -> assertThat(event.attributes())
+                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_CHANNEL, "keyword")
+                        .containsEntry(HybridMemoryRecallPipeline.OBSERVATION_ATTR_OUTCOME,
+                                HybridMemoryRecallPipeline.OBSERVATION_OUTCOME_SUCCESS));
+        assertThat(observationPort.events)
+                .allSatisfy(event -> assertThat(event.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT));
+    }
+
     private HybridMemoryRecallPipeline pipeline(RecordingMemoryStore shortTerm,
                                                 RecordingMemoryStore longTerm,
                                                 RecordingMemoryStore semantic,
@@ -501,6 +583,19 @@ class HybridMemoryRecallPipelineTests {
                                                 MemoryFusionPolicy fusionPolicy,
                                                 MemoryAliasPort aliasPort,
                                                 MemoryRecallRerankerPort recallRerankerPort) {
+        return pipeline(shortTerm, longTerm, semantic, channels, traceRecorder, fusionPolicy, aliasPort,
+                recallRerankerPort, ObservationPort.noop());
+    }
+
+    private HybridMemoryRecallPipeline pipeline(RecordingMemoryStore shortTerm,
+                                                RecordingMemoryStore longTerm,
+                                                RecordingMemoryStore semantic,
+                                                List<MemoryRecallChannelPort> channels,
+                                                MemoryTraceRecorder traceRecorder,
+                                                MemoryFusionPolicy fusionPolicy,
+                                                MemoryAliasPort aliasPort,
+                                                MemoryRecallRerankerPort recallRerankerPort,
+                                                ObservationPort observationPort) {
         return new HybridMemoryRecallPipeline(
                 shortTerm,
                 longTerm,
@@ -518,7 +613,8 @@ class HybridMemoryRecallPipelineTests {
                 traceRecorder,
                 null,
                 aliasPort,
-                recallRerankerPort);
+                recallRerankerPort,
+                observationPort);
     }
 
     private MemoryRecallChannelPort channel(String name, List<MemoryRecallCandidate> candidates) {
@@ -704,6 +800,30 @@ class HybridMemoryRecallPipelineTests {
         @Override
         public List<String> search(String userId, String query, int topK) {
             return hits.stream().limit(topK).toList();
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 }

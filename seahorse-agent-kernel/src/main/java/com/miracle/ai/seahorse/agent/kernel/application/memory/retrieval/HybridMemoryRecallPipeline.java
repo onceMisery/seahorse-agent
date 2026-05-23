@@ -48,6 +48,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.SemanticMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -140,6 +142,14 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
     private final MemoryTraceRecorder traceRecorder;
     private final Executor recallExecutor;
     private final MemoryAliasPort memoryAliasPort;
+    private final ObservationPort observationPort;
+
+    static final String OBSERVATION_CHANNEL_EVENT = "memory-recall-channel";
+    static final String OBSERVATION_ATTR_CHANNEL = "channel";
+    static final String OBSERVATION_ATTR_OUTCOME = "outcome";
+    static final String OBSERVATION_OUTCOME_SUCCESS = "success";
+    static final String OBSERVATION_OUTCOME_TIMEOUT = "timeout";
+    static final String OBSERVATION_OUTCOME_ERROR = "error";
 
     private record ChannelRecallTask(
             MemoryRecallChannelPort channel,
@@ -309,6 +319,44 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                                       Executor recallExecutor,
                                       MemoryAliasPort memoryAliasPort,
                                       MemoryRecallRerankerPort recallRerankerPort) {
+        this(shortTermPort,
+                longTermPort,
+                semanticPort,
+                objectMapper,
+                profileMemoryPort,
+                correctionLedgerPort,
+                memoryRouterPort,
+                businessDocumentRetrieverPort,
+                memoryLifecyclePort,
+                channels,
+                fusionPort,
+                fusionPolicy,
+                channelTopK,
+                traceRecorder,
+                recallExecutor,
+                memoryAliasPort,
+                recallRerankerPort,
+                ObservationPort.noop());
+    }
+
+    public HybridMemoryRecallPipeline(ShortTermMemoryPort shortTermPort,
+                                      LongTermMemoryPort longTermPort,
+                                      SemanticMemoryPort semanticPort,
+                                      ObjectMapper objectMapper,
+                                      ProfileMemoryPort profileMemoryPort,
+                                      CorrectionLedgerPort correctionLedgerPort,
+                                      MemoryRouterPort memoryRouterPort,
+                                      MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                      MemoryLifecyclePort memoryLifecyclePort,
+                                      List<MemoryRecallChannelPort> channels,
+                                      MemoryRecallFusionPort fusionPort,
+                                      MemoryFusionPolicy fusionPolicy,
+                                      int channelTopK,
+                                      MemoryTraceRecorder traceRecorder,
+                                      Executor recallExecutor,
+                                      MemoryAliasPort memoryAliasPort,
+                                      MemoryRecallRerankerPort recallRerankerPort,
+                                      ObservationPort observationPort) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -327,6 +375,7 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, MemoryTraceRecorder::noop);
         this.recallExecutor = Objects.requireNonNullElseGet(recallExecutor, ForkJoinPool::commonPool);
         this.memoryAliasPort = Objects.requireNonNullElseGet(memoryAliasPort, MemoryAliasPort::noop);
+        this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
     }
 
     @Override
@@ -593,6 +642,31 @@ public class HybridMemoryRecallPipeline implements MemoryRetrievalPipelinePort {
                 TRACE_SUBJECT_RECALL_CHANNEL,
                 details,
                 Instant.now()));
+        emitChannelMetric(channel, status, error);
+    }
+
+    private void emitChannelMetric(MemoryRecallChannelPort channel, String status, String error) {
+        try {
+            observationPort.recordEvent(new ObservationEvent(
+                    OBSERVATION_CHANNEL_EVENT,
+                    Instant.now(),
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.of(
+                            OBSERVATION_ATTR_CHANNEL, Objects.requireNonNullElse(channel.channelName(), ""),
+                            OBSERVATION_ATTR_OUTCOME, channelOutcome(status, error))));
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change recall execution semantics.
+        }
+    }
+
+    private static String channelOutcome(String status, String error) {
+        if (MemoryTraceEvent.STATUS_SUCCESS.equals(status)) {
+            return OBSERVATION_OUTCOME_SUCCESS;
+        }
+        if ("timeout".equals(error)) {
+            return OBSERVATION_OUTCOME_TIMEOUT;
+        }
+        return OBSERVATION_OUTCOME_ERROR;
     }
 
     private void recordRecallFusion(String userId,

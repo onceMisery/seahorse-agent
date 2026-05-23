@@ -572,6 +572,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             MemoryRecallRerankerPort recallRerankerPort,
             MemoryFusionPolicy fusionPolicy,
             ObjectProvider<MemoryTraceRecorder> traceRecorder,
+            ObjectProvider<ObservationPort> observationPort,
             @Qualifier("ragRetrievalThreadPoolExecutor") ObjectProvider<Executor> recallExecutor,
             @Value("${seahorse-agent.memory.recall.channel-top-k:20}") int channelTopK) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
@@ -592,7 +593,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
                 recallExecutor.getIfAvailable(),
                 memoryAliasPort.getIfAvailable(MemoryAliasPort::noop),
-                recallRerankerPort);
+                recallRerankerPort,
+                observationPort.getIfAvailable(ObservationPort::noop));
     }
 
     @Bean
