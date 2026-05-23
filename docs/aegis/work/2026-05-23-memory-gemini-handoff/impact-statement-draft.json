@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "docs/aegis/work/2026-05-23-memory-gemini-handoff"
+  ],
+  "owners": [
+    "next memory-system developer"
+  ],
+  "invariants": [
+    "Existing four-layer memory model remains canonical and Gemini-inspired capabilities stay pluggable."
+  ],
+  "compatBoundary": "Do not replace WORKING/SHORT_TERM/LONG_TERM/SEMANTIC storage semantics; avoid unrelated adapter/tool/approval changes.",
+  "nonGoals": [
+    "No code implementation, no broad git add, no reverting parallel worktree changes."
+  ]
+}

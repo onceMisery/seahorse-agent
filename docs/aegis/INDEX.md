@@ -46,3 +46,15 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-23 | work | docs/aegis/work/2026-05-23-ai-infra-phase-0-1/20-checkpoint.md | AI Infra Phase 0/1 execution checkpoint |
 | 2026-05-23 | work | docs/aegis/work/2026-05-23-ai-infra-phase-0-1/90-evidence.md | AI Infra Phase 0/1 execution evidence |
 | 2026-05-23 | work | docs/aegis/work/2026-05-23-ai-infra-phase-0-1/99-reflection.md | AI Infra Phase 0/1 execution reflection |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-memory-gemini-handoff/10-intent.md | Memory Gemini alignment handoff intent |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-memory-gemini-handoff/20-checkpoint.md | Memory Gemini alignment handoff checkpoint |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-memory-gemini-handoff/90-evidence.md | Memory Gemini alignment handoff evidence |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-memory-gemini-handoff/99-reflection.md | Memory Gemini alignment handoff reflection |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-memory-gemini-handoff/task-intent-draft.json | Memory Gemini alignment handoff task intent draft |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-memory-gemini-handoff/baseline-read-set-hint.json | Memory Gemini alignment handoff baseline read-set hint |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-memory-gemini-handoff/impact-statement-draft.json | Memory Gemini alignment handoff impact statement draft |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-memory-gemini-handoff/todo-checkpoint-draft.json | Memory Gemini alignment handoff todo checkpoint draft |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-memory-gemini-handoff/drift-check-draft.json | Memory Gemini alignment handoff drift check draft |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-memory-gemini-handoff/resume-state-hint.json | 2026-05-23-memory-gemini-handoff resume state hint |
+| 2026-05-23 | artifact | docs/aegis/work/2026-05-23-memory-gemini-handoff/evidence-bundle-draft-handoff-md.json | 2026-05-23-memory-gemini-handoff evidence handoff-md |
+| 2026-05-23 | work | docs/aegis/work/2026-05-23-memory-gemini-handoff/HANDOFF.md | Memory Gemini alignment handoff document |

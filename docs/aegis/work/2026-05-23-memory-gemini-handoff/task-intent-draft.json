@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Produce a durable handoff document so the next developer can continue aligning the memory system with docs/gemini-design.md without restarting research.",
+  "goal": "Produce a durable handoff document so the next developer can continue aligning the memory system with docs/gemini-design.md without restarting research.",
+  "successEvidence": [
+    "Handoff records current branch, commits, implemented capabilities, remaining gaps, dirty-worktree caveats, recommended next slices, verification commands, and commit discipline."
+  ],
+  "stopCondition": "Done when the handoff is written and workspace structure check passes; blocked if baseline files cannot be read; needs-verification if git status or key paths are stale.",
+  "nonGoals": [
+    "No code implementation, no broad git add, no reverting parallel worktree changes."
+  ],
+  "scope": "Documentation handoff for ongoing memory-system implementation; no production code edits in this slice.",
+  "changeKinds": [
+    "documentation"
+  ],
+  "riskHints": [
+    "Worktree contains unrelated parallel development changes; future commits must path-limit staging."
+  ]
+}

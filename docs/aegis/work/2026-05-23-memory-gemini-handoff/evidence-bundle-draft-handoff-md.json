@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "handoff-md",
+  "type": "documentation",
+  "source": "docs/aegis/work/2026-05-23-memory-gemini-handoff/HANDOFF.md",
+  "summary": "Direct handoff document for continuing Gemini memory alignment with current progress, gaps, risk boundaries, and next implementation slice.",
+  "verifier": "manual file review plus aegis workspace check"
+}
