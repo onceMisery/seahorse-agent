@@ -153,6 +153,8 @@ import java.util.concurrent.Executor;
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelMemoryAutoConfiguration {
 
+    private static final String MEMORY_REFINER_ENABLED_PROPERTY = "seahorse-agent.memory.refiner.enabled";
+
     @Bean
     @ConditionalOnMissingBean(MemoryAggregationPolicy.class)
     public MemoryAggregationPolicy seahorseMemoryAggregationPolicy(
@@ -314,17 +316,19 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryKeywordIndexPort> memoryKeywordIndexPort,
             ObjectProvider<MemoryGraphIndexPort> memoryGraphIndexPort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
+            Environment environment,
             @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
             @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
             @Value("${seahorse-agent.memory.semantic-limit:10}") int semanticLimit,
             @Value("${seahorse-agent.memory.capture-enabled:true}") boolean captureEnabled,
-            @Value("${seahorse-agent.memory.refiner.enabled:false}") boolean refinerEnabled,
             @Value("${seahorse-agent.memory.refiner.fail-open:true}") boolean refinerFailOpen,
             @Value("${seahorse-agent.memory.refiner.max-batch-operations:8}") int maxRefinerBatchOperations,
             @Value("${seahorse-agent.memory.refiner.max-delete-ratio:0.7}") double maxRefinerDeleteRatio,
             @Value("${seahorse-agent.memory.derived-index.keyword-enabled:true}") boolean keywordIndexOutboxEnabled,
             @Value("${seahorse-agent.memory.derived-index.graph-enabled:true}") boolean graphIndexOutboxEnabled) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        MemoryRefinerPort configuredRefinerPort = memoryRefinerPort.getIfAvailable();
+        boolean refinerEnabled = memoryRefinerEnabled(environment, configuredRefinerPort != null);
         MemoryEngineOptions options = new MemoryEngineOptions(
                 shortTermLimit,
                 longTermLimit,
@@ -352,11 +356,18 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop),
                 memoryPolicyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults),
                 memoryRetrievalPipelinePort.getIfAvailable(),
-                memoryRefinerPort.getIfAvailable(MemoryRefinerPort::noop),
+                configuredRefinerPort == null ? MemoryRefinerPort.noop() : configuredRefinerPort,
                 memoryReviewCandidatePort.getIfAvailable(MemoryReviewCandidatePort::noop),
                 memoryAliasPort.getIfAvailable(MemoryAliasPort::noop),
                 memoryReviewPolicyPort.getIfAvailable(MemoryReviewPolicyPort::defaults),
                 memoryReviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty));
+    }
+
+    private boolean memoryRefinerEnabled(Environment environment, boolean refinerAvailable) {
+        if (environment.containsProperty(MEMORY_REFINER_ENABLED_PROPERTY)) {
+            return environment.getProperty(MEMORY_REFINER_ENABLED_PROPERTY, Boolean.class, false);
+        }
+        return refinerAvailable;
     }
 
     @Bean

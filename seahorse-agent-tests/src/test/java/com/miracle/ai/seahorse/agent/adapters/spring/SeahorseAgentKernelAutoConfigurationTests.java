@@ -861,7 +861,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
     }
 
     @Test
-    void shouldUseProvidedMemoryRefinerOnlyWhenRefinerIsEnabled() {
+    void shouldUseProvidedMemoryRefinerWhenRefinerIsExplicitlyEnabled() {
         contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class, MemoryRefinerConfiguration.class)
                 .withPropertyValues("seahorse-agent.memory.refiner.enabled=true")
                 .run(context -> {
@@ -878,6 +878,46 @@ class SeahorseAgentKernelAutoConfigurationTests {
                             .build());
 
                     verify(shortTermMemoryPort).save(any(MemoryRecord.class));
+                });
+    }
+
+    @Test
+    void shouldEnableMemoryRefinerWhenRefinerPortIsAvailableByDefault() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class, CapturingMemoryRefinerConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    when(context.getBean(MemoryOperationLogPort.class).tryStart(any())).thenReturn(true);
+
+                    context.getBean(MemoryEnginePort.class).writeMemory(MemoryWriteRequest.builder()
+                            .userId("user-default-refiner")
+                            .conversationId("conv-default-refiner")
+                            .messageId("msg-default-refiner")
+                            .message(ChatMessage.user("remember the default refiner should run"))
+                            .build());
+
+                    CapturingMemoryRefinerPort refinerPort = context.getBean(CapturingMemoryRefinerPort.class);
+                    assertThat(refinerPort.requests).hasSize(1);
+                    assertThat(refinerPort.requests.get(0).operationId()).isEqualTo("memory-write-msg-default-refiner");
+                });
+    }
+
+    @Test
+    void shouldAllowExplicitlyDisablingAvailableMemoryRefiner() {
+        contextRunner.withUserConfiguration(MemoryStorePortsConfiguration.class, CapturingMemoryRefinerConfiguration.class)
+                .withPropertyValues("seahorse-agent.memory.refiner.enabled=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    when(context.getBean(MemoryOperationLogPort.class).tryStart(any())).thenReturn(true);
+
+                    context.getBean(MemoryEnginePort.class).writeMemory(MemoryWriteRequest.builder()
+                            .userId("user-disabled-refiner")
+                            .conversationId("conv-disabled-refiner")
+                            .messageId("msg-disabled-refiner")
+                            .message(ChatMessage.user("remember the explicit refiner switch should win"))
+                            .build());
+
+                    CapturingMemoryRefinerPort refinerPort = context.getBean(CapturingMemoryRefinerPort.class);
+                    assertThat(refinerPort.requests).isEmpty();
                 });
     }
 
