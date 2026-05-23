@@ -70,11 +70,12 @@
 
 - 当前默认 buffer 是内存实现，不是 Redis Stream / Lua CAS / 分布式延迟队列。
 - 分布式 debounce 后端属于后续 adapter 深水区，不建议在 kernel 内硬编码 Redis。
+- 已新增 `RedisMemoryAggregationBufferPort`（位于 `seahorse-agent-adapter-cache-redis` 模块）作为 Redisson 后端 MVP：per-session RLock + JSON 文档 + TTL；后续可在此基础上叠加 Lua CAS 优化与专门的延迟调度。
 
 适配建议：
 
 - 保持 `MemoryAggregationBufferPort` 和 `MemoryAggregationSchedulerPort` 不变。
-- 后续新增 `seahorse-agent-adapter-redis` 或已有基础设施 adapter，实现 Redis buffer、atomic rename、delayed token scheduler。
+- 后续新增 `seahorse-agent-adapter-redis` 或已有基础设施 adapter，实现 Redis buffer、atomic rename、delayed token scheduler。Buffer 端已落地于 cache-redis 模块；scheduler 仍可使用 in-memory 版本与之协同，分布式 scheduler 留作独立切片。
 - kernel 只依赖端口和 `MemoryAggregationPolicy`。
 
 ### LLM Refiner
@@ -370,8 +371,8 @@ git commit -m "feat(memory): report recall precision metrics"
 8. ~~Outbox relay batch/task counter via ObservationPort（`memory-outbox-batch` / `memory-outbox-task`，标签 taskType + outcome）。~~ 已完成（`3b8d4844`）。
 9. ~~Context weave counter via ObservationPort（`memory-context-weave`，标签 outcome/truncated）。~~ 已完成（`a08f2fa0`）。
 10. ~~Recall evaluation counter via ObservationPort（`memory-recall-evaluate`，标签 outcome=success|empty）。~~ 已完成（`bda977b1`）。
-11. Redis/distributed aggregation adapter：实现 `MemoryAggregationBufferPort` / scheduler 的生产后端。
-12. 真实 BM25/vector/graph 后端质量评估：建立 golden cases，衡量 channel contribution、recall、precision、MRR。
+11. ~~Redis/distributed aggregation adapter：实现 `MemoryAggregationBufferPort` 的 Redisson 后端，使用 per-session RLock + 带 TTL 的 JSON 文档，Instant 字段以 epoch millis 序列化避免 java.time 模块依赖。~~ 已完成（`a5df98fd`）。后续可叠加专门的 delayed scheduler 适配（当前 InMemoryMemoryAggregationSchedulerPort 仍可与 Redis buffer 协同；分布式 scheduler 留作下一刀）。
+12. 真实 BM25/vector/graph 后端质量评估：建立 golden cases，衡量 channel contribution、recall、precision、MRR。仍需扩展 `MemoryRetrievalPipelinePort` 暴露 per-channel attribution（当前 `MemoryContext` 已 fuse 后无法分辨来源），属于较大 API 改造，建议作为独立切片推进。
 13. Compaction 深化：等 `MemoryCompactionServiceTests` 的并行改动归属明确后再接。
 14. ~~Maintenance Micrometer Counter / Timer：扩展 `MicrometerObservationAdapter` 暴露 stage 级别专属指标（compaction candidates、alias regions、gc derived index cleanups）。~~ 已通过 `ObservationEvent.amount` 字段叠加并由 maintenance service 发射，无需 adapter 侧专属代码改动。
 
