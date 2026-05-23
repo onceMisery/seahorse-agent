@@ -368,10 +368,11 @@ git commit -m "feat(memory): report recall precision metrics"
 6. ~~Review apply / Aggregation flush counter via ObservationPort。~~ 已完成（`c3726e52`、`0ad01f3f`）。
 7. ~~Refiner outcome counter via ObservationPort（`memory-refine`：success/empty/error）。~~ 已完成（`5adc3964`）。
 8. ~~Outbox relay batch/task counter via ObservationPort（`memory-outbox-batch` / `memory-outbox-task`，标签 taskType + outcome）。~~ 已完成（`3b8d4844`）。
-9. Redis/distributed aggregation adapter：实现 `MemoryAggregationBufferPort` / scheduler 的生产后端。
-10. 真实 BM25/vector/graph 后端质量评估：建立 golden cases，衡量 channel contribution、recall、precision、MRR。
-11. Compaction 深化：等 `MemoryCompactionServiceTests` 的并行改动归属明确后再接。
-12. ~~Maintenance Micrometer Counter / Timer：扩展 `MicrometerObservationAdapter` 暴露 stage 级别专属指标（compaction candidates、alias regions、gc derived index cleanups）。~~ 已通过 `ObservationEvent.amount` 字段叠加并由 maintenance service 发射，无需 adapter 侧专属代码改动。
+9. ~~Context weave counter via ObservationPort（`memory-context-weave`，标签 outcome/truncated）。~~ 已完成（`a08f2fa0`）。
+10. Redis/distributed aggregation adapter：实现 `MemoryAggregationBufferPort` / scheduler 的生产后端。
+11. 真实 BM25/vector/graph 后端质量评估：建立 golden cases，衡量 channel contribution、recall、precision、MRR。
+12. Compaction 深化：等 `MemoryCompactionServiceTests` 的并行改动归属明确后再接。
+13. ~~Maintenance Micrometer Counter / Timer：扩展 `MicrometerObservationAdapter` 暴露 stage 级别专属指标（compaction candidates、alias regions、gc derived index cleanups）。~~ 已通过 `ObservationEvent.amount` 字段叠加并由 maintenance service 发射，无需 adapter 侧专属代码改动。
 
 ## 8. 可用 subagents 的建议
 
