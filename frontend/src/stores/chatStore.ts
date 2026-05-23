@@ -452,8 +452,9 @@ export const useChatStore = create<ChatState>()(
         state.thinkingStartAt = shouldFinalizeThinking ? null : state.thinkingStartAt;
         const msg = state.messages.find((m) => m.id === state.streamingMessageId);
         if (msg && msg.status !== "cancelled" && msg.status !== "error") {
-          msg.content += delta;
           msg.rawText = (msg.rawText ?? "") + delta;
+          msg.content = msg.rawText;
+          msg.blocks = parseStreamingText(msg.rawText, msg.id);
           if (shouldFinalizeThinking) {
             msg.isThinking = false;
             if (!msg.thinkingDuration) msg.thinkingDuration = duration;

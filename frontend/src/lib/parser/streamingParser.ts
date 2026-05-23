@@ -1,6 +1,6 @@
 import type { ContentBlock, ArtifactBlock, ArtifactLanguage } from "@/types";
 
-const ARTIFACT_OPEN_RE = /^<artifact\s+(?:[^>]*\s+)?language="([^"]+)"(?:\s+[^>]*\s+)?title="([^"]+)"[^>]*>/i;
+const ARTIFACT_OPEN_RE = /^<artifact\s+(?=[^>]*language=)[^>]*language="([^"]+)"(?=[^>]*title=)[^>]*title="([^"]+)"[^>]*>/i;
 const ARTIFACT_CLOSE_RE = /^<\/artifact>/i;
 const CODE_FENCE_OPEN_RE = /^```(\w*)/;
 const CODE_FENCE_CLOSE_RE = /^```\s*$/;

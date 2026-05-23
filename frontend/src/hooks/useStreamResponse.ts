@@ -50,11 +50,15 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
   // 看门狗：每次收到数据重置定时器，超时则报错
   const watchdogMs = timeoutMs ?? 30000;
   let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  let watchdogFired = false;
 
   const resetWatchdog = () => {
+    if (watchdogFired) return;
     if (watchdogTimer !== null) clearTimeout(watchdogTimer);
     watchdogTimer = setTimeout(() => {
+      watchdogFired = true;
       handlers.onError?.(new Error("Stream timeout: 服务器未在规定时间内响应"));
+      reader.cancel();
     }, watchdogMs);
   };
 

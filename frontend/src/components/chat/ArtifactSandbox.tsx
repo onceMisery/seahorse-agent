@@ -37,7 +37,10 @@ export function ArtifactSandbox({ artifact }: ArtifactSandboxProps) {
   const [copied, setCopied] = React.useState(false);
   const [expanded, setExpanded] = React.useState(false);
 
-  const srcDoc = React.useMemo(() => buildSrcDoc(artifact), [artifact]);
+  const srcDoc = React.useMemo(
+    () => buildSrcDoc(artifact),
+    [artifact.id, artifact.code, artifact.isComplete]
+  );
 
   const handleCopy = async () => {
     try {
@@ -111,7 +114,7 @@ export function ArtifactSandbox({ artifact }: ArtifactSandboxProps) {
       {/* iframe 沙箱 */}
       <iframe
         srcDoc={srcDoc}
-        sandbox="allow-scripts allow-same-origin"
+        sandbox="allow-scripts"
         className="w-full border-0"
         style={{
           height: expanded ? "500px" : "300px",
