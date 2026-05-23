@@ -118,3 +118,25 @@
 - Retirement status: No fallback, adapter, or retirement track introduced.
 - New risk signals: sessionId is inferred from conversationId because `MemoryContext` does not carry a separate session field.
 - Advisory decision: continue
+
+## Checkpoint Update - Outbox Batch Trace Context
+
+- Current todo: Keep the outbox relay traceable by tenant and user in addition to individual task rows.
+- Active slice: Attach tenant/user context to `poll-batch` trace events from the first pending task in the batch.
+- Completed todos:
+- Added a regression test proving outbox batch traces carry tenant/user context.
+- Updated outbox batch trace recording to use the first pending task as the batch context when tasks are present.
+- Left task-level relay traces and outbox processing semantics unchanged.
+- Evidence refs:
+- `./mvnw.cmd -pl seahorse-agent-tests -am test "-Dtest=MemoryOutboxRelayServiceTests" "-Dmaven.compiler.testIncludes=**/MemoryOutboxRelayServiceTests.java" "-Dspotless.apply.skip=true" "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"` failed before the implementation because the batch trace userId was empty.
+- `./mvnw.cmd -pl seahorse-agent-tests -am test "-Dtest=MemoryOutboxRelayServiceTests" "-Dmaven.compiler.testIncludes=**/MemoryOutboxRelayServiceTests.java" "-Dspotless.apply.skip=true" "-Dspotless.check.skip=true" "-Dsurefire.failIfNoSpecifiedTests=false"` passed after the implementation.
+- Blocked on: none
+- Next step: Re-check whether any remaining memory trace producers still emit anonymous batch-level metadata.
+
+## DriftCheckDraft - Outbox Batch Trace Context
+
+- Scope status: Stayed within observability metadata; outbox processing and task handling were unchanged.
+- Compatibility status: Preserved the task relay contract and trace query contract; batch trace now carries the first task's tenant/user dimension.
+- Retirement status: No fallback, adapter, or retirement track introduced.
+- New risk signals: batch trace context is derived from the first task when a batch is non-empty.
+- Advisory decision: continue

@@ -42,3 +42,13 @@ No evidence has been recorded yet.
 - `seahorse-agent-tests/src/test/java/com/miracle/ai/seahorse/agent/kernel/application/memory/MemoryWorkflowRoutingTests.java`
 - Summary: Context-weaver trace events now carry the active conversation id in the session field so memory trace queries can filter them by the same session dimension used by aggregation traces.
 - Verifier: TDD red/green targeted workflow routing test plus related trace/query/web contract regression
+
+## EvidenceBundleDraft - Outbox Batch Trace Context
+
+- Artifact key: outbox-batch-trace-context
+- Type: code
+- Sources:
+- `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/memory/MemoryOutboxRelayService.java`
+- `seahorse-agent-tests/src/test/java/com/miracle/ai/seahorse/agent/kernel/application/memory/MemoryOutboxRelayServiceTests.java`
+- Summary: Outbox batch trace events now carry tenant and user context from the first pending task in the batch, making the batch trace queryable without changing task relay behavior.
+- Verifier: TDD red/green targeted outbox relay test

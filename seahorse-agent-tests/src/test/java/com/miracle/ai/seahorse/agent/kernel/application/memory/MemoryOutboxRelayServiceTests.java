@@ -270,6 +270,8 @@ class MemoryOutboxRelayServiceTests {
                 .anySatisfy(event -> {
                     assertThat(event.component()).isEqualTo("memory-outbox");
                     assertThat(event.eventType()).isEqualTo("poll-batch");
+                    assertThat(event.tenantId()).isEqualTo("default");
+                    assertThat(event.userId()).isEqualTo("user-1");
                     assertThat(event.details()).containsEntry("processedCount", 2);
                     assertThat(event.details()).containsEntry("requestedLimit", 10);
                 })

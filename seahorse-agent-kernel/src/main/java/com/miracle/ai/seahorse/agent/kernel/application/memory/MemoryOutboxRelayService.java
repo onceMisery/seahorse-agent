@@ -58,7 +58,7 @@ public class MemoryOutboxRelayService {
     public int processBatch(int limit) {
         int safeLimit = limit <= 0 ? 50 : limit;
         List<MemoryOutboxPort.MemoryOutboxTask> tasks = outboxPort.pollPending(safeLimit);
-        recordBatch(tasks.size(), safeLimit);
+        recordBatch(tasks.isEmpty() ? null : tasks.get(0), tasks.size(), safeLimit);
         for (MemoryOutboxPort.MemoryOutboxTask task : tasks) {
             processTask(task);
         }
@@ -84,11 +84,11 @@ public class MemoryOutboxRelayService {
         }
     }
 
-    private void recordBatch(int processedCount, int requestedLimit) {
+    private void recordBatch(MemoryOutboxPort.MemoryOutboxTask batchTask, int processedCount, int requestedLimit) {
         traceRecorder.record(new MemoryTraceEvent(
                 "",
-                "default",
-                "",
+                batchTask == null ? "default" : batchTask.tenantId(),
+                batchTask == null ? "" : batchTask.userId(),
                 "",
                 "",
                 "memory-outbox",
