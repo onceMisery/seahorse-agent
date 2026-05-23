@@ -25,8 +25,13 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenCase;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationScope;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -103,6 +108,43 @@ class MemoryRecallEvaluationServiceTests {
         assertThat(report.results().get(0).noiseRate()).isZero();
     }
 
+    @Test
+    void shouldEmitEvaluationObservationTaggedWithOutcome() {
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        MemoryRecallEvaluationService service = new MemoryRecallEvaluationService(
+                new StaticPipeline(Map.of("scored", context(List.of(item("mem-1", MemoryLayer.SEMANTIC, 0.9D))))),
+                observationPort);
+
+        service.evaluate(List.of(
+                new MemoryRecallGoldenCase("case-scored", "user-1", "conv-1", "scored", List.of("mem-1"))),
+                3);
+
+        assertThat(observationPort.events).hasSize(1);
+        ObservationEvent event = observationPort.events.get(0);
+        assertThat(event.name()).isEqualTo(MemoryRecallEvaluationService.OBSERVATION_EVALUATE_EVENT);
+        assertThat(event.attributes())
+                .containsEntry(MemoryRecallEvaluationService.OBSERVATION_ATTR_OUTCOME,
+                        MemoryRecallEvaluationService.OBSERVATION_OUTCOME_SUCCESS);
+        assertThat(event.amount()).isEqualTo(ObservationEvent.DEFAULT_AMOUNT);
+    }
+
+    @Test
+    void shouldEmitEmptyOutcomeObservationWhenNoCasesAreScored() {
+        RecordingObservationPort observationPort = new RecordingObservationPort();
+        MemoryRecallEvaluationService service = new MemoryRecallEvaluationService(
+                new StaticPipeline(Map.of("empty", context(List.of()))),
+                observationPort);
+
+        service.evaluate(List.of(
+                new MemoryRecallGoldenCase("case-empty", "user-1", "conv-1", "empty", List.of())),
+                3);
+
+        assertThat(observationPort.events).singleElement()
+                .satisfies(event -> assertThat(event.attributes())
+                        .containsEntry(MemoryRecallEvaluationService.OBSERVATION_ATTR_OUTCOME,
+                                MemoryRecallEvaluationService.OBSERVATION_OUTCOME_EMPTY));
+    }
+
     private static MemoryContext context(List<MemoryItem> items) {
         return MemoryContext.builder()
                 .userId("user-1")
@@ -152,6 +194,30 @@ class MemoryRecallEvaluationServiceTests {
                             .workingMemory(List.of())
                             .promptMessages(List.of())
                             .build());
+        }
+    }
+
+    private static final class RecordingObservationPort implements ObservationPort {
+
+        private final List<ObservationEvent> events = new ArrayList<>();
+
+        @Override
+        public ObservationScope start(ObservationCommand command) {
+            return new ObservationScope() {
+                @Override
+                public void recordEvent(ObservationEvent event) {
+                    events.add(event);
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        @Override
+        public void recordEvent(ObservationEvent event) {
+            events.add(event);
         }
     }
 }

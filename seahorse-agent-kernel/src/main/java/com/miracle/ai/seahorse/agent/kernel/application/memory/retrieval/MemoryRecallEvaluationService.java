@@ -26,7 +26,10 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluationResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenCase;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -40,12 +43,23 @@ import java.util.Set;
 public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInboundPort {
 
     private static final int DEFAULT_TOP_K = 10;
+    static final String OBSERVATION_EVALUATE_EVENT = "memory-recall-evaluate";
+    static final String OBSERVATION_ATTR_OUTCOME = "outcome";
+    static final String OBSERVATION_OUTCOME_SUCCESS = "success";
+    static final String OBSERVATION_OUTCOME_EMPTY = "empty";
 
     private final MemoryRetrievalPipelinePort retrievalPipelinePort;
+    private final ObservationPort observationPort;
 
     public MemoryRecallEvaluationService(MemoryRetrievalPipelinePort retrievalPipelinePort) {
+        this(retrievalPipelinePort, ObservationPort.noop());
+    }
+
+    public MemoryRecallEvaluationService(MemoryRetrievalPipelinePort retrievalPipelinePort,
+                                         ObservationPort observationPort) {
         this.retrievalPipelinePort = Objects.requireNonNull(retrievalPipelinePort,
                 "retrievalPipelinePort must not be null");
+        this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
     }
 
     @Override
@@ -81,7 +95,7 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
                 .filter(MemoryRecallEvaluationResult::scored)
                 .mapToDouble(MemoryRecallEvaluationResult::noiseRate)
                 .sum();
-        return new MemoryRecallEvaluationReport(
+        MemoryRecallEvaluationReport report = new MemoryRecallEvaluationReport(
                 results.size(),
                 scoredCaseCount,
                 hitCount,
@@ -91,6 +105,21 @@ public class MemoryRecallEvaluationService implements MemoryRecallEvaluationInbo
                 average(precisionSum, scoredCaseCount),
                 average(noiseRateSum, scoredCaseCount),
                 results);
+        emitEvaluationMetric(scoredCaseCount);
+        return report;
+    }
+
+    private void emitEvaluationMetric(int scoredCaseCount) {
+        try {
+            observationPort.recordEvent(new ObservationEvent(
+                    OBSERVATION_EVALUATE_EVENT,
+                    Instant.now(),
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.of(OBSERVATION_ATTR_OUTCOME,
+                            scoredCaseCount > 0 ? OBSERVATION_OUTCOME_SUCCESS : OBSERVATION_OUTCOME_EMPTY)));
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change evaluation semantics.
+        }
     }
 
     private MemoryRecallEvaluationResult evaluateCase(MemoryRecallGoldenCase goldenCase, int topK) {

@@ -601,8 +601,11 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnBean(MemoryRetrievalPipelinePort.class)
     @ConditionalOnMissingBean(MemoryRecallEvaluationInboundPort.class)
     public MemoryRecallEvaluationService seahorseMemoryRecallEvaluationInboundPort(
-            MemoryRetrievalPipelinePort retrievalPipelinePort) {
-        return new MemoryRecallEvaluationService(retrievalPipelinePort);
+            MemoryRetrievalPipelinePort retrievalPipelinePort,
+            ObjectProvider<ObservationPort> observationPort) {
+        return new MemoryRecallEvaluationService(
+                retrievalPipelinePort,
+                observationPort.getIfAvailable(ObservationPort::noop));
     }
 
     @Bean
