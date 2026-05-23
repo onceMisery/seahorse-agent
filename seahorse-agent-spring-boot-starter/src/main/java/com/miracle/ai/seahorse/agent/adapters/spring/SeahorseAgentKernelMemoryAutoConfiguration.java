@@ -324,6 +324,15 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             @Value("${seahorse-agent.memory.refiner.fail-open:true}") boolean refinerFailOpen,
             @Value("${seahorse-agent.memory.refiner.max-batch-operations:8}") int maxRefinerBatchOperations,
             @Value("${seahorse-agent.memory.refiner.max-delete-ratio:0.7}") double maxRefinerDeleteRatio,
+            @Value("${seahorse-agent.memory.refiner.read-mask-per-layer-limit:3}")
+                    int refinerReadMaskPerLayerLimit,
+            @Value("${seahorse-agent.memory.refiner.target-zone-turn-count:3}") int refinerTargetZoneTurnCount,
+            @Value("${seahorse-agent.memory.refiner.sticky-anchor-limit:5}") int refinerStickyAnchorLimit,
+            @Value("${seahorse-agent.memory.refiner.feedback-example-limit:3}") int refinerFeedbackExampleLimit,
+            @Value("${seahorse-agent.memory.refiner.sticky-anchor-importance-threshold:0.85}")
+                    double refinerStickyAnchorImportanceThreshold,
+            @Value("${seahorse-agent.memory.refiner.sticky-anchor-confidence-threshold:0.90}")
+                    double refinerStickyAnchorConfidenceThreshold,
             @Value("${seahorse-agent.memory.derived-index.keyword-enabled:true}") boolean keywordIndexOutboxEnabled,
             @Value("${seahorse-agent.memory.derived-index.graph-enabled:true}") boolean graphIndexOutboxEnabled) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
@@ -339,7 +348,13 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 keywordIndexOutboxEnabled && memoryKeywordIndexPort.getIfAvailable() != null,
                 graphIndexOutboxEnabled && memoryGraphIndexPort.getIfAvailable() != null,
                 maxRefinerBatchOperations,
-                maxRefinerDeleteRatio);
+                maxRefinerDeleteRatio,
+                refinerReadMaskPerLayerLimit,
+                refinerTargetZoneTurnCount,
+                refinerStickyAnchorLimit,
+                refinerFeedbackExampleLimit,
+                refinerStickyAnchorImportanceThreshold,
+                refinerStickyAnchorConfidenceThreshold);
         return new DefaultMemoryEnginePort(
                 shortTermMemoryPort,
                 longTermMemoryPort,

@@ -174,6 +174,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxTaskHandler;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecallRerankerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementMemory;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinementRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
@@ -950,6 +951,72 @@ class SeahorseAgentKernelAutoConfigurationTests {
                     assertThat(feedbackRepository.queries).hasSize(1);
                     assertThat(feedbackRepository.queries.get(0).tenantId()).isEqualTo("default");
                     assertThat(feedbackRepository.queries.get(0).userId()).isEqualTo("user-feedback");
+                });
+    }
+
+    @Test
+    void shouldBindConfiguredRefinerContextPolicyIntoMemoryEngine() {
+        contextRunner.withUserConfiguration(
+                        MemoryStorePortsConfiguration.class,
+                        CapturingMemoryRefinerConfiguration.class,
+                        MemoryReviewFeedbackConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.memory.refiner.enabled=true",
+                        "seahorse-agent.memory.refiner.read-mask-per-layer-limit=1",
+                        "seahorse-agent.memory.refiner.target-zone-turn-count=2",
+                        "seahorse-agent.memory.refiner.sticky-anchor-limit=1",
+                        "seahorse-agent.memory.refiner.feedback-example-limit=1",
+                        "seahorse-agent.memory.refiner.sticky-anchor-importance-threshold=0.90",
+                        "seahorse-agent.memory.refiner.sticky-anchor-confidence-threshold=0.90")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    when(context.getBean(MemoryOperationLogPort.class).tryStart(any())).thenReturn(true);
+                    when(context.getBean(ShortTermMemoryPort.class).listByUser("user-feedback", 1))
+                            .thenReturn(List.of(memoryRecord(
+                                    "stm-existing-1",
+                                    "SHORT_TERM",
+                                    "PREFERENCE",
+                                    "User prefers short answers.",
+                                    0.70D)));
+                    when(context.getBean(LongTermMemoryPort.class).listByUser("user-feedback", 1))
+                            .thenReturn(List.of(memoryRecord(
+                                    "ltm-anchor-1",
+                                    "LONG_TERM",
+                                    "PROJECT_FACT",
+                                    "User's project uses Java 17.",
+                                    0.94D)));
+                    when(context.getBean(SemanticMemoryPort.class).listByUser("user-feedback", 1))
+                            .thenReturn(List.of(memoryRecord(
+                                    "sem-anchor-1",
+                                    "SEMANTIC",
+                                    "TECH_TOPIC",
+                                    "User investigates memory retrieval.",
+                                    0.92D)));
+
+                    context.getBean(MemoryEnginePort.class).writeMemory(MemoryWriteRequest.builder()
+                            .userId("user-feedback")
+                            .conversationId("conv-refiner-policy")
+                            .messageId("msg-refiner-policy")
+                            .message(ChatMessage.user(memoryContextBlock(5)))
+                            .build());
+
+                    CapturingMemoryRefinerPort refinerPort = context.getBean(CapturingMemoryRefinerPort.class);
+                    assertThat(refinerPort.requests).hasSize(1);
+                    MemoryRefinementRequest request = refinerPort.requests.get(0);
+                    assertThat(request.existingMemories())
+                            .extracting(MemoryRefinementMemory::memoryId)
+                            .containsExactly("stm-existing-1", "ltm-anchor-1", "sem-anchor-1");
+                    assertThat(request.stickyAnchors())
+                            .extracting(MemoryRefinementMemory::memoryId)
+                            .containsExactly("ltm-anchor-1");
+                    assertThat(request.targetZone()).contains("turn_4:", "turn_5:");
+                    assertThat(request.targetZone()).doesNotContain("turn_3:");
+                    assertThat(request.feedbackExamples())
+                            .extracting(MemoryReviewFeedbackSample::sampleId)
+                            .containsExactly("feedback-1");
+                    RecordingMemoryReviewFeedbackRepository feedbackRepository =
+                            context.getBean(RecordingMemoryReviewFeedbackRepository.class);
+                    assertThat(feedbackRepository.queries.get(0).limit()).isEqualTo(1);
                 });
     }
 
@@ -1827,6 +1894,39 @@ class SeahorseAgentKernelAutoConfigurationTests {
             queries.add(query);
             return samples.stream().limit(query.limit()).toList();
         }
+    }
+
+    private static MemoryRecord memoryRecord(String id,
+                                             String layer,
+                                             String type,
+                                             String content,
+                                             double score) {
+        return new MemoryRecord(id, layer, type, content,
+                Map.of(
+                        "targetKind", type,
+                        "targetKey", "target." + id,
+                        "status", "ACTIVE",
+                        "importanceScore", score,
+                        "confidenceLevel", score),
+                Instant.EPOCH);
+    }
+
+    private static String memoryContextBlock(int turnCount) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("MEMORY_CONTEXT_BLOCK: v1\n");
+        builder.append("turn_count: ").append(turnCount).append("\n\n");
+        builder.append("[turns]\n");
+        for (int i = 1; i <= turnCount; i++) {
+            builder.append("turn_").append(i).append(":\n");
+            builder.append("  user: turn ").append(i).append(" user text\n");
+            builder.append("  assistant: turn ").append(i).append(" assistant text\n");
+        }
+        builder.append("\n[source_spans]\n");
+        for (int i = 1; i <= turnCount; i++) {
+            builder.append("span_").append(i).append(": msg-").append(i).append(" -> assistant-").append(i)
+                    .append("\n");
+        }
+        return builder.toString();
     }
 
     @Configuration(proxyBeanMethods = false)
