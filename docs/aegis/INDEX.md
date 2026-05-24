@@ -130,3 +130,19 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-gemini-memory-alignment-completion/20-checkpoint.md | Gemini memory alignment completion checkpoint |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-gemini-memory-alignment-completion/90-evidence.md | Gemini memory alignment completion evidence |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-gemini-memory-alignment-completion/99-reflection.md | Gemini memory alignment completion reflection |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-secret-api/10-intent.md | AI Infra Secret API intent |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-secret-api/20-checkpoint.md | AI Infra Secret API checkpoint |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-secret-api/90-evidence.md | AI Infra Secret API evidence |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-secret-api/99-reflection.md | AI Infra Secret API reflection |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/task-intent-draft.json | AI Infra Secret API task intent draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/baseline-read-set-hint.json | AI Infra Secret API baseline read-set hint |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/impact-statement-draft.json | AI Infra Secret API impact statement draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/todo-checkpoint-draft.json | AI Infra Secret API todo checkpoint draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/drift-check-draft.json | AI Infra Secret API drift check draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/evidence-bundle-draft-focused-regression.json | 2026-05-25-ai-infra-secret-api evidence focused-regression |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/evidence-bundle-draft-mcp-credential-regression.json | 2026-05-25-ai-infra-secret-api evidence mcp-credential-regression |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/resume-state-hint.json | 2026-05-25-ai-infra-secret-api resume state hint |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/gate-input-pack.json | 2026-05-25-ai-infra-secret-api gate input pack |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-secret-api/proof-bundle.md | 2026-05-25-ai-infra-secret-api proof bundle |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/evidence-bundle-draft-affected-modules-regression.json | 2026-05-25-ai-infra-secret-api evidence affected-modules-regression |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/evidence-bundle-draft-review-fix-affected-modules-regression.json | 2026-05-25-ai-infra-secret-api evidence review-fix-affected-modules-regression |

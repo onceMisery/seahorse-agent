@@ -190,6 +190,18 @@ CREATE INDEX IF NOT EXISTS idx_sa_approval_request_status
 CREATE INDEX IF NOT EXISTS idx_sa_approval_request_run
   ON sa_approval_request(run_id, step_id);
 
+CREATE TABLE IF NOT EXISTS sa_secret_ref (
+  secret_ref VARCHAR(128) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  encrypted_value TEXT NOT NULL,
+  metadata_json TEXT,
+  created_at TIMESTAMP NOT NULL,
+  rotated_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_secret_ref_tenant
+  ON sa_secret_ref(tenant_id, created_at);
+
 CREATE TABLE IF NOT EXISTS sa_context_pack (
   context_pack_id VARCHAR(64) PRIMARY KEY,
   run_id VARCHAR(64) NOT NULL,

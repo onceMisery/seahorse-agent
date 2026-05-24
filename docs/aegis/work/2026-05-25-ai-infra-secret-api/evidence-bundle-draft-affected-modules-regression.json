@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "affected-modules-regression",
+  "type": "command",
+  "source": "mvn -nsu '-Dspotless.apply.skip=true' -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-spring-boot-starter -am test",
+  "summary": "Passed. Covered full tests for kernel, web adapter, repository JDBC adapter, starter, and transitively built adapter modules included by -am.",
+  "verifier": "codex"
+}

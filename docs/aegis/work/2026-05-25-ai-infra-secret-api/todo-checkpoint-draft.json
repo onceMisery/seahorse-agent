@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-25-ai-infra-secret-api",
+  "currentTodo": "Commit the Phase 5 Secret API slice, merge to main, and verify main.",
+  "completedTodos": [
+    "Confirmed git merge main is already up to date in codex/ai-infra-secret-api.",
+    "Implemented shared metadata plaintext guard in SecretCreateCommand and SecretWriteCommand.",
+    "Fixed MCP HTTP auto-configuration ordering after credential auto-configuration.",
+    "Added Web regression for rejecting metadata that contains the plaintext secret.",
+    "Affected module regression passed for kernel, JDBC, Web, MCP HTTP, starter, and dependencies."
+  ],
+  "activeSlice": "Final integration and main-branch verification.",
+  "evidenceRefs": [
+    "review-fix-affected-modules-regression"
+  ],
+  "blockedOn": null,
+  "nextStep": "Run final diff/Aegis checks, stage, commit, merge to main, and rerun focused main verification.",
+  "updatedAt": "2026-05-25"
+}

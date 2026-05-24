@@ -34,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -52,6 +53,7 @@ import java.util.Optional;
  * 未配置或远程不可用时保持空注册表，让 RAG 主链路降级为仅 KB 检索。
  */
 @AutoConfiguration
+@AutoConfigureAfter(name = "com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentCredentialAutoConfiguration")
 @AutoConfigureBefore(name = "com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAutoConfiguration")
 @EnableConfigurationProperties(McpHttpAdapterProperties.class)
 @Conditional(NativeMcpEnabledCondition.class)

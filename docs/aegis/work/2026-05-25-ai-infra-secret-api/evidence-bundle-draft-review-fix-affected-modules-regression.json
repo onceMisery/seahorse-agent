@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "review-fix-affected-modules-regression",
+  "type": "command",
+  "source": "mvn -nsu '-Dspotless.apply.skip=true' -pl seahorse-agent-kernel,seahorse-agent-adapter-repository-jdbc,seahorse-agent-adapter-web,seahorse-agent-adapter-mcp-http,seahorse-agent-spring-boot-starter -am test",
+  "summary": "Passed after metadata plaintext guard, Web rejection regression, and MCP/credential auto-configuration order fix.",
+  "verifier": "Codex, 2026-05-25"
+}

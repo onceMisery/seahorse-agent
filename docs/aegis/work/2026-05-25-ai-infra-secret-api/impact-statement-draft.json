@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "kernel",
+    "jdbc-repository-adapter",
+    "web-adapter",
+    "spring-auto-configuration",
+    "database-schema"
+  ],
+  "owners": [
+    "SecretManagementInboundPort owns admin secret creation orchestration.",
+    "SecretWritePort owns secret write persistence contract.",
+    "SecretStorePort remains read-only lookup for runtime credential consumers."
+  ],
+  "invariants": [
+    "Kernel depends on credential ports/domain only, not Spring/JDBC/Web.",
+    "API responses and string rendering never include plaintext secrets.",
+    "JDBC storage writes encrypted_value only when an AES-GCM key is configured."
+  ],
+  "compatBoundary": "Existing SecretStorePort#getSecret contract remains read-only; existing MCP static bearer resolution continues through SecretStorePort; unauthenticated MCP remains default.",
+  "nonGoals": [
+    "No OAuth2 refresh or delegated token flow.",
+    "No OpenAPI connector import.",
+    "No sandbox runtime.",
+    "No remote secret manager adapter.",
+    "No secret rotation workflow beyond schema carrying rotated_at."
+  ]
+}

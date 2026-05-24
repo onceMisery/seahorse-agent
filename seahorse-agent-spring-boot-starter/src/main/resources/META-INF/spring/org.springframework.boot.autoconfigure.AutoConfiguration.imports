@@ -2,6 +2,7 @@
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAuthAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAiAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentCacheAdapterAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentCredentialAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentIngestionRepositoryAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKeywordAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKnowledgeRepositoryAutoConfiguration

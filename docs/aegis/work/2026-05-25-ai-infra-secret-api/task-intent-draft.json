@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Close the Phase 5 credential vault persistence and secret creation API gap without repeating already merged approval/checkpoint/MCP credential work.",
+  "goal": "Allow administrators to create encrypted secret references through a minimal API, store only ciphertext durably, and let existing SecretStorePort consumers resolve secrets by secretRef.",
+  "successEvidence": [
+    "Kernel, JDBC, Web, Starter, schema-alignment, and MCP credential regressions pass; API responses return SecretMetadata only; database stores encrypted_value rather than plaintext; branch is committed and merged to main."
+  ],
+  "stopCondition": "Done when the minimal secret write/read path, API, JDBC schema, auto-configuration, Aegis records, and focused verification are complete; blocked if current credential contracts conflict; scope-exceeded if OAuth, remote vault, rotation workflow, OpenAPI import, or sandbox runtime becomes required.",
+  "nonGoals": [
+    "No OAuth2 refresh or delegated token flow.",
+    "No OpenAPI connector import.",
+    "No sandbox runtime.",
+    "No remote secret manager adapter.",
+    "No secret rotation workflow beyond schema carrying rotated_at."
+  ],
+  "scope": "Kernel credential management port/service, JDBC encrypted secret store adapter, Web POST /api/secrets, Spring auto-configuration, SQL schema alignment, focused tests, and Aegis work records.",
+  "changeKinds": [
+    "feature"
+  ],
+  "riskHints": [
+    "Cross-module public API, persistence schema, and credential security boundary change."
+  ]
+}

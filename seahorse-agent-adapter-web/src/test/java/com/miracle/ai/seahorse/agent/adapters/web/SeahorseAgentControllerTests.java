@@ -51,6 +51,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAudi
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
+import com.miracle.ai.seahorse.agent.kernel.domain.credential.SecretMetadata;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionUpdateDraftCommand;
@@ -68,6 +69,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInbo
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.credential.SecretCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.credential.SecretManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
@@ -91,6 +94,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -494,6 +498,61 @@ class SeahorseAgentControllerTests {
 
         verify(port).findById("context-pack-1");
         verify(port).listItems("context-pack-1");
+    }
+
+    @Test
+    void shouldExposeSecretCreationApiWithoutEchoingPlaintext() throws Exception {
+        SecretManagementInboundPort port = mock(SecretManagementInboundPort.class);
+        when(port.create(any())).thenReturn(new SecretMetadata(
+                "secret_1",
+                "tenant-a",
+                "{\"purpose\":\"mcp\"}",
+                NOW,
+                null));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseSecretController(provider(SecretManagementInboundPort.class, port))).build();
+
+        mvc.perform(post("/api/secrets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-a",
+                                "secretValue", "super-secret-token",
+                                "metadataJson", "{\"purpose\":\"mcp\"}"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.secretRef").value("secret_1"))
+                .andExpect(jsonPath("$.data.tenantId").value("tenant-a"))
+                .andExpect(jsonPath("$.data.secretValue").doesNotExist());
+
+        ArgumentCaptor<SecretCreateCommand> captor = ArgumentCaptor.forClass(SecretCreateCommand.class);
+        verify(port).create(captor.capture());
+        assertThat(captor.getValue().tenantId()).isEqualTo("tenant-a");
+        assertThat(captor.getValue().secretValue().reveal()).isEqualTo("super-secret-token");
+        assertThat(captor.getValue().metadataJson()).isEqualTo("{\"purpose\":\"mcp\"}");
+    }
+
+    @Test
+    void shouldRejectSecretCreationMetadataContainingPlaintext() throws Exception {
+        SecretManagementInboundPort port = mock(SecretManagementInboundPort.class);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                        new SeahorseSecretController(provider(SecretManagementInboundPort.class, port)))
+                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                .build();
+
+        mvc.perform(post("/api/secrets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-a",
+                                "secretValue", "super-secret-token",
+                                "metadataJson", "{\"note\":\"super-secret-token\"}"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.message").value("metadataJson must not contain secret plaintext"))
+                .andExpect(jsonPath("$.data").doesNotExist());
+
+        verifyNoInteractions(port);
     }
 
     private String json(Object value) throws Exception {

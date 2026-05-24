@@ -1165,6 +1165,23 @@ CREATE TABLE t_long_term_memory_vector (
 CREATE INDEX idx_ltm_vector_user ON t_long_term_memory_vector (user_id);
 CREATE INDEX idx_ltm_vector_lifecycle ON t_long_term_memory_vector (user_id, tenant_id, status, update_time);
 CREATE INDEX idx_ltm_vector_hnsw ON t_long_term_memory_vector USING hnsw (embedding vector_cosine_ops);
+
+-- ============================================
+-- AI Infra Credential Tables
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sa_secret_ref (
+    secret_ref VARCHAR(128) PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL,
+    encrypted_value TEXT NOT NULL,
+    metadata_json TEXT,
+    created_at TIMESTAMP NOT NULL,
+    rotated_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_secret_ref_tenant
+ON sa_secret_ref(tenant_id, created_at);
+
 -- PostgreSQL Initial Data for Seahorse Agent
 
 INSERT INTO t_user (id, username, password, role, avatar, create_time, update_time, deleted)
