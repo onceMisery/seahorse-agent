@@ -1,10 +1,10 @@
 # DefaultMemoryEnginePort decomposition — Checkpoint
 
 - Task ID: 2026-05-24-default-memory-engine-decomposition
-- Current todo: 11 个 cut 已落地，可继续 §6 推荐的 reviewApplyClassification 拆分，或停手交接。
-- Active slice: spec §8 DefaultMemoryEnginePort 拆分（已达成 §8.4 acceptance 3.5×）
+- Current todo: 12 个 cut 已落地；`reviewApplyClassification` 服务化已完成。后续如继续拆分，优先考虑低风险 helper cleanup，或先做 `MemoryMetadataKeys` 清场后再进入 refinement cluster。
+- Active slice: spec §8 DefaultMemoryEnginePort 拆分（已达成 §8.4 acceptance 3.9×）
 - Blocked on: none
-- Next step: 见 HANDOFF.md §6（reviewApplyClassification 服务化）。
+- Next step: 见 HANDOFF.md §6（当前状态与后续建议）。不要重复实现 `reviewApplyClassification` 服务化。
 
 ## Checkpoint Update — Cut 1 (MemoryDerivedIndexDispatchService, prior session)
 
@@ -83,13 +83,20 @@
 - Drift: 无；RefinerFeedbackScope 内化为新服务私有 record。
 - Decision: continue
 
+## Checkpoint Update — Cut 12 (MemoryReviewApplyClassificationBuilder)
+
+- Completed: review apply 分类构造与 target layer 校验从 facade 抽出到 `MemoryReviewApplyClassificationBuilder`；`DefaultMemoryEnginePort` 改为委托新 service。
+- Evidence ref: 当前工作树 `codex/design-alignment-memory-continuation`；新增 `MemoryReviewApplyClassificationBuilderTests` 4 个用例；回归测试 118 pass；全量 reactor 测试 748 pass。
+- Drift: 无；`MemoryEnginePort` / `MemoryIngestionWorkflowPort` 签名未变；`WORKING` review target layer 仍被拒绝；空 `targetKind` 仍回退 `"FACT"`；`review_applied` / `memory_review_applied` 字面量保留。
+- Decision: continue only for low-risk helper cleanup or pause; spec §8.4 acceptance 已超额达成。
+
 ## DriftCheckDraft — Slice 3 续 总结
 
-- **Scope status**: 11 个 cut 全部停留在 `seahorse-agent-kernel/src/main/java/.../application/memory/` 包内；未触碰 outbound port / Spring auto-config / web controller。
+- **Scope status**: 12 个 cut 全部停留在 `seahorse-agent-kernel/src/main/java/.../application/memory/` 包内；本轮仅新增 1 个 service、1 个 service test，并更新本工作记录；未触碰 outbound port / Spring auto-config / web controller。
 - **Compatibility status**: `MemoryEnginePort` / `MemoryIngestionWorkflowPort` 公开契约 byte-identical；OPERATION_* 字面量保留；metadata key 字面量保留。
-- **Retirement status**: facade 内不再有 derivedIndexDispatch / trackWrite / refinementContext / refinerBatch / profileValue / refinementInput / canonicalAlias / refinerMetadata / operationBuild / operationCompletion / refinerFeedback 的私有实现；旧路径完全替换。
+- **Retirement status**: facade 内不再有 derivedIndexDispatch / trackWrite / refinementContext / refinerBatch / profileValue / refinementInput / canonicalAlias / refinerMetadata / operationBuild / operationCompletion / refinerFeedback / reviewApplyClassification 的私有实现；旧路径完全替换。
 - **New risk signals**:
-  - metadata key 字面量在 facade 与 cut 4/6/8/11 之间重复（技术债，见 HANDOFF.md §7）。
-  - 11 个新 service 均为 facade ctor 直接 `new`，未对外开放；如果需要 mock 替换需后续做 ObjectProvider 注入（subagent B 建议研究）。
+  - metadata key 字面量在 facade 与 cut 4/6/8/11/12 之间重复（技术债，见 HANDOFF.md §7）。
+  - 12 个新 service 均为 facade ctor 直接 `new`，未对外开放；如果需要 mock 替换需后续做 ObjectProvider 注入（subagent B 建议研究）。
   - 仍有 §4.2/§4.3 候选未拆，但边际收益递减，停手是合理决策。
-- **Advisory decision**: stop — spec §8.4 acceptance 已达成 3.5×，继续拆需先做 metadata key 公共化清场。
+- **Advisory decision**: stop or continue with helper cleanup — spec §8.4 acceptance 已超额达成；继续拆高风险 cluster 前需先做 metadata key 公共化清场。
