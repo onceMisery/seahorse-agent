@@ -47,6 +47,15 @@ public class MemoryProperties {
     private final Refiner refiner = new Refiner();
     private final AliasResolution aliasResolution = new AliasResolution();
     private final Trace trace = new Trace();
+    private final DerivedIndex derivedIndex = new DerivedIndex();
+    private final Decay decay = new Decay();
+
+    private int shortTermLimit = 5;
+    private int longTermLimit = 3;
+    private int semanticLimit = 10;
+    private boolean captureEnabled = true;
+    private boolean inferenceEnabled = false;
+    private double longTermImportanceThreshold = 0.6d;
 
     public Policy getPolicy() {
         return policy;
@@ -78,6 +87,62 @@ public class MemoryProperties {
 
     public Trace getTrace() {
         return trace;
+    }
+
+    public DerivedIndex getDerivedIndex() {
+        return derivedIndex;
+    }
+
+    public Decay getDecay() {
+        return decay;
+    }
+
+    public int getShortTermLimit() {
+        return shortTermLimit;
+    }
+
+    public void setShortTermLimit(int shortTermLimit) {
+        this.shortTermLimit = shortTermLimit;
+    }
+
+    public int getLongTermLimit() {
+        return longTermLimit;
+    }
+
+    public void setLongTermLimit(int longTermLimit) {
+        this.longTermLimit = longTermLimit;
+    }
+
+    public int getSemanticLimit() {
+        return semanticLimit;
+    }
+
+    public void setSemanticLimit(int semanticLimit) {
+        this.semanticLimit = semanticLimit;
+    }
+
+    public boolean isCaptureEnabled() {
+        return captureEnabled;
+    }
+
+    public void setCaptureEnabled(boolean captureEnabled) {
+        this.captureEnabled = captureEnabled;
+    }
+
+    public boolean isInferenceEnabled() {
+        return inferenceEnabled;
+    }
+
+    public void setInferenceEnabled(boolean inferenceEnabled) {
+        this.inferenceEnabled = inferenceEnabled;
+    }
+
+    public double getLongTermImportanceThreshold() {
+        return longTermImportanceThreshold;
+    }
+
+    public void setLongTermImportanceThreshold(double longTermImportanceThreshold) {
+        this.longTermImportanceThreshold = longTermImportanceThreshold;
     }
 
     /**
@@ -324,6 +389,7 @@ public class MemoryProperties {
         private long bufferTtlMillis = 86400000L;
         private boolean captureOnError = false;
         private boolean topicShiftFlushEnabled = false;
+        private int scanLimit = 100;
 
         public boolean isEnabled() {
             return enabled;
@@ -387,6 +453,14 @@ public class MemoryProperties {
 
         public void setTopicShiftFlushEnabled(boolean topicShiftFlushEnabled) {
             this.topicShiftFlushEnabled = topicShiftFlushEnabled;
+        }
+
+        public int getScanLimit() {
+            return scanLimit;
+        }
+
+        public void setScanLimit(int scanLimit) {
+            this.scanLimit = scanLimit;
         }
     }
 
@@ -820,6 +894,65 @@ public class MemoryProperties {
 
         public void setMaxEvents(int maxEvents) {
             this.maxEvents = maxEvents;
+        }
+    }
+
+    /**
+     * Slice 4 续：派生索引（keyword / graph outbox）开关。
+     */
+    public static class DerivedIndex {
+
+        private boolean keywordEnabled = true;
+        private boolean graphEnabled = true;
+
+        public boolean isKeywordEnabled() {
+            return keywordEnabled;
+        }
+
+        public void setKeywordEnabled(boolean keywordEnabled) {
+            this.keywordEnabled = keywordEnabled;
+        }
+
+        public boolean isGraphEnabled() {
+            return graphEnabled;
+        }
+
+        public void setGraphEnabled(boolean graphEnabled) {
+            this.graphEnabled = graphEnabled;
+        }
+    }
+
+    /**
+     * Slice 4 续：decay 衰减扫描参数。
+     */
+    public static class Decay {
+
+        private int scanLimit = 500;
+        private double threshold = 0.1d;
+        private boolean dryRun = false;
+
+        public int getScanLimit() {
+            return scanLimit;
+        }
+
+        public void setScanLimit(int scanLimit) {
+            this.scanLimit = scanLimit;
+        }
+
+        public double getThreshold() {
+            return threshold;
+        }
+
+        public void setThreshold(double threshold) {
+            this.threshold = threshold;
+        }
+
+        public boolean isDryRun() {
+            return dryRun;
+        }
+
+        public void setDryRun(boolean dryRun) {
+            this.dryRun = dryRun;
         }
     }
 }

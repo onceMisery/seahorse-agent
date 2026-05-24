@@ -152,6 +152,107 @@ class MemoryPropertiesTests {
     }
 
     @Test
+    void engineDefaultsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties memoryProperties = context.getBean(MemoryProperties.class);
+            assertThat(memoryProperties.getShortTermLimit()).isEqualTo(5);
+            assertThat(memoryProperties.getLongTermLimit()).isEqualTo(3);
+            assertThat(memoryProperties.getSemanticLimit()).isEqualTo(10);
+            assertThat(memoryProperties.isCaptureEnabled()).isTrue();
+            assertThat(memoryProperties.isInferenceEnabled()).isFalse();
+            assertThat(memoryProperties.getLongTermImportanceThreshold()).isEqualTo(0.6d);
+        });
+    }
+
+    @Test
+    void engineCustomKeysOverrideDefaults() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse-agent.memory.short-term-limit=20",
+                        "seahorse-agent.memory.long-term-limit=15",
+                        "seahorse-agent.memory.semantic-limit=40",
+                        "seahorse-agent.memory.capture-enabled=false",
+                        "seahorse-agent.memory.inference-enabled=true",
+                        "seahorse-agent.memory.long-term-importance-threshold=0.42")
+                .run(context -> {
+                    MemoryProperties memoryProperties = context.getBean(MemoryProperties.class);
+                    assertThat(memoryProperties.getShortTermLimit()).isEqualTo(20);
+                    assertThat(memoryProperties.getLongTermLimit()).isEqualTo(15);
+                    assertThat(memoryProperties.getSemanticLimit()).isEqualTo(40);
+                    assertThat(memoryProperties.isCaptureEnabled()).isFalse();
+                    assertThat(memoryProperties.isInferenceEnabled()).isTrue();
+                    assertThat(memoryProperties.getLongTermImportanceThreshold()).isEqualTo(0.42d);
+                });
+    }
+
+    @Test
+    void derivedIndexDefaultsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties.DerivedIndex derivedIndex = context.getBean(MemoryProperties.class).getDerivedIndex();
+            assertThat(derivedIndex.isKeywordEnabled()).isTrue();
+            assertThat(derivedIndex.isGraphEnabled()).isTrue();
+        });
+    }
+
+    @Test
+    void derivedIndexCustomKeysOverrideDefaults() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse-agent.memory.derived-index.keyword-enabled=false",
+                        "seahorse-agent.memory.derived-index.graph-enabled=false")
+                .run(context -> {
+                    MemoryProperties.DerivedIndex derivedIndex = context.getBean(MemoryProperties.class)
+                            .getDerivedIndex();
+                    assertThat(derivedIndex.isKeywordEnabled()).isFalse();
+                    assertThat(derivedIndex.isGraphEnabled()).isFalse();
+                });
+    }
+
+    @Test
+    void decayDefaultsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties.Decay decay = context.getBean(MemoryProperties.class).getDecay();
+            assertThat(decay.getScanLimit()).isEqualTo(500);
+            assertThat(decay.getThreshold()).isEqualTo(0.1d);
+            assertThat(decay.isDryRun()).isFalse();
+        });
+    }
+
+    @Test
+    void decayCustomKeysOverrideDefaults() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse-agent.memory.decay.scan-limit=1500",
+                        "seahorse-agent.memory.decay.threshold=0.3",
+                        "seahorse-agent.memory.decay.dry-run=true")
+                .run(context -> {
+                    MemoryProperties.Decay decay = context.getBean(MemoryProperties.class).getDecay();
+                    assertThat(decay.getScanLimit()).isEqualTo(1500);
+                    assertThat(decay.getThreshold()).isEqualTo(0.3d);
+                    assertThat(decay.isDryRun()).isTrue();
+                });
+    }
+
+    @Test
+    void aggregationScanLimitDefaultMatchesHistoricalAtValueDefault() {
+        contextRunner.run(context -> {
+            MemoryProperties.Aggregation aggregation = context.getBean(MemoryProperties.class).getAggregation();
+            assertThat(aggregation.getScanLimit()).isEqualTo(100);
+        });
+    }
+
+    @Test
+    void aggregationScanLimitCustomKeyOverridesDefault() {
+        contextRunner
+                .withPropertyValues("seahorse-agent.memory.aggregation.scan-limit=750")
+                .run(context -> {
+                    MemoryProperties.Aggregation aggregation = context.getBean(MemoryProperties.class)
+                            .getAggregation();
+                    assertThat(aggregation.getScanLimit()).isEqualTo(750);
+                });
+    }
+
+    @Test
     void allSixNestedSectionsExist() {
         contextRunner.run(context -> {
             MemoryProperties properties = context.getBean(MemoryProperties.class);

@@ -253,11 +253,11 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     public SeahorseMemoryAggregationJob seahorseMemoryAggregationJob(
             MemoryAggregationServicePort aggregationServicePort,
             ObjectProvider<DistributedLockPort> lockPort,
-            @Value("${seahorse-agent.memory.aggregation.scan-limit:100}") int scanLimit) {
+            MemoryProperties memoryProperties) {
         return new SeahorseMemoryAggregationJob(
                 aggregationServicePort,
                 lockPort.getIfAvailable(DistributedLockPort::noop),
-                scanLimit);
+                memoryProperties.getAggregation().getScanLimit());
     }
 
     @Bean
@@ -306,26 +306,21 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<ObjectMapper> objectMapperProvider,
             Environment environment,
             MemoryCaptureRuleProperties captureRuleProperties,
-            MemoryProperties memoryProperties,
-            @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
-            @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
-            @Value("${seahorse-agent.memory.semantic-limit:10}") int semanticLimit,
-            @Value("${seahorse-agent.memory.capture-enabled:true}") boolean captureEnabled,
-            @Value("${seahorse-agent.memory.derived-index.keyword-enabled:true}") boolean keywordIndexOutboxEnabled,
-            @Value("${seahorse-agent.memory.derived-index.graph-enabled:true}") boolean graphIndexOutboxEnabled) {
+            MemoryProperties memoryProperties) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         MemoryRefinerPort configuredRefinerPort = memoryRefinerPort.getIfAvailable();
         boolean refinerEnabled = memoryRefinerEnabled(environment, configuredRefinerPort != null);
         MemoryProperties.Refiner refiner = memoryProperties.getRefiner();
+        MemoryProperties.DerivedIndex derivedIndex = memoryProperties.getDerivedIndex();
         MemoryEngineOptions options = new MemoryEngineOptions(
-                shortTermLimit,
-                longTermLimit,
-                semanticLimit,
-                captureEnabled,
+                memoryProperties.getShortTermLimit(),
+                memoryProperties.getLongTermLimit(),
+                memoryProperties.getSemanticLimit(),
+                memoryProperties.isCaptureEnabled(),
                 refinerEnabled,
                 refiner.isFailOpen(),
-                keywordIndexOutboxEnabled && memoryKeywordIndexPort.getIfAvailable() != null,
-                graphIndexOutboxEnabled && memoryGraphIndexPort.getIfAvailable() != null,
+                derivedIndex.isKeywordEnabled() && memoryKeywordIndexPort.getIfAvailable() != null,
+                derivedIndex.isGraphEnabled() && memoryGraphIndexPort.getIfAvailable() != null,
                 refiner.getMaxBatchOperations(),
                 refiner.getMaxDeleteRatio(),
                 refiner.getReadMaskPerLayerLimit(),
@@ -387,16 +382,13 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryBusinessDocumentRetrieverPort> businessDocumentRetrieverPort,
             ObjectProvider<MemoryLifecyclePort> memoryLifecyclePort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
-            @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
-            @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
-            @Value("${seahorse-agent.memory.semantic-limit:10}") int semanticLimit,
-            @Value("${seahorse-agent.memory.capture-enabled:true}") boolean captureEnabled) {
+            MemoryProperties memoryProperties) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         MemoryEngineOptions options = new MemoryEngineOptions(
-                shortTermLimit,
-                longTermLimit,
-                semanticLimit,
-                captureEnabled);
+                memoryProperties.getShortTermLimit(),
+                memoryProperties.getLongTermLimit(),
+                memoryProperties.getSemanticLimit(),
+                memoryProperties.isCaptureEnabled());
         return new DefaultMemoryRetrievalPipeline(
                 shortTermMemoryPort,
                 longTermMemoryPort,
@@ -805,13 +797,12 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnMissingBean(MemoryGovernanceInboundPort.class)
     public KernelMemoryGovernanceService seahorseMemoryGovernanceInboundPort(
             MemoryGovernanceServicePorts servicePorts,
-            @Value("${seahorse-agent.memory.long-term-importance-threshold:0.6}") double promotionThreshold,
-            @Value("${seahorse-agent.memory.inference-enabled:false}") boolean inferenceEnabled,
-            @Value("${seahorse-agent.memory.decay.scan-limit:500}") int decayScanLimit,
-            @Value("${seahorse-agent.memory.decay.threshold:0.1}") double decayThreshold,
-            @Value("${seahorse-agent.memory.decay.dry-run:false}") boolean decayDryRun) {
-        return new KernelMemoryGovernanceService(servicePorts, promotionThreshold, inferenceEnabled,
-                new MemoryDecayOptions(decayScanLimit, decayThreshold, decayDryRun));
+            MemoryProperties memoryProperties) {
+        MemoryProperties.Decay decay = memoryProperties.getDecay();
+        return new KernelMemoryGovernanceService(servicePorts,
+                memoryProperties.getLongTermImportanceThreshold(),
+                memoryProperties.isInferenceEnabled(),
+                new MemoryDecayOptions(decay.getScanLimit(), decay.getThreshold(), decay.isDryRun()));
     }
 
     @Bean
