@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputGovernanceResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationRequest;
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
 
 /**
  * 输出治理运行记录出站端口。
@@ -26,8 +27,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidation
  * <p>Slice 1a 保留接口以预留未来持久化能力，默认实现为 {@link #noop()}。在
  * 1c 接入 self-heal、1b 接入 DDL 之后，adapter 侧会增加 JDBC 实现把运行记录落库。
  *
- * <p>Slice 2（生产 noop 风险治理）会把本端口纳入 {@code NoopFallback} 标记体系，
- * 用于 starter 启动期识别并按生产策略分类降级；当前切片暂不引入该 marker。
+ * <p>Slice 2a 起，{@link #noop()} 返回的实例同时实现 {@link NoopFallback}，
+ * 便于 starter {@code SeahorseAgentNoopPortGuard} 在启动期识别并按生产策略分类降级。
  */
 public interface OutputValidationRecordPort {
 
@@ -40,8 +41,19 @@ public interface OutputValidationRecordPort {
      * 默认空实现：不持久化任何运行记录。
      */
     static OutputValidationRecordPort noop() {
-        return (request, result) -> {
+        return NoopOutputValidationRecord.INSTANCE;
+    }
+
+    final class NoopOutputValidationRecord implements OutputValidationRecordPort, NoopFallback {
+
+        private static final NoopOutputValidationRecord INSTANCE = new NoopOutputValidationRecord();
+
+        private NoopOutputValidationRecord() {
+        }
+
+        @Override
+        public void record(OutputValidationRequest request, OutputGovernanceResult result) {
             // intentionally empty: production adapters override this method to persist records.
-        };
+        }
     }
 }
