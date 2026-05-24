@@ -122,6 +122,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMainte
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
+import com.miracle.ai.seahorse.agent.adapters.spring.properties.MemoryProperties;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -132,6 +133,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
@@ -156,31 +158,24 @@ import java.util.concurrent.Executor;
         SeahorseAgentMemoryRepositoryAutoConfiguration.class
 })
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@EnableConfigurationProperties(MemoryProperties.class)
 public class SeahorseAgentKernelMemoryAutoConfiguration {
 
     private static final String MEMORY_REFINER_ENABLED_PROPERTY = "seahorse-agent.memory.refiner.enabled";
 
     @Bean
     @ConditionalOnMissingBean(MemoryAggregationPolicy.class)
-    public MemoryAggregationPolicy seahorseMemoryAggregationPolicy(
-            @Value("${seahorse-agent.memory.aggregation.enabled:false}") boolean enabled,
-            @Value("${seahorse-agent.memory.aggregation.idle-flush-millis:40000}") long idleFlushMillis,
-            @Value("${seahorse-agent.memory.aggregation.max-turns:10}") int maxTurns,
-            @Value("${seahorse-agent.memory.aggregation.max-tokens:2000}") int maxTokens,
-            @Value("${seahorse-agent.memory.aggregation.max-context-blocks:32}") int maxContextBlocks,
-            @Value("${seahorse-agent.memory.aggregation.buffer-ttl-millis:86400000}") long bufferTtlMillis,
-            @Value("${seahorse-agent.memory.aggregation.capture-on-error:false}") boolean captureOnError,
-            @Value("${seahorse-agent.memory.aggregation.topic-shift-flush-enabled:false}")
-            boolean topicShiftFlushEnabled) {
+    public MemoryAggregationPolicy seahorseMemoryAggregationPolicy(MemoryProperties properties) {
+        MemoryProperties.Aggregation aggregation = properties.getAggregation();
         return new MemoryAggregationPolicy(
-                enabled,
-                idleFlushMillis,
-                maxTurns,
-                maxTokens,
-                maxContextBlocks,
-                bufferTtlMillis,
-                captureOnError,
-                topicShiftFlushEnabled);
+                aggregation.isEnabled(),
+                aggregation.getIdleFlushMillis(),
+                aggregation.getMaxTurns(),
+                aggregation.getMaxTokens(),
+                aggregation.getMaxContextBlocks(),
+                aggregation.getBufferTtlMillis(),
+                aggregation.isCaptureOnError(),
+                aggregation.isTopicShiftFlushEnabled());
     }
 
     @Bean
