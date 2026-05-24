@@ -25,18 +25,16 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 /**
  * Tool Gateway 工具目录管理 API。
+ *
+ * <p>Slice 6 第一刀：从 {@code Map.of(code, data)} 重构为 {@link ApiResponse} +
+ * {@link ApiResponses#requireService(ObjectProvider, java.util.function.Function)}。
+ * 响应形状（{@code {code, data}} 或 {@code {code, message}} 与历史一致；spec §11.3 约束）。
  */
 @RestController
 public class SeahorseToolCatalogController {
 
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
-    private static final String SERVICE_NOT_AVAILABLE = "Service not available";
     private static final String DEFAULT_CURRENT = "1";
     private static final String DEFAULT_SIZE = "10";
 
@@ -47,43 +45,28 @@ public class SeahorseToolCatalogController {
     }
 
     @GetMapping("/api/tools")
-    public Map<String, Object> page(@RequestParam(required = false) String resourceType,
+    public ApiResponse<Object> page(@RequestParam(required = false) String resourceType,
                                     @RequestParam(required = false) String keyword,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size,
                                     @RequestParam(required = false) Boolean enabled) {
-        ToolCatalogManagementInboundPort port = requirePort();
-        return ok(port.page(resourceType, keyword, current, size, enabled));
+        return ApiResponses.requireService(toolCatalogPortProvider,
+                port -> port.page(resourceType, keyword, current, size, enabled));
     }
 
     @GetMapping("/api/tools/{toolId}")
-    public Map<String, Object> findById(@PathVariable String toolId) {
-        ToolCatalogManagementInboundPort port = requirePort();
-        return ok(port.findById(toolId)
-                .orElseThrow(() -> new IllegalArgumentException("Tool not found")));
+    public ApiResponse<Object> findById(@PathVariable String toolId) {
+        return ApiResponses.requireService(toolCatalogPortProvider,
+                port -> port.findById(toolId).orElseThrow(() -> new IllegalArgumentException("Tool not found")));
     }
 
     @PostMapping("/api/tools/{toolId}/enable")
-    public Map<String, Object> enable(@PathVariable String toolId) {
-        ToolCatalogManagementInboundPort port = requirePort();
-        return ok(port.enable(toolId));
+    public ApiResponse<Object> enable(@PathVariable String toolId) {
+        return ApiResponses.requireService(toolCatalogPortProvider, port -> port.enable(toolId));
     }
 
     @PostMapping("/api/tools/{toolId}/disable")
-    public Map<String, Object> disable(@PathVariable String toolId) {
-        ToolCatalogManagementInboundPort port = requirePort();
-        return ok(port.disable(toolId));
-    }
-
-    private ToolCatalogManagementInboundPort requirePort() {
-        ToolCatalogManagementInboundPort port = toolCatalogPortProvider.getIfAvailable();
-        if (port == null) {
-            throw new IllegalStateException(SERVICE_NOT_AVAILABLE);
-        }
-        return port;
-    }
-
-    private Map<String, Object> ok(Object data) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, data == null ? Map.of() : data);
+    public ApiResponse<Object> disable(@PathVariable String toolId) {
+        return ApiResponses.requireService(toolCatalogPortProvider, port -> port.disable(toolId));
     }
 }
