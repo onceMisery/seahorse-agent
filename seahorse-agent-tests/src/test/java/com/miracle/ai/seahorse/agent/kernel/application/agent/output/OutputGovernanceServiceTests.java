@@ -23,6 +23,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidation
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationIssue;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidationRecordPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidatorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationCommand;
@@ -39,7 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Slice 1a：OutputGovernanceService 行为契约。
+ * Slice 1a / 1c：OutputGovernanceService 行为契约。
  */
 class OutputGovernanceServiceTests {
 
@@ -180,6 +183,142 @@ class OutputGovernanceServiceTests {
                 .extracting(OutputValidationIssue::code)
                 .containsExactly("FIRST_WARN", "SECOND_WARN");
         assertThat(result.governedContent()).isEqualTo("hello");
+    }
+
+    @Test
+    void healsBlockWhenRepairServiceProducesValidContent() {
+        RecordingObservation observation = new RecordingObservation();
+        SelfHealingOutputRepairService selfHeal = new SelfHealingOutputRepairService(
+                staticRepairPort("repair-bot", "{\"title\":\"plan\",\"steps\":[\"a\"]}"));
+        OutputGovernanceService service = new OutputGovernanceService(
+                List.of(new JsonSchemaOutputValidator()),
+                OutputValidationRecordPort.noop(),
+                observation,
+                null,
+                selfHeal);
+
+        OutputGovernanceResult result = service.governFinalAnswer(jsonRequest(
+                "{\"type\":\"object\",\"required\":[\"title\",\"steps\"]}",
+                "{\"title\":\"missing steps\"}"));
+
+        assertThat(result.decision()).isEqualTo(OutputValidationDecision.HEALED);
+        assertThat(result.governedContent()).isEqualTo("{\"title\":\"plan\",\"steps\":[\"a\"]}");
+        assertThat(result.validatorName()).isEqualTo("repair-bot");
+        assertThat(observation.events)
+                .extracting(ObservationEvent::name)
+                .containsExactly(
+                        OutputGovernanceService.OBSERVATION_VALIDATION_EVENT,
+                        OutputGovernanceService.OBSERVATION_SELF_HEAL_EVENT);
+        assertThat(observation.events.get(1).attributes())
+                .containsEntry(OutputGovernanceService.OBSERVATION_ATTR_OUTCOME,
+                        OutputGovernanceService.SELF_HEAL_OUTCOME_HEALED)
+                .containsEntry(OutputGovernanceService.OBSERVATION_ATTR_ATTEMPT, "1");
+    }
+
+    @Test
+    void failsAfterHealWhenRepairProducesStillInvalidContent() {
+        RecordingObservation observation = new RecordingObservation();
+        SelfHealingOutputRepairService selfHeal = new SelfHealingOutputRepairService(
+                staticRepairPort("repair-bot", "{\"still\":\"missing required\"}"));
+        OutputGovernanceService service = new OutputGovernanceService(
+                List.of(new JsonSchemaOutputValidator()),
+                OutputValidationRecordPort.noop(),
+                observation,
+                null,
+                selfHeal);
+
+        OutputGovernanceResult result = service.governFinalAnswer(jsonRequest(
+                "{\"type\":\"object\",\"required\":[\"title\",\"steps\"]}",
+                "{\"title\":\"missing steps\"}"));
+
+        assertThat(result.decision()).isEqualTo(OutputValidationDecision.FAILED_AFTER_HEAL);
+        assertThat(result.governedContent()).contains("blocked by governance");
+        assertThat(observation.events)
+                .extracting(ObservationEvent::name)
+                .containsExactly(
+                        OutputGovernanceService.OBSERVATION_VALIDATION_EVENT,
+                        OutputGovernanceService.OBSERVATION_VALIDATION_FAILED_EVENT,
+                        OutputGovernanceService.OBSERVATION_SELF_HEAL_EVENT);
+        assertThat(observation.events.get(2).attributes())
+                .containsEntry(OutputGovernanceService.OBSERVATION_ATTR_OUTCOME,
+                        OutputGovernanceService.SELF_HEAL_OUTCOME_FAILED);
+    }
+
+    @Test
+    void failsAfterHealWhenRepairReturnsBlankContent() {
+        RecordingObservation observation = new RecordingObservation();
+        AtomicInteger repairCalls = new AtomicInteger();
+        SelfHealingOutputRepairService selfHeal = new SelfHealingOutputRepairService(
+                new OutputRepairModelPort() {
+                    @Override
+                    public String name() {
+                        return "blank-port";
+                    }
+
+                    @Override
+                    public OutputRepairResult repair(OutputRepairRequest request) {
+                        repairCalls.incrementAndGet();
+                        return OutputRepairResult.empty();
+                    }
+                });
+        OutputGovernanceService service = new OutputGovernanceService(
+                List.of(new JsonSchemaOutputValidator()),
+                OutputValidationRecordPort.noop(),
+                observation,
+                null,
+                selfHeal);
+
+        OutputGovernanceResult result = service.governFinalAnswer(jsonRequest(
+                "{\"type\":\"object\",\"required\":[\"title\"]}",
+                "{\"other\":1}"));
+
+        assertThat(result.decision()).isEqualTo(OutputValidationDecision.FAILED_AFTER_HEAL);
+        assertThat(repairCalls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void doesNotInvokeRepairWhenInitialValidationPasses() {
+        AtomicInteger repairCalls = new AtomicInteger();
+        SelfHealingOutputRepairService selfHeal = new SelfHealingOutputRepairService(
+                new OutputRepairModelPort() {
+                    @Override
+                    public String name() {
+                        return "lazy-port";
+                    }
+
+                    @Override
+                    public OutputRepairResult repair(OutputRepairRequest request) {
+                        repairCalls.incrementAndGet();
+                        return OutputRepairResult.of("should not be used");
+                    }
+                });
+        OutputGovernanceService service = new OutputGovernanceService(
+                List.of(new JsonSchemaOutputValidator()),
+                OutputValidationRecordPort.noop(),
+                ObservationPort.noop(),
+                null,
+                selfHeal);
+
+        OutputGovernanceResult result = service.governFinalAnswer(jsonRequest(
+                "{\"type\":\"object\",\"required\":[\"title\"]}",
+                "{\"title\":\"ok\"}"));
+
+        assertThat(result.decision()).isEqualTo(OutputValidationDecision.PASS);
+        assertThat(repairCalls.get()).isEqualTo(0);
+    }
+
+    private static OutputRepairModelPort staticRepairPort(String name, String repaired) {
+        return new OutputRepairModelPort() {
+            @Override
+            public String name() {
+                return name;
+            }
+
+            @Override
+            public OutputRepairResult repair(OutputRepairRequest request) {
+                return OutputRepairResult.of(repaired);
+            }
+        };
     }
 
     private static OutputValidatorPort warningValidator(String name, String code) {
