@@ -172,6 +172,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryRefinementInputBuilder refinementInputBuilder;
     private final MemoryCanonicalAliasResolver canonicalAliasResolver;
     private final MemoryRefinerMetadataWriter refinerMetadataWriter;
+    private final MemoryOperationBuilder operationBuilder;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -544,6 +545,10 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.options.refinerStickyAnchorConfidenceThreshold());
         this.canonicalAliasResolver = new MemoryCanonicalAliasResolver(this.memoryAliasPort);
         this.refinerMetadataWriter = new MemoryRefinerMetadataWriter();
+        this.operationBuilder = new MemoryOperationBuilder(
+                this.memorySanitizer,
+                this.memoryPreFilter,
+                this.memorySemanticClassifier);
     }
 
     @Override
@@ -572,7 +577,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
         String operationId = operationId(command, request);
         String tenantId = tenantId(command);
-        MemoryOperation operation = buildOperation(operationId, tenantId, command, request, message.getContent());
+        MemoryOperation operation = operationBuilder.build(operationId, tenantId, command, request, message.getContent());
         if (!memoryOperationLogPort.tryStart(operation)) {
             return MemoryIngestionResult.ignored("duplicate_operation");
         }
@@ -1442,98 +1447,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         metadata.put("captureSignals", decision.signals());
         metadata.put("captureReasons", decision.reasons());
         return metadata;
-    }
-
-    private MemoryOperation buildOperation(String operationId,
-                                           String tenantId,
-                                           MemoryIngestionCommand command,
-                                           MemoryWriteRequest request,
-                                           String content) {
-        MemoryReviewApplyDirective directive = command == null ? null : command.reviewApplyDirective();
-        MemoryOperationType operationType = inferOperationType(directive, content);
-        return new MemoryOperation(
-                operationId,
-                request.userId(),
-                tenantId,
-                operationType,
-                inferTargetKind(operationType, directive, content),
-                inferTargetKey(operationType, directive, content),
-                requestMap(command, request, content),
-                MemoryValueAssessor.POLICY_VERSION,
-                Instant.now());
-    }
-
-    private MemoryOperationType inferOperationType(MemoryReviewApplyDirective directive, String content) {
-        if (directive != null) {
-            return switch (directive.requestedAction()) {
-                case ADD -> MemoryOperationType.ADD;
-                case UPDATE -> MemoryOperationType.UPDATE;
-                case DELETE -> MemoryOperationType.DELETE;
-                case REVIEW -> MemoryOperationType.REVIEW;
-                case IGNORE -> MemoryOperationType.IGNORE;
-            };
-        }
-        if (OccupationCorrection.extract(content) != null) {
-            return MemoryOperationType.UPDATE;
-        }
-        SanitizedMemoryInput sanitized = memorySanitizer.sanitize(content);
-        if (sanitized.rejected()) {
-            return MemoryOperationType.IGNORE;
-        }
-        MemoryPreFilterResult preFilterResult = memoryPreFilter.filter(sanitized.content());
-        if (!preFilterResult.accepted()) {
-            return MemoryOperationType.IGNORE;
-        }
-        MemoryClassificationResult classification = memorySemanticClassifier.classify(sanitized.content());
-        if (classification.action() == MemoryIngestionAction.UPDATE) {
-            return MemoryOperationType.UPDATE;
-        }
-        if (classification.action() == MemoryIngestionAction.ADD) {
-            return MemoryOperationType.ADD;
-        }
-        if (classification.action() == MemoryIngestionAction.REVIEW) {
-            return MemoryOperationType.REVIEW;
-        }
-        return MemoryOperationType.IGNORE;
-    }
-
-    private String inferTargetKind(MemoryOperationType operationType,
-                                   MemoryReviewApplyDirective directive,
-                                   String content) {
-        if (directive != null && !isBlank(directive.targetKind())) {
-            return directive.targetKind();
-        }
-        if (operationType == MemoryOperationType.UPDATE || OccupationCorrection.extract(content) != null) {
-            return TARGET_KIND_PROFILE_SLOT;
-        }
-        if (operationType == MemoryOperationType.ADD) {
-            return "SHORT_TERM_MEMORY";
-        }
-        return "NONE";
-    }
-
-    private String inferTargetKey(MemoryOperationType operationType,
-                                  MemoryReviewApplyDirective directive,
-                                  String content) {
-        if (directive != null && !isBlank(directive.targetKey())) {
-            return directive.targetKey();
-        }
-        if (operationType == MemoryOperationType.UPDATE || OccupationCorrection.extract(content) != null) {
-            return TARGET_KEY_IDENTITY_OCCUPATION;
-        }
-        return "";
-    }
-
-    private Map<String, Object> requestMap(MemoryIngestionCommand command,
-                                           MemoryWriteRequest request,
-                                           String content) {
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("source", command == null ? "" : command.source());
-        values.put("conversationId", Objects.requireNonNullElse(request.conversationId(), ""));
-        values.put("messageId", Objects.requireNonNullElse(request.messageId(), ""));
-        values.put("role", request.message() == null ? "" : request.message().getRole().name());
-        values.put("content", Objects.requireNonNullElse(content, ""));
-        return values;
     }
 
     private String operationId(MemoryIngestionCommand command, MemoryWriteRequest request) {
