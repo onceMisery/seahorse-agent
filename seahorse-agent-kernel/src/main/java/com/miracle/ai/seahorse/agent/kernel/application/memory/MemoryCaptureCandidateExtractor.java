@@ -20,11 +20,21 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 
 class MemoryCaptureCandidateExtractor {
 
+    private final MemoryCaptureRules rules;
     private MemoryCaptureRejectionReason lastRejection;
+
+    MemoryCaptureCandidateExtractor() {
+        this(MemoryCaptureRules.defaults());
+    }
+
+    MemoryCaptureCandidateExtractor(MemoryCaptureRules rules) {
+        this.rules = Objects.requireNonNullElseGet(rules, MemoryCaptureRules::defaults);
+    }
 
     Optional<MemoryCaptureCandidate> extract(String rawContent) {
         lastRejection = null;
@@ -39,8 +49,8 @@ class MemoryCaptureCandidateExtractor {
         signals.addAll(removal.signals());
 
         boolean explicitRemember = !normalized.equals(content);
-        boolean profileStatement = startsWithAny(normalized, "我是", "我在", "我来自", "我负责", "我擅长");
-        boolean preferenceStatement = startsWithAny(normalized, "我喜欢", "我偏好", "我习惯", "我常用");
+        boolean profileStatement = startsWithAny(normalized, rules.profileStatementPrefixes());
+        boolean preferenceStatement = startsWithAny(normalized, rules.preferenceStatementPrefixes());
         boolean personalFact = isPersonalFactStatement(normalized);
 
         if (profileStatement) {
@@ -63,10 +73,10 @@ class MemoryCaptureCandidateExtractor {
         }
         candidate = trimmedCandidate;
 
-        if (candidate.length() < 2) {
+        if (candidate.length() < rules.minCandidateLength()) {
             return reject(MemoryCaptureRejectionReason.TOO_SHORT);
         }
-        if (candidate.length() > 120) {
+        if (candidate.length() > rules.maxCandidateLength()) {
             return reject(MemoryCaptureRejectionReason.TOO_LONG);
         }
         if (looksLikeQuestion(candidate)) {
@@ -89,6 +99,10 @@ class MemoryCaptureCandidateExtractor {
 
     MemoryCaptureRejectionReason lastRejection() {
         return lastRejection;
+    }
+
+    MemoryCaptureRules rules() {
+        return rules;
     }
 
     private Optional<MemoryCaptureCandidate> reject(MemoryCaptureRejectionReason reason) {
@@ -146,8 +160,17 @@ class MemoryCaptureCandidateExtractor {
     }
 
     private boolean looksLikeQuestion(String content) {
-        return content.endsWith("?") || content.endsWith("？")
-                || content.contains("是什么") || content.contains("怎么") || content.contains("如何");
+        for (String ending : rules.questionEndingCharacters()) {
+            if (content.endsWith(ending)) {
+                return true;
+            }
+        }
+        for (String keyword : rules.questionContainsKeywords()) {
+            if (content.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isPersonalFactStatement(String content) {
@@ -157,12 +180,12 @@ class MemoryCaptureCandidateExtractor {
             return true;
         }
         if (startsWithAny(content,
-                "\u6211\u53eb",
-                "\u6211\u7684\u540d\u5b57\u662f",
-                "\u6211\u7684\u6280\u672f\u6808\u662f",
-                "\u6211\u4e3b\u8981\u4f7f\u7528",
-                "\u6211\u559c\u6b22\u7b80\u77ed\u56de\u7b54",
-                "\u6211\u559c\u6b22\u8be6\u7ec6\u56de\u7b54")) {
+                "我叫",
+                "我的名字是",
+                "我的技术栈是",
+                "我主要使用",
+                "我喜欢简短回答",
+                "我喜欢详细回答")) {
             return true;
         }
         return startsWithAny(content,
@@ -188,31 +211,43 @@ class MemoryCaptureCandidateExtractor {
     private String inferMemoryType(String content) {
         String lower = content.toLowerCase(Locale.ROOT);
         if (startsWithAny(content,
-                "\u6211\u53eb",
-                "\u6211\u7684\u540d\u5b57\u662f",
-                "\u6211\u7684\u6635\u79f0\u662f",
-                "\u6211\u7684\u6280\u672f\u6808\u662f",
-                "\u6211\u4e3b\u8981\u4f7f\u7528")) {
+                "我叫",
+                "我的名字是",
+                "我的昵称是",
+                "我的技术栈是",
+                "我主要使用")) {
             return "PROFILE";
         }
         if (startsWithAny(content,
-                "\u6211\u559c\u6b22",
-                "\u6211\u504f\u597d",
-                "\u6211\u4e60\u60ef",
-                "\u6211\u5e0c\u671b")) {
+                "我喜欢",
+                "我偏好",
+                "我习惯",
+                "我希望")) {
             return "PREFERENCE";
         }
         if (content.contains("喜欢") || content.contains("偏好") || content.contains("习惯")
                 || content.contains("常用") || lower.contains("prefer") || lower.contains("like")) {
             return "PREFERENCE";
         }
-        if (startsWithAny(content, "我是", "我在", "我来自", "我负责", "我擅长")) {
+        if (startsWithAny(content, rules.profileStatementPrefixes())) {
             return "PROFILE";
         }
         return "FACT";
     }
 
     private boolean startsWithAny(String content, String... prefixes) {
+        if (content == null || prefixes == null) {
+            return false;
+        }
+        for (String prefix : prefixes) {
+            if (content.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean startsWithAny(String content, List<String> prefixes) {
         if (content == null || prefixes == null) {
             return false;
         }

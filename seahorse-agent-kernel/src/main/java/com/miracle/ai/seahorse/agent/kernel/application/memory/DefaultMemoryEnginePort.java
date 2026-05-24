@@ -493,6 +493,34 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryAliasPort memoryAliasPort,
                                    MemoryReviewPolicyPort memoryReviewPolicyPort,
                                    MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort) {
+        this(shortTermPort, longTermPort, semanticPort, objectMapper, options, profileMemoryPort,
+                correctionLedgerPort, memoryRouterPort, memoryOperationLogPort, memoryVectorPort, memoryOutboxPort,
+                businessDocumentRetrieverPort, memoryLifecyclePort, memoryPolicyConfigPort,
+                memoryRetrievalPipelinePort, memoryRefinerPort, memoryReviewCandidatePort, memoryAliasPort,
+                memoryReviewPolicyPort, memoryReviewFeedbackRepositoryPort, MemoryCaptureRules.defaults());
+    }
+
+    public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
+                                   LongTermMemoryPort longTermPort,
+                                   SemanticMemoryPort semanticPort,
+                                   ObjectMapper objectMapper,
+                                   MemoryEngineOptions options,
+                                   ProfileMemoryPort profileMemoryPort,
+                                   CorrectionLedgerPort correctionLedgerPort,
+                                   MemoryRouterPort memoryRouterPort,
+                                   MemoryOperationLogPort memoryOperationLogPort,
+                                   MemoryVectorPort memoryVectorPort,
+                                   MemoryOutboxPort memoryOutboxPort,
+                                   MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                   MemoryLifecyclePort memoryLifecyclePort,
+                                   MemoryPolicyConfigPort memoryPolicyConfigPort,
+                                   MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
+                                   MemoryRefinerPort memoryRefinerPort,
+                                   MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                   MemoryAliasPort memoryAliasPort,
+                                   MemoryReviewPolicyPort memoryReviewPolicyPort,
+                                   MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort,
+                                   MemoryCaptureRules captureRules) {
         this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
         this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
         this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
@@ -524,7 +552,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.businessDocumentRetrieverPort,
                 this.memoryLifecyclePort)
                 : memoryRetrievalPipelinePort;
-        this.captureCandidateExtractor = new MemoryCaptureCandidateExtractor();
+        this.captureCandidateExtractor = new MemoryCaptureCandidateExtractor(
+                Objects.requireNonNullElseGet(captureRules, MemoryCaptureRules::defaults));
         this.memoryValueAssessor = new MemoryValueAssessor(this.memoryPolicyConfigPort);
         this.memoryRefinerPort = Objects.requireNonNullElseGet(memoryRefinerPort, MemoryRefinerPort::noop);
         this.memoryReviewCandidatePort = Objects.requireNonNullElseGet(memoryReviewCandidatePort,

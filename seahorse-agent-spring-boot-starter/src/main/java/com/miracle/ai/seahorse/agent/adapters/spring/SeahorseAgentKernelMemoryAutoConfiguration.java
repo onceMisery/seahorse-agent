@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryRevie
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryTraceQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.InMemoryMemoryPolicyConfigPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryDecayOptions;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryCaptureRules;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryEngineOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryGovernanceServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryManagementServicePorts;
@@ -122,6 +123,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryMainte
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ShortTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
+import com.miracle.ai.seahorse.agent.adapters.spring.properties.MemoryCaptureRuleProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.properties.MemoryProperties;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
@@ -158,7 +160,7 @@ import java.util.concurrent.Executor;
         SeahorseAgentMemoryRepositoryAutoConfiguration.class
 })
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties(MemoryProperties.class)
+@EnableConfigurationProperties({MemoryProperties.class, MemoryCaptureRuleProperties.class})
 public class SeahorseAgentKernelMemoryAutoConfiguration {
 
     private static final String MEMORY_REFINER_ENABLED_PROPERTY = "seahorse-agent.memory.refiner.enabled";
@@ -319,6 +321,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryGraphIndexPort> memoryGraphIndexPort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             Environment environment,
+            MemoryCaptureRuleProperties captureRuleProperties,
             @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
             @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
             @Value("${seahorse-agent.memory.semantic-limit:10}") int semanticLimit,
@@ -377,7 +380,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 memoryReviewCandidatePort.getIfAvailable(MemoryReviewCandidatePort::noop),
                 memoryAliasPort.getIfAvailable(MemoryAliasPort::noop),
                 memoryReviewPolicyPort.getIfAvailable(MemoryReviewPolicyPort::defaults),
-                memoryReviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty));
+                memoryReviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty),
+                captureRuleProperties == null ? MemoryCaptureRules.defaults() : captureRuleProperties.toRules());
     }
 
     private boolean memoryRefinerEnabled(Environment environment, boolean refinerAvailable) {
