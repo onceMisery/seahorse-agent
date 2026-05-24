@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,7 +28,7 @@ public interface MemoryKeywordSearchPort {
     List<MemoryKeywordHit> search(String userId, String tenantId, String query, int topK);
 
     static MemoryKeywordSearchPort noop() {
-        return (userId, tenantId, query, topK) -> List.of();
+        return new NoopMemoryKeywordSearchPort();
     }
 
     record MemoryKeywordHit(String memoryId, double score, String layer, Map<String, Object> metadata) {
@@ -35,6 +37,20 @@ public interface MemoryKeywordSearchPort {
             memoryId = Objects.requireNonNullElse(memoryId, "");
             layer = Objects.requireNonNullElse(layer, "");
             metadata = Map.copyOf(Objects.requireNonNullElse(metadata, Map.of()));
+        }
+    }
+
+    /**
+     * 显式 noop fallback：命中关键字索引降级路径。
+     *
+     * <p>实现 {@link NoopFallback} 以便 {@code SeahorseAgentNoopPortGuard} 区分真实实现与
+     * 兜底降级；Class B（索引增强）允许保留但启动期会发出 WARN + metric。
+     */
+    final class NoopMemoryKeywordSearchPort implements MemoryKeywordSearchPort, NoopFallback {
+
+        @Override
+        public List<MemoryKeywordHit> search(String userId, String tenantId, String query, int topK) {
+            return List.of();
         }
     }
 }

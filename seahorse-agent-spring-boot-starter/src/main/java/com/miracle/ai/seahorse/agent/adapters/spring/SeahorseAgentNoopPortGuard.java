@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidationRecord
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionSummarizerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
@@ -186,7 +187,8 @@ public class SeahorseAgentNoopPortGuard implements SmartInitializingSingleton {
      *     <li>Class A：{@link OutputValidationRecordPort}（治理审计）、{@link MemoryOutboxPort}（异步派发）、
      *         {@link MemoryReviewCandidatePort}（人工 review）、{@link MemoryOperationLogPort}（操作日志）、
      *         {@link ToolInvocationAuditPort}（工具调用审计）。</li>
-     *     <li>Class B：{@link MemoryVectorPort}（向量索引）、{@link ObservationPort}（观测后端）。</li>
+     *     <li>Class B：{@link MemoryVectorPort}（向量索引）、
+     *         {@link MemoryKeywordSearchPort}（关键字检索增强）、{@link ObservationPort}（观测后端）。</li>
      *     <li>Class C：{@link MemoryRefinerPort}（增强细化）、{@link MemoryCompactionSummarizerPort}
      *         （压缩摘要）、{@link MemoryGraphPort}（图谱增强）。</li>
      * </ul>
@@ -199,6 +201,7 @@ public class SeahorseAgentNoopPortGuard implements SmartInitializingSingleton {
         map.put(MemoryOperationLogPort.class, RiskClass.CLASS_A_FAIL_FAST);
         map.put(ToolInvocationAuditPort.class, RiskClass.CLASS_A_FAIL_FAST);
         map.put(MemoryVectorPort.class, RiskClass.CLASS_B_WARN);
+        map.put(MemoryKeywordSearchPort.class, RiskClass.CLASS_B_WARN);
         map.put(ObservationPort.class, RiskClass.CLASS_B_WARN);
         map.put(MemoryRefinerPort.class, RiskClass.CLASS_C_OK);
         map.put(MemoryCompactionSummarizerPort.class, RiskClass.CLASS_C_OK);
