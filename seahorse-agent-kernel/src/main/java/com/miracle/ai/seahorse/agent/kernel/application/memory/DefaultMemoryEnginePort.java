@@ -224,6 +224,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemorySchemaValidator memorySchemaValidator;
     private final ProfileSlotResolver profileSlotResolver;
     private final MemoryDerivedIndexDispatchService derivedIndexDispatch;
+    private final MemoryTrackWriteService trackWriteService;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -574,6 +575,12 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.options.keywordIndexOutboxEnabled(),
                 this.options.graphIndexOutboxEnabled(),
                 DEFAULT_VECTOR_EMBEDDING_MODEL);
+        this.trackWriteService = new MemoryTrackWriteService(
+                this.profileMemoryPort,
+                this.correctionLedgerPort,
+                this.memoryLifecyclePort,
+                TARGET_KIND_PROFILE_SLOT,
+                TARGET_KEY_IDENTITY_OCCUPATION);
     }
 
     @Override
@@ -1707,34 +1714,12 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     }
 
     private List<String> captureCorrection(MemoryWriteRequest request, String tenantId, OccupationCorrection correction) {
-        String generationId = "identity.occupation:" + UUID.randomUUID();
-        List<String> sourceIds = isBlank(request.messageId()) ? List.of() : List.of(request.messageId());
-        try {
-            correctionLedgerPort.upsert(new CorrectionCommand(
-                    request.userId(),
-                    tenantId,
-                    "PROFILE_CORRECTION",
-                    TARGET_KIND_PROFILE_SLOT,
-                    TARGET_KEY_IDENTITY_OCCUPATION,
-                    correction.incorrectValue(),
-                    correction.correctValue(),
-                    "用户纠正职业画像：" + correction.incorrectValue() + " -> " + correction.correctValue(),
-                    sourceIds,
-                    generationId));
-            profileMemoryPort.upsert(new ProfileFactUpdate(
-                    request.userId(),
-                    tenantId,
-                    TARGET_KEY_IDENTITY_OCCUPATION,
-                    correction.correctValue(),
-                    0.95D,
-                    "explicit_user_correction",
-                    sourceIds,
-                    generationId));
-            markProfileSlotFragmentsObsolete(request.userId(), tenantId, TARGET_KEY_IDENTITY_OCCUPATION, generationId);
-        } catch (RuntimeException ex) {
-            LOG.warn("写入Profile纠错失败: userId={}", request.userId(), ex);
-        }
-        return List.of("CORRECTION_UPSERT", "PROFILE_UPSERT");
+        return trackWriteService.writeOccupationCorrection(
+                request.userId(),
+                tenantId,
+                request.messageId(),
+                correction.incorrectValue(),
+                correction.correctValue());
     }
 
     private boolean captureProfileFact(MemoryWriteRequest request,
@@ -1746,41 +1731,21 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return false;
         }
         String value = profileValue(slotKey, decision.content());
-        if (isBlank(value)) {
-            return false;
-        }
-        try {
-            profileMemoryPort.upsert(new ProfileFactUpdate(
-                    request.userId(),
-                    tenantId,
-                    slotKey,
-                    value,
-                    decision.confidenceLevel(),
-                    "explicit_user_memory",
-                    isBlank(request.messageId()) ? List.of() : List.of(request.messageId()),
-                    generationId));
-            markProfileSlotFragmentsObsolete(request.userId(), tenantId, slotKey, generationId);
-            return true;
-        } catch (RuntimeException ex) {
-            LOG.warn("写入Profile KV失败: userId={}, slot={}", request.userId(), slotKey, ex);
-            return false;
-        }
+        return trackWriteService.writeProfileFact(
+                request.userId(),
+                tenantId,
+                slotKey,
+                value,
+                decision.confidenceLevel(),
+                request.messageId(),
+                generationId);
     }
 
     private void markProfileSlotFragmentsObsolete(String userId,
                                                   String tenantId,
                                                   String profileSlot,
                                                   String activeGenerationId) {
-        try {
-            memoryLifecyclePort.markObsoleteByProfileSlot(
-                    userId,
-                    tenantId,
-                    profileSlot,
-                    activeGenerationId,
-                    "profile slot updated");
-        } catch (RuntimeException ex) {
-            LOG.warn("Profile slot鏃х鐗囧け鏁堝け璐? userId={}, slot={}", userId, profileSlot, ex);
-        }
+        trackWriteService.markProfileSlotFragmentsObsolete(userId, tenantId, profileSlot, activeGenerationId);
     }
 
     private String profileSlot(MemoryCaptureDecision decision, MemoryClassificationResult classification) {
