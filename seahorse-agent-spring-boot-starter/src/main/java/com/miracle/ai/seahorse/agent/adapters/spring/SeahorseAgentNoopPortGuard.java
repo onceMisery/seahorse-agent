@@ -20,9 +20,14 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidationRecordPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionSummarizerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -176,13 +181,15 @@ public class SeahorseAgentNoopPortGuard implements SmartInitializingSingleton {
     }
 
     /**
-     * Slice 2a-b 默认分类表。当前覆盖：
+     * Slice 2a-c 默认分类表。当前覆盖：
      * <ul>
      *     <li>Class A：{@link OutputValidationRecordPort}（治理审计）、{@link MemoryOutboxPort}（异步派发）、
      *         {@link MemoryReviewCandidatePort}（人工 review）、{@link MemoryOperationLogPort}（操作日志）、
      *         {@link ToolInvocationAuditPort}（工具调用审计）。</li>
+     *     <li>Class B：{@link MemoryVectorPort}（向量索引）、{@link ObservationPort}（观测后端）。</li>
+     *     <li>Class C：{@link MemoryRefinerPort}（增强细化）、{@link MemoryCompactionSummarizerPort}
+     *         （压缩摘要）、{@link MemoryGraphPort}（图谱增强）。</li>
      * </ul>
-     * 后续切片将继续扩充 Class B（向量 / 关键字 / 观测）和 Class C（refiner / summarizer 等纯增强）。
      */
     public static Map<Class<?>, RiskClass> defaultClassifications() {
         Map<Class<?>, RiskClass> map = new LinkedHashMap<>();
@@ -191,6 +198,11 @@ public class SeahorseAgentNoopPortGuard implements SmartInitializingSingleton {
         map.put(MemoryReviewCandidatePort.class, RiskClass.CLASS_A_FAIL_FAST);
         map.put(MemoryOperationLogPort.class, RiskClass.CLASS_A_FAIL_FAST);
         map.put(ToolInvocationAuditPort.class, RiskClass.CLASS_A_FAIL_FAST);
+        map.put(MemoryVectorPort.class, RiskClass.CLASS_B_WARN);
+        map.put(ObservationPort.class, RiskClass.CLASS_B_WARN);
+        map.put(MemoryRefinerPort.class, RiskClass.CLASS_C_OK);
+        map.put(MemoryCompactionSummarizerPort.class, RiskClass.CLASS_C_OK);
+        map.put(MemoryGraphPort.class, RiskClass.CLASS_C_OK);
         return Collections.unmodifiableMap(map);
     }
 

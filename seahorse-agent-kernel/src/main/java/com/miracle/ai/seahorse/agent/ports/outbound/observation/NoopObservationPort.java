@@ -17,7 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.observation;
 
-final class NoopObservationPort implements ObservationPort {
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
+
+final class NoopObservationPort implements ObservationPort, NoopFallback {
 
     static final NoopObservationPort INSTANCE = new NoopObservationPort();
 

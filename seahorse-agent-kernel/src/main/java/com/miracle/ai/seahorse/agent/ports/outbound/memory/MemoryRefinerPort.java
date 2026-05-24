@@ -17,11 +17,26 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
+
 public interface MemoryRefinerPort {
 
     MemoryRefinementResult refine(MemoryRefinementRequest request);
 
     static MemoryRefinerPort noop() {
-        return request -> MemoryRefinementResult.empty("refiner_noop");
+        return NoopMemoryRefiner.INSTANCE;
+    }
+
+    final class NoopMemoryRefiner implements MemoryRefinerPort, NoopFallback {
+
+        private static final NoopMemoryRefiner INSTANCE = new NoopMemoryRefiner();
+
+        private NoopMemoryRefiner() {
+        }
+
+        @Override
+        public MemoryRefinementResult refine(MemoryRefinementRequest request) {
+            return MemoryRefinementResult.empty("refiner_noop");
+        }
     }
 }

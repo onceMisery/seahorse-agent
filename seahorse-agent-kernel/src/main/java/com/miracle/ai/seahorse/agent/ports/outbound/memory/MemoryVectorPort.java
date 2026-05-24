@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
+
 import java.util.List;
 
 public interface MemoryVectorPort {
@@ -30,19 +32,29 @@ public interface MemoryVectorPort {
     List<String> search(String userId, String query, int topK);
 
     static MemoryVectorPort noop() {
-        return new MemoryVectorPort() {
-            @Override
-            public void upsert(String memoryId, String userId, String content, String embeddingModel) {
-            }
+        return NoopMemoryVectorPort.INSTANCE;
+    }
 
-            @Override
-            public void delete(String memoryId, String userId, String tenantId) {
-            }
+    final class NoopMemoryVectorPort implements MemoryVectorPort, NoopFallback {
 
-            @Override
-            public List<String> search(String userId, String query, int topK) {
-                return List.of();
-            }
-        };
+        private static final NoopMemoryVectorPort INSTANCE = new NoopMemoryVectorPort();
+
+        private NoopMemoryVectorPort() {
+        }
+
+        @Override
+        public void upsert(String memoryId, String userId, String content, String embeddingModel) {
+            // intentionally empty: production adapters override to write vectors.
+        }
+
+        @Override
+        public void delete(String memoryId, String userId, String tenantId) {
+            // intentionally empty: production adapters override to delete vectors.
+        }
+
+        @Override
+        public List<String> search(String userId, String query, int topK) {
+            return List.of();
+        }
     }
 }

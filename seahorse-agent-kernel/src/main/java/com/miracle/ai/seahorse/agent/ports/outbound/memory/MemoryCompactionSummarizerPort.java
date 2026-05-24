@@ -17,11 +17,26 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
+
 public interface MemoryCompactionSummarizerPort {
 
     MemoryCompactionSummary summarize(MemoryCompactionCandidate candidate);
 
     static MemoryCompactionSummarizerPort noop() {
-        return candidate -> MemoryCompactionSummary.empty();
+        return NoopMemoryCompactionSummarizer.INSTANCE;
+    }
+
+    final class NoopMemoryCompactionSummarizer implements MemoryCompactionSummarizerPort, NoopFallback {
+
+        private static final NoopMemoryCompactionSummarizer INSTANCE = new NoopMemoryCompactionSummarizer();
+
+        private NoopMemoryCompactionSummarizer() {
+        }
+
+        @Override
+        public MemoryCompactionSummary summarize(MemoryCompactionCandidate candidate) {
+            return MemoryCompactionSummary.empty();
+        }
     }
 }

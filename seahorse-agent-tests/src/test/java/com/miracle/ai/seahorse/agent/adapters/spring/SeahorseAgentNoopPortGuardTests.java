@@ -117,6 +117,90 @@ class SeahorseAgentNoopPortGuardTests {
     }
 
     @Test
+    void coversSlice2cClassBAndClassCPortsInDefaultClassification() {
+        contextRunner.run(context -> {
+            SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
+            java.util.Map<Class<?>, SeahorseAgentNoopPortGuard.RiskClass> byClass = guard.inspect().stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                            SeahorseAgentNoopPortGuard.Inspection::portClass,
+                            SeahorseAgentNoopPortGuard.Inspection::riskClass));
+            assertThat(byClass.get(com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort.class))
+                    .isEqualTo(SeahorseAgentNoopPortGuard.RiskClass.CLASS_B_WARN);
+            assertThat(byClass.get(com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort.class))
+                    .isEqualTo(SeahorseAgentNoopPortGuard.RiskClass.CLASS_B_WARN);
+            assertThat(byClass.get(com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort.class))
+                    .isEqualTo(SeahorseAgentNoopPortGuard.RiskClass.CLASS_C_OK);
+            assertThat(byClass.get(
+                            com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionSummarizerPort.class))
+                    .isEqualTo(SeahorseAgentNoopPortGuard.RiskClass.CLASS_C_OK);
+            assertThat(byClass.get(com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphPort.class))
+                    .isEqualTo(SeahorseAgentNoopPortGuard.RiskClass.CLASS_C_OK);
+        });
+    }
+
+    @Test
+    void detectsNoopFallbackForClassBVectorPort() {
+        contextRunner
+                .withUserConfiguration(NoopMemoryVectorConfiguration.class)
+                .run(context -> {
+                    SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
+                    guard.inspect().stream()
+                            .filter(i -> i.portClass()
+                                    == com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort.class)
+                            .findFirst()
+                            .ifPresentOrElse(
+                                    inspection -> {
+                                        assertThat(inspection.isNoopFallback()).isTrue();
+                                        assertThat(inspection.riskClass())
+                                                .isEqualTo(SeahorseAgentNoopPortGuard.RiskClass.CLASS_B_WARN);
+                                    },
+                                    () -> {
+                                        throw new AssertionError("MemoryVectorPort inspection missing");
+                                    });
+                });
+    }
+
+    @Test
+    void detectsNoopFallbackForClassCRefinerPort() {
+        contextRunner
+                .withUserConfiguration(NoopRefinerConfiguration.class)
+                .run(context -> {
+                    SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
+                    guard.inspect().stream()
+                            .filter(i -> i.portClass()
+                                    == com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort.class)
+                            .findFirst()
+                            .ifPresentOrElse(
+                                    inspection -> {
+                                        assertThat(inspection.isNoopFallback()).isTrue();
+                                        assertThat(inspection.riskClass())
+                                                .isEqualTo(SeahorseAgentNoopPortGuard.RiskClass.CLASS_C_OK);
+                                    },
+                                    () -> {
+                                        throw new AssertionError("MemoryRefinerPort inspection missing");
+                                    });
+                });
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class NoopMemoryVectorConfiguration {
+
+        @Bean
+        com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort noopMemoryVectorPort() {
+            return com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort.noop();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class NoopRefinerConfiguration {
+
+        @Bean
+        com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort noopMemoryRefinerPort() {
+            return com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerPort.noop();
+        }
+    }
+
+    @Test
     void enforcementThrowsOnClassANoopFallback() {
         contextRunner
                 .withUserConfiguration(NoopOutputRecordConfiguration.class)

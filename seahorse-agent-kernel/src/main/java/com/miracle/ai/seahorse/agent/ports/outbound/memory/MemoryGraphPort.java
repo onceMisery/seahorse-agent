@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
+
 import java.util.List;
 
 public interface MemoryGraphPort {
@@ -24,6 +26,19 @@ public interface MemoryGraphPort {
     List<MemoryRecallCandidate> recallNeighborhood(MemoryRecallRequest request, int maxHops);
 
     static MemoryGraphPort noop() {
-        return (request, maxHops) -> List.of();
+        return NoopMemoryGraph.INSTANCE;
+    }
+
+    final class NoopMemoryGraph implements MemoryGraphPort, NoopFallback {
+
+        private static final NoopMemoryGraph INSTANCE = new NoopMemoryGraph();
+
+        private NoopMemoryGraph() {
+        }
+
+        @Override
+        public List<MemoryRecallCandidate> recallNeighborhood(MemoryRecallRequest request, int maxHops) {
+            return List.of();
+        }
     }
 }
