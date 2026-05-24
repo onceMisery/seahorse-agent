@@ -58,4 +58,9 @@ public interface AgentDefinitionRepositoryPort {
      * 查询 Agent 当前最新发布版本。
      */
     Optional<AgentVersion> latestVersion(String agentId);
+
+    /**
+     * 按不可变版本 ID 查询已发布版本快照。
+     */
+    Optional<AgentVersion> findVersion(String agentId, String versionId);
 }

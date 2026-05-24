@@ -17,10 +17,14 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
@@ -39,6 +43,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
@@ -57,6 +62,14 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     private static final Logger LOG = LoggerFactory.getLogger(KernelChatInboundService.class);
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final double DEFAULT_AGENT_TEMPERATURE = 0.3D;
+    private static final String MODEL_CONFIG_MODEL_ID = "modelId";
+    private static final String MODEL_CONFIG_TEMPERATURE = "temperature";
+    private static final String MODEL_CONFIG_TOP_P = "topP";
+    private static final String MODEL_CONFIG_TOP_K = "topK";
+    private static final String MODEL_CONFIG_MAX_TOKENS = "maxTokens";
+    private static final String MODEL_CONFIG_THINKING = "thinking";
     private static final String TRACE_NAME_STREAM_CHAT = "stream-chat";
     private static final String TRACE_ENTRY_STREAM_CHAT =
             "com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService#streamChat";
@@ -68,6 +81,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     private final ConversationMemoryPort memoryPort;
     private final MemoryEnginePort memoryEnginePort;
     private final Optional<AgentRunInboundPort> agentRunPort;
+    private final Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository;
     private final ContextPackRuntimeAssembler contextPackAssembler;
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
@@ -125,6 +139,19 @@ public class KernelChatInboundService implements ChatInboundPort {
                                     MemoryEnginePort memoryEnginePort,
                                     Optional<AgentRunInboundPort> agentRunPort,
                                     Optional<ContextPackBuilderInboundPort> contextPackBuilder) {
+        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
+                agentRunPort, contextPackBuilder, Optional.empty());
+    }
+
+    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+                                    StreamTaskPort streamTaskPort,
+                                    Optional<KernelAgentLoop> agentLoop,
+                                    KernelRagTraceRecorder traceRecorder,
+                                    ConversationMemoryPort memoryPort,
+                                    MemoryEnginePort memoryEnginePort,
+                                    Optional<AgentRunInboundPort> agentRunPort,
+                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
+                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop;
@@ -132,6 +159,9 @@ public class KernelChatInboundService implements ChatInboundPort {
         this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
         this.memoryEnginePort = Objects.requireNonNullElse(memoryEnginePort, MemoryEnginePort.noop());
         this.agentRunPort = agentRunPort == null ? Optional.empty() : agentRunPort;
+        this.agentDefinitionRepository = agentDefinitionRepository == null
+                ? Optional.empty()
+                : agentDefinitionRepository;
         this.contextPackAssembler = new ContextPackRuntimeAssembler(contextPackBuilder);
     }
 
@@ -148,6 +178,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         try {
             if (safeCommand.chatMode() == ChatMode.AGENT) {
                 if (agentLoop.isPresent()) {
+                    validateAgentVersionSelection(safeCommand);
                     AgentRun run = startAgentRun(safeCommand, traceRunScope);
                     if (run != null) {
                         safeCallback.onRunStarted(run.runId());
@@ -193,8 +224,13 @@ public class KernelChatInboundService implements ChatInboundPort {
         MemoryContext memoryContext = loadAgentMemoryContext(command);
         String runId = run == null ? null : run.runId();
         String agentId = run == null ? AgentRuntimeConstants.LEGACY_REACT_AGENT_ID : run.agentId();
-        String versionId = run == null ? null : run.versionId();
+        String versionId = run == null ? command.versionId() : run.versionId();
+        if (run == null) {
+            agentId = selectedAgentId(command);
+            versionId = selectedVersion(agentId, versionId).map(AgentVersion::versionId).orElse(versionId);
+        }
         String tenantId = run == null ? null : run.tenantId();
+        AgentModelExecutionConfig modelConfig = modelExecutionConfig(agentId, versionId);
         ContextPack contextPack = contextPackAssembler.assembleForAgent(
                 command.question(),
                 runId,
@@ -206,11 +242,10 @@ public class KernelChatInboundService implements ChatInboundPort {
                 memoryContext);
         return AgentLoopRequest.builder()
                 .question(command.question())
+                .modelId(modelConfig.modelId())
                 .history(loadAgentHistory(command))
                 .allowedToolIds(List.of())
-                .samplingOptions(ChatSamplingOptions.builder()
-                        .temperature(0.3D)
-                        .build())
+                .samplingOptions(modelConfig.samplingOptions())
                 .contextPack(contextPack)
                 .memoryContext(memoryContext)
                 .runId(runId)
@@ -226,13 +261,72 @@ public class KernelChatInboundService implements ChatInboundPort {
             return null;
         }
         return agentRunPort.get().startRun(new AgentRunStartCommand(
-                AgentRuntimeConstants.LEGACY_REACT_AGENT_ID,
-                null,
+                selectedAgentId(command),
+                command.versionId(),
                 null,
                 command.conversationId(),
                 AgentRunTriggerType.CHAT,
                 inputSummary(command.question()),
                 traceRunScope == null ? null : traceRunScope.traceId()));
+    }
+
+    private AgentModelExecutionConfig modelExecutionConfig(String agentId, String versionId) {
+        return selectedVersion(agentId, versionId)
+                .map(this::modelExecutionConfig)
+                .orElseGet(AgentModelExecutionConfig::defaults);
+    }
+
+    private AgentModelExecutionConfig modelExecutionConfig(AgentVersion version) {
+        if (version == null || version.modelConfigJson() == null || version.modelConfigJson().isBlank()) {
+            return AgentModelExecutionConfig.defaults();
+        }
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(version.modelConfigJson());
+            if (root == null || !root.isObject()) {
+                return AgentModelExecutionConfig.defaults();
+            }
+            return new AgentModelExecutionConfig(
+                    text(root, MODEL_CONFIG_MODEL_ID),
+                    ChatSamplingOptions.builder()
+                            .temperature(doubleValue(root, MODEL_CONFIG_TEMPERATURE, DEFAULT_AGENT_TEMPERATURE))
+                            .topP(doubleValue(root, MODEL_CONFIG_TOP_P, null))
+                            .topK(intValue(root, MODEL_CONFIG_TOP_K, null))
+                            .maxTokens(intValue(root, MODEL_CONFIG_MAX_TOKENS, null))
+                            .thinking(booleanValue(root, MODEL_CONFIG_THINKING, null))
+                            .build());
+        } catch (JsonProcessingException ex) {
+            LOG.warn("Agent version model config is not valid JSON, fallback to defaults: agentId={}, versionId={}",
+                    version.agentId(), version.versionId(), ex);
+            return AgentModelExecutionConfig.defaults();
+        }
+    }
+
+    private Optional<AgentVersion> selectedVersion(String agentId, String versionId) {
+        if (agentDefinitionRepository.isEmpty() || !hasText(agentId)
+                || AgentRuntimeConstants.LEGACY_REACT_AGENT_ID.equals(agentId)) {
+            return Optional.empty();
+        }
+        AgentDefinitionRepositoryPort repository = agentDefinitionRepository.get();
+        if (hasText(versionId)) {
+            return Optional.of(repository.findVersion(agentId, versionId)
+                    .orElseThrow(() -> new IllegalArgumentException("Agent version does not exist")));
+        }
+        return repository.latestVersion(agentId);
+    }
+
+    private String selectedAgentId(StreamChatCommand command) {
+        return hasText(command.agentId())
+                ? command.agentId()
+                : AgentRuntimeConstants.LEGACY_REACT_AGENT_ID;
+    }
+
+    private void validateAgentVersionSelection(StreamChatCommand command) {
+        String agentId = selectedAgentId(command);
+        if (!hasText(command.versionId()) || AgentRuntimeConstants.LEGACY_REACT_AGENT_ID.equals(agentId)
+                || agentDefinitionRepository.isEmpty()) {
+            return;
+        }
+        selectedVersion(agentId, command.versionId());
     }
 
     private MemoryContext loadAgentMemoryContext(StreamChatCommand command) {
@@ -283,6 +377,34 @@ public class KernelChatInboundService implements ChatInboundPort {
             return value;
         }
         return value.substring(0, 500);
+    }
+
+    private String text(JsonNode root, String fieldName) {
+        JsonNode value = root.get(fieldName);
+        if (value == null || value.isNull() || !value.isTextual()) {
+            return null;
+        }
+        String text = value.asText();
+        return hasText(text) ? text.trim() : null;
+    }
+
+    private Double doubleValue(JsonNode root, String fieldName, Double fallback) {
+        JsonNode value = root.get(fieldName);
+        return value == null || !value.isNumber() ? fallback : value.asDouble();
+    }
+
+    private Integer intValue(JsonNode root, String fieldName, Integer fallback) {
+        JsonNode value = root.get(fieldName);
+        return value == null || !value.isIntegralNumber() ? fallback : value.asInt();
+    }
+
+    private Boolean booleanValue(JsonNode root, String fieldName, Boolean fallback) {
+        JsonNode value = root.get(fieldName);
+        return value == null || !value.isBoolean() ? fallback : value.asBoolean();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private StreamCallback finishTraceOnTerminal(StreamCallback delegate, TraceRunScope traceRunScope, String runId) {
@@ -341,5 +463,21 @@ public class KernelChatInboundService implements ChatInboundPort {
         }
         agentRunPort.get().fail(runId, AgentRuntimeConstants.DEFAULT_AGENT_RUN_FAILURE_CODE,
                 Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()));
+    }
+
+    private record AgentModelExecutionConfig(String modelId, ChatSamplingOptions samplingOptions) {
+
+        private AgentModelExecutionConfig {
+            modelId = modelId == null || modelId.isBlank() ? null : modelId.trim();
+            samplingOptions = Objects.requireNonNullElseGet(samplingOptions, () -> ChatSamplingOptions.builder()
+                    .temperature(DEFAULT_AGENT_TEMPERATURE)
+                    .build());
+        }
+
+        private static AgentModelExecutionConfig defaults() {
+            return new AgentModelExecutionConfig(null, ChatSamplingOptions.builder()
+                    .temperature(DEFAULT_AGENT_TEMPERATURE)
+                    .build());
+        }
     }
 }

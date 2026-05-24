@@ -70,6 +70,9 @@ class JdbcAgentDefinitionRepositoryAdapterTests {
         AgentVersion latest = adapter.latestVersion("agent-1").orElseThrow();
         assertThat(latest.versionId()).isEqualTo("agent-1-v2");
         assertThat(latest.versionNo()).isEqualTo(2L);
+        AgentVersion first = adapter.findVersion("agent-1", "agent-1-v1").orElseThrow();
+        assertThat(first.versionNo()).isEqualTo(1L);
+        assertThat(adapter.findVersion("agent-1", "missing")).isEmpty();
     }
 
     private AgentVersion version(String versionId, String agentId, long versionNo, Instant publishedAt) {

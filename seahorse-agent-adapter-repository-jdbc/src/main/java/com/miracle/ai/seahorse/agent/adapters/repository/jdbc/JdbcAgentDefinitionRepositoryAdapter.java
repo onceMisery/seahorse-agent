@@ -99,6 +99,12 @@ public class JdbcAgentDefinitionRepositoryAdapter implements AgentDefinitionRepo
             ORDER BY version_no DESC
             LIMIT 1
             """;
+    private static final String SQL_FIND_VERSION = """
+            SELECT version_id, agent_id, version_no, instructions, tool_set_json, model_config_json,
+                   memory_config_json, guardrail_config_json, published_by, published_at, change_summary
+            FROM sa_agent_version
+            WHERE agent_id = ? AND version_id = ?
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -206,6 +212,16 @@ public class JdbcAgentDefinitionRepositoryAdapter implements AgentDefinitionRepo
             return Optional.empty();
         }
         return jdbcTemplate.query(SQL_LATEST_VERSION, this::mapVersion, agentId.trim()).stream().findFirst();
+    }
+
+    @Override
+    public Optional<AgentVersion> findVersion(String agentId, String versionId) {
+        if (!hasText(agentId) || !hasText(versionId)) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query(SQL_FIND_VERSION, this::mapVersion, agentId.trim(), versionId.trim())
+                .stream()
+                .findFirst();
     }
 
     private AgentDefinition mapDefinition(ResultSet resultSet, int rowNum) throws SQLException {

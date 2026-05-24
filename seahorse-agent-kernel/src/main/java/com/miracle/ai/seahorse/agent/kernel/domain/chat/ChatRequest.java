@@ -36,6 +36,8 @@ public class ChatRequest {
 
     private List<ChatMessage> messages = new ArrayList<>();
 
+    private String modelId;
+
     private ChatSamplingOptions samplingOptions;
 
     /**
@@ -52,15 +54,25 @@ public class ChatRequest {
 
     @Builder
     public ChatRequest(List<ChatMessage> messages,
+                       String modelId,
                        ChatSamplingOptions samplingOptions,
                        Boolean enableTools,
                        List<ToolDescriptor> tools,
                        String toolChoice) {
         this.messages = messages == null ? new ArrayList<>() : messages;
+        this.modelId = trimToNull(modelId);
         this.samplingOptions = samplingOptions;
         this.enableTools = enableTools;
         this.tools = tools == null ? new ArrayList<>() : tools;
         this.toolChoice = toolChoice == null || toolChoice.isBlank() ? DEFAULT_TOOL_CHOICE : toolChoice;
+    }
+
+    public ChatRequest(List<ChatMessage> messages,
+                       ChatSamplingOptions samplingOptions,
+                       Boolean enableTools,
+                       List<ToolDescriptor> tools,
+                       String toolChoice) {
+        this(messages, null, samplingOptions, enableTools, tools, toolChoice);
     }
 
     public Double getTemperature() {
@@ -81,5 +93,16 @@ public class ChatRequest {
 
     public Boolean getThinking() {
         return samplingOptions == null ? null : samplingOptions.getThinking();
+    }
+
+    public void setModelId(String modelId) {
+        this.modelId = trimToNull(modelId);
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
     }
 }

@@ -24,6 +24,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -64,6 +65,32 @@ class ChatRequestToolsTests {
                 .tools(null)
                 .toolChoice(null)
                 .build();
+        assertNotNull(req.getTools());
+        assertTrue(req.getTools().isEmpty());
+        assertEquals("auto", req.getToolChoice());
+    }
+
+    @Test
+    void builderCarriesRuntimeModelId() {
+        ChatRequest req = ChatRequest.builder()
+                .messages(List.of(ChatMessage.user("hi")))
+                .modelId(" agent-chat-model ")
+                .build();
+
+        assertEquals("agent-chat-model", req.getModelId());
+    }
+
+    @Test
+    void legacyFiveArgConstructorRemainsCompatible() {
+        ChatRequest req = new ChatRequest(
+                List.of(ChatMessage.user("hi")),
+                ChatSamplingOptions.builder().temperature(0.5D).build(),
+                null,
+                null,
+                null);
+
+        assertNull(req.getModelId());
+        assertEquals(0.5D, req.getTemperature());
         assertNotNull(req.getTools());
         assertTrue(req.getTools().isEmpty());
         assertEquals("auto", req.getToolChoice());

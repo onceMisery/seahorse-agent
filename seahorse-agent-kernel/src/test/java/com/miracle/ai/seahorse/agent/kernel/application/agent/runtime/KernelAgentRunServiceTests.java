@@ -98,6 +98,51 @@ class KernelAgentRunServiceTests {
     }
 
     @Test
+    void shouldStartRunWithExplicitPublishedVersionWhenVersionExists() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("data-analyst", AgentStatus.PUBLISHED, "version-2"));
+        definitionRepository.saveVersion(agentVersion("data-analyst", "version-1", 1L));
+        definitionRepository.saveVersion(agentVersion("data-analyst", "version-2", 2L));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository, runRepository, currentUser(), FIXED_CLOCK);
+
+        AgentRun run = service.startRun(new AgentRunStartCommand(
+                "data-analyst",
+                "version-1",
+                AgentDefinition.DEFAULT_TENANT_ID,
+                "conversation-1",
+                AgentRunTriggerType.CHAT,
+                "summarized input",
+                "trace-1"));
+
+        assertEquals("version-1", run.versionId());
+        assertTrue(runRepository.runs.containsKey(run.runId()));
+    }
+
+    @Test
+    void shouldRejectExplicitMissingAgentVersion() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("data-analyst", AgentStatus.PUBLISHED, "version-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository, runRepository, currentUser(), FIXED_CLOCK);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> service.startRun(
+                new AgentRunStartCommand(
+                        "data-analyst",
+                        "missing-version",
+                        AgentDefinition.DEFAULT_TENANT_ID,
+                        "conversation-1",
+                        AgentRunTriggerType.CHAT,
+                        "summary",
+                        null)));
+
+        assertEquals("Agent version does not exist", error.getMessage());
+        assertTrue(runRepository.runs.isEmpty());
+    }
+
+    @Test
     void shouldRejectRegisteredAgentRunWithoutVersionBinding() {
         MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
         definitionRepository.save(agent("draft-agent", AgentStatus.DRAFT, null));
@@ -262,12 +307,28 @@ class KernelAgentRunServiceTests {
                 AgentType.ASSISTANT, null, status, AgentRiskLevel.MEDIUM, latestVersionId, now, now);
     }
 
+    private static AgentVersion agentVersion(String agentId, String versionId, long versionNo) {
+        return new AgentVersion(
+                versionId,
+                agentId,
+                versionNo,
+                "You are an assistant.",
+                AgentVersion.EMPTY_JSON_OBJECT,
+                AgentVersion.EMPTY_JSON_OBJECT,
+                AgentVersion.EMPTY_JSON_OBJECT,
+                AgentVersion.EMPTY_JSON_OBJECT,
+                "admin-1",
+                FIXED_CLOCK.instant(),
+                "publish version");
+    }
+
     private static CurrentUserPort currentUser() {
         return () -> Optional.of(new CurrentUser("user-1", "alice", "user", null));
     }
 
     private static class MemoryAgentDefinitionRepository implements AgentDefinitionRepositoryPort {
         private final Map<String, AgentDefinition> definitions = new LinkedHashMap<>();
+        private final Map<String, AgentVersion> versions = new LinkedHashMap<>();
 
         void save(AgentDefinition definition) {
             definitions.put(definition.agentId(), definition);
@@ -300,11 +361,21 @@ class KernelAgentRunServiceTests {
 
         @Override
         public void saveVersion(AgentVersion version) {
+            versions.put(versionKey(version.agentId(), version.versionId()), version);
         }
 
         @Override
         public Optional<AgentVersion> latestVersion(String agentId) {
             return Optional.empty();
+        }
+
+        @Override
+        public Optional<AgentVersion> findVersion(String agentId, String versionId) {
+            return Optional.ofNullable(versions.get(versionKey(agentId, versionId)));
+        }
+
+        private String versionKey(String agentId, String versionId) {
+            return agentId + ":" + versionId;
         }
     }
 

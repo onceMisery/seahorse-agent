@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
@@ -39,6 +40,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
 
     private static final String RUN_ID_PREFIX = "run_";
     private static final String VERSION_REQUIRED_MESSAGE = "Agent run requires a versionId";
+    private static final String VERSION_NOT_FOUND_MESSAGE = "Agent version does not exist";
 
     private final AgentDefinitionRepositoryPort definitionRepository;
     private final AgentRunRepositoryPort runRepository;
@@ -90,7 +92,13 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         if (definition == null) {
             return command.versionId();
         }
-        String versionId = defaultText(command.versionId(), definition.latestVersionId());
+        String requestedVersionId = trimToNull(command.versionId());
+        if (requestedVersionId != null) {
+            return definitionRepository.findVersion(definition.agentId(), requestedVersionId)
+                    .map(AgentVersion::versionId)
+                    .orElseThrow(() -> new IllegalArgumentException(VERSION_NOT_FOUND_MESSAGE));
+        }
+        String versionId = defaultText(null, definition.latestVersionId());
         if (versionId == null) {
             throw new IllegalStateException(VERSION_REQUIRED_MESSAGE);
         }
@@ -182,8 +190,16 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     }
 
     private String defaultText(String value, String defaultValue) {
-        if (value == null || value.trim().isEmpty()) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
             return defaultValue;
+        }
+        return trimmed;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
         }
         return value.trim();
     }

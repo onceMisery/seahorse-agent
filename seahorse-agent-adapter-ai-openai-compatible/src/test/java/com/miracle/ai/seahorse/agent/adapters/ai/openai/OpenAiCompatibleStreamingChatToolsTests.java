@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import okhttp3.Interceptor;
@@ -73,6 +74,26 @@ class OpenAiCompatibleStreamingChatToolsTests {
         JsonNode withoutTools = MAPPER.readTree(interceptor.requestBodies.get(1));
         assertThat(withoutTools.has("tools")).isFalse();
         assertThat(withoutTools.has("tool_choice")).isFalse();
+    }
+
+    @Test
+    void streamChatWithToolsUsesRequestModelId() throws Exception {
+        CapturingInterceptor interceptor = new CapturingInterceptor(done());
+        OpenAiCompatibleModelAdapter adapter = adapter(interceptor);
+
+        adapter.streamChatWithTools(ChatRequest.builder()
+                .messages(List.of(ChatMessage.user("hello")))
+                .modelId("agent-chat-model")
+                .samplingOptions(ChatSamplingOptions.builder()
+                        .topK(30)
+                        .thinking(true)
+                        .build())
+                .build(), new RecordingCallback(), calls -> { });
+
+        JsonNode payload = MAPPER.readTree(interceptor.requestBodies.get(0));
+        assertThat(payload.path("model").asText()).isEqualTo("agent-chat-model");
+        assertThat(payload.path("top_k").asInt()).isEqualTo(30);
+        assertThat(payload.path("thinking").asBoolean()).isTrue();
     }
 
     @Test

@@ -30,7 +30,9 @@ public record StreamChatCommand(
         String taskId,
         String userId,
         boolean deepThinking,
-        ChatMode chatMode) {
+        ChatMode chatMode,
+        String agentId,
+        String versionId) {
 
     public StreamChatCommand {
         question = requireText(question, "question");
@@ -38,6 +40,17 @@ public record StreamChatCommand(
         taskId = requireText(taskId, "taskId");
         userId = Objects.requireNonNullElse(userId, "");
         chatMode = Objects.requireNonNullElse(chatMode, ChatMode.RAG);
+        agentId = trimToNull(agentId);
+        versionId = trimToNull(versionId);
+    }
+
+    public StreamChatCommand(String question,
+                             String conversationId,
+                             String taskId,
+                             String userId,
+                             boolean deepThinking,
+                             ChatMode chatMode) {
+        this(question, conversationId, taskId, userId, deepThinking, chatMode, null, null);
     }
 
     /**
@@ -48,7 +61,7 @@ public record StreamChatCommand(
                              String taskId,
                              String userId,
                              boolean deepThinking) {
-        this(question, conversationId, taskId, userId, deepThinking, ChatMode.RAG);
+        this(question, conversationId, taskId, userId, deepThinking, ChatMode.RAG, null, null);
     }
 
     private static String requireText(String value, String name) {
@@ -56,5 +69,12 @@ public record StreamChatCommand(
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value;
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
     }
 }

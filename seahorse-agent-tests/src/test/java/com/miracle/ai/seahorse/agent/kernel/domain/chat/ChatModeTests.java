@@ -50,6 +50,23 @@ class ChatModeTests {
     }
 
     @Test
+    void agentModeCanSelectRegisteredAgentVersion() {
+        StreamChatCommand command = new StreamChatCommand(
+                "hello",
+                "conv-1",
+                "task-1",
+                "user-1",
+                false,
+                ChatMode.AGENT,
+                " agent-1 ",
+                " agent-1-v2 ");
+
+        assertEquals(ChatMode.AGENT, command.chatMode());
+        assertEquals("agent-1", command.agentId());
+        assertEquals("agent-1-v2", command.versionId());
+    }
+
+    @Test
     void nullChatModeIsNormalizedToRag() {
         StreamChatCommand command = new StreamChatCommand(
                 "hello", "conv-1", "task-1", "user-1", false, null);

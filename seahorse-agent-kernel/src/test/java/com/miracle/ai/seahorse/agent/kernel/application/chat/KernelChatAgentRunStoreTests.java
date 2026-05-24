@@ -25,6 +25,9 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
@@ -69,6 +72,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KernelChatAgentRunStoreTests {
@@ -168,6 +172,100 @@ class KernelChatAgentRunStoreTests {
                 .contains("\"toolId\":\"memory-forget\""));
     }
 
+    @Test
+    void registeredAgentModeUsesLatestVersionModelConfigForRuntimeRequest() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.create(agentDefinition("ops-agent", "ops-agent-v1"));
+        definitionRepository.saveVersion(agentVersion("ops-agent", "ops-agent-v1", """
+                {
+                  "modelId": "agent-chat-model",
+                  "temperature": 0.12,
+                  "topP": 0.8,
+                  "topK": 30,
+                  "maxTokens": 2048,
+                  "thinking": true
+                }
+                """));
+        KernelAgentRunService runService = new KernelAgentRunService(
+                definitionRepository, runRepository,
+                () -> Optional.of(new CurrentUser("user-1", "alice", "user", null)), FIXED_CLOCK);
+        ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("ops answer")));
+        KernelAgentLoop agentLoop = new KernelAgentLoop(
+                model,
+                new InMemoryToolRegistry(),
+                KernelAgentLoopOptions.defaults(),
+                new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runService),
+                Optional.empty(),
+                Optional.of(definitionRepository));
+
+        service.streamChat(new StreamChatCommand(
+                "Run ops", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT, "ops-agent", null),
+                callback);
+
+        assertTrue(callback.awaitTerminal());
+        AgentRun run = runRepository.runs.values().iterator().next();
+        assertEquals("ops-agent", run.agentId());
+        assertEquals("ops-agent-v1", run.versionId());
+        ChatRequest modelRequest = model.requests.get(0);
+        assertEquals("agent-chat-model", modelRequest.getModelId());
+        ChatSamplingOptions sampling = modelRequest.getSamplingOptions();
+        assertEquals(0.12D, sampling.getTemperature());
+        assertEquals(0.8D, sampling.getTopP());
+        assertEquals(30, sampling.getTopK());
+        assertEquals(2048, sampling.getMaxTokens());
+        assertEquals(true, sampling.getThinking());
+    }
+
+    @Test
+    void explicitMissingRegisteredAgentVersionFailsInsteadOfUsingDefaultModelConfig() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.create(agentDefinition("ops-agent", "ops-agent-v1"));
+        definitionRepository.saveVersion(agentVersion("ops-agent", "ops-agent-v1", """
+                {"modelId":"agent-chat-model"}
+                """));
+        KernelAgentRunService runService = new KernelAgentRunService(
+                definitionRepository, runRepository,
+                () -> Optional.of(new CurrentUser("user-1", "alice", "user", null)), FIXED_CLOCK);
+        ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("should-not-run")));
+        KernelAgentLoop agentLoop = new KernelAgentLoop(
+                model,
+                new InMemoryToolRegistry(),
+                KernelAgentLoopOptions.defaults(),
+                new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runService),
+                Optional.empty(),
+                Optional.of(definitionRepository));
+
+        service.streamChat(new StreamChatCommand(
+                "Run ops", "conversation-1", "task-1", "user-1", false,
+                ChatMode.AGENT, "ops-agent", "ops-agent-missing"), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertNotNull(callback.error);
+        assertTrue(callback.error.getMessage().contains("Agent version does not exist"));
+        assertTrue(model.requests.isEmpty());
+        assertTrue(runRepository.runs.isEmpty());
+    }
+
     private static ToolGatewayPort approvalRequiredGateway() {
         return request -> ToolInvocationResult.failed(ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED);
     }
@@ -191,6 +289,7 @@ class KernelChatAgentRunStoreTests {
 
     private static final class ScriptedModel implements StreamingChatModelPort {
         private final List<Turn> turns;
+        private final List<ChatRequest> requests = new ArrayList<>();
         private int index;
 
         private ScriptedModel(List<Turn> turns) {
@@ -207,6 +306,7 @@ class KernelChatAgentRunStoreTests {
                 ChatRequest request,
                 StreamCallback callback,
                 ToolCallCollector toolCallCollector) {
+            requests.add(request);
             Turn turn = turns.get(index++);
             callback.onContent(turn.content);
             toolCallCollector.onToolCalls(turn.toolCalls);
@@ -231,6 +331,7 @@ class KernelChatAgentRunStoreTests {
         private final CountDownLatch terminal = new CountDownLatch(1);
         private final List<String> contents = new ArrayList<>();
         private String runId;
+        private Throwable error;
 
         @Override
         public void onContent(String content) {
@@ -253,6 +354,7 @@ class KernelChatAgentRunStoreTests {
 
         @Override
         public void onError(Throwable error) {
+            this.error = error;
             terminal.countDown();
         }
 
@@ -266,7 +368,7 @@ class KernelChatAgentRunStoreTests {
         }
     }
 
-    private static final class EmptyAgentDefinitionRepository implements AgentDefinitionRepositoryPort {
+    private static class EmptyAgentDefinitionRepository implements AgentDefinitionRepositoryPort {
 
         @Override
         public void create(AgentDefinition definition) {
@@ -298,6 +400,75 @@ class KernelChatAgentRunStoreTests {
         @Override
         public Optional<AgentVersion> latestVersion(String agentId) {
             return Optional.empty();
+        }
+
+        @Override
+        public Optional<AgentVersion> findVersion(String agentId, String versionId) {
+            return Optional.empty();
+        }
+    }
+
+    private static AgentDefinition agentDefinition(String agentId, String latestVersionId) {
+        return new AgentDefinition(
+                agentId,
+                AgentDefinition.DEFAULT_TENANT_ID,
+                "Ops Agent",
+                "Operations assistant",
+                "owner-1",
+                "platform",
+                AgentType.ASSISTANT,
+                null,
+                AgentStatus.PUBLISHED,
+                AgentRiskLevel.LOW,
+                latestVersionId,
+                FIXED_CLOCK.instant(),
+                FIXED_CLOCK.instant());
+    }
+
+    private static AgentVersion agentVersion(String agentId, String versionId, String modelConfigJson) {
+        return new AgentVersion(
+                versionId,
+                agentId,
+                1L,
+                "You are an ops assistant.",
+                AgentVersion.EMPTY_JSON_OBJECT,
+                modelConfigJson,
+                AgentVersion.EMPTY_JSON_OBJECT,
+                AgentVersion.EMPTY_JSON_OBJECT,
+                "owner-1",
+                FIXED_CLOCK.instant(),
+                "publish ops agent");
+    }
+
+    private static final class MemoryAgentDefinitionRepository extends EmptyAgentDefinitionRepository {
+        private final Map<String, AgentDefinition> definitions = new LinkedHashMap<>();
+        private final Map<String, AgentVersion> versions = new LinkedHashMap<>();
+
+        @Override
+        public void create(AgentDefinition definition) {
+            definitions.put(definition.agentId(), definition);
+        }
+
+        @Override
+        public void saveVersion(AgentVersion version) {
+            versions.put(version.agentId() + ":" + version.versionId(), version);
+        }
+
+        @Override
+        public Optional<AgentDefinition> findById(String agentId) {
+            return Optional.ofNullable(definitions.get(agentId));
+        }
+
+        @Override
+        public Optional<AgentVersion> latestVersion(String agentId) {
+            return versions.values().stream()
+                    .filter(version -> agentId.equals(version.agentId()))
+                    .max(Comparator.comparingLong(AgentVersion::versionNo));
+        }
+
+        @Override
+        public Optional<AgentVersion> findVersion(String agentId, String versionId) {
+            return Optional.ofNullable(versions.get(agentId + ":" + versionId));
         }
     }
 

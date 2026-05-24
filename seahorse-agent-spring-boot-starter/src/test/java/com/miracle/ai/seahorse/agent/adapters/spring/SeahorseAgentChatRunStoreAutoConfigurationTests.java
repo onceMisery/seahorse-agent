@@ -689,6 +689,11 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         public Optional<AgentVersion> latestVersion(String agentId) {
             return Optional.empty();
         }
+
+        @Override
+        public Optional<AgentVersion> findVersion(String agentId, String versionId) {
+            return Optional.empty();
+        }
     }
 
     static final class InMemoryAgentRunRepository implements AgentRunRepositoryPort {

@@ -157,6 +157,7 @@ class KernelAgentDefinitionServiceTests {
     private static class MemoryAgentDefinitionRepository implements AgentDefinitionRepositoryPort {
         private final Map<String, AgentDefinition> definitions = new LinkedHashMap<>();
         private final Map<String, AgentVersion> latestVersions = new LinkedHashMap<>();
+        private final Map<String, AgentVersion> versions = new LinkedHashMap<>();
 
         @Override
         public void create(AgentDefinition definition) {
@@ -186,11 +187,17 @@ class KernelAgentDefinitionServiceTests {
         @Override
         public void saveVersion(AgentVersion version) {
             latestVersions.put(version.agentId(), version);
+            versions.put(version.agentId() + ":" + version.versionId(), version);
         }
 
         @Override
         public Optional<AgentVersion> latestVersion(String agentId) {
             return Optional.ofNullable(latestVersions.get(agentId));
+        }
+
+        @Override
+        public Optional<AgentVersion> findVersion(String agentId, String versionId) {
+            return Optional.ofNullable(versions.get(agentId + ":" + versionId));
         }
     }
 }

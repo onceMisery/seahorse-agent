@@ -455,6 +455,21 @@ class KernelAgentLoopTests {
         assertFalse(messages.get(0).getContent().contains("legacy profile memory"));
     }
 
+    @Test
+    void modelIdIsPassedToModelRequest() {
+        ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("answer")));
+        KernelAgentLoop loop = new KernelAgentLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+
+        loop.execute(AgentLoopRequest.builder()
+                .question("hello")
+                .history(List.of())
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.2D).build())
+                .modelId("agent-chat-model")
+                .build());
+
+        assertEquals("agent-chat-model", model.requests.get(0).getModelId());
+    }
+
     private static AgentLoopRequest defaultRequest() {
         return defaultRequest(6);
     }
