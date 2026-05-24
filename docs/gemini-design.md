@@ -1,5 +1,11 @@
 > 本文采用问答形式，来了解agent 主要是记忆系统的设计实现
 
+> **2026-05-24 修订说明（canonical model）：**
+> 本文所述记忆体的具体落地形态以 `docs/aegis/specs/2026-05-24-design-alignment-next-development.md` 为 source-of-truth：
+> - **纵向 `MemoryLayer`** 只保留 4 项：`WORKING / SHORT_TERM / LONG_TERM / SEMANTIC`，表达时间 / 抽象度维度。
+> - **横向 `MemoryTrack`**（profile / correction / business-doc / 等）是与 layer 正交的语义轨，落在 `MemoryContext` 字段或独立 repository port 上，**不**塞进 `MemoryLayer` enum。
+> 历史描述中"七层记忆"或"七个一等公民"等措辞已被替代为上述二维度模型；继续按 7 enum 扩 `MemoryLayer` 视为反模式。
+
 Q:你的agent和记忆系统设计的非常棒，能不能说说这些是怎么设计的l，尽可能的详细：LLM Refiner、Debounce/跨轮聚合、真实 Vector/BM25/Graph 多路召回、REVIEW 人工审核闭环、自动 compaction/alias/GC 这些文档中说明了该实现吗
 
 A:

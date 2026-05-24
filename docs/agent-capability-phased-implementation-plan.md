@@ -1,8 +1,16 @@
 # Seahorse Agent 真 Agent 能力分阶段落地方案
 
+> **2026-05-24 修订说明（执行计划已被 spec 替代）：**
+> 本方案描述的 Phase A–F 仍是能力地图，但**下一轮开发的执行计划**以 `docs/aegis/specs/2026-05-24-design-alignment-next-development.md` 为 source-of-truth：
+> - Phase D 的接入点不再是 `PhaseHandler` decorator；按 spec §6 在 `KernelAgentLoop` 上以独立 `OutputGovernanceService` 接入，并拆 1a / 1b / 1c / 1d / 1e 分阶段交付。
+> - Phase C 文档中的 `AgentTask` / `SkillDefinition` / `PhaseHandler` 已被真实 owner `AgentRun` / `AgentDefinition` / `AgentStep` / `KernelAgentLoop` 替代；阅读 phase-c 文档时请参照其 2026-05-24 修订说明做术语替换。
+> - 记忆系统的 layer/track 关系以 `gemini-design.md` 与该 Gemini 完整设计方案的 2026-05-24 canonical 修订说明为准（4 layer × N track，不扩 `MemoryLayer` enum）。
+> - 阶段排期按 spec §4 表（Slice 0 → 1a → 1b → 2 → 3 → 1c → 1d → 4 → 5 → 1e → 6 → 7）。
+> 现存背景描述保留，但**新任务执行不要单独引用本文档**——必须通过 spec 入口。
+
 > 基线来源：`docs/agent-vs-rag-capability-baseline.md`  
 > 目标：在不破坏现有 RAG 闭环的前提下，补齐 Agentic Search、Skill 注册中心、持久化状态机、任务快照、Human-in-the-Loop、输出治理、记忆工具化和企业治理能力。  
-> 最后更新：2026-05-19
+> 最后更新：2026-05-19（spec 引入修订：2026-05-24）
 
 ---
 

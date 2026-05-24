@@ -1,5 +1,14 @@
 # Phase C 详细设计：Skill 注册中心、状态机、任务快照与 Human-in-the-Loop
 
+> **2026-05-24 修订说明（术语漂移）：**
+> 本文使用的 `AgentTask` / `SkillDefinition` / `PhaseHandler` / `RequirementAnalysisSkill` 等术语在当前代码中**没有实际 owner**。真实落地术语为：
+> - `AgentTask` → `AgentRun`（`kernel/domain/agent/runtime/AgentRun.java`）
+> - `SkillDefinition` → `AgentDefinition`（`kernel/domain/agent/definition/AgentDefinition.java`）
+> - 单步交互 / phase → `AgentStep`（不要继续按 phase 命名扩展）
+> - `PhaseHandler` runtime → 不存在；当前由 `KernelAgentLoop` + runtime services 承载
+>
+> 后续阅读本文时，请把以上术语整体替换。新增设计或代码必须使用真实术语；任何"重启 `AgentTask` 平行模型"的提案必须先经 ADR 评审，详见 `docs/aegis/specs/2026-05-24-design-alignment-next-development.md` §14 禁止事项与 §5.3 canonical 术语表。
+
 > 上游总方案：`docs/agent-capability-phased-implementation-plan.md`  
 > 前置依赖：Phase A Agent Loop、Phase B Agentic Search。  
 > 本阶段目标：让 Agent 从一次性工具循环升级为可持久化、可恢复、可人工确认、可回滚的多阶段任务系统。

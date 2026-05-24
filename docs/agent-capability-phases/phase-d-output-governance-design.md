@@ -1,5 +1,16 @@
 # Phase D 详细设计：输出可信度治理与上下文降维
 
+> **2026-05-24 修订说明（接入点降级）：**
+> 本文原描述要求 Phase D 第一阶段以 `OutputGovernancePhaseDecorator` 包装 `PhaseHandler`。当前代码**没有 `PhaseHandler` runtime**（详见 phase-c 文档 2026-05-24 修订说明）。
+> 因此实施按 `docs/aegis/specs/2026-05-24-design-alignment-next-development.md` 第 6 节执行：
+> - **接入点**：当前真实 owner 是 `KernelAgentLoop`；Phase D MVP（切片 1a）以独立 `OutputGovernanceService` 在 `KernelAgentLoop` 生成 final answer 后被调用。
+> - **不得**为了照本文档新建空壳 `PhaseHandler` runtime；这会制造第二个 runtime owner。
+> - **不得**把 validator 逻辑写进 `KernelAgentLoop.run()` 私有方法；治理逻辑放在独立 service。
+> - 未来如确实引入 phase runtime（属于大型 runtime 改造），再迁移接入点；届时本文 decorator 描述可作为参考实现。
+>
+> 文档其余部分（Validator 列表、`SelfHealingLoop`、`ContextReducerPort`、观测事件需求）**目标不变**，但分阶段拆为 1a / 1b / 1c / 1d / 1e（详见 spec §6.2）。
+> 观测事件命名按项目现有 kebab-case 风格使用 `agent-output-validation` / `agent-output-self-heal` / `agent-output-validation-failed`，**不**用本文档若干段落出现的点号风格。
+
 > 上游总方案：`docs/agent-capability-phased-implementation-plan.md`  
 > 前置依赖：Phase C Agent Task Runtime 和 Skill phase 已可用。  
 > 本阶段目标：让 Agent 阶段输出具备结构校验、失败自愈、可人工修订、上下文可控和可观测能力。

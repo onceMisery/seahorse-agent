@@ -55,7 +55,7 @@ public final class MemoryPromptFormatter {
         StringBuilder memoryBuilder = new StringBuilder();
         appendMemoryLayer(memoryBuilder, "用户纠错本：", memoryContext.getCorrectionMemories());
         appendMemoryLayer(memoryBuilder, "用户画像：", memoryContext.getProfileMemories());
-        appendMemoryLayer(memoryBuilder, "用户画像：", memoryContext.getSemanticMemories());
+        appendMemoryLayer(memoryBuilder, "语义记忆：", memoryContext.getSemanticMemories());
         appendMemoryLayer(memoryBuilder, "业务文档：", memoryContext.getBusinessDocumentMemories());
         appendMemoryLayer(memoryBuilder, "长期记忆：", memoryContext.getLongTermMemories());
         appendMemoryLayer(memoryBuilder, "近期记忆：", memoryContext.getShortTermMemories());

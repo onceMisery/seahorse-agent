@@ -78,3 +78,4 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-runtime/20-checkpoint.md | AI Infra ContextPack runtime checkpoint |
 | 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-runtime/90-evidence.md | AI Infra ContextPack runtime evidence |
 | 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-runtime/99-reflection.md | AI Infra ContextPack runtime reflection |
+| 2026-05-24 | spec | docs/aegis/specs/2026-05-24-design-alignment-next-development.md | Design alignment next development guidance spec |

@@ -1,5 +1,11 @@
 # Gemini Agent 记忆系统完整设计方案
 
+> **2026-05-24 修订说明（canonical model）：**
+> 本文所述记忆分层的代码侧落地以 `docs/aegis/specs/2026-05-24-design-alignment-next-development.md` 为 source-of-truth：
+> - **纵向 `MemoryLayer` 枚举只 4 项**：`WORKING / SHORT_TERM / LONG_TERM / SEMANTIC`，表达时间 / 抽象度维度。
+> - **横向 `MemoryTrack`**（profile / correction / business-doc / 等）是与 layer 正交的语义轨，落在 `MemoryContext` 字段或独立 repository port 上。
+> - 不再把 profile / correction / business-doc 视为"第 5/6/7 层"加入 `MemoryLayer` enum；若文中后续段落出现把它们与 layer 并列的措辞，请以本注记的二维度模型为准。
+
 ## 1. 设计目标与核心原则
 
 Gemini Agent 记忆系统的目标不是把全部对话永久保存，而是在保证安全、低延迟和可控成本的前提下，把“未来有复用价值的信息”沉淀为可检索、可更新、可忘却的结构化记忆。
