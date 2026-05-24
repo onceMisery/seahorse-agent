@@ -23,15 +23,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 @RestController
 public class SeahorseContextPackController {
-
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
-    private static final String SERVICE_NOT_AVAILABLE = "Service not available";
 
     private final ObjectProvider<ContextPackQueryInboundPort> contextPackQueryPortProvider;
 
@@ -40,27 +33,13 @@ public class SeahorseContextPackController {
     }
 
     @GetMapping("/api/context-packs/{contextPackId}")
-    public Map<String, Object> findById(@PathVariable String contextPackId) {
-        ContextPackQueryInboundPort port = requirePort();
-        return ok(port.findById(contextPackId)
+    public ApiResponse<Object> findById(@PathVariable String contextPackId) {
+        return ApiResponses.requireService(contextPackQueryPortProvider, port -> port.findById(contextPackId)
                 .orElseThrow(() -> new IllegalArgumentException("Context pack not found")));
     }
 
     @GetMapping("/api/context-packs/{contextPackId}/items")
-    public Map<String, Object> listItems(@PathVariable String contextPackId) {
-        ContextPackQueryInboundPort port = requirePort();
-        return ok(port.listItems(contextPackId));
-    }
-
-    private ContextPackQueryInboundPort requirePort() {
-        ContextPackQueryInboundPort port = contextPackQueryPortProvider.getIfAvailable();
-        if (port == null) {
-            throw new IllegalStateException(SERVICE_NOT_AVAILABLE);
-        }
-        return port;
-    }
-
-    private Map<String, Object> ok(Object data) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, data == null ? Map.of() : data);
+    public ApiResponse<Object> listItems(@PathVariable String contextPackId) {
+        return ApiResponses.requireService(contextPackQueryPortProvider, port -> port.listItems(contextPackId));
     }
 }

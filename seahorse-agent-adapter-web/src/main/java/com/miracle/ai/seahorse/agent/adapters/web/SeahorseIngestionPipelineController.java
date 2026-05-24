@@ -32,7 +32,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -42,9 +41,6 @@ import java.util.Objects;
 public class SeahorseIngestionPipelineController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "";
 
     private final ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider;
@@ -54,40 +50,39 @@ public class SeahorseIngestionPipelineController {
     }
 
     @PostMapping("/ingestion/pipelines")
-    public Map<String, Object> create(@RequestBody IngestionPipelineRequest request,
+    public ApiResponse<Object> create(@RequestBody IngestionPipelineRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        if (pipelinePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePortProvider.getIfAvailable().create(toPayload(request, operator(userId))));
+        return ApiResponses.requireServiceOrError(pipelinePortProvider,
+                port -> port.create(toPayload(request, operator(userId))));
     }
 
     @PutMapping("/ingestion/pipelines/{id}")
-    public Map<String, Object> update(@PathVariable String id,
+    public ApiResponse<Object> update(@PathVariable String id,
                                       @RequestBody IngestionPipelineRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        if (pipelinePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePortProvider.getIfAvailable().update(id, toPayload(request, operator(userId))));
+        return ApiResponses.requireServiceOrError(pipelinePortProvider,
+                port -> port.update(id, toPayload(request, operator(userId))));
     }
 
     @GetMapping("/ingestion/pipelines/{id}")
-    public Map<String, Object> get(@PathVariable String id) {
-        if (pipelinePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePortProvider.getIfAvailable().get(id));
+    public ApiResponse<Object> get(@PathVariable String id) {
+        return ApiResponses.requireServiceOrError(pipelinePortProvider, port -> port.get(id));
     }
 
     @GetMapping("/ingestion/pipelines")
-    public Map<String, Object> page(@RequestParam(value = "pageNo", defaultValue = "1") long pageNo,
+    public ApiResponse<Object> page(@RequestParam(value = "pageNo", defaultValue = "1") long pageNo,
                                     @RequestParam(value = "pageSize", defaultValue = "10") long pageSize,
                                     @RequestParam(value = "keyword", required = false) String keyword) {
-        if (pipelinePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, pipelinePortProvider.getIfAvailable().page(pageNo, pageSize, keyword));
+        return ApiResponses.requireServiceOrError(pipelinePortProvider, port -> port.page(pageNo, pageSize, keyword));
     }
 
     @DeleteMapping("/ingestion/pipelines/{id}")
-    public Map<String, Object> delete(@PathVariable String id,
+    public ApiResponse<Object> delete(@PathVariable String id,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        if (pipelinePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        pipelinePortProvider.getIfAvailable().delete(id, operator(userId));
-        return Map.of(KEY_CODE, SUCCESS_CODE);
+        return ApiResponses.requireServiceOrError(pipelinePortProvider, port -> {
+            port.delete(id, operator(userId));
+            return null;
+        });
     }
 
     private IngestionPipelinePayload toPayload(IngestionPipelineRequest request, String operator) {

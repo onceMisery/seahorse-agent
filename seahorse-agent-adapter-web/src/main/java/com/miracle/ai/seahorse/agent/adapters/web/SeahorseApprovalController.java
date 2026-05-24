@@ -29,18 +29,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 /**
  * Human-in-the-loop 审批查询和决策 API。
  */
 @RestController
 public class SeahorseApprovalController {
 
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
-    private static final String SERVICE_NOT_AVAILABLE = "Service not available";
     private static final String DEFAULT_CURRENT = "1";
     private static final String DEFAULT_SIZE = "10";
 
@@ -51,59 +45,44 @@ public class SeahorseApprovalController {
     }
 
     @GetMapping("/api/approvals")
-    public Map<String, Object> page(@RequestParam(required = false) String tenantId,
+    public ApiResponse<Object> page(@RequestParam(required = false) String tenantId,
                                     @RequestParam(required = false) ApprovalRequestStatus status,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size) {
-        ApprovalManagementInboundPort port = requirePort();
-        return ok(port.page(tenantId, status, current, size));
+        return ApiResponses.requireService(approvalPortProvider, port -> port.page(tenantId, status, current, size));
     }
 
     @GetMapping("/api/approvals/{approvalId}")
-    public Map<String, Object> findById(@PathVariable String approvalId) {
-        ApprovalManagementInboundPort port = requirePort();
-        return ok(port.findById(approvalId)
+    public ApiResponse<Object> findById(@PathVariable String approvalId) {
+        return ApiResponses.requireService(approvalPortProvider, port -> port.findById(approvalId)
                 .orElseThrow(() -> new IllegalArgumentException("Approval not found")));
     }
 
     @PostMapping("/api/approvals/{approvalId}/approve")
-    public Map<String, Object> approve(@PathVariable String approvalId,
+    public ApiResponse<Object> approve(@PathVariable String approvalId,
                                        @RequestBody(required = false) ApprovalDecisionRequest request) {
-        ApprovalManagementInboundPort port = requirePort();
-        return ok(port.approve(approvalId, toDecisionCommand(request)));
+        return ApiResponses.requireService(approvalPortProvider,
+                port -> port.approve(approvalId, toDecisionCommand(request)));
     }
 
     @PostMapping("/api/approvals/{approvalId}/reject")
-    public Map<String, Object> reject(@PathVariable String approvalId,
+    public ApiResponse<Object> reject(@PathVariable String approvalId,
                                       @RequestBody(required = false) ApprovalDecisionRequest request) {
-        ApprovalManagementInboundPort port = requirePort();
-        return ok(port.reject(approvalId, toDecisionCommand(request)));
+        return ApiResponses.requireService(approvalPortProvider,
+                port -> port.reject(approvalId, toDecisionCommand(request)));
     }
 
     @PostMapping("/api/approvals/{approvalId}/modify")
-    public Map<String, Object> modify(@PathVariable String approvalId,
+    public ApiResponse<Object> modify(@PathVariable String approvalId,
                                       @RequestBody ApprovalModifyRequest request) {
-        ApprovalManagementInboundPort port = requirePort();
         ApprovalModifyRequest safeRequest = request == null ? new ApprovalModifyRequest(null, null) : request;
-        return ok(port.modify(approvalId,
+        return ApiResponses.requireService(approvalPortProvider, port -> port.modify(approvalId,
                 new ApprovalModifyCommand(safeRequest.argumentsPreviewJson(), safeRequest.decisionComment())));
-    }
-
-    private ApprovalManagementInboundPort requirePort() {
-        ApprovalManagementInboundPort port = approvalPortProvider.getIfAvailable();
-        if (port == null) {
-            throw new IllegalStateException(SERVICE_NOT_AVAILABLE);
-        }
-        return port;
     }
 
     private ApprovalDecisionCommand toDecisionCommand(ApprovalDecisionRequest request) {
         ApprovalDecisionRequest safeRequest = request == null ? new ApprovalDecisionRequest(null) : request;
         return new ApprovalDecisionCommand(safeRequest.decisionComment());
-    }
-
-    private Map<String, Object> ok(Object data) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, data == null ? Map.of() : data);
     }
 
     public record ApprovalDecisionRequest(String decisionComment) {
