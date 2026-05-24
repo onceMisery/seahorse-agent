@@ -28,7 +28,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -37,10 +36,6 @@ import java.util.Objects;
 @RestController
 public class SeahorseIntentTreeController {
 
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
-
     private final ObjectProvider<IntentTreeInboundPort> intentTreePortProvider;
 
     public SeahorseIntentTreeController(ObjectProvider<IntentTreeInboundPort> intentTreePortProvider) {
@@ -48,50 +43,53 @@ public class SeahorseIntentTreeController {
     }
 
     @GetMapping("/intent-tree/trees")
-    public Map<String, Object> tree() {
-        if (intentTreePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, intentTreePortProvider.getIfAvailable().tree());
+    public ApiResponse<Object> tree() {
+        return ApiResponses.requireServiceOrError(intentTreePortProvider, IntentTreeInboundPort::tree);
     }
 
     @PostMapping("/intent-tree")
-    public Map<String, Object> createNode(@RequestBody IntentNodePayload request) {
-        if (intentTreePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        String id = intentTreePortProvider.getIfAvailable().create(Objects.requireNonNull(request, "request must not be null"));
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, id);
+    public ApiResponse<Object> createNode(@RequestBody IntentNodePayload request) {
+        return ApiResponses.requireServiceOrError(intentTreePortProvider,
+                port -> port.create(Objects.requireNonNull(request, "request must not be null")));
     }
 
     @PutMapping("/intent-tree/{id}")
-    public Map<String, Object> updateNode(@PathVariable String id, @RequestBody IntentNodePayload request) {
-        if (intentTreePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        intentTreePortProvider.getIfAvailable().update(id, Objects.requireNonNull(request, "request must not be null"));
-        return Map.of(KEY_CODE, SUCCESS_CODE);
+    public ApiResponse<Object> updateNode(@PathVariable String id, @RequestBody IntentNodePayload request) {
+        return ApiResponses.requireServiceOrError(intentTreePortProvider, port -> {
+            port.update(id, Objects.requireNonNull(request, "request must not be null"));
+            return null;
+        });
     }
 
     @DeleteMapping("/intent-tree/{id}")
-    public Map<String, Object> deleteNode(@PathVariable String id) {
-        if (intentTreePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        intentTreePortProvider.getIfAvailable().delete(id);
-        return Map.of(KEY_CODE, SUCCESS_CODE);
+    public ApiResponse<Object> deleteNode(@PathVariable String id) {
+        return ApiResponses.requireServiceOrError(intentTreePortProvider, port -> {
+            port.delete(id);
+            return null;
+        });
     }
 
     @PostMapping("/intent-tree/batch/enable")
-    public Map<String, Object> batchEnable(@RequestBody IntentNodeBatchRequest request) {
-        if (intentTreePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        intentTreePortProvider.getIfAvailable().batchEnable(Objects.requireNonNull(request, "request must not be null").ids());
-        return Map.of(KEY_CODE, SUCCESS_CODE);
+    public ApiResponse<Object> batchEnable(@RequestBody IntentNodeBatchRequest request) {
+        return ApiResponses.requireServiceOrError(intentTreePortProvider, port -> {
+            port.batchEnable(Objects.requireNonNull(request, "request must not be null").ids());
+            return null;
+        });
     }
 
     @PostMapping("/intent-tree/batch/disable")
-    public Map<String, Object> batchDisable(@RequestBody IntentNodeBatchRequest request) {
-        if (intentTreePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        intentTreePortProvider.getIfAvailable().batchDisable(Objects.requireNonNull(request, "request must not be null").ids());
-        return Map.of(KEY_CODE, SUCCESS_CODE);
+    public ApiResponse<Object> batchDisable(@RequestBody IntentNodeBatchRequest request) {
+        return ApiResponses.requireServiceOrError(intentTreePortProvider, port -> {
+            port.batchDisable(Objects.requireNonNull(request, "request must not be null").ids());
+            return null;
+        });
     }
 
     @PostMapping("/intent-tree/batch/delete")
-    public Map<String, Object> batchDelete(@RequestBody IntentNodeBatchRequest request) {
-        if (intentTreePortProvider.getIfAvailable() == null) return Map.of("code", "1", "message", "Service not available");
-        intentTreePortProvider.getIfAvailable().batchDelete(Objects.requireNonNull(request, "request must not be null").ids());
-        return Map.of(KEY_CODE, SUCCESS_CODE);
+    public ApiResponse<Object> batchDelete(@RequestBody IntentNodeBatchRequest request) {
+        return ApiResponses.requireServiceOrError(intentTreePortProvider, port -> {
+            port.batchDelete(Objects.requireNonNull(request, "request must not be null").ids());
+            return null;
+        });
     }
 }

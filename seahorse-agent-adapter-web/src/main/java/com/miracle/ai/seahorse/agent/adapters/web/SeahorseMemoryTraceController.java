@@ -24,15 +24,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 @RestController
 public class SeahorseMemoryTraceController {
-
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
-    private static final String ERROR_CODE = "1";
 
     private final ObjectProvider<MemoryTraceInboundPort> tracePortProvider;
 
@@ -41,7 +34,7 @@ public class SeahorseMemoryTraceController {
     }
 
     @GetMapping("/memories/traces")
-    public Map<String, Object> traces(@RequestParam(defaultValue = "50") int limit,
+    public ApiResponse<Object> traces(@RequestParam(defaultValue = "50") int limit,
                                       @RequestParam(defaultValue = "") String traceId,
                                       @RequestParam(defaultValue = "") String tenantId,
                                       @RequestParam(defaultValue = "") String userId,
@@ -49,18 +42,15 @@ public class SeahorseMemoryTraceController {
                                       @RequestParam(defaultValue = "") String sessionId,
                                       @RequestParam(defaultValue = "") String component,
                                       @RequestParam(defaultValue = "") String status) {
-        MemoryTraceInboundPort tracePort = tracePortProvider.getIfAvailable();
-        if (tracePort == null) {
-            return Map.of(KEY_CODE, ERROR_CODE, "message", "Service not available");
-        }
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, tracePort.listRecent(new MemoryTraceQuery(
-                limit,
-                traceId,
-                tenantId,
-                userId,
-                conversationId,
-                sessionId,
-                component,
-                status)));
+        return ApiResponses.requireServiceOrError(tracePortProvider,
+                port -> port.listRecent(new MemoryTraceQuery(
+                        limit,
+                        traceId,
+                        tenantId,
+                        userId,
+                        conversationId,
+                        sessionId,
+                        component,
+                        status)));
     }
 }

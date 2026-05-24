@@ -26,7 +26,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
-import java.util.Map;
 
 /**
  * Seahorse 原生文档刷新 Web adapter。
@@ -35,9 +34,6 @@ import java.util.Map;
 public class SeahorseDocumentRefreshController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_OPERATOR = "system";
 
     private final ObjectProvider<DocumentRefreshInboundPort> refreshPortProvider;
@@ -47,22 +43,17 @@ public class SeahorseDocumentRefreshController {
     }
 
     @PostMapping("/knowledge-base/docs/{doc-id}/refresh")
-    public Map<String, Object> refresh(@PathVariable("doc-id") String docId,
+    public ApiResponse<Object> refresh(@PathVariable("doc-id") String docId,
                                        @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        if (refreshPortProvider.getIfAvailable() == null) {
-            return Map.of(KEY_CODE, "1", "message", "Service not available");
-        }
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, refreshPortProvider.getIfAvailable().refreshDocument(docId, operator(userId)));
+        return ApiResponses.requireServiceOrError(refreshPortProvider,
+                port -> port.refreshDocument(docId, operator(userId)));
     }
 
     @PostMapping("/knowledge-base/docs/refresh-due")
-    public Map<String, Object> refreshDue(@RequestParam(defaultValue = "20") int limit,
+    public ApiResponse<Object> refreshDue(@RequestParam(defaultValue = "20") int limit,
                                           @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        if (refreshPortProvider.getIfAvailable() == null) {
-            return Map.of(KEY_CODE, "1", "message", "Service not available");
-        }
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                refreshPortProvider.getIfAvailable().refreshDueSchedules(Instant.now(), limit, operator(userId)));
+        return ApiResponses.requireServiceOrError(refreshPortProvider,
+                port -> port.refreshDueSchedules(Instant.now(), limit, operator(userId)));
     }
 
     private String operator(String userId) {

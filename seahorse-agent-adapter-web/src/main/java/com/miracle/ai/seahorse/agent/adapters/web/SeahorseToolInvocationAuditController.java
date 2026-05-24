@@ -24,18 +24,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 /**
  * Tool Gateway 工具调用审计查询 API。
  */
 @RestController
 public class SeahorseToolInvocationAuditController {
 
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
-    private static final String SERVICE_NOT_AVAILABLE = "Service not available";
     private static final String DEFAULT_CURRENT = "1";
     private static final String DEFAULT_SIZE = "10";
 
@@ -47,7 +41,7 @@ public class SeahorseToolInvocationAuditController {
     }
 
     @GetMapping("/api/tool-invocations")
-    public Map<String, Object> page(@RequestParam(required = false) String tenantId,
+    public ApiResponse<Object> page(@RequestParam(required = false) String tenantId,
                                     @RequestParam(required = false) String agentId,
                                     @RequestParam(required = false) String versionId,
                                     @RequestParam(required = false) String runId,
@@ -55,19 +49,7 @@ public class SeahorseToolInvocationAuditController {
                                     @RequestParam(required = false) ToolInvocationStatus status,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size) {
-        ToolInvocationAuditQueryInboundPort port = requirePort();
-        return ok(port.page(tenantId, agentId, versionId, runId, toolId, status, current, size));
-    }
-
-    private ToolInvocationAuditQueryInboundPort requirePort() {
-        ToolInvocationAuditQueryInboundPort port = auditQueryPortProvider.getIfAvailable();
-        if (port == null) {
-            throw new IllegalStateException(SERVICE_NOT_AVAILABLE);
-        }
-        return port;
-    }
-
-    private Map<String, Object> ok(Object data) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, data == null ? Map.of() : data);
+        return ApiResponses.requireService(auditQueryPortProvider,
+                port -> port.page(tenantId, agentId, versionId, runId, toolId, status, current, size));
     }
 }

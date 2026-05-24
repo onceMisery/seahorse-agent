@@ -99,6 +99,43 @@ class ApiResponseContractTests {
         assertThat(response.data()).isEqualTo("payload+");
     }
 
+    @Test
+    void requireServiceOrErrorReturnsErrorResponseWhenProviderMissing() {
+        ApiResponse<String> response = ApiResponses.requireServiceOrError(null, value -> "ignored");
+
+        assertThat(response.code()).isEqualTo(ApiResponses.SERVICE_NOT_AVAILABLE_ERROR_CODE);
+        assertThat(response.message()).isEqualTo(ApiResponses.SERVICE_NOT_AVAILABLE_MESSAGE);
+        assertThat(response.data()).isNull();
+    }
+
+    @Test
+    void requireServiceOrErrorReturnsErrorResponseWhenProviderEmpty() {
+        ObjectProvider<Object> provider = new SimpleObjectProvider<>(null);
+
+        ApiResponse<Object> response = ApiResponses.requireServiceOrError(provider, value -> "ignored");
+
+        assertThat(response.code()).isEqualTo(ApiResponses.SERVICE_NOT_AVAILABLE_ERROR_CODE);
+        assertThat(response.message()).isEqualTo(ApiResponses.SERVICE_NOT_AVAILABLE_MESSAGE);
+        assertThat(response.data()).isNull();
+    }
+
+    @Test
+    void requireServiceOrErrorWithVoidActionProducesEmptySuccess() throws Exception {
+        ObjectProvider<String> provider = new SimpleObjectProvider<>("port");
+
+        ApiResponse<Object> response = ApiResponses.requireServiceOrError(provider, value -> null);
+
+        assertThat(response.code()).isEqualTo(ApiResponse.SUCCESS_CODE);
+        assertThat(response.message()).isNull();
+        assertThat(response.data()).isNull();
+
+        JsonNode json = objectMapper.valueToTree(response);
+        assertThat(json.has("code")).isTrue();
+        assertThat(json.get("code").asText()).isEqualTo("0");
+        assertThat(json.has("message")).isFalse();
+        assertThat(json.has("data")).isFalse();
+    }
+
     private static final class SimpleObjectProvider<T> implements ObjectProvider<T> {
 
         private final T value;

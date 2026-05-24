@@ -44,6 +44,7 @@ import java.util.function.Function;
 public final class ApiResponses {
 
     public static final String SERVICE_NOT_AVAILABLE_MESSAGE = "Service not available";
+    public static final String SERVICE_NOT_AVAILABLE_ERROR_CODE = "1";
 
     private ApiResponses() {
     }
@@ -55,6 +56,21 @@ public final class ApiResponses {
         P port = provider.getIfAvailable();
         if (port == null) {
             throw new IllegalStateException(SERVICE_NOT_AVAILABLE_MESSAGE);
+        }
+        return ApiResponse.ok(action.apply(port));
+    }
+
+    /**
+     * 非抛错变体：port 不可用时直接返回 {@code {code:"1", message:"Service not available"}}，
+     * 保留历史 controller 返回错误响应（而非抛异常）的语义。
+     *
+     * <p>action 可返回 {@code null}（针对 void 端点），由 {@link ApiResponse} 的 NON_NULL
+     * 行为抑制 data 字段，最终输出 {@code {code:"0"}}。
+     */
+    public static <P, T> ApiResponse<T> requireServiceOrError(ObjectProvider<P> provider, Function<P, T> action) {
+        P port = provider == null ? null : provider.getIfAvailable();
+        if (port == null) {
+            return ApiResponse.error(SERVICE_NOT_AVAILABLE_ERROR_CODE, SERVICE_NOT_AVAILABLE_MESSAGE);
         }
         return ApiResponse.ok(action.apply(port));
     }
