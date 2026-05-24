@@ -71,7 +71,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -1369,13 +1368,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 generationId);
     }
 
-    private void markProfileSlotFragmentsObsolete(String userId,
-                                                  String tenantId,
-                                                  String profileSlot,
-                                                  String activeGenerationId) {
-        trackWriteService.markProfileSlotFragmentsObsolete(userId, tenantId, profileSlot, activeGenerationId);
-    }
-
     private Map<String, Object> captureMetadata(String operationId,
                                                 String tenantId,
                                                 MemoryWriteRequest request,
@@ -1428,22 +1420,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return command.tenantId();
         }
         return "default";
-    }
-
-    private MemoryContext emptyContext(MemoryLoadRequest request) {
-        return MemoryContext.builder()
-                .conversationId(request != null ? request.conversationId() : "")
-                .userId(request != null ? request.userId() : "")
-                .currentQuestion(request != null ? request.currentQuestion() : "")
-                .workingMemory(Collections.emptyList())
-                .correctionMemories(Collections.emptyList())
-                .profileMemories(Collections.emptyList())
-                .shortTermMemories(Collections.emptyList())
-                .businessDocumentMemories(Collections.emptyList())
-                .longTermMemories(Collections.emptyList())
-                .semanticMemories(Collections.emptyList())
-                .promptMessages(Collections.emptyList())
-                .build();
     }
 
     private int safeSize(List<?> list) {
