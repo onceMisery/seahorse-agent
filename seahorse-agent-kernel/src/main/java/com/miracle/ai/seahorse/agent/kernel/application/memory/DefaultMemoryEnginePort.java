@@ -171,6 +171,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryProfileValueNormalizer profileValueNormalizer;
     private final MemoryRefinementInputBuilder refinementInputBuilder;
     private final MemoryCanonicalAliasResolver canonicalAliasResolver;
+    private final MemoryRefinerMetadataWriter refinerMetadataWriter;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -542,6 +543,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.options.refinerStickyAnchorImportanceThreshold(),
                 this.options.refinerStickyAnchorConfidenceThreshold());
         this.canonicalAliasResolver = new MemoryCanonicalAliasResolver(this.memoryAliasPort);
+        this.refinerMetadataWriter = new MemoryRefinerMetadataWriter();
     }
 
     @Override
@@ -733,7 +735,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         String profileSlot = profileValueNormalizer.resolveSlot(decision, classification);
         String profileGenerationId = isBlank(profileSlot) ? "" : profileSlot + ":" + UUID.randomUUID();
         Map<String, Object> metadata = captureMetadata(operationId, tenantId, request, message, decision);
-        addRefinedMetadata(metadata, classification);
+        refinerMetadataWriter.appendRefined(metadata, classification);
         if (!isBlank(profileSlot)) {
             metadata.put("profileSlot", profileSlot);
             metadata.put("generationId", profileGenerationId);
@@ -741,7 +743,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         canonicalAliasResolver.attachIfResolved(metadata, request.userId(), tenantId, decision.content());
         MemoryLayer targetLayer = targetLayer(classification);
         MemoryRecord record = new MemoryRecord(
-                memoryId(request, classification),
+                refinerMetadataWriter.buildMemoryId(request, classification),
                 targetLayer.name(),
                 decision.type(),
                 decision.content(),
@@ -1442,63 +1444,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return metadata;
     }
 
-    private void addRefinedMetadata(Map<String, Object> metadata, MemoryClassificationResult classification) {
-        RefinedMemoryDelta delta = classification == null ? null : classification.refinedDelta();
-        if (delta == null || delta.action() == MemoryIngestionAction.IGNORE && isBlank(delta.reason())) {
-            return;
-        }
-        metadata.put("refinerStatus", refinerStatus(delta));
-        metadata.put("refinerAction", delta.action().name());
-        metadata.put("refinerReason", delta.reason());
-        metadata.put("targetKind", delta.targetKind());
-        metadata.put("targetKey", delta.targetKey());
-        for (Map.Entry<String, Object> entry : delta.metadata().entrySet()) {
-            if (METADATA_REFINER_BATCH.equals(entry.getKey())) {
-                continue;
-            }
-            metadata.putIfAbsent(entry.getKey(), entry.getValue());
-        }
-        if (classification != null && classification.decision() != null
-                && "llm_refiner_v1".equals(classification.decision().policyVersion())) {
-            metadata.put("capturePolicy", "llm_refiner");
-        }
-    }
-
-    private String refinerStatus(RefinedMemoryDelta delta) {
-        Object status = delta.metadata().get("status");
-        if (status != null && !status.toString().isBlank()) {
-            return status.toString();
-        }
-        if (delta.action() == MemoryIngestionAction.ADD) {
-            return "enabled";
-        }
-        return delta.reason().startsWith("failed_open") ? "failed_open" : "ignored";
-    }
-
-    private String memoryId(MemoryWriteRequest request, MemoryClassificationResult classification) {
-        String suffix = refinerOperationSuffix(classification);
-        if (!isBlank(request.messageId())) {
-            return "stm-" + request.messageId() + suffix;
-        }
-        return "stm-" + UUID.randomUUID() + suffix;
-    }
-
-    private String refinerOperationSuffix(MemoryClassificationResult classification) {
-        RefinedMemoryDelta delta = classification == null ? null : classification.refinedDelta();
-        if (delta == null) {
-            return "";
-        }
-        Object count = delta.metadata().get(METADATA_REFINER_OPERATION_COUNT);
-        if (!(count instanceof Number number) || number.intValue() <= 1) {
-            return "";
-        }
-        Object index = delta.metadata().get(METADATA_REFINER_OPERATION_INDEX);
-        if (!(index instanceof Number indexNumber)) {
-            return "";
-        }
-        return "-r" + indexNumber.intValue();
-    }
-
     private MemoryOperation buildOperation(String operationId,
                                            String tenantId,
                                            MemoryIngestionCommand command,
@@ -1660,7 +1605,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
     private Map<String, Object> decisionMap(MemoryIngestionResult result, MemoryClassificationResult classification) {
         Map<String, Object> values = new LinkedHashMap<>(decisionMap(result));
-        addRefinedMetadata(values, classification);
+        refinerMetadataWriter.appendRefined(values, classification);
         return values;
     }
 
