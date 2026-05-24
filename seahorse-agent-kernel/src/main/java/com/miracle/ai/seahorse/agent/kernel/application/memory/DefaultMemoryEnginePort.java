@@ -120,11 +120,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String METADATA_REFINER_OPERATION_INDEX = "refinerOperationIndex";
     private static final String METADATA_REFINER_OPERATION_COUNT = "refinerOperationCount";
     private static final String METADATA_REFINER_BATCH = "refinerBatch";
-    private static final String METADATA_REFINER_BATCH_OPERATION_COUNT = "refinerBatchOperationCount";
-    private static final String METADATA_REFINER_BATCH_DELETE_RATIO = "refinerBatchDeleteRatio";
-    private static final String METADATA_REFINER_BATCH_CIRCUIT_REASON = "refinerBatchCircuitReason";
-    private static final String METADATA_REFINER_BATCH_CIRCUIT_TYPE = "refinerBatchCircuitType";
-    private static final String METADATA_REFINER_BATCH_OPERATIONS = "refinerBatchOperations";
     private static final String METADATA_IMPORTANCE_SCORE = "importanceScore";
     private static final String METADATA_CONFIDENCE_LEVEL = "confidenceLevel";
     private static final String METADATA_CANONICAL_ENTITY_ID = "canonicalEntityId";
@@ -134,13 +129,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String METADATA_ALIAS_CONFIDENCE_LEVEL = "aliasConfidenceLevel";
     private static final String TARGET_KIND_PROFILE_SLOT = "PROFILE_SLOT";
     private static final String TARGET_KEY_IDENTITY_OCCUPATION = "identity.occupation";
-    private static final String REFINER_BATCH_CIRCUIT_BREAKER_REASON = "refiner_batch_circuit_breaker";
-    private static final String REFINER_STATUS_CIRCUIT_BREAKER = "circuit_breaker";
-    private static final String REFINER_BATCH_TARGET_KIND = "REFINER_BATCH";
-    private static final String REFINER_BATCH_CIRCUIT_OPERATION_COUNT = "OPERATION_COUNT";
-    private static final String REFINER_BATCH_CIRCUIT_DELETE_RATIO = "DELETE_RATIO";
-    private static final String REFINER_BATCH_REASON_OPERATION_COUNT_EXCEEDED = "operation_count_exceeded";
-    private static final String REFINER_BATCH_REASON_DELETE_RATIO_EXCEEDED = "delete_ratio_exceeded";
     private static final String REFINER_ADD_LOW_CONFIDENCE = MemoryReviewPolicyPort.REFINER_ADD_LOW_CONFIDENCE;
     private static final String REFINER_ADD_REVIEW_CONFIDENCE = MemoryReviewPolicyPort.REFINER_ADD_REVIEW_CONFIDENCE;
     private static final String REFINER_ADD_REVIEW_RISK = MemoryReviewPolicyPort.REFINER_ADD_REVIEW_RISK;
@@ -194,6 +182,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryDerivedIndexDispatchService derivedIndexDispatch;
     private final MemoryTrackWriteService trackWriteService;
     private final MemoryRefinementContextParser refinementContextParser;
+    private final MemoryRefinerBatchCircuitBreaker refinerBatchCircuitBreaker;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -552,6 +541,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 TARGET_KEY_IDENTITY_OCCUPATION);
         this.refinementContextParser = new MemoryRefinementContextParser(
                 this.options.refinerTargetZoneTurnCount());
+        this.refinerBatchCircuitBreaker = new MemoryRefinerBatchCircuitBreaker(
+                this.options.maxRefinerBatchOperations(),
+                this.options.maxRefinerDeleteRatio());
     }
 
     @Override
@@ -1146,7 +1138,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     "unsupported_refined_operation",
                     Map.of("status", "unsupported"));
         }
-        MemoryClassificationResult circuitBreaker = circuitBreakUnsafeBatch(result, classifications);
+        MemoryClassificationResult circuitBreaker = refinerBatchCircuitBreaker.evaluate(result, classifications);
         if (circuitBreaker != null) {
             return circuitBreaker;
         }
@@ -1163,95 +1155,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                         "status", "batch",
                         METADATA_REFINER_BATCH, classifications,
                         METADATA_REFINER_OPERATION_COUNT, classifications.size()));
-    }
-
-    private MemoryClassificationResult circuitBreakUnsafeBatch(MemoryRefinementResult result,
-                                                               List<MemoryClassificationResult> classifications) {
-        int operationCount = classifications.size();
-        if (operationCount > options.maxRefinerBatchOperations()) {
-            return circuitBrokenBatchClassification(
-                    result,
-                    classifications,
-                    REFINER_BATCH_CIRCUIT_OPERATION_COUNT,
-                    REFINER_BATCH_REASON_OPERATION_COUNT_EXCEEDED);
-        }
-        double deleteRatio = refinerBatchDeleteRatio(classifications);
-        if (operationCount > 1 && deleteRatio > options.maxRefinerDeleteRatio()) {
-            return circuitBrokenBatchClassification(
-                    result,
-                    classifications,
-                    REFINER_BATCH_CIRCUIT_DELETE_RATIO,
-                    REFINER_BATCH_REASON_DELETE_RATIO_EXCEEDED);
-        }
-        return null;
-    }
-
-    private MemoryClassificationResult circuitBrokenBatchClassification(MemoryRefinementResult result,
-                                                                        List<MemoryClassificationResult> classifications,
-                                                                        String circuitType,
-                                                                        String circuitReason) {
-        Map<String, Object> metadata = new LinkedHashMap<>(result.metadata());
-        metadata.put("status", REFINER_STATUS_CIRCUIT_BREAKER);
-        metadata.put(METADATA_REFINER_BATCH_OPERATION_COUNT, classifications.size());
-        metadata.put(METADATA_REFINER_BATCH_DELETE_RATIO, refinerBatchDeleteRatio(classifications));
-        metadata.put(METADATA_REFINER_BATCH_CIRCUIT_TYPE, circuitType);
-        metadata.put(METADATA_REFINER_BATCH_CIRCUIT_REASON, circuitReason);
-        metadata.put("maxRefinerBatchOperations", options.maxRefinerBatchOperations());
-        metadata.put("maxRefinerDeleteRatio", options.maxRefinerDeleteRatio());
-        metadata.put(METADATA_REFINER_BATCH_OPERATIONS, refinerBatchOperationSummaries(classifications));
-        return new MemoryClassificationResult(
-                MemoryIngestionAction.REVIEW,
-                null,
-                null,
-                new RefinedMemoryDelta(
-                        MemoryIngestionAction.REVIEW,
-                        REFINER_BATCH_TARGET_KIND,
-                        "",
-                        REFINER_BATCH_CIRCUIT_BREAKER_REASON,
-                        metadata),
-                REFINER_BATCH_CIRCUIT_BREAKER_REASON);
-    }
-
-    private double refinerBatchDeleteRatio(List<MemoryClassificationResult> classifications) {
-        if (classifications == null || classifications.isEmpty()) {
-            return 0D;
-        }
-        int deleteCount = 0;
-        for (MemoryClassificationResult classification : classifications) {
-            RefinedMemoryDelta delta = classification.refinedDelta();
-            if (delta != null && delta.action() == MemoryIngestionAction.DELETE) {
-                deleteCount++;
-            }
-        }
-        return (double) deleteCount / classifications.size();
-    }
-
-    private List<Map<String, Object>> refinerBatchOperationSummaries(List<MemoryClassificationResult> classifications) {
-        List<Map<String, Object>> summaries = new ArrayList<>();
-        for (MemoryClassificationResult classification : classifications) {
-            RefinedMemoryDelta delta = classification.refinedDelta();
-            if (delta == null) {
-                continue;
-            }
-            Map<String, Object> summary = new LinkedHashMap<>();
-            summary.put("action", delta.action().name());
-            summary.put("targetKind", delta.targetKind());
-            summary.put("targetKey", delta.targetKey());
-            summary.put("content", refinerOperationContent(classification));
-            summaries.add(summary);
-        }
-        return summaries;
-    }
-
-    private String refinerOperationContent(MemoryClassificationResult classification) {
-        if (classification.decision() != null) {
-            return classification.decision().content();
-        }
-        RefinedMemoryDelta delta = classification.refinedDelta();
-        if (delta == null) {
-            return "";
-        }
-        return stringMetadata(delta.metadata(), METADATA_CONTENT, "");
     }
 
     private RefinedMemoryOperation firstSupportedOperation(List<RefinedMemoryOperation> operations) {
