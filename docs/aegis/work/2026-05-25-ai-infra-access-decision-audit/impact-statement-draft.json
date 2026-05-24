@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "kernel",
+    "jdbc",
+    "web",
+    "spring-starter"
+  ],
+  "owners": [
+    "ResourceAccessPolicyPort remains the policy extension point; AccessDecisionLogPort and AccessDecisionQueryPort own persistence contracts."
+  ],
+  "invariants": [
+    "Kernel depends on ports and domain types only; JDBC/Web/Spring remain adapters; access query requires admin role."
+  ],
+  "compatBoundary": "Custom ResourceAccessPolicyPort beans still override the default audited wrapper; no full ACL storage management API is introduced.",
+  "nonGoals": [
+    "No POST /api/resources/{type}/{id}/acl.",
+    "No remote Agent mesh, workflow engine, or complex JSON ACL model.",
+    "No RAG/Memory pipeline rewrite."
+  ]
+}

@@ -21,10 +21,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.AccessDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.AccessDecisionEffect;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.AccessSubjectType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItemSourceType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextResourceType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAccessReasonCodes;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAction;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentStatus;
@@ -58,9 +64,11 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentVersionPublishComm
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalModifyCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogPage;
@@ -349,6 +357,54 @@ class SeahorseAgentControllerTests {
     }
 
     @Test
+    void shouldExposeAccessDecisionQueryApi() throws Exception {
+        AccessDecisionQueryInboundPort port = mock(AccessDecisionQueryInboundPort.class);
+        when(port.page(
+                        "tenant-a",
+                        AccessSubjectType.USER_DELEGATED_AGENT,
+                        "user-1",
+                        ResourceAction.READ,
+                        ContextResourceType.MEMORY.value(),
+                        "memory-1",
+                        AccessDecisionEffect.ALLOW,
+                        ResourceAccessReasonCodes.OWNER_MATCH,
+                        2L,
+                        20L))
+                .thenReturn(new AccessDecisionPage(List.of(accessDecision()), 1L, 20L, 2L, 1L));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseAccessDecisionController(provider(AccessDecisionQueryInboundPort.class, port))).build();
+
+        mvc.perform(get("/api/access-decisions")
+                        .param("tenantId", "tenant-a")
+                        .param("subjectType", "USER_DELEGATED_AGENT")
+                        .param("subjectId", "user-1")
+                        .param("action", "READ")
+                        .param("resourceType", "MEMORY")
+                        .param("resourceId", "memory-1")
+                        .param("effect", "ALLOW")
+                        .param("reasonCode", ResourceAccessReasonCodes.OWNER_MATCH)
+                        .param("current", "2")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.records[0].decisionId").value("decision-1"))
+                .andExpect(jsonPath("$.data.records[0].effect").value("ALLOW"));
+
+        verify(port).page(
+                "tenant-a",
+                AccessSubjectType.USER_DELEGATED_AGENT,
+                "user-1",
+                ResourceAction.READ,
+                ContextResourceType.MEMORY.value(),
+                "memory-1",
+                AccessDecisionEffect.ALLOW,
+                ResourceAccessReasonCodes.OWNER_MATCH,
+                2L,
+                20L);
+    }
+
+    @Test
     void shouldExposeApprovalManagementApi() throws Exception {
         ApprovalManagementInboundPort port = mock(ApprovalManagementInboundPort.class);
         when(port.page("tenant-a", ApprovalRequestStatus.PENDING, 2L, 20L))
@@ -527,6 +583,20 @@ class SeahorseAgentControllerTests {
                 null,
                 NOW,
                 NOW.plusSeconds(1));
+    }
+
+    private static AccessDecision accessDecision() {
+        return new AccessDecision(
+                "decision-1",
+                "tenant-a",
+                AccessSubjectType.USER_DELEGATED_AGENT,
+                "user-1",
+                ResourceAction.READ,
+                ContextResourceType.MEMORY.value(),
+                "memory-1",
+                AccessDecisionEffect.ALLOW,
+                ResourceAccessReasonCodes.OWNER_MATCH,
+                NOW);
     }
 
     private static ApprovalRequest approval(ApprovalRequestStatus status) {

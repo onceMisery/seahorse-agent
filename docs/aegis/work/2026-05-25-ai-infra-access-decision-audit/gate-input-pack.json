@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "baselineRefs": [
+    "docs/company-agent/ai-infra-phases/04-context-db-resource-acl.md"
+  ],
+  "impactStatement": "docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/impact-statement-draft.json",
+  "compatPlan": "Custom ResourceAccessPolicyPort beans still override the default audited wrapper; no full ACL storage management API is introduced.",
+  "retirementPlan": "Default deny-all runtime fallback is no longer the normal Spring default when an AccessDecisionLogPort is available; full ACL mutation remains deferred.",
+  "evidenceBundle": [
+    "docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/evidence-bundle-draft-focused-regression.json"
+  ]
+}
