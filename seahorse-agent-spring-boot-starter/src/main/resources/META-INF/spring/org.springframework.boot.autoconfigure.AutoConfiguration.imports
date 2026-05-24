@@ -35,6 +35,7 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelKeywordAutoConf
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelKnowledgeAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelMemoryAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMemoryAggregationAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMemoryMaintenanceAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMemoryOutboxAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelChatAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelMetadataAutoConfiguration
