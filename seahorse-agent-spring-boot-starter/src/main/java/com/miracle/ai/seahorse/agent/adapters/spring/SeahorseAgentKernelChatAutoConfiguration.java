@@ -32,6 +32,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.Memor
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
@@ -154,6 +155,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
     public KernelChatPipeline seahorseKernelChatPipeline(ChatPreparationPorts preparationPorts,
                                                          ChatResponsePorts responsePorts,
                                                          ObjectProvider<KernelRagTraceRecorder> traceRecorder,
+                                                         ObjectProvider<ContextPackBuilderInboundPort> contextPackBuilder,
                                                          org.springframework.core.env.Environment environment) {
         String configured = environment.getProperty(
                 "seahorse-agent.chat.empty-retrieval-fallback", "generic");
@@ -163,7 +165,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                         : KernelChatPipeline.EmptyRetrievalStrategy.FALLBACK_GENERIC;
         return new KernelChatPipeline(preparationPorts, responsePorts,
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
-                strategy);
+                strategy,
+                Optional.ofNullable(contextPackBuilder.getIfAvailable()));
     }
 
     @Bean
@@ -175,12 +178,14 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    ObjectProvider<KernelRagTraceRecorder> traceRecorder,
                                                    ObjectProvider<ConversationMemoryPort> memoryPort,
                                                    ObjectProvider<MemoryEnginePort> memoryEnginePort,
-                                                   ObjectProvider<AgentRunInboundPort> agentRunPort) {
+                                                   ObjectProvider<AgentRunInboundPort> agentRunPort,
+                                                   ObjectProvider<ContextPackBuilderInboundPort> contextPackBuilder) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
                 Optional.ofNullable(agentLoop.getIfAvailable()),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
                 memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
-                Optional.ofNullable(agentRunPort.getIfAvailable()));
+                Optional.ofNullable(agentRunPort.getIfAvailable()),
+                Optional.ofNullable(contextPackBuilder.getIfAvailable()));
     }
 }

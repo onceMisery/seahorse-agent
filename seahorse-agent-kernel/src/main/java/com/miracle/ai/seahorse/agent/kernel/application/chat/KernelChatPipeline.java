@@ -18,12 +18,15 @@
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamChatContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * L1 问答主链路内核编排器。
@@ -53,6 +56,7 @@ public class KernelChatPipeline {
     private final KernelChatPreparationSupport preparationSupport;
     private final KernelChatResponseSupport responseSupport;
     private final EmptyRetrievalStrategy emptyRetrievalStrategy;
+    private final ContextPackRuntimeAssembler contextPackAssembler;
 
     public KernelChatPipeline(ChatPreparationPorts preparationPorts, ChatResponsePorts responsePorts) {
         this(preparationPorts, responsePorts, KernelRagTraceRecorder.noop(), DEFAULT_EMPTY_RETRIEVAL_STRATEGY);
@@ -68,12 +72,22 @@ public class KernelChatPipeline {
                               ChatResponsePorts responsePorts,
                               KernelRagTraceRecorder traceRecorder,
                               EmptyRetrievalStrategy emptyRetrievalStrategy) {
-        ChatPreparationPorts safePreparationPorts = Objects.requireNonNull(preparationPorts, "问答前置端口集合不能为空");
-        ChatResponsePorts safeResponsePorts = Objects.requireNonNull(responsePorts, "问答响应端口集合不能为空");
+        this(preparationPorts, responsePorts, traceRecorder, emptyRetrievalStrategy, Optional.empty());
+    }
+
+    public KernelChatPipeline(ChatPreparationPorts preparationPorts,
+                              ChatResponsePorts responsePorts,
+                              KernelRagTraceRecorder traceRecorder,
+                              EmptyRetrievalStrategy emptyRetrievalStrategy,
+                              Optional<ContextPackBuilderInboundPort> contextPackBuilder) {
+        ChatPreparationPorts safePreparationPorts = Objects.requireNonNull(preparationPorts,
+                "preparationPorts must not be null");
+        ChatResponsePorts safeResponsePorts = Objects.requireNonNull(responsePorts, "responsePorts must not be null");
         this.traceRecorder = Objects.requireNonNull(traceRecorder, "traceRecorder must not be null");
         this.preparationSupport = new KernelChatPreparationSupport(safePreparationPorts);
         this.responseSupport = new KernelChatResponseSupport(safePreparationPorts, safeResponsePorts);
         this.emptyRetrievalStrategy = Objects.requireNonNullElse(emptyRetrievalStrategy, DEFAULT_EMPTY_RETRIEVAL_STRATEGY);
+        this.contextPackAssembler = new ContextPackRuntimeAssembler(contextPackBuilder);
     }
 
     /**
@@ -106,6 +120,13 @@ public class KernelChatPipeline {
 
         RetrievalContext retrievalContext = traceRecorder.recordNode(traceRunScope, stage("retrieval", "retrieve"),
                 () -> preparationSupport.retrieve(safeContext));
+        ContextPack contextPack = contextPackAssembler.assembleForRag(
+                safeContext,
+                retrievalContext,
+                preparationSupport.requireRewriteResult(safeContext));
+        if (contextPack != null) {
+            safeContext.setContextPack(contextPack);
+        }
         if (handleEmptyRetrieval(safeContext, retrievalContext)) {
             return;
         }

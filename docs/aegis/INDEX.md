@@ -79,3 +79,8 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-runtime/90-evidence.md | AI Infra ContextPack runtime evidence |
 | 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-runtime/99-reflection.md | AI Infra ContextPack runtime reflection |
 | 2026-05-24 | spec | docs/aegis/specs/2026-05-24-design-alignment-next-development.md | Design alignment next development guidance spec |
+| 2026-05-24 | plan | docs/aegis/plans/2026-05-24-ai-infra-contextpack-producer.md | AI Infra ContextPack producer plan |
+| 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-producer/10-intent.md | AI Infra ContextPack producer intent |
+| 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-producer/20-checkpoint.md | AI Infra ContextPack producer checkpoint |
+| 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-producer/90-evidence.md | AI Infra ContextPack producer evidence |
+| 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-producer/99-reflection.md | AI Infra ContextPack producer reflection |
