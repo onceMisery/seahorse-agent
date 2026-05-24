@@ -59,7 +59,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyDec
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryVectorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFactUpdate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileMemoryPort;
@@ -126,9 +125,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
     }
 
-    private final ShortTermMemoryPort shortTermPort;
-    private final LongTermMemoryPort longTermPort;
-    private final SemanticMemoryPort semanticPort;
+    private final MemoryLayerStoreRegistry stores;
     private final ProfileMemoryPort profileMemoryPort;
     private final CorrectionLedgerPort correctionLedgerPort;
     private final MemoryRouterPort memoryRouterPort;
@@ -461,9 +458,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                    MemoryReviewPolicyPort memoryReviewPolicyPort,
                                    MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort,
                                    MemoryCaptureRules captureRules) {
-        this.shortTermPort = Objects.requireNonNull(shortTermPort, "shortTermPort must not be null");
-        this.longTermPort = Objects.requireNonNull(longTermPort, "longTermPort must not be null");
-        this.semanticPort = Objects.requireNonNull(semanticPort, "semanticPort must not be null");
+        this.stores = new MemoryLayerStoreRegistry(shortTermPort, longTermPort, semanticPort);
         this.profileMemoryPort = Objects.requireNonNull(profileMemoryPort, "profileMemoryPort must not be null");
         this.correctionLedgerPort = Objects.requireNonNull(correctionLedgerPort, "correctionLedgerPort must not be null");
         this.memoryRouterPort = Objects.requireNonNull(memoryRouterPort, "memoryRouterPort must not be null");
@@ -480,9 +475,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 MemoryPolicyConfigPort::defaults);
         this.memoryRetrievalPipelinePort = memoryRetrievalPipelinePort == null
                 ? new DefaultMemoryRetrievalPipeline(
-                this.shortTermPort,
-                this.longTermPort,
-                this.semanticPort,
+                this.stores.shortTerm(),
+                this.stores.longTerm(),
+                this.stores.semantic(),
                 this.objectMapper,
                 this.options,
                 this.profileMemoryPort,
@@ -527,9 +522,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.options.maxRefinerDeleteRatio());
         this.profileValueNormalizer = new MemoryProfileValueNormalizer(this.profileSlotResolver);
         this.refinementInputBuilder = new MemoryRefinementInputBuilder(
-                this.shortTermPort,
-                this.longTermPort,
-                this.semanticPort,
+                this.stores.shortTerm(),
+                this.stores.longTerm(),
+                this.stores.semantic(),
                 this.options.refinerReadMaskPerLayerLimit(),
                 this.options.refinerStickyAnchorLimit(),
                 this.options.refinerStickyAnchorImportanceThreshold(),
@@ -616,9 +611,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         if (isBlank(userId)) {
             return MemoryQualityReport.builder().build();
         }
-        int shortTermCount = safeSize(shortTermPort.listByUser(userId, Integer.MAX_VALUE));
-        int longTermCount = safeSize(longTermPort.listByUser(userId, Integer.MAX_VALUE));
-        int semanticCount = safeSize(semanticPort.listByUser(userId, Integer.MAX_VALUE));
+        int shortTermCount = safeSize(stores.shortTerm().listByUser(userId, Integer.MAX_VALUE));
+        int longTermCount = safeSize(stores.longTerm().listByUser(userId, Integer.MAX_VALUE));
+        int semanticCount = safeSize(stores.semantic().listByUser(userId, Integer.MAX_VALUE));
         return MemoryQualityReport.builder()
                 .userId(userId)
                 .shortTermCount(shortTermCount)
@@ -708,7 +703,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                             METADATA_TARGET_LAYER, layer.name())),
                     null);
         }
-        boolean deleted = memoryStoreFor(layer).deleteById(targetMemoryId);
+        boolean deleted = stores.storeFor(layer).deleteById(targetMemoryId);
         if (!deleted) {
             return new IngestionExecution(MemoryIngestionResult.rejected(
                     "review_delete_target_not_found",
@@ -874,27 +869,12 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
     private String saveMemory(MemoryRecord record, MemoryLayer targetLayer) {
         MemoryLayer safeLayer = targetLayer == null ? MemoryLayer.SHORT_TERM : targetLayer;
-        if (safeLayer == MemoryLayer.LONG_TERM) {
-            longTermPort.save(record);
-            return "LONG_TERM_SAVE";
-        }
-        if (safeLayer == MemoryLayer.SEMANTIC) {
-            semanticPort.save(record);
-            return "SEMANTIC_SAVE";
-        }
-        shortTermPort.save(record);
-        return "SHORT_TERM_SAVE";
-    }
-
-    private MemoryStorePort memoryStoreFor(MemoryLayer targetLayer) {
-        MemoryLayer safeLayer = targetLayer == null ? MemoryLayer.SHORT_TERM : targetLayer;
-        if (safeLayer == MemoryLayer.LONG_TERM) {
-            return longTermPort;
-        }
-        if (safeLayer == MemoryLayer.SEMANTIC) {
-            return semanticPort;
-        }
-        return shortTermPort;
+        stores.storeFor(safeLayer).save(record);
+        return switch (safeLayer) {
+            case LONG_TERM -> "LONG_TERM_SAVE";
+            case SEMANTIC -> "SEMANTIC_SAVE";
+            case WORKING, SHORT_TERM -> "SHORT_TERM_SAVE";
+        };
     }
 
     private MemoryLayer targetLayer(MemoryClassificationResult classification) {
