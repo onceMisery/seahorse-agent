@@ -36,10 +36,6 @@ import java.util.Objects;
 public class SeahorseMemoryReviewController {
 
     private static final String HEADER_USER_ID = "X-User-Id";
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
-    private static final String ERROR_CODE = "1";
     private static final String DEFAULT_OPERATOR = "system";
 
     private final ObjectProvider<MemoryReviewInboundPort> reviewPortProvider;
@@ -49,111 +45,81 @@ public class SeahorseMemoryReviewController {
     }
 
     @GetMapping("/memory-review/items")
-    public Map<String, Object> page(@RequestParam(defaultValue = "default") String tenantId,
+    public ApiResponse<Object> page(@RequestParam(defaultValue = "default") String tenantId,
                                     @RequestParam(required = false) String userId,
                                     @RequestParam(required = false) String status,
                                     @RequestParam(required = false) String targetKind,
                                     @RequestParam(required = false) String targetKey,
                                     @RequestParam(defaultValue = "1") long current,
                                     @RequestParam(defaultValue = "10") long size) {
-        MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
-        if (port == null) {
-            return unavailable();
-        }
-        return ok(port.page(tenantId, userId, reviewStatus(status), targetKind, targetKey, current, size));
+        return ApiResponses.requireServiceOrError(reviewPortProvider,
+                port -> port.page(tenantId, userId, reviewStatus(status), targetKind, targetKey, current, size));
     }
 
     @GetMapping("/memory-review/pending-summary")
-    public Map<String, Object> pendingSummary(@RequestParam(defaultValue = "default") String tenantId,
+    public ApiResponse<Object> pendingSummary(@RequestParam(defaultValue = "default") String tenantId,
                                               @RequestParam(required = false) String userId,
                                               @RequestParam(required = false) String targetKind,
                                               @RequestParam(required = false) String targetKey) {
-        MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
-        if (port == null) {
-            return unavailable();
-        }
-        return ok(port.pendingSummary(tenantId, userId, targetKind, targetKey));
+        return ApiResponses.requireServiceOrError(reviewPortProvider,
+                port -> port.pendingSummary(tenantId, userId, targetKind, targetKey));
     }
 
     @GetMapping("/memory-review/items/{item-id}")
-    public Map<String, Object> queryById(@PathVariable("item-id") String itemId) {
-        MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
-        if (port == null) {
-            return unavailable();
-        }
-        return ok(port.queryById(itemId));
+    public ApiResponse<Object> queryById(@PathVariable("item-id") String itemId) {
+        return ApiResponses.requireServiceOrError(reviewPortProvider, port -> port.queryById(itemId));
     }
 
     @GetMapping("/memory-review/items/{item-id}/feedback-samples")
-    public Map<String, Object> feedbackSamples(@PathVariable("item-id") String itemId,
+    public ApiResponse<Object> feedbackSamples(@PathVariable("item-id") String itemId,
                                                @RequestParam(defaultValue = "20") int limit) {
-        MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
-        if (port == null) {
-            return unavailable();
-        }
-        return ok(port.listFeedbackSamples(itemId, limit));
+        return ApiResponses.requireServiceOrError(reviewPortProvider, port -> port.listFeedbackSamples(itemId, limit));
     }
 
     @GetMapping("/memory-review/feedback-samples")
-    public Map<String, Object> feedbackSamples(@RequestParam(defaultValue = "default") String tenantId,
+    public ApiResponse<Object> feedbackSamples(@RequestParam(defaultValue = "default") String tenantId,
                                                @RequestParam(required = false) String userId,
                                                @RequestParam(required = false) String status,
                                                @RequestParam(required = false) String targetKind,
                                                @RequestParam(required = false) String targetKey,
                                                @RequestParam(defaultValue = "100") int limit) {
-        MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
-        if (port == null) {
-            return unavailable();
-        }
-        return ok(port.listFeedbackSamples(tenantId, userId, reviewStatus(status), targetKind, targetKey, limit));
+        return ApiResponses.requireServiceOrError(reviewPortProvider, port -> port.listFeedbackSamples(
+                tenantId, userId, reviewStatus(status), targetKind, targetKey, limit));
     }
 
     @GetMapping("/memory-review/feedback-samples/export")
-    public Map<String, Object> exportFeedbackSamples(@RequestParam(defaultValue = "default") String tenantId,
+    public ApiResponse<Object> exportFeedbackSamples(@RequestParam(defaultValue = "default") String tenantId,
                                                      @RequestParam(required = false) String userId,
                                                      @RequestParam(required = false) String status,
                                                      @RequestParam(required = false) String targetKind,
                                                      @RequestParam(required = false) String targetKey,
                                                      @RequestParam(defaultValue = "100") int limit) {
-        MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
-        if (port == null) {
-            return unavailable();
-        }
-        return ok(port.exportRefinerFeedbackSamples(
+        return ApiResponses.requireServiceOrError(reviewPortProvider, port -> port.exportRefinerFeedbackSamples(
                 tenantId, userId, reviewStatus(status), targetKind, targetKey, limit));
     }
 
     @PostMapping("/memory-review/items/{item-id}/approve")
-    public Map<String, Object> approve(@PathVariable("item-id") String itemId,
+    public ApiResponse<Object> approve(@PathVariable("item-id") String itemId,
                                        @RequestBody(required = false) MemoryReviewDecisionRequest request,
                                        @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
-        if (port == null) {
-            return unavailable();
-        }
-        return ok(port.approve(itemId, toCommand(request, userId)));
+        return ApiResponses.requireServiceOrError(reviewPortProvider,
+                port -> port.approve(itemId, toCommand(request, userId)));
     }
 
     @PostMapping("/memory-review/items/{item-id}/modify")
-    public Map<String, Object> modify(@PathVariable("item-id") String itemId,
+    public ApiResponse<Object> modify(@PathVariable("item-id") String itemId,
                                       @RequestBody(required = false) MemoryReviewDecisionRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
-        if (port == null) {
-            return unavailable();
-        }
-        return ok(port.modify(itemId, toCommand(request, userId)));
+        return ApiResponses.requireServiceOrError(reviewPortProvider,
+                port -> port.modify(itemId, toCommand(request, userId)));
     }
 
     @PostMapping("/memory-review/items/{item-id}/reject")
-    public Map<String, Object> reject(@PathVariable("item-id") String itemId,
+    public ApiResponse<Object> reject(@PathVariable("item-id") String itemId,
                                       @RequestBody(required = false) MemoryReviewDecisionRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        MemoryReviewInboundPort port = reviewPortProvider.getIfAvailable();
-        if (port == null) {
-            return unavailable();
-        }
-        return ok(port.reject(itemId, toCommand(request, userId)));
+        return ApiResponses.requireServiceOrError(reviewPortProvider,
+                port -> port.reject(itemId, toCommand(request, userId)));
     }
 
     private MemoryReviewDecisionCommand toCommand(MemoryReviewDecisionRequest request, String userId) {
@@ -170,14 +136,6 @@ public class SeahorseMemoryReviewController {
             return null;
         }
         return MemoryReviewStatus.valueOf(status.trim().toUpperCase());
-    }
-
-    private Map<String, Object> ok(Object data) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, data == null ? Map.of() : data);
-    }
-
-    private Map<String, Object> unavailable() {
-        return Map.of(KEY_CODE, ERROR_CODE, "message", "Service not available");
     }
 
     private String operator(String userId) {

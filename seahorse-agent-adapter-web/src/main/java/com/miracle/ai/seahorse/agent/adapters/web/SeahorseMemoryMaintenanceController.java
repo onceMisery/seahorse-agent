@@ -27,14 +27,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 @RestController
 public class SeahorseMemoryMaintenanceController {
 
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
     private static final String DEFAULT_AGGREGATE_LIMIT = MemoryMaintenanceRunAggregate.DEFAULT_LIMIT_LITERAL;
 
     private final ObjectProvider<MemoryMaintenanceInboundPort> maintenancePortProvider;
@@ -44,41 +39,27 @@ public class SeahorseMemoryMaintenanceController {
     }
 
     @PostMapping("/memories/maintenance/run")
-    public Map<String, Object> runMaintenance(
+    public ApiResponse<Object> runMaintenance(
             @RequestParam(defaultValue = MemoryMaintenanceRunCommand.DEFAULT_REASON) String reason,
             @RequestParam(defaultValue = "false") boolean compaction,
             @RequestParam(defaultValue = "false") boolean alias,
             @RequestParam(defaultValue = "true") boolean gc) {
-        MemoryMaintenanceInboundPort maintenancePort = maintenancePortProvider.getIfAvailable();
-        if (maintenancePort == null) {
-            return Map.of(KEY_CODE, "1", "message", "Service not available");
-        }
-        return ok(maintenancePort.runMaintenance(new MemoryMaintenanceRunCommand(reason, compaction, alias, gc)));
+        return ApiResponses.requireServiceOrError(maintenancePortProvider,
+                port -> port.runMaintenance(new MemoryMaintenanceRunCommand(reason, compaction, alias, gc)));
     }
 
     @GetMapping("/memories/maintenance-runs")
-    public Map<String, Object> pageMaintenanceRuns(
+    public ApiResponse<Object> pageMaintenanceRuns(
             @RequestParam(defaultValue = "") String status,
             @RequestParam(defaultValue = "1") long current,
             @RequestParam(defaultValue = "10") long size) {
-        MemoryMaintenanceInboundPort maintenancePort = maintenancePortProvider.getIfAvailable();
-        if (maintenancePort == null) {
-            return Map.of(KEY_CODE, "1", "message", "Service not available");
-        }
-        return ok(maintenancePort.pageMaintenanceRuns(new MemoryMaintenanceRunQuery(status, current, size)));
+        return ApiResponses.requireServiceOrError(maintenancePortProvider,
+                port -> port.pageMaintenanceRuns(new MemoryMaintenanceRunQuery(status, current, size)));
     }
 
     @GetMapping("/memories/maintenance-runs/aggregate")
-    public Map<String, Object> aggregateMaintenanceRuns(
+    public ApiResponse<Object> aggregateMaintenanceRuns(
             @RequestParam(defaultValue = DEFAULT_AGGREGATE_LIMIT) int limit) {
-        MemoryMaintenanceInboundPort maintenancePort = maintenancePortProvider.getIfAvailable();
-        if (maintenancePort == null) {
-            return Map.of(KEY_CODE, "1", "message", "Service not available");
-        }
-        return ok(maintenancePort.aggregateRecent(limit));
-    }
-
-    private Map<String, Object> ok(Object data) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, data == null ? Map.of() : data);
+        return ApiResponses.requireServiceOrError(maintenancePortProvider, port -> port.aggregateRecent(limit));
     }
 }
