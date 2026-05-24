@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunLeaseService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.approval.KernelApprovalManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.context.DefaultResourceAccessPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackBuilderService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
@@ -119,8 +120,8 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(ResourceAccessPolicyPort.class)
-    public ResourceAccessPolicyPort seahorseResourceAccessPolicyPort() {
-        return ResourceAccessPolicyPort.denyAll();
+    public DefaultResourceAccessPolicyPort seahorseResourceAccessPolicyPort(ObjectProvider<Clock> clockProvider) {
+        return new DefaultResourceAccessPolicyPort(clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean

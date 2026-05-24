@@ -111,11 +111,54 @@ class KernelContextPackBuilderServiceTests {
         assertTrue(usedTokens <= 130);
     }
 
+    @Test
+    void shouldUseDefaultPolicyToKeepOwnInputMemoryAndPublicDocuments() {
+        RecordingContextPackRepository repository = new RecordingContextPackRepository();
+        ContextPackBuilderInboundPort service = new KernelContextPackBuilderService(
+                new DefaultResourceAccessPolicyPort(FIXED_CLOCK),
+                repository,
+                FIXED_CLOCK);
+
+        ContextPack pack = service.build(new ContextBuildRequest(
+                "run-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "answer customer question",
+                300,
+                List.of(
+                        candidate("input-1", ContextItemSourceType.USER_INPUT, ContextSensitivity.INTERNAL, 0.95,
+                                20, "USER_INPUT", "user-1", "{}"),
+                        candidate("memory-1", ContextItemSourceType.MEMORY, ContextSensitivity.CONFIDENTIAL, 0.90,
+                                40, "MEMORY", "user-1", "{}"),
+                        candidate("memory-2", ContextItemSourceType.MEMORY, ContextSensitivity.CONFIDENTIAL, 0.89,
+                                40, "MEMORY", "user-2", "{}"),
+                        candidate("doc-1", ContextItemSourceType.RAG_CHUNK, ContextSensitivity.INTERNAL, 0.80,
+                                40, "DOCUMENT", "user-2", "{\"visibility\":\"public\"}"),
+                        candidate("doc-2", ContextItemSourceType.RAG_CHUNK, ContextSensitivity.INTERNAL, 0.79,
+                                40, "DOCUMENT", "user-2", "{}"))));
+
+        assertEquals(List.of("input-1", "memory-1", "doc-1"),
+                pack.items().stream().map(ContextItem::sourceId).toList());
+    }
+
     private static ContextBuildItemCandidate candidate(String sourceId,
                                                        ContextItemSourceType sourceType,
                                                        ContextSensitivity sensitivity,
                                                        double score,
                                                        int estimatedTokens) {
+        return candidate(sourceId, sourceType, sensitivity, score, estimatedTokens, "DOCUMENT", "user-1", "{}");
+    }
+
+    private static ContextBuildItemCandidate candidate(String sourceId,
+                                                       ContextItemSourceType sourceType,
+                                                       ContextSensitivity sensitivity,
+                                                       double score,
+                                                       int estimatedTokens,
+                                                       String resourceType,
+                                                       String ownerUserId,
+                                                       String attributesJson) {
         return new ContextBuildItemCandidate(
                 sourceType,
                 sourceId,
@@ -124,7 +167,7 @@ class KernelContextPackBuilderServiceTests {
                 score,
                 0.88,
                 sensitivity,
-                new ResourceRef("DOCUMENT", sourceId, "tenant-1", "user-1", "{}"),
+                new ResourceRef(resourceType, sourceId, "tenant-1", ownerUserId, attributesJson),
                 "{\"sourceId\":\"" + sourceId + "\"}",
                 estimatedTokens,
                 null);
