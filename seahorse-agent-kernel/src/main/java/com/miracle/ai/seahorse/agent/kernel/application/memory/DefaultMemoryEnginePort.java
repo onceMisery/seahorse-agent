@@ -30,7 +30,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBusinessDocumentRetrieverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
@@ -75,17 +74,12 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * 默认记忆引擎端口实现。
@@ -120,11 +114,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String METADATA_REFINER_OPERATION_INDEX = "refinerOperationIndex";
     private static final String METADATA_REFINER_OPERATION_COUNT = "refinerOperationCount";
     private static final String METADATA_REFINER_BATCH = "refinerBatch";
-    private static final String METADATA_CANONICAL_ENTITY_ID = "canonicalEntityId";
-    private static final String METADATA_CANONICAL_NAME = "canonicalName";
-    private static final String METADATA_CANONICAL_ENTITY_TYPE = "canonicalEntityType";
-    private static final String METADATA_ALIAS_TEXT = "aliasText";
-    private static final String METADATA_ALIAS_CONFIDENCE_LEVEL = "aliasConfidenceLevel";
     private static final String TARGET_KIND_PROFILE_SLOT = "PROFILE_SLOT";
     private static final String TARGET_KEY_IDENTITY_OCCUPATION = "identity.occupation";
     private static final String REFINER_ADD_LOW_CONFIDENCE = MemoryReviewPolicyPort.REFINER_ADD_LOW_CONFIDENCE;
@@ -132,8 +121,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String REFINER_ADD_REVIEW_RISK = MemoryReviewPolicyPort.REFINER_ADD_REVIEW_RISK;
     private static final String REFINER_STATUS_DROPPED = "dropped";
     private static final String REFINER_STATUS_PENDING_REVIEW = "pending_review";
-    private static final Pattern ALIAS_TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._:+#-]{1,63}");
-    private static final int MAX_ALIAS_TOKEN_LOOKUPS = 16;
 
     private record IngestionExecution(MemoryIngestionResult result, MemoryClassificationResult classification) {
 
@@ -183,6 +170,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryRefinerBatchCircuitBreaker refinerBatchCircuitBreaker;
     private final MemoryProfileValueNormalizer profileValueNormalizer;
     private final MemoryRefinementInputBuilder refinementInputBuilder;
+    private final MemoryCanonicalAliasResolver canonicalAliasResolver;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -553,6 +541,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.options.refinerStickyAnchorLimit(),
                 this.options.refinerStickyAnchorImportanceThreshold(),
                 this.options.refinerStickyAnchorConfidenceThreshold());
+        this.canonicalAliasResolver = new MemoryCanonicalAliasResolver(this.memoryAliasPort);
     }
 
     @Override
@@ -749,7 +738,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             metadata.put("profileSlot", profileSlot);
             metadata.put("generationId", profileGenerationId);
         }
-        attachCanonicalAliasMetadata(metadata, request, tenantId, decision.content());
+        canonicalAliasResolver.attachIfResolved(metadata, request.userId(), tenantId, decision.content());
         MemoryLayer targetLayer = targetLayer(classification);
         MemoryRecord record = new MemoryRecord(
                 memoryId(request, classification),
@@ -1451,50 +1440,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         metadata.put("captureSignals", decision.signals());
         metadata.put("captureReasons", decision.reasons());
         return metadata;
-    }
-
-    private void attachCanonicalAliasMetadata(Map<String, Object> metadata,
-                                              MemoryWriteRequest request,
-                                              String tenantId,
-                                              String content) {
-        if (metadata.containsKey(METADATA_CANONICAL_ENTITY_ID) || request == null || isBlank(request.userId())) {
-            return;
-        }
-        for (String aliasText : aliasLookupTokens(content)) {
-            try {
-                Optional<MemoryAliasResolution> resolved =
-                        memoryAliasPort.resolveAlias(request.userId(), tenantId, aliasText);
-                if (resolved.isEmpty() || isBlank(resolved.get().canonicalEntityId())) {
-                    continue;
-                }
-                MemoryAliasResolution alias = resolved.get();
-                metadata.put(METADATA_CANONICAL_ENTITY_ID, alias.canonicalEntityId());
-                metadata.put(METADATA_CANONICAL_NAME, alias.canonicalName());
-                metadata.put(METADATA_CANONICAL_ENTITY_TYPE, alias.entityType());
-                metadata.put(METADATA_ALIAS_TEXT, isBlank(alias.aliasText()) ? aliasText : alias.aliasText());
-                metadata.put(METADATA_ALIAS_CONFIDENCE_LEVEL, alias.confidenceLevel());
-                return;
-            } catch (RuntimeException ex) {
-                LOG.debug("Memory alias resolution failed during write: userId={}, tenantId={}, aliasText={}, error={}",
-                        request.userId(), tenantId, aliasText,
-                        Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
-            }
-        }
-    }
-
-    private List<String> aliasLookupTokens(String content) {
-        if (isBlank(content)) {
-            return List.of();
-        }
-        Set<String> tokens = new LinkedHashSet<>();
-        Matcher matcher = ALIAS_TOKEN_PATTERN.matcher(content);
-        while (matcher.find() && tokens.size() < MAX_ALIAS_TOKEN_LOOKUPS) {
-            String token = matcher.group();
-            if (!isBlank(token)) {
-                tokens.add(token.trim());
-            }
-        }
-        return List.copyOf(tokens);
     }
 
     private void addRefinedMetadata(Map<String, Object> metadata, MemoryClassificationResult classification) {
