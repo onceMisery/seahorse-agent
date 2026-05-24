@@ -98,3 +98,16 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-contextpack-acl/20-checkpoint.md | AI Infra ContextPack ACL checkpoint |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-contextpack-acl/90-evidence.md | AI Infra ContextPack ACL evidence |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-contextpack-acl/99-reflection.md | AI Infra ContextPack ACL reflection |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/10-intent.md | AI Infra access decision audit intent |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/20-checkpoint.md | AI Infra access decision audit checkpoint |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/90-evidence.md | AI Infra access decision audit evidence |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/99-reflection.md | AI Infra access decision audit reflection |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/task-intent-draft.json | AI Infra access decision audit task intent draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/baseline-read-set-hint.json | AI Infra access decision audit baseline read-set hint |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/impact-statement-draft.json | AI Infra access decision audit impact statement draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/todo-checkpoint-draft.json | AI Infra access decision audit todo checkpoint draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/drift-check-draft.json | AI Infra access decision audit drift check draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/evidence-bundle-draft-focused-regression.json | 2026-05-25-ai-infra-access-decision-audit evidence focused-regression |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/resume-state-hint.json | 2026-05-25-ai-infra-access-decision-audit resume state hint |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/gate-input-pack.json | 2026-05-25-ai-infra-access-decision-audit gate input pack |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/proof-bundle.md | 2026-05-25-ai-infra-access-decision-audit proof bundle |

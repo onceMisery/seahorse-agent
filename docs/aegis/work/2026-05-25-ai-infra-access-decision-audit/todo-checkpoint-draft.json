@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-25-ai-infra-access-decision-audit",
+  "currentTodo": "Run final diff/workspace checks, commit branch, merge back to root main, and rerun focused regression on main.",
+  "completedTodos": [
+    "Merged main into branch; added AccessDecision log/query ports, audited policy wrapper, JDBC adapter, admin-only query service, Web API, Spring auto-configuration, and focused tests."
+  ],
+  "activeSlice": "Phase 4 AccessDecision audit log and query API.",
+  "evidenceRefs": [
+    "focused-regression: Maven focused regression exited 0 / BUILD SUCCESS."
+  ],
+  "blockedOn": null,
+  "nextStep": "Run git diff --check and Aegis workspace checks.",
+  "updatedAt": "2026-05-25"
+}

@@ -21,7 +21,9 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAge
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentCheckpointQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.approval.KernelApprovalManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.context.AuditedResourceAccessPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.DefaultResourceAccessPolicyPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelAccessDecisionQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackBuilderService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
@@ -33,10 +35,13 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
@@ -90,15 +95,19 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(ApprovalRequestQueryPort.class);
                     assertThat(context).hasSingleBean(ApprovalRequestDecisionPort.class);
                     assertThat(context).hasSingleBean(ContextPackRepositoryPort.class);
+                    assertThat(context).hasSingleBean(AccessDecisionLogPort.class);
+                    assertThat(context).hasSingleBean(AccessDecisionQueryPort.class);
                     assertThat(context).hasSingleBean(ResourceAccessPolicyPort.class);
                     assertThat(context.getBean(ResourceAccessPolicyPort.class))
-                            .isInstanceOf(DefaultResourceAccessPolicyPort.class);
+                            .isInstanceOf(AuditedResourceAccessPolicyPort.class)
+                            .isNotInstanceOf(DefaultResourceAccessPolicyPort.class);
                     assertThat(context).hasSingleBean(AgentDefinitionInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunLeaseInboundPort.class);
                     assertThat(context).hasSingleBean(AgentCheckpointQueryInboundPort.class);
                     assertThat(context).hasSingleBean(ContextPackBuilderInboundPort.class);
                     assertThat(context).hasSingleBean(ContextPackQueryInboundPort.class);
+                    assertThat(context).hasSingleBean(AccessDecisionQueryInboundPort.class);
                     assertThat(context).hasSingleBean(ToolCatalogManagementInboundPort.class);
                     assertThat(context).hasSingleBean(AgentToolBindingManagementInboundPort.class);
                     assertThat(context).hasSingleBean(ToolInvocationAuditQueryInboundPort.class);
@@ -108,6 +117,7 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(KernelAgentCheckpointQueryService.class);
                     assertThat(context).hasSingleBean(KernelContextPackBuilderService.class);
                     assertThat(context).hasSingleBean(KernelContextPackQueryService.class);
+                    assertThat(context).hasSingleBean(KernelAccessDecisionQueryService.class);
                     assertThat(context).hasSingleBean(KernelToolCatalogManagementService.class);
                     assertThat(context).hasSingleBean(KernelAgentToolBindingManagementService.class);
                     assertThat(context).hasSingleBean(KernelToolInvocationAuditQueryService.class);

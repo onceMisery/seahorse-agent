@@ -34,10 +34,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 public class DefaultResourceAccessPolicyPort implements ResourceAccessPolicyPort {
 
-    private static final String DECISION_PREFIX = "resource-access-";
+    private static final String DECISION_ID_PREFIX = "acl_";
     private static final String ATTRIBUTE_VISIBILITY = "visibility";
     private static final String ATTRIBUTE_PUBLIC = "public";
     private static final TypeReference<Map<String, Object>> ATTRIBUTE_MAP_TYPE = new TypeReference<>() {
@@ -139,8 +140,7 @@ public class DefaultResourceAccessPolicyPort implements ResourceAccessPolicyPort
         ResourceRef resource = request.resourceRef();
         Instant now = clock.instant();
         return new AccessDecision(
-                DECISION_PREFIX + effect.name().toLowerCase() + "-" + resource.resourceType() + "-"
-                        + resource.resourceId() + "-" + now.toEpochMilli(),
+                DECISION_ID_PREFIX + UUID.randomUUID().toString().replace("-", ""),
                 request.tenantId(),
                 request.subjectType(),
                 request.subjectId(),

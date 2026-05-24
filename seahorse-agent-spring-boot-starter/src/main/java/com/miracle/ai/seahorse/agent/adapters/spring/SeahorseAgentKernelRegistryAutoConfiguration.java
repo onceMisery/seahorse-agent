@@ -22,7 +22,9 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunLeaseService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.approval.KernelApprovalManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.context.AuditedResourceAccessPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.DefaultResourceAccessPolicyPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelAccessDecisionQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackBuilderService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
@@ -34,10 +36,13 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
@@ -120,8 +125,15 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(ResourceAccessPolicyPort.class)
-    public DefaultResourceAccessPolicyPort seahorseResourceAccessPolicyPort(ObjectProvider<Clock> clockProvider) {
-        return new DefaultResourceAccessPolicyPort(clockProvider.getIfAvailable(Clock::systemUTC));
+    public ResourceAccessPolicyPort seahorseResourceAccessPolicyPort(ObjectProvider<Clock> clockProvider,
+                                                                     ObjectProvider<AccessDecisionLogPort> logPort) {
+        DefaultResourceAccessPolicyPort defaultPolicy =
+                new DefaultResourceAccessPolicyPort(clockProvider.getIfAvailable(Clock::systemUTC));
+        AccessDecisionLogPort auditLog = logPort.getIfAvailable();
+        if (auditLog == null) {
+            return defaultPolicy;
+        }
+        return new AuditedResourceAccessPolicyPort(defaultPolicy, auditLog);
     }
 
     @Bean
@@ -144,6 +156,15 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             ContextPackRepositoryPort contextPackRepositoryPort,
             CurrentUserPort currentUserPort) {
         return new KernelContextPackQueryService(contextPackRepositoryPort, currentUserPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({AccessDecisionQueryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(AccessDecisionQueryInboundPort.class)
+    public KernelAccessDecisionQueryService seahorseAccessDecisionQueryInboundPort(
+            AccessDecisionQueryPort accessDecisionQueryPort,
+            CurrentUserPort currentUserPort) {
+        return new KernelAccessDecisionQueryService(accessDecisionQueryPort, currentUserPort);
     }
 
     @Bean
