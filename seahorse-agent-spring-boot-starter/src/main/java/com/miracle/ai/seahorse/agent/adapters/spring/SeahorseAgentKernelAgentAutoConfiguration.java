@@ -24,6 +24,10 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.LocalToolGatewayPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.output.DdlSafetyOutputValidator;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.output.JsonSchemaOutputValidator;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.output.OutputGovernanceService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.output.SelfHealingOutputRepairService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunResumeService;
@@ -48,6 +52,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointReposit
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidationRecordPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidatorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
@@ -62,6 +69,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -132,7 +140,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                    ObjectProvider<ContextWeaverPort> contextWeaverPort,
                                                    ObjectProvider<ToolGatewayPort> toolGatewayPort,
                                                    ObjectProvider<AgentRunStepRecorder> runStepRecorder,
-                                                   ObjectProvider<AgentApprovalWaitHandler> approvalWaitHandler) {
+                                                   ObjectProvider<AgentApprovalWaitHandler> approvalWaitHandler,
+                                                   ObjectProvider<OutputGovernanceService> outputGovernanceService) {
         return new KernelAgentLoop(modelPort, toolRegistry,
                 toolGatewayPort.getIfAvailable(() -> new LocalToolGatewayPort(toolRegistry)),
                 options,
@@ -140,7 +149,48 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 contextWeaverPort.getIfAvailable(
                         com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver::new),
                 runStepRecorder.getIfAvailable(AgentRunStepRecorder::noop),
-                approvalWaitHandler.getIfAvailable(AgentApprovalWaitHandler::noop));
+                approvalWaitHandler.getIfAvailable(AgentApprovalWaitHandler::noop),
+                outputGovernanceService.getIfAvailable());
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnMissingBean(name = "seahorseJsonSchemaOutputValidator")
+    public JsonSchemaOutputValidator seahorseJsonSchemaOutputValidator(ObjectProvider<ObjectMapper> objectMapper) {
+        return new JsonSchemaOutputValidator(objectMapper.getIfAvailable(ObjectMapper::new));
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnMissingBean(name = "seahorseDdlSafetyOutputValidator")
+    public DdlSafetyOutputValidator seahorseDdlSafetyOutputValidator() {
+        return new DdlSafetyOutputValidator();
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean(OutputRepairModelPort.class)
+    @ConditionalOnMissingBean
+    public SelfHealingOutputRepairService seahorseSelfHealingOutputRepairService(
+            OutputRepairModelPort outputRepairModelPort) {
+        return new SelfHealingOutputRepairService(outputRepairModelPort);
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnMissingBean
+    public OutputGovernanceService seahorseOutputGovernanceService(
+            ObjectProvider<OutputValidatorPort> validators,
+            ObjectProvider<OutputValidationRecordPort> recordPort,
+            ObjectProvider<ObservationPort> observationPort,
+            ObjectProvider<SelfHealingOutputRepairService> selfHealingService) {
+        List<OutputValidatorPort> validatorBeans = validators.orderedStream().toList();
+        return new OutputGovernanceService(
+                validatorBeans,
+                recordPort.getIfAvailable(OutputValidationRecordPort::noop),
+                observationPort.getIfAvailable(ObservationPort::noop),
+                null,
+                selfHealingService.getIfAvailable());
     }
 
     @Bean

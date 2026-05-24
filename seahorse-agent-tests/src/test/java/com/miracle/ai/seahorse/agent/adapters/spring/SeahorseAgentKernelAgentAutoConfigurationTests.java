@@ -21,6 +21,10 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegist
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.output.DdlSafetyOutputValidator;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.output.JsonSchemaOutputValidator;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.output.OutputGovernanceService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.output.SelfHealingOutputRepairService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
@@ -38,6 +42,9 @@ import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
@@ -221,6 +228,33 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
                 });
     }
 
+    @Test
+    void shouldRegisterOutputGovernanceBeansWithDefaultValidatorsAndNoSelfHeal() {
+        contextRunner.withUserConfiguration(StreamingModelConfiguration.class)
+                .withPropertyValues("seahorse-agent.chat.agent-mode-enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(JsonSchemaOutputValidator.class);
+                    assertThat(context).hasSingleBean(DdlSafetyOutputValidator.class);
+                    assertThat(context).hasSingleBean(OutputGovernanceService.class);
+                    assertThat(context).doesNotHaveBean(SelfHealingOutputRepairService.class);
+                });
+    }
+
+    @Test
+    void shouldWireSelfHealingOutputRepairWhenRepairPortBeanPresent() {
+        contextRunner.withUserConfiguration(
+                        StreamingModelConfiguration.class,
+                        StubRepairPortConfiguration.class)
+                .withPropertyValues("seahorse-agent.chat.agent-mode-enabled=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(SelfHealingOutputRepairService.class);
+                    SelfHealingOutputRepairService service = context.getBean(SelfHealingOutputRepairService.class);
+                    assertThat(service.repairModelName()).isEqualTo("stub-repair");
+                });
+    }
+
     private static Collection<String> toolIds(InMemoryToolRegistry registry) {
         return registry.listTools().stream()
                 .map(tool -> tool.toolId())
@@ -370,6 +404,25 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
                 @Override
                 public ToolInvocationResult invoke(String toolCallId, String toolId, Map<String, Object> arguments) {
                     return ToolInvocationResult.ok("ok");
+                }
+            };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class StubRepairPortConfiguration {
+
+        @Bean
+        OutputRepairModelPort outputRepairModelPort() {
+            return new OutputRepairModelPort() {
+                @Override
+                public String name() {
+                    return "stub-repair";
+                }
+
+                @Override
+                public OutputRepairResult repair(OutputRepairRequest request) {
+                    return OutputRepairResult.of("");
                 }
             };
         }
