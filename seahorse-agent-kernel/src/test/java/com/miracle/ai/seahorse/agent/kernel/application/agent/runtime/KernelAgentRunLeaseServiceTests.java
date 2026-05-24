@@ -65,6 +65,19 @@ class KernelAgentRunLeaseServiceTests {
     }
 
     @Test
+    void shouldAcquireLeaseForRetryingRun() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        runRepository.createRun(run("run-1", AgentRunStatus.RETRYING));
+        MemoryAgentRunLeaseRepository leaseRepository = new MemoryAgentRunLeaseRepository();
+        KernelAgentRunLeaseService service = new KernelAgentRunLeaseService(runRepository, leaseRepository, FIXED_CLOCK);
+
+        boolean acquired = service.acquire(new AgentRunLeaseCommand("run-1", "worker-1", TEST_LEASE_TTL));
+
+        assertTrue(acquired);
+        assertEquals("worker-1", leaseRepository.findByRunId("run-1").orElseThrow().workerId());
+    }
+
+    @Test
     void shouldRenewLeaseOnlyForCurrentOwner() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         runRepository.createRun(run("run-1", AgentRunStatus.RUNNING));
@@ -81,12 +94,13 @@ class KernelAgentRunLeaseServiceTests {
     }
 
     @Test
-    void shouldNotAcquireLeaseForTerminalRun() {
+    void shouldNotAcquireLeaseForNonRunnableRun() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         MemoryAgentRunLeaseRepository leaseRepository = new MemoryAgentRunLeaseRepository();
         KernelAgentRunLeaseService service = new KernelAgentRunLeaseService(runRepository, leaseRepository, FIXED_CLOCK);
 
         for (AgentRunStatus status : List.of(
+                AgentRunStatus.WAITING_APPROVAL,
                 AgentRunStatus.SUCCEEDED,
                 AgentRunStatus.FAILED,
                 AgentRunStatus.REJECTED,

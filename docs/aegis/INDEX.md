@@ -84,3 +84,8 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-producer/20-checkpoint.md | AI Infra ContextPack producer checkpoint |
 | 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-producer/90-evidence.md | AI Infra ContextPack producer evidence |
 | 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-producer/99-reflection.md | AI Infra ContextPack producer reflection |
+| 2026-05-25 | plan | docs/aegis/plans/2026-05-25-ai-infra-agent-run-retry.md | AI Infra Agent run retry plan |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-agent-run-retry/10-intent.md | AI Infra Agent run retry intent |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-agent-run-retry/20-checkpoint.md | AI Infra Agent run retry checkpoint |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-agent-run-retry/90-evidence.md | AI Infra Agent run retry evidence |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-agent-run-retry/99-reflection.md | AI Infra Agent run retry reflection |

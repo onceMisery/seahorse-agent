@@ -166,6 +166,54 @@ class KernelAgentRunServiceTests {
     }
 
     @Test
+    void shouldRetryFailedRunIdempotently() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("ops-agent", AgentStatus.PUBLISHED, "version-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository, runRepository, currentUser(), FIXED_CLOCK);
+        AgentRun run = service.startRun(new AgentRunStartCommand(
+                "ops-agent",
+                null,
+                AgentDefinition.DEFAULT_TENANT_ID,
+                null,
+                AgentRunTriggerType.API,
+                "summary",
+                null));
+        service.fail(run.runId(), "AGENT_LOOP_FAILED", "boom");
+
+        AgentRun first = service.retry(run.runId());
+        AgentRun second = service.retry(run.runId());
+
+        assertEquals(AgentRunStatus.RETRYING, first.status());
+        assertEquals(AgentRunStatus.RETRYING, second.status());
+        assertEquals(null, first.errorCode());
+        assertEquals(null, first.errorMessage());
+        assertEquals(null, first.finishedAt());
+    }
+
+    @Test
+    void shouldRejectRetryForNonFailedRun() {
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.save(agent("ops-agent", AgentStatus.PUBLISHED, "version-1"));
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        KernelAgentRunService service = new KernelAgentRunService(
+                definitionRepository, runRepository, currentUser(), FIXED_CLOCK);
+        AgentRun run = service.startRun(new AgentRunStartCommand(
+                "ops-agent",
+                null,
+                AgentDefinition.DEFAULT_TENANT_ID,
+                null,
+                AgentRunTriggerType.API,
+                "summary",
+                null));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> service.retry(run.runId()));
+
+        assertEquals("Only FAILED runs can be retried", error.getMessage());
+    }
+
+    @Test
     void shouldRejectDisabledAgentRun() {
         MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
         definitionRepository.save(agent("disabled-agent", AgentStatus.DISABLED, "version-1"));

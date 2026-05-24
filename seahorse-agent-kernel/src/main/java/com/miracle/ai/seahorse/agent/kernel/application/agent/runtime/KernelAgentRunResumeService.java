@@ -265,7 +265,7 @@ public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
                 status,
                 errorCode,
                 errorMessage,
-                status.isTerminal() ? clock.instant() : null);
+                status.isFinished() ? clock.instant() : null);
         runRepository.updateRun(next);
         return next;
     }

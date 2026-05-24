@@ -21,6 +21,7 @@ public enum AgentRunStatus {
     CREATED,
     RUNNING,
     WAITING_APPROVAL,
+    RETRYING,
     SUCCEEDED,
     FAILED,
     REJECTED,
@@ -29,9 +30,18 @@ public enum AgentRunStatus {
 
     public boolean isTerminal() {
         return this == SUCCEEDED
-                || this == FAILED
                 || this == REJECTED
                 || this == EXPIRED
                 || this == CANCELLED;
+    }
+
+    public boolean isFinished() {
+        return isTerminal() || this == FAILED;
+    }
+
+    public boolean isWorkerRunnable() {
+        return this == CREATED
+                || this == RUNNING
+                || this == RETRYING;
     }
 }

@@ -119,9 +119,18 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     }
 
     @Override
+    public AgentRun retry(String runId) {
+        currentUserPort.requireCurrentUser();
+        AgentRun current = loadRun(runId);
+        AgentRun retrying = current.retry();
+        runRepository.updateRun(retrying);
+        return retrying;
+    }
+
+    @Override
     public AgentRun succeed(String runId) {
         AgentRun current = loadRun(runId);
-        if (current.status().isTerminal() || current.status() == AgentRunStatus.WAITING_APPROVAL) {
+        if (!current.status().isWorkerRunnable()) {
             return current;
         }
         AgentRun succeeded = current.withStatus(AgentRunStatus.SUCCEEDED, null, null, clock.instant());
@@ -132,7 +141,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     @Override
     public AgentRun fail(String runId, String errorCode, String errorMessage) {
         AgentRun current = loadRun(runId);
-        if (current.status().isTerminal()) {
+        if (!current.status().isWorkerRunnable()) {
             return current;
         }
         AgentRun failed = current.withStatus(

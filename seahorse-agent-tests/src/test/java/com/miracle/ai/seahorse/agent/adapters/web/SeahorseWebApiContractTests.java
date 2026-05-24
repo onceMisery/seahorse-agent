@@ -284,6 +284,7 @@ class SeahorseWebApiContractTests {
         when(runPort.findRunById("run-1")).thenReturn(Optional.of(agentRun(AgentRunStatus.RUNNING)));
         when(runPort.listSteps("run-1")).thenReturn(List.of(agentStep()));
         when(runPort.cancel("run-1")).thenReturn(agentRun(AgentRunStatus.CANCELLED));
+        when(runPort.retry("run-1")).thenReturn(agentRun(AgentRunStatus.RETRYING));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseAgentDefinitionController(provider(AgentDefinitionInboundPort.class, definitionPort)),
@@ -380,6 +381,14 @@ class SeahorseWebApiContractTests {
         mvc.perform(post("/agent-runs/run-1/cancel"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+
+        mvc.perform(post("/agent-runs/run-1/retry"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("RETRYING"));
+
+        mvc.perform(post("/api/agent-runs/run-1/retry"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("RETRYING"));
     }
 
     @Test
@@ -1813,7 +1822,7 @@ class SeahorseWebApiContractTests {
         return new AgentRun("run-1", "agent-1", "agent-1-v1", "tenant-a", "user-1",
                 "conversation-1", AgentRunTriggerType.CHAT, "summary", status, "trace-1",
                 0L, 0L, BigDecimal.ZERO, null, null, Instant.EPOCH,
-                status == AgentRunStatus.RUNNING ? null : Instant.EPOCH);
+                status.isFinished() ? Instant.EPOCH : null);
     }
 
     private static AgentStep agentStep() {

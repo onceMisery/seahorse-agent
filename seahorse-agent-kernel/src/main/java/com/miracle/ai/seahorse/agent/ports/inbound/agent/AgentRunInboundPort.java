@@ -46,6 +46,11 @@ public interface AgentRunInboundPort {
     AgentRun cancel(String runId);
 
     /**
+     * 将失败运行标记为等待重试；重复重试保持幂等。
+     */
+    AgentRun retry(String runId);
+
+    /**
      * 将运行标记为成功；终态运行不再漂移。
      */
     AgentRun succeed(String runId);

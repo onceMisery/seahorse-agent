@@ -98,6 +98,19 @@ public record AgentRun(String runId,
     }
 
     /**
+     * 失败运行可进入重试等待态，等待后续 worker 或 orchestrator 接管。
+     */
+    public AgentRun retry() {
+        if (status == AgentRunStatus.RETRYING) {
+            return this;
+        }
+        if (status != AgentRunStatus.FAILED) {
+            throw new IllegalStateException("Only FAILED runs can be retried");
+        }
+        return withStatus(AgentRunStatus.RETRYING, null, null, null);
+    }
+
+    /**
      * 统一生成状态变更后的不可变副本，避免调用方原地修改运行记录。
      */
     public AgentRun withStatus(AgentRunStatus nextStatus, String nextErrorCode, String nextErrorMessage, Instant doneAt) {

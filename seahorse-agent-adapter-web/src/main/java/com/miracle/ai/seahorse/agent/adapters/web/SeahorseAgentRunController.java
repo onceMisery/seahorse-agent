@@ -79,6 +79,11 @@ public class SeahorseAgentRunController {
         return ApiResponses.requireService(agentRunPortProvider, port -> port.cancel(runId));
     }
 
+    @PostMapping({"/agent-runs/{runId}/retry", "/api/agent-runs/{runId}/retry"})
+    public ApiResponse<Object> retry(@PathVariable String runId) {
+        return ApiResponses.requireService(agentRunPortProvider, port -> port.retry(runId));
+    }
+
     @PostMapping({"/agent-runs/{runId}/resume", "/api/agent-runs/{runId}/resume"})
     public ApiResponse<Object> resume(@PathVariable String runId) {
         return ApiResponses.requireService(agentRunResumePortProvider, port -> port.resume(runId));

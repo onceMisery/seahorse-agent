@@ -47,7 +47,7 @@ public class KernelAgentRunLeaseService implements AgentRunLeaseInboundPort {
     public boolean acquire(AgentRunLeaseCommand command) {
         AgentRunLeaseCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         AgentRun run = loadRun(safeCommand.runId());
-        if (run.status().isTerminal()) {
+        if (!run.status().isWorkerRunnable()) {
             return false;
         }
         Instant now = clock.instant();
@@ -62,7 +62,7 @@ public class KernelAgentRunLeaseService implements AgentRunLeaseInboundPort {
     public boolean heartbeat(AgentRunLeaseCommand command) {
         AgentRunLeaseCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         AgentRun run = loadRun(safeCommand.runId());
-        if (run.status().isTerminal()) {
+        if (!run.status().isWorkerRunnable()) {
             return false;
         }
         Instant now = clock.instant();
