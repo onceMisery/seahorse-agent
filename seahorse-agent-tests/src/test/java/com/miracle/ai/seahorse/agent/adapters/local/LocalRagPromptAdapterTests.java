@@ -20,15 +20,24 @@ package com.miracle.ai.seahorse.agent.adapters.local;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.PromptContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItemSourceType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class LocalRagPromptAdapterTests {
+
+    private static final Instant NOW = Instant.parse("2026-05-24T00:00:00Z");
 
     @Test
     void shouldFormatRetrievedChunksIntoKbContext() {
@@ -58,5 +67,52 @@ class LocalRagPromptAdapterTests {
         assertThat(messages.get(0).getContent()).contains("知识库上下文", "Seahorse 支持可插拔适配器", "工具上下文");
         assertThat(messages.get(1).getContent()).isEqualTo("历史回答");
         assertThat(messages.get(2).getContent()).contains("Seahorse 支持什么？");
+    }
+
+    @Test
+    void shouldBuildRagMessagesWithContextPackBeforeLegacyMemory() {
+        LocalRagPromptAdapter adapter = new LocalRagPromptAdapter();
+        PromptContext context = PromptContext.builder()
+                .contextPack(contextPack("context pack policy evidence"))
+                .memoryContext(MemoryContext.builder()
+                        .profileMemories(List.of(MemoryItem.builder().content("legacy memory evidence").build()))
+                        .build())
+                .build();
+
+        List<ChatMessage> messages = adapter.buildStructuredMessages(
+                context, List.of(), "What is the policy?", List.of());
+
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(0).getRole()).isEqualTo(ChatRole.SYSTEM);
+        assertThat(messages.get(0).getContent()).contains("context pack policy evidence", "aclDecision=decision-1");
+        assertThat(messages.get(0).getContent()).doesNotContain("legacy memory evidence");
+    }
+
+    private static ContextPack contextPack(String content) {
+        return new ContextPack(
+                "ctx-1",
+                "run-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "answer user",
+                400,
+                List.of(new ContextItem(
+                        "ctxi-1",
+                        "ctx-1",
+                        ContextItemSourceType.RAG_CHUNK,
+                        "doc-1",
+                        content,
+                        null,
+                        0.9,
+                        0.8,
+                        ContextSensitivity.INTERNAL,
+                        "decision-1",
+                        "{\"docId\":\"policy-1\"}",
+                        20,
+                        null,
+                        NOW)),
+                NOW);
     }
 }

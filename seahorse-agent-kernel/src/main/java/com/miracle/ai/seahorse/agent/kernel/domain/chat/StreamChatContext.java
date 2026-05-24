@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
@@ -53,6 +54,8 @@ public class StreamChatContext {
     private List<SubQuestionIntent> subIntents;
 
     private MemoryContext memoryContext;
+
+    private ContextPack contextPack;
 
     private QueryOptimizationResult queryOptimizationResult;
 
@@ -97,6 +100,11 @@ public class StreamChatContext {
 
         public Builder traceRunScope(TraceRunScope traceRunScope) {
             context.setTraceRunScope(traceRunScope);
+            return this;
+        }
+
+        public Builder contextPack(ContextPack contextPack) {
+            context.setContextPack(contextPack);
             return this;
         }
 

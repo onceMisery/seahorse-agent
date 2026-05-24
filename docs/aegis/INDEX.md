@@ -72,3 +72,8 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-24 | artifact | docs/aegis/work/2026-05-23-ai-infra-approval-management/gate-input-pack.json | 2026-05-23-ai-infra-approval-management gate input pack |
 | 2026-05-24 | work | docs/aegis/work/2026-05-23-ai-infra-approval-management/proof-bundle.md | 2026-05-23-ai-infra-approval-management proof bundle |
 | 2026-05-24 | plan | docs/aegis/plans/2026-05-24-ai-infra-contextpack-foundation.md | AI Infra ContextPack foundation plan |
+| 2026-05-24 | plan | docs/aegis/plans/2026-05-24-ai-infra-contextpack-runtime.md | AI Infra ContextPack runtime prompt plan |
+| 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-runtime/10-intent.md | AI Infra ContextPack runtime intent |
+| 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-runtime/20-checkpoint.md | AI Infra ContextPack runtime checkpoint |
+| 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-runtime/90-evidence.md | AI Infra ContextPack runtime evidence |
+| 2026-05-24 | work | docs/aegis/work/2026-05-24-ai-infra-contextpack-runtime/99-reflection.md | AI Infra ContextPack runtime reflection |
