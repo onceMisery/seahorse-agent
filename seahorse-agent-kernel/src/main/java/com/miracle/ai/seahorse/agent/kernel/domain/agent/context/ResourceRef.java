@@ -25,6 +25,14 @@ public record ResourceRef(String resourceType,
 
     private static final String EMPTY_JSON_OBJECT = "{}";
 
+    public ResourceRef(ContextResourceType resourceType,
+                       String resourceId,
+                       String tenantId,
+                       String ownerUserId,
+                       String attributesJson) {
+        this(resourceType == null ? null : resourceType.value(), resourceId, tenantId, ownerUserId, attributesJson);
+    }
+
     public ResourceRef {
         resourceType = requireText(resourceType, "resourceType must not be blank");
         resourceId = requireText(resourceId, "resourceId must not be blank");

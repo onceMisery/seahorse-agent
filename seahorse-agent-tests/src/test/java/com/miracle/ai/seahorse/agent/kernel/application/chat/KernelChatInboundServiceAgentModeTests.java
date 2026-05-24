@@ -20,6 +20,10 @@ package com.miracle.ai.seahorse.agent.kernel.application.chat;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextBuildItemCandidate;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextBuildRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
@@ -27,6 +31,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
@@ -81,6 +86,7 @@ class KernelChatInboundServiceAgentModeTests {
         assertThat(request.history()).isEmpty();
         assertThat(request.allowedToolIds()).isEmpty();
         assertThat(request.samplingOptions().getTemperature()).isEqualTo(0.3D);
+        assertThat(request.contextPack()).isNull();
         assertThat(request.memoryContext().getUserId()).isEqualTo("user-1");
         assertThat(request.memoryContext().getConversationId()).isEqualTo("conv-1");
         assertThat(request.memoryContext().getSemanticMemories())
@@ -92,6 +98,68 @@ class KernelChatInboundServiceAgentModeTests {
         assertThat(memoryCaptor.getValue().userId()).isEqualTo("user-1");
         assertThat(memoryCaptor.getValue().conversationId()).isEqualTo("conv-1");
         assertThat(memoryCaptor.getValue().currentQuestion()).isEqualTo("hello");
+    }
+
+    @Test
+    void shouldBuildContextPackForAgentModeBeforeExecutingAgentLoop() {
+        KernelChatPipeline pipeline = mock(KernelChatPipeline.class);
+        StreamTaskPort taskPort = mock(StreamTaskPort.class);
+        KernelAgentLoop agentLoop = mock(KernelAgentLoop.class);
+        MemoryEnginePort memoryEnginePort = mock(MemoryEnginePort.class);
+        RecordingContextPackBuilder builder = new RecordingContextPackBuilder();
+        StreamCallback callback = mock(StreamCallback.class);
+        StreamCancellationHandle handle = mock(StreamCancellationHandle.class);
+        when(agentLoop.streamExecute(any(), any(), any(TraceRunScope.class))).thenReturn(handle);
+        when(memoryEnginePort.loadMemory(any(MemoryLoadRequest.class))).thenReturn(memoryContext());
+        KernelChatInboundService service = new KernelChatInboundService(
+                pipeline, taskPort, Optional.of(agentLoop), KernelRagTraceRecorder.noop(),
+                null, memoryEnginePort, Optional.empty(), Optional.of(builder));
+
+        service.streamChat(new StreamChatCommand(
+                "hello", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
+
+        ArgumentCaptor<AgentLoopRequest> requestCaptor = ArgumentCaptor.forClass(AgentLoopRequest.class);
+        verify(agentLoop).streamExecute(requestCaptor.capture(), any(), any(TraceRunScope.class));
+        AgentLoopRequest request = requestCaptor.getValue();
+        assertThat(builder.lastRequest).isNotNull();
+        assertThat(builder.lastRequest.runId()).isEqualTo("ctx-run-task-1");
+        assertThat(builder.lastRequest.userId()).isEqualTo("user-1");
+        assertThat(builder.lastRequest.candidates()).hasSize(2);
+        assertThat(request.contextPack()).isNotNull();
+        assertThat(request.contextPack().items()).hasSize(2);
+        assertThat(request.memoryContext().getSemanticMemories())
+                .extracting(MemoryItem::getContent)
+                .containsExactly("user is interested in HR onboarding");
+    }
+
+    @Test
+    void shouldExecuteAgentLoopWithLegacyMemoryContextWhenContextPackBuilderFails() {
+        KernelChatPipeline pipeline = mock(KernelChatPipeline.class);
+        StreamTaskPort taskPort = mock(StreamTaskPort.class);
+        KernelAgentLoop agentLoop = mock(KernelAgentLoop.class);
+        MemoryEnginePort memoryEnginePort = mock(MemoryEnginePort.class);
+        StreamCallback callback = mock(StreamCallback.class);
+        StreamCancellationHandle handle = mock(StreamCancellationHandle.class);
+        when(agentLoop.streamExecute(any(), any(), any(TraceRunScope.class))).thenReturn(handle);
+        when(memoryEnginePort.loadMemory(any(MemoryLoadRequest.class))).thenReturn(memoryContext());
+        KernelChatInboundService service = new KernelChatInboundService(
+                pipeline, taskPort, Optional.of(agentLoop), KernelRagTraceRecorder.noop(),
+                null, memoryEnginePort, Optional.empty(), Optional.of(request -> {
+                    throw new IllegalStateException("context builder unavailable");
+                }));
+
+        service.streamChat(new StreamChatCommand(
+                "hello", "conv-1", "task-1", "user-1", false, ChatMode.AGENT), callback);
+
+        ArgumentCaptor<AgentLoopRequest> requestCaptor = ArgumentCaptor.forClass(AgentLoopRequest.class);
+        verify(agentLoop).streamExecute(requestCaptor.capture(), any(), any(TraceRunScope.class));
+        verify(taskPort).bindHandle("task-1", handle);
+        AgentLoopRequest request = requestCaptor.getValue();
+        assertThat(request.contextPack()).isNull();
+        assertThat(request.memoryContext().getSemanticMemories())
+                .extracting(MemoryItem::getContent)
+                .containsExactly("user is interested in HR onboarding");
+        verify(callback, never()).onError(any());
     }
 
     @Test
@@ -107,5 +175,52 @@ class KernelChatInboundServiceAgentModeTests {
 
         verify(pipeline).execute(any());
         verify(callback, never()).onError(any());
+    }
+
+    private static MemoryContext memoryContext() {
+        return MemoryContext.builder()
+                .semanticMemories(List.of(MemoryItem.builder()
+                        .id("mem-1")
+                        .userId("user-1")
+                        .layer(MemoryLayer.SEMANTIC)
+                        .content("user is interested in HR onboarding")
+                        .relevanceScore(0.84D)
+                        .confidenceLevel(0.91D)
+                        .build()))
+                .build();
+    }
+
+    private static final class RecordingContextPackBuilder implements ContextPackBuilderInboundPort {
+
+        private ContextBuildRequest lastRequest;
+
+        @Override
+        public ContextPack build(ContextBuildRequest request) {
+            lastRequest = request;
+            List<ContextItem> items = request.candidates().stream()
+                    .map(this::item)
+                    .toList();
+            return new ContextPack("ctx-pack-agent", request.runId(), request.agentId(), request.versionId(),
+                    request.tenantId(), request.userId(), request.taskGoal(), request.budgetTokens(), items,
+                    java.time.Instant.EPOCH);
+        }
+
+        private ContextItem item(ContextBuildItemCandidate candidate) {
+            return new ContextItem(
+                    "item-" + candidate.sourceId(),
+                    "ctx-pack-agent",
+                    candidate.sourceType(),
+                    candidate.sourceId(),
+                    candidate.content(),
+                    candidate.summary(),
+                    candidate.score(),
+                    candidate.confidence(),
+                    candidate.sensitivity(),
+                    "allow-" + candidate.sourceId(),
+                    candidate.citationJson(),
+                    candidate.estimatedTokens(),
+                    candidate.expiresAt(),
+                    java.time.Instant.EPOCH);
+        }
     }
 }

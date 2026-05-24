@@ -18,16 +18,25 @@
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextBuildItemCandidate;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextBuildRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItemSourceType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextResourceType;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentGroup;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLayer;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryQualityReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
@@ -149,7 +158,79 @@ class KernelChatPipelineTests {
         Assertions.assertNotNull(ports.lastChatRequest);
         Assertions.assertEquals(0.3D, ports.lastChatRequest.getTemperature());
         Assertions.assertEquals(0.8D, ports.lastChatRequest.getTopP());
+        Assertions.assertNotNull(ports.lastPromptContext);
+        Assertions.assertNull(ports.lastPromptContext.getContextPack());
         Assertions.assertEquals("task-1", ports.boundTaskId);
+    }
+
+    @Test
+    void shouldExposeProducedContextPackToRagPromptAssembly() {
+        RetrievedChunk chunk = RetrievedChunk.builder()
+                .id("chunk-1")
+                .tenantId("tenant-a")
+                .kbId("kb-1")
+                .docId("doc-1")
+                .text("onboarding requires contract and device pickup")
+                .score(0.92F)
+                .build();
+        RetrievalContext retrievalContext = RetrievalContext.builder()
+                .kbContext("kb context")
+                .intentChunks(Map.of(REWRITTEN_QUESTION, List.of(chunk)))
+                .build();
+        RecordingChatPorts ports = new RecordingChatPorts(GuidanceDecision.none(), retrievalContext);
+        RecordingContextPackBuilder builder = new RecordingContextPackBuilder();
+        KernelChatPipeline pipeline = pipeline(ports, fixedMemoryEngine(memoryContext()), builder);
+        RecordingCallback callback = new RecordingCallback();
+
+        pipeline.execute(context(callback));
+
+        Assertions.assertNotNull(builder.lastRequest);
+        Assertions.assertEquals("ctx-run-task-1", builder.lastRequest.runId());
+        Assertions.assertEquals("default", builder.lastRequest.tenantId());
+        Assertions.assertEquals("user-1", builder.lastRequest.userId());
+        Assertions.assertEquals(REWRITTEN_QUESTION, builder.lastRequest.taskGoal());
+        Assertions.assertEquals(3, builder.lastRequest.candidates().size());
+        Assertions.assertEquals(List.of(ContextItemSourceType.USER_INPUT, ContextItemSourceType.MEMORY,
+                        ContextItemSourceType.RAG_CHUNK),
+                builder.lastRequest.candidates().stream()
+                        .map(ContextBuildItemCandidate::sourceType)
+                        .toList());
+        Assertions.assertEquals(List.of(ContextResourceType.USER_INPUT.value(), ContextResourceType.MEMORY.value(),
+                        ContextResourceType.DOCUMENT.value()),
+                builder.lastRequest.candidates().stream()
+                        .map(candidate -> candidate.resourceRef().resourceType())
+                        .toList());
+        Assertions.assertNotNull(ports.lastPromptContext);
+        Assertions.assertNotNull(ports.lastPromptContext.getContextPack());
+        Assertions.assertFalse(ports.lastPromptContext.getContextPack().items().isEmpty());
+    }
+
+    @Test
+    void shouldFallbackToLegacyPromptContextWhenContextPackBuilderFails() {
+        RetrievedChunk chunk = RetrievedChunk.builder()
+                .id("chunk-1")
+                .tenantId("tenant-a")
+                .kbId("kb-1")
+                .docId("doc-1")
+                .text("onboarding requires contract and device pickup")
+                .score(0.92F)
+                .build();
+        RetrievalContext retrievalContext = RetrievalContext.builder()
+                .kbContext("kb context")
+                .intentChunks(Map.of(REWRITTEN_QUESTION, List.of(chunk)))
+                .build();
+        RecordingChatPorts ports = new RecordingChatPorts(GuidanceDecision.none(), retrievalContext);
+        KernelChatPipeline pipeline = pipeline(ports, fixedMemoryEngine(memoryContext()), request -> {
+            throw new IllegalStateException("context builder unavailable");
+        });
+
+        pipeline.execute(context(new RecordingCallback()));
+
+        Assertions.assertTrue(ports.retrieved);
+        Assertions.assertNotNull(ports.lastPromptContext);
+        Assertions.assertNull(ports.lastPromptContext.getContextPack());
+        Assertions.assertNotNull(ports.lastPromptContext.getMemoryContext());
+        Assertions.assertNotNull(ports.lastChatRequest);
     }
 
     @Test
@@ -193,6 +274,17 @@ class KernelChatPipelineTests {
         return new KernelChatPipeline(preparationPorts, responsePorts, KernelRagTraceRecorder.noop());
     }
 
+    private KernelChatPipeline pipeline(RecordingChatPorts ports,
+                                        MemoryEnginePort memoryEnginePort,
+                                        ContextPackBuilderInboundPort contextPackBuilder) {
+        ChatPreparationPorts preparationPorts = new ChatPreparationPorts(ports, memoryEnginePort,
+                QueryOptimizerPort.passthrough(), ports, ports, ports, ports);
+        ChatResponsePorts responsePorts = new ChatResponsePorts(ports, ports, ports, ports);
+        return new KernelChatPipeline(preparationPorts, responsePorts, KernelRagTraceRecorder.noop(),
+                KernelChatPipeline.EmptyRetrievalStrategy.FALLBACK_GENERIC,
+                Optional.of(contextPackBuilder));
+    }
+
     private KernelChatPipeline pipeline(RecordingChatPorts ports, MemoryIngestionWorkflowPort workflowPort) {
         ChatPreparationPorts preparationPorts = new ChatPreparationPorts(
                 ports,
@@ -205,6 +297,49 @@ class KernelChatPipelineTests {
                 ports);
         ChatResponsePorts responsePorts = new ChatResponsePorts(ports, ports, ports, ports);
         return new KernelChatPipeline(preparationPorts, responsePorts, KernelRagTraceRecorder.noop());
+    }
+
+    private MemoryContext memoryContext() {
+        return MemoryContext.builder()
+                .conversationId("conversation-1")
+                .userId("user-1")
+                .currentQuestion(QUESTION)
+                .semanticMemories(List.of(MemoryItem.builder()
+                        .id("mem-1")
+                        .userId("user-1")
+                        .layer(MemoryLayer.SEMANTIC)
+                        .content("user is interested in HR onboarding")
+                        .relevanceScore(0.88D)
+                        .confidenceLevel(0.93D)
+                        .build()))
+                .build();
+    }
+
+    private MemoryEnginePort fixedMemoryEngine(MemoryContext memoryContext) {
+        return new MemoryEnginePort() {
+            @Override
+            public MemoryContext loadMemory(MemoryLoadRequest request) {
+                return memoryContext;
+            }
+
+            @Override
+            public void writeMemory(MemoryWriteRequest request) {
+            }
+
+            @Override
+            public List<MemoryItem> retrieveMemories(MemoryLoadRequest request) {
+                return memoryContext.getSemanticMemories() == null ? List.of() : memoryContext.getSemanticMemories();
+            }
+
+            @Override
+            public void executeMemoryDecay() {
+            }
+
+            @Override
+            public MemoryQualityReport assessMemoryQuality(String userId) {
+                return MemoryQualityReport.builder().userId(userId).build();
+            }
+        };
     }
 
     private StreamChatContext context(StreamCallback callback) {
@@ -231,6 +366,7 @@ class KernelChatPipelineTests {
         private final RetrievalContext retrievalContext;
         private boolean retrieved;
         private ChatRequest lastChatRequest;
+        private PromptContext lastPromptContext;
         private String boundTaskId;
         private RuntimeException streamError;
 
@@ -280,6 +416,7 @@ class KernelChatPipelineTests {
                                                          List<ChatMessage> history,
                                                          String question,
                                                          List<String> subQuestions) {
+            lastPromptContext = context;
             return List.of(ChatMessage.user(question));
         }
 
@@ -342,6 +479,40 @@ class KernelChatPipelineTests {
         @Override
         public void onError(Throwable error) {
             this.error = error;
+        }
+    }
+
+    private static final class RecordingContextPackBuilder implements ContextPackBuilderInboundPort {
+
+        private ContextBuildRequest lastRequest;
+
+        @Override
+        public ContextPack build(ContextBuildRequest request) {
+            lastRequest = request;
+            List<ContextItem> items = request.candidates().stream()
+                    .map(this::item)
+                    .toList();
+            return new ContextPack("ctx-pack-1", request.runId(), request.agentId(), request.versionId(),
+                    request.tenantId(), request.userId(), request.taskGoal(), request.budgetTokens(), items,
+                    java.time.Instant.EPOCH);
+        }
+
+        private ContextItem item(ContextBuildItemCandidate candidate) {
+            return new ContextItem(
+                    "item-" + candidate.sourceId(),
+                    "ctx-pack-1",
+                    candidate.sourceType(),
+                    candidate.sourceId(),
+                    candidate.content(),
+                    candidate.summary(),
+                    candidate.score(),
+                    candidate.confidence(),
+                    candidate.sensitivity(),
+                    "allow-" + candidate.sourceId(),
+                    candidate.citationJson(),
+                    candidate.estimatedTokens(),
+                    candidate.expiresAt(),
+                    java.time.Instant.EPOCH);
         }
     }
 
