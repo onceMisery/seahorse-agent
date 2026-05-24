@@ -46,6 +46,7 @@ public class MemoryProperties {
     private final Maintenance maintenance = new Maintenance();
     private final Refiner refiner = new Refiner();
     private final AliasResolution aliasResolution = new AliasResolution();
+    private final Trace trace = new Trace();
 
     public Policy getPolicy() {
         return policy;
@@ -73,6 +74,10 @@ public class MemoryProperties {
 
     public AliasResolution getAliasResolution() {
         return aliasResolution;
+    }
+
+    public Trace getTrace() {
+        return trace;
     }
 
     /**
@@ -187,6 +192,120 @@ public class MemoryProperties {
      * 占位：召回相关 rrf / decay / channel / rerank 等参数，迁移待后续切片。
      */
     public static class Recall {
+
+        private int rrfK = 60;
+        private double decayLambda = 0.05d;
+        private int finalTopK = 8;
+        private boolean timeDecayEnabled = true;
+        private long channelTimeoutMs = 50L;
+        private final Map<String, Double> channelWeights = new LinkedHashMap<>();
+        private String rerankModel = "";
+        private int rerankInputTopK = 8;
+        private int rerankMaxTextChars = 4000;
+        private String vectorCollection = "memory_vectors";
+        private String embeddingModel = "";
+        private int graphMaxHops = 1;
+        private int channelTopK = 20;
+
+        public int getRrfK() {
+            return rrfK;
+        }
+
+        public void setRrfK(int rrfK) {
+            this.rrfK = rrfK;
+        }
+
+        public double getDecayLambda() {
+            return decayLambda;
+        }
+
+        public void setDecayLambda(double decayLambda) {
+            this.decayLambda = decayLambda;
+        }
+
+        public int getFinalTopK() {
+            return finalTopK;
+        }
+
+        public void setFinalTopK(int finalTopK) {
+            this.finalTopK = finalTopK;
+        }
+
+        public boolean isTimeDecayEnabled() {
+            return timeDecayEnabled;
+        }
+
+        public void setTimeDecayEnabled(boolean timeDecayEnabled) {
+            this.timeDecayEnabled = timeDecayEnabled;
+        }
+
+        public long getChannelTimeoutMs() {
+            return channelTimeoutMs;
+        }
+
+        public void setChannelTimeoutMs(long channelTimeoutMs) {
+            this.channelTimeoutMs = channelTimeoutMs;
+        }
+
+        public Map<String, Double> getChannelWeights() {
+            return channelWeights;
+        }
+
+        public String getRerankModel() {
+            return rerankModel;
+        }
+
+        public void setRerankModel(String rerankModel) {
+            this.rerankModel = rerankModel;
+        }
+
+        public int getRerankInputTopK() {
+            return rerankInputTopK;
+        }
+
+        public void setRerankInputTopK(int rerankInputTopK) {
+            this.rerankInputTopK = rerankInputTopK;
+        }
+
+        public int getRerankMaxTextChars() {
+            return rerankMaxTextChars;
+        }
+
+        public void setRerankMaxTextChars(int rerankMaxTextChars) {
+            this.rerankMaxTextChars = rerankMaxTextChars;
+        }
+
+        public String getVectorCollection() {
+            return vectorCollection;
+        }
+
+        public void setVectorCollection(String vectorCollection) {
+            this.vectorCollection = vectorCollection;
+        }
+
+        public String getEmbeddingModel() {
+            return embeddingModel;
+        }
+
+        public void setEmbeddingModel(String embeddingModel) {
+            this.embeddingModel = embeddingModel;
+        }
+
+        public int getGraphMaxHops() {
+            return graphMaxHops;
+        }
+
+        public void setGraphMaxHops(int graphMaxHops) {
+            this.graphMaxHops = graphMaxHops;
+        }
+
+        public int getChannelTopK() {
+            return channelTopK;
+        }
+
+        public void setChannelTopK(int channelTopK) {
+            this.channelTopK = channelTopK;
+        }
     }
 
     /**
@@ -685,6 +804,22 @@ public class MemoryProperties {
             public void setConfidenceLevel(double confidenceLevel) {
                 this.confidenceLevel = confidenceLevel;
             }
+        }
+    }
+
+    /**
+     * Slice 4 续：trace recorder 参数。
+     */
+    public static class Trace {
+
+        private int maxEvents = 1000;
+
+        public int getMaxEvents() {
+            return maxEvents;
+        }
+
+        public void setMaxEvents(int maxEvents) {
+            this.maxEvents = maxEvents;
         }
     }
 }

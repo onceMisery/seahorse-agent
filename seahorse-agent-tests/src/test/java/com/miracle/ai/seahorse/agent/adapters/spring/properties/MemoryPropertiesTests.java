@@ -76,6 +76,82 @@ class MemoryPropertiesTests {
     }
 
     @Test
+    void recallDefaultsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties.Recall recall = context.getBean(MemoryProperties.class).getRecall();
+            assertThat(recall.getRrfK()).isEqualTo(60);
+            assertThat(recall.getDecayLambda()).isEqualTo(0.05d);
+            assertThat(recall.getFinalTopK()).isEqualTo(8);
+            assertThat(recall.isTimeDecayEnabled()).isTrue();
+            assertThat(recall.getChannelTimeoutMs()).isEqualTo(50L);
+            assertThat(recall.getChannelWeights()).isEmpty();
+            assertThat(recall.getRerankModel()).isEmpty();
+            assertThat(recall.getRerankInputTopK()).isEqualTo(8);
+            assertThat(recall.getRerankMaxTextChars()).isEqualTo(4000);
+            assertThat(recall.getVectorCollection()).isEqualTo("memory_vectors");
+            assertThat(recall.getEmbeddingModel()).isEmpty();
+            assertThat(recall.getGraphMaxHops()).isEqualTo(1);
+            assertThat(recall.getChannelTopK()).isEqualTo(20);
+        });
+    }
+
+    @Test
+    void recallCustomKeysOverrideDefaults() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse-agent.memory.recall.rrf-k=120",
+                        "seahorse-agent.memory.recall.decay-lambda=0.12",
+                        "seahorse-agent.memory.recall.final-top-k=24",
+                        "seahorse-agent.memory.recall.time-decay-enabled=false",
+                        "seahorse-agent.memory.recall.channel-timeout-ms=250",
+                        "seahorse-agent.memory.recall.channel-weights.vector=0.6",
+                        "seahorse-agent.memory.recall.channel-weights.keyword=0.4",
+                        "seahorse-agent.memory.recall.rerank-model=bge-reranker",
+                        "seahorse-agent.memory.recall.rerank-input-top-k=32",
+                        "seahorse-agent.memory.recall.rerank-max-text-chars=2048",
+                        "seahorse-agent.memory.recall.vector-collection=custom_vectors",
+                        "seahorse-agent.memory.recall.embedding-model=text-embedding-3-small",
+                        "seahorse-agent.memory.recall.graph-max-hops=3",
+                        "seahorse-agent.memory.recall.channel-top-k=64")
+                .run(context -> {
+                    MemoryProperties.Recall recall = context.getBean(MemoryProperties.class).getRecall();
+                    assertThat(recall.getRrfK()).isEqualTo(120);
+                    assertThat(recall.getDecayLambda()).isEqualTo(0.12d);
+                    assertThat(recall.getFinalTopK()).isEqualTo(24);
+                    assertThat(recall.isTimeDecayEnabled()).isFalse();
+                    assertThat(recall.getChannelTimeoutMs()).isEqualTo(250L);
+                    assertThat(recall.getChannelWeights())
+                            .containsEntry("vector", 0.6d)
+                            .containsEntry("keyword", 0.4d);
+                    assertThat(recall.getRerankModel()).isEqualTo("bge-reranker");
+                    assertThat(recall.getRerankInputTopK()).isEqualTo(32);
+                    assertThat(recall.getRerankMaxTextChars()).isEqualTo(2048);
+                    assertThat(recall.getVectorCollection()).isEqualTo("custom_vectors");
+                    assertThat(recall.getEmbeddingModel()).isEqualTo("text-embedding-3-small");
+                    assertThat(recall.getGraphMaxHops()).isEqualTo(3);
+                    assertThat(recall.getChannelTopK()).isEqualTo(64);
+                });
+    }
+
+    @Test
+    void traceDefaultsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties.Trace trace = context.getBean(MemoryProperties.class).getTrace();
+            assertThat(trace.getMaxEvents()).isEqualTo(1000);
+        });
+    }
+
+    @Test
+    void traceCustomKeysOverrideDefaults() {
+        contextRunner
+                .withPropertyValues("seahorse-agent.memory.trace.max-events=2500")
+                .run(context -> {
+                    MemoryProperties.Trace trace = context.getBean(MemoryProperties.class).getTrace();
+                    assertThat(trace.getMaxEvents()).isEqualTo(2500);
+                });
+    }
+
+    @Test
     void allSixNestedSectionsExist() {
         contextRunner.run(context -> {
             MemoryProperties properties = context.getBean(MemoryProperties.class);

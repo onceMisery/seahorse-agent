@@ -136,8 +136,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.context.properties.bind.Bindable;
-import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -203,9 +201,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(MemoryTraceRecorder.class)
-    public MemoryTraceRecorder seahorseMemoryTraceRecorder(
-            @Value("${seahorse-agent.memory.trace.max-events:1000}") int maxEvents) {
-        return new InMemoryMemoryTraceRecorder(maxEvents);
+    public MemoryTraceRecorder seahorseMemoryTraceRecorder(MemoryProperties memoryProperties) {
+        return new InMemoryMemoryTraceRecorder(memoryProperties.getTrace().getMaxEvents());
     }
 
     @Bean
@@ -416,26 +413,15 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(MemoryFusionPolicy.class)
-    public MemoryFusionPolicy seahorseMemoryFusionPolicy(
-            @Value("${seahorse-agent.memory.recall.rrf-k:60}") int rrfK,
-            @Value("${seahorse-agent.memory.recall.decay-lambda:0.05}") double decayLambda,
-            @Value("${seahorse-agent.memory.recall.final-top-k:8}") int finalTopK,
-            @Value("${seahorse-agent.memory.recall.time-decay-enabled:true}") boolean timeDecayEnabled,
-            @Value("${seahorse-agent.memory.recall.channel-timeout-ms:50}") long channelTimeoutMs,
-            Environment environment) {
+    public MemoryFusionPolicy seahorseMemoryFusionPolicy(MemoryProperties memoryProperties) {
+        MemoryProperties.Recall recall = memoryProperties.getRecall();
         return new MemoryFusionPolicy(
-                rrfK,
-                decayLambda,
-                finalTopK,
-                timeDecayEnabled,
-                channelTimeoutMs,
-                memoryRecallChannelWeights(environment));
-    }
-
-    private Map<String, Double> memoryRecallChannelWeights(Environment environment) {
-        return Binder.get(environment)
-                .bind("seahorse-agent.memory.recall.channel-weights", Bindable.mapOf(String.class, Double.class))
-                .orElse(Map.of());
+                recall.getRrfK(),
+                recall.getDecayLambda(),
+                recall.getFinalTopK(),
+                recall.isTimeDecayEnabled(),
+                recall.getChannelTimeoutMs(),
+                Map.copyOf(recall.getChannelWeights()));
     }
 
     @Bean
@@ -451,10 +437,12 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnMissingBean(MemoryRecallRerankerPort.class)
     public ModelMemoryRecallReranker seahorseModelMemoryRecallReranker(
             RerankModelPort rerankModelPort,
-            @Value("${seahorse-agent.memory.recall.rerank-model:}") String rerankModel,
-            @Value("${seahorse-agent.memory.recall.rerank-input-top-k:8}") int inputTopK,
-            @Value("${seahorse-agent.memory.recall.rerank-max-text-chars:4000}") int maxTextChars) {
-        return new ModelMemoryRecallReranker(rerankModelPort, rerankModel, inputTopK, maxTextChars);
+            MemoryProperties memoryProperties) {
+        MemoryProperties.Recall recall = memoryProperties.getRecall();
+        return new ModelMemoryRecallReranker(rerankModelPort,
+                recall.getRerankModel(),
+                recall.getRerankInputTopK(),
+                recall.getRerankMaxTextChars());
     }
 
     @Bean
@@ -477,13 +465,13 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     public VectorSearchScoredMemoryVectorPort seahorseVectorSearchScoredMemoryVectorPort(
             VectorSearchPort vectorSearchPort,
             EmbeddingModelPort embeddingModelPort,
-            @Value("${seahorse-agent.memory.recall.vector-collection:memory_vectors}") String collectionName,
-            @Value("${seahorse-agent.memory.recall.embedding-model:}") String embeddingModel) {
+            MemoryProperties memoryProperties) {
+        MemoryProperties.Recall recall = memoryProperties.getRecall();
         return new VectorSearchScoredMemoryVectorPort(
                 vectorSearchPort,
                 embeddingModelPort,
-                collectionName,
-                embeddingModel);
+                recall.getVectorCollection(),
+                recall.getEmbeddingModel());
     }
 
     @Bean
@@ -527,8 +515,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnMissingBean(name = "seahorseGraphMemoryRecallChannel")
     public GraphMemoryRecallChannel seahorseGraphMemoryRecallChannel(
             MemoryGraphPort graphPort,
-            @Value("${seahorse-agent.memory.recall.graph-max-hops:1}") int maxHops) {
-        return new GraphMemoryRecallChannel(graphPort, maxHops);
+            MemoryProperties memoryProperties) {
+        return new GraphMemoryRecallChannel(graphPort, memoryProperties.getRecall().getGraphMaxHops());
     }
 
     @Bean
@@ -554,7 +542,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryTraceRecorder> traceRecorder,
             ObjectProvider<ObservationPort> observationPort,
             @Qualifier("ragRetrievalThreadPoolExecutor") ObjectProvider<Executor> recallExecutor,
-            @Value("${seahorse-agent.memory.recall.channel-top-k:20}") int channelTopK) {
+            MemoryProperties memoryProperties) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         return new HybridMemoryRecallPipeline(
                 shortTermMemoryPort,
@@ -569,7 +557,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 recallChannels,
                 recallFusionPort,
                 fusionPolicy,
-                channelTopK,
+                memoryProperties.getRecall().getChannelTopK(),
                 traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
                 recallExecutor.getIfAvailable(),
                 memoryAliasPort.getIfAvailable(MemoryAliasPort::noop),
