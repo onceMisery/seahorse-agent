@@ -382,6 +382,7 @@ public class KernelAgentLoop {
 
         StreamCancellationHandle handle = modelPort.streamChatWithTools(ChatRequest.builder()
                 .messages(List.copyOf(messages))
+                .modelId(request.modelId())
                 .samplingOptions(request.samplingOptions())
                 .tools(exposedTools(request.allowedToolIds()))
                 .toolChoice("auto")

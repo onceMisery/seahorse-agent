@@ -89,3 +89,8 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-agent-run-retry/20-checkpoint.md | AI Infra Agent run retry checkpoint |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-agent-run-retry/90-evidence.md | AI Infra Agent run retry evidence |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-agent-run-retry/99-reflection.md | AI Infra Agent run retry reflection |
+| 2026-05-25 | plan | docs/aegis/plans/2026-05-25-ai-infra-version-model-routing.md | AI Infra version model routing plan |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-version-model-routing/10-intent.md | AI Infra version model routing intent |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-version-model-routing/20-checkpoint.md | AI Infra version model routing checkpoint |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-version-model-routing/90-evidence.md | AI Infra version model routing evidence |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-version-model-routing/99-reflection.md | AI Infra version model routing reflection |

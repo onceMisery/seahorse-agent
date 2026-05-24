@@ -424,11 +424,24 @@ class SeahorseWebApiContractTests {
                 .andExpect(status().isOk())
                 .andExpect(request().asyncStarted());
 
+        mvc.perform(get("/rag/v3/chat")
+                        .param("question", "hello")
+                        .param("conversationId", "c4")
+                        .param("userId", "u1")
+                        .param("chatMode", "agent")
+                        .param("agentId", " agent-1 ")
+                        .param("versionId", " agent-1-v2 "))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
         ArgumentCaptor<StreamChatCommand> commandCaptor = ArgumentCaptor.forClass(StreamChatCommand.class);
-        verify(chatPort, times(3)).streamChat(commandCaptor.capture(), any());
+        verify(chatPort, times(4)).streamChat(commandCaptor.capture(), any());
         assertThat(commandCaptor.getAllValues())
                 .extracting(StreamChatCommand::chatMode)
-                .containsExactly(ChatMode.RAG, ChatMode.AGENT, ChatMode.RAG);
+                .containsExactly(ChatMode.RAG, ChatMode.AGENT, ChatMode.RAG, ChatMode.AGENT);
+        StreamChatCommand agentCommand = commandCaptor.getAllValues().get(3);
+        assertThat(agentCommand.agentId()).isEqualTo("agent-1");
+        assertThat(agentCommand.versionId()).isEqualTo("agent-1-v2");
 
         mvc.perform(post("/rag/v3/stop").param("taskId", "task-1"))
                 .andExpect(status().isOk())

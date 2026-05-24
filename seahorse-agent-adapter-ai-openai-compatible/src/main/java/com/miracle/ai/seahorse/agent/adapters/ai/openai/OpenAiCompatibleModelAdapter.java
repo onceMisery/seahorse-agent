@@ -107,7 +107,7 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
     @Override
     public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
         StreamCallback safeCallback = Objects.requireNonNull(callback, "callback must not be null");
-        Map<String, Object> payload = chatPayload(request, null, true);
+        Map<String, Object> payload = chatPayload(request, request == null ? null : request.getModelId(), true);
         Call call = httpClient.newCall(httpRequest("/chat/completions", payload));
         // SSE readLine 是阻塞 I/O，必须交给可治理的专用 executor，避免占用公共 ForkJoinPool。
         CompletableFuture.runAsync(() -> consumeStream(call, safeCallback), streamingExecutor);
@@ -121,7 +121,7 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
             ToolCallCollector toolCallCollector) {
         StreamCallback safeCallback = Objects.requireNonNull(callback, "callback must not be null");
         ToolCallCollector safeCollector = Objects.requireNonNullElseGet(toolCallCollector, ToolCallCollector::noop);
-        Map<String, Object> payload = chatPayload(request, null, true);
+        Map<String, Object> payload = chatPayload(request, request == null ? null : request.getModelId(), true);
         Call call = httpClient.newCall(httpRequest("/chat/completions", payload));
         CompletableFuture.runAsync(() -> consumeStreamWithTools(call, safeCallback, safeCollector), streamingExecutor);
         return call::cancel;
@@ -211,7 +211,9 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         payload.put("stream", stream);
         putIfPresent(payload, "temperature", safeRequest.getTemperature());
         putIfPresent(payload, "top_p", safeRequest.getTopP());
+        putIfPresent(payload, "top_k", safeRequest.getTopK());
         putIfPresent(payload, "max_tokens", safeRequest.getMaxTokens());
+        putIfPresent(payload, "thinking", safeRequest.getThinking());
         if (safeRequest.getTools() != null && !safeRequest.getTools().isEmpty()) {
             payload.put("tools", tools(safeRequest.getTools()));
             payload.put("tool_choice", safeRequest.getToolChoice());

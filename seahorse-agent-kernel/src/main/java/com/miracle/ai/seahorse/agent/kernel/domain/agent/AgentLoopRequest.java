@@ -38,6 +38,7 @@ public final class AgentLoopRequest {
     private static final int DEFAULT_MAX_STEPS = 6;
 
     private final String question;
+    private final String modelId;
     private final List<ChatMessage> history;
     private final List<String> allowedToolIds;
     private final ChatSamplingOptions samplingOptions;
@@ -61,6 +62,7 @@ public final class AgentLoopRequest {
         }
         Objects.requireNonNull(b.samplingOptions, "AgentLoopRequest.samplingOptions 不能为空");
         this.question = b.question;
+        this.modelId = trimToNull(b.modelId);
         this.history = b.history == null ? List.of() : List.copyOf(b.history);
         this.allowedToolIds = b.allowedToolIds == null ? List.of() : List.copyOf(b.allowedToolIds);
         this.samplingOptions = b.samplingOptions;
@@ -79,6 +81,10 @@ public final class AgentLoopRequest {
 
     public String question() {
         return question;
+    }
+
+    public String modelId() {
+        return modelId;
     }
 
     public List<ChatMessage> history() {
@@ -143,6 +149,7 @@ public final class AgentLoopRequest {
 
     public static final class Builder {
         private String question;
+        private String modelId;
         private List<ChatMessage> history;
         private List<String> allowedToolIds;
         private ChatSamplingOptions samplingOptions;
@@ -160,6 +167,11 @@ public final class AgentLoopRequest {
 
         public Builder question(String question) {
             this.question = question;
+            return this;
+        }
+
+        public Builder modelId(String modelId) {
+            this.modelId = modelId;
             return this;
         }
 

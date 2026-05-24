@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
@@ -179,13 +180,15 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    ObjectProvider<ConversationMemoryPort> memoryPort,
                                                    ObjectProvider<MemoryEnginePort> memoryEnginePort,
                                                    ObjectProvider<AgentRunInboundPort> agentRunPort,
-                                                   ObjectProvider<ContextPackBuilderInboundPort> contextPackBuilder) {
+                                                   ObjectProvider<ContextPackBuilderInboundPort> contextPackBuilder,
+                                                   ObjectProvider<AgentDefinitionRepositoryPort> agentDefinitionRepository) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
                 Optional.ofNullable(agentLoop.getIfAvailable()),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
                 memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
                 Optional.ofNullable(agentRunPort.getIfAvailable()),
-                Optional.ofNullable(contextPackBuilder.getIfAvailable()));
+                Optional.ofNullable(contextPackBuilder.getIfAvailable()),
+                Optional.ofNullable(agentDefinitionRepository.getIfAvailable()));
     }
 }

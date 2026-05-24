@@ -96,7 +96,9 @@ public class SeahorseChatController {
                            @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
                            String headerUserId,
                            @RequestParam(required = false, defaultValue = "false") Boolean deepThinking,
-                           @RequestParam(required = false) String chatMode) {
+                           @RequestParam(required = false) String chatMode,
+                           @RequestParam(required = false) String agentId,
+                           @RequestParam(required = false) String versionId) {
         String actualConversationId = resolveId(conversationId);
         String actualUserId = WebUserIdResolver.resolve(userId, headerUserId);
         checkChatRateLimit(actualUserId);
@@ -109,7 +111,9 @@ public class SeahorseChatController {
                 taskId,
                 actualUserId,
                 Boolean.TRUE.equals(deepThinking),
-                parseChatMode(chatMode));
+                parseChatMode(chatMode),
+                agentId,
+                versionId);
         try {
             ChatInboundPort chatInboundPort = chatInboundPortProvider.getIfAvailable();
             if (chatInboundPort == null) {
