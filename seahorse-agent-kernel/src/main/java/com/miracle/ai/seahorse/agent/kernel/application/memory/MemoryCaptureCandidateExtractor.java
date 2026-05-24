@@ -24,14 +24,14 @@ import java.util.Optional;
 
 class MemoryCaptureCandidateExtractor {
 
-    private String lastRejectionReason = "";
+    private MemoryCaptureRejectionReason lastRejection;
 
     Optional<MemoryCaptureCandidate> extract(String rawContent) {
-        lastRejectionReason = "";
+        lastRejection = null;
         List<String> signals = new ArrayList<>();
         String content = normalizeMemoryText(rawContent, signals);
         if (content.isBlank()) {
-            return reject("blank");
+            return reject(MemoryCaptureRejectionReason.BLANK);
         }
 
         PrefixRemoval removal = removeExplicitPrefix(content);
@@ -53,7 +53,7 @@ class MemoryCaptureCandidateExtractor {
             signals.add("personal_fact");
         }
         if (!explicitRemember && !profileStatement && !preferenceStatement && !personalFact) {
-            return reject("no_high_value_signal");
+            return reject(MemoryCaptureRejectionReason.NO_HIGH_VALUE_SIGNAL);
         }
 
         String candidate = normalized.replaceFirst("^[：:，,\\s]+", "").trim();
@@ -64,16 +64,16 @@ class MemoryCaptureCandidateExtractor {
         candidate = trimmedCandidate;
 
         if (candidate.length() < 2) {
-            return reject("too_short");
+            return reject(MemoryCaptureRejectionReason.TOO_SHORT);
         }
         if (candidate.length() > 120) {
-            return reject("too_long");
+            return reject(MemoryCaptureRejectionReason.TOO_LONG);
         }
         if (looksLikeQuestion(candidate)) {
-            return reject("question");
+            return reject(MemoryCaptureRejectionReason.QUESTION);
         }
         if (containsSensitiveCredential(candidate)) {
-            return reject("sensitive_credential");
+            return reject(MemoryCaptureRejectionReason.SENSITIVE_CREDENTIAL);
         }
 
         return Optional.of(new MemoryCaptureCandidate(
@@ -84,11 +84,15 @@ class MemoryCaptureCandidateExtractor {
     }
 
     String lastRejectionReason() {
-        return lastRejectionReason;
+        return lastRejection == null ? "" : lastRejection.wireValue();
     }
 
-    private Optional<MemoryCaptureCandidate> reject(String reason) {
-        lastRejectionReason = reason;
+    MemoryCaptureRejectionReason lastRejection() {
+        return lastRejection;
+    }
+
+    private Optional<MemoryCaptureCandidate> reject(MemoryCaptureRejectionReason reason) {
+        this.lastRejection = reason;
         return Optional.empty();
     }
 
