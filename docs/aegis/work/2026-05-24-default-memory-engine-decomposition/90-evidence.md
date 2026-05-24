@@ -11,7 +11,7 @@
     -Dsurefire.failIfNoSpecifiedTests=false
 ```
 
-输出（11 次 cut 完全一致）：
+输出（cut 12 后重新执行）：
 
 ```
 [INFO] Running com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAutoConfigurationTests
@@ -22,6 +22,76 @@
 [INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0
 [INFO] Tests run: 118, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS
+```
+
+## Cut 12 追加证据
+
+### 新 service 单测
+
+```bash
+.\mvnw.cmd -B -pl seahorse-agent-tests -am test \
+    "-Dspotless.check.skip=true" \
+    "-Dtest=MemoryReviewApplyClassificationBuilderTests" \
+    "-Dsurefire.failIfNoSpecifiedTests=false"
+```
+
+输出：
+
+```
+[INFO] Running com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryReviewApplyClassificationBuilderTests
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+```
+
+### facade 行为回归
+
+```bash
+.\mvnw.cmd -B -pl seahorse-agent-tests -am test \
+    "-Dspotless.check.skip=true" \
+    "-Dtest=DefaultMemoryEnginePortTests,SeahorseAgentKernelAutoConfigurationTests,MemoryWorkflowRoutingTests" \
+    "-Dsurefire.failIfNoSpecifiedTests=false"
+```
+
+输出：
+
+```
+[INFO] Running com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelAutoConfigurationTests
+[INFO] Tests run: 46, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Running com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryEnginePortTests
+[INFO] Tests run: 62, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Running com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryWorkflowRoutingTests
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 118, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+```
+
+### SPEC 推荐模块回归
+
+```bash
+.\mvnw.cmd -B -pl seahorse-agent-kernel test "-Dspotless.check.skip=true"
+.\mvnw.cmd -B -pl seahorse-agent-spring-boot-starter -am test "-Dspotless.check.skip=true"
+.\mvnw.cmd -B -pl seahorse-agent-adapter-web -am test "-Dspotless.check.skip=true"
+```
+
+输出摘要：
+
+```
+seahorse-agent-kernel: Tests run: 64, Failures: 0, Errors: 0, Skipped: 0
+seahorse-agent-spring-boot-starter -am: BUILD SUCCESS
+seahorse-agent-adapter-web -am: Tests run: 9, Failures: 0, Errors: 0, Skipped: 0; BUILD SUCCESS
+```
+
+### 全量 reactor 回归
+
+```bash
+.\mvnw.cmd -B test "-Dspotless.check.skip=true"
+```
+
+输出摘要：
+
+```
+seahorse-agent-tests: Tests run: 748, Failures: 0, Errors: 0, Skipped: 0
+27 modules: BUILD SUCCESS
 ```
 
 ## 编译命令
@@ -50,7 +120,7 @@ e6570c42 refactor(kernel): Slice 3 — extract MemoryDerivedIndexDispatchService
 
 ## 文件清单
 
-11 个新 service 文件：
+12 个新 service 文件：
 
 ```
 seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/application/memory/
@@ -64,12 +134,13 @@ seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/applica
 ├── MemoryRefinerBatchCircuitBreaker.java     (172 lines)
 ├── MemoryRefinerFeedbackLookup.java          (144 lines)
 ├── MemoryRefinerMetadataWriter.java          (124 lines)
+├── MemoryReviewApplyClassificationBuilder.java (109 lines)
 └── MemoryTrackWriteService.java              (187 lines)
 ─────────────────────────────────────────────────────
-Total new service code:                       1696 lines
+Total new service code:                       1805 lines
 ```
 
-facade 行数变化：`2156 → 1457 (−699)`
+facade 行数变化：`2156 → 1367 (−789)`（当前 HEAD 已包含 `MemoryLayerStoreRegistry` / `MemoryOperationGateway` 等后续切片；cut 12 本身将 facade 再减少 43 行）
 
 ## 静态验证证据
 

@@ -160,6 +160,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryOperationBuilder operationBuilder;
     private final MemoryOperationGateway operationGateway;
     private final MemoryRefinerFeedbackLookup refinerFeedbackLookup;
+    private final MemoryReviewApplyClassificationBuilder reviewApplyClassificationBuilder;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -541,6 +542,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.options.refinerFeedbackExampleLimit(),
                 TARGET_KIND_PROFILE_SLOT,
                 TARGET_KEY_IDENTITY_OCCUPATION);
+        this.reviewApplyClassificationBuilder = new MemoryReviewApplyClassificationBuilder();
     }
 
     @Override
@@ -627,7 +629,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                                 MemoryWriteRequest request,
                                                 ChatMessage message) {
         MemoryReviewApplyDirective directive = command == null ? null : command.reviewApplyDirective();
-        MemorySchemaValidationResult reviewTargetLayerValidation = validateReviewDirectiveTargetLayer(directive);
+        MemorySchemaValidationResult reviewTargetLayerValidation =
+                reviewApplyClassificationBuilder.validateTargetLayer(directive);
         if (!reviewTargetLayerValidation.valid()) {
             return new IngestionExecution(MemoryIngestionResult.rejected(reviewTargetLayerValidation.reason()), null);
         }
@@ -640,7 +643,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     MemoryIngestionResult.rejected(sanitized.reason(), Map.of("signals", sanitized.signals())),
                     null);
         }
-        MemoryClassificationResult reviewClassification = reviewApplyClassification(directive, sanitized.content());
+        MemoryClassificationResult reviewClassification =
+                reviewApplyClassificationBuilder.build(directive, sanitized.content());
         if (reviewClassification != null) {
             if (reviewClassification.action() == MemoryIngestionAction.IGNORE) {
                 return new IngestionExecution(MemoryIngestionResult.rejected(reviewClassification.reason()),
@@ -832,38 +836,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return derivedIndexDispatch.dispatchDelete(memoryId, userId, tenantId);
     }
 
-    private MemoryClassificationResult reviewApplyClassification(MemoryReviewApplyDirective directive,
-                                                                 String content) {
-        if (directive == null) {
-            return null;
-        }
-        String targetKind = isBlank(directive.targetKind()) ? "FACT" : directive.targetKind();
-        Map<String, Object> metadata = new LinkedHashMap<>(directive.metadata());
-        metadata.put("status", "review_applied");
-        metadata.put(METADATA_REVIEW_REQUESTED_ACTION, directive.requestedAction().name());
-        metadata.put(METADATA_TARGET_LAYER, targetLayer(directive.targetLayer()).name());
-        metadata.put(METADATA_CONFIDENCE, directive.confidence());
-        metadata.put(METADATA_IMPORTANCE, directive.importance());
-        metadata.put(METADATA_VALUE_SCORE, directive.valueScore());
-        metadata.put(METADATA_RISK_SCORE, directive.riskScore());
-        metadata.put(METADATA_SOURCE_MESSAGE_IDS, directive.sourceMessageIds());
-        MemoryCaptureDecision decision = MemoryCaptureDecision.refinedAdd(
-                content,
-                targetKind,
-                directive.importance(),
-                directive.confidence(),
-                directive.valueScore(),
-                directive.riskScore(),
-                List.of("memory_review_applied"),
-                List.of("human_review"));
-        return MemoryClassificationResult.refinedAdd(decision, new RefinedMemoryDelta(
-                directive.requestedAction(),
-                targetKind,
-                directive.targetKey(),
-                "memory_review_applied",
-                metadata));
-    }
-
     private String saveMemory(MemoryRecord record, MemoryLayer targetLayer) {
         MemoryLayer safeLayer = targetLayer == null ? MemoryLayer.SHORT_TERM : targetLayer;
         stores.storeFor(safeLayer).save(record);
@@ -894,21 +866,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return parsed == MemoryLayer.WORKING ? MemoryLayer.SHORT_TERM : parsed;
         } catch (IllegalArgumentException ex) {
             return MemoryLayer.SHORT_TERM;
-        }
-    }
-
-    private MemorySchemaValidationResult validateReviewDirectiveTargetLayer(MemoryReviewApplyDirective directive) {
-        if (directive == null) {
-            return MemorySchemaValidationResult.ok();
-        }
-        try {
-            MemoryLayer parsed = MemoryLayer.valueOf(directive.targetLayer().trim().toUpperCase(Locale.ROOT));
-            if (parsed == MemoryLayer.WORKING) {
-                return MemorySchemaValidationResult.invalid("invalid_review_target_layer");
-            }
-            return MemorySchemaValidationResult.ok();
-        } catch (IllegalArgumentException ex) {
-            return MemorySchemaValidationResult.invalid("invalid_review_target_layer");
         }
     }
 
