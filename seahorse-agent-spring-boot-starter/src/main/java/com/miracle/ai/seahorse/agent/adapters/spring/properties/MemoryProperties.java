@@ -291,9 +291,14 @@ public class MemoryProperties {
     public static class Maintenance {
 
         private final Compaction compaction = new Compaction();
+        private final Gc gc = new Gc();
 
         public Compaction getCompaction() {
             return compaction;
+        }
+
+        public Gc getGc() {
+            return gc;
         }
 
         public static class Compaction {
@@ -351,6 +356,109 @@ public class MemoryProperties {
 
             public void setEmbeddingModel(String embeddingModel) {
                 this.embeddingModel = embeddingModel;
+            }
+        }
+
+        public static class Gc {
+
+            private int scanLimit = 100;
+            private long retentionDays = 7L;
+            private boolean dryRun = false;
+            private boolean vectorIndexEnabled = true;
+            private boolean keywordIndexEnabled = true;
+            private boolean graphIndexEnabled = true;
+            private boolean archiveEnabled = false;
+            private long archiveIdleDays = 90L;
+            private double archiveScoreThreshold = 0.15d;
+            private boolean physicalDeleteEnabled = false;
+            private long physicalDeleteRetentionDays = 30L;
+
+            public int getScanLimit() {
+                return scanLimit;
+            }
+
+            public void setScanLimit(int scanLimit) {
+                this.scanLimit = scanLimit;
+            }
+
+            public long getRetentionDays() {
+                return retentionDays;
+            }
+
+            public void setRetentionDays(long retentionDays) {
+                this.retentionDays = retentionDays;
+            }
+
+            public boolean isDryRun() {
+                return dryRun;
+            }
+
+            public void setDryRun(boolean dryRun) {
+                this.dryRun = dryRun;
+            }
+
+            public boolean isVectorIndexEnabled() {
+                return vectorIndexEnabled;
+            }
+
+            public void setVectorIndexEnabled(boolean vectorIndexEnabled) {
+                this.vectorIndexEnabled = vectorIndexEnabled;
+            }
+
+            public boolean isKeywordIndexEnabled() {
+                return keywordIndexEnabled;
+            }
+
+            public void setKeywordIndexEnabled(boolean keywordIndexEnabled) {
+                this.keywordIndexEnabled = keywordIndexEnabled;
+            }
+
+            public boolean isGraphIndexEnabled() {
+                return graphIndexEnabled;
+            }
+
+            public void setGraphIndexEnabled(boolean graphIndexEnabled) {
+                this.graphIndexEnabled = graphIndexEnabled;
+            }
+
+            public boolean isArchiveEnabled() {
+                return archiveEnabled;
+            }
+
+            public void setArchiveEnabled(boolean archiveEnabled) {
+                this.archiveEnabled = archiveEnabled;
+            }
+
+            public long getArchiveIdleDays() {
+                return archiveIdleDays;
+            }
+
+            public void setArchiveIdleDays(long archiveIdleDays) {
+                this.archiveIdleDays = archiveIdleDays;
+            }
+
+            public double getArchiveScoreThreshold() {
+                return archiveScoreThreshold;
+            }
+
+            public void setArchiveScoreThreshold(double archiveScoreThreshold) {
+                this.archiveScoreThreshold = archiveScoreThreshold;
+            }
+
+            public boolean isPhysicalDeleteEnabled() {
+                return physicalDeleteEnabled;
+            }
+
+            public void setPhysicalDeleteEnabled(boolean physicalDeleteEnabled) {
+                this.physicalDeleteEnabled = physicalDeleteEnabled;
+            }
+
+            public long getPhysicalDeleteRetentionDays() {
+                return physicalDeleteRetentionDays;
+            }
+
+            public void setPhysicalDeleteRetentionDays(long physicalDeleteRetentionDays) {
+                this.physicalDeleteRetentionDays = physicalDeleteRetentionDays;
             }
         }
     }

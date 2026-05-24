@@ -207,6 +207,59 @@ class MemoryPropertiesTests {
     }
 
     @Test
+    void maintenanceGcDefaultsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties.Maintenance.Gc gc = context.getBean(MemoryProperties.class)
+                    .getMaintenance()
+                    .getGc();
+            assertThat(gc.getScanLimit()).isEqualTo(100);
+            assertThat(gc.getRetentionDays()).isEqualTo(7L);
+            assertThat(gc.isDryRun()).isFalse();
+            assertThat(gc.isVectorIndexEnabled()).isTrue();
+            assertThat(gc.isKeywordIndexEnabled()).isTrue();
+            assertThat(gc.isGraphIndexEnabled()).isTrue();
+            assertThat(gc.isArchiveEnabled()).isFalse();
+            assertThat(gc.getArchiveIdleDays()).isEqualTo(90L);
+            assertThat(gc.getArchiveScoreThreshold()).isEqualTo(0.15d);
+            assertThat(gc.isPhysicalDeleteEnabled()).isFalse();
+            assertThat(gc.getPhysicalDeleteRetentionDays()).isEqualTo(30L);
+        });
+    }
+
+    @Test
+    void maintenanceGcCustomKeysOverrideDefaults() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse-agent.memory.maintenance.gc.scan-limit=500",
+                        "seahorse-agent.memory.maintenance.gc.retention-days=14",
+                        "seahorse-agent.memory.maintenance.gc.dry-run=true",
+                        "seahorse-agent.memory.maintenance.gc.vector-index-enabled=false",
+                        "seahorse-agent.memory.maintenance.gc.keyword-index-enabled=false",
+                        "seahorse-agent.memory.maintenance.gc.graph-index-enabled=false",
+                        "seahorse-agent.memory.maintenance.gc.archive-enabled=true",
+                        "seahorse-agent.memory.maintenance.gc.archive-idle-days=180",
+                        "seahorse-agent.memory.maintenance.gc.archive-score-threshold=0.25",
+                        "seahorse-agent.memory.maintenance.gc.physical-delete-enabled=true",
+                        "seahorse-agent.memory.maintenance.gc.physical-delete-retention-days=60")
+                .run(context -> {
+                    MemoryProperties.Maintenance.Gc gc = context.getBean(MemoryProperties.class)
+                            .getMaintenance()
+                            .getGc();
+                    assertThat(gc.getScanLimit()).isEqualTo(500);
+                    assertThat(gc.getRetentionDays()).isEqualTo(14L);
+                    assertThat(gc.isDryRun()).isTrue();
+                    assertThat(gc.isVectorIndexEnabled()).isFalse();
+                    assertThat(gc.isKeywordIndexEnabled()).isFalse();
+                    assertThat(gc.isGraphIndexEnabled()).isFalse();
+                    assertThat(gc.isArchiveEnabled()).isTrue();
+                    assertThat(gc.getArchiveIdleDays()).isEqualTo(180L);
+                    assertThat(gc.getArchiveScoreThreshold()).isEqualTo(0.25d);
+                    assertThat(gc.isPhysicalDeleteEnabled()).isTrue();
+                    assertThat(gc.getPhysicalDeleteRetentionDays()).isEqualTo(60L);
+                });
+    }
+
+    @Test
     void policyCustomKeysOverrideDefaults() {
         contextRunner
                 .withPropertyValues(

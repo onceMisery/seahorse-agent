@@ -874,32 +874,23 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             MemoryOutboxPort outboxPort,
             ObjectProvider<MemoryKeywordIndexPort> keywordIndexPort,
             ObjectProvider<MemoryGraphIndexPort> graphIndexPort,
-            @Value("${seahorse-agent.memory.gc.scan-limit:100}") int scanLimit,
-            @Value("${seahorse-agent.memory.gc.retention-days:7}") long retentionDays,
-            @Value("${seahorse-agent.memory.gc.dry-run:false}") boolean dryRun,
-            @Value("${seahorse-agent.memory.gc.vector-index-enabled:true}") boolean vectorIndexEnabled,
-            @Value("${seahorse-agent.memory.gc.keyword-index-enabled:true}") boolean keywordIndexEnabled,
-            @Value("${seahorse-agent.memory.gc.graph-index-enabled:true}") boolean graphIndexEnabled,
-            @Value("${seahorse-agent.memory.gc.archive-enabled:false}") boolean archiveEnabled,
-            @Value("${seahorse-agent.memory.gc.archive-idle-days:90}") long archiveIdleDays,
-            @Value("${seahorse-agent.memory.gc.archive-score-threshold:0.15}") double archiveScoreThreshold,
-            @Value("${seahorse-agent.memory.gc.physical-delete-enabled:false}") boolean physicalDeleteEnabled,
-            @Value("${seahorse-agent.memory.gc.physical-delete-retention-days:30}") long physicalDeleteRetentionDays) {
+            MemoryProperties memoryProperties) {
+        MemoryProperties.Maintenance.Gc gc = memoryProperties.getMaintenance().getGc();
         return new MemoryGarbageCollectionService(
                 garbageCollectionPort.getIfAvailable(MemoryGarbageCollectionPort::noop),
                 outboxPort,
                 new MemoryGarbageCollectionOptions(
-                        scanLimit,
-                        Duration.ofDays(Math.max(0L, retentionDays)),
-                        dryRun,
-                        vectorIndexEnabled,
-                        keywordIndexEnabled && keywordIndexPort.getIfAvailable() != null,
-                        graphIndexEnabled && graphIndexPort.getIfAvailable() != null,
-                        archiveEnabled,
-                        Duration.ofDays(Math.max(0L, archiveIdleDays)),
-                        archiveScoreThreshold,
-                        physicalDeleteEnabled,
-                        Duration.ofDays(Math.max(0L, physicalDeleteRetentionDays))));
+                        gc.getScanLimit(),
+                        Duration.ofDays(Math.max(0L, gc.getRetentionDays())),
+                        gc.isDryRun(),
+                        gc.isVectorIndexEnabled(),
+                        gc.isKeywordIndexEnabled() && keywordIndexPort.getIfAvailable() != null,
+                        gc.isGraphIndexEnabled() && graphIndexPort.getIfAvailable() != null,
+                        gc.isArchiveEnabled(),
+                        Duration.ofDays(Math.max(0L, gc.getArchiveIdleDays())),
+                        gc.getArchiveScoreThreshold(),
+                        gc.isPhysicalDeleteEnabled(),
+                        Duration.ofDays(Math.max(0L, gc.getPhysicalDeleteRetentionDays()))));
     }
 
     @Bean
