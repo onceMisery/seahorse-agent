@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 
@@ -50,6 +51,9 @@ public final class AgentLoopRequest {
     private final String tenantId;
     private final String userId;
     private final String agentIdentityId;
+    // Phase D Slice 1a 起：通过 expected* 字段驱动输出治理；默认 null 表示按 PLAIN_TEXT 走，不做结构校验。
+    private final OutputArtifactType expectedOutputArtifactType;
+    private final String expectedOutputSchemaJson;
 
     private AgentLoopRequest(Builder b) {
         if (b.question == null || b.question.isBlank()) {
@@ -69,6 +73,8 @@ public final class AgentLoopRequest {
         this.tenantId = defaultText(b.tenantId, AgentDefinition.DEFAULT_TENANT_ID);
         this.userId = defaultText(b.userId, defaultUserId(contextPack, memoryContext));
         this.agentIdentityId = defaultText(b.agentIdentityId, this.userId);
+        this.expectedOutputArtifactType = b.expectedOutputArtifactType;
+        this.expectedOutputSchemaJson = trimToNull(b.expectedOutputSchemaJson);
     }
 
     public String question() {
@@ -123,6 +129,14 @@ public final class AgentLoopRequest {
         return agentIdentityId;
     }
 
+    public OutputArtifactType expectedOutputArtifactType() {
+        return expectedOutputArtifactType;
+    }
+
+    public String expectedOutputSchemaJson() {
+        return expectedOutputSchemaJson;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -141,6 +155,8 @@ public final class AgentLoopRequest {
         private String tenantId;
         private String userId;
         private String agentIdentityId;
+        private OutputArtifactType expectedOutputArtifactType;
+        private String expectedOutputSchemaJson;
 
         public Builder question(String question) {
             this.question = question;
@@ -204,6 +220,16 @@ public final class AgentLoopRequest {
 
         public Builder agentIdentityId(String agentIdentityId) {
             this.agentIdentityId = agentIdentityId;
+            return this;
+        }
+
+        public Builder expectedOutputArtifactType(OutputArtifactType expectedOutputArtifactType) {
+            this.expectedOutputArtifactType = expectedOutputArtifactType;
+            return this;
+        }
+
+        public Builder expectedOutputSchemaJson(String expectedOutputSchemaJson) {
+            this.expectedOutputSchemaJson = expectedOutputSchemaJson;
             return this;
         }
 

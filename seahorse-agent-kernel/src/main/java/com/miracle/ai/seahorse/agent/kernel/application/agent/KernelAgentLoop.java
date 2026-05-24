@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.output.OutputGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitCommand;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
@@ -29,6 +30,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputGovernanceResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
@@ -53,6 +57,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -91,6 +96,8 @@ public class KernelAgentLoop {
     private final ContextWeaverPort contextWeaver;
     private final AgentRunStepRecorder runStepRecorder;
     private final AgentApprovalWaitHandler approvalWaitHandler;
+    // Phase D Slice 1a：可选输出治理。null 表示运行时未启用输出治理，保持引入前行为。
+    private final OutputGovernanceService outputGovernance;
 
     public KernelAgentLoop(StreamingChatModelPort modelPort,
                            ToolRegistryPort toolRegistry,
@@ -112,6 +119,7 @@ public class KernelAgentLoop {
         this.contextWeaver = new DefaultContextWeaver();
         this.runStepRecorder = AgentRunStepRecorder.noop();
         this.approvalWaitHandler = AgentApprovalWaitHandler.noop();
+        this.outputGovernance = null;
     }
 
     public KernelAgentLoop(StreamingChatModelPort modelPort,
@@ -164,6 +172,7 @@ public class KernelAgentLoop {
         this.contextWeaver = Objects.requireNonNullElseGet(contextWeaver, DefaultContextWeaver::new);
         this.runStepRecorder = AgentRunStepRecorder.noop();
         this.approvalWaitHandler = AgentApprovalWaitHandler.noop();
+        this.outputGovernance = null;
     }
 
     public KernelAgentLoop(StreamingChatModelPort modelPort,
@@ -195,6 +204,19 @@ public class KernelAgentLoop {
                            ContextWeaverPort contextWeaver,
                            AgentRunStepRecorder runStepRecorder,
                            AgentApprovalWaitHandler approvalWaitHandler) {
+        this(modelPort, toolRegistry, toolGateway, options, traceRecorder, contextWeaver,
+                runStepRecorder, approvalWaitHandler, null);
+    }
+
+    public KernelAgentLoop(StreamingChatModelPort modelPort,
+                           ToolRegistryPort toolRegistry,
+                           ToolGatewayPort toolGateway,
+                           KernelAgentLoopOptions options,
+                           KernelRagTraceRecorder traceRecorder,
+                           ContextWeaverPort contextWeaver,
+                           AgentRunStepRecorder runStepRecorder,
+                           AgentApprovalWaitHandler approvalWaitHandler,
+                           OutputGovernanceService outputGovernance) {
         this.modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
         ToolRegistryPort effectiveToolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         this.toolRegistry = effectiveToolRegistry;
@@ -205,6 +227,7 @@ public class KernelAgentLoop {
         this.contextWeaver = Objects.requireNonNullElseGet(contextWeaver, DefaultContextWeaver::new);
         this.runStepRecorder = Objects.requireNonNullElseGet(runStepRecorder, AgentRunStepRecorder::noop);
         this.approvalWaitHandler = Objects.requireNonNullElseGet(approvalWaitHandler, AgentApprovalWaitHandler::noop);
+        this.outputGovernance = outputGovernance;
     }
 
     public AgentLoopResult execute(AgentLoopRequest request) {
@@ -264,11 +287,12 @@ public class KernelAgentLoop {
                 recordModelTurn(request, messages, turn, null);
                 modelTurnRecorded = true;
                 if (turn.toolCalls().isEmpty()) {
-                    emitContent(callback, turn.content());
-                    steps.add(AgentStep.finalAnswer(turn.content()));
+                    String finalContent = applyOutputGovernance(request, turn.content());
+                    emitContent(callback, finalContent);
+                    steps.add(AgentStep.finalAnswer(finalContent));
                     emitComplete(callback);
                     traceRecorder.finishNode(stepScope);
-                    return new AgentLoopResult(turn.content(), steps, false);
+                    return new AgentLoopResult(finalContent, steps, false);
                 }
 
                 List<AgentObservation> observations = executeTools(
@@ -646,6 +670,25 @@ public class KernelAgentLoop {
         if (callback != null && content != null && !content.isEmpty()) {
             callback.onContent(content);
         }
+    }
+
+    private String applyOutputGovernance(AgentLoopRequest request, String originalContent) {
+        if (outputGovernance == null) {
+            return originalContent;
+        }
+        OutputArtifactType artifactType = Objects.requireNonNullElse(
+                request.expectedOutputArtifactType(), OutputArtifactType.PLAIN_TEXT);
+        OutputValidationRequest validationRequest = new OutputValidationRequest(
+                request.runId(),
+                request.agentId(),
+                request.tenantId(),
+                request.userId(),
+                artifactType,
+                request.expectedOutputSchemaJson(),
+                originalContent,
+                Map.of());
+        OutputGovernanceResult result = outputGovernance.governFinalAnswer(validationRequest);
+        return result.governedContent();
     }
 
     private void emitComplete(StreamCallback callback) {
