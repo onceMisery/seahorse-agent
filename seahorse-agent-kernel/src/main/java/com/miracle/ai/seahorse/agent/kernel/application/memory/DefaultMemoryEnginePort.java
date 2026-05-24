@@ -105,6 +105,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultMemoryEnginePort.class);
     private static final String DEFAULT_VECTOR_EMBEDDING_MODEL = "default";
+
     private static final String REVIEW_CANDIDATE_PREFIX = "review-";
     private static final String REVIEW_DEFAULT_LAYER = "SHORT_TERM";
     private static final String METADATA_CONTENT = "content";
@@ -151,10 +152,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final Pattern CONTEXT_TURN_INDEX_PATTERN = Pattern.compile("\\bturn_(\\d+):");
     private static final Pattern CONTEXT_SOURCE_SPAN_PATTERN = Pattern.compile(
             "\\bspan_(\\d+):\\s*(.*?)(?=\\s+span_\\d+:\\s*|\\s*$)", Pattern.DOTALL);
-    private static final String OPERATION_VECTOR_DELETE = "VECTOR_DELETE";
-    private static final String OPERATION_VECTOR_DELETE_OUTBOX_ENQUEUE = "VECTOR_DELETE_OUTBOX_ENQUEUE";
-    private static final String OPERATION_KEYWORD_DELETE_OUTBOX_ENQUEUE = "KEYWORD_DELETE_OUTBOX_ENQUEUE";
-    private static final String OPERATION_GRAPH_DELETE_OUTBOX_ENQUEUE = "GRAPH_DELETE_OUTBOX_ENQUEUE";
 
     private record IngestionExecution(MemoryIngestionResult result, MemoryClassificationResult classification) {
 
@@ -226,6 +223,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemorySemanticClassifier memorySemanticClassifier;
     private final MemorySchemaValidator memorySchemaValidator;
     private final ProfileSlotResolver profileSlotResolver;
+    private final MemoryDerivedIndexDispatchService derivedIndexDispatch;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -541,6 +539,12 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.memorySemanticClassifier = new MemorySemanticClassifier(captureCandidateExtractor, memoryValueAssessor);
         this.memorySchemaValidator = new MemorySchemaValidator(memorySanitizer);
         this.profileSlotResolver = new ProfileSlotResolver();
+        this.derivedIndexDispatch = new MemoryDerivedIndexDispatchService(
+                this.memoryVectorPort,
+                this.memoryOutboxPort,
+                this.options.keywordIndexOutboxEnabled(),
+                this.options.graphIndexOutboxEnabled(),
+                DEFAULT_VECTOR_EMBEDDING_MODEL);
     }
 
     @Override
@@ -825,66 +829,11 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     }
 
     private List<String> indexMemoryOrEnqueueOutbox(MemoryRecord record, String userId, String tenantId) {
-        List<String> operations = new ArrayList<>();
-        try {
-            memoryVectorPort.upsert(record.id(), userId, record.content(), DEFAULT_VECTOR_EMBEDDING_MODEL);
-            operations.add("VECTOR_UPSERT");
-        } catch (RuntimeException ex) {
-            LOG.warn("记忆向量索引失败，已转入outbox: memoryId={}, userId={}, error={}",
-                    record.id(), userId, Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
-            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorUpsert(
-                    record,
-                    userId,
-                    tenantId,
-                    DEFAULT_VECTOR_EMBEDDING_MODEL,
-                    Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
-            operations.add("VECTOR_OUTBOX_ENQUEUE");
-        }
-        enqueueOptionalDerivedIndex(record, userId, tenantId, operations);
-        return operations;
+        return derivedIndexDispatch.dispatchUpsert(record, userId, tenantId);
     }
 
     private List<String> deleteIndexesOrEnqueueOutbox(String memoryId, String userId, String tenantId) {
-        List<String> operations = new ArrayList<>();
-        try {
-            memoryVectorPort.delete(memoryId, userId, tenantId);
-            operations.add(OPERATION_VECTOR_DELETE);
-        } catch (RuntimeException ex) {
-            LOG.warn("记忆向量删除失败，已转入outbox: memoryId={}, userId={}, error={}",
-                    memoryId, userId, Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
-            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.vectorDelete(memoryId, userId, tenantId));
-            operations.add(OPERATION_VECTOR_DELETE_OUTBOX_ENQUEUE);
-        }
-        enqueueOptionalDerivedDelete(memoryId, userId, tenantId, operations);
-        return operations;
-    }
-
-    private void enqueueOptionalDerivedIndex(MemoryRecord record,
-                                             String userId,
-                                             String tenantId,
-                                             List<String> operations) {
-        if (options.keywordIndexOutboxEnabled()) {
-            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.keywordUpsert(record, userId, tenantId));
-            operations.add("KEYWORD_OUTBOX_ENQUEUE");
-        }
-        if (options.graphIndexOutboxEnabled()) {
-            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.graphUpsert(record, userId, tenantId));
-            operations.add("GRAPH_OUTBOX_ENQUEUE");
-        }
-    }
-
-    private void enqueueOptionalDerivedDelete(String memoryId,
-                                              String userId,
-                                              String tenantId,
-                                              List<String> operations) {
-        if (options.keywordIndexOutboxEnabled()) {
-            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.keywordDelete(memoryId, userId, tenantId));
-            operations.add(OPERATION_KEYWORD_DELETE_OUTBOX_ENQUEUE);
-        }
-        if (options.graphIndexOutboxEnabled()) {
-            memoryOutboxPort.enqueue(MemoryOutboxPort.MemoryOutboxTask.graphDelete(memoryId, userId, tenantId));
-            operations.add(OPERATION_GRAPH_DELETE_OUTBOX_ENQUEUE);
-        }
+        return derivedIndexDispatch.dispatchDelete(memoryId, userId, tenantId);
     }
 
     private MemoryClassificationResult reviewApplyClassification(MemoryReviewApplyDirective directive,
