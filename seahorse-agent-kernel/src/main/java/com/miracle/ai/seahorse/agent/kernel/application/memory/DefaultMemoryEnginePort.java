@@ -173,6 +173,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryCanonicalAliasResolver canonicalAliasResolver;
     private final MemoryRefinerMetadataWriter refinerMetadataWriter;
     private final MemoryOperationBuilder operationBuilder;
+    private final MemoryOperationCompletionWriter operationCompletionWriter;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -549,6 +550,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.memorySanitizer,
                 this.memoryPreFilter,
                 this.memorySemanticClassifier);
+        this.operationCompletionWriter = new MemoryOperationCompletionWriter(
+                this.memoryOperationLogPort,
+                this.refinerMetadataWriter);
     }
 
     @Override
@@ -583,7 +587,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
         try {
             IngestionExecution execution = executeIngestion(operationId, tenantId, command, request, message);
-            markOperationCompleted(operationId, execution.result(), decisionMap(execution.result(), execution.classification()));
+            operationCompletionWriter.markCompleted(operationId, execution.result(), execution.classification());
             return execution.result();
         } catch (RuntimeException ex) {
             memoryOperationLogPort.markFailed(operationId,
@@ -1477,49 +1481,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return command.tenantId();
         }
         return "default";
-    }
-
-    private void markOperationCompleted(String operationId,
-                                        MemoryIngestionResult result,
-                                        Map<String, Object> decision) {
-        memoryOperationLogPort.markCompleted(operationId, operationStatus(result), decision);
-    }
-
-    private MemoryOperationStatus operationStatus(MemoryIngestionResult result) {
-        if (result == null) {
-            return MemoryOperationStatus.FAILED;
-        }
-        return switch (result.status()) {
-            case ACCEPTED -> MemoryOperationStatus.SUCCEEDED;
-            case REJECTED -> result.action() == MemoryIngestionAction.REVIEW
-                    ? MemoryOperationStatus.REVIEW
-                    : MemoryOperationStatus.REJECTED;
-            case IGNORED -> MemoryOperationStatus.IGNORED;
-            case FAILED -> MemoryOperationStatus.FAILED;
-        };
-    }
-
-    private Map<String, Object> decisionMap(MemoryIngestionResult result) {
-        Map<String, Object> values = new LinkedHashMap<>();
-        if (result == null) {
-            values.put("status", MemoryIngestionStatus.FAILED.name());
-            values.put("action", MemoryIngestionAction.IGNORE.name());
-            values.put("reason", "empty_result");
-            values.put("operations", List.of());
-            return values;
-        }
-        values.put("status", result.status().name());
-        values.put("action", result.action().name());
-        values.put("reason", result.reason());
-        values.put("operations", result.operations());
-        values.putAll(result.details());
-        return values;
-    }
-
-    private Map<String, Object> decisionMap(MemoryIngestionResult result, MemoryClassificationResult classification) {
-        Map<String, Object> values = new LinkedHashMap<>(decisionMap(result));
-        refinerMetadataWriter.appendRefined(values, classification);
-        return values;
     }
 
     private MemoryContext emptyContext(MemoryLoadRequest request) {
