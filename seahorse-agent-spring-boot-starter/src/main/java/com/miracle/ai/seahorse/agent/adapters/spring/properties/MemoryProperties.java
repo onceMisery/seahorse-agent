@@ -68,9 +68,111 @@ public class MemoryProperties {
     }
 
     /**
-     * 占位：策略相关 capture / risk / token / review 等阈值，迁移待后续切片。
+     * Slice 4 续：策略阈值与开关，覆盖 capture / risk / refiner / 告警阈值 / 灰度。
+     *
+     * <p>所有字段默认值与历史 {@code @Value("${seahorse-agent.memory.policy.*}")} 完全一致。
      */
     public static class Policy {
+
+        private double captureAcceptThreshold = 0.4d;
+        private double highValueThreshold = 0.75d;
+        private double riskRejectThreshold = 0.7d;
+        private int tokenBudget = 2400;
+        private boolean reviewEnabled = false;
+        private double refinerDropConfidenceThreshold = 0.5d;
+        private double refinerAutoCommitConfidenceThreshold = 0.85d;
+        private double refinerReviewRiskThreshold = 0.7d;
+        private int schemaFailureAlertThreshold = 0;
+        private int outboxBacklogAlertThreshold = 0;
+        private String greyReleaseKey = "";
+
+        public double getCaptureAcceptThreshold() {
+            return captureAcceptThreshold;
+        }
+
+        public void setCaptureAcceptThreshold(double captureAcceptThreshold) {
+            this.captureAcceptThreshold = captureAcceptThreshold;
+        }
+
+        public double getHighValueThreshold() {
+            return highValueThreshold;
+        }
+
+        public void setHighValueThreshold(double highValueThreshold) {
+            this.highValueThreshold = highValueThreshold;
+        }
+
+        public double getRiskRejectThreshold() {
+            return riskRejectThreshold;
+        }
+
+        public void setRiskRejectThreshold(double riskRejectThreshold) {
+            this.riskRejectThreshold = riskRejectThreshold;
+        }
+
+        public int getTokenBudget() {
+            return tokenBudget;
+        }
+
+        public void setTokenBudget(int tokenBudget) {
+            this.tokenBudget = tokenBudget;
+        }
+
+        public boolean isReviewEnabled() {
+            return reviewEnabled;
+        }
+
+        public void setReviewEnabled(boolean reviewEnabled) {
+            this.reviewEnabled = reviewEnabled;
+        }
+
+        public double getRefinerDropConfidenceThreshold() {
+            return refinerDropConfidenceThreshold;
+        }
+
+        public void setRefinerDropConfidenceThreshold(double refinerDropConfidenceThreshold) {
+            this.refinerDropConfidenceThreshold = refinerDropConfidenceThreshold;
+        }
+
+        public double getRefinerAutoCommitConfidenceThreshold() {
+            return refinerAutoCommitConfidenceThreshold;
+        }
+
+        public void setRefinerAutoCommitConfidenceThreshold(double refinerAutoCommitConfidenceThreshold) {
+            this.refinerAutoCommitConfidenceThreshold = refinerAutoCommitConfidenceThreshold;
+        }
+
+        public double getRefinerReviewRiskThreshold() {
+            return refinerReviewRiskThreshold;
+        }
+
+        public void setRefinerReviewRiskThreshold(double refinerReviewRiskThreshold) {
+            this.refinerReviewRiskThreshold = refinerReviewRiskThreshold;
+        }
+
+        public int getSchemaFailureAlertThreshold() {
+            return schemaFailureAlertThreshold;
+        }
+
+        public void setSchemaFailureAlertThreshold(int schemaFailureAlertThreshold) {
+            this.schemaFailureAlertThreshold = schemaFailureAlertThreshold;
+        }
+
+        public int getOutboxBacklogAlertThreshold() {
+            return outboxBacklogAlertThreshold;
+        }
+
+        public void setOutboxBacklogAlertThreshold(int outboxBacklogAlertThreshold) {
+            this.outboxBacklogAlertThreshold = outboxBacklogAlertThreshold;
+        }
+
+        public String getGreyReleaseKey() {
+            return greyReleaseKey;
+        }
+
+        public void setGreyReleaseKey(String greyReleaseKey) {
+            this.greyReleaseKey = greyReleaseKey;
+        }
     }
 
     /**

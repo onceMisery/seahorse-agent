@@ -88,6 +88,56 @@ class MemoryPropertiesTests {
         });
     }
 
+    @Test
+    void policyDefaultsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties properties = context.getBean(MemoryProperties.class);
+            MemoryProperties.Policy policy = properties.getPolicy();
+            assertThat(policy.getCaptureAcceptThreshold()).isEqualTo(0.4d);
+            assertThat(policy.getHighValueThreshold()).isEqualTo(0.75d);
+            assertThat(policy.getRiskRejectThreshold()).isEqualTo(0.7d);
+            assertThat(policy.getTokenBudget()).isEqualTo(2400);
+            assertThat(policy.isReviewEnabled()).isFalse();
+            assertThat(policy.getRefinerDropConfidenceThreshold()).isEqualTo(0.5d);
+            assertThat(policy.getRefinerAutoCommitConfidenceThreshold()).isEqualTo(0.85d);
+            assertThat(policy.getRefinerReviewRiskThreshold()).isEqualTo(0.7d);
+            assertThat(policy.getSchemaFailureAlertThreshold()).isEqualTo(0);
+            assertThat(policy.getOutboxBacklogAlertThreshold()).isEqualTo(0);
+            assertThat(policy.getGreyReleaseKey()).isEmpty();
+        });
+    }
+
+    @Test
+    void policyCustomKeysOverrideDefaults() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse-agent.memory.policy.capture-accept-threshold=0.55",
+                        "seahorse-agent.memory.policy.high-value-threshold=0.9",
+                        "seahorse-agent.memory.policy.risk-reject-threshold=0.85",
+                        "seahorse-agent.memory.policy.token-budget=4096",
+                        "seahorse-agent.memory.policy.review-enabled=true",
+                        "seahorse-agent.memory.policy.refiner-drop-confidence-threshold=0.42",
+                        "seahorse-agent.memory.policy.refiner-auto-commit-confidence-threshold=0.92",
+                        "seahorse-agent.memory.policy.refiner-review-risk-threshold=0.66",
+                        "seahorse-agent.memory.policy.schema-failure-alert-threshold=10",
+                        "seahorse-agent.memory.policy.outbox-backlog-alert-threshold=500",
+                        "seahorse-agent.memory.policy.grey-release-key=tenant-canary")
+                .run(context -> {
+                    MemoryProperties.Policy policy = context.getBean(MemoryProperties.class).getPolicy();
+                    assertThat(policy.getCaptureAcceptThreshold()).isEqualTo(0.55d);
+                    assertThat(policy.getHighValueThreshold()).isEqualTo(0.9d);
+                    assertThat(policy.getRiskRejectThreshold()).isEqualTo(0.85d);
+                    assertThat(policy.getTokenBudget()).isEqualTo(4096);
+                    assertThat(policy.isReviewEnabled()).isTrue();
+                    assertThat(policy.getRefinerDropConfidenceThreshold()).isEqualTo(0.42d);
+                    assertThat(policy.getRefinerAutoCommitConfidenceThreshold()).isEqualTo(0.92d);
+                    assertThat(policy.getRefinerReviewRiskThreshold()).isEqualTo(0.66d);
+                    assertThat(policy.getSchemaFailureAlertThreshold()).isEqualTo(10);
+                    assertThat(policy.getOutboxBacklogAlertThreshold()).isEqualTo(500);
+                    assertThat(policy.getGreyReleaseKey()).isEqualTo("tenant-canary");
+                });
+    }
+
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties(MemoryProperties.class)
     static class PropertiesHolderConfiguration {
