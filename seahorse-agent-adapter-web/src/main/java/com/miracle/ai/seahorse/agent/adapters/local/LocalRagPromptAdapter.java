@@ -73,6 +73,7 @@ public class LocalRagPromptAdapter implements RagPromptPort {
         appendContext(builder, KB_CONTEXT_TITLE, kbContext);
         appendContext(builder, MCP_CONTEXT_TITLE, mcpContext);
         String memoryContext = contextWeaverPort.weave(
+                context == null ? null : context.getContextPack(),
                 context == null ? null : context.getMemoryContext(),
                 ContextBudget.defaults());
         if (!memoryContext.isBlank()) {

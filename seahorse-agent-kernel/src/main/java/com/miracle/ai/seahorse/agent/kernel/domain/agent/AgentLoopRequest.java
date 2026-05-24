@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.domain.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
@@ -40,6 +41,7 @@ public final class AgentLoopRequest {
     private final List<String> allowedToolIds;
     private final ChatSamplingOptions samplingOptions;
     private final int maxSteps;
+    private final ContextPack contextPack;
     private final MemoryContext memoryContext;
     // 以下上下文字段由 Agent Runtime 传入 Tool Gateway，用于策略、审计和资源权限判断。
     private final String runId;
@@ -59,12 +61,13 @@ public final class AgentLoopRequest {
         this.allowedToolIds = b.allowedToolIds == null ? List.of() : List.copyOf(b.allowedToolIds);
         this.samplingOptions = b.samplingOptions;
         this.maxSteps = b.maxSteps <= 0 ? DEFAULT_MAX_STEPS : b.maxSteps;
+        this.contextPack = b.contextPack;
         this.memoryContext = b.memoryContext;
         this.runId = trimToNull(b.runId);
         this.agentId = defaultText(b.agentId, AgentRuntimeConstants.LEGACY_REACT_AGENT_ID);
         this.versionId = trimToNull(b.versionId);
         this.tenantId = defaultText(b.tenantId, AgentDefinition.DEFAULT_TENANT_ID);
-        this.userId = defaultText(b.userId, memoryContext == null ? "" : memoryContext.getUserId());
+        this.userId = defaultText(b.userId, defaultUserId(contextPack, memoryContext));
         this.agentIdentityId = defaultText(b.agentIdentityId, this.userId);
     }
 
@@ -86,6 +89,10 @@ public final class AgentLoopRequest {
 
     public int maxSteps() {
         return maxSteps;
+    }
+
+    public ContextPack contextPack() {
+        return contextPack;
     }
 
     public MemoryContext memoryContext() {
@@ -126,6 +133,7 @@ public final class AgentLoopRequest {
         private List<String> allowedToolIds;
         private ChatSamplingOptions samplingOptions;
         private int maxSteps;
+        private ContextPack contextPack;
         private MemoryContext memoryContext;
         private String runId;
         private String agentId;
@@ -156,6 +164,11 @@ public final class AgentLoopRequest {
 
         public Builder maxSteps(int maxSteps) {
             this.maxSteps = maxSteps;
+            return this;
+        }
+
+        public Builder contextPack(ContextPack contextPack) {
+            this.contextPack = contextPack;
             return this;
         }
 
@@ -197,6 +210,13 @@ public final class AgentLoopRequest {
         public AgentLoopRequest build() {
             return new AgentLoopRequest(this);
         }
+    }
+
+    private static String defaultUserId(ContextPack contextPack, MemoryContext memoryContext) {
+        if (memoryContext != null) {
+            return memoryContext.getUserId();
+        }
+        return contextPack == null ? "" : contextPack.userId();
     }
 
     private static String trimToNull(String value) {

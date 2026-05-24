@@ -17,9 +17,22 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 
 public interface ContextWeaverPort {
 
     String weave(MemoryContext context, ContextBudget budget);
+
+    default String weave(ContextPack contextPack, ContextBudget budget) {
+        return "";
+    }
+
+    default String weave(ContextPack contextPack, MemoryContext memoryContext, ContextBudget budget) {
+        String contextPackText = weave(contextPack, budget);
+        if (contextPackText != null && !contextPackText.isBlank()) {
+            return contextPackText;
+        }
+        return weave(memoryContext, budget);
+    }
 }

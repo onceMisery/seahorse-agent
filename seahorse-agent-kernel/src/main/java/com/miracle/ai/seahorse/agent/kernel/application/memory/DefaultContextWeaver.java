@@ -17,6 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
@@ -38,6 +41,10 @@ public class DefaultContextWeaver implements ContextWeaverPort {
     private static final String MEMORY_CONFLICT_NOTE =
             "注意：Correction Ledger 和 Profile KV 是用户画像强事实源；业务知识库事实优先于普通历史记忆。";
     private static final int MAX_MEMORY_ITEM_LENGTH = 220;
+    private static final String CONTEXT_PACK_TITLE = "ContextPack context:";
+    private static final String CONTEXT_PACK_NOTE =
+            "Use only these ContextPack items as authorized runtime context; keep citations and ACL decisions traceable.";
+    private static final int MAX_CONTEXT_ITEM_LENGTH = 320;
     private static final String COMPONENT = "memory-context-weaver";
     static final String OBSERVATION_WEAVE_EVENT = "memory-context-weave";
     static final String OBSERVATION_ATTR_OUTCOME = "outcome";
@@ -80,6 +87,33 @@ public class DefaultContextWeaver implements ContextWeaverPort {
         return prompt;
     }
 
+    @Override
+    public String weave(ContextPack contextPack, ContextBudget budget) {
+        if (!hasContextPackItems(contextPack)) {
+            return "";
+        }
+        ContextBudget safeBudget = Objects.requireNonNullElseGet(budget, ContextBudget::defaults);
+        BudgetedBuilder builder = new BudgetedBuilder(safeBudget.maxItems(), safeBudget.maxChars());
+        builder.appendHeader(CONTEXT_PACK_TITLE);
+        for (ContextItem item : contextPack.items()) {
+            appendContextItem(builder, item);
+        }
+        if (builder.itemCount == 0) {
+            return "";
+        }
+        builder.appendFooter(CONTEXT_PACK_NOTE);
+        return builder.build();
+    }
+
+    @Override
+    public String weave(ContextPack contextPack, MemoryContext memoryContext, ContextBudget budget) {
+        String contextPackText = weave(contextPack, budget);
+        if (!contextPackText.isBlank()) {
+            return contextPackText;
+        }
+        return weave(memoryContext, budget);
+    }
+
     private static boolean hasMemory(MemoryContext context) {
         return context != null
                 && (!safeItems(context.getCorrectionMemories()).isEmpty()
@@ -90,6 +124,10 @@ public class DefaultContextWeaver implements ContextWeaverPort {
                 || !safeItems(context.getLongTermMemories()).isEmpty());
     }
 
+    private static boolean hasContextPackItems(ContextPack contextPack) {
+        return contextPack != null && contextPack.items() != null && !contextPack.items().isEmpty();
+    }
+
     private static void appendZone(BudgetedBuilder builder, String title, List<MemoryItem> items) {
         for (MemoryItem item : safeItems(items)) {
             String content = decorateWithMetadata(truncate(item.getContent(), MAX_MEMORY_ITEM_LENGTH),
@@ -98,6 +136,27 @@ public class DefaultContextWeaver implements ContextWeaverPort {
                 builder.appendItem(title, content);
             }
         }
+    }
+
+    private static void appendContextItem(BudgetedBuilder builder, ContextItem item) {
+        if (item == null || item.sensitivity() == ContextSensitivity.SECRET) {
+            return;
+        }
+        String content = truncate(item.content(), MAX_CONTEXT_ITEM_LENGTH);
+        if (content.isBlank()) {
+            return;
+        }
+        builder.appendItem("[" + item.sourceType().name() + "]",
+                content + " (" + contextItemProvenance(item) + ")");
+    }
+
+    private static String contextItemProvenance(ContextItem item) {
+        StringBuilder summary = new StringBuilder();
+        appendSummary(summary, "source", item.sourceType().name() + ":" + item.sourceId());
+        appendSummary(summary, "sensitivity", item.sensitivity().name());
+        appendSummary(summary, "aclDecision", item.aclDecisionId());
+        appendSummary(summary, "citation", item.citationJson());
+        return summary.toString();
     }
 
     private static List<MemoryItem> safeItems(List<MemoryItem> items) {
@@ -121,6 +180,16 @@ public class DefaultContextWeaver implements ContextWeaverPort {
             return content.trim();
         }
         return content.trim() + " (" + metadata + ")";
+    }
+
+    private static void appendSummary(StringBuilder summary, String label, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        if (!summary.isEmpty()) {
+            summary.append(", ");
+        }
+        summary.append(label).append("=").append(value.trim());
     }
 
     private static String metadataSummary(String metadataJson) {

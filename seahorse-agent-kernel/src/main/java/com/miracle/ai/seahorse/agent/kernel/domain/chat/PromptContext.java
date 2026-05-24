@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.chat;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
@@ -45,6 +46,8 @@ public class PromptContext {
 
     private Map<String, List<RetrievedChunk>> intentChunks;
 
+    private ContextPack contextPack;
+
     private MemoryContext memoryContext;
 
     public boolean hasMcp() {
@@ -63,6 +66,10 @@ public class PromptContext {
                 || notEmpty(memoryContext.getBusinessDocumentMemories())
                 || notEmpty(memoryContext.getLongTermMemories())
                 || notEmpty(memoryContext.getSemanticMemories()));
+    }
+
+    public boolean hasContextPack() {
+        return contextPack != null && notEmpty(contextPack.items());
     }
 
     private boolean notEmpty(List<?> list) {

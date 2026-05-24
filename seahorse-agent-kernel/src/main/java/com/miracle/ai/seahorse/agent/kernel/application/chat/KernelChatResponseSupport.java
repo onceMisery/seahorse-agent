@@ -116,6 +116,7 @@ final class KernelChatResponseSupport {
                 .mcpIntents(mergedGroup.mcpIntents())
                 .kbIntents(mergedGroup.kbIntents())
                 .intentChunks(retrievalContext.getIntentChunks())
+                .contextPack(context.getContextPack())
                 .memoryContext(memoryContext)
                 .build();
 
@@ -167,7 +168,7 @@ final class KernelChatResponseSupport {
                 : customPrompt;
         systemPrompt = prependCoreContext(systemPrompt);
         systemPrompt = renderSystemPrompt(systemPrompt, context);
-        systemPrompt = appendMemoryContext(systemPrompt, context.getMemoryContext());
+        systemPrompt = appendRuntimeContext(systemPrompt, context);
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.system(systemPrompt));
         messages.addAll(safeHistory(context));
@@ -183,16 +184,17 @@ final class KernelChatResponseSupport {
         return responsePorts.streamingChatModelPort().streamChat(request, requireCallback(context));
     }
 
-    private String appendMemoryContext(String systemPrompt, MemoryContext memoryContext) {
-        String memoryText = responsePorts.contextWeaverPort().weave(memoryContext, ContextBudget.defaults());
-        if (memoryText.isBlank()) {
+    private String appendRuntimeContext(String systemPrompt, StreamChatContext context) {
+        String contextText = responsePorts.contextWeaverPort()
+                .weave(context.getContextPack(), context.getMemoryContext(), ContextBudget.defaults());
+        if (contextText.isBlank()) {
             return systemPrompt;
         }
         String safeSystemPrompt = Objects.requireNonNullElse(systemPrompt, "").trim();
         if (safeSystemPrompt.isBlank()) {
-            return memoryText;
+            return contextText;
         }
-        return safeSystemPrompt + "\n\n" + memoryText;
+        return safeSystemPrompt + "\n\n" + contextText;
     }
 
     private static final String CORE_CONTEXT_HEADER =

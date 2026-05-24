@@ -28,6 +28,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopExitReason;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
@@ -249,7 +250,7 @@ public class KernelAgentLoop {
         Objects.requireNonNull(request, "AgentLoopRequest must not be null");
         AgentRunControl runControl = Objects.requireNonNullElseGet(control, AgentRunControl::direct);
         List<ChatMessage> messages = new ArrayList<>(request.history());
-        installMemoryContext(messages, request.memoryContext());
+        installRuntimeContext(messages, request.contextPack(), request.memoryContext());
         messages.add(ChatMessage.user(request.question()));
 
         List<AgentStep> steps = new ArrayList<>();
@@ -397,25 +398,27 @@ public class KernelAgentLoop {
                 .toList();
     }
 
-    private void installMemoryContext(List<ChatMessage> messages, MemoryContext memoryContext) {
-        String memoryText = contextWeaver.weave(memoryContext, ContextBudget.defaults());
-        if (memoryText.isBlank()) {
+    private void installRuntimeContext(List<ChatMessage> messages,
+                                       ContextPack contextPack,
+                                       MemoryContext memoryContext) {
+        String contextText = contextWeaver.weave(contextPack, memoryContext, ContextBudget.defaults());
+        if (contextText.isBlank()) {
             return;
         }
         if (!messages.isEmpty() && messages.get(0).getRole() == ChatRole.SYSTEM) {
             ChatMessage first = messages.get(0);
-            messages.set(0, ChatMessage.system(appendMemoryText(first.getContent(), memoryText)));
+            messages.set(0, ChatMessage.system(appendContextText(first.getContent(), contextText)));
             return;
         }
-        messages.add(0, ChatMessage.system(memoryText));
+        messages.add(0, ChatMessage.system(contextText));
     }
 
-    private String appendMemoryText(String systemPrompt, String memoryText) {
+    private String appendContextText(String systemPrompt, String contextText) {
         String safeSystemPrompt = Objects.requireNonNullElse(systemPrompt, "").trim();
         if (safeSystemPrompt.isBlank()) {
-            return memoryText;
+            return contextText;
         }
-        return safeSystemPrompt + "\n\n" + memoryText;
+        return safeSystemPrompt + "\n\n" + contextText;
     }
 
     private List<AgentObservation> executeTools(List<AgentToolCall> toolCalls,

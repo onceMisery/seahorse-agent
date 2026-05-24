@@ -22,6 +22,11 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItemSourceType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
@@ -39,6 +44,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +64,7 @@ class KernelAgentLoopTests {
 
     private static final ToolDescriptor WEATHER_DESCRIPTOR =
             new ToolDescriptor("weather", "Weather", "查询天气", "{}");
+    private static final Instant NOW = Instant.parse("2026-05-24T00:00:00Z");
 
     @Test
     void returnsFinalAnswerWhenModelDoesNotRequestTools() {
@@ -123,7 +130,7 @@ class KernelAgentLoopTests {
         AgentLoopResult result = loop.execute(defaultRequest(2));
 
         assertTrue(result.truncated());
-        assertTrue(result.finalAnswer().contains("步骤"));
+        assertTrue(result.finalAnswer().contains("Task step limit reached"));
         assertEquals(2, result.steps().size());
     }
 
@@ -139,7 +146,7 @@ class KernelAgentLoopTests {
 
         AgentObservation observation = result.steps().get(0).observations().get(0);
         assertFalse(observation.success());
-        assertTrue(observation.error().contains("未注册"));
+        assertEquals(ToolPolicyReasonCodes.TOOL_NOT_FOUND, observation.error());
         assertEquals("已降级回答", result.finalAnswer());
     }
 
@@ -201,7 +208,7 @@ class KernelAgentLoopTests {
 
         AgentObservation observation = result.steps().get(0).observations().get(0);
         assertFalse(observation.success());
-        assertTrue(observation.error().contains("超时"));
+        assertTrue(observation.error().contains("Tool execution timed out"));
         assertEquals("已按超时处理", result.finalAnswer());
     }
 
@@ -426,6 +433,28 @@ class KernelAgentLoopTests {
         assertTrue(messages.get(0).getContent().contains("teacher"));
     }
 
+    @Test
+    void contextPackIsInjectedIntoFirstModelTurnBeforeLegacyMemory() {
+        ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("policy")));
+        KernelAgentLoop loop = new KernelAgentLoop(model, ToolRegistryPort.empty(), KernelAgentLoopOptions.defaults());
+
+        loop.execute(AgentLoopRequest.builder()
+                .question("what is the refund policy?")
+                .history(List.of(ChatMessage.system("system-base")))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.3D).build())
+                .contextPack(contextPack("refund approval requires manager signoff"))
+                .memoryContext(MemoryContext.builder()
+                        .profileMemories(List.of(MemoryItem.builder().content("legacy profile memory").build()))
+                        .build())
+                .build());
+
+        List<ChatMessage> messages = model.requests.get(0).getMessages();
+        assertEquals(ChatRole.SYSTEM, messages.get(0).getRole());
+        assertTrue(messages.get(0).getContent().contains("refund approval requires manager signoff"));
+        assertTrue(messages.get(0).getContent().contains("aclDecision=decision-1"));
+        assertFalse(messages.get(0).getContent().contains("legacy profile memory"));
+    }
+
     private static AgentLoopRequest defaultRequest() {
         return defaultRequest(6);
     }
@@ -437,6 +466,34 @@ class KernelAgentLoopTests {
                 .samplingOptions(ChatSamplingOptions.builder().temperature(0.3D).build())
                 .maxSteps(maxSteps)
                 .build();
+    }
+
+    private static ContextPack contextPack(String content) {
+        return new ContextPack(
+                "ctx-1",
+                "run-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "answer user",
+                400,
+                List.of(new ContextItem(
+                        "ctxi-1",
+                        "ctx-1",
+                        ContextItemSourceType.RAG_CHUNK,
+                        "doc-1",
+                        content,
+                        null,
+                        0.9,
+                        0.8,
+                        ContextSensitivity.INTERNAL,
+                        "decision-1",
+                        "{\"docId\":\"policy-1\"}",
+                        20,
+                        null,
+                        NOW)),
+                NOW);
     }
 
     private static ToolPort throwingTool(String message) {
