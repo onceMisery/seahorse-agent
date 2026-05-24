@@ -24,17 +24,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 @RestController
 public class SeahorseMemoryRecallGoldenHarnessController {
-
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String KEY_MESSAGE = "message";
-    private static final String SUCCESS_CODE = "0";
-    private static final String ERROR_CODE = "1";
-    private static final String NOT_AVAILABLE_MESSAGE = "Service not available";
 
     private final ObjectProvider<MemoryRecallGoldenHarnessInboundPort> harnessPortProvider;
 
@@ -44,20 +35,13 @@ public class SeahorseMemoryRecallGoldenHarnessController {
     }
 
     @GetMapping("/memories/recall-quality/golden/profiles")
-    public Map<String, Object> listProfiles() {
-        MemoryRecallGoldenHarnessInboundPort port = harnessPortProvider.getIfAvailable();
-        if (port == null) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, NOT_AVAILABLE_MESSAGE);
-        }
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, port.listProfiles());
+    public ApiResponse<Object> listProfiles() {
+        return ApiResponses.requireServiceOrError(harnessPortProvider,
+                MemoryRecallGoldenHarnessInboundPort::listProfiles);
     }
 
     @PostMapping("/memories/recall-quality/golden/profiles/{profileName}/run")
-    public Map<String, Object> runProfile(@PathVariable("profileName") String profileName) {
-        MemoryRecallGoldenHarnessInboundPort port = harnessPortProvider.getIfAvailable();
-        if (port == null) {
-            return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, NOT_AVAILABLE_MESSAGE);
-        }
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, port.runProfile(profileName));
+    public ApiResponse<Object> runProfile(@PathVariable("profileName") String profileName) {
+        return ApiResponses.requireServiceOrError(harnessPortProvider, port -> port.runProfile(profileName));
     }
 }

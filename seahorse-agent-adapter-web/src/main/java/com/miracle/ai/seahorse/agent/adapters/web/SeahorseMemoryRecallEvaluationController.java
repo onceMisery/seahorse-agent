@@ -24,15 +24,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 @RestController
 public class SeahorseMemoryRecallEvaluationController {
-
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
-    private static final String ERROR_CODE = "1";
 
     private final ObjectProvider<MemoryRecallEvaluationInboundPort> evaluationPortProvider;
 
@@ -42,11 +35,7 @@ public class SeahorseMemoryRecallEvaluationController {
     }
 
     @PostMapping("/memories/recall-quality/evaluate")
-    public Map<String, Object> evaluate(@RequestBody(required = false) MemoryRecallEvaluationCommand command) {
-        MemoryRecallEvaluationInboundPort evaluationPort = evaluationPortProvider.getIfAvailable();
-        if (evaluationPort == null) {
-            return Map.of(KEY_CODE, ERROR_CODE, "message", "Service not available");
-        }
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, evaluationPort.evaluate(command));
+    public ApiResponse<Object> evaluate(@RequestBody(required = false) MemoryRecallEvaluationCommand command) {
+        return ApiResponses.requireServiceOrError(evaluationPortProvider, port -> port.evaluate(command));
     }
 }
