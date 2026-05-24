@@ -151,6 +151,62 @@ class MemoryPropertiesTests {
     }
 
     @Test
+    void outboxDefaultsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties.Outbox outbox = context.getBean(MemoryProperties.class).getOutbox();
+            assertThat(outbox.getRelayBatchSize()).isEqualTo(50);
+        });
+    }
+
+    @Test
+    void outboxCustomKeyOverridesDefault() {
+        contextRunner
+                .withPropertyValues("seahorse-agent.memory.outbox.relay-batch-size=200")
+                .run(context -> {
+                    MemoryProperties.Outbox outbox = context.getBean(MemoryProperties.class).getOutbox();
+                    assertThat(outbox.getRelayBatchSize()).isEqualTo(200);
+                });
+    }
+
+    @Test
+    void maintenanceCompactionDefaultsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties.Maintenance.Compaction compaction = context.getBean(MemoryProperties.class)
+                    .getMaintenance()
+                    .getCompaction();
+            assertThat(compaction.getScanLimit()).isEqualTo(100);
+            assertThat(compaction.getMinGroupSize()).isEqualTo(3);
+            assertThat(compaction.isVectorIndexEnabled()).isTrue();
+            assertThat(compaction.isKeywordIndexEnabled()).isTrue();
+            assertThat(compaction.isGraphIndexEnabled()).isTrue();
+            assertThat(compaction.getEmbeddingModel()).isEqualTo("default");
+        });
+    }
+
+    @Test
+    void maintenanceCompactionCustomKeysOverrideDefaults() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse-agent.memory.maintenance.compaction.scan-limit=300",
+                        "seahorse-agent.memory.maintenance.compaction.min-group-size=5",
+                        "seahorse-agent.memory.maintenance.compaction.vector-index-enabled=false",
+                        "seahorse-agent.memory.maintenance.compaction.keyword-index-enabled=false",
+                        "seahorse-agent.memory.maintenance.compaction.graph-index-enabled=false",
+                        "seahorse-agent.memory.maintenance.compaction.embedding-model=ada-002")
+                .run(context -> {
+                    MemoryProperties.Maintenance.Compaction compaction = context.getBean(MemoryProperties.class)
+                            .getMaintenance()
+                            .getCompaction();
+                    assertThat(compaction.getScanLimit()).isEqualTo(300);
+                    assertThat(compaction.getMinGroupSize()).isEqualTo(5);
+                    assertThat(compaction.isVectorIndexEnabled()).isFalse();
+                    assertThat(compaction.isKeywordIndexEnabled()).isFalse();
+                    assertThat(compaction.isGraphIndexEnabled()).isFalse();
+                    assertThat(compaction.getEmbeddingModel()).isEqualTo("ada-002");
+                });
+    }
+
+    @Test
     void policyCustomKeysOverrideDefaults() {
         contextRunner
                 .withPropertyValues(

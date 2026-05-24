@@ -264,15 +264,95 @@ public class MemoryProperties {
     }
 
     /**
-     * 占位：outbox relay batch / handler 配置，迁移待后续切片。
+     * Slice 4 续：outbox relay 调度参数。
+     *
+     * <p>{@code relay-enabled} 由 {@code @ConditionalOnProperty} 控制 bean 创建，
+     * 此处保留属性以便未来下沉判断；当前仅 {@code relay-batch-size} 参与运行时绑定。
      */
     public static class Outbox {
+
+        private int relayBatchSize = 50;
+
+        public int getRelayBatchSize() {
+            return relayBatchSize;
+        }
+
+        public void setRelayBatchSize(int relayBatchSize) {
+            this.relayBatchSize = relayBatchSize;
+        }
     }
 
     /**
-     * 占位：maintenance / compaction / gc / alias 等参数，迁移待后续切片。
+     * Slice 4 续：维护任务（compaction / gc / alias / 总控）配置。
+     *
+     * <p>本次迁移仅落地 compaction 子段；gc / alias-resolution / maintenance enabled 旗标
+     * 在后续切片继续迁移，避免一次性大改。
      */
     public static class Maintenance {
+
+        private final Compaction compaction = new Compaction();
+
+        public Compaction getCompaction() {
+            return compaction;
+        }
+
+        public static class Compaction {
+
+            private int scanLimit = 100;
+            private int minGroupSize = 3;
+            private boolean vectorIndexEnabled = true;
+            private boolean keywordIndexEnabled = true;
+            private boolean graphIndexEnabled = true;
+            private String embeddingModel = "default";
+
+            public int getScanLimit() {
+                return scanLimit;
+            }
+
+            public void setScanLimit(int scanLimit) {
+                this.scanLimit = scanLimit;
+            }
+
+            public int getMinGroupSize() {
+                return minGroupSize;
+            }
+
+            public void setMinGroupSize(int minGroupSize) {
+                this.minGroupSize = minGroupSize;
+            }
+
+            public boolean isVectorIndexEnabled() {
+                return vectorIndexEnabled;
+            }
+
+            public void setVectorIndexEnabled(boolean vectorIndexEnabled) {
+                this.vectorIndexEnabled = vectorIndexEnabled;
+            }
+
+            public boolean isKeywordIndexEnabled() {
+                return keywordIndexEnabled;
+            }
+
+            public void setKeywordIndexEnabled(boolean keywordIndexEnabled) {
+                this.keywordIndexEnabled = keywordIndexEnabled;
+            }
+
+            public boolean isGraphIndexEnabled() {
+                return graphIndexEnabled;
+            }
+
+            public void setGraphIndexEnabled(boolean graphIndexEnabled) {
+                this.graphIndexEnabled = graphIndexEnabled;
+            }
+
+            public String getEmbeddingModel() {
+                return embeddingModel;
+            }
+
+            public void setEmbeddingModel(String embeddingModel) {
+                this.embeddingModel = embeddingModel;
+            }
+        }
     }
 
     /**

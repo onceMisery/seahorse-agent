@@ -695,11 +695,11 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     public SeahorseMemoryOutboxRelayJob seahorseMemoryOutboxRelayJob(
             MemoryOutboxRelayService relayService,
             ObjectProvider<DistributedLockPort> lockPort,
-            @Value("${seahorse-agent.memory.outbox.relay-batch-size:50}") int batchSize) {
+            MemoryProperties memoryProperties) {
         return new SeahorseMemoryOutboxRelayJob(
                 relayService,
                 lockPort.getIfAvailable(DistributedLockPort::noop),
-                batchSize);
+                memoryProperties.getOutbox().getRelayBatchSize());
     }
 
     @Bean
@@ -849,24 +849,20 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryKeywordIndexPort> keywordIndexPort,
             ObjectProvider<MemoryGraphIndexPort> graphIndexPort,
             ObjectProvider<ObservationPort> observationPort,
-            @Value("${seahorse-agent.memory.compaction.scan-limit:100}") int scanLimit,
-            @Value("${seahorse-agent.memory.compaction.min-group-size:3}") int minGroupSize,
-            @Value("${seahorse-agent.memory.compaction.vector-index-enabled:true}") boolean vectorIndexEnabled,
-            @Value("${seahorse-agent.memory.compaction.keyword-index-enabled:true}") boolean keywordIndexEnabled,
-            @Value("${seahorse-agent.memory.compaction.graph-index-enabled:true}") boolean graphIndexEnabled,
-            @Value("${seahorse-agent.memory.compaction.embedding-model:default}") String embeddingModel) {
+            MemoryProperties memoryProperties) {
+        MemoryProperties.Maintenance.Compaction compaction = memoryProperties.getMaintenance().getCompaction();
         return new MemoryCompactionService(
                 compactionPort.getIfAvailable(MemoryCompactionPort::noop),
                 longTermMemoryPort.getIfAvailable(),
                 outboxPort,
                 summarizerPort.getIfAvailable(MemoryCompactionSummarizerPort::noop),
                 new MemoryCompactionOptions(
-                        scanLimit,
-                        minGroupSize,
-                        vectorIndexEnabled,
-                        keywordIndexEnabled && keywordIndexPort.getIfAvailable() != null,
-                        graphIndexEnabled && graphIndexPort.getIfAvailable() != null,
-                        embeddingModel),
+                        compaction.getScanLimit(),
+                        compaction.getMinGroupSize(),
+                        compaction.isVectorIndexEnabled(),
+                        compaction.isKeywordIndexEnabled() && keywordIndexPort.getIfAvailable() != null,
+                        compaction.isGraphIndexEnabled() && graphIndexPort.getIfAvailable() != null,
+                        compaction.getEmbeddingModel()),
                 observationPort.getIfAvailable(ObservationPort::noop));
     }
 
