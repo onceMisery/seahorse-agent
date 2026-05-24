@@ -28,16 +28,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
 import java.util.Objects;
 
 @RestController
 public class SeahorseAgentRunController {
-
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
-    private static final String SERVICE_NOT_AVAILABLE = "Service not available";
 
     private final ObjectProvider<AgentRunInboundPort> agentRunPortProvider;
     private final ObjectProvider<AgentRunResumeInboundPort> agentRunResumePortProvider;
@@ -56,11 +50,10 @@ public class SeahorseAgentRunController {
     }
 
     @PostMapping("/agents/{agentId}/runs")
-    public Map<String, Object> startRun(@PathVariable String agentId,
+    public ApiResponse<Object> startRun(@PathVariable String agentId,
                                         @RequestBody AgentRunStartRequest request) {
         AgentRunStartRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        AgentRunInboundPort port = requirePort();
-        return ok(port.startRun(new AgentRunStartCommand(
+        return ApiResponses.requireService(agentRunPortProvider, port -> port.startRun(new AgentRunStartCommand(
                 agentId,
                 safeRequest.versionId(),
                 safeRequest.tenantId(),
@@ -71,65 +64,28 @@ public class SeahorseAgentRunController {
     }
 
     @GetMapping("/agent-runs/{runId}")
-    public Map<String, Object> findRunById(@PathVariable String runId) {
-        AgentRunInboundPort port = requirePort();
-        return ok(port.findRunById(runId)
+    public ApiResponse<Object> findRunById(@PathVariable String runId) {
+        return ApiResponses.requireService(agentRunPortProvider, port -> port.findRunById(runId)
                 .orElseThrow(() -> new IllegalArgumentException("Agent run not found")));
     }
 
     @GetMapping("/agent-runs/{runId}/steps")
-    public Map<String, Object> listSteps(@PathVariable String runId) {
-        AgentRunInboundPort port = requirePort();
-        return ok(port.listSteps(runId));
+    public ApiResponse<Object> listSteps(@PathVariable String runId) {
+        return ApiResponses.requireService(agentRunPortProvider, port -> port.listSteps(runId));
     }
 
     @PostMapping("/agent-runs/{runId}/cancel")
-    public Map<String, Object> cancel(@PathVariable String runId) {
-        AgentRunInboundPort port = requirePort();
-        return ok(port.cancel(runId));
+    public ApiResponse<Object> cancel(@PathVariable String runId) {
+        return ApiResponses.requireService(agentRunPortProvider, port -> port.cancel(runId));
     }
 
     @PostMapping({"/agent-runs/{runId}/resume", "/api/agent-runs/{runId}/resume"})
-    public Map<String, Object> resume(@PathVariable String runId) {
-        AgentRunResumeInboundPort port = requireResumePort();
-        return ok(port.resume(runId));
+    public ApiResponse<Object> resume(@PathVariable String runId) {
+        return ApiResponses.requireService(agentRunResumePortProvider, port -> port.resume(runId));
     }
 
     @GetMapping({"/agent-runs/{runId}/checkpoints", "/api/agent-runs/{runId}/checkpoints"})
-    public Map<String, Object> listCheckpoints(@PathVariable String runId) {
-        AgentCheckpointQueryInboundPort port = requireCheckpointQueryPort();
-        return ok(port.listByRunId(runId));
-    }
-
-    private AgentRunInboundPort requirePort() {
-        AgentRunInboundPort port = agentRunPortProvider.getIfAvailable();
-        if (port == null) {
-            throw new IllegalStateException(SERVICE_NOT_AVAILABLE);
-        }
-        return port;
-    }
-
-    private AgentRunResumeInboundPort requireResumePort() {
-        AgentRunResumeInboundPort port = agentRunResumePortProvider == null
-                ? null
-                : agentRunResumePortProvider.getIfAvailable();
-        if (port == null) {
-            throw new IllegalStateException(SERVICE_NOT_AVAILABLE);
-        }
-        return port;
-    }
-
-    private AgentCheckpointQueryInboundPort requireCheckpointQueryPort() {
-        AgentCheckpointQueryInboundPort port = checkpointQueryPortProvider == null
-                ? null
-                : checkpointQueryPortProvider.getIfAvailable();
-        if (port == null) {
-            throw new IllegalStateException(SERVICE_NOT_AVAILABLE);
-        }
-        return port;
-    }
-
-    private Map<String, Object> ok(Object data) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, data == null ? Map.of() : data);
+    public ApiResponse<Object> listCheckpoints(@PathVariable String runId) {
+        return ApiResponses.requireService(checkpointQueryPortProvider, port -> port.listByRunId(runId));
     }
 }

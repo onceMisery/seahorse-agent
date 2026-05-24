@@ -27,7 +27,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -35,11 +34,6 @@ import java.util.Objects;
  */
 @RestController
 public class SeahorseAgentToolBindingController {
-
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
-    private static final String SERVICE_NOT_AVAILABLE = "Service not available";
 
     private final ObjectProvider<AgentToolBindingManagementInboundPort> bindingPortProvider;
 
@@ -49,12 +43,12 @@ public class SeahorseAgentToolBindingController {
     }
 
     @PutMapping("/api/agents/{agentId}/versions/{versionId}/tools")
-    public Map<String, Object> replaceBindings(@PathVariable String agentId,
+    public ApiResponse<Object> replaceBindings(@PathVariable String agentId,
                                                @PathVariable String versionId,
                                                @RequestBody AgentToolBindingReplaceRequest request) {
         AgentToolBindingReplaceRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        AgentToolBindingManagementInboundPort port = requirePort();
-        return ok(port.replaceBindings(agentId, versionId, toCommand(safeRequest)));
+        return ApiResponses.requireService(bindingPortProvider,
+                port -> port.replaceBindings(agentId, versionId, toCommand(safeRequest)));
     }
 
     private AgentToolBindingReplaceCommand toCommand(AgentToolBindingReplaceRequest request) {
@@ -70,17 +64,5 @@ public class SeahorseAgentToolBindingController {
                 safeRequest.toolId(),
                 safeRequest.maxCallsPerRun(),
                 safeRequest.argumentPolicyJson());
-    }
-
-    private AgentToolBindingManagementInboundPort requirePort() {
-        AgentToolBindingManagementInboundPort port = bindingPortProvider.getIfAvailable();
-        if (port == null) {
-            throw new IllegalStateException(SERVICE_NOT_AVAILABLE);
-        }
-        return port;
-    }
-
-    private Map<String, Object> ok(Object data) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, data == null ? Map.of() : data);
     }
 }
