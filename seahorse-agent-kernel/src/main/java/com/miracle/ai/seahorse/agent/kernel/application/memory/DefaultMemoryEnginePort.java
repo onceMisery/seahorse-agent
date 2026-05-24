@@ -120,8 +120,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String METADATA_REFINER_OPERATION_INDEX = "refinerOperationIndex";
     private static final String METADATA_REFINER_OPERATION_COUNT = "refinerOperationCount";
     private static final String METADATA_REFINER_BATCH = "refinerBatch";
-    private static final String METADATA_IMPORTANCE_SCORE = "importanceScore";
-    private static final String METADATA_CONFIDENCE_LEVEL = "confidenceLevel";
     private static final String METADATA_CANONICAL_ENTITY_ID = "canonicalEntityId";
     private static final String METADATA_CANONICAL_NAME = "canonicalName";
     private static final String METADATA_CANONICAL_ENTITY_TYPE = "canonicalEntityType";
@@ -184,6 +182,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryRefinementContextParser refinementContextParser;
     private final MemoryRefinerBatchCircuitBreaker refinerBatchCircuitBreaker;
     private final MemoryProfileValueNormalizer profileValueNormalizer;
+    private final MemoryRefinementInputBuilder refinementInputBuilder;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -546,6 +545,14 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.options.maxRefinerBatchOperations(),
                 this.options.maxRefinerDeleteRatio());
         this.profileValueNormalizer = new MemoryProfileValueNormalizer(this.profileSlotResolver);
+        this.refinementInputBuilder = new MemoryRefinementInputBuilder(
+                this.shortTermPort,
+                this.longTermPort,
+                this.semanticPort,
+                this.options.refinerReadMaskPerLayerLimit(),
+                this.options.refinerStickyAnchorLimit(),
+                this.options.refinerStickyAnchorImportanceThreshold(),
+                this.options.refinerStickyAnchorConfidenceThreshold());
     }
 
     @Override
@@ -942,7 +949,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             return baseline;
         }
         try {
-            List<MemoryRefinementMemory> existingMemories = currentExistingMemories(request.userId());
+            List<MemoryRefinementMemory> existingMemories = refinementInputBuilder.existingMemories(request.userId());
             MemoryRefinementContextParser.Zones contextZones = refinementContextParser.parse(sanitizedContent);
             List<MemoryReviewFeedbackSample> feedbackExamples =
                     recentReviewFeedbackExamples(tenantId, request.userId(), baseline);
@@ -961,7 +968,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     existingMemories,
                     contextZones.referenceZone(),
                     contextZones.targetZone(),
-                    stickyAnchors(existingMemories),
+                    refinementInputBuilder.stickyAnchors(existingMemories),
                     feedbackExamples));
             return applyRefinementResult(result, baseline, contextZones);
         } catch (RuntimeException ex) {
@@ -1036,76 +1043,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return sample != null
                 && (sample.reviewStatus() == MemoryReviewStatus.APPLIED
                 || sample.reviewStatus() == MemoryReviewStatus.REJECTED);
-    }
-
-    private List<MemoryRefinementMemory> currentExistingMemories(String userId) {
-        if (isBlank(userId)) {
-            return List.of();
-        }
-        List<MemoryRefinementMemory> memories = new ArrayList<>();
-        collectExistingMemories(memories, MemoryLayer.SHORT_TERM, shortTermPort, userId);
-        collectExistingMemories(memories, MemoryLayer.LONG_TERM, longTermPort, userId);
-        collectExistingMemories(memories, MemoryLayer.SEMANTIC, semanticPort, userId);
-        return List.copyOf(memories);
-    }
-
-    private void collectExistingMemories(List<MemoryRefinementMemory> memories,
-                                         MemoryLayer layer,
-                                         MemoryStorePort store,
-                                         String userId) {
-        try {
-            for (MemoryRecord record : store.listByUser(userId, options.refinerReadMaskPerLayerLimit())) {
-                if (record == null || isBlank(record.id())) {
-                    continue;
-                }
-                memories.add(toRefinementMemory(layer, record));
-            }
-        } catch (RuntimeException ex) {
-            LOG.debug("load refiner read-mask memories failed: layer={}, userId={}", layer, userId, ex);
-        }
-    }
-
-    private MemoryRefinementMemory toRefinementMemory(MemoryLayer layer, MemoryRecord record) {
-        Map<String, Object> metadata = record.metadata();
-        return new MemoryRefinementMemory(
-                record.id(),
-                layer.name(),
-                record.type(),
-                record.content(),
-                stringMetadata(metadata, "targetKind", record.type()),
-                stringMetadata(metadata, "targetKey", stringMetadata(metadata, "profileSlot", "")),
-                stringMetadata(metadata, "generationId", ""),
-                stringMetadata(metadata, "status", "ACTIVE"),
-                metadata);
-    }
-
-    private List<MemoryRefinementMemory> stickyAnchors(List<MemoryRefinementMemory> existingMemories) {
-        if (existingMemories == null || existingMemories.isEmpty()) {
-            return List.of();
-        }
-        return existingMemories.stream()
-                .filter(this::isStickyAnchor)
-                .limit(options.refinerStickyAnchorLimit())
-                .toList();
-    }
-
-    private boolean isStickyAnchor(MemoryRefinementMemory memory) {
-        if (memory == null || !"ACTIVE".equalsIgnoreCase(memory.status())) {
-            return false;
-        }
-        String layer = memory.layer().toUpperCase(Locale.ROOT);
-        if (!MemoryLayer.LONG_TERM.name().equals(layer) && !MemoryLayer.SEMANTIC.name().equals(layer)) {
-            return false;
-        }
-        return memoryMetadataScore(memory, METADATA_IMPORTANCE_SCORE, METADATA_IMPORTANCE)
-                >= options.refinerStickyAnchorImportanceThreshold()
-                || memoryMetadataScore(memory, METADATA_CONFIDENCE_LEVEL, METADATA_CONFIDENCE)
-                >= options.refinerStickyAnchorConfidenceThreshold();
-    }
-
-    private double memoryMetadataScore(MemoryRefinementMemory memory, String primaryKey, String fallbackKey) {
-        double primary = doubleMetadata(memory.metadata(), primaryKey);
-        return primary > 0D ? primary : doubleMetadata(memory.metadata(), fallbackKey);
     }
 
     private MemoryClassificationResult applyRefinementResult(MemoryRefinementResult result,
