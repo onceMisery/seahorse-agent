@@ -94,3 +94,7 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-version-model-routing/20-checkpoint.md | AI Infra version model routing checkpoint |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-version-model-routing/90-evidence.md | AI Infra version model routing evidence |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-version-model-routing/99-reflection.md | AI Infra version model routing reflection |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-contextpack-acl/10-intent.md | AI Infra ContextPack ACL intent |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-contextpack-acl/20-checkpoint.md | AI Infra ContextPack ACL checkpoint |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-contextpack-acl/90-evidence.md | AI Infra ContextPack ACL evidence |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-contextpack-acl/99-reflection.md | AI Infra ContextPack ACL reflection |

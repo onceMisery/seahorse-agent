@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAge
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentCheckpointQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.approval.KernelApprovalManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.context.DefaultResourceAccessPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackBuilderService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
@@ -90,6 +91,8 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(ApprovalRequestDecisionPort.class);
                     assertThat(context).hasSingleBean(ContextPackRepositoryPort.class);
                     assertThat(context).hasSingleBean(ResourceAccessPolicyPort.class);
+                    assertThat(context.getBean(ResourceAccessPolicyPort.class))
+                            .isInstanceOf(DefaultResourceAccessPolicyPort.class);
                     assertThat(context).hasSingleBean(AgentDefinitionInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunLeaseInboundPort.class);
