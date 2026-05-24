@@ -19,6 +19,10 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputValidationRecordPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -172,12 +176,21 @@ public class SeahorseAgentNoopPortGuard implements SmartInitializingSingleton {
     }
 
     /**
-     * Slice 2a 默认分类表。后续 Slice 2b 将扩充 outbox / operation log / audit / review candidate
-     * 等关键 A 类端口，以及向量 / 关键字 / 观测等 B 类端口。
+     * Slice 2a-b 默认分类表。当前覆盖：
+     * <ul>
+     *     <li>Class A：{@link OutputValidationRecordPort}（治理审计）、{@link MemoryOutboxPort}（异步派发）、
+     *         {@link MemoryReviewCandidatePort}（人工 review）、{@link MemoryOperationLogPort}（操作日志）、
+     *         {@link ToolInvocationAuditPort}（工具调用审计）。</li>
+     * </ul>
+     * 后续切片将继续扩充 Class B（向量 / 关键字 / 观测）和 Class C（refiner / summarizer 等纯增强）。
      */
     public static Map<Class<?>, RiskClass> defaultClassifications() {
         Map<Class<?>, RiskClass> map = new LinkedHashMap<>();
         map.put(OutputValidationRecordPort.class, RiskClass.CLASS_A_FAIL_FAST);
+        map.put(MemoryOutboxPort.class, RiskClass.CLASS_A_FAIL_FAST);
+        map.put(MemoryReviewCandidatePort.class, RiskClass.CLASS_A_FAIL_FAST);
+        map.put(MemoryOperationLogPort.class, RiskClass.CLASS_A_FAIL_FAST);
+        map.put(ToolInvocationAuditPort.class, RiskClass.CLASS_A_FAIL_FAST);
         return Collections.unmodifiableMap(map);
     }
 

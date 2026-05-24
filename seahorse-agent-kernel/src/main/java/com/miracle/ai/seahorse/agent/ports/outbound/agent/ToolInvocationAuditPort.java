@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditCompletion;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAuditRecord;
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
 
 /**
  * 工具调用审计出站端口。
@@ -45,18 +46,29 @@ public interface ToolInvocationAuditPort {
      * 空审计实现，用于未配置审计仓储时保持 Gateway 行为兼容。
      */
     static ToolInvocationAuditPort noop() {
-        return new ToolInvocationAuditPort() {
-            @Override
-            public void recordRequested(ToolInvocationAuditRecord record) {
-            }
+        return NoopToolInvocationAudit.INSTANCE;
+    }
 
-            @Override
-            public void recordDecision(ToolInvocationAuditDecision decision) {
-            }
+    final class NoopToolInvocationAudit implements ToolInvocationAuditPort, NoopFallback {
 
-            @Override
-            public void recordCompleted(ToolInvocationAuditCompletion completion) {
-            }
-        };
+        private static final NoopToolInvocationAudit INSTANCE = new NoopToolInvocationAudit();
+
+        private NoopToolInvocationAudit() {
+        }
+
+        @Override
+        public void recordRequested(ToolInvocationAuditRecord record) {
+            // intentionally empty: production adapters override to persist audit records.
+        }
+
+        @Override
+        public void recordDecision(ToolInvocationAuditDecision decision) {
+            // intentionally empty: production adapters override to persist policy decisions.
+        }
+
+        @Override
+        public void recordCompleted(ToolInvocationAuditCompletion completion) {
+            // intentionally empty: production adapters override to persist completion state.
+        }
     }
 }

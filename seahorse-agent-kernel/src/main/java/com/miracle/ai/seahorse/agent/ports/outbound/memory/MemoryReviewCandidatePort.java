@@ -17,12 +17,26 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
+
 public interface MemoryReviewCandidatePort {
 
     void save(MemoryReviewCandidate candidate);
 
     static MemoryReviewCandidatePort noop() {
-        return candidate -> {
-        };
+        return NoopMemoryReviewCandidate.INSTANCE;
+    }
+
+    final class NoopMemoryReviewCandidate implements MemoryReviewCandidatePort, NoopFallback {
+
+        private static final NoopMemoryReviewCandidate INSTANCE = new NoopMemoryReviewCandidate();
+
+        private NoopMemoryReviewCandidate() {
+        }
+
+        @Override
+        public void save(MemoryReviewCandidate candidate) {
+            // intentionally empty: production adapters override to persist review candidates.
+        }
     }
 }

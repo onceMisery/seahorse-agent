@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -38,8 +40,20 @@ public interface MemoryOutboxPort {
     }
 
     static MemoryOutboxPort noop() {
-        return task -> {
-        };
+        return NoopMemoryOutbox.INSTANCE;
+    }
+
+    final class NoopMemoryOutbox implements MemoryOutboxPort, NoopFallback {
+
+        private static final NoopMemoryOutbox INSTANCE = new NoopMemoryOutbox();
+
+        private NoopMemoryOutbox() {
+        }
+
+        @Override
+        public void enqueue(MemoryOutboxTask task) {
+            // intentionally empty: production adapters override to enqueue outbox tasks.
+        }
     }
 
     record MemoryOutboxTask(

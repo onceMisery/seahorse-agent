@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
+
 import java.util.List;
 import java.util.Map;
 
@@ -33,19 +35,29 @@ public interface MemoryOperationLogPort {
     }
 
     static MemoryOperationLogPort noop() {
-        return new MemoryOperationLogPort() {
-            @Override
-            public boolean tryStart(MemoryOperation operation) {
-                return true;
-            }
+        return NoopMemoryOperationLog.INSTANCE;
+    }
 
-            @Override
-            public void markCompleted(String operationId, MemoryOperationStatus status, Map<String, Object> decision) {
-            }
+    final class NoopMemoryOperationLog implements MemoryOperationLogPort, NoopFallback {
 
-            @Override
-            public void markFailed(String operationId, String errorMessage) {
-            }
-        };
+        private static final NoopMemoryOperationLog INSTANCE = new NoopMemoryOperationLog();
+
+        private NoopMemoryOperationLog() {
+        }
+
+        @Override
+        public boolean tryStart(MemoryOperation operation) {
+            return true;
+        }
+
+        @Override
+        public void markCompleted(String operationId, MemoryOperationStatus status, Map<String, Object> decision) {
+            // intentionally empty: production adapters override to persist completion state.
+        }
+
+        @Override
+        public void markFailed(String operationId, String errorMessage) {
+            // intentionally empty: production adapters override to persist failure state.
+        }
     }
 }

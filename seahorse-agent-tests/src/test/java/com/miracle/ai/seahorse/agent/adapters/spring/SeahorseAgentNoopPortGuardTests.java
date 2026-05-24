@@ -61,13 +61,15 @@ class SeahorseAgentNoopPortGuardTests {
                 .run(context -> {
                     SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
                     java.util.List<SeahorseAgentNoopPortGuard.Inspection> inspections = guard.inspect();
-                    assertThat(inspections).hasSize(1);
-                    SeahorseAgentNoopPortGuard.Inspection only = inspections.get(0);
-                    assertThat(only.portClass()).isEqualTo(OutputValidationRecordPort.class);
-                    assertThat(only.riskClass())
-                            .isEqualTo(SeahorseAgentNoopPortGuard.RiskClass.CLASS_A_FAIL_FAST);
-                    assertThat(only.isNoopFallback()).isTrue();
-                    assertThat(only.missing()).isFalse();
+                    assertThat(inspections)
+                            .filteredOn(i -> i.portClass() == OutputValidationRecordPort.class)
+                            .singleElement()
+                            .satisfies(only -> {
+                                assertThat(only.riskClass())
+                                        .isEqualTo(SeahorseAgentNoopPortGuard.RiskClass.CLASS_A_FAIL_FAST);
+                                assertThat(only.isNoopFallback()).isTrue();
+                                assertThat(only.missing()).isFalse();
+                            });
                 });
     }
 
@@ -78,10 +80,13 @@ class SeahorseAgentNoopPortGuardTests {
                 .run(context -> {
                     SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
                     java.util.List<SeahorseAgentNoopPortGuard.Inspection> inspections = guard.inspect();
-                    assertThat(inspections).hasSize(1);
-                    SeahorseAgentNoopPortGuard.Inspection only = inspections.get(0);
-                    assertThat(only.isNoopFallback()).isFalse();
-                    assertThat(only.missing()).isFalse();
+                    assertThat(inspections)
+                            .filteredOn(i -> i.portClass() == OutputValidationRecordPort.class)
+                            .singleElement()
+                            .satisfies(only -> {
+                                assertThat(only.isNoopFallback()).isFalse();
+                                assertThat(only.missing()).isFalse();
+                            });
                 });
     }
 
@@ -90,8 +95,24 @@ class SeahorseAgentNoopPortGuardTests {
         contextRunner.run(context -> {
             SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
             java.util.List<SeahorseAgentNoopPortGuard.Inspection> inspections = guard.inspect();
-            assertThat(inspections).hasSize(1);
-            assertThat(inspections.get(0).missing()).isTrue();
+            assertThat(inspections).isNotEmpty();
+            assertThat(inspections).allSatisfy(inspection -> assertThat(inspection.missing()).isTrue());
+        });
+    }
+
+    @Test
+    void coversNewSlice2bClassAPortsInDefaultClassification() {
+        contextRunner.run(context -> {
+            SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
+            java.util.Set<Class<?>> portClasses = guard.inspect().stream()
+                    .map(SeahorseAgentNoopPortGuard.Inspection::portClass)
+                    .collect(java.util.stream.Collectors.toSet());
+            assertThat(portClasses).contains(
+                    OutputValidationRecordPort.class,
+                    com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort.class,
+                    com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort.class,
+                    com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationLogPort.class,
+                    com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort.class);
         });
     }
 
