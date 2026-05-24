@@ -207,6 +207,49 @@ class MemoryPropertiesTests {
     }
 
     @Test
+    void aliasResolutionDefaultsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties.AliasResolution aliasResolution = context.getBean(MemoryProperties.class)
+                    .getAliasResolution();
+            assertThat(aliasResolution.getScanLimit()).isEqualTo(100);
+            assertThat(aliasResolution.getAutoResolveConfidenceThreshold()).isEqualTo(0.95d);
+            assertThat(aliasResolution.getDictionary()).isEmpty();
+        });
+    }
+
+    @Test
+    void aliasResolutionCustomKeysOverrideDefaults() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse-agent.memory.alias-resolution.scan-limit=500",
+                        "seahorse-agent.memory.alias-resolution.auto-resolve-confidence-threshold=0.88",
+                        "seahorse-agent.memory.alias-resolution.dictionary.gpt.user-id=user-1",
+                        "seahorse-agent.memory.alias-resolution.dictionary.gpt.tenant-id=tenant-x",
+                        "seahorse-agent.memory.alias-resolution.dictionary.gpt.alias-text=GPT",
+                        "seahorse-agent.memory.alias-resolution.dictionary.gpt.canonical-entity-id=entity-1",
+                        "seahorse-agent.memory.alias-resolution.dictionary.gpt.canonical-name=ChatGPT",
+                        "seahorse-agent.memory.alias-resolution.dictionary.gpt.entity-type=PRODUCT",
+                        "seahorse-agent.memory.alias-resolution.dictionary.gpt.confidence-level=0.91")
+                .run(context -> {
+                    MemoryProperties.AliasResolution aliasResolution = context.getBean(MemoryProperties.class)
+                            .getAliasResolution();
+                    assertThat(aliasResolution.getScanLimit()).isEqualTo(500);
+                    assertThat(aliasResolution.getAutoResolveConfidenceThreshold()).isEqualTo(0.88d);
+                    assertThat(aliasResolution.getDictionary()).hasSize(1);
+                    MemoryProperties.AliasResolution.DictionaryEntry entry = aliasResolution.getDictionary()
+                            .get("gpt");
+                    assertThat(entry).isNotNull();
+                    assertThat(entry.getUserId()).isEqualTo("user-1");
+                    assertThat(entry.getTenantId()).isEqualTo("tenant-x");
+                    assertThat(entry.getAliasText()).isEqualTo("GPT");
+                    assertThat(entry.getCanonicalEntityId()).isEqualTo("entity-1");
+                    assertThat(entry.getCanonicalName()).isEqualTo("ChatGPT");
+                    assertThat(entry.getEntityType()).isEqualTo("PRODUCT");
+                    assertThat(entry.getConfidenceLevel()).isEqualTo(0.91d);
+                });
+    }
+
+    @Test
     void maintenanceEnabledFlagsMatchHistoricalAtValueDefaults() {
         contextRunner.run(context -> {
             MemoryProperties.Maintenance maintenance = context.getBean(MemoryProperties.class).getMaintenance();

@@ -898,79 +898,37 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnMissingBean(MemoryAliasResolutionService.class)
     public MemoryAliasResolutionService seahorseMemoryAliasResolutionService(
             MemoryAliasPort aliasPort,
-            @Value("${seahorse-agent.memory.alias-resolution.scan-limit:100}") int scanLimit,
-            @Value("${seahorse-agent.memory.alias-resolution.auto-resolve-confidence-threshold:0.95}")
-            double autoResolveConfidenceThreshold,
-            Environment environment) {
+            MemoryProperties memoryProperties) {
+        MemoryProperties.AliasResolution aliasResolution = memoryProperties.getAliasResolution();
         return new MemoryAliasResolutionService(
                 aliasPort,
                 new MemoryAliasResolutionOptions(
-                        scanLimit,
+                        aliasResolution.getScanLimit(),
                         "",
                         "default",
-                        autoResolveConfidenceThreshold,
-                        memoryAliasDictionary(environment)));
+                        aliasResolution.getAutoResolveConfidenceThreshold(),
+                        memoryAliasDictionary(aliasResolution)));
     }
 
-    private Map<String, MemoryAliasCandidate> memoryAliasDictionary(Environment environment) {
-        Map<String, MemoryAliasDictionaryEntry> entries = Binder.get(environment)
-                .bind("seahorse-agent.memory.alias-resolution.dictionary",
-                        Bindable.mapOf(String.class, MemoryAliasDictionaryEntry.class))
-                .orElse(Map.of());
+    private Map<String, MemoryAliasCandidate> memoryAliasDictionary(
+            MemoryProperties.AliasResolution aliasResolution) {
         Map<String, MemoryAliasCandidate> dictionary = new LinkedHashMap<>();
-        entries.forEach((aliasText, entry) -> dictionary.put(aliasText, entry.toCandidate(aliasText)));
+        aliasResolution.getDictionary().forEach((aliasText, entry) ->
+                dictionary.put(aliasText, toCandidate(aliasText, entry)));
         return dictionary;
     }
 
-    private static final class MemoryAliasDictionaryEntry {
-
-        private String userId;
-        private String tenantId;
-        private String aliasText;
-        private String canonicalEntityId;
-        private String canonicalName;
-        private String entityType;
-        private double confidenceLevel;
-
-        MemoryAliasCandidate toCandidate(String dictionaryAliasText) {
-            String candidateAliasText = hasText(aliasText) ? aliasText : dictionaryAliasText;
-            return new MemoryAliasCandidate(
-                    userId,
-                    tenantId,
-                    candidateAliasText,
-                    canonicalEntityId,
-                    canonicalName,
-                    entityType,
-                    confidenceLevel);
-        }
-
-        public void setUserId(String userId) {
-            this.userId = userId;
-        }
-
-        public void setTenantId(String tenantId) {
-            this.tenantId = tenantId;
-        }
-
-        public void setAliasText(String aliasText) {
-            this.aliasText = aliasText;
-        }
-
-        public void setCanonicalEntityId(String canonicalEntityId) {
-            this.canonicalEntityId = canonicalEntityId;
-        }
-
-        public void setCanonicalName(String canonicalName) {
-            this.canonicalName = canonicalName;
-        }
-
-        public void setEntityType(String entityType) {
-            this.entityType = entityType;
-        }
-
-        public void setConfidenceLevel(double confidenceLevel) {
-            this.confidenceLevel = confidenceLevel;
-        }
+    private static MemoryAliasCandidate toCandidate(String dictionaryAliasText,
+            MemoryProperties.AliasResolution.DictionaryEntry entry) {
+        String candidateAliasText = hasText(entry.getAliasText()) ? entry.getAliasText() : dictionaryAliasText;
+        return new MemoryAliasCandidate(
+                entry.getUserId(),
+                entry.getTenantId(),
+                candidateAliasText,
+                entry.getCanonicalEntityId(),
+                entry.getCanonicalName(),
+                entry.getEntityType(),
+                entry.getConfidenceLevel());
     }
 
     private static boolean hasText(String value) {

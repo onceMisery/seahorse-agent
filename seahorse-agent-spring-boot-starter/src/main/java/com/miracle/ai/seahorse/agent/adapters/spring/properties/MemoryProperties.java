@@ -17,6 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring.properties;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -42,6 +45,7 @@ public class MemoryProperties {
     private final Outbox outbox = new Outbox();
     private final Maintenance maintenance = new Maintenance();
     private final Refiner refiner = new Refiner();
+    private final AliasResolution aliasResolution = new AliasResolution();
 
     public Policy getPolicy() {
         return policy;
@@ -65,6 +69,10 @@ public class MemoryProperties {
 
     public Refiner getRefiner() {
         return refiner;
+    }
+
+    public AliasResolution getAliasResolution() {
+        return aliasResolution;
     }
 
     /**
@@ -576,6 +584,107 @@ public class MemoryProperties {
 
         public void setStickyAnchorConfidenceThreshold(double stickyAnchorConfidenceThreshold) {
             this.stickyAnchorConfidenceThreshold = stickyAnchorConfidenceThreshold;
+        }
+    }
+
+    /**
+     * Slice 4 续：alias-resolution 段。
+     *
+     * <p>保留 {@code seahorse-agent.memory.alias-resolution.dictionary} 顶层 map 形态，
+     * 配合 starter bean 工厂将 {@link DictionaryEntry} 转换为内核侧 candidate；
+     * Properties 自身仅作 POJO 绑定，避免内核类型反向依赖。
+     */
+    public static class AliasResolution {
+
+        private int scanLimit = 100;
+        private double autoResolveConfidenceThreshold = 0.95d;
+        private final Map<String, DictionaryEntry> dictionary = new LinkedHashMap<>();
+
+        public int getScanLimit() {
+            return scanLimit;
+        }
+
+        public void setScanLimit(int scanLimit) {
+            this.scanLimit = scanLimit;
+        }
+
+        public double getAutoResolveConfidenceThreshold() {
+            return autoResolveConfidenceThreshold;
+        }
+
+        public void setAutoResolveConfidenceThreshold(double autoResolveConfidenceThreshold) {
+            this.autoResolveConfidenceThreshold = autoResolveConfidenceThreshold;
+        }
+
+        public Map<String, DictionaryEntry> getDictionary() {
+            return dictionary;
+        }
+
+        public static class DictionaryEntry {
+
+            private String userId;
+            private String tenantId;
+            private String aliasText;
+            private String canonicalEntityId;
+            private String canonicalName;
+            private String entityType;
+            private double confidenceLevel;
+
+            public String getUserId() {
+                return userId;
+            }
+
+            public void setUserId(String userId) {
+                this.userId = userId;
+            }
+
+            public String getTenantId() {
+                return tenantId;
+            }
+
+            public void setTenantId(String tenantId) {
+                this.tenantId = tenantId;
+            }
+
+            public String getAliasText() {
+                return aliasText;
+            }
+
+            public void setAliasText(String aliasText) {
+                this.aliasText = aliasText;
+            }
+
+            public String getCanonicalEntityId() {
+                return canonicalEntityId;
+            }
+
+            public void setCanonicalEntityId(String canonicalEntityId) {
+                this.canonicalEntityId = canonicalEntityId;
+            }
+
+            public String getCanonicalName() {
+                return canonicalName;
+            }
+
+            public void setCanonicalName(String canonicalName) {
+                this.canonicalName = canonicalName;
+            }
+
+            public String getEntityType() {
+                return entityType;
+            }
+
+            public void setEntityType(String entityType) {
+                this.entityType = entityType;
+            }
+
+            public double getConfidenceLevel() {
+                return confidenceLevel;
+            }
+
+            public void setConfidenceLevel(double confidenceLevel) {
+                this.confidenceLevel = confidenceLevel;
+            }
         }
     }
 }
