@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "candidateDocs": [
+    "docs/company-agent/ai-infra-phases/05-connectors-credentials-sandbox.md",
+    "docs/company-agent/ai-infra-phases/99-current-implementation-handoff.md"
+  ],
+  "whyRelevant": "Phase 5 requires bearer token injection, secretRef-only credential usage, and avoiding token disclosure in prompt/log/trace paths.",
+  "missingAuthority": []
+}

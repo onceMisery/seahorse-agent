@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.mcp.http;
 
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialAuthType;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
@@ -74,6 +75,10 @@ public class McpHttpAdapterProperties {
 
         private boolean enabled = true;
 
+        private CredentialAuthType authType = CredentialAuthType.NONE;
+
+        private String clientSecretRef = "";
+
         public String getName() {
             return name;
         }
@@ -96,6 +101,22 @@ public class McpHttpAdapterProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        public CredentialAuthType getAuthType() {
+            return authType;
+        }
+
+        public void setAuthType(CredentialAuthType authType) {
+            this.authType = Objects.requireNonNullElse(authType, CredentialAuthType.NONE);
+        }
+
+        public String getClientSecretRef() {
+            return clientSecretRef;
+        }
+
+        public void setClientSecretRef(String clientSecretRef) {
+            this.clientSecretRef = Objects.requireNonNullElse(clientSecretRef, "");
         }
     }
 }

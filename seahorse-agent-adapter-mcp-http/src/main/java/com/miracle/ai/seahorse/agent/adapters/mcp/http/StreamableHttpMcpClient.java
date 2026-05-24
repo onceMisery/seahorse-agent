@@ -23,6 +23,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionRequest;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialAuthType;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialMaterial;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpClientPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
 import okhttp3.MediaType;
@@ -59,11 +61,14 @@ public class StreamableHttpMcpClient implements McpClientPort {
     private static final String FIELD_ERROR = "error";
     private static final String FIELD_CONTENT = "content";
     private static final String FIELD_TEXT = "text";
+    private static final String HEADER_AUTHORIZATION = "Authorization";
+    private static final String AUTHORIZATION_BEARER_PREFIX = "Bearer ";
 
     private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String serverName;
     private final String endpointUrl;
+    private final CredentialMaterial credentialMaterial;
     private final AtomicLong requestId = new AtomicLong(1);
 
     public StreamableHttpMcpClient(OkHttpClient httpClient,
@@ -74,6 +79,19 @@ public class StreamableHttpMcpClient implements McpClientPort {
         this.objectMapper = Objects.requireNonNull(objectMapper, "ObjectMapper 不能为空");
         this.serverName = Objects.requireNonNullElse(serverName, "");
         this.endpointUrl = resolveEndpointUrl(serverUrl);
+        this.credentialMaterial = CredentialMaterial.none();
+    }
+
+    public StreamableHttpMcpClient(OkHttpClient httpClient,
+                                   ObjectMapper objectMapper,
+                                   String serverName,
+                                   String serverUrl,
+                                   CredentialMaterial credentialMaterial) {
+        this.httpClient = Objects.requireNonNull(httpClient, "httpClient must not be null");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        this.serverName = Objects.requireNonNullElse(serverName, "");
+        this.endpointUrl = resolveEndpointUrl(serverUrl);
+        this.credentialMaterial = Objects.requireNonNullElseGet(credentialMaterial, CredentialMaterial::none);
     }
 
     /**
@@ -171,14 +189,24 @@ public class StreamableHttpMcpClient implements McpClientPort {
         } catch (JsonProcessingException ex) {
             return new McpJsonRpcResponse(null, "JSON 序列化失败: " + ex.getMessage());
         }
-        Request request = new Request.Builder()
+        Request.Builder requestBuilder = new Request.Builder()
                 .url(endpointUrl)
-                .post(RequestBody.create(body, JSON))
-                .build();
+                .post(RequestBody.create(body, JSON));
+        applyCredential(requestBuilder);
+        Request request = requestBuilder.build();
         try (Response response = httpClient.newCall(request).execute()) {
             return readResponse(method, response);
         } catch (IOException ex) {
             return new McpJsonRpcResponse(null, "HTTP 调用异常: " + ex.getMessage());
+        }
+    }
+
+    private void applyCredential(Request.Builder requestBuilder) {
+        if (CredentialAuthType.STATIC_BEARER.equals(credentialMaterial.authType())
+                && credentialMaterial.secretValue().hasText()) {
+            requestBuilder.header(
+                    HEADER_AUTHORIZATION,
+                    AUTHORIZATION_BEARER_PREFIX + credentialMaterial.secretValue().reveal());
         }
     }
 

@@ -19,6 +19,12 @@ package com.miracle.ai.seahorse.agent.adapters.mcp.http;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolFeature;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialAuthType;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialMaterial;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialProviderPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretStoreCredentialProvider;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpParameterExtractionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
@@ -37,6 +43,7 @@ import org.springframework.context.annotation.Conditional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * MCP HTTP 原生 adapter 自动装配。
@@ -51,6 +58,16 @@ import java.util.List;
 public class McpHttpAutoConfiguration {
 
     private static final Logger LOG = LoggerFactory.getLogger(McpHttpAutoConfiguration.class);
+    private static final String MSG_CREDENTIAL_PROVIDER_MISSING = "credential provider missing";
+    private static final String MSG_CLIENT_SECRET_REF_MISSING = "clientSecretRef missing";
+    private static final String MSG_CREDENTIAL_RESOLUTION_FAILED = "credential resolution failed";
+
+    @Bean
+    @ConditionalOnBean(SecretStorePort.class)
+    @ConditionalOnMissingBean(CredentialProviderPort.class)
+    public CredentialProviderPort seahorseSecretStoreCredentialProvider(SecretStorePort secretStorePort) {
+        return new SecretStoreCredentialProvider(secretStorePort);
+    }
 
     @Bean
     @ConditionalOnBean(OkHttpClient.class)
@@ -59,12 +76,13 @@ public class McpHttpAutoConfiguration {
             OkHttpClient httpClient,
             ObjectMapper objectMapper,
             McpHttpAdapterProperties properties,
-            ObjectProvider<McpToolFeature> localToolFeatures) {
+            ObjectProvider<McpToolFeature> localToolFeatures,
+            ObjectProvider<CredentialProviderPort> credentialProvider) {
         List<McpToolFeature> features = new ArrayList<>(localToolFeatures.orderedStream().toList());
         OkHttpClient effectiveHttpClient = httpClient.newBuilder()
                 .callTimeout(properties.getCallTimeout())
                 .build();
-        features.addAll(discoverRemoteFeatures(effectiveHttpClient, objectMapper, properties));
+        features.addAll(discoverRemoteFeatures(effectiveHttpClient, objectMapper, properties, credentialProvider));
         return new NativeMcpToolRegistry(features);
     }
 
@@ -78,23 +96,29 @@ public class McpHttpAutoConfiguration {
 
     private List<McpToolFeature> discoverRemoteFeatures(OkHttpClient httpClient,
                                                         ObjectMapper objectMapper,
-                                                        McpHttpAdapterProperties properties) {
+                                                        McpHttpAdapterProperties properties,
+                                                        ObjectProvider<CredentialProviderPort> credentialProvider) {
         List<McpToolFeature> features = new ArrayList<>();
         for (McpHttpAdapterProperties.Server server : properties.getServers()) {
-            features.addAll(discoverServerFeatures(httpClient, objectMapper, server));
+            features.addAll(discoverServerFeatures(httpClient, objectMapper, server, credentialProvider));
         }
         return features;
     }
 
     private List<McpToolFeature> discoverServerFeatures(OkHttpClient httpClient,
                                                         ObjectMapper objectMapper,
-                                                        McpHttpAdapterProperties.Server server) {
+                                                        McpHttpAdapterProperties.Server server,
+                                                        ObjectProvider<CredentialProviderPort> credentialProvider) {
         if (!server.isEnabled() || server.getUrl().isBlank()) {
+            return List.of();
+        }
+        Optional<CredentialMaterial> credentialMaterial = resolveCredentialMaterial(server, credentialProvider);
+        if (credentialMaterial.isEmpty()) {
             return List.of();
         }
         try {
             StreamableHttpMcpClient client = new StreamableHttpMcpClient(
-                    httpClient, objectMapper, server.getName(), server.getUrl());
+                    httpClient, objectMapper, server.getName(), server.getUrl(), credentialMaterial.get());
             if (!client.initialize()) {
                 return List.of();
             }
@@ -108,5 +132,39 @@ public class McpHttpAutoConfiguration {
             LOG.warn("MCP Server 工具发现失败, server={}, reason={}", server.getName(), ex.getMessage());
             return List.of();
         }
+    }
+
+    private Optional<CredentialMaterial> resolveCredentialMaterial(
+            McpHttpAdapterProperties.Server server,
+            ObjectProvider<CredentialProviderPort> credentialProvider) {
+        if (CredentialAuthType.NONE.equals(server.getAuthType())) {
+            return Optional.of(CredentialMaterial.none());
+        }
+        CredentialProviderPort provider = credentialProvider.getIfAvailable();
+        if (provider == null) {
+            LOG.warn("MCP Server credential skipped, server={}, authType={}, reason={}",
+                    server.getName(), server.getAuthType(), MSG_CREDENTIAL_PROVIDER_MISSING);
+            return Optional.empty();
+        }
+        if (CredentialAuthType.STATIC_BEARER.equals(server.getAuthType())
+                && server.getClientSecretRef().isBlank()) {
+            LOG.warn("MCP Server credential skipped, server={}, authType={}, reason={}",
+                    server.getName(), server.getAuthType(), MSG_CLIENT_SECRET_REF_MISSING);
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(provider.resolve(toCredentialRequest(server)));
+        } catch (RuntimeException ex) {
+            LOG.warn("MCP Server credential skipped, server={}, authType={}, reason={}",
+                    server.getName(), server.getAuthType(), MSG_CREDENTIAL_RESOLUTION_FAILED);
+            return Optional.empty();
+        }
+    }
+
+    private CredentialRequest toCredentialRequest(McpHttpAdapterProperties.Server server) {
+        return switch (server.getAuthType()) {
+            case NONE -> CredentialRequest.none();
+            case STATIC_BEARER -> CredentialRequest.staticBearer(server.getClientSecretRef());
+        };
     }
 }

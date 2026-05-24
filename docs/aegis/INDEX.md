@@ -111,3 +111,16 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/resume-state-hint.json | 2026-05-25-ai-infra-access-decision-audit resume state hint |
 | 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/gate-input-pack.json | 2026-05-25-ai-infra-access-decision-audit gate input pack |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-access-decision-audit/proof-bundle.md | 2026-05-25-ai-infra-access-decision-audit proof bundle |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/10-intent.md | AI Infra MCP static bearer intent |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/20-checkpoint.md | AI Infra MCP static bearer checkpoint |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/90-evidence.md | AI Infra MCP static bearer evidence |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/99-reflection.md | AI Infra MCP static bearer reflection |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/task-intent-draft.json | AI Infra MCP static bearer task intent draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/baseline-read-set-hint.json | AI Infra MCP static bearer baseline read-set hint |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/impact-statement-draft.json | AI Infra MCP static bearer impact statement draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/todo-checkpoint-draft.json | AI Infra MCP static bearer todo checkpoint draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/drift-check-draft.json | AI Infra MCP static bearer drift check draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/evidence-bundle-draft-focused-regression.json | AI Infra MCP static bearer focused regression evidence bundle |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/resume-state-hint.json | AI Infra MCP static bearer resume state hint |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/gate-input-pack.json | 2026-05-25-ai-infra-mcp-static-bearer gate input pack |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/proof-bundle.md | 2026-05-25-ai-infra-mcp-static-bearer proof bundle |

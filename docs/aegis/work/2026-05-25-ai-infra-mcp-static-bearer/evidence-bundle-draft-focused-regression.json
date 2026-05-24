@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "focused-regression",
+  "type": "test",
+  "source": "mvn -nsu '-Dspotless.apply.skip=true' -pl seahorse-agent-kernel,seahorse-agent-adapter-mcp-http,seahorse-agent-spring-boot-starter -am '-Dtest=CredentialMaterialTests,StreamableHttpMcpClientCredentialTests,McpHttpAutoConfigurationCredentialTests,NativeMcpEnabledConditionTests,NativeMcpToolRegistryTests,SeahorseAgentRegistryAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test",
+  "summary": "Focused and broader related MCP static bearer regression passed across kernel, MCP HTTP adapter, and Spring starter.",
+  "verifier": "codex"
+}
