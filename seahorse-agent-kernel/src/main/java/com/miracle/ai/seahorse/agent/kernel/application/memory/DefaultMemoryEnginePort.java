@@ -53,12 +53,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewApplyDirective;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewCandidatePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryStorePort;
@@ -129,14 +127,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
     }
 
-    private record RefinerFeedbackScope(String targetKind, String targetKey) {
-
-        private RefinerFeedbackScope {
-            targetKind = Objects.requireNonNullElse(targetKind, "").trim();
-            targetKey = Objects.requireNonNullElse(targetKey, "").trim();
-        }
-    }
-
     private final ShortTermMemoryPort shortTermPort;
     private final LongTermMemoryPort longTermPort;
     private final SemanticMemoryPort semanticPort;
@@ -174,6 +164,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryRefinerMetadataWriter refinerMetadataWriter;
     private final MemoryOperationBuilder operationBuilder;
     private final MemoryOperationCompletionWriter operationCompletionWriter;
+    private final MemoryRefinerFeedbackLookup refinerFeedbackLookup;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -553,6 +544,12 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.operationCompletionWriter = new MemoryOperationCompletionWriter(
                 this.memoryOperationLogPort,
                 this.refinerMetadataWriter);
+        this.refinerFeedbackLookup = new MemoryRefinerFeedbackLookup(
+                this.memoryReviewFeedbackRepositoryPort,
+                this.profileValueNormalizer,
+                this.options.refinerFeedbackExampleLimit(),
+                TARGET_KIND_PROFILE_SLOT,
+                TARGET_KEY_IDENTITY_OCCUPATION);
     }
 
     @Override
@@ -952,7 +949,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             List<MemoryRefinementMemory> existingMemories = refinementInputBuilder.existingMemories(request.userId());
             MemoryRefinementContextParser.Zones contextZones = refinementContextParser.parse(sanitizedContent);
             List<MemoryReviewFeedbackSample> feedbackExamples =
-                    recentReviewFeedbackExamples(tenantId, request.userId(), baseline);
+                    refinerFeedbackLookup.recentResolved(tenantId, request.userId(), baseline);
             MemoryRefinementResult result = memoryRefinerPort.refine(new MemoryRefinementRequest(
                     operationId,
                     tenantId,
@@ -993,56 +990,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     "failed_open:" + Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()),
                     Map.of("status", "failed_open"));
         }
-    }
-
-    private List<MemoryReviewFeedbackSample> recentReviewFeedbackExamples(String tenantId,
-                                                                          String userId,
-                                                                          MemoryClassificationResult baseline) {
-        if (isBlank(userId)) {
-            return List.of();
-        }
-        RefinerFeedbackScope scope = refinerFeedbackScope(baseline);
-        try {
-            List<MemoryReviewFeedbackSample> samples = memoryReviewFeedbackRepositoryPort.listSamples(
-                    new MemoryReviewFeedbackQuery(
-                            tenantId,
-                            userId,
-                            null,
-                            scope.targetKind(),
-                            scope.targetKey(),
-                            options.refinerFeedbackExampleLimit()));
-            return samples.stream()
-                    .filter(this::isResolvedFeedbackSample)
-                    .limit(options.refinerFeedbackExampleLimit())
-                    .toList();
-        } catch (RuntimeException ex) {
-            LOG.debug("load refiner review-feedback examples failed: tenantId={}, userId={}", tenantId, userId, ex);
-            return List.of();
-        }
-    }
-
-    private RefinerFeedbackScope refinerFeedbackScope(MemoryClassificationResult baseline) {
-        if (baseline == null) {
-            return new RefinerFeedbackScope("", "");
-        }
-        RefinedMemoryDelta delta = baseline.refinedDelta();
-        if (delta != null && !isBlank(delta.targetKind()) && !isBlank(delta.targetKey())) {
-            return new RefinerFeedbackScope(delta.targetKind(), delta.targetKey());
-        }
-        if (baseline.action() == MemoryIngestionAction.UPDATE && baseline.correction() != null) {
-            return new RefinerFeedbackScope(TARGET_KIND_PROFILE_SLOT, TARGET_KEY_IDENTITY_OCCUPATION);
-        }
-        String profileSlot = baseline.decision() == null ? "" : profileValueNormalizer.resolveSlot(baseline.decision(), baseline);
-        if (!isBlank(profileSlot)) {
-            return new RefinerFeedbackScope(TARGET_KIND_PROFILE_SLOT, profileSlot);
-        }
-        return new RefinerFeedbackScope("", "");
-    }
-
-    private boolean isResolvedFeedbackSample(MemoryReviewFeedbackSample sample) {
-        return sample != null
-                && (sample.reviewStatus() == MemoryReviewStatus.APPLIED
-                || sample.reviewStatus() == MemoryReviewStatus.REJECTED);
     }
 
     private MemoryClassificationResult applyRefinementResult(MemoryRefinementResult result,
