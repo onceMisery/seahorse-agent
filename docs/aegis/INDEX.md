@@ -124,3 +124,9 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/resume-state-hint.json | AI Infra MCP static bearer resume state hint |
 | 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/gate-input-pack.json | 2026-05-25-ai-infra-mcp-static-bearer gate input pack |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/proof-bundle.md | 2026-05-25-ai-infra-mcp-static-bearer proof bundle |
+| 2026-05-25 | spec | docs/aegis/specs/2026-05-25-gemini-memory-alignment-current-state.md | Gemini memory alignment current-state design |
+| 2026-05-25 | plan | docs/aegis/plans/2026-05-25-gemini-memory-alignment-completion.md | Gemini memory alignment completion plan |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-gemini-memory-alignment-completion/10-intent.md | Gemini memory alignment completion intent |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-gemini-memory-alignment-completion/20-checkpoint.md | Gemini memory alignment completion checkpoint |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-gemini-memory-alignment-completion/90-evidence.md | Gemini memory alignment completion evidence |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-gemini-memory-alignment-completion/99-reflection.md | Gemini memory alignment completion reflection |
