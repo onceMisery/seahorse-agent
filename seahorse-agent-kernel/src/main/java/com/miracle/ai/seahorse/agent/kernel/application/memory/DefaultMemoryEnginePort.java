@@ -146,45 +146,13 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private static final String REFINER_ADD_REVIEW_RISK = MemoryReviewPolicyPort.REFINER_ADD_REVIEW_RISK;
     private static final String REFINER_STATUS_DROPPED = "dropped";
     private static final String REFINER_STATUS_PENDING_REVIEW = "pending_review";
-    private static final Pattern CONTEXT_TURN_HEADER_PATTERN = Pattern.compile("\\bturn_\\d+:");
     private static final Pattern ALIAS_TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._:+#-]{1,63}");
     private static final int MAX_ALIAS_TOKEN_LOOKUPS = 16;
-    private static final Pattern CONTEXT_TURN_INDEX_PATTERN = Pattern.compile("\\bturn_(\\d+):");
-    private static final Pattern CONTEXT_SOURCE_SPAN_PATTERN = Pattern.compile(
-            "\\bspan_(\\d+):\\s*(.*?)(?=\\s+span_\\d+:\\s*|\\s*$)", Pattern.DOTALL);
 
     private record IngestionExecution(MemoryIngestionResult result, MemoryClassificationResult classification) {
 
         private IngestionExecution {
             Objects.requireNonNull(result, "result must not be null");
-        }
-    }
-
-    private record MemoryRefinementContextZones(String referenceZone,
-                                                String targetZone,
-                                                List<String> targetSourceMessageIds) {
-
-        private MemoryRefinementContextZones(String referenceZone, String targetZone) {
-            this(referenceZone, targetZone, List.of());
-        }
-
-        private MemoryRefinementContextZones {
-            referenceZone = Objects.requireNonNullElse(referenceZone, "");
-            targetZone = Objects.requireNonNullElse(targetZone, "");
-            targetSourceMessageIds = targetSourceMessageIds == null
-                    ? List.of()
-                    : List.copyOf(targetSourceMessageIds.stream()
-                    .filter(messageId -> messageId != null && !messageId.isBlank())
-                    .distinct()
-                    .toList());
-        }
-    }
-
-    private record ContextBlockTurn(int turnIndex, String turnBlock, String sourceSpan) {
-
-        private ContextBlockTurn {
-            turnBlock = Objects.requireNonNullElse(turnBlock, "");
-            sourceSpan = Objects.requireNonNullElse(sourceSpan, "");
         }
     }
 
@@ -225,6 +193,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final ProfileSlotResolver profileSlotResolver;
     private final MemoryDerivedIndexDispatchService derivedIndexDispatch;
     private final MemoryTrackWriteService trackWriteService;
+    private final MemoryRefinementContextParser refinementContextParser;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -581,6 +550,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.memoryLifecyclePort,
                 TARGET_KIND_PROFILE_SLOT,
                 TARGET_KEY_IDENTITY_OCCUPATION);
+        this.refinementContextParser = new MemoryRefinementContextParser(
+                this.options.refinerTargetZoneTurnCount());
     }
 
     @Override
@@ -978,7 +949,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
         try {
             List<MemoryRefinementMemory> existingMemories = currentExistingMemories(request.userId());
-            MemoryRefinementContextZones contextZones = refinementContextZones(sanitizedContent);
+            MemoryRefinementContextParser.Zones contextZones = refinementContextParser.parse(sanitizedContent);
             List<MemoryReviewFeedbackSample> feedbackExamples =
                     recentReviewFeedbackExamples(tenantId, request.userId(), baseline);
             MemoryRefinementResult result = memoryRefinerPort.refine(new MemoryRefinementRequest(
@@ -1143,141 +1114,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         return primary > 0D ? primary : doubleMetadata(memory.metadata(), fallbackKey);
     }
 
-    private MemoryRefinementContextZones refinementContextZones(String sanitizedContent) {
-        if (isBlank(sanitizedContent)) {
-            return new MemoryRefinementContextZones("", "");
-        }
-        List<ContextBlockTurn> turns = contextBlockTurns(sanitizedContent);
-        if (turns.isEmpty()) {
-            return new MemoryRefinementContextZones("", sanitizedContent);
-        }
-        int targetStart = Math.max(0, turns.size() - options.refinerTargetZoneTurnCount());
-        List<ContextBlockTurn> targetTurns = turns.subList(targetStart, turns.size());
-        return new MemoryRefinementContextZones(
-                joinContextTurnBlocks(turns.subList(0, targetStart)),
-                joinContextTurnBlocks(targetTurns),
-                sourceMessageIdsFromSpans(targetTurns));
-    }
-
-    private List<ContextBlockTurn> contextBlockTurns(String content) {
-        String normalized = Objects.requireNonNullElse(content, "").replace("\r\n", "\n").replace('\r', '\n');
-        int turnsStart = normalized.indexOf("[turns]");
-        if (turnsStart < 0) {
-            return List.of();
-        }
-        int bodyStart = turnsStart + "[turns]".length();
-        int sourceSpansStart = normalized.indexOf("[source_spans]", bodyStart);
-        String turnsBody = sourceSpansStart > bodyStart
-                ? normalized.substring(bodyStart, sourceSpansStart)
-                : normalized.substring(bodyStart);
-        Map<Integer, String> sourceSpans = sourceSpansStart > bodyStart
-                ? splitContextSourceSpans(normalized.substring(sourceSpansStart + "[source_spans]".length()))
-                : Map.of();
-        return splitContextTurns(turnsBody, sourceSpans);
-    }
-
-    private List<ContextBlockTurn> splitContextTurns(String turnsBody, Map<Integer, String> sourceSpans) {
-        List<ContextBlockTurn> turns = new ArrayList<>();
-        Matcher matcher = CONTEXT_TURN_HEADER_PATTERN.matcher(Objects.requireNonNullElse(turnsBody, ""));
-        int currentStart = -1;
-        while (matcher.find()) {
-            if (currentStart >= 0) {
-                String block = turnsBody.substring(currentStart, matcher.start()).trim();
-                if (!block.isBlank()) {
-                    turns.add(contextBlockTurn(block, sourceSpans));
-                }
-            }
-            currentStart = matcher.start();
-        }
-        if (currentStart >= 0) {
-            String block = turnsBody.substring(currentStart).trim();
-            if (!block.isBlank()) {
-                turns.add(contextBlockTurn(block, sourceSpans));
-            }
-        }
-        return List.copyOf(turns);
-    }
-
-    private Map<Integer, String> splitContextSourceSpans(String spansBody) {
-        Map<Integer, String> spans = new LinkedHashMap<>();
-        Matcher matcher = CONTEXT_SOURCE_SPAN_PATTERN.matcher(Objects.requireNonNullElse(spansBody, ""));
-        while (matcher.find()) {
-            int index = parsePositiveInt(matcher.group(1));
-            if (index > 0) {
-                spans.put(index, ("span_" + index + ": " + matcher.group(2).trim()).trim());
-            }
-        }
-        return Map.copyOf(spans);
-    }
-
-    private ContextBlockTurn contextBlockTurn(String block, Map<Integer, String> sourceSpans) {
-        int index = contextTurnIndex(block);
-        return new ContextBlockTurn(
-                index,
-                block,
-                index <= 0 ? "" : Objects.requireNonNullElse(sourceSpans.get(index), ""));
-    }
-
-    private int contextTurnIndex(String block) {
-        Matcher matcher = CONTEXT_TURN_INDEX_PATTERN.matcher(Objects.requireNonNullElse(block, ""));
-        if (!matcher.find()) {
-            return 0;
-        }
-        return parsePositiveInt(matcher.group(1));
-    }
-
-    private int parsePositiveInt(String value) {
-        try {
-            return Math.max(0, Integer.parseInt(value));
-        } catch (NumberFormatException ex) {
-            return 0;
-        }
-    }
-
-    private String joinContextTurnBlocks(List<ContextBlockTurn> turns) {
-        if (turns == null || turns.isEmpty()) {
-            return "";
-        }
-        String turnBlocks = String.join("\n\n", turns.stream()
-                .map(ContextBlockTurn::turnBlock)
-                .toList());
-        List<String> sourceSpans = turns.stream()
-                .map(ContextBlockTurn::sourceSpan)
-                .filter(span -> !span.isBlank())
-                .toList();
-        if (sourceSpans.isEmpty()) {
-            return turnBlocks;
-        }
-        return turnBlocks + "\n\n[source_spans]\n" + String.join("\n", sourceSpans);
-    }
-
-    private List<String> sourceMessageIdsFromSpans(List<ContextBlockTurn> turns) {
-        if (turns == null || turns.isEmpty()) {
-            return List.of();
-        }
-        return turns.stream()
-                .map(ContextBlockTurn::sourceSpan)
-                .map(this::sourceMessageIdFromSpan)
-                .filter(messageId -> !isBlank(messageId))
-                .distinct()
-                .toList();
-    }
-
-    private String sourceMessageIdFromSpan(String sourceSpan) {
-        if (isBlank(sourceSpan)) {
-            return "";
-        }
-        String span = sourceSpan.trim();
-        int separatorIndex = span.indexOf(':');
-        String body = separatorIndex >= 0 ? span.substring(separatorIndex + 1) : span;
-        int assistantSeparatorIndex = body.indexOf("->");
-        String userMessageId = assistantSeparatorIndex >= 0 ? body.substring(0, assistantSeparatorIndex) : body;
-        return userMessageId.trim();
-    }
-
     private MemoryClassificationResult applyRefinementResult(MemoryRefinementResult result,
                                                              MemoryClassificationResult baseline,
-                                                             MemoryRefinementContextZones contextZones) {
+                                                             MemoryRefinementContextParser.Zones contextZones) {
         if (result == null || !result.refined() || result.operations().isEmpty()) {
             return withRefinerDelta(
                     baseline,
@@ -1427,7 +1266,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     }
 
     private List<MemoryClassificationResult> supportedRefinedClassifications(MemoryRefinementResult result,
-                                                                             MemoryRefinementContextZones contextZones) {
+                                                                             MemoryRefinementContextParser.Zones contextZones) {
         List<MemoryClassificationResult> classifications = new ArrayList<>();
         List<RefinedMemoryOperation> operations = result == null ? List.of() : result.operations();
         int supportedIndex = 0;
