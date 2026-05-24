@@ -183,6 +183,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryTrackWriteService trackWriteService;
     private final MemoryRefinementContextParser refinementContextParser;
     private final MemoryRefinerBatchCircuitBreaker refinerBatchCircuitBreaker;
+    private final MemoryProfileValueNormalizer profileValueNormalizer;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -544,6 +545,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.refinerBatchCircuitBreaker = new MemoryRefinerBatchCircuitBreaker(
                 this.options.maxRefinerBatchOperations(),
                 this.options.maxRefinerDeleteRatio());
+        this.profileValueNormalizer = new MemoryProfileValueNormalizer(this.profileSlotResolver);
     }
 
     @Override
@@ -732,7 +734,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                                              ChatMessage message,
                                                              MemoryClassificationResult classification) {
         MemoryCaptureDecision decision = classification.decision();
-        String profileSlot = profileSlot(decision, classification);
+        String profileSlot = profileValueNormalizer.resolveSlot(decision, classification);
         String profileGenerationId = isBlank(profileSlot) ? "" : profileSlot + ":" + UUID.randomUUID();
         Map<String, Object> metadata = captureMetadata(operationId, tenantId, request, message, decision);
         addRefinedMetadata(metadata, classification);
@@ -1023,7 +1025,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         if (baseline.action() == MemoryIngestionAction.UPDATE && baseline.correction() != null) {
             return new RefinerFeedbackScope(TARGET_KIND_PROFILE_SLOT, TARGET_KEY_IDENTITY_OCCUPATION);
         }
-        String profileSlot = baseline.decision() == null ? "" : profileSlot(baseline.decision(), baseline);
+        String profileSlot = baseline.decision() == null ? "" : profileValueNormalizer.resolveSlot(baseline.decision(), baseline);
         if (!isBlank(profileSlot)) {
             return new RefinerFeedbackScope(TARGET_KIND_PROFILE_SLOT, profileSlot);
         }
@@ -1472,7 +1474,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         if (isBlank(slotKey)) {
             return false;
         }
-        String value = profileValue(slotKey, decision.content());
+        String value = profileValueNormalizer.normalize(slotKey, decision.content());
         return trackWriteService.writeProfileFact(
                 request.userId(),
                 tenantId,
@@ -1488,62 +1490,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                                   String profileSlot,
                                                   String activeGenerationId) {
         trackWriteService.markProfileSlotFragmentsObsolete(userId, tenantId, profileSlot, activeGenerationId);
-    }
-
-    private String profileSlot(MemoryCaptureDecision decision, MemoryClassificationResult classification) {
-        RefinedMemoryDelta delta = classification == null ? null : classification.refinedDelta();
-        if (delta != null
-                && TARGET_KIND_PROFILE_SLOT.equalsIgnoreCase(delta.targetKind())
-                && !isBlank(delta.targetKey())) {
-            return delta.targetKey();
-        }
-        return decision == null ? "" : profileSlotResolver.resolve(decision.type(), decision.content(), "");
-    }
-
-    private String profileValue(String slotKey, String content) {
-        String value = Objects.requireNonNullElse(content, "").trim();
-        if ("identity.name".equals(slotKey)) {
-            value = stripPrefix(value, "(?i)^my name is\\s+");
-            value = stripPrefix(value, "^\u6211\u53eb");
-            value = stripPrefix(value, "^\u6211\u7684\u540d\u5b57\u662f");
-            return stripPrefix(value, "^\u6211\u7684\u6635\u79f0\u662f");
-        }
-        if ("skills.tech_stack".equals(slotKey)) {
-            value = stripPrefix(value, "(?i)^my tech stack is\\s+");
-            value = stripPrefix(value, "^\u6211\u7684\u6280\u672f\u6808\u662f\\s*");
-            return stripPrefix(value, "^\u6211\u4e3b\u8981\u4f7f\u7528\\s*");
-        }
-        if ("preferences.response_style".equals(slotKey)) {
-            value = stripPrefix(value, "(?i)^i prefer\\s+");
-            value = stripPrefix(value, "(?i)^i like\\s+");
-            value = stripPrefix(value, "^\u6211\u559c\u6b22");
-            value = stripPrefix(value, "^\u6211\u504f\u597d");
-            return value;
-        }
-        if ("identity.occupation".equals(slotKey)) {
-            return normalizeOccupationValue(stripProfilePrefix(value));
-        }
-        return "";
-    }
-
-    private String stripPrefix(String content, String regex) {
-        return Objects.requireNonNullElse(content, "").replaceFirst(regex, "").trim();
-    }
-
-    private String stripProfilePrefix(String content) {
-        return Objects.requireNonNullElse(content, "")
-                .trim()
-                .replaceFirst("^我的(职业|身份|工作|岗位|角色)是", "")
-                .replaceFirst("^我是", "")
-                .replaceFirst("^我是一名", "")
-                .replaceFirst("^我是一位", "")
-                .replaceFirst("^一名", "")
-                .replaceFirst("^一位", "")
-                .trim();
-    }
-
-    private String normalizeOccupationValue(String value) {
-        return OccupationCorrection.normalizeOccupationValue(value);
     }
 
     private Map<String, Object> captureMetadata(String operationId,
