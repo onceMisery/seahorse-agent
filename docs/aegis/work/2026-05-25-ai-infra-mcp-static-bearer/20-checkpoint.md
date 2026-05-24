@@ -1,10 +1,10 @@
 # AI Infra MCP static bearer - Checkpoint
 
 - Task ID: 2026-05-25-ai-infra-mcp-static-bearer
-- Current todo: Finalize MCP `STATIC_BEARER` minimal loop, update evidence, run verification, commit, and merge.
+- Current todo: MCP `STATIC_BEARER` minimal loop is merged to root `main`; continue with the next AI-Infra gap in a new slice.
 - Active slice: Phase 5 MCP static bearer credential resolution and header injection.
 - Blocked on: none
-- Next step: Run final diff checks, commit branch, merge back to root `main`, and rerun focused regression on `main`.
+- Next step: Continue with the next AI-Infra gap in a new isolated slice.
 
 ## DriftCheckDraft
 
@@ -17,12 +17,12 @@
 
 ## Checkpoint Update
 
-- Current todo: Commit branch, merge back to root `main`, and rerun focused regression on `main`.
+- Current todo: MCP `STATIC_BEARER` minimal loop is merged and verified on root `main`.
 - Active slice: Phase 5 MCP static bearer credential resolution and header injection.
 - Completed todos:
 - Merged `main` into branch; wrote RED tests; added credential port/domain types; added MCP server `authType/clientSecretRef`; added bearer header injection; added default `SecretStorePort` to `CredentialProviderPort` composition; ran focused regression.
 - Evidence refs:
-- focused-regression: Maven focused regression exited 0 / BUILD SUCCESS.
+- focused-regression: Maven focused and broader related regressions exited 0 / BUILD SUCCESS in the feature worktree and on root `main`.
 - diff-check: `git diff --check` exited 0 with only LF/CRLF warnings.
 - Blocked on: none
-- Next step: Commit branch and merge to root `main`.
+- Next step: Continue with the next AI-Infra gap in a new isolated slice.

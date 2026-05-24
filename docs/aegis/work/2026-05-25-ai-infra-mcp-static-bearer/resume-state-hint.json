@@ -2,9 +2,9 @@
   "schemaVersion": "aegis.schema.v0",
   "taskId": "2026-05-25-ai-infra-mcp-static-bearer",
   "lastCheckpointRef": "docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/todo-checkpoint-draft.json",
-  "resumeInstruction": "Resume from the MCP static bearer branch, verify status, commit, merge to root main, and rerun focused regression on main.",
+  "resumeInstruction": "MCP static bearer is merged and verified on root main; continue with the next AI-Infra gap in a new isolated slice.",
   "knownPartialWork": [
-    "Credential ports/domain, MCP auth properties, bearer header injection, auto-configuration composition, tests, and work records are implemented in the feature worktree."
+    "Credential ports/domain, MCP auth properties, bearer header injection, auto-configuration composition, tests, and work records are merged to root main."
   ],
   "mustReadBeforeContinuing": [
     "docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/10-intent.md",

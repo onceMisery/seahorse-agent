@@ -1,16 +1,16 @@
 {
   "schemaVersion": "aegis.schema.v0",
   "taskId": "2026-05-25-ai-infra-mcp-static-bearer",
-  "currentTodo": "Commit branch, merge back to root main, and rerun focused regression on main.",
+  "currentTodo": "MCP STATIC_BEARER minimal loop is merged and verified on root main.",
   "completedTodos": [
     "Merged main into branch; wrote RED tests; added credential port/domain types; added MCP server authType/clientSecretRef; added bearer header injection; added default SecretStorePort to CredentialProviderPort composition; ran focused regression."
   ],
   "activeSlice": "Phase 5 MCP static bearer credential resolution and header injection.",
   "evidenceRefs": [
-    "focused-regression: Maven focused and broader related regressions exited 0 / BUILD SUCCESS.",
+    "focused-regression: Maven focused and broader related regressions exited 0 / BUILD SUCCESS in the feature worktree and on root main.",
     "diff-check: git diff --check exited 0 with only LF/CRLF warnings."
   ],
   "blockedOn": null,
-  "nextStep": "Commit branch and merge to root main.",
+  "nextStep": "Continue with the next AI-Infra gap in a new isolated slice.",
   "updatedAt": "2026-05-25"
 }

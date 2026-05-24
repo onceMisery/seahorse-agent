@@ -22,7 +22,7 @@ Risk / Unknown:
 - Aegis workspace global check is known to fail on historical records outside this work directory with older index/JSON shapes.
 
 Decision:
-- Focused and broader related regressions passed in the feature worktree.
-- Continue to commit, merge into root `main`, and rerun focused regression on `main`.
+- Focused and broader related regressions passed in the feature worktree and after fast-forward merge on root `main`.
+- This MCP static bearer slice is complete; continue with the next AI-Infra gap in a separate isolated slice.
 
 Method Pack output does not grant completion authority.

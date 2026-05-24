@@ -11,6 +11,8 @@ Verification:
   `mvn -nsu '-Dspotless.apply.skip=true' -pl seahorse-agent-kernel,seahorse-agent-adapter-mcp-http -am '-Dtest=CredentialMaterialTests,StreamableHttpMcpClientCredentialTests,McpHttpAutoConfigurationCredentialTests,NativeMcpEnabledConditionTests,NativeMcpToolRegistryTests' '-Dsurefire.failIfNoSpecifiedTests=false' test`
 - Broader related regression passed:
   `mvn -nsu '-Dspotless.apply.skip=true' -pl seahorse-agent-kernel,seahorse-agent-adapter-mcp-http,seahorse-agent-spring-boot-starter -am '-Dtest=CredentialMaterialTests,StreamableHttpMcpClientCredentialTests,McpHttpAutoConfigurationCredentialTests,NativeMcpEnabledConditionTests,NativeMcpToolRegistryTests,SeahorseAgentRegistryAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test`
+- Root `main` focused regression passed after fast-forward merge:
+  `mvn -nsu '-Dspotless.apply.skip=true' -pl seahorse-agent-kernel,seahorse-agent-adapter-mcp-http,seahorse-agent-spring-boot-starter -am '-Dtest=CredentialMaterialTests,StreamableHttpMcpClientCredentialTests,McpHttpAutoConfigurationCredentialTests,NativeMcpEnabledConditionTests,NativeMcpToolRegistryTests,SeahorseAgentRegistryAutoConfigurationTests' '-Dsurefire.failIfNoSpecifiedTests=false' test`
 - `git diff --check` exited 0. Git only reported LF/CRLF conversion warnings.
 - Aegis proof bundle assembled:
   `docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/proof-bundle.md`
@@ -39,6 +41,8 @@ Safety evidence:
 - Production logs for credential resolution skip/failure include server name, auth type, and named reason only.
 - Raw token is revealed only at the HTTP request header injection boundary.
 
-Pending evidence:
-- Commit and merge back to root `main`.
-- Rerun focused regression on root `main`.
+Completion evidence:
+- Feature branch commit: `06cab7d8 feat(mcp): add static bearer credentials`.
+- Feature branch merged latest `main`: `01610084 merge: main into mcp static bearer`.
+- Root `main` fast-forwarded to `01610084`.
+- Root `main` focused regression exited 0 / BUILD SUCCESS.
