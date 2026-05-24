@@ -872,6 +872,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryCompactionSummarizerPort> summarizerPort,
             ObjectProvider<MemoryKeywordIndexPort> keywordIndexPort,
             ObjectProvider<MemoryGraphIndexPort> graphIndexPort,
+            ObjectProvider<ObservationPort> observationPort,
             @Value("${seahorse-agent.memory.compaction.scan-limit:100}") int scanLimit,
             @Value("${seahorse-agent.memory.compaction.min-group-size:3}") int minGroupSize,
             @Value("${seahorse-agent.memory.compaction.vector-index-enabled:true}") boolean vectorIndexEnabled,
@@ -889,7 +890,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                         vectorIndexEnabled,
                         keywordIndexEnabled && keywordIndexPort.getIfAvailable() != null,
                         graphIndexEnabled && graphIndexPort.getIfAvailable() != null,
-                        embeddingModel));
+                        embeddingModel),
+                observationPort.getIfAvailable(ObservationPort::noop));
     }
 
     @Bean

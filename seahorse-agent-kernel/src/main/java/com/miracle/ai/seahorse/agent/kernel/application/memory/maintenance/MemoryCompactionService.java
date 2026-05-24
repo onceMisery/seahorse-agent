@@ -26,6 +26,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionSumma
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationEvent;
+import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,23 +45,34 @@ public class MemoryCompactionService {
     private static final String METADATA_CONFIDENCE_LEVEL = "confidenceLevel";
     private static final double DEFAULT_MASTER_IMPORTANCE_SCORE = 0.8D;
     private static final double DEFAULT_MASTER_CONFIDENCE_LEVEL = 0.8D;
+    static final String OBSERVATION_RUN_EVENT = "memory-compaction-run";
+    static final String OBSERVATION_GROUP_EVENT = "memory-compaction-group";
+    static final String OBSERVATION_ATTR_OUTCOME = "outcome";
+    static final String OBSERVATION_ATTR_STRATEGY = "strategy";
+    static final String OBSERVATION_OUTCOME_SUCCESS = "success";
+    static final String OBSERVATION_OUTCOME_EMPTY = "empty";
+    static final String OBSERVATION_OUTCOME_ERROR = "error";
+    static final String OBSERVATION_OUTCOME_SKIPPED = "skipped";
 
     private final MemoryCompactionPort compactionPort;
     private final LongTermMemoryPort longTermMemoryPort;
     private final MemoryOutboxPort outboxPort;
     private final MemoryCompactionSummarizerPort summarizerPort;
     private final MemoryCompactionOptions options;
+    private final ObservationPort observationPort;
 
     public MemoryCompactionService() {
         this(MemoryCompactionPort.noop(), null, MemoryOutboxPort.noop(),
-                MemoryCompactionSummarizerPort.noop(), MemoryCompactionOptions.defaults());
+                MemoryCompactionSummarizerPort.noop(), MemoryCompactionOptions.defaults(),
+                ObservationPort.noop());
     }
 
     public MemoryCompactionService(MemoryCompactionPort compactionPort,
                                    LongTermMemoryPort longTermMemoryPort,
                                    MemoryOutboxPort outboxPort,
                                    MemoryCompactionOptions options) {
-        this(compactionPort, longTermMemoryPort, outboxPort, MemoryCompactionSummarizerPort.noop(), options);
+        this(compactionPort, longTermMemoryPort, outboxPort, MemoryCompactionSummarizerPort.noop(), options,
+                ObservationPort.noop());
     }
 
     public MemoryCompactionService(MemoryCompactionPort compactionPort,
@@ -67,11 +80,21 @@ public class MemoryCompactionService {
                                    MemoryOutboxPort outboxPort,
                                    MemoryCompactionSummarizerPort summarizerPort,
                                    MemoryCompactionOptions options) {
+        this(compactionPort, longTermMemoryPort, outboxPort, summarizerPort, options, ObservationPort.noop());
+    }
+
+    public MemoryCompactionService(MemoryCompactionPort compactionPort,
+                                   LongTermMemoryPort longTermMemoryPort,
+                                   MemoryOutboxPort outboxPort,
+                                   MemoryCompactionSummarizerPort summarizerPort,
+                                   MemoryCompactionOptions options,
+                                   ObservationPort observationPort) {
         this.compactionPort = Objects.requireNonNullElseGet(compactionPort, MemoryCompactionPort::noop);
         this.longTermMemoryPort = longTermMemoryPort;
         this.outboxPort = Objects.requireNonNullElseGet(outboxPort, MemoryOutboxPort::noop);
         this.summarizerPort = Objects.requireNonNullElseGet(summarizerPort, MemoryCompactionSummarizerPort::noop);
         this.options = Objects.requireNonNullElseGet(options, MemoryCompactionOptions::defaults);
+        this.observationPort = Objects.requireNonNullElseGet(observationPort, ObservationPort::noop);
     }
 
     public MemoryCompactionResult run(String reason) {
@@ -82,6 +105,7 @@ public class MemoryCompactionService {
         int compactedFragments = 0;
         for (MemoryCompactionCandidate candidate : candidates) {
             if (candidate.fragments().size() < options.minGroupSize()) {
+                emitGroupMetric(candidate, OBSERVATION_OUTCOME_SKIPPED);
                 continue;
             }
             try {
@@ -91,10 +115,13 @@ public class MemoryCompactionService {
                 enqueueMasterUpserts(master, candidate, errors);
                 enqueueFragmentDeletes(candidate, errors);
                 compactedGroups++;
+                emitGroupMetric(candidate, OBSERVATION_OUTCOME_SUCCESS);
             } catch (RuntimeException ex) {
                 errors.add(candidate.groupKey() + ":" + errorMessage(ex));
+                emitGroupMetric(candidate, OBSERVATION_OUTCOME_ERROR);
             }
         }
+        emitRunMetric(candidates, compactedGroups, errors);
         return new MemoryCompactionResult(
                 Objects.requireNonNullElse(reason, "manual-compaction"),
                 candidates.size(),
@@ -248,5 +275,53 @@ public class MemoryCompactionService {
 
     private String errorMessage(RuntimeException ex) {
         return ex.getMessage() == null ? ex.getClass().getName() : ex.getMessage();
+    }
+
+    private void emitRunMetric(List<MemoryCompactionCandidate> candidates,
+                               int compactedGroups,
+                               List<String> errors) {
+        String outcome;
+        if (!errors.isEmpty() && compactedGroups == 0) {
+            outcome = OBSERVATION_OUTCOME_ERROR;
+        } else if (candidates.isEmpty() || compactedGroups == 0) {
+            outcome = OBSERVATION_OUTCOME_EMPTY;
+        } else {
+            outcome = OBSERVATION_OUTCOME_SUCCESS;
+        }
+        try {
+            observationPort.recordEvent(new ObservationEvent(
+                    OBSERVATION_RUN_EVENT,
+                    Instant.now(),
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.of(OBSERVATION_ATTR_OUTCOME, outcome)));
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change compaction semantics.
+        }
+    }
+
+    private void emitGroupMetric(MemoryCompactionCandidate candidate, String outcome) {
+        try {
+            Map<String, String> attributes = new LinkedHashMap<>();
+            attributes.put(OBSERVATION_ATTR_OUTCOME, outcome);
+            attributes.put(OBSERVATION_ATTR_STRATEGY, normalizeStrategy(candidate));
+            observationPort.recordEvent(new ObservationEvent(
+                    OBSERVATION_GROUP_EVENT,
+                    Instant.now(),
+                    ObservationEvent.DEFAULT_AMOUNT,
+                    Map.copyOf(attributes)));
+        } catch (RuntimeException ignored) {
+            // Observation emission is best-effort and must not change compaction semantics.
+        }
+    }
+
+    private String normalizeStrategy(MemoryCompactionCandidate candidate) {
+        if (candidate == null) {
+            return "unknown";
+        }
+        String strategy = candidate.strategy();
+        if (strategy == null || strategy.isBlank()) {
+            return "unknown";
+        }
+        return strategy;
     }
 }
