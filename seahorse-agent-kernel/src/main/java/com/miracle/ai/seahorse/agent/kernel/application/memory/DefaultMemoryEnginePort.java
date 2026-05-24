@@ -129,7 +129,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final ProfileMemoryPort profileMemoryPort;
     private final CorrectionLedgerPort correctionLedgerPort;
     private final MemoryRouterPort memoryRouterPort;
-    private final MemoryOperationLogPort memoryOperationLogPort;
     private final MemoryVectorPort memoryVectorPort;
     private final MemoryOutboxPort memoryOutboxPort;
     private final MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort;
@@ -159,7 +158,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryCanonicalAliasResolver canonicalAliasResolver;
     private final MemoryRefinerMetadataWriter refinerMetadataWriter;
     private final MemoryOperationBuilder operationBuilder;
-    private final MemoryOperationCompletionWriter operationCompletionWriter;
+    private final MemoryOperationGateway operationGateway;
     private final MemoryRefinerFeedbackLookup refinerFeedbackLookup;
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
@@ -462,8 +461,6 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         this.profileMemoryPort = Objects.requireNonNull(profileMemoryPort, "profileMemoryPort must not be null");
         this.correctionLedgerPort = Objects.requireNonNull(correctionLedgerPort, "correctionLedgerPort must not be null");
         this.memoryRouterPort = Objects.requireNonNull(memoryRouterPort, "memoryRouterPort must not be null");
-        this.memoryOperationLogPort = Objects.requireNonNull(memoryOperationLogPort,
-                "memoryOperationLogPort must not be null");
         this.memoryVectorPort = Objects.requireNonNull(memoryVectorPort, "memoryVectorPort must not be null");
         this.memoryOutboxPort = Objects.requireNonNull(memoryOutboxPort, "memoryOutboxPort must not be null");
         this.businessDocumentRetrieverPort = Objects.requireNonNull(businessDocumentRetrieverPort,
@@ -535,9 +532,9 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 this.memorySanitizer,
                 this.memoryPreFilter,
                 this.memorySemanticClassifier);
-        this.operationCompletionWriter = new MemoryOperationCompletionWriter(
-                this.memoryOperationLogPort,
-                this.refinerMetadataWriter);
+        this.operationGateway = new MemoryOperationGateway(
+                memoryOperationLogPort,
+                new MemoryOperationCompletionWriter(memoryOperationLogPort, this.refinerMetadataWriter));
         this.refinerFeedbackLookup = new MemoryRefinerFeedbackLookup(
                 this.memoryReviewFeedbackRepositoryPort,
                 this.profileValueNormalizer,
@@ -573,15 +570,15 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         String operationId = operationId(command, request);
         String tenantId = tenantId(command);
         MemoryOperation operation = operationBuilder.build(operationId, tenantId, command, request, message.getContent());
-        if (!memoryOperationLogPort.tryStart(operation)) {
+        if (!operationGateway.tryStart(operation)) {
             return MemoryIngestionResult.ignored("duplicate_operation");
         }
         try {
             IngestionExecution execution = executeIngestion(operationId, tenantId, command, request, message);
-            operationCompletionWriter.markCompleted(operationId, execution.result(), execution.classification());
+            operationGateway.markCompleted(operationId, execution.result(), execution.classification());
             return execution.result();
         } catch (RuntimeException ex) {
-            memoryOperationLogPort.markFailed(operationId,
+            operationGateway.markFailed(operationId,
                     Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName()));
             throw ex;
         }
