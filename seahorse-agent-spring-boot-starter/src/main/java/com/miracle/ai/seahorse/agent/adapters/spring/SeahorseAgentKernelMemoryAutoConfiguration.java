@@ -164,42 +164,6 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     private static final String MEMORY_REFINER_ENABLED_PROPERTY = "seahorse-agent.memory.refiner.enabled";
 
     @Bean
-    @ConditionalOnMissingBean(MemoryAggregationPolicy.class)
-    public MemoryAggregationPolicy seahorseMemoryAggregationPolicy(MemoryProperties properties) {
-        MemoryProperties.Aggregation aggregation = properties.getAggregation();
-        return new MemoryAggregationPolicy(
-                aggregation.isEnabled(),
-                aggregation.getIdleFlushMillis(),
-                aggregation.getMaxTurns(),
-                aggregation.getMaxTokens(),
-                aggregation.getMaxContextBlocks(),
-                aggregation.getBufferTtlMillis(),
-                aggregation.isCaptureOnError(),
-                aggregation.isTopicShiftFlushEnabled());
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(MemoryAggregationTopicShiftDetector.class)
-    public ExplicitCueMemoryAggregationTopicShiftDetector seahorseMemoryAggregationTopicShiftDetector() {
-        return new ExplicitCueMemoryAggregationTopicShiftDetector();
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
-            havingValue = "true")
-    @ConditionalOnMissingBean(MemoryAggregationBufferPort.class)
-    public InMemoryMemoryAggregationBufferPort seahorseInMemoryAggregationBufferPort(
-            MemoryAggregationPolicy policy) {
-        return new InMemoryMemoryAggregationBufferPort(policy);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(MemoryAggregationSchedulerPort.class)
-    public MemoryAggregationSchedulerPort seahorseMemoryAggregationSchedulerPort() {
-        return MemoryAggregationSchedulerPort.noop();
-    }
-
-    @Bean
     @ConditionalOnMissingBean(MemoryTraceRecorder.class)
     public MemoryTraceRecorder seahorseMemoryTraceRecorder(MemoryProperties memoryProperties) {
         return new InMemoryMemoryTraceRecorder(memoryProperties.getTrace().getMaxEvents());
@@ -209,55 +173,6 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @ConditionalOnMissingBean(MemoryTraceInboundPort.class)
     public KernelMemoryTraceQueryService seahorseMemoryTraceInboundPort(MemoryTraceRecorder traceRecorder) {
         return new KernelMemoryTraceQueryService(traceRecorder);
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
-            havingValue = "true")
-    @ConditionalOnMissingBean(MemoryAggregationServicePort.class)
-    public DefaultMemoryAggregationService seahorseMemoryAggregationService(
-            MemoryAggregationPolicy policy,
-            ObjectProvider<MemoryAggregationBufferPort> aggregationBufferPort,
-            ObjectProvider<MemoryAggregationSchedulerPort> schedulerPort,
-            ObjectProvider<MemoryIngestionWorkflowPort> ingestionWorkflowPort,
-            ObjectProvider<MemoryTraceRecorder> traceRecorder,
-            ObjectProvider<MemoryAggregationTopicShiftDetector> topicShiftDetector,
-            ObjectProvider<ObservationPort> observationPort) {
-        return new DefaultMemoryAggregationService(
-                policy,
-                aggregationBufferPort.getIfAvailable(MemoryAggregationBufferPort::noop),
-                schedulerPort.getIfAvailable(MemoryAggregationSchedulerPort::noop),
-                ingestionWorkflowPort.getIfAvailable(() -> command ->
-                        com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult.ignored("noop")),
-                traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
-                topicShiftDetector.getIfAvailable(ExplicitCueMemoryAggregationTopicShiftDetector::new),
-                observationPort.getIfAvailable(ObservationPort::noop),
-                java.time.Clock.systemUTC());
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
-            havingValue = "true")
-    @ConditionalOnBean(MemoryAggregationServicePort.class)
-    @ConditionalOnMissingBean(MemoryAggregationInboundPort.class)
-    public KernelMemoryAggregationControlService seahorseMemoryAggregationInboundPort(
-            MemoryAggregationServicePort aggregationServicePort) {
-        return new KernelMemoryAggregationControlService(aggregationServicePort);
-    }
-
-    @Bean
-    @ConditionalOnProperty(prefix = "seahorse-agent.memory.aggregation", name = "enabled",
-            havingValue = "true")
-    @ConditionalOnBean(MemoryAggregationServicePort.class)
-    @ConditionalOnMissingBean
-    public SeahorseMemoryAggregationJob seahorseMemoryAggregationJob(
-            MemoryAggregationServicePort aggregationServicePort,
-            ObjectProvider<DistributedLockPort> lockPort,
-            MemoryProperties memoryProperties) {
-        return new SeahorseMemoryAggregationJob(
-                aggregationServicePort,
-                lockPort.getIfAvailable(DistributedLockPort::noop),
-                memoryProperties.getAggregation().getScanLimit());
     }
 
     @Bean
