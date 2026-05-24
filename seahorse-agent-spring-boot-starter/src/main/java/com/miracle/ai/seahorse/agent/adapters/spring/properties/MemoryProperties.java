@@ -276,8 +276,90 @@ public class MemoryProperties {
     }
 
     /**
-     * 占位：refiner fail-open / batch 限额、sticky anchor 等参数，迁移待后续切片。
+     * Slice 4 续：refiner 引擎运行参数（fail-open / batch / sticky anchor 等）。
      */
     public static class Refiner {
+
+        private boolean failOpen = true;
+        private int maxBatchOperations = 8;
+        private double maxDeleteRatio = 0.7d;
+        private int readMaskPerLayerLimit = 3;
+        private int targetZoneTurnCount = 3;
+        private int stickyAnchorLimit = 5;
+        private int feedbackExampleLimit = 3;
+        private double stickyAnchorImportanceThreshold = 0.85d;
+        private double stickyAnchorConfidenceThreshold = 0.90d;
+
+        public boolean isFailOpen() {
+            return failOpen;
+        }
+
+        public void setFailOpen(boolean failOpen) {
+            this.failOpen = failOpen;
+        }
+
+        public int getMaxBatchOperations() {
+            return maxBatchOperations;
+        }
+
+        public void setMaxBatchOperations(int maxBatchOperations) {
+            this.maxBatchOperations = maxBatchOperations;
+        }
+
+        public double getMaxDeleteRatio() {
+            return maxDeleteRatio;
+        }
+
+        public void setMaxDeleteRatio(double maxDeleteRatio) {
+            this.maxDeleteRatio = maxDeleteRatio;
+        }
+
+        public int getReadMaskPerLayerLimit() {
+            return readMaskPerLayerLimit;
+        }
+
+        public void setReadMaskPerLayerLimit(int readMaskPerLayerLimit) {
+            this.readMaskPerLayerLimit = readMaskPerLayerLimit;
+        }
+
+        public int getTargetZoneTurnCount() {
+            return targetZoneTurnCount;
+        }
+
+        public void setTargetZoneTurnCount(int targetZoneTurnCount) {
+            this.targetZoneTurnCount = targetZoneTurnCount;
+        }
+
+        public int getStickyAnchorLimit() {
+            return stickyAnchorLimit;
+        }
+
+        public void setStickyAnchorLimit(int stickyAnchorLimit) {
+            this.stickyAnchorLimit = stickyAnchorLimit;
+        }
+
+        public int getFeedbackExampleLimit() {
+            return feedbackExampleLimit;
+        }
+
+        public void setFeedbackExampleLimit(int feedbackExampleLimit) {
+            this.feedbackExampleLimit = feedbackExampleLimit;
+        }
+
+        public double getStickyAnchorImportanceThreshold() {
+            return stickyAnchorImportanceThreshold;
+        }
+
+        public void setStickyAnchorImportanceThreshold(double stickyAnchorImportanceThreshold) {
+            this.stickyAnchorImportanceThreshold = stickyAnchorImportanceThreshold;
+        }
+
+        public double getStickyAnchorConfidenceThreshold() {
+            return stickyAnchorConfidenceThreshold;
+        }
+
+        public void setStickyAnchorConfidenceThreshold(double stickyAnchorConfidenceThreshold) {
+            this.stickyAnchorConfidenceThreshold = stickyAnchorConfidenceThreshold;
+        }
     }
 }

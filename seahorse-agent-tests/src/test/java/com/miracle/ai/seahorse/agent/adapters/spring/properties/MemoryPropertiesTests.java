@@ -108,6 +108,49 @@ class MemoryPropertiesTests {
     }
 
     @Test
+    void refinerDefaultsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties.Refiner refiner = context.getBean(MemoryProperties.class).getRefiner();
+            assertThat(refiner.isFailOpen()).isTrue();
+            assertThat(refiner.getMaxBatchOperations()).isEqualTo(8);
+            assertThat(refiner.getMaxDeleteRatio()).isEqualTo(0.7d);
+            assertThat(refiner.getReadMaskPerLayerLimit()).isEqualTo(3);
+            assertThat(refiner.getTargetZoneTurnCount()).isEqualTo(3);
+            assertThat(refiner.getStickyAnchorLimit()).isEqualTo(5);
+            assertThat(refiner.getFeedbackExampleLimit()).isEqualTo(3);
+            assertThat(refiner.getStickyAnchorImportanceThreshold()).isEqualTo(0.85d);
+            assertThat(refiner.getStickyAnchorConfidenceThreshold()).isEqualTo(0.90d);
+        });
+    }
+
+    @Test
+    void refinerCustomKeysOverrideDefaults() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse-agent.memory.refiner.fail-open=false",
+                        "seahorse-agent.memory.refiner.max-batch-operations=32",
+                        "seahorse-agent.memory.refiner.max-delete-ratio=0.5",
+                        "seahorse-agent.memory.refiner.read-mask-per-layer-limit=10",
+                        "seahorse-agent.memory.refiner.target-zone-turn-count=6",
+                        "seahorse-agent.memory.refiner.sticky-anchor-limit=12",
+                        "seahorse-agent.memory.refiner.feedback-example-limit=7",
+                        "seahorse-agent.memory.refiner.sticky-anchor-importance-threshold=0.55",
+                        "seahorse-agent.memory.refiner.sticky-anchor-confidence-threshold=0.66")
+                .run(context -> {
+                    MemoryProperties.Refiner refiner = context.getBean(MemoryProperties.class).getRefiner();
+                    assertThat(refiner.isFailOpen()).isFalse();
+                    assertThat(refiner.getMaxBatchOperations()).isEqualTo(32);
+                    assertThat(refiner.getMaxDeleteRatio()).isEqualTo(0.5d);
+                    assertThat(refiner.getReadMaskPerLayerLimit()).isEqualTo(10);
+                    assertThat(refiner.getTargetZoneTurnCount()).isEqualTo(6);
+                    assertThat(refiner.getStickyAnchorLimit()).isEqualTo(12);
+                    assertThat(refiner.getFeedbackExampleLimit()).isEqualTo(7);
+                    assertThat(refiner.getStickyAnchorImportanceThreshold()).isEqualTo(0.55d);
+                    assertThat(refiner.getStickyAnchorConfidenceThreshold()).isEqualTo(0.66d);
+                });
+    }
+
+    @Test
     void policyCustomKeysOverrideDefaults() {
         contextRunner
                 .withPropertyValues(

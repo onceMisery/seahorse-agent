@@ -309,44 +309,34 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<ObjectMapper> objectMapperProvider,
             Environment environment,
             MemoryCaptureRuleProperties captureRuleProperties,
+            MemoryProperties memoryProperties,
             @Value("${seahorse-agent.memory.short-term-limit:5}") int shortTermLimit,
             @Value("${seahorse-agent.memory.long-term-limit:3}") int longTermLimit,
             @Value("${seahorse-agent.memory.semantic-limit:10}") int semanticLimit,
             @Value("${seahorse-agent.memory.capture-enabled:true}") boolean captureEnabled,
-            @Value("${seahorse-agent.memory.refiner.fail-open:true}") boolean refinerFailOpen,
-            @Value("${seahorse-agent.memory.refiner.max-batch-operations:8}") int maxRefinerBatchOperations,
-            @Value("${seahorse-agent.memory.refiner.max-delete-ratio:0.7}") double maxRefinerDeleteRatio,
-            @Value("${seahorse-agent.memory.refiner.read-mask-per-layer-limit:3}")
-                    int refinerReadMaskPerLayerLimit,
-            @Value("${seahorse-agent.memory.refiner.target-zone-turn-count:3}") int refinerTargetZoneTurnCount,
-            @Value("${seahorse-agent.memory.refiner.sticky-anchor-limit:5}") int refinerStickyAnchorLimit,
-            @Value("${seahorse-agent.memory.refiner.feedback-example-limit:3}") int refinerFeedbackExampleLimit,
-            @Value("${seahorse-agent.memory.refiner.sticky-anchor-importance-threshold:0.85}")
-                    double refinerStickyAnchorImportanceThreshold,
-            @Value("${seahorse-agent.memory.refiner.sticky-anchor-confidence-threshold:0.90}")
-                    double refinerStickyAnchorConfidenceThreshold,
             @Value("${seahorse-agent.memory.derived-index.keyword-enabled:true}") boolean keywordIndexOutboxEnabled,
             @Value("${seahorse-agent.memory.derived-index.graph-enabled:true}") boolean graphIndexOutboxEnabled) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         MemoryRefinerPort configuredRefinerPort = memoryRefinerPort.getIfAvailable();
         boolean refinerEnabled = memoryRefinerEnabled(environment, configuredRefinerPort != null);
+        MemoryProperties.Refiner refiner = memoryProperties.getRefiner();
         MemoryEngineOptions options = new MemoryEngineOptions(
                 shortTermLimit,
                 longTermLimit,
                 semanticLimit,
                 captureEnabled,
                 refinerEnabled,
-                refinerFailOpen,
+                refiner.isFailOpen(),
                 keywordIndexOutboxEnabled && memoryKeywordIndexPort.getIfAvailable() != null,
                 graphIndexOutboxEnabled && memoryGraphIndexPort.getIfAvailable() != null,
-                maxRefinerBatchOperations,
-                maxRefinerDeleteRatio,
-                refinerReadMaskPerLayerLimit,
-                refinerTargetZoneTurnCount,
-                refinerStickyAnchorLimit,
-                refinerFeedbackExampleLimit,
-                refinerStickyAnchorImportanceThreshold,
-                refinerStickyAnchorConfidenceThreshold);
+                refiner.getMaxBatchOperations(),
+                refiner.getMaxDeleteRatio(),
+                refiner.getReadMaskPerLayerLimit(),
+                refiner.getTargetZoneTurnCount(),
+                refiner.getStickyAnchorLimit(),
+                refiner.getFeedbackExampleLimit(),
+                refiner.getStickyAnchorImportanceThreshold(),
+                refiner.getStickyAnchorConfidenceThreshold());
         return new DefaultMemoryEnginePort(
                 shortTermMemoryPort,
                 longTermMemoryPort,
