@@ -293,12 +293,40 @@ public class MemoryProperties {
         private final Compaction compaction = new Compaction();
         private final Gc gc = new Gc();
 
+        private boolean compactionEnabled = false;
+        private boolean aliasEnabled = false;
+        private boolean gcEnabled = true;
+
         public Compaction getCompaction() {
             return compaction;
         }
 
         public Gc getGc() {
             return gc;
+        }
+
+        public boolean isCompactionEnabled() {
+            return compactionEnabled;
+        }
+
+        public void setCompactionEnabled(boolean compactionEnabled) {
+            this.compactionEnabled = compactionEnabled;
+        }
+
+        public boolean isAliasEnabled() {
+            return aliasEnabled;
+        }
+
+        public void setAliasEnabled(boolean aliasEnabled) {
+            this.aliasEnabled = aliasEnabled;
+        }
+
+        public boolean isGcEnabled() {
+            return gcEnabled;
+        }
+
+        public void setGcEnabled(boolean gcEnabled) {
+            this.gcEnabled = gcEnabled;
         }
 
         public static class Compaction {

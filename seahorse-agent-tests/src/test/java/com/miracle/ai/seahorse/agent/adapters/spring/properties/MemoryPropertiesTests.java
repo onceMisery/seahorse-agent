@@ -207,6 +207,31 @@ class MemoryPropertiesTests {
     }
 
     @Test
+    void maintenanceEnabledFlagsMatchHistoricalAtValueDefaults() {
+        contextRunner.run(context -> {
+            MemoryProperties.Maintenance maintenance = context.getBean(MemoryProperties.class).getMaintenance();
+            assertThat(maintenance.isCompactionEnabled()).isFalse();
+            assertThat(maintenance.isAliasEnabled()).isFalse();
+            assertThat(maintenance.isGcEnabled()).isTrue();
+        });
+    }
+
+    @Test
+    void maintenanceEnabledFlagsCustomKeysOverrideDefaults() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse-agent.memory.maintenance.compaction-enabled=true",
+                        "seahorse-agent.memory.maintenance.alias-enabled=true",
+                        "seahorse-agent.memory.maintenance.gc-enabled=false")
+                .run(context -> {
+                    MemoryProperties.Maintenance maintenance = context.getBean(MemoryProperties.class).getMaintenance();
+                    assertThat(maintenance.isCompactionEnabled()).isTrue();
+                    assertThat(maintenance.isAliasEnabled()).isTrue();
+                    assertThat(maintenance.isGcEnabled()).isFalse();
+                });
+    }
+
+    @Test
     void maintenanceGcDefaultsMatchHistoricalAtValueDefaults() {
         contextRunner.run(context -> {
             MemoryProperties.Maintenance.Gc gc = context.getBean(MemoryProperties.class)

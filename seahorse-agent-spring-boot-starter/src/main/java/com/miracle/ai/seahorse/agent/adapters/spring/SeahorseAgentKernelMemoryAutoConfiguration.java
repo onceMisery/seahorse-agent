@@ -987,9 +987,8 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryMaintenanceRunRepositoryPort> maintenanceRunRepositoryPort,
             ObjectProvider<MemoryTraceRecorder> traceRecorder,
             ObjectProvider<ObservationPort> observationPort,
-            @Value("${seahorse-agent.memory.maintenance.compaction-enabled:false}") boolean compactionEnabled,
-            @Value("${seahorse-agent.memory.maintenance.alias-enabled:false}") boolean aliasEnabled,
-            @Value("${seahorse-agent.memory.maintenance.gc-enabled:true}") boolean garbageCollectionEnabled) {
+            MemoryProperties memoryProperties) {
+        MemoryProperties.Maintenance maintenance = memoryProperties.getMaintenance();
         return new DefaultMemoryMaintenanceService(
                 garbageCollectionService,
                 compactionService.getIfAvailable(),
@@ -997,9 +996,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 maintenanceRunRepositoryPort.getIfAvailable(MemoryMaintenanceRunRepositoryPort::noop),
                 traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
                 observationPort.getIfAvailable(ObservationPort::noop),
-                compactionEnabled,
-                aliasEnabled,
-                garbageCollectionEnabled);
+                maintenance.isCompactionEnabled(),
+                maintenance.isAliasEnabled(),
+                maintenance.isGcEnabled());
     }
 
     @Bean
@@ -1010,15 +1009,14 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     public SeahorseMemoryMaintenanceJob seahorseMemoryMaintenanceJob(
             MemoryMaintenanceInboundPort maintenanceInboundPort,
             ObjectProvider<DistributedLockPort> lockPort,
-            @Value("${seahorse-agent.memory.maintenance.compaction-enabled:false}") boolean compactionEnabled,
-            @Value("${seahorse-agent.memory.maintenance.alias-enabled:false}") boolean aliasEnabled,
-            @Value("${seahorse-agent.memory.maintenance.gc-enabled:true}") boolean garbageCollectionEnabled) {
+            MemoryProperties memoryProperties) {
+        MemoryProperties.Maintenance maintenance = memoryProperties.getMaintenance();
         return new SeahorseMemoryMaintenanceJob(
                 maintenanceInboundPort,
                 lockPort.getIfAvailable(DistributedLockPort::noop),
-                compactionEnabled,
-                aliasEnabled,
-                garbageCollectionEnabled);
+                maintenance.isCompactionEnabled(),
+                maintenance.isAliasEnabled(),
+                maintenance.isGcEnabled());
     }
 
     @Bean
