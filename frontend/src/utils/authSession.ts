@@ -3,7 +3,7 @@ import { storage } from "@/utils/storage";
 let redirectingToLogin = false;
 
 function isAuthNeutralPath(pathname: string) {
-  return pathname.startsWith("/prototype/") || pathname === "/admin/ai-infra";
+  return pathname.startsWith("/prototype/");
 }
 
 export function handleUnauthorizedSession(message = "Login expired, please sign in again.") {

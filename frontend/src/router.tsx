@@ -19,7 +19,7 @@ import { SystemSettingsPage } from "@/pages/admin/settings/SystemSettingsPage";
 import { SampleQuestionPage } from "@/pages/admin/sample-questions/SampleQuestionPage";
 import { QueryTermMappingPage } from "@/pages/admin/query-term-mapping/QueryTermMappingPage";
 import { UserListPage } from "@/pages/admin/users/UserListPage";
-import { AiInfraPrototypePage } from "@/pages/admin/ai-infra/AiInfraPrototypePage";
+import { AiInfraConsolePage } from "@/pages/admin/ai-infra/AiInfraConsolePage";
 import { useAuthStore } from "@/stores/authStore";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -89,11 +89,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/prototype/ai-infra",
-    element: <AiInfraPrototypePage />
-  },
-  {
-    path: "/admin/ai-infra",
-    element: <Navigate to="/prototype/ai-infra" replace />
+    element: <Navigate to="/admin/ai-infra" replace />
   },
   {
     path: "/admin",
@@ -150,6 +146,10 @@ export const router = createBrowserRouter([
       {
         path: "traces/:traceId",
         element: <RagTraceDetailPage />
+      },
+      {
+        path: "ai-infra",
+        element: <AiInfraConsolePage />
       },
       {
         path: "settings",
