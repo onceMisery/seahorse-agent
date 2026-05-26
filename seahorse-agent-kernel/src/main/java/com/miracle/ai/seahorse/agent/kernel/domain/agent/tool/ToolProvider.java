@@ -24,6 +24,7 @@ public enum ToolProvider {
     BUILTIN,
     MCP,
     OPENAPI,
+    LOCAL_AGENT,
     INTERNAL,
     REMOTE_AGENT
 }

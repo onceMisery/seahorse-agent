@@ -50,4 +50,8 @@ public record CredentialMaterial(
     public static CredentialMaterial staticBearer(String secretRef, SecretValue secretValue) {
         return new CredentialMaterial(CredentialAuthType.STATIC_BEARER, secretRef, secretValue);
     }
+
+    public static CredentialMaterial clientCredentialsBearer(String clientSecretRef, SecretValue accessToken) {
+        return new CredentialMaterial(CredentialAuthType.CLIENT_CREDENTIALS, clientSecretRef, accessToken);
+    }
 }

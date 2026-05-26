@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "kernel-domain",
+    "kernel-ports",
+    "jdbc-adapter",
+    "web-adapter",
+    "spring-starter"
+  ],
+  "owners": [
+    "ResourceAccessPolicyPort remains the runtime authorization extension point; ResourceAclRepositoryPort owns ACL persistence contract."
+  ],
+  "invariants": [
+    "Kernel must not depend on Spring/JDBC/Web; ACL rule status/effect/action/scope use enums or named constants; custom ResourceAccessPolicyPort beans must override default composition."
+  ],
+  "compatBoundary": "No ContextPack domain invariant changes; no full IAM/RBAC; no policy language engine.",
+  "nonGoals": [
+    "Do not introduce workflow engine, remote mesh, complex JSON policy language, or full IAM/RBAC."
+  ]
+}

@@ -61,6 +61,9 @@ CREATE INDEX IF NOT EXISTS idx_sa_agent_run_agent_status
 CREATE INDEX IF NOT EXISTS idx_sa_agent_run_user
   ON sa_agent_run(tenant_id, user_id, started_at);
 
+CREATE INDEX IF NOT EXISTS idx_sa_agent_run_worker_queue
+  ON sa_agent_run(tenant_id, status, started_at, run_id);
+
 CREATE TABLE IF NOT EXISTS sa_agent_step (
   step_id VARCHAR(64) PRIMARY KEY,
   run_id VARCHAR(64) NOT NULL,
@@ -122,6 +125,118 @@ CREATE TABLE IF NOT EXISTS sa_tool_catalog (
 
 CREATE INDEX IF NOT EXISTS idx_sa_tool_catalog_resource
   ON sa_tool_catalog(resource_type, enabled);
+
+CREATE TABLE IF NOT EXISTS sa_connector (
+  connector_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(1000),
+  status VARCHAR(32) NOT NULL,
+  created_by VARCHAR(64) NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_connector_tenant_status
+  ON sa_connector(tenant_id, status);
+
+CREATE TABLE IF NOT EXISTS sa_connector_version (
+  connector_version_id VARCHAR(64) PRIMARY KEY,
+  connector_id VARCHAR(64) NOT NULL,
+  spec_hash VARCHAR(128) NOT NULL,
+  spec_json TEXT NOT NULL,
+  imported_by VARCHAR(64) NOT NULL,
+  imported_at TIMESTAMP NOT NULL,
+  UNIQUE(connector_id, spec_hash)
+);
+
+CREATE TABLE IF NOT EXISTS sa_connector_operation (
+  operation_id VARCHAR(64) PRIMARY KEY,
+  connector_id VARCHAR(64) NOT NULL,
+  connector_version_id VARCHAR(64) NOT NULL,
+  operation_key VARCHAR(256) NOT NULL,
+  original_operation_id VARCHAR(128),
+  method VARCHAR(16) NOT NULL,
+  path VARCHAR(512) NOT NULL,
+  summary VARCHAR(256),
+  description VARCHAR(1000),
+  schema_json TEXT NOT NULL,
+  output_schema_json TEXT,
+  tool_id VARCHAR(128) NOT NULL,
+  risk_level VARCHAR(32) NOT NULL,
+  action_type VARCHAR(32) NOT NULL,
+  resource_type VARCHAR(64),
+  auth_type VARCHAR(32) NOT NULL DEFAULT 'NONE',
+  status VARCHAR(32) NOT NULL,
+  requires_approval BOOLEAN NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_connector_operation_connector
+  ON sa_connector_operation(connector_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS sa_connector_credential_binding (
+  binding_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  connector_id VARCHAR(64) NOT NULL,
+  operation_id VARCHAR(64) NOT NULL,
+  auth_type VARCHAR(32) NOT NULL,
+  credential_ref VARCHAR(128) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  bound_by VARCHAR(64) NOT NULL,
+  bound_at TIMESTAMP NOT NULL,
+  rotated_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_connector_credential_binding_operation
+  ON sa_connector_credential_binding(tenant_id, connector_id, operation_id, auth_type, status);
+
+CREATE TABLE IF NOT EXISTS sa_agent_template (
+  template_id VARCHAR(64) PRIMARY KEY,
+  status VARCHAR(32) NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(1000),
+  agent_type VARCHAR(32) NOT NULL,
+  risk_cap VARCHAR(32) NOT NULL,
+  allowed_tool_ids_json TEXT NOT NULL,
+  base_instructions TEXT NOT NULL,
+  guardrail_config_json TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_template_status
+  ON sa_agent_template(status, template_id);
+
+CREATE TABLE IF NOT EXISTS sa_agent_publish_check (
+  check_id VARCHAR(64) PRIMARY KEY,
+  agent_id VARCHAR(64) NOT NULL,
+  version_id VARCHAR(64),
+  status VARCHAR(32) NOT NULL,
+  result_json TEXT NOT NULL,
+  checked_by VARCHAR(64) NOT NULL,
+  checked_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_publish_check_agent
+  ON sa_agent_publish_check(agent_id, checked_at);
+
+CREATE TABLE IF NOT EXISTS sa_agent_version_activation (
+  activation_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  agent_id VARCHAR(64) NOT NULL,
+  version_id VARCHAR(64) NOT NULL,
+  activation_type VARCHAR(32) NOT NULL,
+  previous_version_id VARCHAR(64),
+  reason_code VARCHAR(64) NOT NULL,
+  operator_id VARCHAR(64) NOT NULL,
+  created_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_version_activation_active
+  ON sa_agent_version_activation(agent_id, created_at DESC, activation_id DESC);
 
 CREATE TABLE IF NOT EXISTS sa_agent_tool_binding (
   id VARCHAR(64) PRIMARY KEY,
@@ -253,3 +368,273 @@ CREATE TABLE IF NOT EXISTS sa_access_decision_log (
 
 CREATE INDEX IF NOT EXISTS idx_sa_access_decision_resource
   ON sa_access_decision_log(tenant_id, resource_type, resource_id, created_at);
+
+CREATE TABLE IF NOT EXISTS sa_resource_acl_rule (
+  rule_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  scope VARCHAR(32) NOT NULL,
+  resource_type VARCHAR(64) NOT NULL,
+  resource_id VARCHAR(128) NOT NULL,
+  subject_type VARCHAR(32) NOT NULL,
+  subject_id VARCHAR(64) NOT NULL,
+  action VARCHAR(32) NOT NULL,
+  effect VARCHAR(32) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  priority INT NOT NULL,
+  expires_at TIMESTAMP,
+  created_by VARCHAR(64) NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  CONSTRAINT chk_sa_resource_acl_scope CHECK (scope IN ('EXACT_RESOURCE', 'RESOURCE_TYPE')),
+  CONSTRAINT chk_sa_resource_acl_subject_type CHECK (subject_type IN ('USER', 'AGENT', 'USER_DELEGATED_AGENT')),
+  CONSTRAINT chk_sa_resource_acl_action CHECK (action IN ('READ', 'WRITE', 'DELETE', 'EXECUTE')),
+  CONSTRAINT chk_sa_resource_acl_effect CHECK (effect IN ('ALLOW', 'DENY')),
+  CONSTRAINT chk_sa_resource_acl_status CHECK (status IN ('ENABLED', 'DISABLED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_resource_acl_lookup
+  ON sa_resource_acl_rule(tenant_id, resource_type, resource_id, subject_type, subject_id, action, status);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_sa_resource_acl_active_exact_rule
+  ON sa_resource_acl_rule(tenant_id, scope, resource_type, resource_id, subject_type, subject_id, action, effect, priority)
+  WHERE status = 'ENABLED';
+
+CREATE TABLE IF NOT EXISTS sa_sandbox_session (
+  session_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  run_id VARCHAR(64) NOT NULL,
+  runtime_type VARCHAR(32) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  reason_code VARCHAR(64) NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_sandbox_session_run
+  ON sa_sandbox_session(tenant_id, run_id, created_at);
+
+CREATE TABLE IF NOT EXISTS sa_sandbox_execution (
+  execution_id VARCHAR(64) PRIMARY KEY,
+  session_id VARCHAR(64) NOT NULL,
+  runtime_type VARCHAR(32) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  result_summary VARCHAR(1000),
+  reason_code VARCHAR(64) NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_sandbox_execution_session
+  ON sa_sandbox_execution(session_id, created_at);
+
+CREATE TABLE IF NOT EXISTS sa_sandbox_artifact (
+  artifact_id VARCHAR(64) PRIMARY KEY,
+  session_id VARCHAR(64) NOT NULL,
+  execution_id VARCHAR(64) NOT NULL,
+  object_uri VARCHAR(1000) NOT NULL,
+  media_type VARCHAR(128) NOT NULL,
+  scan_status VARCHAR(32) NOT NULL,
+  sensitivity VARCHAR(32) NOT NULL,
+  created_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_sandbox_artifact_session
+  ON sa_sandbox_artifact(session_id, created_at);
+
+CREATE TABLE IF NOT EXISTS sa_audit_event (
+  audit_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  event_type VARCHAR(64) NOT NULL,
+  actor_type VARCHAR(32) NOT NULL,
+  actor_id VARCHAR(64) NOT NULL,
+  run_id VARCHAR(64),
+  agent_id VARCHAR(64),
+  resource_type VARCHAR(64),
+  resource_id VARCHAR(128),
+  redacted_payload TEXT NOT NULL,
+  occurred_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_audit_event_tenant_time
+  ON sa_audit_event(tenant_id, occurred_at);
+
+CREATE INDEX IF NOT EXISTS idx_sa_audit_event_run
+  ON sa_audit_event(run_id, occurred_at);
+
+CREATE INDEX IF NOT EXISTS idx_sa_audit_event_agent
+  ON sa_audit_event(agent_id, occurred_at);
+
+CREATE INDEX IF NOT EXISTS idx_sa_audit_event_resource
+  ON sa_audit_event(tenant_id, resource_type, resource_id, occurred_at);
+
+CREATE TABLE IF NOT EXISTS sa_production_gate_report (
+  report_id VARCHAR(64) PRIMARY KEY,
+  agent_id VARCHAR(64) NOT NULL,
+  version_id VARCHAR(64),
+  status VARCHAR(32) NOT NULL,
+  result_json TEXT NOT NULL,
+  checked_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_production_gate_report_agent
+  ON sa_production_gate_report(agent_id, checked_at);
+
+CREATE TABLE IF NOT EXISTS sa_agent_eval_summary (
+  summary_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  agent_id VARCHAR(64) NOT NULL,
+  version_id VARCHAR(64) NOT NULL,
+  eval_type VARCHAR(32) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  score DOUBLE PRECISION NOT NULL,
+  pass_threshold DOUBLE PRECISION NOT NULL,
+  warn_threshold DOUBLE PRECISION NOT NULL,
+  case_count INT NOT NULL,
+  dataset_ref VARCHAR(256),
+  eval_run_ref VARCHAR(256),
+  evidence_json TEXT NOT NULL,
+  created_by VARCHAR(64) NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  CONSTRAINT chk_sa_agent_eval_summary_type CHECK (eval_type IN ('SAFETY', 'TRAJECTORY', 'RAG', 'MEMORY', 'TOOL_USE')),
+  CONSTRAINT chk_sa_agent_eval_summary_status CHECK (status IN ('PASS', 'WARN', 'FAIL', 'STALE')),
+  CONSTRAINT chk_sa_agent_eval_summary_score CHECK (score >= 0),
+  CONSTRAINT chk_sa_agent_eval_summary_threshold CHECK (pass_threshold >= warn_threshold AND warn_threshold >= 0),
+  CONSTRAINT chk_sa_agent_eval_summary_case_count CHECK (case_count >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_eval_summary_latest
+  ON sa_agent_eval_summary(tenant_id, agent_id, version_id, eval_type, created_at DESC, summary_id DESC);
+
+CREATE TABLE IF NOT EXISTS sa_quota_policy (
+  policy_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  scope VARCHAR(32) NOT NULL,
+  subject_id VARCHAR(128) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  token_limit BIGINT,
+  call_limit BIGINT,
+  cost_limit DOUBLE PRECISION,
+  warn_ratio DOUBLE PRECISION NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  CONSTRAINT chk_sa_quota_policy_scope
+    CHECK (scope IN ('TENANT', 'AGENT', 'USER', 'TOOL', 'MODEL', 'RUN')),
+  CONSTRAINT chk_sa_quota_policy_status
+    CHECK (status IN ('ACTIVE', 'DISABLED')),
+  CONSTRAINT chk_sa_quota_policy_limit_required
+    CHECK (token_limit IS NOT NULL OR call_limit IS NOT NULL OR cost_limit IS NOT NULL),
+  CONSTRAINT chk_sa_quota_policy_token_limit
+    CHECK (token_limit IS NULL OR token_limit >= 0),
+  CONSTRAINT chk_sa_quota_policy_call_limit
+    CHECK (call_limit IS NULL OR call_limit >= 0),
+  CONSTRAINT chk_sa_quota_policy_cost_limit
+    CHECK (cost_limit IS NULL OR cost_limit >= 0),
+  CONSTRAINT chk_sa_quota_policy_warn_ratio
+    CHECK (warn_ratio > 0 AND warn_ratio <= 1)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_quota_policy_active
+  ON sa_quota_policy(tenant_id, scope, subject_id, status, updated_at DESC, policy_id DESC);
+
+CREATE TABLE IF NOT EXISTS sa_cost_usage_record (
+  usage_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  agent_id VARCHAR(64),
+  run_id VARCHAR(64),
+  user_id VARCHAR(64),
+  tool_id VARCHAR(128),
+  model_id VARCHAR(128),
+  source VARCHAR(32) NOT NULL,
+  tokens BIGINT NOT NULL,
+  calls BIGINT NOT NULL,
+  cost DOUBLE PRECISION NOT NULL,
+  reason_ref VARCHAR(256),
+  created_at TIMESTAMP NOT NULL,
+  CONSTRAINT chk_sa_cost_usage_source
+    CHECK (source IN ('MODEL', 'TOOL', 'SANDBOX', 'MANUAL_ADJUSTMENT')),
+  CONSTRAINT chk_sa_cost_usage_tokens
+    CHECK (tokens >= 0),
+  CONSTRAINT chk_sa_cost_usage_calls
+    CHECK (calls >= 0),
+  CONSTRAINT chk_sa_cost_usage_cost
+    CHECK (cost >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_cost_usage_aggregate
+  ON sa_cost_usage_record(tenant_id, agent_id, run_id, created_at);
+
+CREATE TABLE IF NOT EXISTS sa_agent_version_rollout (
+  rollout_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  agent_id VARCHAR(64) NOT NULL,
+  version_id VARCHAR(64) NOT NULL,
+  canary_percent INT NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  failure_code VARCHAR(64),
+  gate_report_id VARCHAR(64),
+  started_by VARCHAR(64) NOT NULL,
+  started_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  finished_at TIMESTAMP,
+  CONSTRAINT chk_sa_agent_version_rollout_percent
+    CHECK (canary_percent >= 1 AND canary_percent <= 100),
+  CONSTRAINT chk_sa_agent_version_rollout_status
+    CHECK (status IN ('CREATED', 'RUNNING', 'PAUSED', 'PROMOTED', 'ROLLED_BACK', 'FAILED')),
+  CONSTRAINT chk_sa_agent_version_rollout_failure
+    CHECK (
+      (status = 'FAILED' AND failure_code IS NOT NULL)
+      OR (status <> 'FAILED' AND failure_code IS NULL)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_version_rollout_latest
+  ON sa_agent_version_rollout(tenant_id, agent_id, version_id, updated_at DESC, rollout_id DESC);
+
+CREATE TABLE IF NOT EXISTS sa_enterprise_pilot_readiness_report (
+  report_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  agent_id VARCHAR(64) NOT NULL,
+  version_id VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  check_results_json TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  CONSTRAINT chk_sa_enterprise_pilot_readiness_status
+    CHECK (status IN ('PASS', 'WARN', 'FAIL'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_enterprise_pilot_readiness_latest
+  ON sa_enterprise_pilot_readiness_report(tenant_id, agent_id, version_id, created_at DESC, report_id DESC);
+
+CREATE TABLE IF NOT EXISTS sa_agent_handoff (
+  handoff_id VARCHAR(64) PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  parent_run_id VARCHAR(64) NOT NULL,
+  child_run_id VARCHAR(64),
+  source_agent_id VARCHAR(64) NOT NULL,
+  target_agent_id VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  failure_code VARCHAR(64),
+  handoff_reason VARCHAR(1000),
+  input_summary_json TEXT NOT NULL,
+  context_summary_json TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  finished_at TIMESTAMP,
+  CONSTRAINT chk_sa_agent_handoff_status
+    CHECK (status IN ('CREATED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED')),
+  CONSTRAINT chk_sa_agent_handoff_failure_code
+    CHECK (failure_code IS NULL OR failure_code IN (
+      'DEPTH_LIMIT_EXCEEDED',
+      'CYCLE_DETECTED',
+      'POLICY_DENIED',
+      'TARGET_DISABLED',
+      'CONTEXT_DENIED',
+      'CHILD_RUN_FAILED'
+    ))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_handoff_parent
+  ON sa_agent_handoff(tenant_id, parent_run_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_handoff_child
+  ON sa_agent_handoff(child_run_id);

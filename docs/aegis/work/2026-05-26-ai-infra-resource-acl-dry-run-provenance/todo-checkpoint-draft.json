@@ -1,0 +1,11 @@
+{
+  "currentTodo": "Write RED tests for Resource ACL dry-run import and natural-key lookup.",
+  "completedTodos": [
+    "Re-read section 14.2 of the unfinished phase plan",
+    "Scanned existing Resource ACL domain/service/JDBC/Web code",
+    "Confirmed single-rule ACL management exists; dry-run import and natural-key query are missing"
+  ],
+  "activeSlice": "Phase 4 Resource ACL dry-run and Context Provenance hardening",
+  "blockedOn": [],
+  "nextStep": "Add focused RED tests for kernel dry-run domain/service, JDBC natural-key lookup, and Web dry-run API."
+}

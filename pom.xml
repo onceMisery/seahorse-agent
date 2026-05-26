@@ -45,6 +45,7 @@
         <module>seahorse-agent-adapter-source-feishu</module>
         <module>seahorse-agent-adapter-ai-openai-compatible</module>
         <module>seahorse-agent-adapter-mcp-http</module>
+        <module>seahorse-agent-adapter-openapi</module>
         <module>seahorse-agent-adapter-vector-milvus</module>
         <module>seahorse-agent-adapter-vector-pgvector</module>
         <module>seahorse-agent-adapter-vector-noop</module>

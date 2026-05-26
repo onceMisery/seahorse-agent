@@ -1,0 +1,16 @@
+{
+  "currentTodo": "Phase 8A Audit Ledger foundation accepted; continue to Phase 4 Resource ACL dry-run and provenance.",
+  "completedTodos": [
+    "Re-read section 14.6 of the unfinished phase plan",
+    "Scanned existing tool invocation audit, publish check, retrieval evaluation, and feature health code",
+    "Confirmed unified audit and production gate owners are missing",
+    "Added kernel audit and production gate domain objects, ports, and services",
+    "Added JDBC audit and production gate repository adapters and schema",
+    "Added Web audit query and production gate controllers",
+    "Added Spring Boot starter wiring for audit and production gate services",
+    "Ran focused Phase 8A acceptance commands"
+  ],
+  "activeSlice": "Phase 8A Audit Ledger foundation",
+  "blockedOn": [],
+  "nextStep": "Start Phase 4 Resource ACL dry-run and Context Provenance hardening."
+}

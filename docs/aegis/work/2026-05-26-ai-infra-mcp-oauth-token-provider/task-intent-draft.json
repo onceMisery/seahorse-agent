@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Implement Phase 5A MCP OAuth client credentials token provider with token cache and MCP bearer material injection.",
+  "goal": "MCP servers can use CLIENT_CREDENTIALS credentials through kernel OAuth ports and MCP adapter wiring without exposing raw token or client secret.",
+  "successEvidence": [
+    "OAuth kernel tests, MCP adapter OAuth credential tests, starter credential auto-configuration tests, and git diff check pass."
+  ],
+  "stopCondition": "Done when Phase 5A focused regression passes; blocked if existing credential contract cannot be extended compatibly; scope-exceeded if authorization-code UI, dynamic client registration, scope auto-retry, or real connector execution is required.",
+  "nonGoals": [
+    "No browser authorization-code UI.",
+    "No dynamic client registration.",
+    "No automatic scope challenge retry.",
+    "No real OpenAPI operation execution."
+  ],
+  "scope": "Kernel credential/OAuth models and ports, OAuthCredentialProvider, MCP HTTP adapter properties and credential request mapping, starter credential wiring, focused tests, and Aegis records.",
+  "changeKinds": [
+    "feature"
+  ],
+  "riskHints": [
+    "Cross-module credential contract and adapter auto-configuration change; raw secret/token leakage risk."
+  ]
+}

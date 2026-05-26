@@ -25,9 +25,15 @@ import com.miracle.ai.seahorse.agent.ports.inbound.credential.SecretManagementIn
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialProviderPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.InMemoryOAuthTokenCachePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.OAuthCredentialProvider;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.OAuthToken;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.OAuthTokenCachePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.OAuthTokenPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretStoreCredentialProvider;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretWritePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretValue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -37,6 +43,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import javax.sql.DataSource;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -94,6 +103,45 @@ class SeahorseAgentCredentialAutoConfigurationTests {
                     assertThat(context).hasSingleBean(CredentialProviderPort.class);
                     assertThat(context.getBean(CredentialProviderPort.class))
                             .isInstanceOf(SecretStoreCredentialProvider.class);
+                });
+    }
+
+    @Test
+    void shouldCreateOAuthCredentialProviderWhenOAuthTokenPortExists() {
+        contextRunner
+                .withBean(SecretStorePort.class, () -> secretRef -> Optional.of(SecretValue.of("client-secret")))
+                .withBean(OAuthTokenPort.class, () -> request -> OAuthToken.bearer(
+                        SecretValue.of("access-token"),
+                        Instant.now().plus(1, ChronoUnit.HOURS),
+                        List.of("weather.read"),
+                        ""))
+                .run(context -> {
+                    assertThat(context).hasSingleBean(OAuthTokenCachePort.class);
+                    assertThat(context.getBean(OAuthTokenCachePort.class))
+                            .isInstanceOf(InMemoryOAuthTokenCachePort.class);
+                    assertThat(context).hasSingleBean(CredentialProviderPort.class);
+                    assertThat(context.getBean(CredentialProviderPort.class))
+                            .isInstanceOf(OAuthCredentialProvider.class);
+                });
+    }
+
+    @Test
+    void shouldBackOffWhenCustomCredentialProviderExistsForOAuth() {
+        CredentialProviderPort customProvider = request -> com.miracle.ai.seahorse.agent.ports.outbound.credential
+                .CredentialMaterial.none();
+
+        contextRunner
+                .withBean(SecretStorePort.class, () -> secretRef -> Optional.of(SecretValue.of("client-secret")))
+                .withBean(OAuthTokenPort.class, () -> request -> OAuthToken.bearer(
+                        SecretValue.of("access-token"),
+                        Instant.now().plus(1, ChronoUnit.HOURS),
+                        List.of("weather.read"),
+                        ""))
+                .withBean(CredentialProviderPort.class, () -> customProvider)
+                .run(context -> {
+                    assertThat(context).hasSingleBean(CredentialProviderPort.class);
+                    assertThat(context.getBean(CredentialProviderPort.class)).isSameAs(customProvider);
+                    assertThat(context).hasSingleBean(OAuthTokenCachePort.class);
                 });
     }
 

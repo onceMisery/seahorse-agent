@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Implement Phase 6 Agent Factory JDBC, Web, and starter integration around the existing kernel ports",
+  "goal": "Continue AI Infra implementation according to Phase 6 design by wiring Agent Factory adapters without changing kernel invariants",
+  "successEvidence": [
+    "RED and GREEN tests cover JDBC template/check repositories, Web template/from-template/validate APIs, and starter auto-configuration for repositories and KernelAgentFactoryService"
+  ],
+  "stopCondition": "done when focused JDBC/Web/starter tests and diff check pass; needs-verification if tests cannot run; scope-exceeded if UI or rollback is required in this slice",
+  "nonGoals": [
+    "Agent Studio frontend, rollback endpoint behavior, canary/eval/quota enforcement, and Audit Ledger integration"
+  ],
+  "scope": "Repository JDBC adapter, Web adapter, Spring Boot starter wiring, SQL schema, tests, and Aegis records",
+  "changeKinds": [
+    "feature"
+  ],
+  "riskHints": [
+    "Cross-module adapter integration; must preserve ports/adapters direction and avoid duplicating AgentDefinition invariants"
+  ]
+}

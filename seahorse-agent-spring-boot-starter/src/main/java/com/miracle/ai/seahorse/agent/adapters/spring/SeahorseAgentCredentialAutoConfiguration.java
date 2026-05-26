@@ -23,6 +23,11 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.SecretValueCipher;
 import com.miracle.ai.seahorse.agent.kernel.application.credential.KernelSecretManagementService;
 import com.miracle.ai.seahorse.agent.ports.inbound.credential.SecretManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialProviderPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.InMemoryOAuthTokenCachePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.OAuthCredentialProvider;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.OAuthTokenCachePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.OAuthTokenPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretStorePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretWritePort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -62,6 +67,28 @@ public class SeahorseAgentCredentialAutoConfiguration {
     @ConditionalOnMissingBean({SecretStorePort.class, SecretWritePort.class})
     public JdbcSecretStoreAdapter seahorseJdbcSecretStoreAdapter(DataSource dataSource, SecretValueCipher cipher) {
         return new JdbcSecretStoreAdapter(dataSource, cipher);
+    }
+
+    @Bean
+    @ConditionalOnBean(OAuthTokenPort.class)
+    @ConditionalOnMissingBean(OAuthTokenCachePort.class)
+    public InMemoryOAuthTokenCachePort seahorseInMemoryOAuthTokenCachePort(ObjectProvider<Clock> clockProvider) {
+        return new InMemoryOAuthTokenCachePort(clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnBean({SecretStorePort.class, OAuthTokenPort.class, OAuthTokenCachePort.class})
+    @ConditionalOnMissingBean(CredentialProviderPort.class)
+    public OAuthCredentialProvider seahorseOAuthCredentialProvider(
+            SecretStorePort secretStorePort,
+            OAuthTokenPort oauthTokenPort,
+            OAuthTokenCachePort oauthTokenCachePort,
+            ObjectProvider<Clock> clockProvider) {
+        return new OAuthCredentialProvider(
+                secretStorePort,
+                oauthTokenPort,
+                oauthTokenCachePort,
+                clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean

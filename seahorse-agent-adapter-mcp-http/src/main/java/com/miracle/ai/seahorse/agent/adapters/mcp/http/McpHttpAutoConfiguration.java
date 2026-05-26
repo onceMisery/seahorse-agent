@@ -62,6 +62,9 @@ public class McpHttpAutoConfiguration {
     private static final Logger LOG = LoggerFactory.getLogger(McpHttpAutoConfiguration.class);
     private static final String MSG_CREDENTIAL_PROVIDER_MISSING = "credential provider missing";
     private static final String MSG_CLIENT_SECRET_REF_MISSING = "clientSecretRef missing";
+    private static final String MSG_CLIENT_ID_MISSING = "clientId missing";
+    private static final String MSG_SERVER_NAME_MISSING = "server name missing";
+    private static final String MSG_USER_DELEGATED_UNSUPPORTED = "user delegated credentials unsupported";
     private static final String MSG_CREDENTIAL_RESOLUTION_FAILED = "credential resolution failed";
 
     @Bean
@@ -148,10 +151,10 @@ public class McpHttpAutoConfiguration {
                     server.getName(), server.getAuthType(), MSG_CREDENTIAL_PROVIDER_MISSING);
             return Optional.empty();
         }
-        if (CredentialAuthType.STATIC_BEARER.equals(server.getAuthType())
-                && server.getClientSecretRef().isBlank()) {
+        Optional<String> invalidReason = validateCredentialConfiguration(server);
+        if (invalidReason.isPresent()) {
             LOG.warn("MCP Server credential skipped, server={}, authType={}, reason={}",
-                    server.getName(), server.getAuthType(), MSG_CLIENT_SECRET_REF_MISSING);
+                    server.getName(), server.getAuthType(), invalidReason.get());
             return Optional.empty();
         }
         try {
@@ -167,6 +170,43 @@ public class McpHttpAutoConfiguration {
         return switch (server.getAuthType()) {
             case NONE -> CredentialRequest.none();
             case STATIC_BEARER -> CredentialRequest.staticBearer(server.getClientSecretRef());
+            case CLIENT_CREDENTIALS -> CredentialRequest.clientCredentials(
+                    server.getTenantId(),
+                    server.getName(),
+                    server.getClientId(),
+                    server.getClientSecretRef(),
+                    server.getScopes(),
+                    server.getAudience(),
+                    server.getResource());
+            case USER_DELEGATED -> CredentialRequest.userDelegated(
+                    server.getTenantId(),
+                    server.getName(),
+                    server.getClientId(),
+                    server.getScopes(),
+                    server.getAudience(),
+                    server.getResource());
         };
+    }
+
+    private Optional<String> validateCredentialConfiguration(McpHttpAdapterProperties.Server server) {
+        if (CredentialAuthType.USER_DELEGATED.equals(server.getAuthType())) {
+            return Optional.of(MSG_USER_DELEGATED_UNSUPPORTED);
+        }
+        if (CredentialAuthType.STATIC_BEARER.equals(server.getAuthType())
+                && server.getClientSecretRef().isBlank()) {
+            return Optional.of(MSG_CLIENT_SECRET_REF_MISSING);
+        }
+        if (CredentialAuthType.CLIENT_CREDENTIALS.equals(server.getAuthType())) {
+            if (server.getName().isBlank()) {
+                return Optional.of(MSG_SERVER_NAME_MISSING);
+            }
+            if (server.getClientId().isBlank()) {
+                return Optional.of(MSG_CLIENT_ID_MISSING);
+            }
+            if (server.getClientSecretRef().isBlank()) {
+                return Optional.of(MSG_CLIENT_SECRET_REF_MISSING);
+            }
+        }
+        return Optional.empty();
     }
 }

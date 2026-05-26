@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "candidateDocs": [
+    "docs/company-agent/ai-infra-phases/09-unfinished-phase-design-development-plans.md#112-phase-5-开发卡mcp-oauth-token-provider-最小闭环",
+    "docs/company-agent/ai-infra-phases/05-connectors-credentials-sandbox.md",
+    "docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/"
+  ],
+  "whyRelevant": "Baseline read-set requires agent review.",
+  "missingAuthority": []
+}

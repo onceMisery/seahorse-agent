@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "seahorse-agent-kernel domain/application/ports"
+  ],
+  "owners": [
+    "kernel agent factory service composed from existing AgentDefinitionInboundPort and template/check repositories"
+  ],
+  "invariants": [
+    "Factory must not rebuild or bypass AgentDefinition invariants; from-template creates DRAFT only; templates can only be narrowed by requested tools/risk"
+  ],
+  "compatBoundary": "No JDBC/Web/starter/UI changes in this slice; no workflow engine; existing AgentDefinition publish behavior unchanged",
+  "nonGoals": [
+    "Full Studio UI, rollback implementation, JDBC template storage, Web API, Eval/Quota enforcement, and publish blocking"
+  ]
+}

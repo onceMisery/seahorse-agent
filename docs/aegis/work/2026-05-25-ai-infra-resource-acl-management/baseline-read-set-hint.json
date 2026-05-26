@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "candidateDocs": [
+    "docs/company-agent/ai-infra-phases/09-unfinished-phase-design-development-plans.md",
+    "docs/company-agent/ai-infra-phases/04-context-db-resource-acl.md",
+    "docs/company-agent/Seahorse Agent 企业级 AI Infra 架构基线.md"
+  ],
+  "whyRelevant": "These define the Phase 4 ACL boundary, adapter direction, and kernel dependency constraints.",
+  "missingAuthority": []
+}

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-26-ai-infra-mcp-oauth-token-provider",
+  "taskIntentRef": "docs/aegis/work/2026-05-26-ai-infra-mcp-oauth-token-provider/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/company-agent/ai-infra-phases/09-unfinished-phase-design-development-plans.md#112-phase-5-开发卡mcp-oauth-token-provider-最小闭环",
+    "docs/company-agent/ai-infra-phases/05-connectors-credentials-sandbox.md",
+    "docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/"
+  ],
+  "scopeStatus": "within Phase 5A; no authorization-code UI, dynamic client registration, automatic scope challenge retry, remote Agent mesh, or real OpenAPI operation execution added",
+  "compatStatus": "existing NONE and STATIC_BEARER MCP credentials remain covered; custom CredentialProviderPort override remains covered",
+  "retirementStatus": "static-bearer-only MCP header injection widened to bearer-material semantics; static bearer path retained and tested",
+  "newRiskSignals": [
+    "Cross-module credential contract and adapter auto-configuration change; raw secret/token leakage risk."
+  ],
+  "decision": "continue"
+}

@@ -18,22 +18,56 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentDefinitionRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentCatalogQueryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentCheckpointRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentEvalSummaryRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentHandoffRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRolloutRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunLeaseRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunQueueRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentToolBindingRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentVersionActivationRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConnectorCredentialBindingRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConnectorRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcCostUsageRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcEnterprisePilotReadinessRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAuditEventRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAccessDecisionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcContextPackRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentPublishCheckRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentTemplateRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcProductionGateRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQuotaPolicyRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcResourceAclRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSandboxRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolApprovalRequestRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolCatalogRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolInvocationAuditRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionLogPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCatalogQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRolloutRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentVersionActivationRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AuditEventRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorCredentialBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ContextPackRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.EnterprisePilotReadinessRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.QuotaPolicyRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
@@ -95,9 +129,25 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @Bean
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(ResourceAclRepositoryPort.class)
+    public JdbcResourceAclRepositoryAdapter seahorseJdbcResourceAclRepositoryAdapter(DataSource dataSource) {
+        return new JdbcResourceAclRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentRunLeaseRepositoryPort.class)
     public JdbcAgentRunLeaseRepositoryAdapter seahorseJdbcAgentRunLeaseRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentRunLeaseRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentRunQueueRepositoryPort.class)
+    public JdbcAgentRunQueueRepositoryAdapter seahorseJdbcAgentRunQueueRepositoryAdapter(DataSource dataSource) {
+        return new JdbcAgentRunQueueRepositoryAdapter(dataSource);
     }
 
     @Bean
@@ -130,5 +180,128 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(ToolApprovalRequestRepositoryPort.class)
     public JdbcToolApprovalRequestRepositoryAdapter seahorseJdbcToolApprovalRequestRepositoryAdapter(DataSource dataSource) {
         return new JdbcToolApprovalRequestRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(ConnectorRepositoryPort.class)
+    public JdbcConnectorRepositoryAdapter seahorseJdbcConnectorRepositoryAdapter(DataSource dataSource) {
+        return new JdbcConnectorRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(ConnectorCredentialBindingRepositoryPort.class)
+    public JdbcConnectorCredentialBindingRepositoryAdapter seahorseJdbcConnectorCredentialBindingRepositoryAdapter(
+            DataSource dataSource) {
+        return new JdbcConnectorCredentialBindingRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentTemplateRepositoryPort.class)
+    public JdbcAgentTemplateRepositoryAdapter seahorseJdbcAgentTemplateRepositoryAdapter(DataSource dataSource) {
+        return new JdbcAgentTemplateRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentPublishCheckRepositoryPort.class)
+    public JdbcAgentPublishCheckRepositoryAdapter seahorseJdbcAgentPublishCheckRepositoryAdapter(DataSource dataSource) {
+        return new JdbcAgentPublishCheckRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentVersionActivationRepositoryPort.class)
+    public JdbcAgentVersionActivationRepositoryAdapter seahorseJdbcAgentVersionActivationRepositoryAdapter(
+            DataSource dataSource) {
+        return new JdbcAgentVersionActivationRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentCatalogQueryPort.class)
+    public JdbcAgentCatalogQueryAdapter seahorseJdbcAgentCatalogQueryAdapter(DataSource dataSource) {
+        return new JdbcAgentCatalogQueryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentHandoffRepositoryPort.class)
+    public JdbcAgentHandoffRepositoryAdapter seahorseJdbcAgentHandoffRepositoryAdapter(DataSource dataSource) {
+        return new JdbcAgentHandoffRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentEvalSummaryRepositoryPort.class)
+    public JdbcAgentEvalSummaryRepositoryAdapter seahorseJdbcAgentEvalSummaryRepositoryAdapter(DataSource dataSource) {
+        return new JdbcAgentEvalSummaryRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentRolloutRepositoryPort.class)
+    public JdbcAgentRolloutRepositoryAdapter seahorseJdbcAgentRolloutRepositoryAdapter(DataSource dataSource) {
+        return new JdbcAgentRolloutRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(EnterprisePilotReadinessRepositoryPort.class)
+    public JdbcEnterprisePilotReadinessRepositoryAdapter seahorseJdbcEnterprisePilotReadinessRepositoryAdapter(
+            DataSource dataSource) {
+        return new JdbcEnterprisePilotReadinessRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AuditEventRepositoryPort.class)
+    public JdbcAuditEventRepositoryAdapter seahorseJdbcAuditEventRepositoryAdapter(DataSource dataSource) {
+        return new JdbcAuditEventRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(ProductionGateRepositoryPort.class)
+    public JdbcProductionGateRepositoryAdapter seahorseJdbcProductionGateRepositoryAdapter(DataSource dataSource) {
+        return new JdbcProductionGateRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(QuotaPolicyRepositoryPort.class)
+    public JdbcQuotaPolicyRepositoryAdapter seahorseJdbcQuotaPolicyRepositoryAdapter(DataSource dataSource) {
+        return new JdbcQuotaPolicyRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(CostUsageRepositoryPort.class)
+    public JdbcCostUsageRepositoryAdapter seahorseJdbcCostUsageRepositoryAdapter(DataSource dataSource) {
+        return new JdbcCostUsageRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(SandboxSessionRepositoryPort.class)
+    public JdbcSandboxRepositoryAdapter seahorseJdbcSandboxRepositoryAdapter(DataSource dataSource) {
+        return new JdbcSandboxRepositoryAdapter(dataSource);
     }
 }

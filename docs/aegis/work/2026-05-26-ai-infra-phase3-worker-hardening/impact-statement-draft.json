@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "kernel",
+    "jdbc",
+    "starter"
+  ],
+  "owners": [
+    "Kernel runtime worker service"
+  ],
+  "invariants": [
+    "Worker must not directly mutate ApprovalRequest and must not call ToolPort; resume execution stays owned by AgentRunResumeInboundPort."
+  ],
+  "compatBoundary": "Existing approval, checkpoint, resume, lease, retry, and cancel semantics remain compatible.",
+  "nonGoals": [
+    "No automatic background thread, no MQ workflow, no Temporal/LangGraph, no remote mesh."
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-26-ai-infra-phase3-worker-hardening",
+  "currentTodo": "Write kernel RED tests for worker tick semantics.",
+  "completedTodos": [],
+  "activeSlice": "Phase 3 Durable Runtime Worker Hardening.",
+  "evidenceRefs": [],
+  "blockedOn": null,
+  "nextStep": "Add KernelAgentRunWorkerServiceTests before production code.",
+  "updatedAt": "2026-05-26"
+}

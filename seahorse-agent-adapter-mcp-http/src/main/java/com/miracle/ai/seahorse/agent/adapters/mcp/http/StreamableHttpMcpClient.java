@@ -202,7 +202,7 @@ public class StreamableHttpMcpClient implements McpClientPort {
     }
 
     private void applyCredential(Request.Builder requestBuilder) {
-        if (CredentialAuthType.STATIC_BEARER.equals(credentialMaterial.authType())
+        if (credentialMaterial.authType().isBearerMaterial()
                 && credentialMaterial.secretValue().hasText()) {
             requestBuilder.header(
                     HEADER_AUTHORIZATION,

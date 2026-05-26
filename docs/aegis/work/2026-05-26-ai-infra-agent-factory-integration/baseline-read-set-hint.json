@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "candidateDocs": [
+    "docs/company-agent/ai-infra-phases/06-agent-factory-studio.md",
+    "docs/company-agent/ai-infra-phases/09-unfinished-phase-design-development-plans.md#12.3.7"
+  ],
+  "whyRelevant": "These docs define Agent Factory APIs, JDBC tables, starter wiring expectations, and focused acceptance commands",
+  "missingAuthority": []
+}

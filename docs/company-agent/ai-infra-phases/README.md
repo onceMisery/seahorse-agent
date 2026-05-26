@@ -15,6 +15,8 @@
 | Phase 6 | [06-agent-factory-studio.md](./06-agent-factory-studio.md) | 业务 Agent 模板、派生、发布门禁与 Agent Studio |
 | Phase 7 | [07-multi-agent-a2a-mesh.md](./07-multi-agent-a2a-mesh.md) | 本地 multi-agent、A2A 和 Agent Mesh 治理 |
 | Phase 8 | [08-production-hardening.md](./08-production-hardening.md) | 评估、红队、审计、成本、SRE 与企业试点准入 |
+| 当前剩余方案 | [20-unfinished-phase-implementation-pack.md](./20-unfinished-phase-implementation-pack.md) | 最新实施入口：第 21 节当前代码面校准后收敛到 Phase 8D kernel/JDBC/Web/starter 闭环与最终完成审计；Phase 4/5/7/8B/8C 作为回归依赖 |
+| 历史剩余方案 | [09-unfinished-phase-design-development-plans.md](./09-unfinished-phase-design-development-plans.md) | 历史分析与执行卡记录，第 19 节保留为上一版入口 |
 
 ## 执行原则
 
@@ -31,3 +33,4 @@
 3. Approval 中断与恢复：见 Phase 3。
 4. Agent Definition 与发布版本：见 Phase 1 + Phase 6。
 5. ContextPack 与资源 ACL：见 Phase 4。
+6. 当前未完成阶段的下一批实施顺序：见 `20-unfinished-phase-implementation-pack.md`。

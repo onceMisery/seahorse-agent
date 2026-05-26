@@ -51,6 +51,12 @@
         </dependency>
         <dependency>
             <groupId>com.miracle.ai</groupId>
+            <artifactId>seahorse-agent-adapter-openapi</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.miracle.ai</groupId>
             <artifactId>seahorse-agent-adapter-parser-tika</artifactId>
             <version>${project.version}</version>
             <optional>true</optional>

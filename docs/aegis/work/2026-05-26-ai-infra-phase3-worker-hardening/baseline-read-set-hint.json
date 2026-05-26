@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "candidateDocs": [
+    "docs/company-agent/ai-infra-phases/09-unfinished-phase-design-development-plans.md#16.2"
+  ],
+  "whyRelevant": "Defines Phase 3 worker hardening target, file boundaries, TDD order, acceptance commands, and rollback invariants.",
+  "missingAuthority": []
+}

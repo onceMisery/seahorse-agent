@@ -28,6 +28,8 @@ public final class ResourceAccessReasonCodes {
     public static final String SUBJECT_NOT_SUPPORTED = "SUBJECT_NOT_SUPPORTED";
     public static final String RESOURCE_TYPE_NOT_SUPPORTED = "RESOURCE_TYPE_NOT_SUPPORTED";
     public static final String DEFAULT_DENY = "DEFAULT_DENY";
+    public static final String RESOURCE_ACL_ALLOW = "RESOURCE_ACL_ALLOW";
+    public static final String RESOURCE_ACL_DENY = "RESOURCE_ACL_DENY";
 
     private ResourceAccessReasonCodes() {
     }

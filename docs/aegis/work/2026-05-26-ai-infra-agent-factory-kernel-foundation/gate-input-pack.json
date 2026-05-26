@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "baselineRefs": [
+    "docs/company-agent/ai-infra-phases/09-unfinished-phase-design-development-plans.md#12.3.6"
+  ],
+  "impactStatement": "docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/impact-statement-draft.json",
+  "compatPlan": "No JDBC/Web/starter/UI changes in this slice; no workflow engine; existing AgentDefinition publish behavior unchanged",
+  "retirementPlan": "No old factory owner exists to retire; future JDBC/Web/starter adapters will implement the new small ports without changing kernel invariants.",
+  "evidenceBundle": [
+    "docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/evidence-bundle-draft-diff-check.json",
+    "docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/evidence-bundle-draft-green-agent-factory-kernel-regression.json",
+    "docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/evidence-bundle-draft-red-agent-factory-missing-contract.json"
+  ]
+}

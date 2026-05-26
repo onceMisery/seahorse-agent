@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-25-ai-infra-phase-plan-refresh",
+  "taskIntentRef": "docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/company-agent/ai-infra-phases/20-unfinished-phase-implementation-pack.md#21"
+  ],
+  "scopeStatus": "within active section 21 final AI Infra completion audit scope",
+  "compatStatus": "kernel remains isolated from Spring/JDBC/Web/HTTP clients; adapter and starter boundaries remain intact",
+  "retirementStatus": "older Approval API handoff and pre-section-21 incomplete markers are superseded by final audit evidence for the scoped implementation",
+  "newRiskSignals": [
+    "Final audit is focused regression plus scans, not a full repository-wide mvn test.",
+    "Explicit non-goals remain outside completion: real traffic routing, remote A2A mesh, real secret vault, real container sandbox runtime, Prometheus exporter, frontend publish wizard, distributed rate limiting, and real billing."
+  ],
+  "decision": "continue"
+}

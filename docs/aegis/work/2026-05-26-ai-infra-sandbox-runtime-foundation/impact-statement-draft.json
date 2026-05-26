@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "seahorse-agent-kernel domain/application/ports"
+  ],
+  "owners": [
+    "kernel sandbox runtime service composed from ports"
+  ],
+  "invariants": [
+    "Main JVM must not execute arbitrary sandbox code; network defaults to deny; artifacts are prompt-visible only after scan and non-secret classification"
+  ],
+  "compatBoundary": "No Web/JDBC/starter changes in this slice; no workflow engine; no remote mesh; existing connector and credential behavior unchanged",
+  "nonGoals": [
+    "Local shell, browser automation, code interpreter implementation, persistence, Web API, and Audit Ledger integration"
+  ]
+}

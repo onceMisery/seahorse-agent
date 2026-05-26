@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "diff-check",
+  "type": "format-check",
+  "source": "git diff --check",
+  "summary": "Whitespace/conflict-marker check passed; output only contained expected Windows LF-to-CRLF warnings.",
+  "verifier": "git diff --check exit 0"
+}

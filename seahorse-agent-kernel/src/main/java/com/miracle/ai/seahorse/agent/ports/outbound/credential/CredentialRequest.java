@@ -17,26 +17,84 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.credential;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
  * Credential resolution request.
  */
-public record CredentialRequest(CredentialAuthType authType, String secretRef) {
+public record CredentialRequest(
+        CredentialAuthType authType,
+        String secretRef,
+        String tenantId,
+        String serverId,
+        String clientId,
+        List<String> scopes,
+        String audience,
+        String resource
+) {
 
     public CredentialRequest {
         authType = Objects.requireNonNullElse(authType, CredentialAuthType.NONE);
         secretRef = Objects.requireNonNullElse(secretRef, "");
+        tenantId = Objects.requireNonNullElse(tenantId, "");
+        serverId = Objects.requireNonNullElse(serverId, "");
+        clientId = Objects.requireNonNullElse(clientId, "");
+        scopes = OAuthScopes.normalize(scopes);
+        audience = Objects.requireNonNullElse(audience, "");
+        resource = Objects.requireNonNullElse(resource, "");
         if (authType.isSecretBacked() && secretRef.isBlank()) {
             throw new IllegalArgumentException("secretRef must not be blank for " + authType);
+        }
+        if (CredentialAuthType.CLIENT_CREDENTIALS.equals(authType)) {
+            requireText(tenantId, "tenantId");
+            requireText(serverId, "serverId");
+            requireText(clientId, "clientId");
         }
     }
 
     public static CredentialRequest none() {
-        return new CredentialRequest(CredentialAuthType.NONE, "");
+        return new CredentialRequest(CredentialAuthType.NONE, "", "", "", "", List.of(), "", "");
     }
 
     public static CredentialRequest staticBearer(String secretRef) {
-        return new CredentialRequest(CredentialAuthType.STATIC_BEARER, secretRef);
+        return new CredentialRequest(CredentialAuthType.STATIC_BEARER, secretRef, "", "", "", List.of(), "", "");
+    }
+
+    public static CredentialRequest clientCredentials(String tenantId,
+                                                      String serverId,
+                                                      String clientId,
+                                                      String clientSecretRef,
+                                                      List<String> scopes,
+                                                      String audience,
+                                                      String resource) {
+        return new CredentialRequest(
+                CredentialAuthType.CLIENT_CREDENTIALS,
+                clientSecretRef,
+                tenantId,
+                serverId,
+                clientId,
+                scopes,
+                audience,
+                resource);
+    }
+
+    public static CredentialRequest userDelegated(String tenantId,
+                                                  String serverId,
+                                                  String clientId,
+                                                  List<String> scopes,
+                                                  String audience,
+                                                  String resource) {
+        throw new IllegalArgumentException("USER_DELEGATED credential resolution is not supported yet");
+    }
+
+    public String clientSecretRef() {
+        return secretRef;
+    }
+
+    private static void requireText(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
     }
 }

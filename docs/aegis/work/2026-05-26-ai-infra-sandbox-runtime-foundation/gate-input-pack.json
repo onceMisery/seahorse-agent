@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "baselineRefs": [
+    "docs/company-agent/ai-infra-phases/09-unfinished-phase-design-development-plans.md#12.2.5"
+  ],
+  "impactStatement": "docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/impact-statement-draft.json",
+  "compatPlan": "No Web/JDBC/starter changes in this slice; no workflow engine; no remote mesh; existing connector and credential behavior unchanged",
+  "retirementPlan": "Default unsupported runtime remains the deliberate fail-closed adapter until a future external sandbox adapter replaces it; no old execution path exists to retire.",
+  "evidenceBundle": [
+    "docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/evidence-bundle-draft-diff-check.json",
+    "docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/evidence-bundle-draft-green-sandbox-focused-regression.json",
+    "docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/evidence-bundle-draft-red-sandbox-missing-contract.json"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-26-ai-infra-phase3-worker-hardening",
+  "taskIntentRef": "docs/aegis/work/2026-05-26-ai-infra-phase3-worker-hardening/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/company-agent/ai-infra-phases/09-unfinished-phase-design-development-plans.md#16.2"
+  ],
+  "scopeStatus": "not-yet-verified",
+  "compatStatus": "not-yet-verified",
+  "retirementStatus": "not-yet-verified",
+  "newRiskSignals": [
+    "Cross-module runtime contracts; must preserve AgentRun status invariants and existing retry/cancel idempotency."
+  ],
+  "decision": "needs-baseline-readback"
+}

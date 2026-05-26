@@ -22,16 +22,24 @@ package com.miracle.ai.seahorse.agent.ports.outbound.credential;
  */
 public enum CredentialAuthType {
 
-    NONE(false),
-    STATIC_BEARER(true);
+    NONE(false, false),
+    STATIC_BEARER(true, true),
+    CLIENT_CREDENTIALS(true, true),
+    USER_DELEGATED(false, true);
 
     private final boolean secretBacked;
+    private final boolean bearerMaterial;
 
-    CredentialAuthType(boolean secretBacked) {
+    CredentialAuthType(boolean secretBacked, boolean bearerMaterial) {
         this.secretBacked = secretBacked;
+        this.bearerMaterial = bearerMaterial;
     }
 
     public boolean isSecretBacked() {
         return secretBacked;
+    }
+
+    public boolean isBearerMaterial() {
+        return bearerMaterial;
     }
 }

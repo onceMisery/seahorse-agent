@@ -1,0 +1,9 @@
+{
+  "scopeStatus": "within Phase 5 Sandbox integration",
+  "compatibilityStatus": "kernel remains port-driven; JDBC/Web/Spring stay adapters",
+  "retirementStatus": "in-memory constructor path remains compatible for existing unit tests; Spring wiring now uses repository-backed constructor",
+  "newRiskSignals": [
+    "Full Phase 5 still needs connector disable, credential binding, and Audit Ledger integration"
+  ],
+  "advisoryDecision": "continue-to-phase-8a"
+}

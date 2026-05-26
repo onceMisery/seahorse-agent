@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Implement OpenAPI connector import to ToolCatalog without real HTTP execution.",
+  "goal": "Implement OpenAPI connector import to ToolCatalog without real HTTP execution.",
+  "successEvidence": [],
+  "stopCondition": "Stop when success evidence is satisfied or a blocker/risk requires pause.",
+  "nonGoals": [],
+  "scope": "Kernel connector domain/ports/service, OpenAPI parser adapter, JDBC connector repository, Web API, Spring wiring, focused verification.",
+  "changeKinds": [
+    "feature"
+  ],
+  "riskHints": []
+}

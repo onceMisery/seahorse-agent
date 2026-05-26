@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "green-sandbox-focused-regression",
+  "type": "test-green",
+  "source": "mvn -nsu '-Dspotless.apply.skip=true' -pl seahorse-agent-kernel '-Dtest=DefaultSandboxPolicyPortTests,KernelSandboxRuntimeServiceTests,SandboxPolicyDecisionTests,SandboxExecutionTests,SandboxArtifactTests' test",
+  "summary": "GREEN passed 10 sandbox kernel tests covering default deny, unsupported runtime, enum reason decisions, terminal session fail-closed behavior, execution transitions, and prompt-visible artifact filtering.",
+  "verifier": "maven-surefire exit 0; tests run 10, failures 0, errors 0"
+}

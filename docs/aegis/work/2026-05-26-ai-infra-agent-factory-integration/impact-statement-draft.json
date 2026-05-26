@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "adapter-repository-jdbc, adapter-web, spring-boot-starter"
+  ],
+  "owners": [
+    "adapters implement AgentTemplateRepositoryPort, AgentPublishCheckRepositoryPort, and AgentFactoryInboundPort wiring"
+  ],
+  "invariants": [
+    "Kernel remains independent of JDBC/Web/Spring; Agent Factory composes AgentDefinitionInboundPort and does not bypass draft/version invariants"
+  ],
+  "compatBoundary": "No UI, no rollback implementation, no publish blocking, no Phase 8 Eval/Quota hard gate in this slice",
+  "nonGoals": [
+    "Agent Studio frontend, rollback endpoint behavior, canary/eval/quota enforcement, and Audit Ledger integration"
+  ]
+}

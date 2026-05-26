@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-05-25-ai-infra-openapi-connector-import",
+  "taskIntentRef": "docs/aegis/work/2026-05-25-ai-infra-openapi-connector-import/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/company-agent/ai-infra-phases/05-connectors-credentials-sandbox.md",
+    "docs/company-agent/ai-infra-phases/09-unfinished-phase-design-development-plans.md"
+  ],
+  "scopeStatus": "in-scope",
+  "compatStatus": "compatible-additive",
+  "retirementStatus": "no-retirement-required",
+  "newRiskSignals": [
+    "OpenAPI Connector can now be imported and enabled into ToolCatalog, but real remote HTTP execution remains intentionally absent.",
+    "Audit Ledger integration is deferred to Phase 8A."
+  ],
+  "decision": "continue"
+}

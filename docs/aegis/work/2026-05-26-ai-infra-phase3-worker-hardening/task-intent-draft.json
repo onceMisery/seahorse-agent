@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Implement explicit worker tick for durable runtime using existing run queue, lease, checkpoint, and resume ports.",
+  "goal": "Implement explicit worker tick for durable runtime using existing run queue, lease, checkpoint, and resume ports.",
+  "successEvidence": [
+    "Kernel, JDBC, starter focused tests pass; worker tick does not execute terminal or waiting approval runs; lease conflicts prevent duplicate resume; approved checkpoint delegates to resume owner."
+  ],
+  "stopCondition": "Done when focused Phase 3 acceptance passes; blocked if existing run/lease/resume contracts cannot support worker tick without changing invariants; needs-verification if tests are incomplete.",
+  "nonGoals": [
+    "No automatic background thread, no MQ workflow, no Temporal/LangGraph, no remote mesh."
+  ],
+  "scope": "Phase 3 durable runtime worker hardening only: kernel worker port/service, queue repository port/JDBC adapter, starter wiring; no background thread or workflow engine.",
+  "changeKinds": [
+    "feature"
+  ],
+  "riskHints": [
+    "Cross-module runtime contracts; must preserve AgentRun status invariants and existing retry/cancel idempotency."
+  ]
+}

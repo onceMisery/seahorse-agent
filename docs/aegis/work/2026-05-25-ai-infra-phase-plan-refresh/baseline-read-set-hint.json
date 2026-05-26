@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "candidateDocs": [
+    "docs/company-agent/",
+    "docs/company-agent/ai-infra-phases/",
+    "docs/company-agent/ai-infra-phases/00-architecture-baseline.md",
+    "docs/company-agent/ai-infra-phases/04-context-db-resource-acl.md",
+    "docs/company-agent/ai-infra-phases/05-connectors-credentials-sandbox.md",
+    "docs/company-agent/ai-infra-phases/06-agent-factory-studio.md",
+    "docs/company-agent/ai-infra-phases/07-multi-agent-a2a-mesh.md",
+    "docs/company-agent/ai-infra-phases/08-production-hardening.md",
+    "docs/company-agent/ai-infra-phases/20-unfinished-phase-implementation-pack.md",
+    "docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/20-checkpoint.md",
+    "docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/90-evidence.md"
+  ],
+  "whyRelevant": "These documents define the AI Infra architecture baseline, current section 21 implementation authority, phase boundaries, and evidence needed for the final completion audit.",
+  "missingAuthority": [
+    "No runtime gate grants authoritative completion; completion is a verified engineering claim based on tests, scans, and scope boundaries.",
+    "Future production integrations remain explicit non-goals unless a later plan adds them."
+  ]
+}

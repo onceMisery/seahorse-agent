@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.LocalAgentAsToolPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunWorkerService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
@@ -27,6 +29,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalReques
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.PolicyDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
@@ -48,12 +51,17 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
@@ -338,8 +346,26 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(AgentRunResumeInboundPort.class);
+                    assertThat(context).hasSingleBean(AgentRunWorkerInboundPort.class);
+                    assertThat(context.getBean(AgentRunWorkerInboundPort.class))
+                            .isInstanceOf(KernelAgentRunWorkerService.class);
                     assertThat(context).hasSingleBean(AgentApprovalWaitHandler.class);
                     assertThat(context).hasSingleBean(AgentCheckpointQueryInboundPort.class);
+                });
+    }
+
+    @Test
+    void shouldWireLocalAgentAsToolPortWhenHandoffDependenciesExist() {
+        contextRunner.withUserConfiguration(TestLocalAgentAsToolConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(LocalAgentAsToolPort.class);
+
+                    RecordingToolRegistry toolRegistry = context.getBean(RecordingToolRegistry.class);
+                    context.getBean(BuiltInAgentToolRegistrar.class).run(null);
+
+                    assertThat(toolRegistry.registered)
+                            .containsKey(LocalAgentAsToolPort.TOOL_ID);
                 });
     }
 
@@ -561,6 +587,11 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         }
 
         @Bean
+        AgentDefinitionRepositoryPort agentDefinitionRepositoryPort() {
+            return new EmptyAgentDefinitionRepository();
+        }
+
+        @Bean
         InMemoryAgentRunRepository agentRunRepositoryPort() {
             return new InMemoryAgentRunRepository();
         }
@@ -568,6 +599,19 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Bean
         AgentCheckpointRepositoryPort agentCheckpointRepositoryPort() {
             return new InMemoryAgentCheckpointRepository();
+        }
+
+        @Bean
+        AgentRunQueueRepositoryPort agentRunQueueRepositoryPort(InMemoryAgentRunRepository runRepository) {
+            return (tenantId, limit, now) -> runRepository.runs.values().stream()
+                    .filter(run -> tenantId.equals(run.tenantId()))
+                    .limit(limit)
+                    .toList();
+        }
+
+        @Bean
+        AgentRunLeaseInboundPort agentRunLeaseInboundPort() {
+            return new NoopAgentRunLeasePort();
         }
 
         @Bean
@@ -728,6 +772,45 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         }
     }
 
+    @Configuration(proxyBeanMethods = false)
+    static class TestLocalAgentAsToolConfiguration extends TestApprovalRuntimeConfiguration {
+
+        @Bean
+        @Override
+        ToolRegistryPort toolRegistryPort(CountingToolPort toolPort) {
+            return new RecordingToolRegistry();
+        }
+
+        @Bean
+        AgentHandoffRepositoryPort agentHandoffRepositoryPort() {
+            return new InMemoryAgentHandoffRepository();
+        }
+    }
+
+    private static final class NoopAgentRunLeasePort implements AgentRunLeaseInboundPort {
+
+        @Override
+        public boolean acquire(AgentRunLeaseCommand command) {
+            return true;
+        }
+
+        @Override
+        public boolean heartbeat(AgentRunLeaseCommand command) {
+            return true;
+        }
+
+        @Override
+        public boolean release(String runId, String workerId) {
+            return true;
+        }
+
+        @Override
+        public Optional<com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunLease> findByRunId(
+                String runId) {
+            return Optional.empty();
+        }
+    }
+
     private static final class InMemoryAgentCheckpointRepository implements AgentCheckpointRepositoryPort {
         private final List<AgentCheckpoint> checkpoints = new ArrayList<>();
 
@@ -792,6 +875,56 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
             return "memory-write".equals(toolId)
                     ? Optional.of((toolCallId, id, arguments) -> ToolInvocationResult.ok("token=sk-live-secret"))
                     : Optional.empty();
+        }
+    }
+
+    static final class RecordingToolRegistry implements ToolRegistryPort {
+        private final Map<String, ToolPort> registered = new LinkedHashMap<>();
+
+        @Override
+        public List<ToolDescriptor> listTools() {
+            return registered.keySet().stream()
+                    .map(toolId -> new ToolDescriptor(toolId, toolId, toolId, "{}"))
+                    .toList();
+        }
+
+        @Override
+        public Optional<ToolPort> find(String toolId) {
+            return Optional.ofNullable(registered.get(toolId));
+        }
+
+        @Override
+        public void register(ToolDescriptor descriptor, ToolPort port) {
+            registered.put(descriptor.toolId(), port);
+        }
+    }
+
+    static final class InMemoryAgentHandoffRepository implements AgentHandoffRepositoryPort {
+        private final Map<String, AgentHandoff> handoffs = new LinkedHashMap<>();
+
+        @Override
+        public AgentHandoff save(AgentHandoff handoff) {
+            handoffs.put(handoff.handoffId(), handoff);
+            return handoff;
+        }
+
+        @Override
+        public AgentHandoff update(AgentHandoff handoff) {
+            handoffs.put(handoff.handoffId(), handoff);
+            return handoff;
+        }
+
+        @Override
+        public Optional<AgentHandoff> findById(String handoffId) {
+            return Optional.ofNullable(handoffs.get(handoffId));
+        }
+
+        @Override
+        public List<AgentHandoff> listByParentRunId(String tenantId, String parentRunId) {
+            return handoffs.values().stream()
+                    .filter(handoff -> tenantId.equals(handoff.tenantId()))
+                    .filter(handoff -> parentRunId.equals(handoff.parentRunId()))
+                    .toList();
         }
     }
 

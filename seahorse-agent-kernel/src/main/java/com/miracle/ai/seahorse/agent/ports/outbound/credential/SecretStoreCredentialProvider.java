@@ -42,6 +42,8 @@ public class SecretStoreCredentialProvider implements CredentialProviderPort {
                     safeRequest.secretRef(),
                     secretStorePort.getSecret(safeRequest.secretRef())
                             .orElseThrow(() -> new IllegalArgumentException(MSG_SECRET_NOT_FOUND)));
+            case CLIENT_CREDENTIALS, USER_DELEGATED ->
+                    throw new IllegalArgumentException(MSG_UNSUPPORTED_AUTH_TYPE + ": " + safeRequest.authType());
             default -> throw new IllegalArgumentException(MSG_UNSUPPORTED_AUTH_TYPE + ": " + safeRequest.authType());
         };
     }

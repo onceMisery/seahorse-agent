@@ -21,6 +21,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.Connector;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorCredentialBinding;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorCredentialBindingStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorOperation;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorOperationStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorProvider;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.ConnectorStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.connector.OpenApiHttpMethod;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.AccessDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.AccessDecisionEffect;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.AccessSubjectType;
@@ -31,6 +39,17 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextResource
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAccessReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAction;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAclImportDryRunItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAclImportDryRunReport;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAclImportItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAclImportItemStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAclImportMode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAclImportReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAclImportResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAclNaturalKey;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAclRule;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAclRuleScope;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAclRuleStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentStatus;
@@ -67,6 +86,16 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInbou
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalModifyCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ConnectorCredentialBindingCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ConnectorImportResult;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ConnectorOperationDisableCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ConnectorOperationEnableCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.OpenApiConnectorInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.OpenApiImportCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResourceAclCreateCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResourceAclImportCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResourceAclImportDryRunCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResourceAclManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.credential.SecretCreateCommand;
@@ -74,8 +103,13 @@ import com.miracle.ai.seahorse.agent.ports.inbound.credential.SecretManagementIn
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclRulePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialAuthType;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -409,6 +443,272 @@ class SeahorseAgentControllerTests {
     }
 
     @Test
+    void shouldExposeResourceAclManagementApi() throws Exception {
+        ResourceAclManagementInboundPort port = mock(ResourceAclManagementInboundPort.class);
+        ResourceAclRule enabledRule = resourceAclRule(ResourceAclRuleStatus.ENABLED);
+        ResourceAclRule disabledRule = resourceAclRule(ResourceAclRuleStatus.DISABLED);
+        when(port.create(any())).thenReturn(enabledRule);
+        when(port.page(any())).thenReturn(new ResourceAclRulePage(List.of(enabledRule), 1L, 20L, 2L, 1L));
+        when(port.disable("rule-1")).thenReturn(disabledRule);
+        when(port.dryRunImport(any())).thenReturn(resourceAclDryRunReport());
+        when(port.importRules(any())).thenReturn(resourceAclImportResult());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseResourceAclController(provider(ResourceAclManagementInboundPort.class, port))).build();
+
+        mvc.perform(post("/api/resource-acl-rules")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-a",
+                                "resourceType", ContextResourceType.DOCUMENT.value(),
+                                "resourceId", "doc-1",
+                                "subjectType", "USER_DELEGATED_AGENT",
+                                "subjectId", "user-1",
+                                "action", "READ",
+                                "effect", "ALLOW",
+                                "priority", 100))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.ruleId").value("rule-1"))
+                .andExpect(jsonPath("$.data.status").value("ENABLED"));
+
+        ArgumentCaptor<ResourceAclCreateCommand> createCaptor =
+                ArgumentCaptor.forClass(ResourceAclCreateCommand.class);
+        verify(port).create(createCaptor.capture());
+        assertThat(createCaptor.getValue().tenantId()).isEqualTo("tenant-a");
+        assertThat(createCaptor.getValue().resourceType()).isEqualTo(ContextResourceType.DOCUMENT.value());
+        assertThat(createCaptor.getValue().subjectType()).isEqualTo(AccessSubjectType.USER_DELEGATED_AGENT);
+        assertThat(createCaptor.getValue().action()).isEqualTo(ResourceAction.READ);
+        assertThat(createCaptor.getValue().effect()).isEqualTo(AccessDecisionEffect.ALLOW);
+
+        mvc.perform(get("/api/resource-acl-rules")
+                        .param("tenantId", "tenant-a")
+                        .param("resourceType", ContextResourceType.DOCUMENT.value())
+                        .param("resourceId", "doc-1")
+                        .param("subjectType", "USER_DELEGATED_AGENT")
+                        .param("subjectId", "user-1")
+                        .param("status", "ENABLED")
+                        .param("current", "2")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].ruleId").value("rule-1"))
+                .andExpect(jsonPath("$.data.records[0].effect").value("ALLOW"));
+
+        ArgumentCaptor<ResourceAclQuery> queryCaptor = ArgumentCaptor.forClass(ResourceAclQuery.class);
+        verify(port).page(queryCaptor.capture());
+        assertThat(queryCaptor.getValue().tenantId()).isEqualTo("tenant-a");
+        assertThat(queryCaptor.getValue().resourceType()).isEqualTo(ContextResourceType.DOCUMENT.value());
+        assertThat(queryCaptor.getValue().status()).isEqualTo(ResourceAclRuleStatus.ENABLED);
+        assertThat(queryCaptor.getValue().current()).isEqualTo(2L);
+        assertThat(queryCaptor.getValue().size()).isEqualTo(20L);
+
+        mvc.perform(post("/api/resource-acl-rules/rule-1/disable"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ruleId").value("rule-1"))
+                .andExpect(jsonPath("$.data.status").value("DISABLED"));
+
+        verify(port).disable("rule-1");
+
+        mvc.perform(post("/api/resource-acl-rules:dry-run-import")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("items", List.of(
+                                Map.of(
+                                        "tenantId", "tenant-a",
+                                        "scope", "EXACT_RESOURCE",
+                                        "resourceType", ContextResourceType.DOCUMENT.value(),
+                                        "resourceId", "doc-1",
+                                        "subjectType", "USER_DELEGATED_AGENT",
+                                        "subjectId", "user-1",
+                                        "action", "READ",
+                                        "effect", "ALLOW",
+                                        "priority", 100),
+                                Map.of(
+                                        "tenantId", "tenant-a",
+                                        "scope", "EXACT_RESOURCE",
+                                        "resourceType", ContextResourceType.DOCUMENT.value(),
+                                        "resourceId", "doc-1",
+                                        "subjectType", "USER_DELEGATED_AGENT",
+                                        "subjectId", "user-1",
+                                        "action", "READ",
+                                        "effect", "DENY",
+                                        "priority", 100))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.items[0].index").value(0))
+                .andExpect(jsonPath("$.data.items[0].status").value("VALID"))
+                .andExpect(jsonPath("$.data.items[0].reasonCode").value("VALID_RULE"))
+                .andExpect(jsonPath("$.data.items[0].naturalKey.resourceId").value("doc-1"))
+                .andExpect(jsonPath("$.data.items[0].naturalKey.priority").doesNotExist())
+                .andExpect(jsonPath("$.data.items[0].sql").doesNotExist())
+                .andExpect(jsonPath("$.data.items[0].tableName").doesNotExist())
+                .andExpect(jsonPath("$.data.items[0].commitToken").doesNotExist());
+
+        ArgumentCaptor<ResourceAclImportDryRunCommand> dryRunCaptor =
+                ArgumentCaptor.forClass(ResourceAclImportDryRunCommand.class);
+        verify(port).dryRunImport(dryRunCaptor.capture());
+        assertThat(dryRunCaptor.getValue().items()).hasSize(2);
+        assertThat(dryRunCaptor.getValue().items().get(0).scope()).isEqualTo(ResourceAclRuleScope.EXACT_RESOURCE);
+        assertThat(dryRunCaptor.getValue().items().get(0).effect()).isEqualTo(AccessDecisionEffect.ALLOW);
+
+        mvc.perform(post("/api/resource-acl-rules:import")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "mode", "VALID_ONLY",
+                                "items", List.of(
+                                        Map.of(
+                                                "tenantId", "tenant-a",
+                                                "scope", "EXACT_RESOURCE",
+                                                "resourceType", ContextResourceType.DOCUMENT.value(),
+                                                "resourceId", "doc-1",
+                                                "subjectType", "USER_DELEGATED_AGENT",
+                                                "subjectId", "user-1",
+                                                "action", "READ",
+                                                "effect", "ALLOW",
+                                                "priority", 100))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.mode").value("VALID_ONLY"))
+                .andExpect(jsonPath("$.data.createdCount").value(1))
+                .andExpect(jsonPath("$.data.skippedCount").value(0))
+                .andExpect(jsonPath("$.data.dryRunReport.items[0].status").value("VALID"))
+                .andExpect(jsonPath("$.data.rawItems").doesNotExist());
+
+        ArgumentCaptor<ResourceAclImportCommand> importCaptor =
+                ArgumentCaptor.forClass(ResourceAclImportCommand.class);
+        verify(port).importRules(importCaptor.capture());
+        assertThat(importCaptor.getValue().mode()).isEqualTo(ResourceAclImportMode.VALID_ONLY);
+        assertThat(importCaptor.getValue().items()).hasSize(1);
+    }
+
+    @Test
+    void shouldExposeOpenApiConnectorImportApi() throws Exception {
+        OpenApiConnectorInboundPort port = mock(OpenApiConnectorInboundPort.class);
+        Connector connector = connector();
+        ConnectorOperation disabledOperation = connectorOperation(ConnectorOperationStatus.DISABLED);
+        ConnectorOperation enabledOperation = connectorOperation(ConnectorOperationStatus.ENABLED);
+        ConnectorCredentialBinding binding = connectorCredentialBinding();
+        when(port.importSpec(any())).thenReturn(new ConnectorImportResult(
+                "conn-1",
+                "connv-1",
+                ConnectorStatus.IMPORTED,
+                2,
+                2,
+                1));
+        when(port.page(any())).thenReturn(new ConnectorPage(List.of(connector), 1L, 20L, 2L, 1L));
+        when(port.listOperations("conn-1")).thenReturn(List.of(disabledOperation));
+        when(port.bindCredential(any())).thenReturn(binding);
+        when(port.listActiveCredentialBindings("conn-1", "op-1")).thenReturn(List.of(binding));
+        when(port.enableOperation(any())).thenReturn(enabledOperation);
+        when(port.disableOperation(any())).thenReturn(disabledOperation);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseOpenApiConnectorController(provider(OpenApiConnectorInboundPort.class, port))).build();
+
+        mvc.perform(post("/api/connectors/openapi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "tenantId", "tenant-a",
+                                "name", "crm-api",
+                                "specJson", "{\"openapi\":\"3.0.3\",\"paths\":{}}",
+                                "importedBy", "admin-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.connectorId").value("conn-1"))
+                .andExpect(jsonPath("$.data.connectorVersionId").value("connv-1"))
+                .andExpect(jsonPath("$.data.disabledOperationCount").value(2));
+
+        ArgumentCaptor<OpenApiImportCommand> importCaptor = ArgumentCaptor.forClass(OpenApiImportCommand.class);
+        verify(port).importSpec(importCaptor.capture());
+        assertThat(importCaptor.getValue().tenantId()).isEqualTo("tenant-a");
+        assertThat(importCaptor.getValue().name()).isEqualTo("crm-api");
+        assertThat(importCaptor.getValue().importedBy()).isEqualTo("admin-1");
+
+        mvc.perform(get("/api/connectors")
+                        .param("tenantId", "tenant-a")
+                        .param("keyword", "crm")
+                        .param("status", "IMPORTED")
+                        .param("current", "2")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].connectorId").value("conn-1"))
+                .andExpect(jsonPath("$.data.records[0].status").value("IMPORTED"));
+
+        ArgumentCaptor<ConnectorQuery> queryCaptor = ArgumentCaptor.forClass(ConnectorQuery.class);
+        verify(port).page(queryCaptor.capture());
+        assertThat(queryCaptor.getValue().tenantId()).isEqualTo("tenant-a");
+        assertThat(queryCaptor.getValue().keyword()).isEqualTo("crm");
+        assertThat(queryCaptor.getValue().status()).isEqualTo(ConnectorStatus.IMPORTED);
+        assertThat(queryCaptor.getValue().current()).isEqualTo(2L);
+        assertThat(queryCaptor.getValue().size()).isEqualTo(20L);
+
+        mvc.perform(get("/api/connectors/conn-1/operations"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].operationId").value("op-1"))
+                .andExpect(jsonPath("$.data[0].status").value("DISABLED"))
+                .andExpect(jsonPath("$.data[0].requiresApproval").value(true));
+
+        mvc.perform(put("/api/connectors/conn-1/operations/op-1/credential-binding")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "authType", "STATIC_BEARER",
+                                "credentialRef", "secret-ref-1",
+                                "boundBy", "admin-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.bindingId").value("binding-1"))
+                .andExpect(jsonPath("$.data.authType").value("STATIC_BEARER"))
+                .andExpect(jsonPath("$.data.credentialRef").value("secret-ref-1"))
+                .andExpect(jsonPath("$.data.secretValue").doesNotExist());
+
+        ArgumentCaptor<ConnectorCredentialBindingCommand> bindingCaptor =
+                ArgumentCaptor.forClass(ConnectorCredentialBindingCommand.class);
+        verify(port).bindCredential(bindingCaptor.capture());
+        assertThat(bindingCaptor.getValue().connectorId()).isEqualTo("conn-1");
+        assertThat(bindingCaptor.getValue().operationId()).isEqualTo("op-1");
+        assertThat(bindingCaptor.getValue().authType()).isEqualTo(CredentialAuthType.STATIC_BEARER);
+        assertThat(bindingCaptor.getValue().credentialRef()).isEqualTo("secret-ref-1");
+        assertThat(bindingCaptor.getValue().boundBy()).isEqualTo("admin-1");
+
+        mvc.perform(get("/api/connectors/conn-1/operations/op-1/credential-binding"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].bindingId").value("binding-1"))
+                .andExpect(jsonPath("$.data[0].credentialRef").value("secret-ref-1"))
+                .andExpect(jsonPath("$.data[0].secretValue").doesNotExist());
+
+        verify(port).listActiveCredentialBindings("conn-1", "op-1");
+
+        mvc.perform(post("/api/connectors/conn-1/operations/op-1/enable")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "approvalPolicyId", "approval-policy-1",
+                                "operatorConfirmedRisk", false))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.operationId").value("op-1"))
+                .andExpect(jsonPath("$.data.status").value("ENABLED"));
+
+        ArgumentCaptor<ConnectorOperationEnableCommand> enableCaptor =
+                ArgumentCaptor.forClass(ConnectorOperationEnableCommand.class);
+        verify(port).enableOperation(enableCaptor.capture());
+        assertThat(enableCaptor.getValue().connectorId()).isEqualTo("conn-1");
+        assertThat(enableCaptor.getValue().operationId()).isEqualTo("op-1");
+        assertThat(enableCaptor.getValue().approvalPolicyId()).isEqualTo("approval-policy-1");
+        assertThat(enableCaptor.getValue().operatorConfirmedRisk()).isFalse();
+
+        mvc.perform(post("/api/connectors/conn-1/operations/op-1/disable")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("reasonCode", "admin-disabled"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.operationId").value("op-1"))
+                .andExpect(jsonPath("$.data.status").value("DISABLED"));
+
+        ArgumentCaptor<ConnectorOperationDisableCommand> disableCaptor =
+                ArgumentCaptor.forClass(ConnectorOperationDisableCommand.class);
+        verify(port).disableOperation(disableCaptor.capture());
+        assertThat(disableCaptor.getValue().connectorId()).isEqualTo("conn-1");
+        assertThat(disableCaptor.getValue().operationId()).isEqualTo("op-1");
+        assertThat(disableCaptor.getValue().reasonCode()).isEqualTo("admin-disabled");
+    }
+
+    @Test
     void shouldExposeApprovalManagementApi() throws Exception {
         ApprovalManagementInboundPort port = mock(ApprovalManagementInboundPort.class);
         when(port.page("tenant-a", ApprovalRequestStatus.PENDING, 2L, 20L))
@@ -656,6 +956,111 @@ class SeahorseAgentControllerTests {
                 AccessDecisionEffect.ALLOW,
                 ResourceAccessReasonCodes.OWNER_MATCH,
                 NOW);
+    }
+
+    private static ResourceAclRule resourceAclRule(ResourceAclRuleStatus status) {
+        return new ResourceAclRule(
+                "rule-1",
+                "tenant-a",
+                ResourceAclRuleScope.EXACT_RESOURCE,
+                ContextResourceType.DOCUMENT.value(),
+                "doc-1",
+                AccessSubjectType.USER_DELEGATED_AGENT,
+                "user-1",
+                ResourceAction.READ,
+                AccessDecisionEffect.ALLOW,
+                status,
+                100,
+                null,
+                "admin-1",
+                NOW,
+                NOW);
+    }
+
+    private static ResourceAclImportDryRunReport resourceAclDryRunReport() {
+        ResourceAclImportItem item = new ResourceAclImportItem(
+                "tenant-a",
+                ResourceAclRuleScope.EXACT_RESOURCE,
+                ContextResourceType.DOCUMENT.value(),
+                "doc-1",
+                AccessSubjectType.USER_DELEGATED_AGENT,
+                "user-1",
+                ResourceAction.READ,
+                AccessDecisionEffect.ALLOW,
+                100,
+                null);
+        return new ResourceAclImportDryRunReport(List.of(new ResourceAclImportDryRunItem(
+                0,
+                item,
+                new ResourceAclNaturalKey(
+                        "tenant-a",
+                        ResourceAclRuleScope.EXACT_RESOURCE,
+                        ContextResourceType.DOCUMENT.value(),
+                        "doc-1",
+                        AccessSubjectType.USER_DELEGATED_AGENT,
+                        "user-1",
+                        ResourceAction.READ),
+                ResourceAclImportItemStatus.VALID,
+                ResourceAclImportReasonCode.VALID_RULE)));
+    }
+
+    private static ResourceAclImportResult resourceAclImportResult() {
+        return new ResourceAclImportResult(
+                ResourceAclImportMode.VALID_ONLY,
+                resourceAclDryRunReport(),
+                List.of("rule-1"),
+                Map.of(ResourceAclImportReasonCode.VALID_RULE, 1),
+                false);
+    }
+
+    private static Connector connector() {
+        return new Connector(
+                "conn-1",
+                "tenant-a",
+                ConnectorProvider.OPENAPI,
+                "crm-api",
+                "CRM API",
+                ConnectorStatus.IMPORTED,
+                "admin-1",
+                NOW,
+                NOW);
+    }
+
+    private static ConnectorOperation connectorOperation(ConnectorOperationStatus status) {
+        return new ConnectorOperation(
+                "op-1",
+                "conn-1",
+                "connv-1",
+                "deleteCustomer",
+                "deleteCustomer",
+                OpenApiHttpMethod.DELETE,
+                "/customers/{customerId}",
+                "Delete customer",
+                "Delete a customer",
+                "{\"type\":\"object\"}",
+                null,
+                "openapi_delete_customer",
+                ToolRiskLevel.HIGH,
+                ToolActionType.DELETE,
+                "CRM_CUSTOMER",
+                status,
+                true,
+                NOW,
+                NOW);
+    }
+
+    private static ConnectorCredentialBinding connectorCredentialBinding() {
+        return new ConnectorCredentialBinding(
+                "binding-1",
+                "tenant-a",
+                "conn-1",
+                "op-1",
+                CredentialAuthType.STATIC_BEARER,
+                "secret-ref-1",
+                ConnectorCredentialBindingStatus.ACTIVE,
+                "admin-1",
+                NOW,
+                null);
     }
 
     private static ApprovalRequest approval(ApprovalRequestStatus status) {

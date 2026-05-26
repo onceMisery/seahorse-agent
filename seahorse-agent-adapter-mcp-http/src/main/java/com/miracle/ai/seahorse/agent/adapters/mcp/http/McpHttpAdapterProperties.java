@@ -69,6 +69,8 @@ public class McpHttpAdapterProperties {
      */
     public static class Server {
 
+        private static final String DEFAULT_TENANT_ID = "default";
+
         private String name = "";
 
         private String url = "";
@@ -77,7 +79,21 @@ public class McpHttpAdapterProperties {
 
         private CredentialAuthType authType = CredentialAuthType.NONE;
 
+        private String tenantId = DEFAULT_TENANT_ID;
+
+        private String authorizationServerMetadataUrl = "";
+
+        private String protectedResourceMetadataUrl = "";
+
+        private String clientId = "";
+
         private String clientSecretRef = "";
+
+        private List<String> scopes = new ArrayList<>();
+
+        private String audience = "";
+
+        private String resource = "";
 
         public String getName() {
             return name;
@@ -111,12 +127,68 @@ public class McpHttpAdapterProperties {
             this.authType = Objects.requireNonNullElse(authType, CredentialAuthType.NONE);
         }
 
+        public String getTenantId() {
+            return tenantId;
+        }
+
+        public void setTenantId(String tenantId) {
+            this.tenantId = Objects.requireNonNullElse(tenantId, DEFAULT_TENANT_ID);
+        }
+
+        public String getAuthorizationServerMetadataUrl() {
+            return authorizationServerMetadataUrl;
+        }
+
+        public void setAuthorizationServerMetadataUrl(String authorizationServerMetadataUrl) {
+            this.authorizationServerMetadataUrl = Objects.requireNonNullElse(authorizationServerMetadataUrl, "");
+        }
+
+        public String getProtectedResourceMetadataUrl() {
+            return protectedResourceMetadataUrl;
+        }
+
+        public void setProtectedResourceMetadataUrl(String protectedResourceMetadataUrl) {
+            this.protectedResourceMetadataUrl = Objects.requireNonNullElse(protectedResourceMetadataUrl, "");
+        }
+
+        public String getClientId() {
+            return clientId;
+        }
+
+        public void setClientId(String clientId) {
+            this.clientId = Objects.requireNonNullElse(clientId, "");
+        }
+
         public String getClientSecretRef() {
             return clientSecretRef;
         }
 
         public void setClientSecretRef(String clientSecretRef) {
             this.clientSecretRef = Objects.requireNonNullElse(clientSecretRef, "");
+        }
+
+        public List<String> getScopes() {
+            return scopes;
+        }
+
+        public void setScopes(List<String> scopes) {
+            this.scopes = new ArrayList<>(Objects.requireNonNullElse(scopes, List.of()));
+        }
+
+        public String getAudience() {
+            return audience;
+        }
+
+        public void setAudience(String audience) {
+            this.audience = Objects.requireNonNullElse(audience, "");
+        }
+
+        public String getResource() {
+            return resource;
+        }
+
+        public void setResource(String resource) {
+            this.resource = Objects.requireNonNullElse(resource, "");
         }
     }
 }

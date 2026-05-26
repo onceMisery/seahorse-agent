@@ -146,3 +146,94 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-secret-api/proof-bundle.md | 2026-05-25-ai-infra-secret-api proof bundle |
 | 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/evidence-bundle-draft-affected-modules-regression.json | 2026-05-25-ai-infra-secret-api evidence affected-modules-regression |
 | 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-secret-api/evidence-bundle-draft-review-fix-affected-modules-regression.json | 2026-05-25-ai-infra-secret-api evidence review-fix-affected-modules-regression |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/10-intent.md | AI Infra Resource ACL Management intent |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/20-checkpoint.md | AI Infra Resource ACL Management checkpoint |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/90-evidence.md | AI Infra Resource ACL Management evidence |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/99-reflection.md | AI Infra Resource ACL Management reflection |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/task-intent-draft.json | AI Infra Resource ACL Management task intent draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/baseline-read-set-hint.json | AI Infra Resource ACL Management baseline read-set hint |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/impact-statement-draft.json | AI Infra Resource ACL Management impact statement draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/todo-checkpoint-draft.json | AI Infra Resource ACL Management todo checkpoint draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/drift-check-draft.json | AI Infra Resource ACL Management drift check draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/evidence-bundle-draft-focused-regression.json | 2026-05-25-ai-infra-resource-acl-management evidence focused-regression |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/resume-state-hint.json | 2026-05-25-ai-infra-resource-acl-management resume state hint |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-resource-acl-management/evidence-bundle-draft-review-fix-deny-wins-regression.json | 2026-05-25-ai-infra-resource-acl-management evidence review-fix-deny-wins-regression |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-openapi-connector-import/10-intent.md | AI Infra Phase 5B OpenAPI Connector Import intent |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-openapi-connector-import/20-checkpoint.md | AI Infra Phase 5B OpenAPI Connector Import checkpoint |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-openapi-connector-import/90-evidence.md | AI Infra Phase 5B OpenAPI Connector Import evidence |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-openapi-connector-import/99-reflection.md | AI Infra Phase 5B OpenAPI Connector Import reflection |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-openapi-connector-import/task-intent-draft.json | AI Infra Phase 5B OpenAPI Connector Import task intent draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-openapi-connector-import/baseline-read-set-hint.json | AI Infra Phase 5B OpenAPI Connector Import baseline read-set hint |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-openapi-connector-import/impact-statement-draft.json | AI Infra Phase 5B OpenAPI Connector Import impact statement draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-openapi-connector-import/todo-checkpoint-draft.json | AI Infra Phase 5B OpenAPI Connector Import todo checkpoint draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-openapi-connector-import/drift-check-draft.json | AI Infra Phase 5B OpenAPI Connector Import drift check draft |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/10-intent.md | AI Infra phase plan refresh intent |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/20-checkpoint.md | AI Infra phase plan refresh checkpoint |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/90-evidence.md | AI Infra phase plan refresh evidence |
+| 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/99-reflection.md | AI Infra phase plan refresh reflection |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/task-intent-draft.json | AI Infra phase plan refresh task intent draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/baseline-read-set-hint.json | AI Infra phase plan refresh baseline read-set hint |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/impact-statement-draft.json | AI Infra phase plan refresh impact statement draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/todo-checkpoint-draft.json | AI Infra phase plan refresh todo checkpoint draft |
+| 2026-05-25 | artifact | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/drift-check-draft.json | AI Infra phase plan refresh drift check draft |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-mcp-oauth-token-provider/10-intent.md | AI Infra MCP OAuth Token Provider intent |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-mcp-oauth-token-provider/20-checkpoint.md | AI Infra MCP OAuth Token Provider checkpoint |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-mcp-oauth-token-provider/90-evidence.md | AI Infra MCP OAuth Token Provider evidence |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-mcp-oauth-token-provider/99-reflection.md | AI Infra MCP OAuth Token Provider reflection |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-mcp-oauth-token-provider/task-intent-draft.json | AI Infra MCP OAuth Token Provider task intent draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-mcp-oauth-token-provider/baseline-read-set-hint.json | AI Infra MCP OAuth Token Provider baseline read-set hint |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-mcp-oauth-token-provider/impact-statement-draft.json | AI Infra MCP OAuth Token Provider impact statement draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-mcp-oauth-token-provider/todo-checkpoint-draft.json | AI Infra MCP OAuth Token Provider todo checkpoint draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-mcp-oauth-token-provider/drift-check-draft.json | AI Infra MCP OAuth Token Provider drift check draft |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/10-intent.md | AI Infra Sandbox Runtime Foundation intent |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/20-checkpoint.md | AI Infra Sandbox Runtime Foundation checkpoint |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/90-evidence.md | AI Infra Sandbox Runtime Foundation evidence |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/99-reflection.md | AI Infra Sandbox Runtime Foundation reflection |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/task-intent-draft.json | AI Infra Sandbox Runtime Foundation task intent draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/baseline-read-set-hint.json | AI Infra Sandbox Runtime Foundation baseline read-set hint |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/impact-statement-draft.json | AI Infra Sandbox Runtime Foundation impact statement draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/todo-checkpoint-draft.json | AI Infra Sandbox Runtime Foundation todo checkpoint draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/drift-check-draft.json | AI Infra Sandbox Runtime Foundation drift check draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/evidence-bundle-draft-red-sandbox-missing-contract.json | 2026-05-26-ai-infra-sandbox-runtime-foundation evidence red-sandbox-missing-contract |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/evidence-bundle-draft-green-sandbox-focused-regression.json | 2026-05-26-ai-infra-sandbox-runtime-foundation evidence green-sandbox-focused-regression |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/evidence-bundle-draft-diff-check.json | 2026-05-26-ai-infra-sandbox-runtime-foundation evidence diff-check |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/resume-state-hint.json | 2026-05-26-ai-infra-sandbox-runtime-foundation resume state hint |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/gate-input-pack.json | 2026-05-26-ai-infra-sandbox-runtime-foundation gate input pack |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-sandbox-runtime-foundation/proof-bundle.md | 2026-05-26-ai-infra-sandbox-runtime-foundation proof bundle |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/10-intent.md | AI Infra Agent Factory Kernel Foundation intent |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/20-checkpoint.md | AI Infra Agent Factory Kernel Foundation checkpoint |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/90-evidence.md | AI Infra Agent Factory Kernel Foundation evidence |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/99-reflection.md | AI Infra Agent Factory Kernel Foundation reflection |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/task-intent-draft.json | AI Infra Agent Factory Kernel Foundation task intent draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/baseline-read-set-hint.json | AI Infra Agent Factory Kernel Foundation baseline read-set hint |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/impact-statement-draft.json | AI Infra Agent Factory Kernel Foundation impact statement draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/todo-checkpoint-draft.json | AI Infra Agent Factory Kernel Foundation todo checkpoint draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/drift-check-draft.json | AI Infra Agent Factory Kernel Foundation drift check draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/evidence-bundle-draft-diff-check.json | 2026-05-26-ai-infra-agent-factory-kernel-foundation evidence diff-check |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/evidence-bundle-draft-green-agent-factory-kernel-regression.json | 2026-05-26-ai-infra-agent-factory-kernel-foundation evidence green-agent-factory-kernel-regression |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/evidence-bundle-draft-red-agent-factory-missing-contract.json | 2026-05-26-ai-infra-agent-factory-kernel-foundation evidence red-agent-factory-missing-contract |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/resume-state-hint.json | 2026-05-26-ai-infra-agent-factory-kernel-foundation resume state hint |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/gate-input-pack.json | 2026-05-26-ai-infra-agent-factory-kernel-foundation gate input pack |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-agent-factory-kernel-foundation/proof-bundle.md | 2026-05-26-ai-infra-agent-factory-kernel-foundation proof bundle |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-agent-factory-integration/10-intent.md | AI Infra Agent Factory Integration intent |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-agent-factory-integration/20-checkpoint.md | AI Infra Agent Factory Integration checkpoint |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-agent-factory-integration/90-evidence.md | AI Infra Agent Factory Integration evidence |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-agent-factory-integration/99-reflection.md | AI Infra Agent Factory Integration reflection |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-integration/task-intent-draft.json | AI Infra Agent Factory Integration task intent draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-integration/baseline-read-set-hint.json | AI Infra Agent Factory Integration baseline read-set hint |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-integration/impact-statement-draft.json | AI Infra Agent Factory Integration impact statement draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-integration/todo-checkpoint-draft.json | AI Infra Agent Factory Integration todo checkpoint draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-agent-factory-integration/drift-check-draft.json | AI Infra Agent Factory Integration drift check draft |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-phase3-worker-hardening/10-intent.md | AI Infra Phase 3 Worker Hardening intent |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-phase3-worker-hardening/20-checkpoint.md | AI Infra Phase 3 Worker Hardening checkpoint |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-phase3-worker-hardening/90-evidence.md | AI Infra Phase 3 Worker Hardening evidence |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-ai-infra-phase3-worker-hardening/99-reflection.md | AI Infra Phase 3 Worker Hardening reflection |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-phase3-worker-hardening/task-intent-draft.json | AI Infra Phase 3 Worker Hardening task intent draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-phase3-worker-hardening/baseline-read-set-hint.json | AI Infra Phase 3 Worker Hardening baseline read-set hint |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-phase3-worker-hardening/impact-statement-draft.json | AI Infra Phase 3 Worker Hardening impact statement draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-phase3-worker-hardening/todo-checkpoint-draft.json | AI Infra Phase 3 Worker Hardening todo checkpoint draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-ai-infra-phase3-worker-hardening/drift-check-draft.json | AI Infra Phase 3 Worker Hardening drift check draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/resume-state-hint.json | 2026-05-25-ai-infra-phase-plan-refresh resume state hint |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/evidence-bundle-draft-final-ai-infra-completion-audit.json | 2026-05-25-ai-infra-phase-plan-refresh evidence final-ai-infra-completion-audit |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/gate-input-pack.json | 2026-05-25-ai-infra-phase-plan-refresh gate input pack |
+| 2026-05-26 | work | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/proof-bundle.md | 2026-05-25-ai-infra-phase-plan-refresh proof bundle |

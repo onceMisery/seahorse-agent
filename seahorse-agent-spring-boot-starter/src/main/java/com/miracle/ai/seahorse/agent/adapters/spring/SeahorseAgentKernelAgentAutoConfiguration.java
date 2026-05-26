@@ -30,9 +30,12 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.output.OutputGover
 import com.miracle.ai.seahorse.agent.kernel.application.agent.output.SelfHealingOutputRepairService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunWorkerService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunResumeService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgentHandoffService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.LocalAgentAsToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJsonSupport;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
@@ -46,9 +49,12 @@ import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrato
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkerInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
@@ -276,6 +282,35 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean({
+            AgentRunQueueRepositoryPort.class,
+            AgentRunRepositoryPort.class,
+            AgentCheckpointRepositoryPort.class,
+            ApprovalRequestQueryPort.class,
+            AgentRunLeaseInboundPort.class,
+            AgentRunResumeInboundPort.class
+    })
+    @ConditionalOnMissingBean(AgentRunWorkerInboundPort.class)
+    public KernelAgentRunWorkerService seahorseAgentRunWorkerInboundPort(
+            AgentRunQueueRepositoryPort agentRunQueueRepositoryPort,
+            AgentRunRepositoryPort agentRunRepositoryPort,
+            AgentCheckpointRepositoryPort agentCheckpointRepositoryPort,
+            ApprovalRequestQueryPort approvalRequestQueryPort,
+            AgentRunLeaseInboundPort agentRunLeaseInboundPort,
+            AgentRunResumeInboundPort agentRunResumeInboundPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelAgentRunWorkerService(
+                agentRunQueueRepositoryPort,
+                agentRunRepositoryPort,
+                agentCheckpointRepositoryPort,
+                approvalRequestQueryPort,
+                agentRunLeaseInboundPort,
+                agentRunResumeInboundPort,
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
     @ConditionalOnMissingBean
     public AgentRunStepRecorder seahorseAgentRunStepRecorder(
             ObjectProvider<AgentRunRepositoryPort> agentRunRepositoryPort,
@@ -355,6 +390,14 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @ConditionalOnMissingBean
     public GetDateTimeToolPortAdapter seahorseGetDateTimeToolPortAdapter() {
         return new GetDateTimeToolPortAdapter();
+    }
+
+    @Bean
+    @ConditionalOnAgentModeEnabled
+    @ConditionalOnBean(KernelAgentHandoffService.class)
+    @ConditionalOnMissingBean
+    public LocalAgentAsToolPort seahorseLocalAgentAsToolPort(KernelAgentHandoffService handoffService) {
+        return new LocalAgentAsToolPort(handoffService);
     }
 
     @Bean
