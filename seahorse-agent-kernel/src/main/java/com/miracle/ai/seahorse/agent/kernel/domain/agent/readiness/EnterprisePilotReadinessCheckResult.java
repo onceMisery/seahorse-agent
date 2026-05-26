@@ -29,7 +29,7 @@ public record EnterprisePilotReadinessCheckResult(EnterprisePilotReadinessCheckC
                                                   String message,
                                                   Instant checkedAt) {
 
-    private static final List<String> FORBIDDEN_EVIDENCE_FRAGMENTS = List.of(
+    private static final List<String> FORBIDDEN_RAW_FRAGMENTS = List.of(
             "secret-token",
             "rawprompt",
             "rawtooloutput",
@@ -42,7 +42,7 @@ public record EnterprisePilotReadinessCheckResult(EnterprisePilotReadinessCheckC
         status = Objects.requireNonNullElse(status, EnterprisePilotReadinessStatus.FAIL);
         reasonCode = Objects.requireNonNull(reasonCode, "reasonCode must not be null");
         evidenceRef = requireSafeEvidenceRef(evidenceRef);
-        message = defaultText(message, code.name());
+        message = requireSafeMessage(defaultText(message, code.name()));
         checkedAt = Objects.requireNonNull(checkedAt, "checkedAt must not be null");
     }
 
@@ -62,11 +62,20 @@ public record EnterprisePilotReadinessCheckResult(EnterprisePilotReadinessCheckC
         if (trimmed == null) {
             throw new IllegalArgumentException("evidenceRef must not be blank");
         }
-        String normalized = trimmed.toLowerCase(Locale.ROOT);
-        if (FORBIDDEN_EVIDENCE_FRAGMENTS.stream().anyMatch(normalized::contains)) {
-            throw new IllegalArgumentException("evidenceRef must not contain raw sensitive evidence");
-        }
+        rejectRawSensitiveEvidence(trimmed, "evidenceRef");
         return trimmed;
+    }
+
+    private static String requireSafeMessage(String value) {
+        rejectRawSensitiveEvidence(value, "message");
+        return value;
+    }
+
+    private static void rejectRawSensitiveEvidence(String value, String fieldName) {
+        String normalized = value.toLowerCase(Locale.ROOT);
+        if (FORBIDDEN_RAW_FRAGMENTS.stream().anyMatch(normalized::contains)) {
+            throw new IllegalArgumentException(fieldName + " must not contain raw sensitive evidence");
+        }
     }
 
     private static String defaultText(String value, String fallback) {

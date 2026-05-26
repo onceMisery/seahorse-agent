@@ -71,6 +71,17 @@ class EnterprisePilotReadinessReportTests {
                 NOW));
     }
 
+    @Test
+    void shouldRejectSecretLikeReadinessMessage() {
+        assertThrows(IllegalArgumentException.class, () -> new EnterprisePilotReadinessCheckResult(
+                EnterprisePilotReadinessCheckCode.AUDIT,
+                EnterprisePilotReadinessStatus.PASS,
+                EnterprisePilotReadinessReasonCode.AUDIT_READY,
+                "evidence:AUDIT",
+                "rawPrompt bearer secret-token",
+                NOW));
+    }
+
     private static EnterprisePilotReadinessReport report(List<EnterprisePilotReadinessCheckResult> results) {
         return new EnterprisePilotReadinessReport(
                 "readiness-1",

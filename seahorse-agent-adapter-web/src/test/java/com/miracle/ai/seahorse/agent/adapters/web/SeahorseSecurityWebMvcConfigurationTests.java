@@ -51,14 +51,12 @@ class SeahorseSecurityWebMvcConfigurationTests {
         mvc.perform(get("/prototype/ai-infra"))
                 .andExpect(status().isOk())
                 .andExpect(content().string("prototype"));
-
-        mvc.perform(get("/admin/ai-infra"))
-                .andExpect(status().isOk())
-                .andExpect(content().string("prototype"));
     }
 
     @Test
     void shouldNotTreatProtectedApiRoutesAsPublic() {
+        assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/prototype/ai-infra")).isTrue();
+        assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/admin/ai-infra")).isFalse();
         assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/user/me")).isFalse();
         assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/agents")).isFalse();
         assertThat(SeahorseSecurityWebMvcConfiguration.isPublicPath("/agent-runs/run-1")).isFalse();
