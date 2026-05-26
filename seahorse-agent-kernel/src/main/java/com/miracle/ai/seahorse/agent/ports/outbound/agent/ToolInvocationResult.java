@@ -21,13 +21,21 @@ package com.miracle.ai.seahorse.agent.ports.outbound.agent;
  * 工具调用结果。content 总是字符串（JSON 序列化由 Tool 实现负责），
  * 便于直接以 OpenAI 兼容 "tool" role 消息回填给 LLM。
  */
-public record ToolInvocationResult(boolean success, String content, String error) {
+public record ToolInvocationResult(boolean success, String content, String error, String approvalId) {
+
+    public ToolInvocationResult(boolean success, String content, String error) {
+        this(success, content, error, null);
+    }
 
     public static ToolInvocationResult ok(String content) {
-        return new ToolInvocationResult(true, content, null);
+        return new ToolInvocationResult(true, content, null, null);
     }
 
     public static ToolInvocationResult failed(String error) {
-        return new ToolInvocationResult(false, null, error);
+        return failed(error, null);
+    }
+
+    public static ToolInvocationResult failed(String error, String approvalId) {
+        return new ToolInvocationResult(false, null, error, approvalId);
     }
 }

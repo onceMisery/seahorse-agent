@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeature;
+import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeatureGate;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
@@ -26,6 +28,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
@@ -55,6 +58,8 @@ public class McpToolAllowlistRegistrar implements ApplicationRunner {
     private final McpToolRegistryPort mcpRegistry;
     private final ToolRegistryPort toolRegistry;
     private final ToolCatalogRepositoryPort toolCatalogRepository;
+    private final AdvancedFeatureGate advancedFeatureGate;
+    private final ToolProviderExposurePolicyPort providerExposurePolicy;
     private final List<String> includeToolIds;
     private final ObjectMapper objectMapper;
     private final Clock clock;
@@ -75,11 +80,35 @@ public class McpToolAllowlistRegistrar implements ApplicationRunner {
                                      List<String> includeToolIds,
                                      ObjectMapper objectMapper,
                                      Clock clock) {
+        this(adapter,
+                mcpRegistry,
+                toolRegistry,
+                toolCatalogRepository,
+                AdvancedFeatureGate.consumerWebDefaults(),
+                ToolProviderExposurePolicyPort.consumerWebDefaults(),
+                includeToolIds,
+                objectMapper,
+                clock);
+    }
+
+    public McpToolAllowlistRegistrar(McpToolPortAdapter adapter,
+                                     McpToolRegistryPort mcpRegistry,
+                                     ToolRegistryPort toolRegistry,
+                                     ToolCatalogRepositoryPort toolCatalogRepository,
+                                     AdvancedFeatureGate advancedFeatureGate,
+                                     ToolProviderExposurePolicyPort providerExposurePolicy,
+                                     List<String> includeToolIds,
+                                     ObjectMapper objectMapper,
+                                     Clock clock) {
         this.adapter = Objects.requireNonNull(adapter, "adapter must not be null");
         this.mcpRegistry = Objects.requireNonNull(mcpRegistry, "mcpRegistry must not be null");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry must not be null");
         this.toolCatalogRepository = Objects.requireNonNullElseGet(toolCatalogRepository,
                 ToolCatalogRepositoryPort::empty);
+        this.advancedFeatureGate = Objects.requireNonNullElseGet(advancedFeatureGate,
+                AdvancedFeatureGate::consumerWebDefaults);
+        this.providerExposurePolicy = Objects.requireNonNullElseGet(providerExposurePolicy,
+                ToolProviderExposurePolicyPort::consumerWebDefaults);
         this.includeToolIds = List.copyOf(Objects.requireNonNullElse(includeToolIds, List.of()));
         this.objectMapper = Objects.requireNonNullElseGet(objectMapper, ObjectMapper::new);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
@@ -87,6 +116,10 @@ public class McpToolAllowlistRegistrar implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        if (!advancedFeatureGate.isEnabled(AdvancedFeature.MCP_TOOL)
+                || !providerExposurePolicy.isProviderAllowed(ToolProvider.MCP)) {
+            return;
+        }
         for (String toolId : includeToolIds) {
             register(toolId);
         }

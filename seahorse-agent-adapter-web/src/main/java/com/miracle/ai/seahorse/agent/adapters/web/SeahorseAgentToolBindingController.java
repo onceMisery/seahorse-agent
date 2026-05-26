@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingItemCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingReplaceCommand;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -36,16 +37,35 @@ import java.util.Objects;
 public class SeahorseAgentToolBindingController {
 
     private final ObjectProvider<AgentToolBindingManagementInboundPort> bindingPortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseAgentToolBindingController(
             ObjectProvider<AgentToolBindingManagementInboundPort> bindingPortProvider) {
+        this(bindingPortProvider, AdvancedFeatureGate.allEnabledForTests());
+    }
+
+    @Autowired
+    public SeahorseAgentToolBindingController(
+            ObjectProvider<AgentToolBindingManagementInboundPort> bindingPortProvider,
+            ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(bindingPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseAgentToolBindingController(
+            ObjectProvider<AgentToolBindingManagementInboundPort> bindingPortProvider,
+            AdvancedFeatureGate advancedFeatureGate) {
         this.bindingPortProvider = bindingPortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @PutMapping("/api/agents/{agentId}/versions/{versionId}/tools")
     public ApiResponse<Object> replaceBindings(@PathVariable String agentId,
                                                @PathVariable String versionId,
                                                @RequestBody AgentToolBindingReplaceRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_TOOL_BINDING_MANAGEMENT);
         AgentToolBindingReplaceRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
         return ApiResponses.requireService(bindingPortProvider,
                 port -> port.replaceBindings(agentId, versionId, toCommand(safeRequest)));

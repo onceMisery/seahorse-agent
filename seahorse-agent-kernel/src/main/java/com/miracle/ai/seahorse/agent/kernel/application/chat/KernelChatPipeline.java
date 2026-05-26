@@ -80,6 +80,16 @@ public class KernelChatPipeline {
                               KernelRagTraceRecorder traceRecorder,
                               EmptyRetrievalStrategy emptyRetrievalStrategy,
                               Optional<ContextPackBuilderInboundPort> contextPackBuilder) {
+        this(preparationPorts, responsePorts, traceRecorder, emptyRetrievalStrategy, contextPackBuilder,
+                ConversationAttachmentContextAssembler.noop());
+    }
+
+    public KernelChatPipeline(ChatPreparationPorts preparationPorts,
+                              ChatResponsePorts responsePorts,
+                              KernelRagTraceRecorder traceRecorder,
+                              EmptyRetrievalStrategy emptyRetrievalStrategy,
+                              Optional<ContextPackBuilderInboundPort> contextPackBuilder,
+                              ConversationAttachmentContextAssembler attachmentContextAssembler) {
         ChatPreparationPorts safePreparationPorts = Objects.requireNonNull(preparationPorts,
                 "preparationPorts must not be null");
         ChatResponsePorts safeResponsePorts = Objects.requireNonNull(responsePorts, "responsePorts must not be null");
@@ -87,7 +97,7 @@ public class KernelChatPipeline {
         this.preparationSupport = new KernelChatPreparationSupport(safePreparationPorts);
         this.responseSupport = new KernelChatResponseSupport(safePreparationPorts, safeResponsePorts);
         this.emptyRetrievalStrategy = Objects.requireNonNullElse(emptyRetrievalStrategy, DEFAULT_EMPTY_RETRIEVAL_STRATEGY);
-        this.contextPackAssembler = new ContextPackRuntimeAssembler(contextPackBuilder);
+        this.contextPackAssembler = new ContextPackRuntimeAssembler(contextPackBuilder, attachmentContextAssembler);
     }
 
     /**

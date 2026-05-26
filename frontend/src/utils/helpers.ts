@@ -15,10 +15,20 @@ export function truncate(text: string, max = 36) {
   return `${text.slice(0, max)}...`;
 }
 
-export function buildQuery(params: Record<string, string | number | boolean | undefined | null>) {
+type QueryValue = string | number | boolean | undefined | null;
+
+export function buildQuery(params: Record<string, QueryValue | QueryValue[]>) {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null || value === "") return;
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (item !== undefined && item !== null && item !== "") {
+          search.append(key, String(item));
+        }
+      });
+      return;
+    }
     search.set(key, String(value));
   });
   const query = search.toString();

@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentDefinitionRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentArtifactRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentCatalogQueryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentCheckpointRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentEvalSummaryRepositoryAdapter;
@@ -46,6 +47,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolCatalogRep
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcToolInvocationAuditRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCatalogQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryRepositoryPort;
@@ -100,6 +102,14 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(AgentRunRepositoryPort.class)
     public JdbcAgentRunRepositoryAdapter seahorseJdbcAgentRunRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentRunRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentArtifactRepositoryPort.class)
+    public JdbcAgentArtifactRepositoryAdapter seahorseJdbcAgentArtifactRepositoryAdapter(DataSource dataSource) {
+        return new JdbcAgentArtifactRepositoryAdapter(dataSource);
     }
 
     @Bean

@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeT
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,13 +35,26 @@ import java.util.List;
 public class SeahorseSandboxController {
 
     private final ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
-    public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider) {
+    @Autowired
+    public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
+                                     ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(sandboxRuntimePortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseSandboxController(ObjectProvider<SandboxRuntimeInboundPort> sandboxRuntimePortProvider,
+                                     AdvancedFeatureGate advancedFeatureGate) {
         this.sandboxRuntimePortProvider = sandboxRuntimePortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @PostMapping("/api/sandbox/sessions")
     public ApiResponse<Object> createSession(@RequestBody SandboxSessionCreateRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
         SandboxSessionCreateRequest safeRequest = request == null
                 ? new SandboxSessionCreateRequest(null, null, null, false, List.of())
                 : request;
@@ -56,6 +70,7 @@ public class SeahorseSandboxController {
     @PostMapping("/api/sandbox/sessions/{sessionId}/execute")
     public ApiResponse<Object> execute(@PathVariable String sessionId,
                                        @RequestBody SandboxExecutionRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
         SandboxExecutionRequest safeRequest = request == null
                 ? new SandboxExecutionRequest(null, false, List.of())
                 : request;
@@ -69,11 +84,13 @@ public class SeahorseSandboxController {
 
     @PostMapping("/api/sandbox/sessions/{sessionId}/close")
     public ApiResponse<Object> close(@PathVariable String sessionId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
         return ApiResponses.requireService(sandboxRuntimePortProvider, port -> port.close(sessionId));
     }
 
     @GetMapping("/api/sandbox/sessions/{sessionId}/artifacts")
     public ApiResponse<Object> listArtifacts(@PathVariable String sessionId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
         return ApiResponses.requireService(sandboxRuntimePortProvider, port -> port.listArtifacts(sessionId));
     }
 

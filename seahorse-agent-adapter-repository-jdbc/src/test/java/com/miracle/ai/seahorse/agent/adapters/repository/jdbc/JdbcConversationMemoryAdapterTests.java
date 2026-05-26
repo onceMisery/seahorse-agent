@@ -69,6 +69,19 @@ class JdbcConversationMemoryAdapterTests {
         assertThat(history.get(0).getContent()).isEqualTo("hello");
     }
 
+    @Test
+    void shouldPersistAgentRunIdWhenAppendingAssistantMessage() {
+        adapter.append("conv-1", "user-1", ChatMessage.assistant("answer"), "run-1");
+
+        String runId = jdbcTemplate.queryForObject("""
+                SELECT agent_run_id
+                FROM t_message
+                WHERE conversation_id = ? AND user_id = ? AND role = ?
+                """, String.class, "conv-1", "user-1", "assistant");
+
+        assertThat(runId).isEqualTo("run-1");
+    }
+
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_message");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_conversation");
@@ -93,6 +106,7 @@ class JdbcConversationMemoryAdapterTests {
                     content TEXT NOT NULL,
                     thinking_content TEXT,
                     thinking_duration INTEGER,
+                    agent_run_id VARCHAR(64),
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
@@ -105,8 +119,8 @@ class JdbcConversationMemoryAdapterTests {
         jdbcTemplate.update("""
                 INSERT INTO t_message
                 (id, conversation_id, user_id, role, content, thinking_content, thinking_duration,
-                 create_time, update_time, deleted)
-                VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, 0)
+                 agent_run_id, create_time, update_time, deleted)
+                VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, 0)
                 """, id, conversationId, userId, role, content, timestamp, timestamp);
     }
 }

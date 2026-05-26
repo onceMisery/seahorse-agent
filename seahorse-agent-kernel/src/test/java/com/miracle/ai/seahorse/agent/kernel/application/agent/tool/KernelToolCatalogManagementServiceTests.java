@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class KernelToolCatalogManagementServiceTests {
@@ -43,13 +44,16 @@ class KernelToolCatalogManagementServiceTests {
 
     @Test
     void shouldPageAndFindCatalogEntriesBehindAdminBoundary() {
-        MemoryToolCatalogRepository repository = new MemoryToolCatalogRepository(tool(true));
+        MemoryToolCatalogRepository repository = new MemoryToolCatalogRepository(tool(
+                "weather_query",
+                ToolProvider.BUILTIN,
+                true));
         KernelToolCatalogManagementService service = new KernelToolCatalogManagementService(repository, adminUser());
 
-        ToolCatalogPage page = service.page("MCP", "weather", 2L, 20L, true);
+        ToolCatalogPage page = service.page("BUILTIN", "weather", 2L, 20L, true);
         Optional<ToolCatalogEntry> found = service.findById("weather_query");
 
-        assertEquals("MCP", repository.lastQuery.resourceType());
+        assertEquals("BUILTIN", repository.lastQuery.resourceType());
         assertEquals("weather", repository.lastQuery.keyword());
         assertEquals(2L, repository.lastQuery.current());
         assertEquals(20L, repository.lastQuery.size());
@@ -60,7 +64,10 @@ class KernelToolCatalogManagementServiceTests {
 
     @Test
     void shouldEnableAndDisableCatalogEntry() {
-        MemoryToolCatalogRepository repository = new MemoryToolCatalogRepository(tool(true));
+        MemoryToolCatalogRepository repository = new MemoryToolCatalogRepository(tool(
+                "weather_query",
+                ToolProvider.BUILTIN,
+                true));
         KernelToolCatalogManagementService service = new KernelToolCatalogManagementService(repository, adminUser());
 
         ToolCatalogEntry disabled = service.disable("weather_query");
@@ -72,9 +79,26 @@ class KernelToolCatalogManagementServiceTests {
     }
 
     @Test
+    void shouldHideAndRejectAdvancedProvidersInConsumerWebMode() {
+        MemoryToolCatalogRepository repository = new MemoryToolCatalogRepository(
+                tool("memory_read", ToolProvider.BUILTIN, true),
+                tool("mcp_weather", ToolProvider.MCP, true));
+        KernelToolCatalogManagementService service = new KernelToolCatalogManagementService(repository, adminUser());
+
+        ToolCatalogPage page = service.page(null, null, 1L, 10L, true);
+        Optional<ToolCatalogEntry> hidden = service.findById("mcp_weather");
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> service.enable("mcp_weather"));
+
+        assertEquals(List.of("memory_read"), page.records().stream().map(ToolCatalogEntry::toolId).toList());
+        assertTrue(hidden.isEmpty());
+        assertEquals("Tool provider is disabled in the current product mode", error.getMessage());
+    }
+
+    @Test
     void shouldRejectNonAdminAccess() {
         KernelToolCatalogManagementService service = new KernelToolCatalogManagementService(
-                new MemoryToolCatalogRepository(tool(true)), user());
+                new MemoryToolCatalogRepository(tool("weather_query", ToolProvider.BUILTIN, true)), user());
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> service.page(null, null, 1L, 10L, null));
@@ -82,17 +106,17 @@ class KernelToolCatalogManagementServiceTests {
         assertEquals("权限不足", error.getMessage());
     }
 
-    private static ToolCatalogEntry tool(boolean enabled) {
+    private static ToolCatalogEntry tool(String toolId, ToolProvider provider, boolean enabled) {
         return new ToolCatalogEntry(
-                "weather_query",
-                ToolProvider.MCP,
+                toolId,
+                provider,
                 "Weather Query",
                 "查询天气",
                 "{\"type\":\"object\"}",
                 null,
                 ToolRiskLevel.MEDIUM,
                 ToolActionType.EXECUTE,
-                "MCP",
+                provider.name(),
                 "platform",
                 enabled,
                 false,
@@ -112,8 +136,10 @@ class KernelToolCatalogManagementServiceTests {
         private final Map<String, ToolCatalogEntry> entries = new LinkedHashMap<>();
         private ToolCatalogQuery lastQuery;
 
-        private MemoryToolCatalogRepository(ToolCatalogEntry entry) {
-            entries.put(entry.toolId(), entry);
+        private MemoryToolCatalogRepository(ToolCatalogEntry... entries) {
+            for (ToolCatalogEntry entry : entries) {
+                this.entries.put(entry.toolId(), entry);
+            }
         }
 
         @Override

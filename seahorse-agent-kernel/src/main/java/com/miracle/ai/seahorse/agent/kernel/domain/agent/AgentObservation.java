@@ -20,7 +20,11 @@ package com.miracle.ai.seahorse.agent.kernel.domain.agent;
 /**
  * 工具调用观察值：循环把工具结果回填给 LLM 之前的中间形态。
  */
-public record AgentObservation(String toolCallId, boolean success, String content, String error) {
+public record AgentObservation(String toolCallId, boolean success, String content, String error, String approvalId) {
+
+    public AgentObservation(String toolCallId, boolean success, String content, String error) {
+        this(toolCallId, success, content, error, null);
+    }
 
     public AgentObservation {
         if (toolCallId == null || toolCallId.isBlank()) {
@@ -33,6 +37,10 @@ public record AgentObservation(String toolCallId, boolean success, String conten
     }
 
     public static AgentObservation failed(String toolCallId, String error) {
-        return new AgentObservation(toolCallId, false, null, error);
+        return failed(toolCallId, error, null);
+    }
+
+    public static AgentObservation failed(String toolCallId, String error, String approvalId) {
+        return new AgentObservation(toolCallId, false, null, error, approvalId);
     }
 }

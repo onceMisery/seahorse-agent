@@ -11,6 +11,8 @@ export interface ConversationMessageVO {
   conversationId: string;
   role: string;
   content: string;
+  agentRunId?: string | null;
+  runId?: string | null;
   thinkingContent?: string | null;
   thinkingDuration?: number | null;
   vote: number | null;

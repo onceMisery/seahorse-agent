@@ -46,6 +46,13 @@ public interface ConversationMemoryPort {
     default void append(String conversationId, String userId, ChatMessage message) {
     }
 
+    /**
+     * Append a conversation message with the agent run that produced it.
+     */
+    default void append(String conversationId, String userId, ChatMessage message, String agentRunId) {
+        append(conversationId, userId, message);
+    }
+
     static ConversationMemoryPort noop() {
         return (conversationId, userId, message) -> List.of();
     }

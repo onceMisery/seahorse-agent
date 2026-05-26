@@ -17,10 +17,17 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.AgentToolBinding;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingItemCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingReplaceCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.junit.jupiter.api.Test;
@@ -29,7 +36,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -82,6 +91,26 @@ class KernelAgentToolBindingManagementServiceTests {
     }
 
     @Test
+    void shouldRejectAdvancedProviderToolBindingsInConsumerWebMode() {
+        MemoryToolCatalogRepository toolCatalog = new MemoryToolCatalogRepository();
+        toolCatalog.save(tool("mcp_weather", ToolProvider.MCP));
+        KernelAgentToolBindingManagementService service = new KernelAgentToolBindingManagementService(
+                new MemoryAgentToolBindingRepository(),
+                adminUser(),
+                FIXED_CLOCK,
+                toolCatalog);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> service.replaceBindings(
+                        "agent-1",
+                        "agent-1-v1",
+                        new AgentToolBindingReplaceCommand(List.of(
+                                new AgentToolBindingItemCommand("mcp_weather", 3, null)))));
+
+        assertEquals("Tool provider is disabled in the current product mode", error.getMessage());
+    }
+
+    @Test
     void shouldRejectNonAdminAccess() {
         KernelAgentToolBindingManagementService service = new KernelAgentToolBindingManagementService(
                 new MemoryAgentToolBindingRepository(), user(), FIXED_CLOCK);
@@ -104,6 +133,24 @@ class KernelAgentToolBindingManagementServiceTests {
         return () -> Optional.of(new CurrentUser("user-1", "alice", "user", null));
     }
 
+    private static ToolCatalogEntry tool(String toolId, ToolProvider provider) {
+        return new ToolCatalogEntry(
+                toolId,
+                provider,
+                toolId,
+                null,
+                "{}",
+                null,
+                ToolRiskLevel.MEDIUM,
+                ToolActionType.EXECUTE,
+                provider.name(),
+                "platform",
+                true,
+                false,
+                FIXED_CLOCK.instant(),
+                FIXED_CLOCK.instant());
+    }
+
     private static final class MemoryAgentToolBindingRepository implements AgentToolBindingRepositoryPort {
         private final List<AgentToolBinding> bindings = new ArrayList<>();
         private String lastAgentId;
@@ -120,6 +167,30 @@ class KernelAgentToolBindingManagementServiceTests {
         @Override
         public List<AgentToolBinding> listBindings(String agentId, String versionId) {
             return List.copyOf(bindings);
+        }
+    }
+
+    private static final class MemoryToolCatalogRepository implements ToolCatalogRepositoryPort {
+
+        private final Map<String, ToolCatalogEntry> tools = new LinkedHashMap<>();
+
+        @Override
+        public void save(ToolCatalogEntry entry) {
+            tools.put(entry.toolId(), entry);
+        }
+
+        @Override
+        public Optional<ToolCatalogEntry> findById(String toolId) {
+            return Optional.ofNullable(tools.get(toolId));
+        }
+
+        @Override
+        public void setEnabled(String toolId, boolean enabled) {
+        }
+
+        @Override
+        public ToolCatalogPage page(ToolCatalogQuery query) {
+            return new ToolCatalogPage(List.copyOf(tools.values()), tools.size(), query.size(), query.current(), 1L);
         }
     }
 }

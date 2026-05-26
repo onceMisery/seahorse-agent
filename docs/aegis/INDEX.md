@@ -237,3 +237,12 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-26 | artifact | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/evidence-bundle-draft-final-ai-infra-completion-audit.json | 2026-05-25-ai-infra-phase-plan-refresh evidence final-ai-infra-completion-audit |
 | 2026-05-26 | artifact | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/gate-input-pack.json | 2026-05-25-ai-infra-phase-plan-refresh gate input pack |
 | 2026-05-26 | work | docs/aegis/work/2026-05-25-ai-infra-phase-plan-refresh/proof-bundle.md | 2026-05-25-ai-infra-phase-plan-refresh proof bundle |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/10-intent.md | C Web AI Infra Implementation intent |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/20-checkpoint.md | C Web AI Infra Implementation checkpoint |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/90-evidence.md | C Web AI Infra Implementation evidence |
+| 2026-05-26 | work | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/99-reflection.md | C Web AI Infra Implementation reflection |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/task-intent-draft.json | C Web AI Infra Implementation task intent draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/baseline-read-set-hint.json | C Web AI Infra Implementation baseline read-set hint |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/impact-statement-draft.json | C Web AI Infra Implementation impact statement draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/todo-checkpoint-draft.json | C Web AI Infra Implementation todo checkpoint draft |
+| 2026-05-26 | artifact | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/drift-check-draft.json | C Web AI Infra Implementation drift check draft |

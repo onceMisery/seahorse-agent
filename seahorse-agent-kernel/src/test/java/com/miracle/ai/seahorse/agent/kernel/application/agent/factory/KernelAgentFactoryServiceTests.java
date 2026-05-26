@@ -129,6 +129,40 @@ class KernelAgentFactoryServiceTests {
     }
 
     @Test
+    void shouldHideAndRejectTemplatesUsingAdvancedProviderToolsInConsumerWebMode() {
+        MemoryTemplateRepository templateRepository = new MemoryTemplateRepository(List.of(
+                templateWithTools(AgentTemplateId.KNOWLEDGE_ASSISTANT, AgentTemplateStatus.ENABLED, List.of("search")),
+                templateWithTools(AgentTemplateId.TOOL_OPERATOR, AgentTemplateStatus.ENABLED, List.of("mcp-weather"))));
+        RecordingDefinitionPort definitionPort = new RecordingDefinitionPort();
+        MemoryToolCatalogRepository toolCatalogRepository = new MemoryToolCatalogRepository();
+        toolCatalogRepository.save(tool("search", ToolProvider.BUILTIN, ToolRiskLevel.LOW, true, false));
+        toolCatalogRepository.save(tool("mcp-weather", ToolProvider.MCP, ToolRiskLevel.MEDIUM, true, false));
+        KernelAgentFactoryService service = new KernelAgentFactoryService(
+                templateRepository,
+                definitionPort,
+                new MemoryPublishCheckRepository(),
+                toolCatalogRepository);
+
+        List<AgentTemplate> templates = service.listTemplates(true);
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> service.createFromTemplate(new AgentFactoryCreateCommand(
+                        AgentTemplateId.TOOL_OPERATOR,
+                        "tenant-1",
+                        "bad-agent",
+                        "Bad Agent",
+                        null,
+                        "owner-1",
+                        "ops",
+                        List.of("mcp-weather"),
+                        AgentRiskLevel.LOW,
+                        null)));
+
+        assertEquals(List.of(AgentTemplateId.KNOWLEDGE_ASSISTANT),
+                templates.stream().map(AgentTemplate::templateId).toList());
+        assertEquals("Tool provider is disabled in the current product mode", error.getMessage());
+    }
+
+    @Test
     void shouldReturnStructuredPublishValidationReportWithWarningsBeforePhase8() {
         MemoryPublishCheckRepository checkRepository = new MemoryPublishCheckRepository();
         MemoryToolCatalogRepository toolCatalogRepository = new MemoryToolCatalogRepository();
@@ -319,6 +353,13 @@ class KernelAgentFactoryServiceTests {
     }
 
     private static AgentTemplate template(AgentTemplateId id, AgentTemplateStatus status) {
+        return templateWithTools(
+                id,
+                status,
+                id == AgentTemplateId.TOOL_OPERATOR ? List.of("search", "delete-customer") : List.of("search", "memory-read"));
+    }
+
+    private static AgentTemplate templateWithTools(AgentTemplateId id, AgentTemplateStatus status, List<String> toolIds) {
         return new AgentTemplate(
                 id,
                 status,
@@ -326,7 +367,7 @@ class KernelAgentFactoryServiceTests {
                 id.value() + " template",
                 id == AgentTemplateId.TOOL_OPERATOR ? AgentType.DOMAIN : AgentType.ASSISTANT,
                 id == AgentTemplateId.TOOL_OPERATOR ? AgentRiskLevel.HIGH : AgentRiskLevel.LOW,
-                id == AgentTemplateId.TOOL_OPERATOR ? List.of("search", "delete-customer") : List.of("search", "memory-read"),
+                toolIds,
                 "Base instructions for " + id.value(),
                 "{\"base\":true}");
     }
@@ -338,6 +379,28 @@ class KernelAgentFactoryServiceTests {
         return new ToolCatalogEntry(
                 toolId,
                 ToolProvider.BUILTIN,
+                toolId,
+                null,
+                "{}",
+                null,
+                riskLevel,
+                ToolActionType.EXECUTE,
+                null,
+                "platform",
+                enabled,
+                requiresApproval,
+                NOW,
+                NOW);
+    }
+
+    private static ToolCatalogEntry tool(String toolId,
+                                         ToolProvider provider,
+                                         ToolRiskLevel riskLevel,
+                                         boolean enabled,
+                                         boolean requiresApproval) {
+        return new ToolCatalogEntry(
+                toolId,
+                provider,
                 toolId,
                 null,
                 "{}",

@@ -73,6 +73,8 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         private final ConversationMemoryPort memoryPort;
         private final StringBuilder answer = new StringBuilder();
         private final StringBuilder thinking = new StringBuilder();
+        private String currentRunId;
+        private long runStartedAtMs;
 
         private LocalChatStreamCallback(SseEmitter emitter,
                                         String conversationId,
@@ -112,7 +114,20 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             if (streamTaskPort.isCancelled(taskId) || isBlank(runId)) {
                 return;
             }
+            currentRunId = runId;
+            runStartedAtMs = System.currentTimeMillis();
             sender.sendEvent(StreamEventType.META.value(), new StreamMetaPayload(conversationId, taskId, runId));
+            sender.sendEvent(StreamEventType.RUN_STARTED.value(),
+                    AgentStreamTimelineEvents.runStartedProtocol(runId, conversationId, taskId));
+            sender.sendEvent(StreamEventType.AGENT_TIMELINE.value(), AgentStreamTimelineEvents.runStarted(runId));
+        }
+
+        @Override
+        public void onEvent(String eventName, Object payload) {
+            if (streamTaskPort.isCancelled(taskId) || isBlank(eventName)) {
+                return;
+            }
+            sender.sendEvent(eventName, payload);
         }
 
         @Override
@@ -120,6 +135,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             if (streamTaskPort.isCancelled(taskId)) {
                 return;
             }
+            sendRunCompletedEvent();
             appendAssistantMessage();
             sender.sendEvent(StreamEventType.FINISH.value(), new StreamCompletionPayload(null, null));
             sender.sendEvent(StreamEventType.DONE.value(), DONE_PAYLOAD);
@@ -146,7 +162,17 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
                 return;
             }
             memoryPort.append(conversationId, userId,
-                    ChatMessage.assistant(answer.toString(), thinking.toString(), null));
+                    ChatMessage.assistant(answer.toString(), thinking.toString(), null),
+                    currentRunId);
+        }
+
+        private void sendRunCompletedEvent() {
+            if (isBlank(currentRunId) || runStartedAtMs <= 0L) {
+                return;
+            }
+            long durationMs = System.currentTimeMillis() - runStartedAtMs;
+            sender.sendEvent(StreamEventType.AGENT_TIMELINE.value(),
+                    AgentStreamTimelineEvents.runSucceeded(currentRunId, durationMs));
         }
 
         private void sendChunked(String type, String content) {

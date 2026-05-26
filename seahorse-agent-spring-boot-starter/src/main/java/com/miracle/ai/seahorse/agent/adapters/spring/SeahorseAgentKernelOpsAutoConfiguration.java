@@ -17,25 +17,33 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.kernel.application.conversation.KernelConversationAttachmentService;
 import com.miracle.ai.seahorse.agent.kernel.application.conversation.KernelConversationManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.dashboard.KernelDashboardService;
+import com.miracle.ai.seahorse.agent.kernel.application.feedback.KernelFeedbackEvaluationCandidateQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.feedback.KernelMessageFeedbackService;
 import com.miracle.ai.seahorse.agent.kernel.application.intent.KernelIntentTreeService;
 import com.miracle.ai.seahorse.agent.kernel.application.mapping.KernelQueryTermMappingService;
 import com.miracle.ai.seahorse.agent.kernel.application.sample.KernelSampleQuestionService;
+import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationAttachmentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.dashboard.DashboardInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.MessageFeedbackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.intent.IntentTreeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.mapping.QueryTermMappingInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.sample.SampleQuestionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.dashboard.DashboardRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidateQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import java.time.Duration;
 import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
@@ -65,11 +73,29 @@ public class SeahorseAgentKernelOpsAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({FeedbackEvaluationCandidateQueryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(FeedbackEvaluationCandidateQueryInboundPort.class)
+    public KernelFeedbackEvaluationCandidateQueryService seahorseFeedbackEvaluationCandidateQueryInboundPort(
+            FeedbackEvaluationCandidateQueryPort candidateQueryPort,
+            CurrentUserPort currentUserPort) {
+        return new KernelFeedbackEvaluationCandidateQueryService(candidateQueryPort, currentUserPort);
+    }
+
+    @Bean
     @ConditionalOnBean(ConversationRepositoryPort.class)
     @ConditionalOnMissingBean(ConversationManagementInboundPort.class)
     public KernelConversationManagementService seahorseConversationManagementInboundPort(
             ConversationRepositoryPort conversationRepositoryPort) {
         return new KernelConversationManagementService(conversationRepositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({ConversationAttachmentRepositoryPort.class, ObjectStoragePort.class})
+    @ConditionalOnMissingBean(ConversationAttachmentInboundPort.class)
+    public KernelConversationAttachmentService seahorseConversationAttachmentInboundPort(
+            ConversationAttachmentRepositoryPort attachmentRepositoryPort,
+            ObjectStoragePort objectStoragePort) {
+        return new KernelConversationAttachmentService(attachmentRepositoryPort, objectStoragePort);
     }
 
     @Bean

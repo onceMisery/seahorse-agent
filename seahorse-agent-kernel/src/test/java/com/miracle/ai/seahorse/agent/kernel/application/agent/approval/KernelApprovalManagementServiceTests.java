@@ -41,6 +41,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class KernelApprovalManagementServiceTests {
@@ -68,6 +69,26 @@ class KernelApprovalManagementServiceTests {
     }
 
     @Test
+    void shouldListPendingApprovalsByRunForOwningUser() {
+        MemoryApprovalRepository repository = new MemoryApprovalRepository(List.of(
+                approval("approval-1", "run-1", "user-1", ApprovalRequestStatus.PENDING),
+                approval("approval-2", "run-1", "user-2", ApprovalRequestStatus.PENDING),
+                approval("approval-3", "run-2", "user-1", ApprovalRequestStatus.PENDING),
+                approval("approval-4", "run-1", "user-1", ApprovalRequestStatus.APPROVED)));
+        ApprovalManagementInboundPort service = new KernelApprovalManagementService(
+                repository,
+                repository,
+                user(),
+                FIXED_CLOCK);
+
+        List<ApprovalRequest> approvals = service.listPendingByRunId("run-1");
+
+        assertEquals("run-1", repository.lastQuery.runId());
+        assertEquals(ApprovalRequestStatus.PENDING, repository.lastQuery.status());
+        assertEquals(List.of("approval-1"), approvals.stream().map(ApprovalRequest::approvalId).toList());
+    }
+
+    @Test
     void shouldApprovePendingApprovalWithCurrentAdmin() {
         MemoryApprovalRepository repository = new MemoryApprovalRepository(
                 List.of(approval("approval-1", ApprovalRequestStatus.PENDING)));
@@ -87,6 +108,43 @@ class KernelApprovalManagementServiceTests {
         assertEquals("Looks safe", decided.decisionComment());
         assertEquals(ApprovalRequestStatus.PENDING, repository.lastDecision.fromStatus());
         assertEquals(ApprovalRequestStatus.APPROVED, repository.lastDecision.toStatus());
+    }
+
+    @Test
+    void shouldApprovePendingApprovalWithOwningUser() {
+        MemoryApprovalRepository repository = new MemoryApprovalRepository(
+                List.of(approval("approval-1", "run-1", "user-1", ApprovalRequestStatus.PENDING)));
+        ApprovalManagementInboundPort service = new KernelApprovalManagementService(
+                repository,
+                repository,
+                user(),
+                FIXED_CLOCK);
+
+        ApprovalRequest decided = service.approve(
+                "approval-1",
+                new ApprovalDecisionCommand("Confirmed from chat"));
+
+        assertEquals(ApprovalRequestStatus.APPROVED, decided.status());
+        assertEquals("user-1", decided.decidedBy());
+        assertEquals(NOW, decided.decidedAt());
+        assertEquals("Confirmed from chat", decided.decisionComment());
+        assertEquals(ApprovalRequestStatus.APPROVED, repository.lastDecision.toStatus());
+    }
+
+    @Test
+    void shouldRejectDecisionWhenUserDoesNotOwnApproval() {
+        MemoryApprovalRepository repository = new MemoryApprovalRepository(
+                List.of(approval("approval-1", "run-1", "user-2", ApprovalRequestStatus.PENDING)));
+        ApprovalManagementInboundPort service = new KernelApprovalManagementService(
+                repository,
+                repository,
+                user(),
+                FIXED_CLOCK);
+
+        assertThrows(IllegalStateException.class,
+                () -> service.approve("approval-1", new ApprovalDecisionCommand("not mine")));
+
+        assertNull(repository.lastDecision);
     }
 
     @Test
@@ -162,13 +220,20 @@ class KernelApprovalManagementServiceTests {
     }
 
     private static ApprovalRequest approval(String approvalId, ApprovalRequestStatus status) {
+        return approval(approvalId, "run-1", "user-1", status);
+    }
+
+    private static ApprovalRequest approval(String approvalId,
+                                            String runId,
+                                            String userId,
+                                            ApprovalRequestStatus status) {
         return new ApprovalRequest(
                 approvalId,
-                "run-1",
+                runId,
                 "step-1",
                 "invocation-1",
                 "tenant-1",
-                "user-1",
+                userId,
                 "agent-1",
                 "memory-forget",
                 ApprovalType.TOOL_EXECUTION,
@@ -212,7 +277,8 @@ class KernelApprovalManagementServiceTests {
         public ApprovalRequestPage page(ApprovalRequestQuery query) {
             lastQuery = query;
             List<ApprovalRequest> records = approvalsById.values().stream()
-                    .filter(approval -> approval.tenantId().equals(query.tenantId()))
+                    .filter(approval -> query.tenantId() == null || approval.tenantId().equals(query.tenantId()))
+                    .filter(approval -> query.runId() == null || approval.runId().equals(query.runId()))
                     .filter(approval -> approval.status() == query.status())
                     .toList();
             return new ApprovalRequestPage(records, records.size(), query.size(), query.current(), 1L);

@@ -28,6 +28,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManag
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryReviewService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryTraceQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.InMemoryMemoryPolicyConfigPort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.InMemoryUserMemoryPrivacySettingPort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelUserMemoryPrivacyService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryDecayOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryCaptureRules;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryEngineOptions;
@@ -35,6 +37,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryGovernanceS
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryManagementServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryOutboxRelayService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.RuleBasedMemoryCandidateExtractor;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.UserMemoryPrivacyAwareMemoryEnginePort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.DefaultMemoryAggregationService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.ExplicitCueMemoryAggregationTopicShiftDetector;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.InMemoryMemoryAggregationBufferPort;
@@ -71,6 +74,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryRecallGoldenHarnessInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryTraceInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.memory.UserMemoryPrivacyInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
@@ -112,6 +116,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackR
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRetrievalPipelinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.UserMemoryPrivacySettingPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
@@ -164,6 +169,19 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     private static final String MEMORY_REFINER_ENABLED_PROPERTY = "seahorse-agent.memory.refiner.enabled";
 
     @Bean
+    @ConditionalOnMissingBean(UserMemoryPrivacySettingPort.class)
+    public InMemoryUserMemoryPrivacySettingPort seahorseUserMemoryPrivacySettingPort() {
+        return new InMemoryUserMemoryPrivacySettingPort();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(UserMemoryPrivacyInboundPort.class)
+    public KernelUserMemoryPrivacyService seahorseUserMemoryPrivacyInboundPort(
+            UserMemoryPrivacySettingPort settingPort) {
+        return new KernelUserMemoryPrivacyService(settingPort);
+    }
+
+    @Bean
     @ConditionalOnMissingBean(MemoryTraceRecorder.class)
     public MemoryTraceRecorder seahorseMemoryTraceRecorder(MemoryProperties memoryProperties) {
         return new InMemoryMemoryTraceRecorder(memoryProperties.getTrace().getMaxEvents());
@@ -197,7 +215,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     @Bean
     @ConditionalOnBean({ShortTermMemoryPort.class, LongTermMemoryPort.class, SemanticMemoryPort.class})
     @ConditionalOnMissingBean(MemoryEnginePort.class)
-    public DefaultMemoryEnginePort seahorseDefaultMemoryEnginePort(
+    public MemoryEnginePort seahorseDefaultMemoryEnginePort(
             ShortTermMemoryPort shortTermMemoryPort,
             LongTermMemoryPort longTermMemoryPort,
             SemanticMemoryPort semanticMemoryPort,
@@ -218,6 +236,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
             ObjectProvider<MemoryReviewFeedbackRepositoryPort> memoryReviewFeedbackRepositoryPort,
             ObjectProvider<MemoryKeywordIndexPort> memoryKeywordIndexPort,
             ObjectProvider<MemoryGraphIndexPort> memoryGraphIndexPort,
+            ObjectProvider<UserMemoryPrivacySettingPort> userMemoryPrivacySettingPort,
             ObjectProvider<ObjectMapper> objectMapperProvider,
             Environment environment,
             MemoryCaptureRuleProperties captureRuleProperties,
@@ -244,7 +263,7 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 refiner.getFeedbackExampleLimit(),
                 refiner.getStickyAnchorImportanceThreshold(),
                 refiner.getStickyAnchorConfidenceThreshold());
-        return new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort delegate = new DefaultMemoryEnginePort(
                 shortTermMemoryPort,
                 longTermMemoryPort,
                 semanticMemoryPort,
@@ -266,6 +285,9 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 memoryReviewPolicyPort.getIfAvailable(MemoryReviewPolicyPort::defaults),
                 memoryReviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty),
                 captureRuleProperties == null ? MemoryCaptureRules.defaults() : captureRuleProperties.toRules());
+        return new UserMemoryPrivacyAwareMemoryEnginePort(
+                delegate,
+                userMemoryPrivacySettingPort.getIfAvailable(UserMemoryPrivacySettingPort::defaults));
     }
 
     private boolean memoryRefinerEnabled(Environment environment, boolean refinerAvailable) {

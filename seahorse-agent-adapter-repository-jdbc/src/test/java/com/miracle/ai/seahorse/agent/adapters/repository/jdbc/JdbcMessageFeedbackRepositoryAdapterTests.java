@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackSubmission;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -70,6 +71,27 @@ class JdbcMessageFeedbackRepositoryAdapterTests {
                 .hasMessageContaining("assistant message not found");
     }
 
+    @Test
+    void shouldPageDislikedAssistantFeedbackEvaluationCandidates() {
+        insertMessage("msg-1", "conv-1", "user-1", "assistant", "run-1", "candidate answer");
+        insertMessage("msg-2", "conv-1", "user-1", "assistant", "run-2", "other run");
+        insertMessage("msg-3", "conv-1", "user-1", "assistant", "run-1", "liked answer");
+        adapter.upsert(new MessageFeedbackSubmission("msg-1", "user-1", -1, "incorrect", "needs fact fix",
+                Instant.now()));
+        adapter.upsert(new MessageFeedbackSubmission("msg-2", "user-1", -1, "incorrect", "wrong run",
+                Instant.now()));
+        adapter.upsert(new MessageFeedbackSubmission("msg-3", "user-1", 1, "good", "useful", Instant.now()));
+
+        var page = adapter.page(new FeedbackEvaluationCandidateQuery("user-1", "run-1", "incorrect", 1L, 10L));
+
+        assertThat(page.total()).isEqualTo(1L);
+        assertThat(page.records()).hasSize(1);
+        assertThat(page.records().get(0).messageId()).isEqualTo("msg-1");
+        assertThat(page.records().get(0).agentRunId()).isEqualTo("run-1");
+        assertThat(page.records().get(0).content()).isEqualTo("candidate answer");
+        assertThat(page.records().get(0).vote()).isEqualTo(-1);
+    }
+
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_message_feedback");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_message");
@@ -80,6 +102,7 @@ class JdbcMessageFeedbackRepositoryAdapterTests {
                     user_id VARCHAR(20) NOT NULL,
                     role VARCHAR(16) NOT NULL,
                     content TEXT NOT NULL,
+                    agent_run_id VARCHAR(64),
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
@@ -102,10 +125,15 @@ class JdbcMessageFeedbackRepositoryAdapterTests {
     }
 
     private void insertMessage(String messageId, String conversationId, String userId, String role) {
+        insertMessage(messageId, conversationId, userId, role, null, "content");
+    }
+
+    private void insertMessage(String messageId, String conversationId, String userId, String role,
+                               String agentRunId, String content) {
         jdbcTemplate.update("""
                 INSERT INTO t_message
-                (id, conversation_id, user_id, role, content, create_time, update_time, deleted)
-                VALUES (?, ?, ?, ?, 'content', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
-                """, messageId, conversationId, userId, role);
+                (id, conversation_id, user_id, role, content, agent_run_id, create_time, update_time, deleted)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """, messageId, conversationId, userId, role, content, agentRunId);
     }
 }

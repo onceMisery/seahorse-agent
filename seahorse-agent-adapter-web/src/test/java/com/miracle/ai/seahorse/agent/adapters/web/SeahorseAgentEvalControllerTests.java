@@ -42,6 +42,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -63,7 +64,9 @@ class SeahorseAgentEvalControllerTests {
         when(port.history(org.mockito.ArgumentMatchers.any()))
                 .thenReturn(new AgentEvalSummaryPage(List.of(summary), 1L, 20L, 1L, 1L));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseAgentEvalController(provider(AgentEvalInboundPort.class, port))).build();
+                new SeahorseAgentEvalController(
+                        provider(AgentEvalInboundPort.class, port),
+                        AdvancedFeatureGate.allEnabledForTests())).build();
 
         mvc.perform(post("/api/agents/agent-1/versions/version-1/eval-summaries")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -129,6 +132,32 @@ class SeahorseAgentEvalControllerTests {
                 ArgumentCaptor.forClass(AgentEvalSummaryHistoryQuery.class);
         verify(port).history(queryCaptor.capture());
         assertThat(queryCaptor.getValue().tenantId()).isEqualTo("tenant-a");
+    }
+
+    @Test
+    void consumerWebModeShouldRejectAgentEvaluationApis() throws Exception {
+        AgentEvalInboundPort port = mock(AgentEvalInboundPort.class);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                        new SeahorseAgentEvalController(provider(AgentEvalInboundPort.class, port)))
+                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                .build();
+
+        mvc.perform(post("/api/agents/agent-1/versions/version-1/eval-summaries")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "summaryId": "summary-1",
+                                  "tenantId": "tenant-a",
+                                  "evalType": "SAFETY",
+                                  "status": "PASS"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.message")
+                        .value("Advanced feature AGENT_EVALUATION is disabled in CONSUMER_WEB mode"));
+
+        verifyNoInteractions(port);
     }
 
     private static AgentEvalSummary summary(String summaryId, AgentEvalStatus status) {

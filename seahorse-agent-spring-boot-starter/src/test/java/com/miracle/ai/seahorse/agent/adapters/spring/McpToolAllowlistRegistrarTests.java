@@ -17,6 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeature;
+import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeatureGate;
+import com.miracle.ai.seahorse.agent.adapters.web.ProductMode;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
@@ -25,6 +28,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolExecutorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
@@ -38,6 +42,7 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +60,7 @@ class McpToolAllowlistRegistrarTests {
 
     @Test
     void shouldWriteAllowlistedMcpToolToCatalogWithDefaultPolicyMetadata() {
-        contextRunner.withUserConfiguration(McpCatalogConfiguration.class)
+        contextRunner.withUserConfiguration(AdvancedMcpCatalogConfiguration.class)
                 .withPropertyValues(
                         "seahorse-agent.chat.agent-mode-enabled=true",
                         "seahorse-agent.chat.agent.tools.mcp.include=weather_query, missing_tool")
@@ -91,11 +96,46 @@ class McpToolAllowlistRegistrarTests {
                 });
     }
 
+    @Test
+    void shouldNotRegisterAllowlistedMcpToolInConsumerWebByDefault() {
+        contextRunner.withUserConfiguration(McpCatalogConfiguration.class)
+                .withPropertyValues(
+                        "seahorse-agent.chat.agent-mode-enabled=true",
+                        "seahorse-agent.chat.agent.tools.mcp.include=weather_query")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    context.getBeansOfType(ApplicationRunner.class)
+                            .values()
+                            .forEach(McpToolAllowlistRegistrarTests::run);
+
+                    InMemoryToolRegistry registry = context.getBean(InMemoryToolRegistry.class);
+                    assertThat(registry.find(WEATHER_TOOL_ID)).isEmpty();
+                    assertThat(context.getBean(RecordingToolCatalogRepository.class).savedEntries()).isEmpty();
+                });
+    }
+
     private static void run(ApplicationRunner runner) {
         try {
             runner.run(null);
         } catch (Exception ex) {
             throw new IllegalStateException(ex);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class AdvancedMcpCatalogConfiguration extends McpCatalogConfiguration {
+
+        @Bean
+        AdvancedFeatureGate advancedFeatureGate() {
+            EnumMap<AdvancedFeature, Boolean> features = new EnumMap<>(AdvancedFeature.class);
+            features.put(AdvancedFeature.MCP_TOOL, true);
+            return AdvancedFeatureGate.configured(ProductMode.ENTERPRISE_PLATFORM, features);
+        }
+
+        @Bean
+        ToolProviderExposurePolicyPort toolProviderExposurePolicyPort() {
+            return ToolProviderExposurePolicyPort.allEnabled();
         }
     }
 

@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.intent.IntentTreeInboundPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentNodePayload;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -37,24 +38,43 @@ import java.util.Objects;
 public class SeahorseIntentTreeController {
 
     private final ObjectProvider<IntentTreeInboundPort> intentTreePortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseIntentTreeController(ObjectProvider<IntentTreeInboundPort> intentTreePortProvider) {
+        this(intentTreePortProvider, AdvancedFeatureGate.allEnabledForTests());
+    }
+
+    @Autowired
+    public SeahorseIntentTreeController(ObjectProvider<IntentTreeInboundPort> intentTreePortProvider,
+                                        ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(intentTreePortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseIntentTreeController(ObjectProvider<IntentTreeInboundPort> intentTreePortProvider,
+                                        AdvancedFeatureGate advancedFeatureGate) {
         this.intentTreePortProvider = intentTreePortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @GetMapping("/intent-tree/trees")
     public ApiResponse<Object> tree() {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INTENT_TREE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(intentTreePortProvider, IntentTreeInboundPort::tree);
     }
 
     @PostMapping("/intent-tree")
     public ApiResponse<Object> createNode(@RequestBody IntentNodePayload request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INTENT_TREE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(intentTreePortProvider,
                 port -> port.create(Objects.requireNonNull(request, "request must not be null")));
     }
 
     @PutMapping("/intent-tree/{id}")
     public ApiResponse<Object> updateNode(@PathVariable String id, @RequestBody IntentNodePayload request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INTENT_TREE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(intentTreePortProvider, port -> {
             port.update(id, Objects.requireNonNull(request, "request must not be null"));
             return null;
@@ -63,6 +83,7 @@ public class SeahorseIntentTreeController {
 
     @DeleteMapping("/intent-tree/{id}")
     public ApiResponse<Object> deleteNode(@PathVariable String id) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INTENT_TREE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(intentTreePortProvider, port -> {
             port.delete(id);
             return null;
@@ -71,6 +92,7 @@ public class SeahorseIntentTreeController {
 
     @PostMapping("/intent-tree/batch/enable")
     public ApiResponse<Object> batchEnable(@RequestBody IntentNodeBatchRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INTENT_TREE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(intentTreePortProvider, port -> {
             port.batchEnable(Objects.requireNonNull(request, "request must not be null").ids());
             return null;
@@ -79,6 +101,7 @@ public class SeahorseIntentTreeController {
 
     @PostMapping("/intent-tree/batch/disable")
     public ApiResponse<Object> batchDisable(@RequestBody IntentNodeBatchRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INTENT_TREE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(intentTreePortProvider, port -> {
             port.batchDisable(Objects.requireNonNull(request, "request must not be null").ids());
             return null;
@@ -87,6 +110,7 @@ public class SeahorseIntentTreeController {
 
     @PostMapping("/intent-tree/batch/delete")
     public ApiResponse<Object> batchDelete(@RequestBody IntentNodeBatchRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INTENT_TREE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(intentTreePortProvider, port -> {
             port.batchDelete(Objects.requireNonNull(request, "request must not be null").ids());
             return null;

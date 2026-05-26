@@ -64,6 +64,52 @@ CREATE INDEX IF NOT EXISTS idx_sa_agent_run_user
 CREATE INDEX IF NOT EXISTS idx_sa_agent_run_worker_queue
   ON sa_agent_run(tenant_id, status, started_at, run_id);
 
+CREATE TABLE IF NOT EXISTS sa_agent_artifact (
+  artifact_id VARCHAR(64) PRIMARY KEY,
+  run_id VARCHAR(64) NOT NULL,
+  message_id VARCHAR(64),
+  tenant_id VARCHAR(64) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  artifact_type VARCHAR(32) NOT NULL,
+  title VARCHAR(256) NOT NULL,
+  mime_type VARCHAR(128) NOT NULL,
+  storage_ref VARCHAR(1000) NOT NULL,
+  preview_text TEXT,
+  provenance_json TEXT,
+  scan_status VARCHAR(32) NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  CONSTRAINT chk_sa_agent_artifact_type
+    CHECK (artifact_type IN ('REPORT', 'TABLE', 'CHART', 'HTML', 'IMAGE', 'FILE', 'MARKDOWN')),
+  CONSTRAINT chk_sa_agent_artifact_scan_status
+    CHECK (scan_status IN ('PENDING', 'CLEAN', 'BLOCKED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_artifact_run
+  ON sa_agent_artifact(run_id, created_at, artifact_id);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_artifact_user
+  ON sa_agent_artifact(tenant_id, user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS sa_conversation_attachment (
+  attachment_id VARCHAR(64) PRIMARY KEY,
+  conversation_id VARCHAR(64) NOT NULL,
+  message_id VARCHAR(64),
+  user_id VARCHAR(64) NOT NULL,
+  file_name VARCHAR(256) NOT NULL,
+  mime_type VARCHAR(128) NOT NULL,
+  size_bytes BIGINT NOT NULL,
+  storage_ref VARCHAR(1000) NOT NULL,
+  parse_status VARCHAR(32) NOT NULL,
+  resource_ref_json TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  deleted SMALLINT NOT NULL DEFAULT 0,
+  CONSTRAINT chk_sa_conversation_attachment_parse_status
+    CHECK (parse_status IN ('PENDING', 'PARSED', 'FAILED', 'BLOCKED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_conversation_attachment_user
+  ON sa_conversation_attachment(conversation_id, user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS sa_agent_step (
   step_id VARCHAR(64) PRIMARY KEY,
   run_id VARCHAR(64) NOT NULL,

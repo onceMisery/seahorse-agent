@@ -24,9 +24,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionTaskUpload
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimitDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -58,9 +58,11 @@ public class SeahorseIngestionTaskController {
     private final RateLimiterPort rateLimiterPort;
     private final int uploadRateLimitPermits;
     private final Duration uploadRateLimitWindow;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseIngestionTaskController(ObjectProvider<IngestionTaskInboundPort> taskPortProvider) {
-        this(taskPortProvider, RateLimiterPort.noop(), 20, Duration.ofMinutes(1).toMillis());
+        this(taskPortProvider, RateLimiterPort.noop(), 20, Duration.ofMinutes(1).toMillis(),
+                AdvancedFeatureGate.allEnabledForTests());
     }
 
     @Autowired
@@ -69,16 +71,30 @@ public class SeahorseIngestionTaskController {
                                            @Value("${seahorse-agent.web.upload-rate-limit.permits:20}")
                                            int uploadRateLimitPermits,
                                            @Value("${seahorse-agent.web.upload-rate-limit.window-ms:60000}")
-                                           long uploadRateLimitWindowMs) {
+                                           long uploadRateLimitWindowMs,
+                                           ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(taskPortProvider, rateLimiterPort, uploadRateLimitPermits, uploadRateLimitWindowMs,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseIngestionTaskController(ObjectProvider<IngestionTaskInboundPort> taskPortProvider,
+                                           RateLimiterPort rateLimiterPort,
+                                           int uploadRateLimitPermits,
+                                           long uploadRateLimitWindowMs,
+                                           AdvancedFeatureGate advancedFeatureGate) {
         this.taskPortProvider = taskPortProvider;
         this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPort, RateLimiterPort.noop());
         this.uploadRateLimitPermits = Math.max(1, uploadRateLimitPermits);
         this.uploadRateLimitWindow = Duration.ofMillis(Math.max(1L, uploadRateLimitWindowMs));
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @PostMapping("/ingestion/tasks")
     public Map<String, Object> create(@RequestBody IngestionTaskRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().execute(toCommand(request, operator(userId))));
     }
 
@@ -87,6 +103,7 @@ public class SeahorseIngestionTaskController {
                                       @RequestPart("file") MultipartFile file,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId)
             throws IOException {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
         String operator = operator(userId);
         checkUploadRateLimit(operator);
         IngestionTaskUploadCommand command = new IngestionTaskUploadCommand(
@@ -100,11 +117,13 @@ public class SeahorseIngestionTaskController {
 
     @GetMapping("/ingestion/tasks/{id}")
     public Map<String, Object> get(@PathVariable String id) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().get(id));
     }
 
     @GetMapping("/ingestion/tasks/{id}/nodes")
     public Map<String, Object> nodes(@PathVariable String id) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().listNodes(id));
     }
 
@@ -112,6 +131,7 @@ public class SeahorseIngestionTaskController {
     public Map<String, Object> page(@RequestParam(value = "pageNo", defaultValue = "1") long pageNo,
                                     @RequestParam(value = "pageSize", defaultValue = "10") long pageSize,
                                     @RequestParam(value = "status", required = false) String status) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().page(pageNo, pageSize, status));
     }
 

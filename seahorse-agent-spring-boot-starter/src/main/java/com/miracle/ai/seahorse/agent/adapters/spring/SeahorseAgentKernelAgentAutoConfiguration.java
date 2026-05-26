@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeatureGate;
+import com.miracle.ai.seahorse.agent.adapters.web.ProductMode;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.CatalogBackedToolPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
@@ -44,6 +46,9 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToo
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.QueryMetadataToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.web.WebFetchSafetyPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
@@ -68,6 +73,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPor
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolResourceAccessPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
@@ -77,6 +83,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkfl
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -85,19 +93,24 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.convert.DurationStyle;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Condition;
+import org.springframework.context.annotation.ConditionContext;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.core.env.Environment;
+import org.springframework.core.type.AnnotatedTypeMetadata;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 
 /**
- * AgentLoop 自动装配。默认关闭，仅在显式打开 agent-mode-enabled 后生效。
+ * AgentLoop 鑷姩瑁呴厤銆傞粯璁ゅ叧闂紝浠呭湪鏄惧紡鎵撳紑 agent-mode-enabled 鍚庣敓鏁堛€?
  */
 @AutoConfiguration
 @AutoConfigureAfter({
@@ -110,22 +123,36 @@ import java.util.List;
 public class SeahorseAgentKernelAgentAutoConfiguration {
 
     private static final String PROP_AGENT_ENABLED = "seahorse-agent.chat.agent-mode-enabled";
+    private static final String PROP_WEB_TASK_AGENT_ENABLED = "seahorse-agent.chat.web-task-agent-enabled";
     private static final String PROP_MAX_STEPS = "seahorse-agent.chat.agent.max-steps";
     private static final String PROP_PER_TOOL_TIMEOUT = "seahorse-agent.chat.agent.per-tool-timeout";
     private static final String PROP_MAX_PARALLEL_TOOLS = "seahorse-agent.chat.agent.max-parallel-tools";
     private static final String PROP_MCP_INCLUDE = "seahorse-agent.chat.agent.tools.mcp.include";
     private static final String PROP_SEARCH_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.search.enabled";
     private static final String PROP_MEMORY_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.memory.enabled";
+    private static final String PROP_WEB_RESEARCH_TOOLS_ENABLED =
+            "seahorse-agent.chat.agent.tools.web-research.enabled";
+    private static final String PROP_WEB_FETCH_TIMEOUT =
+            "seahorse-agent.chat.agent.tools.web-research.fetch-timeout";
+    private static final String PROP_WEB_FETCH_MAX_BYTES =
+            "seahorse-agent.chat.agent.tools.web-research.fetch-max-bytes";
+    private static final String PROP_WEB_FETCH_USER_AGENT =
+            "seahorse-agent.chat.agent.tools.web-research.user-agent";
+    private static final String PROP_PRODUCT_MODE = "seahorse-agent.product-mode";
+    private static final String PROP_ADVANCED_AGENT_HANDOFF =
+            "seahorse-agent.advanced.agent-handoff-enabled";
+    private static final String PROP_ADVANCED_LOCAL_AGENT =
+            "seahorse-agent.advanced.local-agent-enabled";
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnMissingBean(ToolRegistryPort.class)
     public InMemoryToolRegistry seahorseAgentToolRegistryPort() {
         return new InMemoryToolRegistry();
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnMissingBean
     public KernelAgentLoopOptions seahorseKernelAgentLoopOptions(Environment environment) {
         return KernelAgentLoopOptions.builder()
@@ -136,7 +163,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(StreamingChatModelPort.class)
     @ConditionalOnMissingBean
     public KernelAgentLoop seahorseKernelAgentLoop(StreamingChatModelPort modelPort,
@@ -160,21 +187,21 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnMissingBean(name = "seahorseJsonSchemaOutputValidator")
     public JsonSchemaOutputValidator seahorseJsonSchemaOutputValidator(ObjectProvider<ObjectMapper> objectMapper) {
         return new JsonSchemaOutputValidator(objectMapper.getIfAvailable(ObjectMapper::new));
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnMissingBean(name = "seahorseDdlSafetyOutputValidator")
     public DdlSafetyOutputValidator seahorseDdlSafetyOutputValidator() {
         return new DdlSafetyOutputValidator();
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(OutputRepairModelPort.class)
     @ConditionalOnMissingBean
     public SelfHealingOutputRepairService seahorseSelfHealingOutputRepairService(
@@ -183,7 +210,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnMissingBean
     public OutputGovernanceService seahorseOutputGovernanceService(
             ObjectProvider<OutputValidatorPort> validators,
@@ -200,7 +227,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean({ToolCatalogRepositoryPort.class, AgentToolBindingRepositoryPort.class})
     @ConditionalOnMissingBean
     public ToolPolicyPort seahorseCatalogBackedToolPolicyPort(
@@ -217,7 +244,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(ToolRegistryPort.class)
     @ConditionalOnMissingBean
     public ToolGatewayPort seahorseToolGatewayPort(ToolRegistryPort toolRegistry,
@@ -238,7 +265,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean({AgentRunRepositoryPort.class, AgentCheckpointRepositoryPort.class})
     @ConditionalOnMissingBean
     public AgentApprovalWaitHandler seahorseAgentApprovalWaitHandler(
@@ -252,7 +279,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean({
             AgentRunRepositoryPort.class,
             AgentCheckpointRepositoryPort.class,
@@ -281,7 +308,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean({
             AgentRunQueueRepositoryPort.class,
             AgentRunRepositoryPort.class,
@@ -310,7 +337,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnMissingBean
     public AgentRunStepRecorder seahorseAgentRunStepRecorder(
             ObjectProvider<AgentRunRepositoryPort> agentRunRepositoryPort,
@@ -323,14 +350,14 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnMissingBean
     public AgentToolJsonSupport seahorseAgentToolJsonSupport(ObjectProvider<ObjectMapper> objectMapper) {
         return new AgentToolJsonSupport(objectMapper.getIfAvailable(ObjectMapper::new));
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(KernelRetrievalEngine.class)
     @ConditionalOnProperty(name = PROP_SEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
@@ -341,7 +368,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnProperty(name = PROP_SEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public QueryMetadataToolPortAdapter seahorseQueryMetadataToolPortAdapter(AgentToolJsonSupport jsonSupport) {
@@ -349,7 +376,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(MemoryEnginePort.class)
     @ConditionalOnProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
@@ -359,7 +386,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(MemoryEnginePort.class)
     @ConditionalOnProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
@@ -375,7 +402,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(MemoryManagementInboundPort.class)
     @ConditionalOnProperty(name = PROP_MEMORY_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
@@ -386,14 +413,59 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnMissingBean
     public GetDateTimeToolPortAdapter seahorseGetDateTimeToolPortAdapter() {
         return new GetDateTimeToolPortAdapter();
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public WebFetchSafetyPolicy seahorseWebFetchSafetyPolicy() {
+        return new WebFetchSafetyPolicy();
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean(WebFetchPort.class)
+    public JdkHttpWebFetchPortAdapter seahorseWebFetchPort(ObjectProvider<HttpClient> httpClient,
+                                                           WebFetchSafetyPolicy safetyPolicy,
+                                                           Environment environment) {
+        return new JdkHttpWebFetchPortAdapter(
+                httpClient.getIfAvailable(),
+                safetyPolicy,
+                parseDuration(environment.getProperty(PROP_WEB_FETCH_TIMEOUT), Duration.ofSeconds(10)),
+                environment.getProperty(PROP_WEB_FETCH_MAX_BYTES, Integer.class, 512 * 1024),
+                environment.getProperty(PROP_WEB_FETCH_USER_AGENT));
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(WebFetchPort.class)
+    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public WebFetchToolPortAdapter seahorseWebFetchToolPortAdapter(WebFetchPort webFetchPort,
+                                                                   WebFetchSafetyPolicy safetyPolicy,
+                                                                   AgentToolJsonSupport jsonSupport) {
+        return new WebFetchToolPortAdapter(webFetchPort, safetyPolicy, jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(WebSearchPort.class)
+    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public WebSearchToolPortAdapter seahorseWebSearchToolPortAdapter(WebSearchPort webSearchPort,
+                                                                     AgentToolJsonSupport jsonSupport) {
+        return new WebSearchToolPortAdapter(webSearchPort, jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @Conditional(AdvancedLocalAgentToolEnabledCondition.class)
     @ConditionalOnBean(KernelAgentHandoffService.class)
     @ConditionalOnMissingBean
     public LocalAgentAsToolPort seahorseLocalAgentAsToolPort(KernelAgentHandoffService handoffService) {
@@ -401,7 +473,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(ToolRegistryPort.class)
     @ConditionalOnMissingBean
     public BuiltInAgentToolRegistrar seahorseBuiltInAgentToolRegistrar(
@@ -411,7 +483,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(KernelMcpOrchestrator.class)
     @ConditionalOnMissingBean
     public McpToolPortAdapter seahorseMcpToolPortAdapter(KernelMcpOrchestrator orchestrator) {
@@ -419,7 +491,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnAgentModeEnabled
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean({McpToolPortAdapter.class, McpToolRegistryPort.class, ToolRegistryPort.class})
     @ConditionalOnMissingBean
     public McpToolAllowlistRegistrar seahorseMcpToolAllowlistRegistrar(McpToolPortAdapter adapter,
@@ -427,6 +499,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                                         ToolRegistryPort toolRegistry,
                                                                         Environment environment,
                                                                         ObjectProvider<ToolCatalogRepositoryPort> toolCatalogRepository,
+                                                                        ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
+                                                                        ObjectProvider<ToolProviderExposurePolicyPort> toolProviderExposurePolicy,
                                                                         ObjectProvider<ObjectMapper> objectMapper,
                                                                         ObjectProvider<Clock> clockProvider) {
         return new McpToolAllowlistRegistrar(
@@ -434,6 +508,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 mcpRegistry,
                 toolRegistry,
                 toolCatalogRepository.getIfAvailable(ToolCatalogRepositoryPort::empty),
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults),
+                toolProviderExposurePolicy.getIfAvailable(ToolProviderExposurePolicyPort::consumerWebDefaults),
                 parseCsv(environment.getProperty(PROP_MCP_INCLUDE, "")),
                 objectMapper.getIfAvailable(ObjectMapper::new),
                 clockProvider.getIfAvailable(Clock::systemUTC));
@@ -459,7 +535,44 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Target({ElementType.METHOD, ElementType.TYPE})
     @Retention(RetentionPolicy.RUNTIME)
-    @ConditionalOnProperty(name = PROP_AGENT_ENABLED, havingValue = "true")
-    private @interface ConditionalOnAgentModeEnabled {
+    @Conditional(AgentRuntimeEnabledCondition.class)
+    private @interface ConditionalOnAgentRuntimeEnabled {
+    }
+
+    private static final class AgentRuntimeEnabledCondition implements Condition {
+
+        @Override
+        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            Environment environment = context.getEnvironment();
+            return isEnabled(environment, PROP_AGENT_ENABLED, false)
+                    || isEnabled(environment, PROP_WEB_TASK_AGENT_ENABLED, true);
+        }
+
+        private boolean isEnabled(Environment environment, String propertyName, boolean defaultValue) {
+            return Boolean.TRUE.equals(environment.getProperty(propertyName, Boolean.class, defaultValue));
+        }
+    }
+
+    private static final class AdvancedLocalAgentToolEnabledCondition implements Condition {
+
+        @Override
+        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            Environment environment = context.getEnvironment();
+            return !isConsumerWebMode(environment)
+                    && isEnabled(environment, PROP_ADVANCED_AGENT_HANDOFF)
+                    && isEnabled(environment, PROP_ADVANCED_LOCAL_AGENT);
+        }
+
+        private boolean isConsumerWebMode(Environment environment) {
+            try {
+                return ProductMode.fromProperty(environment.getProperty(PROP_PRODUCT_MODE)) == ProductMode.CONSUMER_WEB;
+            } catch (IllegalArgumentException ex) {
+                return true;
+            }
+        }
+
+        private boolean isEnabled(Environment environment, String propertyName) {
+            return Boolean.TRUE.equals(environment.getProperty(propertyName, Boolean.class, false));
+        }
     }
 }

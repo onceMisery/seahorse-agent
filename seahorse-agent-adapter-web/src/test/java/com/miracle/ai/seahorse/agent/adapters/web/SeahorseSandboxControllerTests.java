@@ -73,7 +73,9 @@ class SeahorseSandboxControllerTests {
         when(port.close("session-1")).thenReturn(session(SandboxExecutionStatus.CANCELLED));
         when(port.listArtifacts("session-1")).thenReturn(List.of(artifact()));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseSandboxController(provider(SandboxRuntimeInboundPort.class, port))).build();
+                new SeahorseSandboxController(
+                        provider(SandboxRuntimeInboundPort.class, port),
+                        AdvancedFeatureGate.allEnabledForTests())).build();
 
         mvc.perform(post("/api/sandbox/sessions")
                         .contentType(MediaType.APPLICATION_JSON)

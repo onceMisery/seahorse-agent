@@ -38,15 +38,51 @@ public class JdbcChatSchemaUpgrade {
     }
 
     public void upgrade() {
+        ensureConversationAttachmentTable();
         ensureMemoryProfileTables();
         widenColumns("t_conversation", List.of("id", "conversation_id", "user_id"));
         widenColumns("t_conversation_summary", List.of("id", "conversation_id", "user_id", "last_message_id"));
         widenColumns("t_message", List.of("id", "conversation_id", "user_id"));
+        ensureMessageRunLinkage();
         widenColumns("t_message_feedback", List.of("id", "message_id", "conversation_id", "user_id"));
         widenColumns("t_rag_trace_run", List.of("id", "trace_id", "conversation_id", "task_id", "user_id"));
         widenColumns("t_rag_trace_node", List.of("id", "trace_id", "node_id", "parent_node_id", "node_type"));
         widenColumns("t_short_term_memory", List.of("id", "user_id", "conversation_id"));
         ensureLayeredMemoryLifecycleColumns();
+    }
+
+    private void ensureConversationAttachmentTable() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_conversation_attachment (
+                    attachment_id VARCHAR(64) PRIMARY KEY,
+                    conversation_id VARCHAR(64) NOT NULL,
+                    message_id VARCHAR(64),
+                    user_id VARCHAR(64) NOT NULL,
+                    file_name VARCHAR(256) NOT NULL,
+                    mime_type VARCHAR(128) NOT NULL,
+                    size_bytes BIGINT NOT NULL,
+                    storage_ref VARCHAR(1000) NOT NULL,
+                    parse_status VARCHAR(32) NOT NULL,
+                    resource_ref_json TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    deleted SMALLINT NOT NULL DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sa_conversation_attachment_user
+                ON sa_conversation_attachment (conversation_id, user_id, created_at)
+                """);
+    }
+
+    private void ensureMessageRunLinkage() {
+        if (!tableExists("t_message")) {
+            return;
+        }
+        addColumnIfMissing("t_message", "agent_run_id", "VARCHAR(64)");
+        createIndexIfTableExists("t_message", """
+                CREATE INDEX IF NOT EXISTS idx_message_agent_run
+                ON t_message (agent_run_id, user_id, create_time)
+                """);
     }
 
     private void ensureMemoryProfileTables() {

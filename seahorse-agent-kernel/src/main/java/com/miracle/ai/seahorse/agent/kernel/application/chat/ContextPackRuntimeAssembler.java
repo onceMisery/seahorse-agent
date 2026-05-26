@@ -67,6 +67,7 @@ final class ContextPackRuntimeAssembler {
     private static final double DEFAULT_RAG_SCORE = 0.5D;
 
     private final Optional<ContextPackBuilderInboundPort> contextPackBuilder;
+    private final ConversationAttachmentContextAssembler attachmentContextAssembler;
     private final ObjectMapper objectMapper;
 
     ContextPackRuntimeAssembler() {
@@ -78,8 +79,21 @@ final class ContextPackRuntimeAssembler {
     }
 
     ContextPackRuntimeAssembler(Optional<ContextPackBuilderInboundPort> contextPackBuilder,
+                                ConversationAttachmentContextAssembler attachmentContextAssembler) {
+        this(contextPackBuilder, attachmentContextAssembler, new ObjectMapper());
+    }
+
+    ContextPackRuntimeAssembler(Optional<ContextPackBuilderInboundPort> contextPackBuilder,
+                                ObjectMapper objectMapper) {
+        this(contextPackBuilder, ConversationAttachmentContextAssembler.noop(), objectMapper);
+    }
+
+    ContextPackRuntimeAssembler(Optional<ContextPackBuilderInboundPort> contextPackBuilder,
+                                ConversationAttachmentContextAssembler attachmentContextAssembler,
                                 ObjectMapper objectMapper) {
         this.contextPackBuilder = contextPackBuilder == null ? Optional.empty() : contextPackBuilder;
+        this.attachmentContextAssembler = Objects.requireNonNullElseGet(
+                attachmentContextAssembler, ConversationAttachmentContextAssembler::noop);
         this.objectMapper = Objects.requireNonNullElseGet(objectMapper, ObjectMapper::new);
     }
 
@@ -97,6 +111,7 @@ final class ContextPackRuntimeAssembler {
         List<ContextBuildItemCandidate> candidates = new ArrayList<>();
         addUserInputCandidate(candidates, safeContext.getQuestion(), runId, userId,
                 AgentDefinition.DEFAULT_TENANT_ID);
+        addAttachmentCandidates(candidates, safeContext.getConversationId(), userId, safeContext.getAttachmentIds());
         addMemoryCandidates(candidates, safeContext.getMemoryContext(), userId, AgentDefinition.DEFAULT_TENANT_ID);
         addRagCandidates(candidates, retrievalContext, userId);
         return build(new ContextBuildRequest(
@@ -118,6 +133,20 @@ final class ContextPackRuntimeAssembler {
                                  String tenantId,
                                  String userId,
                                  MemoryContext memoryContext) {
+        return assembleForAgent(question, runId, taskId, agentId, versionId, tenantId, userId, memoryContext,
+                null, List.of());
+    }
+
+    ContextPack assembleForAgent(String question,
+                                 String runId,
+                                 String taskId,
+                                 String agentId,
+                                 String versionId,
+                                 String tenantId,
+                                 String userId,
+                                 MemoryContext memoryContext,
+                                 String conversationId,
+                                 List<String> attachmentIds) {
         String safeUserId = trimToNull(userId);
         if (safeUserId == null) {
             return null;
@@ -126,6 +155,7 @@ final class ContextPackRuntimeAssembler {
         String safeRunId = firstText(runId, generatedRunId(taskId));
         List<ContextBuildItemCandidate> candidates = new ArrayList<>();
         addUserInputCandidate(candidates, question, safeRunId, safeUserId, safeTenantId);
+        addAttachmentCandidates(candidates, conversationId, safeUserId, attachmentIds);
         addMemoryCandidates(candidates, memoryContext, safeUserId, safeTenantId);
         return build(new ContextBuildRequest(
                 safeRunId,
@@ -136,6 +166,13 @@ final class ContextPackRuntimeAssembler {
                 firstText(question, "agent task"),
                 DEFAULT_BUDGET_TOKENS,
                 candidates));
+    }
+
+    private void addAttachmentCandidates(List<ContextBuildItemCandidate> candidates,
+                                         String conversationId,
+                                         String userId,
+                                         List<String> attachmentIds) {
+        candidates.addAll(attachmentContextAssembler.assemble(conversationId, userId, attachmentIds));
     }
 
     private ContextPack build(ContextBuildRequest request) {

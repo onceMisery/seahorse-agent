@@ -17,12 +17,19 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidate;
+import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidatePage;
+import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidateQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackSubmission;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -34,9 +41,11 @@ import java.util.stream.Collectors;
  *
  * <p>复用 {@code t_message_feedback} 和 {@code t_message}，面向 Seahorse 原生反馈端口提供持久化能力。
  */
-public class JdbcMessageFeedbackRepositoryAdapter implements MessageFeedbackRepositoryPort {
+public class JdbcMessageFeedbackRepositoryAdapter
+        implements MessageFeedbackRepositoryPort, FeedbackEvaluationCandidateQueryPort {
 
     private static final String ROLE_ASSISTANT = "assistant";
+    private static final int DISLIKE_VOTE = -1;
     private static final String SQL_FIND_CONVERSATION = """
             SELECT conversation_id
             FROM t_message
@@ -63,6 +72,14 @@ public class JdbcMessageFeedbackRepositoryAdapter implements MessageFeedbackRepo
             SELECT message_id, vote
             FROM t_message_feedback
             WHERE user_id = ? AND deleted = 0 AND message_id IN (%s)
+            """;
+    private static final String SQL_CANDIDATE_BASE = """
+            FROM t_message_feedback f
+            JOIN t_message m
+              ON m.id = f.message_id AND m.user_id = f.user_id AND m.deleted = 0
+            WHERE f.deleted = 0
+              AND f.vote = ?
+              AND m.role = ?
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -101,6 +118,37 @@ public class JdbcMessageFeedbackRepositoryAdapter implements MessageFeedbackRepo
                 Map.entry(resultSet.getString("message_id"), resultSet.getInt("vote")), args)
                 .stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (first, second) -> first));
+    }
+
+    @Override
+    public FeedbackEvaluationCandidatePage page(FeedbackEvaluationCandidateQuery query) {
+        FeedbackEvaluationCandidateQuery safeQuery = query == null
+                ? new FeedbackEvaluationCandidateQuery(null, null, null, 1L, 10L)
+                : query;
+        QueryParts parts = candidateQueryParts(safeQuery);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(1) " + parts.whereSql(), Long.class, parts.args());
+        long safeTotal = total == null ? 0L : total;
+        long offset = (safeQuery.current() - 1L) * safeQuery.size();
+        Object[] pageArgs = appendPagingArgs(parts.args(), safeQuery.size(), offset);
+        List<FeedbackEvaluationCandidate> records = jdbcTemplate.query("""
+                        SELECT f.id AS feedback_id,
+                               f.message_id,
+                               f.conversation_id,
+                               f.user_id,
+                               m.agent_run_id,
+                               f.vote,
+                               f.reason,
+                               f.comment,
+                               m.content,
+                               f.create_time
+                        """ + parts.whereSql() + """
+                        ORDER BY f.create_time DESC, f.id DESC
+                        LIMIT ? OFFSET ?
+                        """,
+                this::mapCandidate,
+                pageArgs);
+        long pages = safeTotal == 0L ? 0L : (long) Math.ceil((double) safeTotal / safeQuery.size());
+        return new FeedbackEvaluationCandidatePage(records, safeTotal, safeQuery.size(), safeQuery.current(), pages);
     }
 
     private String requireAssistantConversation(MessageFeedbackSubmission feedback) {
@@ -155,6 +203,49 @@ public class JdbcMessageFeedbackRepositoryAdapter implements MessageFeedbackRepo
         return args;
     }
 
+    private QueryParts candidateQueryParts(FeedbackEvaluationCandidateQuery query) {
+        List<Object> args = new ArrayList<>();
+        args.add(DISLIKE_VOTE);
+        args.add(ROLE_ASSISTANT);
+        StringBuilder where = new StringBuilder(SQL_CANDIDATE_BASE);
+        if (hasText(query.userId())) {
+            where.append(" AND f.user_id = ?");
+            args.add(query.userId());
+        }
+        if (hasText(query.runId())) {
+            where.append(" AND m.agent_run_id = ?");
+            args.add(query.runId());
+        }
+        if (hasText(query.reason())) {
+            where.append(" AND f.reason = ?");
+            args.add(query.reason());
+        }
+        return new QueryParts(where.toString(), args.toArray());
+    }
+
+    private Object[] appendPagingArgs(Object[] args, long size, long offset) {
+        Object[] pageArgs = new Object[args.length + 2];
+        System.arraycopy(args, 0, pageArgs, 0, args.length);
+        pageArgs[args.length] = size;
+        pageArgs[args.length + 1] = offset;
+        return pageArgs;
+    }
+
+    private FeedbackEvaluationCandidate mapCandidate(ResultSet resultSet, int rowNum) throws SQLException {
+        Timestamp createdAt = resultSet.getTimestamp("create_time");
+        return new FeedbackEvaluationCandidate(
+                resultSet.getString("feedback_id"),
+                resultSet.getString("message_id"),
+                resultSet.getString("conversation_id"),
+                resultSet.getString("user_id"),
+                resultSet.getString("agent_run_id"),
+                resultSet.getInt("vote"),
+                resultSet.getString("reason"),
+                resultSet.getString("comment"),
+                resultSet.getString("content"),
+                createdAt == null ? null : createdAt.toInstant());
+    }
+
     private String nextId() {
         long millis = System.currentTimeMillis();
         int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
@@ -163,5 +254,8 @@ public class JdbcMessageFeedbackRepositoryAdapter implements MessageFeedbackRepo
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private record QueryParts(String whereSql, Object[] args) {
     }
 }

@@ -97,6 +97,12 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
                 ApprovalRequestStatus.PENDING,
                 1L,
                 10L));
+        ApprovalRequestPage runPage = adapter.page(new ApprovalRequestQuery(
+                null,
+                "run-approval-2",
+                ApprovalRequestStatus.PENDING,
+                1L,
+                10L));
 
         assertThat(found).isPresent();
         assertThat(found.orElseThrow().approvalId()).isEqualTo("approval-1");
@@ -104,6 +110,9 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
         assertThat(page.records())
                 .extracting(ApprovalRequest::approvalId)
                 .containsExactly("approval-2", "approval-1");
+        assertThat(runPage.records())
+                .extracting(ApprovalRequest::approvalId)
+                .containsExactly("approval-2");
     }
 
     @Test

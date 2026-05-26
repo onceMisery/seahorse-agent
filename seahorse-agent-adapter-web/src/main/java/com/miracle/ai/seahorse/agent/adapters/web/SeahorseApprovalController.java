@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalReques
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalModifyCommand;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,9 +40,25 @@ public class SeahorseApprovalController {
     private static final String DEFAULT_SIZE = "10";
 
     private final ObjectProvider<ApprovalManagementInboundPort> approvalPortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseApprovalController(ObjectProvider<ApprovalManagementInboundPort> approvalPortProvider) {
+        this(approvalPortProvider, AdvancedFeatureGate.allEnabledForTests());
+    }
+
+    @Autowired
+    public SeahorseApprovalController(ObjectProvider<ApprovalManagementInboundPort> approvalPortProvider,
+                                      ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(approvalPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseApprovalController(ObjectProvider<ApprovalManagementInboundPort> approvalPortProvider,
+                                      AdvancedFeatureGate advancedFeatureGate) {
         this.approvalPortProvider = approvalPortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @GetMapping("/api/approvals")
@@ -49,11 +66,18 @@ public class SeahorseApprovalController {
                                     @RequestParam(required = false) ApprovalRequestStatus status,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         return ApiResponses.requireService(approvalPortProvider, port -> port.page(tenantId, status, current, size));
+    }
+
+    @GetMapping("/api/agent-runs/{runId}/pending-approvals")
+    public ApiResponse<Object> listPendingByRunId(@PathVariable String runId) {
+        return ApiResponses.requireService(approvalPortProvider, port -> port.listPendingByRunId(runId));
     }
 
     @GetMapping("/api/approvals/{approvalId}")
     public ApiResponse<Object> findById(@PathVariable String approvalId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         return ApiResponses.requireService(approvalPortProvider, port -> port.findById(approvalId)
                 .orElseThrow(() -> new IllegalArgumentException("Approval not found")));
     }

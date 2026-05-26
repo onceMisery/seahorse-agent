@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,9 +40,25 @@ public class SeahorseToolCatalogController {
     private static final String DEFAULT_SIZE = "10";
 
     private final ObjectProvider<ToolCatalogManagementInboundPort> toolCatalogPortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseToolCatalogController(ObjectProvider<ToolCatalogManagementInboundPort> toolCatalogPortProvider) {
+        this(toolCatalogPortProvider, AdvancedFeatureGate.allEnabledForTests());
+    }
+
+    @Autowired
+    public SeahorseToolCatalogController(ObjectProvider<ToolCatalogManagementInboundPort> toolCatalogPortProvider,
+                                         ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(toolCatalogPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseToolCatalogController(ObjectProvider<ToolCatalogManagementInboundPort> toolCatalogPortProvider,
+                                         AdvancedFeatureGate advancedFeatureGate) {
         this.toolCatalogPortProvider = toolCatalogPortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @GetMapping("/api/tools")
@@ -50,23 +67,27 @@ public class SeahorseToolCatalogController {
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size,
                                     @RequestParam(required = false) Boolean enabled) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         return ApiResponses.requireService(toolCatalogPortProvider,
                 port -> port.page(resourceType, keyword, current, size, enabled));
     }
 
     @GetMapping("/api/tools/{toolId}")
     public ApiResponse<Object> findById(@PathVariable String toolId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         return ApiResponses.requireService(toolCatalogPortProvider,
                 port -> port.findById(toolId).orElseThrow(() -> new IllegalArgumentException("Tool not found")));
     }
 
     @PostMapping("/api/tools/{toolId}/enable")
     public ApiResponse<Object> enable(@PathVariable String toolId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         return ApiResponses.requireService(toolCatalogPortProvider, port -> port.enable(toolId));
     }
 
     @PostMapping("/api/tools/{toolId}/disable")
     public ApiResponse<Object> disable(@PathVariable String toolId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         return ApiResponses.requireService(toolCatalogPortProvider, port -> port.disable(toolId));
     }
 }

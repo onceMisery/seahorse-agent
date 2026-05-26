@@ -56,8 +56,8 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
     private static final String SQL_INSERT_MESSAGE = """
             INSERT INTO t_message
             (id, conversation_id, user_id, role, content, thinking_content, thinking_duration,
-             create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+             agent_run_id, create_time, update_time, deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """;
     private static final String SQL_COUNT_CONVERSATION = """
             SELECT COUNT(1) FROM t_conversation
@@ -95,6 +95,11 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
 
     @Override
     public void append(String conversationId, String userId, ChatMessage message) {
+        append(conversationId, userId, message, null);
+    }
+
+    @Override
+    public void append(String conversationId, String userId, ChatMessage message, String agentRunId) {
         if (!hasText(conversationId) || !hasText(userId) || message == null || !hasText(message.getContent())) {
             return;
         }
@@ -107,6 +112,7 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
                 message.getContent(),
                 message.getThinkingContent(),
                 message.getThinkingDuration(),
+                trimToNull(agentRunId),
                 now,
                 now);
         upsertConversation(conversationId, userId, message, now);
@@ -201,5 +207,12 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private String trimToNull(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        return value.trim();
     }
 }

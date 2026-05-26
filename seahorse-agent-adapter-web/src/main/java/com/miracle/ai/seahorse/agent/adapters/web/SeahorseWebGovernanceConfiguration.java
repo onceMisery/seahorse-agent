@@ -25,6 +25,7 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -47,6 +48,35 @@ public class SeahorseWebGovernanceConfiguration implements WebMvcConfigurer, Fil
     public SeahorseWebGovernanceConfiguration(
             @Value("${seahorse-agent.web.demo-mode.enabled:false}") boolean demoModeEnabled) {
         this.demoModeEnabled = demoModeEnabled;
+    }
+
+    @Bean
+    public AdvancedFeatureGate seahorseAdvancedFeatureGate(
+            @Value("${seahorse-agent.product-mode:consumer-web}") String productMode,
+            @Value("${seahorse-agent.advanced.sandbox-enabled:false}") boolean sandboxEnabled,
+            @Value("${seahorse-agent.advanced.connector-management-enabled:false}")
+            boolean connectorManagementEnabled,
+            @Value("${seahorse-agent.advanced.secret-management-enabled:false}") boolean secretManagementEnabled,
+            @Value("${seahorse-agent.advanced.agent-handoff-enabled:false}") boolean agentHandoffEnabled,
+            @Value("${seahorse-agent.advanced.remote-agent-enabled:false}") boolean remoteAgentEnabled,
+            @Value("${seahorse-agent.advanced.local-agent-enabled:false}") boolean localAgentEnabled,
+            @Value("${seahorse-agent.advanced.mcp-tool-enabled:false}") boolean mcpToolEnabled,
+            @Value("${seahorse-agent.advanced.agent-run-management-enabled:false}")
+            boolean agentRunManagementEnabled,
+            @Value("${seahorse-agent.advanced.agent-evaluation-enabled:false}") boolean agentEvaluationEnabled,
+            @Value("${seahorse-agent.advanced.production-gate-enabled:false}") boolean productionGateEnabled) {
+        return AdvancedFeatureGate.configured(
+                ProductMode.fromProperty(productMode),
+                sandboxEnabled,
+                connectorManagementEnabled,
+                secretManagementEnabled,
+                agentHandoffEnabled,
+                remoteAgentEnabled,
+                localAgentEnabled,
+                mcpToolEnabled,
+                agentRunManagementEnabled,
+                agentEvaluationEnabled,
+                productionGateEnabled);
     }
 
     @Override

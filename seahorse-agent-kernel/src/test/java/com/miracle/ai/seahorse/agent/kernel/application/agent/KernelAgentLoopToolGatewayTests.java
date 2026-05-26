@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopExitReason;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpoint;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentCheckpointType;
@@ -34,7 +35,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
@@ -132,6 +135,28 @@ class KernelAgentLoopToolGatewayTests {
     }
 
     @Test
+    void shouldNotExposeAnyToolsWhenAllowlistIsEmpty() {
+        ToolListRecordingModel model = new ToolListRecordingModel();
+        RecordingToolGateway gateway = new RecordingToolGateway();
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("answer directly")
+                .allowedToolIds(List.of())
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-empty-tools")
+                .build());
+
+        assertEquals("direct answer", result.finalAnswer());
+        assertEquals(List.of(), model.tools);
+        assertEquals(0, gateway.requests.size());
+    }
+
+    @Test
     void shouldPauseRunAndCheckpointPendingToolWhenGatewayRequiresApproval() {
         AgentToolCall toolCall = AgentToolCall.of("call-1", "memory-forget", Map.of("memoryId", "mem-1"));
         ScriptedModel model = new ScriptedModel(List.of(
@@ -194,6 +219,104 @@ class KernelAgentLoopToolGatewayTests {
         assertTrue(checkpoint.pendingToolCallJson().contains("\"tenantId\":\"tenant-1\""));
     }
 
+    @Test
+    void shouldEmitStepToolAndApprovalEventsDuringStreamingExecution() {
+        AgentToolCall toolCall = AgentToolCall.of("call-1", "memory-forget", Map.of("memoryId", "mem-1"));
+        ScriptedModel model = new ScriptedModel(List.of(Turn.toolCalls("need approval", List.of(toolCall))));
+        RecordingToolGateway gateway = new RecordingToolGateway(
+                ToolInvocationResult.failed(ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED, "approval-1"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("forget memory")
+                .allowedToolIds(List.of("memory-forget"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-approval")
+                .agentId("agent-1")
+                .versionId("version-1")
+                .tenantId("tenant-1")
+                .userId("user-1")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals(List.of(), callback.errors);
+        assertTrue(callback.events.stream()
+                .anyMatch(event -> StreamEventType.STEP_STARTED.value().equals(event.eventName())));
+        assertTrue(callback.events.stream()
+                .anyMatch(event -> StreamEventType.TOOL_CALL_STARTED.value().equals(event.eventName())));
+        assertTrue(callback.events.stream()
+                .anyMatch(event -> StreamEventType.TOOL_CALL_WAITING_USER.value().equals(event.eventName())));
+        StreamApprovalRequiredEvent approvalEvent = callback.events.stream()
+                .filter(event -> StreamEventType.TOOL_CALL_WAITING_USER.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamApprovalRequiredEvent.class::isInstance)
+                .map(StreamApprovalRequiredEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("approval-1", approvalEvent.approvalId());
+        assertEquals("memory-forget", approvalEvent.toolId());
+        assertTrue(callback.events.stream()
+                .anyMatch(event -> StreamEventType.STEP_FINISHED.value().equals(event.eventName())));
+    }
+
+    @Test
+    void shouldEmitSourcesFromWebSearchObservationDuringStreamingExecution() {
+        AgentToolCall toolCall = AgentToolCall.of("call-1", "web_search", Map.of("query", "seahorse ai"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need search", List.of(toolCall)),
+                Turn.finalAnswer("done")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("""
+                {"sources":[{"title":"Seahorse","url":"https://example.com","snippet":"AI source","score":0.9}]}
+                """));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("web_search"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-web-search")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertTrue(callback.events.stream()
+                .anyMatch(event -> StreamEventType.SOURCE_FOUND.value().equals(event.eventName())
+                        && String.valueOf(event.payload()).contains("https://example.com")));
+    }
+
+    @Test
+    void shouldEmitMarkdownArtifactWhenExpectedOutputIsMarkdown() {
+        ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("# Report\n\nFinal research result.")));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                new RecordingToolGateway(),
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("write report")
+                .allowedToolIds(List.of())
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-report")
+                .expectedOutputArtifactType(OutputArtifactType.MARKDOWN)
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertTrue(callback.events.stream()
+                .anyMatch(event -> StreamEventType.ARTIFACT_CREATED.value().equals(event.eventName())
+                        && String.valueOf(event.payload()).contains("Final research result.")));
+    }
+
     private static final class RecordingToolGateway implements ToolGatewayPort {
         private final List<ToolInvocationRequest> requests = new ArrayList<>();
         private final ToolInvocationResult result;
@@ -218,7 +341,8 @@ class KernelAgentLoopToolGatewayTests {
         public List<ToolDescriptor> listTools() {
             return List.of(
                     new ToolDescriptor("weather", "Weather", "Weather lookup", "{}"),
-                    new ToolDescriptor("memory-forget", "Memory Forget", "Forget memory", "{}"));
+                    new ToolDescriptor("memory-forget", "Memory Forget", "Forget memory", "{}"),
+                    new ToolDescriptor("web_search", "Web Search", "Search public Web sources", "{}"));
         }
 
         @Override
@@ -246,9 +370,33 @@ class KernelAgentLoopToolGatewayTests {
                 StreamCallback callback,
                 ToolCallCollector toolCallCollector) {
             Turn turn = turns.get(index++);
-            assertFalse(request.getTools().isEmpty());
+            if (!turn.toolCalls().isEmpty()) {
+                assertFalse(request.getTools().isEmpty());
+            }
             callback.onContent(turn.content);
             toolCallCollector.onToolCalls(turn.toolCalls);
+            callback.onComplete();
+            return () -> {
+            };
+        }
+    }
+
+    private static final class ToolListRecordingModel implements StreamingChatModelPort {
+        private List<ToolDescriptor> tools = List.of();
+
+        @Override
+        public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public StreamCancellationHandle streamChatWithTools(
+                ChatRequest request,
+                StreamCallback callback,
+                ToolCallCollector toolCallCollector) {
+            tools = List.copyOf(request.getTools());
+            callback.onContent("direct answer");
+            toolCallCollector.onToolCalls(List.of());
             callback.onComplete();
             return () -> {
             };
@@ -264,6 +412,44 @@ class KernelAgentLoopToolGatewayTests {
         private static Turn toolCalls(String content, List<AgentToolCall> toolCalls) {
             return new Turn(content, toolCalls);
         }
+    }
+
+    private static final class RecordingStreamCallback implements StreamCallback {
+        private final java.util.concurrent.CountDownLatch terminal = new java.util.concurrent.CountDownLatch(1);
+        private final List<StreamEvent> events = new ArrayList<>();
+        private final List<Throwable> errors = new ArrayList<>();
+
+        @Override
+        public void onContent(String content) {
+        }
+
+        @Override
+        public void onEvent(String eventName, Object payload) {
+            events.add(new StreamEvent(eventName, payload));
+        }
+
+        @Override
+        public void onComplete() {
+            terminal.countDown();
+        }
+
+        @Override
+        public void onError(Throwable error) {
+            errors.add(error);
+            terminal.countDown();
+        }
+
+        private boolean awaitTerminal() {
+            try {
+                return terminal.await(1, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+    }
+
+    private record StreamEvent(String eventName, Object payload) {
     }
 
     private static final class MemoryAgentRunRepository implements AgentRunRepositoryPort {

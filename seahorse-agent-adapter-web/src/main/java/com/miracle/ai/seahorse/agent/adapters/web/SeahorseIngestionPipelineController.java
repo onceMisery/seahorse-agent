@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelinePayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineNodePayload;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,14 +45,31 @@ public class SeahorseIngestionPipelineController {
     private static final String DEFAULT_OPERATOR = "";
 
     private final ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider) {
+        this(pipelinePortProvider, AdvancedFeatureGate.allEnabledForTests());
+    }
+
+    @Autowired
+    public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider,
+                                               ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(pipelinePortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseIngestionPipelineController(ObjectProvider<IngestionPipelineInboundPort> pipelinePortProvider,
+                                               AdvancedFeatureGate advancedFeatureGate) {
         this.pipelinePortProvider = pipelinePortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @PostMapping("/ingestion/pipelines")
     public ApiResponse<Object> create(@RequestBody IngestionPipelineRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_PIPELINE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(pipelinePortProvider,
                 port -> port.create(toPayload(request, operator(userId))));
     }
@@ -60,12 +78,14 @@ public class SeahorseIngestionPipelineController {
     public ApiResponse<Object> update(@PathVariable String id,
                                       @RequestBody IngestionPipelineRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_PIPELINE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(pipelinePortProvider,
                 port -> port.update(id, toPayload(request, operator(userId))));
     }
 
     @GetMapping("/ingestion/pipelines/{id}")
     public ApiResponse<Object> get(@PathVariable String id) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_PIPELINE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(pipelinePortProvider, port -> port.get(id));
     }
 
@@ -73,12 +93,14 @@ public class SeahorseIngestionPipelineController {
     public ApiResponse<Object> page(@RequestParam(value = "pageNo", defaultValue = "1") long pageNo,
                                     @RequestParam(value = "pageSize", defaultValue = "10") long pageSize,
                                     @RequestParam(value = "keyword", required = false) String keyword) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_PIPELINE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(pipelinePortProvider, port -> port.page(pageNo, pageSize, keyword));
     }
 
     @DeleteMapping("/ingestion/pipelines/{id}")
     public ApiResponse<Object> delete(@PathVariable String id,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_PIPELINE_MANAGEMENT);
         return ApiResponses.requireServiceOrError(pipelinePortProvider, port -> {
             port.delete(id, operator(userId));
             return null;

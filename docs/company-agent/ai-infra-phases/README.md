@@ -2,6 +2,19 @@
 
 本目录把 `Seahorse Agent 企业级 AI Infra 分阶段开发规划.md` 拆成可执行的阶段文档。每份文档面向开发者，固定包含目标、模块边界、领域模型、表结构、API、任务切片、测试命令、验收标准和风险控制。
 
+## C 端 Web 范围声明
+
+本目录是历史企业级 AI Infra 规划，不再作为 C 端 Web Agent 的默认完成标准。C 端当前基线以 `../c-web-ai-infra-phases/` 为准：云端可治理 Agent Runtime、Web 聊天内任务时间线、来源、产物、用户确认、个人数据安全、质量和成本闭环。
+
+以下能力仅保留为专业版或企业版远期扩展，默认不得进入 consumer-web 主线：
+
+- 本地安装 Agent、宿主机 shell、本地文件系统读写、本地 sandbox。
+- 用户自定义任意 MCP server 并直接执行。
+- 企业 OpenAPI/MCP connector、secret 管理和写操作工具。
+- Local Agent-as-Tool、A2A、Remote Agent、Agent Mesh。
+
+Phase 5 和 Phase 7 的连接器、沙箱、A2A、mesh 内容只作为企业扩展参考；默认实现必须通过 ProductMode/AdvancedFeatureGate 隔离，并在前端用户侧隐藏。
+
 建议按顺序执行：
 
 | 阶段 | 文档 | 目标 |

@@ -23,11 +23,13 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalReques
  * 审批请求分页查询条件。
  *
  * @param tenantId 租户 ID 过滤条件，可为空
+ * @param runId    AgentRun ID 过滤条件，可为空
  * @param status   审批状态，默认 PENDING
  * @param current  当前页码，从 1 开始
  * @param size     每页大小
  */
 public record ApprovalRequestQuery(String tenantId,
+                                   String runId,
                                    ApprovalRequestStatus status,
                                    long current,
                                    long size) {
@@ -36,8 +38,13 @@ public record ApprovalRequestQuery(String tenantId,
     public static final long DEFAULT_PAGE_SIZE = 10L;
     public static final ApprovalRequestStatus DEFAULT_STATUS = ApprovalRequestStatus.PENDING;
 
+    public ApprovalRequestQuery(String tenantId, ApprovalRequestStatus status, long current, long size) {
+        this(tenantId, null, status, current, size);
+    }
+
     public ApprovalRequestQuery {
         tenantId = trimToNull(tenantId);
+        runId = trimToNull(runId);
         status = status == null ? DEFAULT_STATUS : status;
         current = current <= 0 ? DEFAULT_CURRENT : current;
         size = size <= 0 ? DEFAULT_PAGE_SIZE : size;

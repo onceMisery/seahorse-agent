@@ -46,6 +46,7 @@ import {
   type KnowledgeDocumentSearchItem
 } from "@/services/knowledgeService";
 import { Avatar } from "@/components/common/Avatar";
+import { ADVANCED_ADMIN_FEATURES, isAdvancedAdminEnabled } from "@/config/productMode";
 
 type MenuChild = {
   path: string;
@@ -61,6 +62,7 @@ type MenuItem = {
   icon: any;
   search?: string;
   children?: MenuChild[];
+  feature?: keyof typeof ADVANCED_ADMIN_FEATURES;
 };
 
 type MenuGroup = {
@@ -85,6 +87,7 @@ const menuGroups: MenuGroup[] = [
       {
         id: "intent",
         path: "/admin/intent-tree",
+        feature: "INTENT_MANAGEMENT",
         label: "意图管理",
         icon: Layers,
         children: [
@@ -103,6 +106,7 @@ const menuGroups: MenuGroup[] = [
       {
         id: "ingestion",
         path: "/admin/ingestion",
+        feature: "INGESTION_MANAGEMENT",
         label: "数据通道",
         icon: Upload,
         children: [
@@ -137,6 +141,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         path: "/admin/ai-infra",
+        feature: "AI_INFRA_CONSOLE",
         label: "AI Infra 控制台",
         icon: Cpu
       },
@@ -178,6 +183,20 @@ const breadcrumbMap: Record<string, string> = {
   users: "用户管理"
 };
 
+function menuItemEnabled(item: MenuItem) {
+  if (!item.feature) return true;
+  return isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES[item.feature]);
+}
+
+function visibleMenuGroups() {
+  return menuGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(menuItemEnabled)
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
 export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -200,6 +219,7 @@ export function AdminLayout() {
   const blurTimeoutRef = useRef<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const isDashboardRoute = location.pathname.startsWith("/admin/dashboard");
+  const visibleGroups = useMemo(() => visibleMenuGroups(), []);
 
   const handleLogout = async () => {
     await logout();
@@ -336,9 +356,12 @@ export function AdminLayout() {
     const text = String(rounded).replace(/\.0$/, "");
     return `${text}k`;
   }, [starCount]);
-  const isIngestionActive = location.pathname.startsWith("/admin/ingestion");
+  const ingestionAdminEnabled = isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.INGESTION_MANAGEMENT);
+  const intentAdminEnabled = isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.INTENT_MANAGEMENT);
+  const isIngestionActive = ingestionAdminEnabled && location.pathname.startsWith("/admin/ingestion");
   const isIntentActive =
-    location.pathname.startsWith("/admin/intent-tree") || location.pathname.startsWith("/admin/intent-list");
+    intentAdminEnabled &&
+    (location.pathname.startsWith("/admin/intent-tree") || location.pathname.startsWith("/admin/intent-list"));
 
   useEffect(() => {
     setOpenGroups((prev) => ({
@@ -461,7 +484,7 @@ export function AdminLayout() {
         </div>
 
         <nav className="flex-1 space-y-4 px-2 pb-4">
-          {menuGroups.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.title} className="space-y-2">
               {!collapsed && (
                 <p className="admin-sidebar__group-title">{group.title}</p>

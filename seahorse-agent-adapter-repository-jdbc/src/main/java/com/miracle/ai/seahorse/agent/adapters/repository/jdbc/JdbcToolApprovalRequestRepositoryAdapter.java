@@ -204,6 +204,7 @@ public class JdbcToolApprovalRequestRepositoryAdapter implements ToolApprovalReq
         List<String> conditions = new ArrayList<>();
         List<Object> parameters = new ArrayList<>();
         addCondition(conditions, parameters, "tenant_id", query.tenantId());
+        addCondition(conditions, parameters, "run_id", query.runId());
         if (query.status() != null) {
             conditions.add("status = ?");
             parameters.add(query.status().name());

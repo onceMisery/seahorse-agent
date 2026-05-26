@@ -67,6 +67,19 @@ class CatalogBackedToolPolicyPortTests {
     }
 
     @Test
+    void shouldDenyToolWhenRuntimeAllowlistIsEmptyEvenIfBindingExists() {
+        CatalogBackedToolPolicyPort policy = policy(
+                tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ, true, false),
+                binding("knowledge-search", 3));
+
+        PolicyDecision decision = policy.decide(request("knowledge-search", Map.of("input", "value"), Map.of(),
+                List.of()));
+
+        assertEquals(PolicyDecision.Effect.DENY, decision.effect());
+        assertEquals("TOOL_NOT_BOUND", decision.reasonCode());
+    }
+
+    @Test
     void shouldAllowLowRiskReadToolWhenCatalogAndBindingAllowIt() {
         CatalogBackedToolPolicyPort policy = policy(
                 tool("knowledge-search", ToolRiskLevel.LOW, ToolActionType.READ, true, false),
@@ -225,6 +238,13 @@ class CatalogBackedToolPolicyPortTests {
     private static ToolPolicyRequest request(String toolId,
                                              Map<String, Object> arguments,
                                              Map<String, String> resourceRefs) {
+        return request(toolId, arguments, resourceRefs, List.of(toolId));
+    }
+
+    private static ToolPolicyRequest request(String toolId,
+                                             Map<String, Object> arguments,
+                                             Map<String, String> resourceRefs,
+                                             List<String> allowedToolIds) {
         return new ToolPolicyRequest(
                 "run-1",
                 "step-1",
@@ -238,7 +258,7 @@ class CatalogBackedToolPolicyPortTests {
                 arguments,
                 resourceRefs,
                 "run-1:call-1",
-                List.of(toolId),
+                allowedToolIds,
                 true);
     }
 

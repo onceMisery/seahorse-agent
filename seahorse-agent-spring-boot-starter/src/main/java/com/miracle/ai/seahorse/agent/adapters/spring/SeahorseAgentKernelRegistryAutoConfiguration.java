@@ -18,9 +18,11 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.artifact.KernelAgentArtifactQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentCheckpointQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunLeaseService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunSnapshotService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.approval.KernelApprovalManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.connector.KernelOpenApiConnectorImportService;
@@ -31,6 +33,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelAcce
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackBuilderService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelResourceAclManagementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelAgentRunCostSummaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelCostUsageQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelAgentEvalQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.factory.KernelAgentFactoryService;
@@ -38,21 +41,26 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.gate.KernelProduct
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.DefaultMeshPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgentHandoffService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaDecisionService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaSummaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.readiness.KernelEnterprisePilotReadinessService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.rollout.KernelAgentRolloutService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.KernelSandboxRuntimeService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sre.KernelSreHealthQueryService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.task.KernelTaskTemplateQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCatalogManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolInvocationAuditQueryService;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentFactoryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentHandoffInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentEvalInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunCostSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
@@ -64,15 +72,18 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.EnterprisePilotReadines
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.OpenApiConnectorInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ProductionGateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResourceAclManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SreHealthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCatalogQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepositoryPort;
@@ -114,6 +125,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionReposito
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthContributorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthReportProviderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditRedactionPolicy;
@@ -164,6 +176,38 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 agentRunRepositoryPort,
                 currentUserPort,
                 clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnBean({AgentArtifactRepositoryPort.class, AgentRunRepositoryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(AgentArtifactQueryInboundPort.class)
+    public KernelAgentArtifactQueryService seahorseAgentArtifactQueryInboundPort(
+            AgentArtifactRepositoryPort agentArtifactRepositoryPort,
+            AgentRunRepositoryPort agentRunRepositoryPort,
+            CurrentUserPort currentUserPort) {
+        return new KernelAgentArtifactQueryService(
+                agentArtifactRepositoryPort,
+                agentRunRepositoryPort,
+                currentUserPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({AgentRunRepositoryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(AgentRunSnapshotInboundPort.class)
+    public KernelAgentRunSnapshotService seahorseAgentRunSnapshotInboundPort(
+            AgentRunRepositoryPort agentRunRepositoryPort,
+            CurrentUserPort currentUserPort,
+            ObjectProvider<AgentCheckpointRepositoryPort> agentCheckpointRepositoryPort,
+            ObjectProvider<ContextPackRepositoryPort> contextPackRepositoryPort,
+            ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
+            ObjectProvider<AgentArtifactRepositoryPort> agentArtifactRepositoryPort) {
+        return new KernelAgentRunSnapshotService(
+                agentRunRepositoryPort,
+                agentCheckpointRepositoryPort.getIfAvailable(),
+                contextPackRepositoryPort.getIfAvailable(),
+                approvalRequestQueryPort.getIfAvailable(),
+                agentArtifactRepositoryPort.getIfAvailable(),
+                currentUserPort);
     }
 
     @Bean
@@ -239,6 +283,12 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(ToolProviderExposurePolicyPort.class)
+    public ToolProviderExposurePolicyPort seahorseToolProviderExposurePolicyPort() {
+        return ToolProviderExposurePolicyPort.consumerWebDefaults();
+    }
+
+    @Bean
     @ConditionalOnBean({ResourceAclRepositoryPort.class, CurrentUserPort.class})
     @ConditionalOnMissingBean(ResourceAclManagementInboundPort.class)
     public KernelResourceAclManagementService seahorseResourceAclManagementInboundPort(
@@ -258,8 +308,12 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     @ConditionalOnMissingBean(ToolCatalogManagementInboundPort.class)
     public KernelToolCatalogManagementService seahorseToolCatalogManagementInboundPort(
             ToolCatalogRepositoryPort toolCatalogRepositoryPort,
-            CurrentUserPort currentUserPort) {
-        return new KernelToolCatalogManagementService(toolCatalogRepositoryPort, currentUserPort);
+            CurrentUserPort currentUserPort,
+            ToolProviderExposurePolicyPort toolProviderExposurePolicyPort) {
+        return new KernelToolCatalogManagementService(
+                toolCatalogRepositoryPort,
+                currentUserPort,
+                toolProviderExposurePolicyPort);
     }
 
     @Bean
@@ -268,11 +322,15 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     public KernelAgentToolBindingManagementService seahorseAgentToolBindingManagementInboundPort(
             AgentToolBindingRepositoryPort agentToolBindingRepositoryPort,
             CurrentUserPort currentUserPort,
-            ObjectProvider<Clock> clockProvider) {
+            ObjectProvider<Clock> clockProvider,
+            ObjectProvider<ToolCatalogRepositoryPort> toolCatalogRepositoryPort,
+            ToolProviderExposurePolicyPort toolProviderExposurePolicyPort) {
         return new KernelAgentToolBindingManagementService(
                 agentToolBindingRepositoryPort,
                 currentUserPort,
-                clockProvider.getIfAvailable(Clock::systemUTC));
+                clockProvider.getIfAvailable(Clock::systemUTC),
+                toolCatalogRepositoryPort.getIfAvailable(),
+                toolProviderExposurePolicyPort);
     }
 
     @Bean
@@ -344,6 +402,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             AgentDefinitionRepositoryPort agentDefinitionRepositoryPort,
             AgentVersionActivationRepositoryPort agentVersionActivationRepositoryPort,
             AgentCatalogQueryPort agentCatalogQueryPort,
+            ToolProviderExposurePolicyPort toolProviderExposurePolicyPort,
             ObjectProvider<Clock> clockProvider) {
         return new KernelAgentFactoryService(
                 agentTemplateRepositoryPort,
@@ -353,6 +412,7 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 agentDefinitionRepositoryPort,
                 agentVersionActivationRepositoryPort,
                 agentCatalogQueryPort,
+                toolProviderExposurePolicyPort,
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
@@ -402,11 +462,40 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(QuotaSummaryInboundPort.class)
+    public KernelQuotaSummaryService seahorseQuotaSummaryInboundPort(
+            ObjectProvider<QuotaPolicyRepositoryPort> quotaPolicyRepositoryPort,
+            ObjectProvider<CostUsageRepositoryPort> costUsageRepositoryPort) {
+        return new KernelQuotaSummaryService(
+                quotaPolicyRepositoryPort.getIfAvailable(),
+                costUsageRepositoryPort.getIfAvailable());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(TaskTemplateQueryInboundPort.class)
+    public KernelTaskTemplateQueryService seahorseTaskTemplateQueryInboundPort() {
+        return new KernelTaskTemplateQueryService();
+    }
+
+    @Bean
     @ConditionalOnBean(CostUsageRepositoryPort.class)
     @ConditionalOnMissingBean(CostUsageInboundPort.class)
     public KernelCostUsageQueryService seahorseCostUsageInboundPort(
             CostUsageRepositoryPort costUsageRepositoryPort) {
         return new KernelCostUsageQueryService(costUsageRepositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({AgentRunRepositoryPort.class, CostUsageRepositoryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(AgentRunCostSummaryInboundPort.class)
+    public KernelAgentRunCostSummaryService seahorseAgentRunCostSummaryInboundPort(
+            AgentRunRepositoryPort agentRunRepositoryPort,
+            CostUsageRepositoryPort costUsageRepositoryPort,
+            CurrentUserPort currentUserPort) {
+        return new KernelAgentRunCostSummaryService(
+                agentRunRepositoryPort,
+                costUsageRepositoryPort,
+                currentUserPort);
     }
 
     @Bean

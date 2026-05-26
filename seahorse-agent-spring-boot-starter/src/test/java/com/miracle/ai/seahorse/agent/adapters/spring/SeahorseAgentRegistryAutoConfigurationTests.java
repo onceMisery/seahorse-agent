@@ -18,8 +18,10 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.artifact.KernelAgentArtifactQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentCheckpointQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunSnapshotService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.approval.KernelApprovalManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.connector.KernelOpenApiConnectorImportService;
@@ -36,9 +38,11 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.factory.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.gate.KernelProductionGateService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgentHandoffService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaDecisionService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaSummaryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.readiness.KernelEnterprisePilotReadinessService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.rollout.KernelAgentRolloutService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sre.KernelSreHealthQueryService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.task.KernelTaskTemplateQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCatalogManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolInvocationAuditQueryService;
@@ -48,7 +52,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentFactoryInboundPort
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentHandoffInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
@@ -60,12 +66,15 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.EnterprisePilotReadines
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.OpenApiConnectorInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ProductionGateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResourceAclManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SreHealthInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryRepositoryPort;
@@ -106,6 +115,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.junit.jupiter.api.Test;
@@ -134,6 +144,7 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(AgentDefinitionRepositoryPort.class);
+                    assertThat(context).hasSingleBean(AgentArtifactRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentRunRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentCheckpointRepositoryPort.class);
                     assertThat(context).hasSingleBean(AgentRunLeaseRepositoryPort.class);
@@ -173,8 +184,10 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(field(context.getBean(ResourceAccessPolicyPort.class), "auditLedger"))
                             .isSameAs(context.getBean(KernelAuditLedgerService.class));
                     assertThat(context).hasSingleBean(AgentDefinitionInboundPort.class);
+                    assertThat(context).hasSingleBean(AgentArtifactQueryInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunInboundPort.class);
                     assertThat(context).hasSingleBean(AgentRunLeaseInboundPort.class);
+                    assertThat(context).hasSingleBean(AgentRunSnapshotInboundPort.class);
                     assertThat(context).hasSingleBean(AgentCheckpointQueryInboundPort.class);
                     assertThat(context).hasSingleBean(ContextPackBuilderInboundPort.class);
                     assertThat(context).hasSingleBean(ContextPackQueryInboundPort.class);
@@ -183,6 +196,8 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(AgentHandoffInboundPort.class);
                     assertThat(context).hasSingleBean(AgentEvalInboundPort.class);
                     assertThat(context).hasSingleBean(QuotaManagementInboundPort.class);
+                    assertThat(context).hasSingleBean(QuotaSummaryInboundPort.class);
+                    assertThat(context).hasSingleBean(TaskTemplateQueryInboundPort.class);
                     assertThat(context).hasSingleBean(CostUsageInboundPort.class);
                     assertThat(context).hasSingleBean(SreHealthInboundPort.class);
                     assertThat(context).hasSingleBean(SreHealthReportProviderPort.class);
@@ -203,7 +218,9 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(ToolInvocationAuditQueryInboundPort.class);
                     assertThat(context).hasSingleBean(ApprovalManagementInboundPort.class);
                     assertThat(context).hasSingleBean(KernelAgentDefinitionService.class);
+                    assertThat(context).hasSingleBean(KernelAgentArtifactQueryService.class);
                     assertThat(context).hasSingleBean(KernelAgentRunService.class);
+                    assertThat(context).hasSingleBean(KernelAgentRunSnapshotService.class);
                     assertThat(context).hasSingleBean(KernelAgentCheckpointQueryService.class);
                     assertThat(context).hasSingleBean(KernelContextPackBuilderService.class);
                     assertThat(context).hasSingleBean(KernelContextPackQueryService.class);
@@ -223,6 +240,8 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(KernelAgentHandoffService.class);
                     assertThat(context).hasSingleBean(KernelAgentEvalQueryService.class);
                     assertThat(context).hasSingleBean(KernelQuotaDecisionService.class);
+                    assertThat(context).hasSingleBean(KernelQuotaSummaryService.class);
+                    assertThat(context).hasSingleBean(KernelTaskTemplateQueryService.class);
                     assertThat(context).hasSingleBean(KernelCostUsageQueryService.class);
                     assertThat(context).hasSingleBean(KernelSreHealthQueryService.class);
                     assertThat(context).hasSingleBean(KernelProductionGateService.class);
@@ -261,6 +280,19 @@ class SeahorseAgentRegistryAutoConfigurationTests {
                     assertThat(context).hasSingleBean(KernelAgentToolBindingManagementService.class);
                     assertThat(context).hasSingleBean(KernelToolInvocationAuditQueryService.class);
                     assertThat(context).hasSingleBean(KernelApprovalManagementService.class);
+                    assertThat(context).hasSingleBean(ToolProviderExposurePolicyPort.class);
+                    assertThat(field(context.getBean(KernelToolCatalogManagementService.class),
+                            "providerExposurePolicy"))
+                            .isSameAs(context.getBean(ToolProviderExposurePolicyPort.class));
+                    assertThat(field(context.getBean(KernelAgentToolBindingManagementService.class),
+                            "providerExposurePolicy"))
+                            .isSameAs(context.getBean(ToolProviderExposurePolicyPort.class));
+                    assertThat(field(context.getBean(KernelAgentFactoryService.class), "providerExposurePolicy"))
+                            .isSameAs(context.getBean(ToolProviderExposurePolicyPort.class));
+                    assertThat(field(context.getBean(KernelAgentArtifactQueryService.class), "artifactRepository"))
+                            .isSameAs(context.getBean(AgentArtifactRepositoryPort.class));
+                    assertThat(field(context.getBean(KernelAgentRunSnapshotService.class), "artifactRepository"))
+                            .isSameAs(context.getBean(AgentArtifactRepositoryPort.class));
                 });
     }
 

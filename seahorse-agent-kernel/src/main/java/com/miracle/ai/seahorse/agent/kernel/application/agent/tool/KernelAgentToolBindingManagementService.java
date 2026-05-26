@@ -22,6 +22,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingItemCom
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingReplaceCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 
@@ -42,13 +44,36 @@ public class KernelAgentToolBindingManagementService implements AgentToolBinding
     private final AgentToolBindingRepositoryPort bindingRepository;
     private final CurrentUserPort currentUserPort;
     private final Clock clock;
+    private final ToolCatalogRepositoryPort toolCatalogRepository;
+    private final ToolProviderExposurePolicyPort providerExposurePolicy;
 
     public KernelAgentToolBindingManagementService(AgentToolBindingRepositoryPort bindingRepository,
                                                    CurrentUserPort currentUserPort,
                                                    Clock clock) {
+        this(bindingRepository, currentUserPort, clock, ToolCatalogRepositoryPort.empty(),
+                ToolProviderExposurePolicyPort.consumerWebDefaults());
+    }
+
+    public KernelAgentToolBindingManagementService(AgentToolBindingRepositoryPort bindingRepository,
+                                                   CurrentUserPort currentUserPort,
+                                                   Clock clock,
+                                                   ToolCatalogRepositoryPort toolCatalogRepository) {
+        this(bindingRepository, currentUserPort, clock, toolCatalogRepository,
+                ToolProviderExposurePolicyPort.consumerWebDefaults());
+    }
+
+    public KernelAgentToolBindingManagementService(AgentToolBindingRepositoryPort bindingRepository,
+                                                   CurrentUserPort currentUserPort,
+                                                   Clock clock,
+                                                   ToolCatalogRepositoryPort toolCatalogRepository,
+                                                   ToolProviderExposurePolicyPort providerExposurePolicy) {
         this.bindingRepository = Objects.requireNonNull(bindingRepository, "bindingRepository must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
+        this.toolCatalogRepository = Objects.requireNonNullElseGet(toolCatalogRepository, ToolCatalogRepositoryPort::empty);
+        this.providerExposurePolicy = Objects.requireNonNullElseGet(
+                providerExposurePolicy,
+                ToolProviderExposurePolicyPort::consumerWebDefaults);
     }
 
     @Override
@@ -57,13 +82,12 @@ public class KernelAgentToolBindingManagementService implements AgentToolBinding
                                                   AgentToolBindingReplaceCommand command) {
         currentUserPort.requireRole(ADMIN_ROLE);
         CurrentUser currentUser = currentUserPort.requireCurrentUser();
-        String safeAgentId = requireText(agentId, "agentId 不能为空");
-        String safeVersionId = requireText(versionId, "versionId 不能为空");
+        String safeAgentId = requireText(agentId, "agentId must not be blank");
+        String safeVersionId = requireText(versionId, "versionId must not be blank");
         AgentToolBindingReplaceCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         Instant now = clock.instant();
         List<AgentToolBinding> bindings = buildBindings(safeAgentId, safeVersionId, safeCommand, currentUser, now);
 
-        // 工具绑定采用发布版本快照语义：一次请求替换整个版本的工具集，防止运行时策略读取到半更新状态。
         bindingRepository.saveBindings(safeAgentId, safeVersionId, bindings);
         return List.copyOf(bindings);
     }
@@ -77,10 +101,12 @@ public class KernelAgentToolBindingManagementService implements AgentToolBinding
         List<AgentToolBinding> bindings = new ArrayList<>();
         for (AgentToolBindingItemCommand item : command.tools()) {
             AgentToolBindingItemCommand safeItem = Objects.requireNonNull(item, "tool binding item must not be null");
-            String toolId = requireText(safeItem.toolId(), "toolId 不能为空");
+            String toolId = requireText(safeItem.toolId(), "toolId must not be blank");
             if (!toolIds.add(toolId)) {
                 throw new IllegalArgumentException("toolId 不能重复");
             }
+            toolCatalogRepository.findById(toolId)
+                    .ifPresent(providerExposurePolicy::requireToolAllowed);
             bindings.add(new AgentToolBinding(
                     nextBindingId(),
                     agentId,

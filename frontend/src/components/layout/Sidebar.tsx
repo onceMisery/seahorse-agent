@@ -3,6 +3,7 @@ import { SeahorseLogo } from "@/components/common/SeahorseLogo";
 import { differenceInCalendarDays, isValid } from "date-fns";
 import {
   BookOpen,
+  Database,
   LogOut,
   MessageSquare,
   MoreHorizontal,
@@ -227,6 +228,18 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   管理后台
                 </button>
               ) : null}
+              <button
+                type="button"
+                className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors glass-hover"
+                style={{ color: "var(--theme-text-secondary)" }}
+                onClick={() => {
+                  navigate("/memories");
+                  onClose();
+                }}
+              >
+                <Database className="h-3.5 w-3.5" />
+                Memory center
+              </button>
             </div>
           </div>
           <div className="rounded-2xl p-3 glass">

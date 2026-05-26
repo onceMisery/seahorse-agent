@@ -44,6 +44,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepos
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentVersionActivationRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 
 import java.time.Clock;
 import java.util.ArrayList;
@@ -65,6 +66,7 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
     private final AgentDefinitionRepositoryPort definitionRepository;
     private final AgentVersionActivationRepositoryPort activationRepository;
     private final AgentCatalogQueryPort catalogQueryPort;
+    private final ToolProviderExposurePolicyPort providerExposurePolicy;
     private final Clock clock;
 
     public KernelAgentFactoryService(AgentTemplateRepositoryPort templateRepository,
@@ -87,6 +89,7 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
                 null,
                 null,
                 null,
+                ToolProviderExposurePolicyPort.consumerWebDefaults(),
                 clock);
     }
 
@@ -105,6 +108,7 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
                 definitionRepository,
                 activationRepository,
                 catalogQueryPort,
+                ToolProviderExposurePolicyPort.consumerWebDefaults(),
                 Clock.systemUTC());
     }
 
@@ -116,6 +120,27 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
                                      AgentVersionActivationRepositoryPort activationRepository,
                                      AgentCatalogQueryPort catalogQueryPort,
                                      Clock clock) {
+        this(
+                templateRepository,
+                definitionPort,
+                checkRepository,
+                toolCatalogRepository,
+                definitionRepository,
+                activationRepository,
+                catalogQueryPort,
+                ToolProviderExposurePolicyPort.consumerWebDefaults(),
+                clock);
+    }
+
+    public KernelAgentFactoryService(AgentTemplateRepositoryPort templateRepository,
+                                     AgentDefinitionInboundPort definitionPort,
+                                     AgentPublishCheckRepositoryPort checkRepository,
+                                     ToolCatalogRepositoryPort toolCatalogRepository,
+                                     AgentDefinitionRepositoryPort definitionRepository,
+                                     AgentVersionActivationRepositoryPort activationRepository,
+                                     AgentCatalogQueryPort catalogQueryPort,
+                                     ToolProviderExposurePolicyPort providerExposurePolicy,
+                                     Clock clock) {
         this.templateRepository = Objects.requireNonNull(templateRepository,
                 "templateRepository must not be null");
         this.definitionPort = Objects.requireNonNull(definitionPort, "definitionPort must not be null");
@@ -125,12 +150,17 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
         this.definitionRepository = definitionRepository;
         this.activationRepository = activationRepository;
         this.catalogQueryPort = catalogQueryPort;
+        this.providerExposurePolicy = Objects.requireNonNullElseGet(
+                providerExposurePolicy,
+                ToolProviderExposurePolicyPort::consumerWebDefaults);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
     @Override
     public List<AgentTemplate> listTemplates(boolean includeDisabled) {
-        return templateRepository.list(includeDisabled);
+        return templateRepository.list(includeDisabled).stream()
+                .filter(this::templateAllowed)
+                .toList();
     }
 
     @Override
@@ -138,8 +168,10 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
         AgentFactoryCreateCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         AgentTemplate template = templateRepository.findById(safeCommand.templateId())
                 .orElseThrow(() -> new IllegalArgumentException("Agent template not found"));
+        requireTemplateAllowed(template);
         template.validateRequestedTools(safeCommand.requestedToolIds());
         template.validateRequestedRisk(safeCommand.riskLevel());
+        requireToolsAllowed(safeCommand.requestedToolIds());
         String agentId = definitionPort.createDraft(new AgentDefinitionCreateCommand(
                 safeCommand.agentId(),
                 safeCommand.tenantId(),
@@ -258,7 +290,10 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
         }
         boolean allEnabled = toolIds.stream()
                 .map(toolCatalogRepository::findById)
-                .allMatch(optional -> optional.map(ToolCatalogEntry::enabled).orElse(false));
+                .allMatch(optional -> optional
+                        .filter(providerExposurePolicy::isToolAllowed)
+                        .map(ToolCatalogEntry::enabled)
+                        .orElse(false));
         if (allEnabled) {
             return AgentPublishCheckItem.pass(AgentPublishCheckCode.TOOLS_ENABLED, "All requested tools are enabled.");
         }
@@ -269,6 +304,7 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
         boolean missingApproval = toolIds.stream()
                 .map(toolCatalogRepository::findById)
                 .flatMap(Optional::stream)
+                .filter(providerExposurePolicy::isToolAllowed)
                 .filter(this::highRisk)
                 .anyMatch(tool -> !tool.requiresApproval());
         if (missingApproval) {
@@ -300,6 +336,30 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
 
     private boolean highRisk(ToolCatalogEntry tool) {
         return tool.riskLevel() == ToolRiskLevel.HIGH || tool.riskLevel() == ToolRiskLevel.CRITICAL;
+    }
+
+    private boolean templateAllowed(AgentTemplate template) {
+        return template.allowedToolIds().stream()
+                .map(toolCatalogRepository::findById)
+                .flatMap(Optional::stream)
+                .allMatch(providerExposurePolicy::isToolAllowed);
+    }
+
+    private void requireTemplateAllowed(AgentTemplate template) {
+        template.allowedToolIds().stream()
+                .map(toolCatalogRepository::findById)
+                .flatMap(Optional::stream)
+                .forEach(providerExposurePolicy::requireToolAllowed);
+    }
+
+    private void requireToolsAllowed(List<String> toolIds) {
+        if (toolIds == null) {
+            return;
+        }
+        toolIds.stream()
+                .map(toolCatalogRepository::findById)
+                .flatMap(Optional::stream)
+                .forEach(providerExposurePolicy::requireToolAllowed);
     }
 
     private boolean hasText(String value) {

@@ -21,13 +21,19 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.task.TaskTemplateId;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
@@ -50,6 +56,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -73,6 +80,15 @@ public class KernelChatInboundService implements ChatInboundPort {
     private static final String TRACE_NAME_STREAM_CHAT = "stream-chat";
     private static final String TRACE_ENTRY_STREAM_CHAT =
             "com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService#streamChat";
+    private static final EnumSet<TaskTemplateId> CONTROLLED_WEB_AGENT_TEMPLATES = EnumSet.of(
+            TaskTemplateId.DEEP_RESEARCH,
+            TaskTemplateId.WEB_SUMMARY,
+            TaskTemplateId.COMPARE_ANALYSIS);
+    private static final List<String> CONTROLLED_WEB_RESEARCH_TOOL_IDS = List.of(
+            WebSearchToolPortAdapter.TOOL_ID,
+            WebFetchToolPortAdapter.TOOL_ID,
+            SearchKnowledgeBaseToolPortAdapter.TOOL_ID,
+            GetDateTimeToolPortAdapter.TOOL_ID);
 
     private final KernelChatPipeline chatPipeline;
     private final StreamTaskPort streamTaskPort;
@@ -152,6 +168,21 @@ public class KernelChatInboundService implements ChatInboundPort {
                                     Optional<AgentRunInboundPort> agentRunPort,
                                     Optional<ContextPackBuilderInboundPort> contextPackBuilder,
                                     Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository) {
+        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
+                agentRunPort, contextPackBuilder, agentDefinitionRepository,
+                ConversationAttachmentContextAssembler.noop());
+    }
+
+    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+                                    StreamTaskPort streamTaskPort,
+                                    Optional<KernelAgentLoop> agentLoop,
+                                    KernelRagTraceRecorder traceRecorder,
+                                    ConversationMemoryPort memoryPort,
+                                    MemoryEnginePort memoryEnginePort,
+                                    Optional<AgentRunInboundPort> agentRunPort,
+                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
+                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
+                                    ConversationAttachmentContextAssembler attachmentContextAssembler) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop;
@@ -162,7 +193,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         this.agentDefinitionRepository = agentDefinitionRepository == null
                 ? Optional.empty()
                 : agentDefinitionRepository;
-        this.contextPackAssembler = new ContextPackRuntimeAssembler(contextPackBuilder);
+        this.contextPackAssembler = new ContextPackRuntimeAssembler(contextPackBuilder, attachmentContextAssembler);
     }
 
     @Override
@@ -217,6 +248,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .deepThinking(command.deepThinking())
                 .callback(callback)
                 .traceRunScope(traceRunScope)
+                .attachmentIds(command.attachmentIds())
                 .build();
     }
 
@@ -239,12 +271,14 @@ public class KernelChatInboundService implements ChatInboundPort {
                 versionId,
                 tenantId,
                 command.userId(),
-                memoryContext);
+                memoryContext,
+                command.conversationId(),
+                command.attachmentIds());
         return AgentLoopRequest.builder()
                 .question(command.question())
                 .modelId(modelConfig.modelId())
                 .history(loadAgentHistory(command))
-                .allowedToolIds(List.of())
+                .allowedToolIds(allowedToolIds(command))
                 .samplingOptions(modelConfig.samplingOptions())
                 .contextPack(contextPack)
                 .memoryContext(memoryContext)
@@ -253,7 +287,27 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .versionId(versionId)
                 .tenantId(tenantId)
                 .userId(command.userId())
+                .expectedOutputArtifactType(expectedOutputArtifactType(command))
                 .build();
+    }
+
+    private List<String> allowedToolIds(StreamChatCommand command) {
+        return isControlledWebAgentTemplate(command) ? CONTROLLED_WEB_RESEARCH_TOOL_IDS : List.of();
+    }
+
+    private OutputArtifactType expectedOutputArtifactType(StreamChatCommand command) {
+        return isControlledWebAgentTemplate(command) ? OutputArtifactType.MARKDOWN : null;
+    }
+
+    private boolean isControlledWebAgentTemplate(StreamChatCommand command) {
+        if (!hasText(command.taskTemplateId())) {
+            return false;
+        }
+        try {
+            return CONTROLLED_WEB_AGENT_TEMPLATES.contains(TaskTemplateId.fromValue(command.taskTemplateId()));
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
     }
 
     private AgentRun startAgentRun(StreamChatCommand command, TraceRunScope traceRunScope) {
@@ -418,6 +472,16 @@ public class KernelChatInboundService implements ChatInboundPort {
             @Override
             public void onThinking(String content) {
                 delegate.onThinking(content);
+            }
+
+            @Override
+            public void onRunStarted(String runId) {
+                delegate.onRunStarted(runId);
+            }
+
+            @Override
+            public void onEvent(String eventName, Object payload) {
+                delegate.onEvent(eventName, payload);
             }
 
             @Override

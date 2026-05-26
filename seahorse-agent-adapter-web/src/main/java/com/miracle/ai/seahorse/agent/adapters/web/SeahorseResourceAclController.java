@@ -31,6 +31,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResourceAclImportComman
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResourceAclImportDryRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResourceAclManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAclQuery;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -51,14 +52,33 @@ public class SeahorseResourceAclController {
     private static final String DEFAULT_SIZE = "10";
 
     private final ObjectProvider<ResourceAclManagementInboundPort> resourceAclManagementPortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseResourceAclController(
             ObjectProvider<ResourceAclManagementInboundPort> resourceAclManagementPortProvider) {
+        this(resourceAclManagementPortProvider, AdvancedFeatureGate.allEnabledForTests());
+    }
+
+    @Autowired
+    public SeahorseResourceAclController(
+            ObjectProvider<ResourceAclManagementInboundPort> resourceAclManagementPortProvider,
+            ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(resourceAclManagementPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseResourceAclController(
+            ObjectProvider<ResourceAclManagementInboundPort> resourceAclManagementPortProvider,
+            AdvancedFeatureGate advancedFeatureGate) {
         this.resourceAclManagementPortProvider = resourceAclManagementPortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @PostMapping("/api/resource-acl-rules")
     public ApiResponse<Object> create(@RequestBody ResourceAclCreateRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.RESOURCE_ACL_MANAGEMENT);
         ResourceAclCreateRequest safeRequest = request == null
                 ? new ResourceAclCreateRequest(null, null, null, null, null, null, null, 0, null)
                 : request;
@@ -77,6 +97,7 @@ public class SeahorseResourceAclController {
 
     @PostMapping("/api/resource-acl-rules:dry-run-import")
     public ApiResponse<Object> dryRunImport(@RequestBody ResourceAclImportDryRunRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.RESOURCE_ACL_MANAGEMENT);
         ResourceAclImportDryRunRequest safeRequest = request == null
                 ? new ResourceAclImportDryRunRequest(List.of())
                 : request;
@@ -86,6 +107,7 @@ public class SeahorseResourceAclController {
 
     @PostMapping("/api/resource-acl-rules:import")
     public ApiResponse<Object> importRules(@RequestBody ResourceAclImportRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.RESOURCE_ACL_MANAGEMENT);
         ResourceAclImportRequest safeRequest = request == null
                 ? new ResourceAclImportRequest(null, List.of())
                 : request;
@@ -103,6 +125,7 @@ public class SeahorseResourceAclController {
                                     @RequestParam(required = false) ResourceAclRuleStatus status,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.RESOURCE_ACL_MANAGEMENT);
         return ApiResponses.requireService(resourceAclManagementPortProvider,
                 port -> port.page(new ResourceAclQuery(
                         tenantId,
@@ -117,6 +140,7 @@ public class SeahorseResourceAclController {
 
     @PostMapping("/api/resource-acl-rules/{ruleId}/disable")
     public ApiResponse<Object> disable(@PathVariable String ruleId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.RESOURCE_ACL_MANAGEMENT);
         return ApiResponses.requireService(resourceAclManagementPortProvider, port -> port.disable(ruleId));
     }
 

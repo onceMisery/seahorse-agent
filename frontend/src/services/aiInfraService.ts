@@ -10,7 +10,7 @@ export type PageResult<T> = {
   pages: number;
 };
 
-export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "MODIFIED_APPROVED";
+export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "MODIFIED";
 
 export type ApprovalPageParams = {
   tenantId?: string;
@@ -39,6 +39,14 @@ export type CostUsageAggregateParams = {
   runId?: string;
   from?: string;
   to?: string;
+};
+
+export type FeedbackEvaluationCandidateParams = {
+  userId?: string;
+  runId?: string;
+  reason?: string;
+  current?: number;
+  size?: number;
 };
 
 export type ReadinessRequest = {
@@ -110,6 +118,14 @@ export async function getAiInfraSreHealth(): Promise<ApiRecord> {
 
 export async function getAiInfraCostUsageAggregate(params: CostUsageAggregateParams): Promise<ApiRecord> {
   return api.get<ApiRecord, ApiRecord>("/api/cost-usage:aggregate", { params });
+}
+
+export async function getFeedbackEvaluationCandidates(
+  params: FeedbackEvaluationCandidateParams
+): Promise<PageResult<ApiRecord>> {
+  return api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/feedback/evaluation-candidates", {
+    params: withPageDefaults(params)
+  });
 }
 
 export async function generateAiInfraReadinessReport(request: ReadinessRequest): Promise<ApiRecord> {

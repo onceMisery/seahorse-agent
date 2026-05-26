@@ -30,6 +30,9 @@ public interface StreamCallback {
     default void onRunStarted(String runId) {
     }
 
+    default void onEvent(String eventName, Object payload) {
+    }
+
     void onComplete();
 
     void onError(Throwable error);

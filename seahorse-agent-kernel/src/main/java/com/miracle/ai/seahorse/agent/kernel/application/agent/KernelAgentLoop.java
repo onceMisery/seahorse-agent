@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.output.OutputGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitCommand;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
@@ -34,13 +36,20 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactTy
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputGovernanceResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamAgentStepEvent;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamToolCallEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
@@ -52,6 +61,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 
+import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -85,8 +96,27 @@ public class KernelAgentLoop {
     private static final String IDEMPOTENCY_KEY_SEPARATOR = ":";
     private static final String TRACE_TYPE_AGENT_STEP = "AGENT_STEP";
     private static final String TRACE_TYPE_AGENT_TOOL = "AGENT_TOOL";
+    private static final String MODEL_STEP_ID_PREFIX = "model-turn-";
+    private static final String MODEL_STEP_TITLE = "Model turn";
+    private static final String TOOL_CALL_STARTED_SUMMARY = "Tool call started";
+    private static final String TOOL_CALL_APPROVAL_SUMMARY = "Tool call requires approval";
+    private static final String TOOL_ARGUMENT_KEYS_FIELD = "argumentKeys";
+    private static final String TOOL_ARGUMENT_COUNT_FIELD = "argumentCount";
+    private static final String WEB_SEARCH_TOOL_ID = "web_search";
+    private static final String WEB_SEARCH_SOURCES_FIELD = "sources";
+    private static final String ARTIFACT_ID_PREFIX = "artifact-";
+    private static final String MARKDOWN_LANGUAGE = "markdown";
+    private static final String MARKDOWN_ARTIFACT_TITLE = "Research report";
+    private static final String ARTIFACT_CONTENT_FIELD = "content";
+    private static final String ARTIFACT_CODE_FIELD = "code";
+    private static final String ARTIFACT_LANGUAGE_FIELD = "language";
+    private static final String ARTIFACT_TITLE_FIELD = "title";
+    private static final String ARTIFACT_TYPE_FIELD = "artifactType";
+    private static final String MARKDOWN_ARTIFACT_TYPE = "MARKDOWN";
+    private static final ToolRiskLevel DEFAULT_TOOL_RISK_LEVEL = ToolRiskLevel.HIGH;
     private static final String TRACE_CLASS_NAME =
             "com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final StreamingChatModelPort modelPort;
     private final ToolRegistryPort toolRegistry;
@@ -280,7 +310,11 @@ public class KernelAgentLoop {
         int maxSteps = Math.min(request.maxSteps(), options.maxSteps());
         for (int step = 0; step < maxSteps; step++) {
             runControl.checkCancelled();
-            TraceNodeScope stepScope = traceRecorder.startNode(traceRunScope, agentStepCommand(step + 1));
+            int stepNo = step + 1;
+            String stepId = modelStepId(stepNo);
+            Instant stepStartedAt = Instant.now();
+            emitStepStarted(callback, request, stepId, stepNo, stepStartedAt);
+            TraceNodeScope stepScope = traceRecorder.startNode(traceRunScope, agentStepCommand(stepNo));
             boolean modelTurnRecorded = false;
             try {
                 ModelTurn turn = requestModelTurn(request, messages, runControl);
@@ -289,14 +323,23 @@ public class KernelAgentLoop {
                 if (turn.toolCalls().isEmpty()) {
                     String finalContent = applyOutputGovernance(request, turn.content());
                     emitContent(callback, finalContent);
+                    emitFinalArtifact(callback, request, finalContent);
                     steps.add(AgentStep.finalAnswer(finalContent));
+                    emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
+                            null, finalContent);
                     emitComplete(callback);
                     traceRecorder.finishNode(stepScope);
                     return new AgentLoopResult(finalContent, steps, false);
                 }
 
                 List<AgentObservation> observations = executeTools(
-                        turn.toolCalls(), request.allowedToolIds(), request, runControl, traceRunScope, stepScope);
+                        turn.toolCalls(),
+                        request.allowedToolIds(),
+                        request,
+                        runControl,
+                        traceRunScope,
+                        stepScope,
+                        callback);
                 if (requiresApproval(observations)) {
                     emitToolThinking(callback, turn, observations);
                     AgentStep pendingStep = AgentStep.thought(turn.thought(), turn.toolCalls(), observations);
@@ -307,6 +350,8 @@ public class KernelAgentLoop {
                             waitingApprovalStateJson(turn, observations),
                             waitingApprovalMessages(messages, turn)));
                     emitContent(callback, WAITING_APPROVAL_MESSAGE);
+                    emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
+                            null, WAITING_APPROVAL_MESSAGE);
                     emitComplete(callback);
                     traceRecorder.finishNode(stepScope);
                     return new AgentLoopResult(
@@ -317,16 +362,22 @@ public class KernelAgentLoop {
                 }
                 runControl.checkCancelled();
                 emitToolThinking(callback, turn, observations);
+                emitSourcesFromObservations(callback, turn.toolCalls(), observations);
                 steps.add(AgentStep.thought(turn.thought(), turn.toolCalls(), observations));
                 messages.add(ChatMessage.assistantToolCalls(turn.content(), turn.toolCalls()));
                 for (AgentObservation observation : observations) {
                     messages.add(ChatMessage.tool(observation.toolCallId(), observationText(observation)));
                 }
+                emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
+                        null, null);
                 traceRecorder.finishNode(stepScope);
             } catch (RuntimeException ex) {
                 if (!modelTurnRecorded) {
                     recordModelTurn(request, messages, null, ex);
                 }
+                emitRecoverableError(callback, request, stepId, ex);
+                emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
+                        ex, null);
                 traceRecorder.finishNode(stepScope, ex);
                 throw ex;
             }
@@ -413,13 +464,21 @@ public class KernelAgentLoop {
     }
 
     private List<ToolDescriptor> exposedTools(List<String> allowedToolIds) {
-        List<ToolDescriptor> all = toolRegistry.listTools();
         if (allowedToolIds == null || allowedToolIds.isEmpty()) {
-            return all;
+            return List.of();
         }
+        List<ToolDescriptor> all = toolRegistry.listTools();
         Set<String> allowed = new HashSet<>(allowedToolIds);
-        return all.stream()
+        Map<String, ToolDescriptor> descriptorsById = all.stream()
                 .filter(tool -> allowed.contains(tool.toolId()))
+                .collect(java.util.stream.Collectors.toMap(
+                        ToolDescriptor::toolId,
+                        tool -> tool,
+                        (left, right) -> left,
+                        LinkedHashMap::new));
+        return allowedToolIds.stream()
+                .map(descriptorsById::get)
+                .filter(Objects::nonNull)
                 .toList();
     }
 
@@ -451,7 +510,8 @@ public class KernelAgentLoop {
                                                 AgentLoopRequest request,
                                                 AgentRunControl control,
                                                 TraceRunScope traceRunScope,
-                                                TraceNodeScope stepScope) {
+                                                TraceNodeScope stepScope,
+                                                StreamCallback callback) {
         Set<String> allowed = allowedToolIds == null || allowedToolIds.isEmpty()
                 ? Set.of()
                 : new HashSet<>(allowedToolIds);
@@ -464,7 +524,14 @@ public class KernelAgentLoop {
         for (int start = 0; start < toolCalls.size(); start += parallelism) {
             int end = Math.min(start + parallelism, toolCalls.size());
             observations.addAll(executeToolBatch(
-                    toolCalls.subList(start, end), allowed, request, parallelism, control, traceRunScope, stepScope));
+                    toolCalls.subList(start, end),
+                    allowed,
+                    request,
+                    parallelism,
+                    control,
+                    traceRunScope,
+                    stepScope,
+                    callback));
             if (Thread.currentThread().isInterrupted() && observations.size() < toolCalls.size()) {
                 for (int i = observations.size(); i < toolCalls.size(); i++) {
                     observations.add(AgentObservation.failed(toolCalls.get(i).id(), "Tool execution was interrupted"));
@@ -481,10 +548,14 @@ public class KernelAgentLoop {
                                                     int parallelism,
                                                     AgentRunControl control,
                                                     TraceRunScope traceRunScope,
-                                                    TraceNodeScope stepScope) {
+                                                    TraceNodeScope stepScope,
+                                                    StreamCallback callback) {
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(parallelism, toolCalls.size()));
         control.bindToolExecutor(executor);
         try {
+            for (AgentToolCall toolCall : toolCalls) {
+                emitToolCallStarted(callback, request, toolCall);
+            }
             List<Callable<AgentObservation>> tasks = toolCalls.stream()
                     .<Callable<AgentObservation>>map(toolCall ->
                             () -> executeToolTraced(toolCall, allowedToolIds, request, traceRunScope, stepScope))
@@ -496,6 +567,7 @@ public class KernelAgentLoop {
                 AgentObservation observation = toObservation(toolCalls.get(i), futures.get(i));
                 observations.add(observation);
                 runStepRecorder.recordToolCall(request.runId(), toolCalls.get(i), observation);
+                emitToolCallWaitingUser(callback, request, toolCalls.get(i), observation);
             }
             return observations;
         } catch (InterruptedException ex) {
@@ -544,7 +616,10 @@ public class KernelAgentLoop {
             ToolInvocationResult result = toolGateway.invoke(toolInvocationRequest(toolCall, allowedToolIds, request));
             return result.success()
                     ? AgentObservation.ok(toolCall.id(), truncateObservationText(result.content()))
-                    : AgentObservation.failed(toolCall.id(), truncateObservationText(result.error()));
+                    : AgentObservation.failed(
+                            toolCall.id(),
+                            truncateObservationText(result.error()),
+                            result.approvalId());
         } catch (Exception ex) {
             return AgentObservation.failed(toolCall.id(),
                     truncateObservationText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
@@ -625,6 +700,122 @@ public class KernelAgentLoop {
         return observation.success() ? observation.content() : observation.error();
     }
 
+    private String modelStepId(int stepNo) {
+        return MODEL_STEP_ID_PREFIX + stepNo;
+    }
+
+    private void emitStepStarted(StreamCallback callback,
+                                 AgentLoopRequest request,
+                                 String stepId,
+                                 int stepNo,
+                                 Instant startedAt) {
+        emitEvent(callback, StreamEventType.STEP_STARTED, new StreamAgentStepEvent(
+                request.runId(),
+                stepId,
+                stepNo,
+                AgentStepType.MODEL_TURN,
+                AgentStepStatus.RUNNING,
+                MODEL_STEP_TITLE,
+                null,
+                startedAt,
+                null,
+                null,
+                null,
+                null,
+                false));
+    }
+
+    private void emitStepFinished(StreamCallback callback,
+                                  AgentLoopRequest request,
+                                  String stepId,
+                                  int stepNo,
+                                  Instant startedAt,
+                                  AgentStepStatus status,
+                                  Throwable error,
+                                  String message) {
+        Instant finishedAt = Instant.now();
+        emitEvent(callback, StreamEventType.STEP_FINISHED, new StreamAgentStepEvent(
+                request.runId(),
+                stepId,
+                stepNo,
+                AgentStepType.MODEL_TURN,
+                status,
+                MODEL_STEP_TITLE,
+                null,
+                startedAt,
+                finishedAt,
+                Math.max(0L, Duration.between(startedAt, finishedAt).toMillis()),
+                error == null ? null : error.getClass().getSimpleName(),
+                error == null ? message : Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()),
+                false));
+    }
+
+    private void emitRecoverableError(StreamCallback callback,
+                                      AgentLoopRequest request,
+                                      String stepId,
+                                      Throwable error) {
+        emitEvent(callback, StreamEventType.RECOVERABLE_ERROR, new StreamAgentStepEvent(
+                request.runId(),
+                stepId,
+                0,
+                AgentStepType.MODEL_TURN,
+                AgentStepStatus.FAILED,
+                MODEL_STEP_TITLE,
+                null,
+                null,
+                Instant.now(),
+                null,
+                error == null ? null : error.getClass().getSimpleName(),
+                error == null ? null : Objects.requireNonNullElse(error.getMessage(), error.getClass().getName()),
+                true));
+    }
+
+    private void emitToolCallStarted(StreamCallback callback, AgentLoopRequest request, AgentToolCall toolCall) {
+        emitEvent(callback, StreamEventType.TOOL_CALL_STARTED, new StreamToolCallEvent(
+                request.runId(),
+                toolCall.id(),
+                toolCall.id(),
+                toolCall.id(),
+                toolCall.toolId(),
+                DEFAULT_TOOL_RISK_LEVEL,
+                TOOL_CALL_STARTED_SUMMARY,
+                Instant.now(),
+                null,
+                null,
+                null));
+    }
+
+    private void emitToolCallWaitingUser(StreamCallback callback,
+                                         AgentLoopRequest request,
+                                         AgentToolCall toolCall,
+                                         AgentObservation observation) {
+        if (!isApprovalRequired(observation)) {
+            return;
+        }
+        emitEvent(callback, StreamEventType.TOOL_CALL_WAITING_USER, new StreamApprovalRequiredEvent(
+                request.runId(),
+                toolCall.id(),
+                observation.approvalId(),
+                toolCall.id(),
+                toolCall.toolId(),
+                DEFAULT_TOOL_RISK_LEVEL,
+                TOOL_CALL_APPROVAL_SUMMARY,
+                argumentsPreview(toolCall),
+                Instant.now()));
+    }
+
+    private Map<String, Object> argumentsPreview(AgentToolCall toolCall) {
+        return Map.of(
+                TOOL_ARGUMENT_KEYS_FIELD, toolCall.arguments().keySet(),
+                TOOL_ARGUMENT_COUNT_FIELD, toolCall.arguments().size());
+    }
+
+    private void emitEvent(StreamCallback callback, StreamEventType eventType, Object payload) {
+        if (callback != null && eventType != null) {
+            callback.onEvent(eventType.value(), payload);
+        }
+    }
+
     private void recordModelTurn(AgentLoopRequest request,
                                  List<ChatMessage> messages,
                                  ModelTurn turn,
@@ -667,10 +858,54 @@ public class KernelAgentLoop {
         }
     }
 
+    private void emitSourcesFromObservations(StreamCallback callback,
+                                             List<AgentToolCall> toolCalls,
+                                             List<AgentObservation> observations) {
+        if (callback == null || toolCalls == null || observations == null) {
+            return;
+        }
+        for (int i = 0; i < Math.min(toolCalls.size(), observations.size()); i++) {
+            AgentToolCall toolCall = toolCalls.get(i);
+            AgentObservation observation = observations.get(i);
+            if (toolCall == null || observation == null || !observation.success()
+                    || !WEB_SEARCH_TOOL_ID.equals(toolCall.toolId())
+                    || observation.content() == null || observation.content().isBlank()) {
+                continue;
+            }
+            try {
+                JsonNode sources = OBJECT_MAPPER.readTree(observation.content()).path(WEB_SEARCH_SOURCES_FIELD);
+                if (sources.isArray() && !sources.isEmpty()) {
+                    emitEvent(callback, StreamEventType.SOURCE_FOUND,
+                            OBJECT_MAPPER.convertValue(sources, List.class));
+                }
+            } catch (Exception ignored) {
+                // Tool observations are best-effort UI evidence; invalid JSON should not fail the run.
+            }
+        }
+    }
+
     private void emitContent(StreamCallback callback, String content) {
         if (callback != null && content != null && !content.isEmpty()) {
             callback.onContent(content);
         }
+    }
+
+    private void emitFinalArtifact(StreamCallback callback, AgentLoopRequest request, String content) {
+        if (callback == null || request == null || content == null || content.isBlank()
+                || request.expectedOutputArtifactType() != OutputArtifactType.MARKDOWN) {
+            return;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("id", ARTIFACT_ID_PREFIX + Objects.requireNonNullElse(request.runId(), "live"));
+        payload.put(ARTIFACT_TITLE_FIELD, MARKDOWN_ARTIFACT_TITLE);
+        payload.put(ARTIFACT_LANGUAGE_FIELD, MARKDOWN_LANGUAGE);
+        payload.put(ARTIFACT_TYPE_FIELD, MARKDOWN_ARTIFACT_TYPE);
+        payload.put(ARTIFACT_CONTENT_FIELD, content);
+        payload.put(ARTIFACT_CODE_FIELD, content);
+        if (request.runId() != null && !request.runId().isBlank()) {
+            payload.put("runId", request.runId());
+        }
+        emitEvent(callback, StreamEventType.ARTIFACT_CREATED, payload);
     }
 
     private String applyOutputGovernance(AgentLoopRequest request, String originalContent) {

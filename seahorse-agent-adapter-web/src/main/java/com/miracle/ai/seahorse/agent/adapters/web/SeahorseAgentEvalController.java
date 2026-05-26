@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.eval.AgentEvalType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentEvalInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentEvalSummaryHistoryQuery;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentEvalSummarySaveCommand;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,15 +42,32 @@ public class SeahorseAgentEvalController {
     private static final String DEFAULT_SIZE = "20";
 
     private final ObjectProvider<AgentEvalInboundPort> agentEvalPortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseAgentEvalController(ObjectProvider<AgentEvalInboundPort> agentEvalPortProvider) {
+        this(agentEvalPortProvider, AdvancedFeatureGate.consumerWebDefaults());
+    }
+
+    @Autowired
+    public SeahorseAgentEvalController(ObjectProvider<AgentEvalInboundPort> agentEvalPortProvider,
+                                       ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(agentEvalPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseAgentEvalController(ObjectProvider<AgentEvalInboundPort> agentEvalPortProvider,
+                                       AdvancedFeatureGate advancedFeatureGate) {
         this.agentEvalPortProvider = agentEvalPortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @PostMapping("/api/agents/{agentId}/versions/{versionId}/eval-summaries")
     public ApiResponse<Object> save(@PathVariable String agentId,
                                     @PathVariable String versionId,
                                     @RequestBody AgentEvalSummarySaveRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_EVALUATION);
         AgentEvalSummarySaveRequest safeRequest = request == null
                 ? new AgentEvalSummarySaveRequest(
                 null, null, null, null, 0d, 0d, 0d, 0, null, null, List.of(), null, null)
@@ -78,6 +96,7 @@ public class SeahorseAgentEvalController {
                                       @PathVariable String versionId,
                                       @RequestParam String tenantId,
                                       @RequestParam AgentEvalType evalType) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_EVALUATION);
         return ApiResponses.requireService(agentEvalPortProvider, port -> port.latestSummary(
                         tenantId,
                         agentId,
@@ -93,6 +112,7 @@ public class SeahorseAgentEvalController {
                                        @RequestParam(required = false) AgentEvalType evalType,
                                        @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                        @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_EVALUATION);
         return ApiResponses.requireService(agentEvalPortProvider,
                 port -> port.history(new AgentEvalSummaryHistoryQuery(
                         tenantId,

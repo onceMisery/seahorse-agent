@@ -20,6 +20,13 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.LocalAgentAsToolPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.web.WebFetchSafetyPolicy;
+import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeature;
+import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeatureGate;
+import com.miracle.ai.seahorse.agent.adapters.web.ProductMode;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunWorkerService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
@@ -83,6 +90,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
+import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -98,6 +108,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -355,8 +366,34 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     }
 
     @Test
-    void shouldWireLocalAgentAsToolPortWhenHandoffDependenciesExist() {
+    void shouldNotWireLocalAgentAsToolPortInConsumerWebByDefault() {
         contextRunner.withUserConfiguration(TestLocalAgentAsToolConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(LocalAgentAsToolPort.class);
+                });
+    }
+
+    @Test
+    void shouldNotWireLocalAgentAsToolPortWhenConsumerWebFlagsAreMisconfigured() {
+        contextRunner.withPropertyValues(
+                        "seahorse-agent.product-mode=consumer-web",
+                        "seahorse-agent.advanced.agent-handoff-enabled=true",
+                        "seahorse-agent.advanced.local-agent-enabled=true")
+                .withUserConfiguration(TestLocalAgentAsToolConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(LocalAgentAsToolPort.class);
+                });
+    }
+
+    @Test
+    void shouldWireLocalAgentAsToolPortWhenAdvancedLocalAgentFeatureIsEnabled() {
+        contextRunner.withPropertyValues(
+                        "seahorse-agent.product-mode=enterprise-platform",
+                        "seahorse-agent.advanced.agent-handoff-enabled=true",
+                        "seahorse-agent.advanced.local-agent-enabled=true")
+                .withUserConfiguration(TestAdvancedLocalAgentAsToolConfiguration.class)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(LocalAgentAsToolPort.class);
@@ -366,6 +403,55 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
 
                     assertThat(toolRegistry.registered)
                             .containsKey(LocalAgentAsToolPort.TOOL_ID);
+                });
+    }
+
+    @Test
+    void shouldWireControlledWebFetchToolButNotWebSearchWithoutProvider() {
+        contextRunner.withUserConfiguration(TestNoRunStoreConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(WebFetchSafetyPolicy.class);
+                    assertThat(context).hasSingleBean(WebFetchPort.class);
+                    assertThat(context).hasSingleBean(WebFetchToolPortAdapter.class);
+                    assertThat(context).doesNotHaveBean(WebSearchToolPortAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldWireControlledWebTaskAgentRuntimeByDefault() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(SeahorseAgentKernelAutoConfiguration.class))
+                .withUserConfiguration(TestNoRunStoreConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(KernelAgentLoop.class);
+                    assertThat(context).hasSingleBean(WebFetchToolPortAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldDisableAgentRuntimeOnlyWhenAgentModeAndWebTaskRuntimeAreBothDisabled() {
+        new ApplicationContextRunner()
+                .withPropertyValues(
+                        "seahorse-agent.chat.agent-mode-enabled=false",
+                        "seahorse-agent.chat.web-task-agent-enabled=false")
+                .withConfiguration(AutoConfigurations.of(SeahorseAgentKernelAutoConfiguration.class))
+                .withUserConfiguration(TestNoRunStoreConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(KernelAgentLoop.class);
+                    assertThat(context).doesNotHaveBean(WebFetchToolPortAdapter.class);
+                });
+    }
+
+    @Test
+    void shouldWireWebSearchToolOnlyWhenServerProviderExists() {
+        contextRunner.withUserConfiguration(TestWebSearchProviderConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(WebSearchPort.class);
+                    assertThat(context).hasSingleBean(WebSearchToolPortAdapter.class);
                 });
     }
 
@@ -419,6 +505,15 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Bean
         StreamingChatModelPort streamingChatModelPort() {
             return new SingleTurnStreamingChatModel();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestWebSearchProviderConfiguration extends TestNoRunStoreConfiguration {
+
+        @Bean
+        WebSearchPort webSearchPort() {
+            return request -> new WebSearchResult(request.query(), List.of());
         }
     }
 
@@ -784,6 +879,18 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Bean
         AgentHandoffRepositoryPort agentHandoffRepositoryPort() {
             return new InMemoryAgentHandoffRepository();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestAdvancedLocalAgentAsToolConfiguration extends TestLocalAgentAsToolConfiguration {
+
+        @Bean
+        AdvancedFeatureGate advancedFeatureGate() {
+            EnumMap<AdvancedFeature, Boolean> features = new EnumMap<>(AdvancedFeature.class);
+            features.put(AdvancedFeature.AGENT_HANDOFF, true);
+            features.put(AdvancedFeature.LOCAL_AGENT, true);
+            return AdvancedFeatureGate.configured(ProductMode.ENTERPRISE_PLATFORM, features);
         }
     }
 

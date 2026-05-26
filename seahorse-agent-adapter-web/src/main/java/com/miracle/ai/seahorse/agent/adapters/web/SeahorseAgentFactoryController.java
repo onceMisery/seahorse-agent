@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentFactoryCreateComma
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentFactoryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentPublishValidationCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentVersionRollbackCommand;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,19 +40,37 @@ import java.util.List;
 public class SeahorseAgentFactoryController {
 
     private final ObjectProvider<AgentFactoryInboundPort> agentFactoryPortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseAgentFactoryController(ObjectProvider<AgentFactoryInboundPort> agentFactoryPortProvider) {
+        this(agentFactoryPortProvider, AdvancedFeatureGate.allEnabledForTests());
+    }
+
+    @Autowired
+    public SeahorseAgentFactoryController(ObjectProvider<AgentFactoryInboundPort> agentFactoryPortProvider,
+                                          ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(agentFactoryPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseAgentFactoryController(ObjectProvider<AgentFactoryInboundPort> agentFactoryPortProvider,
+                                          AdvancedFeatureGate advancedFeatureGate) {
         this.agentFactoryPortProvider = agentFactoryPortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @GetMapping("/api/agent-templates")
     public ApiResponse<Object> listTemplates(
             @RequestParam(required = false, defaultValue = "false") boolean includeDisabled) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_FACTORY_MANAGEMENT);
         return ApiResponses.requireService(agentFactoryPortProvider, port -> port.listTemplates(includeDisabled));
     }
 
     @PostMapping("/api/agents/from-template")
     public ApiResponse<Object> createFromTemplate(@RequestBody AgentFactoryCreateRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_FACTORY_MANAGEMENT);
         AgentFactoryCreateRequest safeRequest = request == null
                 ? new AgentFactoryCreateRequest(null, null, null, null, null, null, null, List.of(), null, null)
                 : request;
@@ -72,6 +91,7 @@ public class SeahorseAgentFactoryController {
     @PostMapping("/api/agents/{agentId}/validate")
     public ApiResponse<Object> validatePublish(@PathVariable String agentId,
                                                @RequestBody AgentPublishValidationRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_FACTORY_MANAGEMENT);
         AgentPublishValidationRequest safeRequest = request == null
                 ? new AgentPublishValidationRequest(null, null, List.of(), null, null, null)
                 : request;
@@ -88,6 +108,7 @@ public class SeahorseAgentFactoryController {
 
     @GetMapping("/api/agents/{agentId}/publish-checks/latest")
     public ApiResponse<Object> latestPublishCheck(@PathVariable String agentId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_FACTORY_MANAGEMENT);
         return ApiResponses.requireService(agentFactoryPortProvider,
                 port -> port.latestPublishCheck(agentId).orElse(null));
     }
@@ -96,6 +117,7 @@ public class SeahorseAgentFactoryController {
     public ApiResponse<Object> rollback(@PathVariable String agentId,
                                         @PathVariable String versionId,
                                         @RequestBody AgentVersionRollbackRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_FACTORY_MANAGEMENT);
         AgentVersionRollbackRequest safeRequest = request == null
                 ? new AgentVersionRollbackRequest(null, null, null, null)
                 : request;
@@ -114,6 +136,7 @@ public class SeahorseAgentFactoryController {
                                        @RequestParam(required = false) String keyword,
                                        @RequestParam(required = false, defaultValue = "1") long current,
                                        @RequestParam(required = false, defaultValue = "20") long size) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_FACTORY_MANAGEMENT);
         return ApiResponses.requireService(agentFactoryPortProvider,
                 port -> port.catalog(new AgentCatalogQuery(tenantId, keyword, current, size)));
     }

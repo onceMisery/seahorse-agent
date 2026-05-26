@@ -76,7 +76,10 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundP
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionUpdateDraftCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunMessageSnapshot;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshot;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingReplaceCommand;
@@ -226,6 +229,7 @@ class SeahorseAgentControllerTests {
         AgentRunInboundPort port = mock(AgentRunInboundPort.class);
         AgentRunResumeInboundPort resumePort = mock(AgentRunResumeInboundPort.class);
         AgentCheckpointQueryInboundPort checkpointPort = mock(AgentCheckpointQueryInboundPort.class);
+        AgentRunSnapshotInboundPort snapshotPort = mock(AgentRunSnapshotInboundPort.class);
         AgentRun run = run(AgentRunStatus.RUNNING);
         when(port.startRun(any())).thenReturn(run);
         when(port.findRunById("run-1")).thenReturn(Optional.of(run));
@@ -233,12 +237,15 @@ class SeahorseAgentControllerTests {
         when(port.cancel("run-1")).thenReturn(run(AgentRunStatus.CANCELLED));
         when(resumePort.resume("run-1")).thenReturn(run(AgentRunStatus.SUCCEEDED));
         when(checkpointPort.listByRunId("run-1")).thenReturn(List.of(checkpoint()));
+        when(snapshotPort.getSnapshot("run-1")).thenReturn(snapshot());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseAgentRunController(
                         provider(AgentRunInboundPort.class, port),
                         provider(AgentRunResumeInboundPort.class, resumePort),
-                        provider(AgentCheckpointQueryInboundPort.class, checkpointPort))).build();
+                        provider(AgentCheckpointQueryInboundPort.class, checkpointPort),
+                        provider(AgentRunSnapshotInboundPort.class, snapshotPort),
+                        AdvancedFeatureGate.allEnabledForTests())).build();
 
         mvc.perform(post("/agents/agent-1/runs")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -279,6 +286,111 @@ class SeahorseAgentControllerTests {
                 .andExpect(jsonPath("$.data[0].checkpointId").value("checkpoint-1"))
                 .andExpect(jsonPath("$.data[0].checkpointType").value("WAITING_APPROVAL"));
         verify(checkpointPort).listByRunId("run-1");
+
+        mvc.perform(get("/api/agent-runs/run-1/snapshot"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.run.runId").value("run-1"))
+                .andExpect(jsonPath("$.data.lastEventSeq").value(1))
+                .andExpect(jsonPath("$.data.pendingApprovals[0].approvalId").value("approval-1"));
+        verify(snapshotPort).getSnapshot("run-1");
+    }
+
+    @Test
+    void consumerWebModeShouldRejectRunManagementApiVariantsExceptSnapshot() throws Exception {
+        AgentRunInboundPort port = mock(AgentRunInboundPort.class);
+        AgentRunResumeInboundPort resumePort = mock(AgentRunResumeInboundPort.class);
+        AgentCheckpointQueryInboundPort checkpointPort = mock(AgentCheckpointQueryInboundPort.class);
+        AgentRunSnapshotInboundPort snapshotPort = mock(AgentRunSnapshotInboundPort.class);
+        when(snapshotPort.getSnapshot("run-1")).thenReturn(snapshot());
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                        new SeahorseAgentRunController(
+                                provider(AgentRunInboundPort.class, port),
+                                provider(AgentRunResumeInboundPort.class, resumePort),
+                                provider(AgentCheckpointQueryInboundPort.class, checkpointPort),
+                                provider(AgentRunSnapshotInboundPort.class, snapshotPort),
+                                AdvancedFeatureGate.consumerWebDefaults()))
+                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                .build();
+
+        mvc.perform(post("/api/agent-runs/run-1/retry"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message")
+                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+
+        mvc.perform(post("/api/agent-runs/run-1/resume"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message")
+                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+
+        mvc.perform(get("/api/agent-runs/run-1/checkpoints"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message")
+                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+
+        mvc.perform(get("/api/agent-runs/run-1/snapshot"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.run.runId").value("run-1"));
+
+        verify(snapshotPort).getSnapshot("run-1");
+        verifyNoInteractions(port, resumePort, checkpointPort);
+    }
+
+    @Test
+    void consumerWebModeShouldRejectLegacyAgentRunManagement() throws Exception {
+        AgentRunInboundPort port = mock(AgentRunInboundPort.class);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                        new SeahorseAgentRunController(provider(AgentRunInboundPort.class, port)))
+                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                .build();
+
+        mvc.perform(post("/agents/agent-1/runs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "versionId", "agent-1-v1",
+                                "tenantId", "tenant-a",
+                                "conversationId", "conversation-1",
+                                "triggerType", "A2A",
+                                "inputSummary", "summary",
+                                "traceId", "trace-1"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.message")
+                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+
+        verifyNoInteractions(port);
+    }
+
+    @Test
+    void enterpriseRunManagementShouldStillRejectA2aWhenHandoffIsDisabled() throws Exception {
+        AgentRunInboundPort port = mock(AgentRunInboundPort.class);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                        new SeahorseAgentRunController(
+                                provider(AgentRunInboundPort.class, port),
+                                null,
+                                null,
+                                null,
+                                AdvancedFeatureGate.configured(
+                                        ProductMode.ENTERPRISE_PLATFORM,
+                                        Map.of(AdvancedFeature.AGENT_RUN_MANAGEMENT, true))))
+                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                .build();
+
+        mvc.perform(post("/agents/agent-1/runs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "versionId", "agent-1-v1",
+                                "tenantId", "tenant-a",
+                                "conversationId", "conversation-1",
+                                "triggerType", "A2A",
+                                "inputSummary", "summary",
+                                "traceId", "trace-1"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.message")
+                        .value("Advanced feature AGENT_HANDOFF is disabled in ENTERPRISE_PLATFORM mode"));
+
+        verifyNoInteractions(port);
     }
 
     @Test
@@ -602,7 +714,9 @@ class SeahorseAgentControllerTests {
         when(port.disableOperation(any())).thenReturn(disabledOperation);
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseOpenApiConnectorController(provider(OpenApiConnectorInboundPort.class, port))).build();
+                new SeahorseOpenApiConnectorController(
+                        provider(OpenApiConnectorInboundPort.class, port),
+                        AdvancedFeatureGate.allEnabledForTests())).build();
 
         mvc.perform(post("/api/connectors/openapi")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -714,6 +828,7 @@ class SeahorseAgentControllerTests {
         when(port.page("tenant-a", ApprovalRequestStatus.PENDING, 2L, 20L))
                 .thenReturn(new ApprovalRequestPage(List.of(approval(ApprovalRequestStatus.PENDING)), 1L, 20L, 2L,
                         1L));
+        when(port.listPendingByRunId("run-1")).thenReturn(List.of(approval(ApprovalRequestStatus.PENDING)));
         when(port.findById("approval-1")).thenReturn(Optional.of(approval(ApprovalRequestStatus.PENDING)));
         when(port.approve(eq("approval-1"), any())).thenReturn(approval(ApprovalRequestStatus.APPROVED));
         when(port.reject(eq("approval-1"), any())).thenReturn(approval(ApprovalRequestStatus.REJECTED));
@@ -731,6 +846,13 @@ class SeahorseAgentControllerTests {
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.records[0].approvalId").value("approval-1"))
                 .andExpect(jsonPath("$.data.records[0].status").value("PENDING"));
+
+        mvc.perform(get("/api/agent-runs/run-1/pending-approvals"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].approvalId").value("approval-1"))
+                .andExpect(jsonPath("$.data[0].runId").value("run-1"))
+                .andExpect(jsonPath("$.data[0].status").value("PENDING"));
+        verify(port).listPendingByRunId("run-1");
 
         mvc.perform(get("/api/approvals/approval-1"))
                 .andExpect(status().isOk())
@@ -811,7 +933,9 @@ class SeahorseAgentControllerTests {
                 null));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseSecretController(provider(SecretManagementInboundPort.class, port))).build();
+                new SeahorseSecretController(
+                        provider(SecretManagementInboundPort.class, port),
+                        AdvancedFeatureGate.allEnabledForTests())).build();
 
         mvc.perform(post("/api/secrets")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -837,7 +961,9 @@ class SeahorseAgentControllerTests {
         SecretManagementInboundPort port = mock(SecretManagementInboundPort.class);
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                        new SeahorseSecretController(provider(SecretManagementInboundPort.class, port)))
+                        new SeahorseSecretController(
+                                provider(SecretManagementInboundPort.class, port),
+                                AdvancedFeatureGate.allEnabledForTests()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -892,6 +1018,21 @@ class SeahorseAgentControllerTests {
                 null,
                 "{\"toolId\":\"memory-forget\"}",
                 NOW);
+    }
+
+    private static AgentRunSnapshot snapshot() {
+        return new AgentRunSnapshot(
+                run(AgentRunStatus.WAITING_APPROVAL),
+                List.of(),
+                Optional.of(checkpoint()),
+                new AgentRunMessageSnapshot(null, "partial", "thinking"),
+                "step-1",
+                List.of(),
+                List.of(),
+                List.of(approval(ApprovalRequestStatus.PENDING)),
+                1L,
+                true,
+                false);
     }
 
     private static ToolCatalogEntry tool(boolean enabled) {

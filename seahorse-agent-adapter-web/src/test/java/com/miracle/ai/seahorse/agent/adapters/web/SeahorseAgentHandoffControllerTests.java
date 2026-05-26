@@ -52,7 +52,9 @@ class SeahorseAgentHandoffControllerTests {
         when(port.findById("handoff-1")).thenReturn(running);
         when(port.cancel("handoff-1")).thenReturn(cancelled);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseAgentHandoffController(provider(AgentHandoffInboundPort.class, port))).build();
+                new SeahorseAgentHandoffController(
+                        provider(AgentHandoffInboundPort.class, port),
+                        AdvancedFeatureGate.allEnabledForTests())).build();
 
         mvc.perform(get("/api/agent-runs/parent-run-1/handoffs").param("tenantId", "tenant-a"))
                 .andExpect(status().isOk())

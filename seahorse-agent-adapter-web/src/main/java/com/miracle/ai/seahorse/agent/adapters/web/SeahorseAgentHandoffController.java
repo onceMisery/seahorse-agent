@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffFailureCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentHandoffInboundPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,14 +36,27 @@ import java.util.List;
 public class SeahorseAgentHandoffController {
 
     private final ObjectProvider<AgentHandoffInboundPort> handoffPortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
-    public SeahorseAgentHandoffController(ObjectProvider<AgentHandoffInboundPort> handoffPortProvider) {
+    @Autowired
+    public SeahorseAgentHandoffController(ObjectProvider<AgentHandoffInboundPort> handoffPortProvider,
+                                          ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(handoffPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseAgentHandoffController(ObjectProvider<AgentHandoffInboundPort> handoffPortProvider,
+                                          AdvancedFeatureGate advancedFeatureGate) {
         this.handoffPortProvider = handoffPortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @GetMapping("/api/agent-runs/{runId}/handoffs")
     public ApiResponse<Object> listByParentRunId(@PathVariable String runId,
                                                  @RequestParam String tenantId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_HANDOFF);
         return ApiResponses.requireService(handoffPortProvider, port -> port.listByParentRunId(tenantId, runId).stream()
                 .map(AgentHandoffResponse::from)
                 .toList());
@@ -50,11 +64,13 @@ public class SeahorseAgentHandoffController {
 
     @GetMapping("/api/agent-handoffs/{handoffId}")
     public ApiResponse<Object> findById(@PathVariable String handoffId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_HANDOFF);
         return ApiResponses.requireService(handoffPortProvider, port -> AgentHandoffResponse.from(port.findById(handoffId)));
     }
 
     @PostMapping("/api/agent-handoffs/{handoffId}/cancel")
     public ApiResponse<Object> cancel(@PathVariable String handoffId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_HANDOFF);
         return ApiResponses.requireService(handoffPortProvider, port -> AgentHandoffResponse.from(port.cancel(handoffId)));
     }
 

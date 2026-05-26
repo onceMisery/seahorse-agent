@@ -59,6 +59,8 @@ public class StreamChatContext {
 
     private QueryOptimizationResult queryOptimizationResult;
 
+    private List<String> attachmentIds;
+
     public static Builder builder() {
         return new Builder();
     }
@@ -105,6 +107,11 @@ public class StreamChatContext {
 
         public Builder contextPack(ContextPack contextPack) {
             context.setContextPack(contextPack);
+            return this;
+        }
+
+        public Builder attachmentIds(List<String> attachmentIds) {
+            context.setAttachmentIds(attachmentIds == null ? List.of() : List.copyOf(attachmentIds));
             return this;
         }
 

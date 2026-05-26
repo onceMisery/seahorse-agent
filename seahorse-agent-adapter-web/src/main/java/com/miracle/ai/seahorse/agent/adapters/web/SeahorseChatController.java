@@ -18,18 +18,20 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.hutool.core.util.IdUtil;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.task.TaskTemplateId;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
-import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimitDecision;
-import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimitDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -39,6 +41,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -49,10 +53,17 @@ import java.util.Objects;
 @RestController
 public class SeahorseChatController {
 
+    private static final EnumSet<TaskTemplateId> CONTROLLED_WEB_AGENT_TEMPLATES = EnumSet.of(
+            TaskTemplateId.DEEP_RESEARCH,
+            TaskTemplateId.WEB_SUMMARY,
+            TaskTemplateId.COMPARE_ANALYSIS);
+
     private final ObjectProvider<ChatInboundPort> chatInboundPortProvider;
+    private final ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider;
     private final ChatStreamCallbackFactoryPort callbackFactory;
     private final StreamTaskPort streamTaskPort;
     private final RateLimiterPort rateLimiterPort;
+    private final AdvancedFeatureGate advancedFeatureGate;
     private final long sseTimeoutMs;
     private final int chatRateLimitPermits;
     private final Duration chatRateLimitWindow;
@@ -61,36 +72,72 @@ public class SeahorseChatController {
                                   ChatStreamCallbackFactoryPort callbackFactory,
                                   StreamTaskPort streamTaskPort,
                                   long sseTimeoutMs) {
-        this.chatInboundPortProvider = chatInboundPortProvider;
-        this.callbackFactory = Objects.requireNonNull(callbackFactory, "callbackFactory must not be null");
-        this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
-        this.rateLimiterPort = RateLimiterPort.noop();
-        this.sseTimeoutMs = sseTimeoutMs;
-        this.chatRateLimitPermits = 60;
-        this.chatRateLimitWindow = Duration.ofMinutes(1);
+        this(chatInboundPortProvider, callbackFactory, streamTaskPort, sseTimeoutMs, null);
+    }
+
+    public SeahorseChatController(ObjectProvider<ChatInboundPort> chatInboundPortProvider,
+                                  ChatStreamCallbackFactoryPort callbackFactory,
+                                  StreamTaskPort streamTaskPort,
+                                  long sseTimeoutMs,
+                                  ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider) {
+        this(chatInboundPortProvider,
+                callbackFactory,
+                streamTaskPort,
+                snapshotPortProvider,
+                RateLimiterPort.noop(),
+                AdvancedFeatureGate.consumerWebDefaults(),
+                sseTimeoutMs,
+                60,
+                Duration.ofMinutes(1));
     }
 
     @Autowired
     public SeahorseChatController(ObjectProvider<ChatInboundPort> chatInboundPortProvider,
                                   ChatStreamCallbackFactoryPort callbackFactory,
                                   StreamTaskPort streamTaskPort,
+                                  ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
                                   ObjectProvider<RateLimiterPort> rateLimiterPortProvider,
+                                  ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
                                   @Value("${seahorse-agent.web.sse-timeout-ms:300000}")
                                   long sseTimeoutMs,
                                   @Value("${seahorse-agent.web.chat-rate-limit.permits:60}") int chatRateLimitPermits,
                                   @Value("${seahorse-agent.web.chat-rate-limit.window-ms:60000}")
                                   long chatRateLimitWindowMs) {
+        this(chatInboundPortProvider,
+                callbackFactory,
+                streamTaskPort,
+                snapshotPortProvider,
+                Objects.requireNonNullElse(rateLimiterPortProvider.getIfAvailable(), RateLimiterPort.noop()),
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults),
+                sseTimeoutMs,
+                chatRateLimitPermits,
+                Duration.ofMillis(Math.max(1L, chatRateLimitWindowMs)));
+    }
+
+    private SeahorseChatController(ObjectProvider<ChatInboundPort> chatInboundPortProvider,
+                                   ChatStreamCallbackFactoryPort callbackFactory,
+                                   StreamTaskPort streamTaskPort,
+                                   ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
+                                   RateLimiterPort rateLimiterPort,
+                                   AdvancedFeatureGate advancedFeatureGate,
+                                   long sseTimeoutMs,
+                                   int chatRateLimitPermits,
+                                   Duration chatRateLimitWindow) {
         this.chatInboundPortProvider = chatInboundPortProvider;
+        this.snapshotPortProvider = snapshotPortProvider;
         this.callbackFactory = Objects.requireNonNull(callbackFactory, "callbackFactory must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
-        this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPortProvider.getIfAvailable(), RateLimiterPort.noop());
+        this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPort, RateLimiterPort.noop());
+        this.advancedFeatureGate = Objects.requireNonNullElseGet(
+                advancedFeatureGate,
+                AdvancedFeatureGate::consumerWebDefaults);
         this.sseTimeoutMs = sseTimeoutMs;
         this.chatRateLimitPermits = Math.max(1, chatRateLimitPermits);
-        this.chatRateLimitWindow = Duration.ofMillis(Math.max(1L, chatRateLimitWindowMs));
+        this.chatRateLimitWindow = Objects.requireNonNullElse(chatRateLimitWindow, Duration.ofMinutes(1));
     }
 
     @GetMapping(value = "/rag/v3/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE + ";charset=UTF-8")
-    public SseEmitter chat(@RequestParam String question,
+    public SseEmitter chat(@RequestParam(required = false) String question,
                            @RequestParam(required = false) String conversationId,
                            @RequestParam(required = false) String userId,
                            @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
@@ -98,10 +145,19 @@ public class SeahorseChatController {
                            @RequestParam(required = false, defaultValue = "false") Boolean deepThinking,
                            @RequestParam(required = false) String chatMode,
                            @RequestParam(required = false) String agentId,
-                           @RequestParam(required = false) String versionId) {
+                           @RequestParam(required = false) String versionId,
+                           @RequestParam(required = false) String taskTemplateId,
+                           @RequestParam(required = false) List<String> attachmentIds,
+                           @RequestParam(required = false) String resumeRunId,
+                           @RequestParam(required = false) Long lastEventSeq) {
         String actualConversationId = resolveId(conversationId);
         String actualUserId = WebUserIdResolver.resolve(userId, headerUserId);
+        if (hasText(resumeRunId)) {
+            return resumeStream(resumeRunId, lastEventSeq, actualUserId);
+        }
         checkChatRateLimit(actualUserId);
+        ChatMode resolvedChatMode = resolveChatMode(chatMode, taskTemplateId);
+        requireChatModeAllowed(chatMode, resolvedChatMode, taskTemplateId, agentId, versionId);
         String taskId = nextShortId();
         SseEmitter emitter = new SseEmitter(sseTimeoutMs);
         StreamCallback callback = callbackFactory.create(emitter, actualConversationId, taskId, actualUserId);
@@ -111,9 +167,11 @@ public class SeahorseChatController {
                 taskId,
                 actualUserId,
                 Boolean.TRUE.equals(deepThinking),
-                parseChatMode(chatMode),
+                resolvedChatMode,
                 agentId,
-                versionId);
+                versionId,
+                taskTemplateId,
+                attachmentIds);
         try {
             ChatInboundPort chatInboundPort = chatInboundPortProvider.getIfAvailable();
             if (chatInboundPort == null) {
@@ -124,6 +182,32 @@ public class SeahorseChatController {
             emitSseError(emitter, ex);
         }
         return emitter;
+    }
+
+    private SseEmitter resumeStream(String resumeRunId, Long lastEventSeq, String actualUserId) {
+        checkChatRateLimit(actualUserId);
+        SseEmitter emitter = new SseEmitter(sseTimeoutMs);
+        try {
+            AgentRunSnapshotInboundPort snapshotPort = snapshotPort();
+            emitter.send(SseEmitter.event()
+                    .name(StreamEventType.RUN_SNAPSHOT.value())
+                    .data(snapshotPort.getSnapshot(resumeRunId)));
+            emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
+            emitter.complete();
+        } catch (RuntimeException | IOException ex) {
+            emitSseError(emitter, ex instanceof RuntimeException runtimeException
+                    ? runtimeException
+                    : new IllegalStateException(ex.getMessage(), ex));
+        }
+        return emitter;
+    }
+
+    private AgentRunSnapshotInboundPort snapshotPort() {
+        AgentRunSnapshotInboundPort port = snapshotPortProvider == null ? null : snapshotPortProvider.getIfAvailable();
+        if (port == null) {
+            throw new IllegalStateException("AgentRunSnapshotInboundPort is not configured");
+        }
+        return port;
     }
 
     @PostMapping("/rag/v3/stop")
@@ -156,6 +240,44 @@ public class SeahorseChatController {
         } catch (IllegalArgumentException ex) {
             return ChatMode.RAG;
         }
+    }
+
+    private ChatMode resolveChatMode(String requestedChatMode, String taskTemplateId) {
+        if (hasText(requestedChatMode)) {
+            return parseChatMode(requestedChatMode);
+        }
+        return isControlledWebAgentTemplate(taskTemplateId) ? ChatMode.AGENT : ChatMode.RAG;
+    }
+
+    private void requireChatModeAllowed(String requestedChatMode,
+                                        ChatMode resolvedChatMode,
+                                        String taskTemplateId,
+                                        String agentId,
+                                        String versionId) {
+        if (resolvedChatMode != ChatMode.AGENT) {
+            return;
+        }
+        boolean controlledWebTask = isControlledWebAgentTemplate(taskTemplateId)
+                && !hasText(agentId)
+                && !hasText(versionId);
+        if (!controlledWebTask) {
+            advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
+        }
+    }
+
+    private boolean isControlledWebAgentTemplate(String taskTemplateId) {
+        if (!hasText(taskTemplateId)) {
+            return false;
+        }
+        try {
+            return CONTROLLED_WEB_AGENT_TEMPLATES.contains(TaskTemplateId.fromValue(taskTemplateId.trim()));
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     private void checkChatRateLimit(String userId) {

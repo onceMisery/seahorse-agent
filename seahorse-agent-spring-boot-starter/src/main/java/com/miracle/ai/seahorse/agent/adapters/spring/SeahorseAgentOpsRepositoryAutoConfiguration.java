@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentExtensionStatusAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationAttachmentRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDashboardRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcIntentTreeRepositoryAdapter;
@@ -27,6 +28,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRep
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRagTraceRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSampleQuestionRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.dashboard.DashboardRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
@@ -62,6 +64,15 @@ public class SeahorseAgentOpsRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(ConversationRepositoryPort.class)
     public JdbcConversationRepositoryAdapter seahorseJdbcConversationRepositoryAdapter(DataSource dataSource) {
         return new JdbcConversationRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(ConversationAttachmentRepositoryPort.class)
+    public JdbcConversationAttachmentRepositoryAdapter seahorseJdbcConversationAttachmentRepositoryAdapter(
+            DataSource dataSource) {
+        return new JdbcConversationAttachmentRepositoryAdapter(dataSource);
     }
 
     @Bean

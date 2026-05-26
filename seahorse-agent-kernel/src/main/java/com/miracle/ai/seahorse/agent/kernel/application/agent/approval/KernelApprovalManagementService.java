@@ -31,6 +31,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -40,9 +41,11 @@ import java.util.Optional;
 public class KernelApprovalManagementService implements ApprovalManagementInboundPort {
 
     private static final String ADMIN_ROLE = "admin";
+    private static final String ACCESS_DENIED = "权限不足";
     private static final String APPROVAL_NOT_FOUND = "审批请求不存在";
     private static final String APPROVAL_NOT_PENDING = "审批请求不是待处理状态";
     private static final String APPROVAL_STATE_CHANGED = "审批请求状态已变更";
+    private static final long RUN_PENDING_APPROVAL_PAGE_SIZE = 50L;
 
     private final ApprovalRequestQueryPort queryPort;
     private final ApprovalRequestDecisionPort decisionPort;
@@ -63,6 +66,20 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
     public ApprovalRequestPage page(String tenantId, ApprovalRequestStatus status, long current, long size) {
         requireAdmin();
         return queryPort.page(new ApprovalRequestQuery(tenantId, status, current, size));
+    }
+
+    @Override
+    public List<ApprovalRequest> listPendingByRunId(String runId) {
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
+        ApprovalRequestPage page = queryPort.page(new ApprovalRequestQuery(
+                null,
+                requireText(runId, "runId 不能为空"),
+                ApprovalRequestStatus.PENDING,
+                ApprovalRequestQuery.DEFAULT_CURRENT,
+                RUN_PENDING_APPROVAL_PAGE_SIZE));
+        return page.records().stream()
+                .filter(approval -> isAdmin(currentUser) || currentUser.userId().equals(approval.userId()))
+                .toList();
     }
 
     @Override
@@ -92,10 +109,13 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
                                    ApprovalRequestStatus toStatus,
                                    String decisionComment,
                                    String argumentsPreviewJson) {
-        CurrentUser currentUser = requireAdmin();
+        CurrentUser currentUser = currentUserPort.requireCurrentUser();
         String safeApprovalId = requireText(approvalId, "approvalId 不能为空");
         ApprovalRequest current = queryPort.findById(safeApprovalId)
                 .orElseThrow(() -> new IllegalArgumentException(APPROVAL_NOT_FOUND));
+        if (!isAdmin(currentUser) && !currentUser.userId().equals(current.userId())) {
+            throw new IllegalStateException(ACCESS_DENIED);
+        }
         if (current.status() != ApprovalRequestStatus.PENDING) {
             throw new IllegalStateException(APPROVAL_NOT_PENDING);
         }
@@ -114,6 +134,10 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
     private CurrentUser requireAdmin() {
         currentUserPort.requireRole(ADMIN_ROLE);
         return currentUserPort.requireCurrentUser();
+    }
+
+    private boolean isAdmin(CurrentUser currentUser) {
+        return currentUser != null && currentUser.hasRole(ADMIN_ROLE);
     }
 
     private String decisionComment(ApprovalDecisionCommand command) {

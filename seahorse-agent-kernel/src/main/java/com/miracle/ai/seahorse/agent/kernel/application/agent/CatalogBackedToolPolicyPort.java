@@ -102,6 +102,10 @@ public class CatalogBackedToolPolicyPort implements ToolPolicyPort {
         if (request == null || !toolRegisteredPredicate.test(request)) {
             return deny(ToolPolicyReasonCodes.TOOL_NOT_FOUND, "Tool is not registered");
         }
+        if (request.allowedToolIds().isEmpty() || !request.allowedToolIds().contains(request.toolId())) {
+            return deny(ToolPolicyReasonCodes.TOOL_NOT_BOUND,
+                    "Tool is not bound to the current agent version");
+        }
 
         return toolCatalogRepository.findById(request.toolId())
                 .map(tool -> decideWithCatalog(request, tool))

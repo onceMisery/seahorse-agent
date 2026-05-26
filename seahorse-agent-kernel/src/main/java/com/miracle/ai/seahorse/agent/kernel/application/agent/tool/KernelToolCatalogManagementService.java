@@ -22,35 +22,55 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementIn
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 public class KernelToolCatalogManagementService implements ToolCatalogManagementInboundPort {
 
     private static final String ADMIN_ROLE = "admin";
+    private static final String TOOL_NOT_FOUND = "Tool not found";
 
     private final ToolCatalogRepositoryPort toolCatalogRepository;
+    private final ToolProviderExposurePolicyPort providerExposurePolicy;
     private final CurrentUserPort currentUserPort;
 
     public KernelToolCatalogManagementService(ToolCatalogRepositoryPort toolCatalogRepository,
                                               CurrentUserPort currentUserPort) {
+        this(toolCatalogRepository, currentUserPort, ToolProviderExposurePolicyPort.consumerWebDefaults());
+    }
+
+    public KernelToolCatalogManagementService(ToolCatalogRepositoryPort toolCatalogRepository,
+                                              CurrentUserPort currentUserPort,
+                                              ToolProviderExposurePolicyPort providerExposurePolicy) {
         this.toolCatalogRepository = Objects.requireNonNull(toolCatalogRepository,
                 "toolCatalogRepository must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
+        this.providerExposurePolicy = Objects.requireNonNullElseGet(
+                providerExposurePolicy,
+                ToolProviderExposurePolicyPort::consumerWebDefaults);
     }
 
     @Override
     public ToolCatalogPage page(String resourceType, String keyword, long current, long size, Boolean enabled) {
         requireAdmin();
-        return toolCatalogRepository.page(new ToolCatalogQuery(resourceType, keyword, current, size, enabled));
+        ToolCatalogPage page = toolCatalogRepository.page(new ToolCatalogQuery(resourceType, keyword, current, size,
+                enabled));
+        List<ToolCatalogEntry> records = page.records().stream()
+                .filter(providerExposurePolicy::isToolAllowed)
+                .toList();
+        return new ToolCatalogPage(records, records.size(), page.size(), page.current(), pages(records.size(),
+                page.size()));
     }
 
     @Override
     public Optional<ToolCatalogEntry> findById(String toolId) {
         requireAdmin();
-        return toolCatalogRepository.findById(requireText(toolId, "toolId 不能为空"));
+        return toolCatalogRepository.findById(requireText(toolId, "toolId must not be blank"))
+                .filter(providerExposurePolicy::isToolAllowed);
     }
 
     @Override
@@ -65,11 +85,20 @@ public class KernelToolCatalogManagementService implements ToolCatalogManagement
 
     private ToolCatalogEntry setEnabled(String toolId, boolean enabled) {
         requireAdmin();
-        String safeToolId = requireText(toolId, "toolId 不能为空");
-        // 先执行状态变更，再读取最新目录条目返回给管理端。
+        String safeToolId = requireText(toolId, "toolId must not be blank");
+        toolCatalogRepository.findById(safeToolId)
+                .ifPresent(providerExposurePolicy::requireToolAllowed);
         toolCatalogRepository.setEnabled(safeToolId, enabled);
         return toolCatalogRepository.findById(safeToolId)
-                .orElseThrow(() -> new IllegalArgumentException("工具不存在"));
+                .filter(providerExposurePolicy::isToolAllowed)
+                .orElseThrow(() -> new IllegalArgumentException(TOOL_NOT_FOUND));
+    }
+
+    private long pages(long total, long size) {
+        if (total <= 0L || size <= 0L) {
+            return 0L;
+        }
+        return (total + size - 1L) / size;
     }
 
     private void requireAdmin() {

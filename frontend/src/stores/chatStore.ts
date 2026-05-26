@@ -3,13 +3,28 @@ import { immer } from "zustand/middleware/immer";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 
-import type { CompletionPayload, Message, MessageDeltaPayload, StreamMetaPayload } from "@/types";
+import {
+  AGENT_STREAM_EVENTS,
+  type AgentArtifact,
+  type AgentApproval,
+  type AgentRunSnapshot,
+  type AgentSource,
+  type AgentTimelineItem,
+  type ArtifactBlock,
+  type CompletionPayload,
+  type Message,
+  type MessageDeltaPayload,
+  type StreamMetaPayload,
+  type TaskTemplateId
+} from "@/types";
 import {
   listMessages,
   listSessions,
   deleteSession as deleteSessionRequest,
   renameSession as renameSessionRequest
 } from "@/services/sessionService";
+import { listPendingApprovalRequests } from "@/services/approvalService";
+import { getAgentRunCostSummary, getAgentRunSnapshot } from "@/services/agentRunService";
 import { stopTask, submitFeedback } from "@/services/chatService";
 import { buildQuery } from "@/utils/helpers";
 import { createStreamResponse } from "@/hooks/useStreamResponse";
@@ -17,11 +32,137 @@ import { handleUnauthorizedSession } from "@/utils/authSession";
 import { storage } from "@/utils/storage";
 import type { ChatState } from "@/stores/chatStoreTypes";
 import { mapVoteToFeedback, upsertSession } from "@/stores/chatSessionUtils";
-import { API_BASE_URL, computeThinkingDuration } from "@/stores/chatStreamUtils";
+import {
+  API_BASE_URL,
+  computeThinkingDuration,
+  extractArtifactsFromBlocks,
+  normalizeAgentStreamEvent
+} from "@/stores/chatStreamUtils";
 import { RenderBuffer } from "@/lib/stream/renderBuffer";
 import { parseStreamingText } from "@/lib/parser/streamingParser";
 
 const EMPTY_ASSISTANT_MESSAGE = "本次对话没有返回有效内容，请稍后重试。";
+const CONTROLLED_WEB_AGENT_CHAT_MODE = "agent";
+const CONTROLLED_WEB_AGENT_TEMPLATE_IDS = new Set<TaskTemplateId>([
+  "deep-research",
+  "web-summary",
+  "compare-analysis"
+]);
+
+function chatModeForTaskTemplate(templateId?: TaskTemplateId | string | null) {
+  return templateId && CONTROLLED_WEB_AGENT_TEMPLATE_IDS.has(templateId as TaskTemplateId)
+    ? CONTROLLED_WEB_AGENT_CHAT_MODE
+    : undefined;
+}
+
+function mergeById<T extends { id: string }>(current: T[] | undefined, incoming: T[]) {
+  const map = new Map<string, T>();
+  for (const item of current ?? []) map.set(item.id, item);
+  for (const item of incoming) map.set(item.id, { ...map.get(item.id), ...item });
+  return Array.from(map.values());
+}
+
+function mergeArtifacts(current: ArtifactBlock[] | undefined, incoming: ArtifactBlock[]) {
+  return mergeById(current, incoming);
+}
+
+function mergeServerArtifacts(current: AgentArtifact[] | undefined, incoming: AgentArtifact[]) {
+  const map = new Map<string, AgentArtifact>();
+  for (const item of current ?? []) map.set(item.artifactId, item);
+  for (const item of incoming) map.set(item.artifactId, { ...map.get(item.artifactId), ...item });
+  return Array.from(map.values());
+}
+
+function durationMs(startedAt?: string | null, finishedAt?: string | null) {
+  if (!startedAt || !finishedAt) return undefined;
+  const started = new Date(startedAt).getTime();
+  const finished = new Date(finishedAt).getTime();
+  if (!Number.isFinite(started) || !Number.isFinite(finished) || finished < started) return undefined;
+  return finished - started;
+}
+
+function snapshotTimeline(snapshot: AgentRunSnapshot): AgentTimelineItem[] {
+  const runId = snapshot.run?.runId;
+  const items: AgentTimelineItem[] = [];
+  if (runId) {
+    items.push({
+      id: `run-started-${runId}`,
+      title: "Run started",
+      status: snapshot.run?.status,
+      detail: snapshot.run?.inputSummary ?? undefined,
+      timestamp: snapshot.run?.startedAt ?? undefined,
+      durationMs: durationMs(snapshot.run?.startedAt, snapshot.run?.finishedAt)
+    });
+  }
+  for (const step of snapshot.steps ?? []) {
+    const title = step.stepType?.replace(/_/g, " ") || `Step ${step.stepNo ?? items.length + 1}`;
+    items.push({
+      id: step.stepId,
+      title,
+      status: step.status,
+      detail: step.summary ?? step.errorMessage ?? step.errorCode ?? undefined,
+      timestamp: step.finishedAt ?? step.startedAt ?? undefined,
+      durationMs: durationMs(step.startedAt, step.finishedAt)
+    });
+  }
+  return items;
+}
+
+function snapshotSources(snapshot: AgentRunSnapshot): AgentSource[] {
+  return (snapshot.sources ?? []).map((source, index) => ({
+    id: source.itemId || source.sourceId || `snapshot-source-${index}`,
+    title: source.sourceId || source.sourceType || source.itemId || `Source ${index + 1}`,
+    snippet: source.summary ?? undefined,
+    score: typeof source.confidence === "number" ? source.confidence : source.score,
+    sourceType: source.sourceType
+  }));
+}
+
+function snapshotServerArtifacts(snapshot: AgentRunSnapshot): AgentArtifact[] {
+  return snapshot.artifacts ?? [];
+}
+
+function snapshotApprovals(snapshot: AgentRunSnapshot): AgentApproval[] {
+  const normalized = normalizeAgentStreamEvent(AGENT_STREAM_EVENTS.APPROVAL, snapshot.pendingApprovals ?? []);
+  return normalized?.type === AGENT_STREAM_EVENTS.APPROVAL ? normalized.items : [];
+}
+
+function mergeRunSnapshot(message: Message, snapshot: AgentRunSnapshot) {
+  const messageSnapshot = snapshot.messageSnapshot;
+  if (messageSnapshot?.assistantMessageId) {
+    message.id = String(messageSnapshot.assistantMessageId);
+  }
+  if (messageSnapshot?.content && !message.rawText?.trim()) {
+    message.rawText = messageSnapshot.content;
+    message.content = messageSnapshot.content;
+    const parsed = parseMessageBlocks(message.rawText, message.id);
+    message.blocks = parsed.blocks;
+    message.artifacts = mergeArtifacts(message.artifacts, parsed.artifacts);
+  }
+  if (messageSnapshot?.thinking && !message.thinking?.trim()) {
+    message.thinking = messageSnapshot.thinking;
+    message.isDeepThinking = true;
+    message.isThinking = false;
+  }
+  message.agentRunId = snapshot.run?.runId ?? message.agentRunId;
+  message.agentRunStatus = snapshot.run?.status ?? message.agentRunStatus;
+  message.currentStepId = snapshot.currentStepId ?? message.currentStepId;
+  message.lastEventSeq = snapshot.lastEventSeq ?? message.lastEventSeq;
+  message.canResume = snapshot.canResume ?? message.canResume;
+  message.canRetry = snapshot.canRetry ?? message.canRetry;
+  message.timeline = mergeById(message.timeline, snapshotTimeline(snapshot));
+  message.sources = mergeById(message.sources, snapshotSources(snapshot));
+  message.serverArtifacts = mergeServerArtifacts(message.serverArtifacts, snapshotServerArtifacts(snapshot));
+  message.approvals = mergeById(message.approvals, snapshotApprovals(snapshot));
+}
+
+function parseMessageBlocks(rawText: string | undefined, messageId: string) {
+  const blocks = parseStreamingText(rawText ?? "", messageId);
+  return {
+    blocks,
+    artifacts: extractArtifactsFromBlocks(blocks)
+  };
+}
 
 export const useChatStore = create<ChatState>()(
   immer((set, get) => ({
@@ -39,6 +180,7 @@ export const useChatStore = create<ChatState>()(
     streamAbort: null,
     streamingMessageId: null,
     cancelRequested: false,
+    selectedTaskTemplateId: null,
 
     fetchSessions: async () => {
       set((state) => { state.isLoading = true; });
@@ -139,19 +281,31 @@ export const useChatStore = create<ChatState>()(
       try {
         const data = await listMessages(sessionId);
         if (get().currentSessionId !== sessionId) return;
-        const mapped: Message[] = data.map((item) => ({
-          id: String(item.id),
-          role: item.role === "assistant" ? "assistant" : "user",
-          content: item.content,
-          rawText: item.content,
-          thinking: item.thinkingContent || undefined,
-          thinkingDuration: item.thinkingDuration || undefined,
-          isDeepThinking: Boolean(item.thinkingContent),
-          createdAt: item.createTime,
-          feedback: mapVoteToFeedback(item.vote),
-          status: "done"
-        }));
+        const mapped: Message[] = data.map((item) => {
+          const messageId = String(item.id);
+          const parsed = item.role === "assistant" ? parseMessageBlocks(item.content, messageId) : null;
+          return {
+            id: messageId,
+            role: item.role === "assistant" ? "assistant" : "user",
+            content: item.content,
+            rawText: item.content,
+            thinking: item.thinkingContent || undefined,
+            thinkingDuration: item.thinkingDuration || undefined,
+            isDeepThinking: Boolean(item.thinkingContent),
+            createdAt: item.createTime,
+            feedback: mapVoteToFeedback(item.vote),
+            status: "done",
+            blocks: parsed?.blocks,
+            artifacts: parsed?.artifacts,
+            agentRunId: item.agentRunId ?? item.runId ?? undefined
+          };
+        });
         set((s) => { s.messages = mapped; });
+        mapped
+          .filter((message) => message.agentRunId)
+          .forEach((message) => {
+            get().refreshRunSnapshot(message.id, message.agentRunId as string).catch(() => null);
+          });
       } catch (error) {
         toast.error((error as Error).message || "Failed to load messages");
       } finally {
@@ -181,11 +335,17 @@ export const useChatStore = create<ChatState>()(
       set((s) => { s.deepThinkingEnabled = enabled; });
     },
 
-    sendMessage: async (content) => {
+    setSelectedTaskTemplateId: (templateId) => {
+      set((s) => { s.selectedTaskTemplateId = templateId; });
+    },
+
+    sendMessage: async (content, options = {}) => {
       const trimmed = content.trim();
       if (!trimmed) return;
       if (get().isStreaming) return;
       const deepThinkingEnabled = get().deepThinkingEnabled;
+      const selectedTaskTemplateId = get().selectedTaskTemplateId;
+      const attachmentIds = Array.from(new Set(options.attachmentIds ?? [])).filter(Boolean);
       const inputFocusKey = Date.now();
 
       const userMessage: Message = {
@@ -220,11 +380,14 @@ export const useChatStore = create<ChatState>()(
         s.cancelRequested = false;
       });
 
-      const conversationId = get().currentSessionId;
+      const conversationId = options.conversationIdOverride || get().currentSessionId;
       const query = buildQuery({
         question: trimmed,
         conversationId: conversationId || undefined,
-        deepThinking: deepThinkingEnabled ? true : undefined
+        deepThinking: deepThinkingEnabled ? true : undefined,
+        chatMode: chatModeForTaskTemplate(selectedTaskTemplateId),
+        taskTemplateId: selectedTaskTemplateId || undefined,
+        attachmentIds
       });
       const url = `${API_BASE_URL}/rag/v3/chat${query}`;
       const token = storage.getToken();
@@ -236,11 +399,59 @@ export const useChatStore = create<ChatState>()(
           if (!msg) return;
           msg.rawText = (msg.rawText ?? "") + flushedText;
           msg.content = msg.rawText;
-          msg.blocks = parseStreamingText(msg.rawText, msg.id);
+          const parsed = parseMessageBlocks(msg.rawText, msg.id);
+          msg.blocks = parsed.blocks;
+          msg.artifacts = mergeArtifacts(msg.artifacts, parsed.artifacts);
         });
       });
 
+      const mergeAgentEvent = (event: string, payload: unknown) => {
+        if (get().streamingMessageId !== assistantId) return;
+        if (event === AGENT_STREAM_EVENTS.RUN_SNAPSHOT && payload && typeof payload === "object") {
+          set((state) => {
+            const msg = state.messages.find((m) => m.id === assistantId);
+            if (!msg || msg.status === "cancelled" || msg.status === "error") return;
+            mergeRunSnapshot(msg, payload as AgentRunSnapshot);
+          });
+          return;
+        }
+        const normalized = normalizeAgentStreamEvent(event, payload);
+        if (!normalized || (normalized.items.length === 0 && normalized.type !== AGENT_STREAM_EVENTS.ARTIFACT)) {
+          return;
+        }
+        set((state) => {
+          const msg = state.messages.find((m) => m.id === assistantId);
+          if (!msg || msg.status === "cancelled" || msg.status === "error") return;
+          switch (normalized.type) {
+            case AGENT_STREAM_EVENTS.TIMELINE:
+              msg.timeline = mergeById(msg.timeline, normalized.items);
+              break;
+            case AGENT_STREAM_EVENTS.SOURCE:
+              msg.sources = mergeById(msg.sources, normalized.items);
+              break;
+            case AGENT_STREAM_EVENTS.ARTIFACT:
+              msg.artifacts = mergeArtifacts(msg.artifacts, normalized.items);
+              msg.serverArtifacts = mergeServerArtifacts(msg.serverArtifacts, normalized.serverArtifacts);
+              break;
+            case AGENT_STREAM_EVENTS.APPROVAL:
+              msg.approvals = mergeById(msg.approvals, normalized.items);
+              break;
+            case AGENT_STREAM_EVENTS.QUOTA:
+              msg.quota = mergeById(msg.quota, normalized.items);
+              break;
+            case AGENT_STREAM_EVENTS.MEMORY:
+              msg.memories = mergeById(msg.memories, normalized.items);
+              break;
+            default:
+              break;
+          }
+        });
+      };
+
       const handlers = {
+        onEvent: (event: string, payload: unknown) => {
+          mergeAgentEvent(event, payload);
+        },
         onMeta: (payload: StreamMetaPayload) => {
           if (get().streamingMessageId !== assistantId) return;
           const nextId = payload.conversationId || get().currentSessionId;
@@ -262,6 +473,12 @@ export const useChatStore = create<ChatState>()(
               if (msg) msg.agentRunId = payload.runId || undefined;
             }
           });
+          if (payload.runId) {
+            get().refreshRunSnapshot(assistantId, payload.runId).catch(() => null);
+            listPendingApprovalRequests(payload.runId)
+              .then((approvals) => mergeAgentEvent(AGENT_STREAM_EVENTS.APPROVAL, approvals))
+              .catch(() => null);
+          }
           if (get().cancelRequested) {
             stopTask(payload.taskId).catch(() => null);
           }
@@ -320,6 +537,7 @@ export const useChatStore = create<ChatState>()(
               }
               return block;
             });
+            msg.artifacts = mergeArtifacts(msg.artifacts, extractArtifactsFromBlocks(msg.blocks));
           });
         },
         onCancel: (payload: CompletionPayload) => {
@@ -336,7 +554,9 @@ export const useChatStore = create<ChatState>()(
               if (payload?.messageId) msg.id = String(payload.messageId);
               msg.rawText = (msg.rawText ?? "") + suffix;
               msg.content = msg.rawText;
-              msg.blocks = parseStreamingText(msg.rawText, msg.id);
+              const parsed = parseMessageBlocks(msg.rawText, msg.id);
+              msg.blocks = parsed.blocks;
+              msg.artifacts = mergeArtifacts(msg.artifacts, parsed.artifacts);
               msg.status = "cancelled";
               msg.isThinking = false;
               msg.thinkingDuration = msg.thinkingDuration ?? computeThinkingDuration(state.thinkingStartAt);
@@ -367,6 +587,7 @@ export const useChatStore = create<ChatState>()(
                 msg.rawText = EMPTY_ASSISTANT_MESSAGE;
                 msg.blocks = [{ type: "text", text: EMPTY_ASSISTANT_MESSAGE }];
               }
+              msg.artifacts = mergeArtifacts(msg.artifacts, extractArtifactsFromBlocks(msg.blocks));
               msg.status = "done";
               msg.isThinking = false;
               msg.thinkingDuration = msg.thinkingDuration ?? computeThinkingDuration(state.thinkingStartAt);
@@ -438,6 +659,20 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
+    refreshRunSnapshot: async (messageId, runId) => {
+      if (!runId) return;
+      const [snapshot, costSummary] = await Promise.all([
+        getAgentRunSnapshot(runId),
+        getAgentRunCostSummary(runId).catch(() => undefined)
+      ]);
+      set((state) => {
+        const msg = state.messages.find((m) => m.id === messageId || m.agentRunId === runId);
+        if (!msg) return;
+        mergeRunSnapshot(msg, snapshot);
+        if (costSummary) msg.costSummary = costSummary;
+      });
+    },
+
     cancelGeneration: () => {
       const { isStreaming, streamTaskId } = get();
       if (!isStreaming) return;
@@ -457,7 +692,9 @@ export const useChatStore = create<ChatState>()(
         if (msg && msg.status !== "cancelled" && msg.status !== "error") {
           msg.rawText = (msg.rawText ?? "") + delta;
           msg.content = msg.rawText;
-          msg.blocks = parseStreamingText(msg.rawText, msg.id);
+          const parsed = parseMessageBlocks(msg.rawText, msg.id);
+          msg.blocks = parsed.blocks;
+          msg.artifacts = mergeArtifacts(msg.artifacts, parsed.artifacts);
           if (shouldFinalizeThinking) {
             msg.isThinking = false;
             if (!msg.thinkingDuration) msg.thinkingDuration = duration;
@@ -478,7 +715,7 @@ export const useChatStore = create<ChatState>()(
       });
     },
 
-    submitFeedback: async (messageId, feedback) => {
+    submitFeedback: async (messageId, feedback, options = {}) => {
       const vote = feedback === "like" ? 1 : feedback === "dislike" ? -1 : null;
       const prev = get().messages.find((message) => message.id === messageId)?.feedback ?? null;
       set((state) => {
@@ -490,7 +727,7 @@ export const useChatStore = create<ChatState>()(
         return;
       }
       try {
-        await submitFeedback(messageId, vote);
+        await submitFeedback(messageId, vote, options.reason, options.comment);
         toast.success(feedback === "like" ? "Liked" : "Disliked");
       } catch (error) {
         set((state) => {

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Brain, ChevronDown } from "lucide-react";
 
+import { AgentTracePanel } from "@/components/chat/AgentTracePanel";
 import { FeedbackButtons } from "@/components/chat/FeedbackButtons";
 import { MessageContent } from "@/components/chat/MessageContent";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
@@ -110,6 +111,7 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
             </div>
           ) : null}
           {hasContent ? <MessageContent blocks={message.blocks ?? []} rawText={message.content} /> : null}
+          {!isUser ? <AgentTracePanel message={message} /> : null}
           {showEmptyResult ? (
             <p className="text-sm" style={{ color: "var(--theme-text-muted)" }}>
               {EMPTY_RESULT_TEXT}

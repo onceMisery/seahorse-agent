@@ -28,6 +28,7 @@ public class ConversationMessageRecord {
     private String conversationId;
     private String role;
     private String content;
+    private String agentRunId;
     private String thinkingContent;
     private Integer thinkingDuration;
     private Integer vote;
@@ -63,6 +64,14 @@ public class ConversationMessageRecord {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public String getAgentRunId() {
+        return agentRunId;
+    }
+
+    public void setAgentRunId(String agentRunId) {
+        this.agentRunId = agentRunId;
     }
 
     public String getThinkingContent() {

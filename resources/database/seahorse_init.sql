@@ -70,6 +70,7 @@ CREATE TABLE t_message (
     user_id           VARCHAR(64) NOT NULL,
     role              VARCHAR(16) NOT NULL,
     content           TEXT        NOT NULL,
+    agent_run_id      VARCHAR(64),
     thinking_content  TEXT,
     thinking_duration INTEGER,
     create_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -77,7 +78,28 @@ CREATE TABLE t_message (
     deleted           SMALLINT    DEFAULT 0
 );
 CREATE INDEX idx_conversation_user_time ON t_message (conversation_id, user_id, create_time);
+CREATE INDEX idx_message_agent_run ON t_message (agent_run_id, user_id, create_time);
 COMMENT ON TABLE t_message IS '会话消息记录表';
+
+CREATE TABLE sa_conversation_attachment (
+    attachment_id     VARCHAR(64)   NOT NULL PRIMARY KEY,
+    conversation_id   VARCHAR(64)   NOT NULL,
+    message_id        VARCHAR(64),
+    user_id           VARCHAR(64)   NOT NULL,
+    file_name         VARCHAR(256)  NOT NULL,
+    mime_type         VARCHAR(128)  NOT NULL,
+    size_bytes        BIGINT        NOT NULL,
+    storage_ref       VARCHAR(1000) NOT NULL,
+    parse_status      VARCHAR(32)   NOT NULL,
+    resource_ref_json TEXT          NOT NULL,
+    created_at        TIMESTAMP     NOT NULL,
+    deleted           SMALLINT      NOT NULL DEFAULT 0,
+    CONSTRAINT chk_sa_conversation_attachment_parse_status
+        CHECK (parse_status IN ('PENDING', 'PARSED', 'FAILED', 'BLOCKED'))
+);
+CREATE INDEX idx_sa_conversation_attachment_user
+    ON sa_conversation_attachment (conversation_id, user_id, created_at);
+COMMENT ON TABLE sa_conversation_attachment IS '会话附件表';
 
 CREATE TABLE t_message_feedback (
     id              VARCHAR(64)       NOT NULL PRIMARY KEY,

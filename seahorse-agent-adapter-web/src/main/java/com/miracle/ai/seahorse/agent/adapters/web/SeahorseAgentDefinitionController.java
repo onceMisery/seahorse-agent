@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionCreateCo
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionUpdateDraftCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentVersionPublishCommand;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,13 +40,30 @@ public class SeahorseAgentDefinitionController {
     private static final String DEFAULT_SIZE = "10";
 
     private final ObjectProvider<AgentDefinitionInboundPort> agentDefinitionPortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseAgentDefinitionController(ObjectProvider<AgentDefinitionInboundPort> agentDefinitionPortProvider) {
+        this(agentDefinitionPortProvider, AdvancedFeatureGate.allEnabledForTests());
+    }
+
+    @Autowired
+    public SeahorseAgentDefinitionController(ObjectProvider<AgentDefinitionInboundPort> agentDefinitionPortProvider,
+                                             ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(agentDefinitionPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseAgentDefinitionController(ObjectProvider<AgentDefinitionInboundPort> agentDefinitionPortProvider,
+                                             AdvancedFeatureGate advancedFeatureGate) {
         this.agentDefinitionPortProvider = agentDefinitionPortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @PostMapping("/agents")
     public ApiResponse<Object> create(@RequestBody AgentDefinitionCreateRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         AgentDefinitionCreateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.createDraft(new AgentDefinitionCreateCommand(
                 safeRequest.agentId(),
@@ -64,12 +82,14 @@ public class SeahorseAgentDefinitionController {
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size,
                                     @RequestParam(required = false) String keyword) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         return ApiResponses.requireService(agentDefinitionPortProvider,
                 port -> port.page(tenantId, current, size, keyword));
     }
 
     @GetMapping("/agents/{agentId}")
     public ApiResponse<Object> findById(@PathVariable String agentId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.findById(agentId)
                 .orElseThrow(() -> new IllegalArgumentException("Agent not found")));
     }
@@ -77,6 +97,7 @@ public class SeahorseAgentDefinitionController {
     @PutMapping("/agents/{agentId}/draft")
     public ApiResponse<Object> updateDraft(@PathVariable String agentId,
                                            @RequestBody AgentDefinitionUpdateDraftRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         AgentDefinitionUpdateDraftRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.updateDraft(agentId,
                 new AgentDefinitionUpdateDraftCommand(
@@ -90,6 +111,7 @@ public class SeahorseAgentDefinitionController {
     @PostMapping("/agents/{agentId}/publish")
     public ApiResponse<Object> publish(@PathVariable String agentId,
                                        @RequestBody AgentVersionPublishRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         AgentVersionPublishRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.publish(agentId,
                 new AgentVersionPublishCommand(
@@ -103,6 +125,7 @@ public class SeahorseAgentDefinitionController {
 
     @PostMapping("/agents/{agentId}/disable")
     public ApiResponse<Object> disable(@PathVariable String agentId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.disable(agentId));
     }
 }

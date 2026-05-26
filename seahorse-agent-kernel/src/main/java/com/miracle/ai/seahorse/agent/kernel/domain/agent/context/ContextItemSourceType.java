@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.domain.agent.context;
 public enum ContextItemSourceType {
     RAG_CHUNK,
     MEMORY,
+    CONVERSATION_ATTACHMENT,
     TOOL_RESULT,
     USER_INPUT,
     SYSTEM_STATE

@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.ports.inbound.chat;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -32,7 +33,9 @@ public record StreamChatCommand(
         boolean deepThinking,
         ChatMode chatMode,
         String agentId,
-        String versionId) {
+        String versionId,
+        String taskTemplateId,
+        List<String> attachmentIds) {
 
     public StreamChatCommand {
         question = requireText(question, "question");
@@ -42,6 +45,32 @@ public record StreamChatCommand(
         chatMode = Objects.requireNonNullElse(chatMode, ChatMode.RAG);
         agentId = trimToNull(agentId);
         versionId = trimToNull(versionId);
+        taskTemplateId = trimToNull(taskTemplateId);
+        attachmentIds = normalizeIds(attachmentIds);
+    }
+
+    public StreamChatCommand(String question,
+                             String conversationId,
+                             String taskId,
+                             String userId,
+                             boolean deepThinking,
+                             ChatMode chatMode,
+                             String agentId,
+                             String versionId,
+                             String taskTemplateId) {
+        this(question, conversationId, taskId, userId, deepThinking, chatMode, agentId, versionId, taskTemplateId,
+                List.of());
+    }
+
+    public StreamChatCommand(String question,
+                             String conversationId,
+                             String taskId,
+                             String userId,
+                             boolean deepThinking,
+                             ChatMode chatMode,
+                             String agentId,
+                             String versionId) {
+        this(question, conversationId, taskId, userId, deepThinking, chatMode, agentId, versionId, null, List.of());
     }
 
     public StreamChatCommand(String question,
@@ -50,7 +79,7 @@ public record StreamChatCommand(
                              String userId,
                              boolean deepThinking,
                              ChatMode chatMode) {
-        this(question, conversationId, taskId, userId, deepThinking, chatMode, null, null);
+        this(question, conversationId, taskId, userId, deepThinking, chatMode, null, null, null, List.of());
     }
 
     /**
@@ -61,7 +90,7 @@ public record StreamChatCommand(
                              String taskId,
                              String userId,
                              boolean deepThinking) {
-        this(question, conversationId, taskId, userId, deepThinking, ChatMode.RAG, null, null);
+        this(question, conversationId, taskId, userId, deepThinking, ChatMode.RAG, null, null, null, List.of());
     }
 
     private static String requireText(String value, String name) {
@@ -76,5 +105,17 @@ public record StreamChatCommand(
             return null;
         }
         return value.trim();
+    }
+
+    private static List<String> normalizeIds(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .distinct()
+                .toList();
     }
 }

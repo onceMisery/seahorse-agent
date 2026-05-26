@@ -34,6 +34,7 @@ import java.util.Optional;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -51,7 +52,9 @@ class SeahorseProductionGateControllerTests {
         when(port.generate("agent-1")).thenReturn(report);
         when(port.latest("agent-1")).thenReturn(Optional.of(report));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseProductionGateController(provider(ProductionGateInboundPort.class, port))).build();
+                new SeahorseProductionGateController(
+                        provider(ProductionGateInboundPort.class, port),
+                        AdvancedFeatureGate.allEnabledForTests())).build();
 
         mvc.perform(post("/api/agents/agent-1/production-gate"))
                 .andExpect(status().isOk())
@@ -66,6 +69,23 @@ class SeahorseProductionGateControllerTests {
                 .andExpect(jsonPath("$.data.agentId").value("agent-1"))
                 .andExpect(jsonPath("$.data.versionId").value("version-1"));
         verify(port).latest("agent-1");
+    }
+
+    @Test
+    void consumerWebModeShouldRejectProductionGateApis() throws Exception {
+        ProductionGateInboundPort port = mock(ProductionGateInboundPort.class);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                        new SeahorseProductionGateController(provider(ProductionGateInboundPort.class, port)))
+                .setControllerAdvice(new SeahorseWebExceptionHandler())
+                .build();
+
+        mvc.perform(post("/api/agents/agent-1/production-gate"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.message")
+                        .value("Advanced feature PRODUCTION_GATE is disabled in CONSUMER_WEB mode"));
+
+        verifyNoInteractions(port);
     }
 
     private static ProductionGateReport report() {

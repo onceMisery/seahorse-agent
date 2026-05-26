@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
+import com.miracle.ai.seahorse.agent.kernel.application.chat.ConversationAttachmentContextAssembler;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.RuleBasedQueryOptimizerPort;
@@ -43,6 +44,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryOptimizerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermExpansionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
@@ -50,6 +53,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkfl
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import java.util.Map;
 import java.util.Optional;
@@ -152,11 +156,25 @@ public class SeahorseAgentKernelChatAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({ConversationAttachmentRepositoryPort.class, ObjectStoragePort.class})
+    @ConditionalOnMissingBean
+    public ConversationAttachmentContextAssembler seahorseConversationAttachmentContextAssembler(
+            ConversationAttachmentRepositoryPort attachmentRepositoryPort,
+            ObjectStoragePort objectStoragePort,
+            ObjectProvider<DocumentParserPort> documentParserPort) {
+        return new ConversationAttachmentContextAssembler(
+                attachmentRepositoryPort,
+                objectStoragePort,
+                documentParserPort.getIfAvailable(DocumentParserPort::plainText));
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     public KernelChatPipeline seahorseKernelChatPipeline(ChatPreparationPorts preparationPorts,
                                                          ChatResponsePorts responsePorts,
                                                          ObjectProvider<KernelRagTraceRecorder> traceRecorder,
                                                          ObjectProvider<ContextPackBuilderInboundPort> contextPackBuilder,
+                                                         ObjectProvider<ConversationAttachmentContextAssembler> attachmentContextAssembler,
                                                          org.springframework.core.env.Environment environment) {
         String configured = environment.getProperty(
                 "seahorse-agent.chat.empty-retrieval-fallback", "generic");
@@ -167,7 +185,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
         return new KernelChatPipeline(preparationPorts, responsePorts,
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
                 strategy,
-                Optional.ofNullable(contextPackBuilder.getIfAvailable()));
+                Optional.ofNullable(contextPackBuilder.getIfAvailable()),
+                attachmentContextAssembler.getIfAvailable(ConversationAttachmentContextAssembler::noop));
     }
 
     @Bean
@@ -181,7 +200,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    ObjectProvider<MemoryEnginePort> memoryEnginePort,
                                                    ObjectProvider<AgentRunInboundPort> agentRunPort,
                                                    ObjectProvider<ContextPackBuilderInboundPort> contextPackBuilder,
-                                                   ObjectProvider<AgentDefinitionRepositoryPort> agentDefinitionRepository) {
+                                                   ObjectProvider<AgentDefinitionRepositoryPort> agentDefinitionRepository,
+                                                   ObjectProvider<ConversationAttachmentContextAssembler> attachmentContextAssembler) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
                 Optional.ofNullable(agentLoop.getIfAvailable()),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
@@ -189,6 +209,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
                 Optional.ofNullable(agentRunPort.getIfAvailable()),
                 Optional.ofNullable(contextPackBuilder.getIfAvailable()),
-                Optional.ofNullable(agentDefinitionRepository.getIfAvailable()));
+                Optional.ofNullable(agentDefinitionRepository.getIfAvailable()),
+                attachmentContextAssembler.getIfAvailable(ConversationAttachmentContextAssembler::noop));
     }
 }

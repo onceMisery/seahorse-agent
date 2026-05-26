@@ -69,6 +69,15 @@ class LocalToolGatewayPortPolicyTests {
     }
 
     @Test
+    void defaultPolicyShouldDenyWhenAllowlistIsEmpty() {
+        PolicyDecision decision = ToolPolicyPort.defaults()
+                .decide(ToolPolicyRequest.from(request("weather", List.of()), true));
+
+        assertEquals(PolicyDecision.Effect.DENY, decision.effect());
+        assertEquals("TOOL_NOT_BOUND", decision.reasonCode());
+    }
+
+    @Test
     void shouldRequireApprovalWithoutExecutingTool() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
         LocalToolGatewayPort gateway = new LocalToolGatewayPort(

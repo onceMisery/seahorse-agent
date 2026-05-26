@@ -50,7 +50,87 @@ public enum StreamEventType {
     /**
      * 请求被拒绝。
      */
-    REJECT("reject");
+    REJECT("reject"),
+
+    /**
+     * Agent 任务时间线。
+     */
+    AGENT_TIMELINE("agent.timeline"),
+
+    /**
+     * Agent run 已创建并开始执行。
+     */
+    RUN_STARTED("run_started"),
+
+    /**
+     * Agent run snapshot for Web SSE resume.
+     */
+    RUN_SNAPSHOT("run_snapshot"),
+
+    /**
+     * Agent step started.
+     */
+    STEP_STARTED("step_started"),
+
+    /**
+     * Agent step progress update.
+     */
+    STEP_PROGRESS("step_progress"),
+
+    /**
+     * Agent step finished.
+     */
+    STEP_FINISHED("step_finished"),
+
+    /**
+     * Tool call started.
+     */
+    TOOL_CALL_STARTED("tool_call_started"),
+
+    /**
+     * Tool call is waiting for the current user to decide.
+     */
+    TOOL_CALL_WAITING_USER("tool_call_waiting_user"),
+
+    /**
+     * Source or citation was found.
+     */
+    SOURCE_FOUND("source_found"),
+
+    /**
+     * Run artifact was created.
+     */
+    ARTIFACT_CREATED("artifact_created"),
+
+    /**
+     * Recoverable runtime error.
+     */
+    RECOVERABLE_ERROR("recoverable_error"),
+
+    /**
+     * Structured agent source event.
+     */
+    AGENT_SOURCE("agent.source"),
+
+    /**
+     * Structured agent artifact event.
+     */
+    AGENT_ARTIFACT("agent.artifact"),
+
+    /**
+     * Structured agent approval event.
+     */
+    AGENT_APPROVAL("agent.approval"),
+
+    /**
+     * Structured agent quota event.
+     */
+    AGENT_QUOTA("agent.quota"),
+
+    /**
+     * Structured agent memory event.
+     */
+    AGENT_MEMORY("agent.memory");
 
     private final String value;
 

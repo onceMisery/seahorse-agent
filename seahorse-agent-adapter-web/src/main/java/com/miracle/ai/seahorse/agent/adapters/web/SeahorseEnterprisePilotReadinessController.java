@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.EnterprisePilotReadinessGenerateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.EnterprisePilotReadinessInboundPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,16 +32,35 @@ import org.springframework.web.bind.annotation.RestController;
 public class SeahorseEnterprisePilotReadinessController {
 
     private final ObjectProvider<EnterprisePilotReadinessInboundPort> readinessPortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseEnterprisePilotReadinessController(
             ObjectProvider<EnterprisePilotReadinessInboundPort> readinessPortProvider) {
+        this(readinessPortProvider, AdvancedFeatureGate.allEnabledForTests());
+    }
+
+    @Autowired
+    public SeahorseEnterprisePilotReadinessController(
+            ObjectProvider<EnterprisePilotReadinessInboundPort> readinessPortProvider,
+            ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(readinessPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseEnterprisePilotReadinessController(
+            ObjectProvider<EnterprisePilotReadinessInboundPort> readinessPortProvider,
+            AdvancedFeatureGate advancedFeatureGate) {
         this.readinessPortProvider = readinessPortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @PostMapping("/api/agents/{agentId}/versions/{versionId}/pilot-readiness/generate")
     public ApiResponse<Object> generate(@PathVariable String agentId,
                                         @PathVariable String versionId,
                                         @RequestBody EnterprisePilotReadinessGenerateRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.ENTERPRISE_PILOT_READINESS);
         EnterprisePilotReadinessGenerateRequest safeRequest =
                 request == null ? new EnterprisePilotReadinessGenerateRequest(null, null) : request;
         return ApiResponses.requireService(readinessPortProvider,
@@ -55,6 +75,7 @@ public class SeahorseEnterprisePilotReadinessController {
     public ApiResponse<Object> latest(@PathVariable String agentId,
                                       @PathVariable String versionId,
                                       @RequestParam String tenantId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.ENTERPRISE_PILOT_READINESS);
         return ApiResponses.requireService(readinessPortProvider,
                 port -> port.latest(tenantId, agentId, versionId)
                         .orElseThrow(() -> new IllegalArgumentException("Enterprise pilot readiness report not found")));

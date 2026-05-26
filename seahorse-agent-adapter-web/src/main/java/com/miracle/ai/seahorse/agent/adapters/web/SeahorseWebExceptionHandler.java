@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.dev33.satoken.exception.NotLoginException;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -50,6 +51,23 @@ public class SeahorseWebExceptionHandler {
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public Map<String, Object> notLogin(NotLoginException ex) {
         return error(ex);
+    }
+
+    @ExceptionHandler(AdvancedFeatureDisabledException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Map<String, Object> advancedFeatureDisabled(AdvancedFeatureDisabledException ex) {
+        return error(ex);
+    }
+
+    @ExceptionHandler(SecurityException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Map<String, Object> forbidden(SecurityException ex) {
+        return error(ex);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public org.springframework.http.ResponseEntity<Map<String, Object>> responseStatus(ResponseStatusException ex) {
+        return org.springframework.http.ResponseEntity.status(ex.getStatusCode()).body(error(ex));
     }
 
     @ExceptionHandler(Exception.class)

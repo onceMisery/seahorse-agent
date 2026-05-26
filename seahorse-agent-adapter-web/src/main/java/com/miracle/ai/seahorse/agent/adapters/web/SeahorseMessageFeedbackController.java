@@ -17,9 +17,12 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQuery;
+import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.MessageFeedbackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.SubmitMessageFeedbackCommand;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,9 +42,17 @@ import java.util.Objects;
 public class SeahorseMessageFeedbackController {
 
     private final ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider;
+    private final ObjectProvider<FeedbackEvaluationCandidateQueryInboundPort> candidateQueryPortProvider;
 
     public SeahorseMessageFeedbackController(ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider) {
+        this(feedbackInboundPortProvider, null);
+    }
+
+    public SeahorseMessageFeedbackController(ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider,
+                                             ObjectProvider<FeedbackEvaluationCandidateQueryInboundPort>
+                                                     candidateQueryPortProvider) {
         this.feedbackInboundPortProvider = feedbackInboundPortProvider;
+        this.candidateQueryPortProvider = candidateQueryPortProvider;
     }
 
     @PostMapping("/conversations/messages/{messageId}/feedback")
@@ -58,6 +69,16 @@ public class SeahorseMessageFeedbackController {
                 safeRequest.reason(),
                 safeRequest.comment()));
         return Map.of("code", "0");
+    }
+
+    @GetMapping("/api/feedback/evaluation-candidates")
+    public ApiResponse<Object> evaluationCandidates(@RequestParam(required = false) String userId,
+                                                    @RequestParam(required = false) String runId,
+                                                    @RequestParam(required = false) String reason,
+                                                    @RequestParam(defaultValue = "1") long current,
+                                                    @RequestParam(defaultValue = "10") long size) {
+        return ApiResponses.requireService(candidateQueryPortProvider, port -> port.page(
+                new FeedbackEvaluationCandidateQuery(userId, runId, reason, current, size)));
     }
 
     private int requireVote(Integer vote) {

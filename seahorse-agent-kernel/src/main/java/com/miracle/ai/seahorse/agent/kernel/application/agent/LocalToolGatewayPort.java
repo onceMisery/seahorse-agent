@@ -171,10 +171,17 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         ToolInvocationStatus decisionStatus = approvalSatisfied ? ToolInvocationStatus.ALLOWED : decisionStatus(decision);
         auditPort.recordDecision(new ToolInvocationAuditDecision(invocationId, decision.decisionId(), decisionStatus));
         if (!decision.allowsExecution() && !approvalSatisfied) {
+            String approvalId = null;
             if (decision.effect() == PolicyDecision.Effect.APPROVAL_REQUIRED) {
-                createApprovalRequest(safeRequest, decision, invocationId, effectiveRunId, effectiveUserId, startedAt);
+                approvalId = createApprovalRequest(
+                        safeRequest,
+                        decision,
+                        invocationId,
+                        effectiveRunId,
+                        effectiveUserId,
+                        startedAt);
             }
-            ToolInvocationResult result = ToolInvocationResult.failed(decision.reasonCode());
+            ToolInvocationResult result = ToolInvocationResult.failed(decision.reasonCode(), approvalId);
             auditPort.recordCompleted(new ToolInvocationAuditCompletion(
                     invocationId,
                     decisionStatus,
@@ -214,15 +221,16 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
         return UUID.randomUUID().toString();
     }
 
-    private void createApprovalRequest(ToolInvocationRequest request,
-                                       PolicyDecision decision,
-                                       String invocationId,
-                                       String effectiveRunId,
-                                       String effectiveUserId,
-                                       Instant requestedAt) {
+    private String createApprovalRequest(ToolInvocationRequest request,
+                                         PolicyDecision decision,
+                                         String invocationId,
+                                         String effectiveRunId,
+                                         String effectiveUserId,
+                                         Instant requestedAt) {
         // 审批请求保存的是可展示的参数预览，不保存完整敏感入参；真正恢复执行由后续 durable runtime 切片接管。
+        String approvalId = approvalId(invocationId);
         approvalRequestRepository.save(new ApprovalRequest(
-                APPROVAL_ID_PREFIX + invocationId,
+                approvalId,
                 effectiveRunId,
                 request.stepId(),
                 invocationId,
@@ -240,6 +248,11 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                 null,
                 null,
                 null));
+        return approvalId;
+    }
+
+    private String approvalId(String invocationId) {
+        return APPROVAL_ID_PREFIX + invocationId;
     }
 
     private String approvalSummary(ToolInvocationRequest request, PolicyDecision decision) {

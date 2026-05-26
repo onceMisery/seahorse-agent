@@ -23,6 +23,10 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOpt
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
@@ -95,7 +99,10 @@ class KernelChatAgentRunStoreTests {
         KernelAgentLoop agentLoop = new KernelAgentLoop(
                 model,
                 toolRegistry,
+                successfulWeatherGateway(),
                 KernelAgentLoopOptions.defaults(),
+                com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder.noop(),
+                new com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver(),
                 new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
         RecordingCallback callback = new RecordingCallback();
         KernelChatInboundService service = new KernelChatInboundService(
@@ -266,8 +273,68 @@ class KernelChatAgentRunStoreTests {
         assertTrue(runRepository.runs.isEmpty());
     }
 
+    @Test
+    void controlledWebTemplatesExposeOnlyControlledWebResearchTools() {
+        for (String templateId : List.of("deep-research", "web-summary", "compare-analysis")) {
+            MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+            KernelAgentRunService runService = new KernelAgentRunService(
+                    new EmptyAgentDefinitionRepository(), runRepository,
+                    () -> Optional.of(new CurrentUser("user-1", "alice", "user", null)), FIXED_CLOCK);
+            ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("research answer")));
+            InMemoryToolRegistry toolRegistry = new InMemoryToolRegistry();
+            toolRegistry.register(new ToolDescriptor(WebSearchToolPortAdapter.TOOL_ID, "Web Search", "Search", "{}"),
+                    (callId, toolId, arguments) -> ToolInvocationResult.ok("{}"));
+            toolRegistry.register(new ToolDescriptor(WebFetchToolPortAdapter.TOOL_ID, "Web Fetch", "Fetch", "{}"),
+                    (callId, toolId, arguments) -> ToolInvocationResult.ok("{}"));
+            toolRegistry.register(
+                    new ToolDescriptor(SearchKnowledgeBaseToolPortAdapter.TOOL_ID, "KB Search", "KB", "{}"),
+                    (callId, toolId, arguments) -> ToolInvocationResult.ok("{}"));
+            toolRegistry.register(new ToolDescriptor(GetDateTimeToolPortAdapter.TOOL_ID, "Date Time", "Time", "{}"),
+                    (callId, toolId, arguments) -> ToolInvocationResult.ok("{}"));
+            KernelAgentLoop agentLoop = new KernelAgentLoop(
+                    model,
+                    toolRegistry,
+                    KernelAgentLoopOptions.defaults(),
+                    new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
+            RecordingCallback callback = new RecordingCallback();
+            KernelChatInboundService service = new KernelChatInboundService(
+                    newPipeline(),
+                    StreamTaskPort.noop(),
+                    Optional.of(agentLoop),
+                    null,
+                    null,
+                    MemoryEnginePort.noop(),
+                    Optional.of(runService));
+
+            service.streamChat(new StreamChatCommand(
+                    "Research public information",
+                    "conversation-1",
+                    "task-" + templateId,
+                    "user-1",
+                    false,
+                    ChatMode.AGENT,
+                    null,
+                    null,
+                    templateId), callback);
+
+            assertTrue(callback.awaitTerminal());
+            List<String> toolIds = model.requests.get(0).getTools().stream()
+                    .map(ToolDescriptor::toolId)
+                    .toList();
+            assertEquals(List.of(
+                    WebSearchToolPortAdapter.TOOL_ID,
+                    WebFetchToolPortAdapter.TOOL_ID,
+                    SearchKnowledgeBaseToolPortAdapter.TOOL_ID,
+                    GetDateTimeToolPortAdapter.TOOL_ID), toolIds);
+        }
+    }
+
     private static ToolGatewayPort approvalRequiredGateway() {
         return request -> ToolInvocationResult.failed(ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED);
+    }
+
+    private static ToolGatewayPort successfulWeatherGateway() {
+        return request -> ToolInvocationResult.ok("{\"temp\":21}");
     }
 
     private static KernelChatPipeline newPipeline() {

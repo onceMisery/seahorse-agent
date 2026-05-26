@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageRecord;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageSource;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunCostSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.CostUsageInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageQuery;
 import org.junit.jupiter.api.Test;
@@ -109,6 +110,32 @@ class SeahorseCostUsageControllerTests {
         ArgumentCaptor<CostUsageQuery> queryCaptor = ArgumentCaptor.forClass(CostUsageQuery.class);
         verify(port).aggregate(queryCaptor.capture());
         assertThat(queryCaptor.getValue().runId()).isEqualTo("run-1");
+    }
+
+    @Test
+    void shouldReadAgentRunCostSummaryFromApiPath() throws Exception {
+        AgentRunCostSummaryInboundPort port = mock(AgentRunCostSummaryInboundPort.class);
+        when(port.getCostSummary("run-1")).thenReturn(new CostUsageAggregate(
+                "tenant-a",
+                "agent-1",
+                "run-1",
+                150L,
+                3L,
+                0.35d,
+                2L));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseAgentRunController(
+                null,
+                null,
+                null,
+                null,
+                provider(AgentRunCostSummaryInboundPort.class, port),
+                AdvancedFeatureGate.consumerWebDefaults())).build();
+
+        mvc.perform(get("/api/agent-runs/run-1/cost-summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tenantId").value("tenant-a"))
+                .andExpect(jsonPath("$.data.totalTokens").value(150))
+                .andExpect(jsonPath("$.data.totalCalls").value(3));
     }
 
     private static CostUsageRecord record() {

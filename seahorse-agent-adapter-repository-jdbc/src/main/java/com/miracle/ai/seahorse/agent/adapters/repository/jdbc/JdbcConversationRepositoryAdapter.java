@@ -62,7 +62,7 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
             WHERE conversation_id = ? AND user_id = ? AND deleted = 0
             """;
     private static final String SQL_LIST_MESSAGES = """
-            SELECT m.id, m.conversation_id, m.role, m.content, m.thinking_content,
+            SELECT m.id, m.conversation_id, m.role, m.content, m.agent_run_id, m.thinking_content,
                    m.thinking_duration, m.create_time, f.vote
             FROM t_message m
             LEFT JOIN t_message_feedback f
@@ -128,6 +128,7 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
         record.setConversationId(resultSet.getString("conversation_id"));
         record.setRole(resultSet.getString("role"));
         record.setContent(resultSet.getString("content"));
+        record.setAgentRunId(resultSet.getString("agent_run_id"));
         record.setThinkingContent(resultSet.getString("thinking_content"));
         record.setThinkingDuration(resultSet.getObject("thinking_duration", Integer.class));
         record.setVote(resultSet.getObject("vote", Integer.class));

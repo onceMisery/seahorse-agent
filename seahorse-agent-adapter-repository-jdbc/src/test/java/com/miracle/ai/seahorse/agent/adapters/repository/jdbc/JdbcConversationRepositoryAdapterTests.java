@@ -62,12 +62,13 @@ class JdbcConversationRepositoryAdapterTests {
     void shouldListMessagesWithFeedbackVote() {
         insertConversation();
         insertMessage("msg-1", "user", null);
-        insertMessage("msg-2", "assistant", 1);
+        insertMessage("msg-2", "assistant", 1, "run-1");
 
         List<ConversationMessageRecord> messages = adapter.listMessages("conv-1", "user-1");
 
         assertThat(messages).extracting(ConversationMessageRecord::getId).containsExactly("msg-1", "msg-2");
         assertThat(messages.get(1).getVote()).isEqualTo(1);
+        assertThat(messages.get(1).getAgentRunId()).isEqualTo("run-1");
     }
 
     private void insertConversation() {
@@ -80,13 +81,17 @@ class JdbcConversationRepositoryAdapterTests {
     }
 
     private void insertMessage(String id, String role, Integer vote) {
+        insertMessage(id, role, vote, null);
+    }
+
+    private void insertMessage(String id, String role, Integer vote, String agentRunId) {
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
                 INSERT INTO t_message
                 (id, conversation_id, user_id, role, content, thinking_content, thinking_duration,
-                 create_time, update_time, deleted)
-                VALUES (?, 'conv-1', 'user-1', ?, ?, null, null, ?, ?, 0)
-                """, id, role, "content-" + id, now, now);
+                 agent_run_id, create_time, update_time, deleted)
+                VALUES (?, 'conv-1', 'user-1', ?, ?, null, null, ?, ?, ?, 0)
+                """, id, role, "content-" + id, agentRunId, now, now);
         if (vote == null) {
             return;
         }
@@ -132,6 +137,7 @@ class JdbcConversationRepositoryAdapterTests {
                     content TEXT NOT NULL,
                     thinking_content TEXT,
                     thinking_duration INTEGER,
+                    agent_run_id VARCHAR(64),
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0

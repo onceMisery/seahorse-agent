@@ -1,4 +1,14 @@
-import type { FeedbackValue, Message, Session } from "@/types";
+import type { FeedbackReason, FeedbackValue, Message, Session, TaskTemplateId } from "@/types";
+
+export interface SendMessageOptions {
+  attachmentIds?: string[];
+  conversationIdOverride?: string | null;
+}
+
+export interface SubmitFeedbackOptions {
+  reason?: FeedbackReason | string | null;
+  comment?: string | null;
+}
 
 export interface ChatState {
   sessions: Session[];
@@ -15,6 +25,7 @@ export interface ChatState {
   streamAbort: (() => void) | null;
   streamingMessageId: string | null;
   cancelRequested: boolean;
+  selectedTaskTemplateId: TaskTemplateId | string | null;
   fetchSessions: () => Promise<void>;
   createSession: () => Promise<string>;
   deleteSession: (sessionId: string) => Promise<void>;
@@ -22,9 +33,11 @@ export interface ChatState {
   selectSession: (sessionId: string) => Promise<void>;
   updateSessionTitle: (sessionId: string, title: string) => void;
   setDeepThinkingEnabled: (enabled: boolean) => void;
-  sendMessage: (content: string) => Promise<void>;
+  setSelectedTaskTemplateId: (templateId: TaskTemplateId | string | null) => void;
+  sendMessage: (content: string, options?: SendMessageOptions) => Promise<void>;
+  refreshRunSnapshot: (messageId: string, runId: string) => Promise<void>;
   cancelGeneration: () => void;
   appendStreamContent: (delta: string) => void;
   appendThinkingContent: (delta: string) => void;
-  submitFeedback: (messageId: string, feedback: FeedbackValue) => Promise<void>;
+  submitFeedback: (messageId: string, feedback: FeedbackValue, options?: SubmitFeedbackOptions) => Promise<void>;
 }

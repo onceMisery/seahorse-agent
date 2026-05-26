@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.OpenApiConnectorInbound
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.OpenApiImportCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.CredentialAuthType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,13 +42,26 @@ public class SeahorseOpenApiConnectorController {
     private static final String DEFAULT_SIZE = "10";
 
     private final ObjectProvider<OpenApiConnectorInboundPort> connectorPortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
-    public SeahorseOpenApiConnectorController(ObjectProvider<OpenApiConnectorInboundPort> connectorPortProvider) {
+    @Autowired
+    public SeahorseOpenApiConnectorController(ObjectProvider<OpenApiConnectorInboundPort> connectorPortProvider,
+                                              ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(connectorPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseOpenApiConnectorController(ObjectProvider<OpenApiConnectorInboundPort> connectorPortProvider,
+                                              AdvancedFeatureGate advancedFeatureGate) {
         this.connectorPortProvider = connectorPortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @PostMapping("/api/connectors/openapi")
     public ApiResponse<Object> importOpenApi(@RequestBody OpenApiImportRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.CONNECTOR_MANAGEMENT);
         OpenApiImportRequest safeRequest = request == null
                 ? new OpenApiImportRequest(null, null, null, null)
                 : request;
@@ -65,12 +79,14 @@ public class SeahorseOpenApiConnectorController {
                                     @RequestParam(required = false) ConnectorStatus status,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.CONNECTOR_MANAGEMENT);
         return ApiResponses.requireService(connectorPortProvider,
                 port -> port.page(new ConnectorQuery(tenantId, keyword, status, current, size)));
     }
 
     @GetMapping("/api/connectors/{connectorId}/operations")
     public ApiResponse<Object> listOperations(@PathVariable String connectorId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.CONNECTOR_MANAGEMENT);
         return ApiResponses.requireService(connectorPortProvider, port -> port.listOperations(connectorId));
     }
 
@@ -78,6 +94,7 @@ public class SeahorseOpenApiConnectorController {
     public ApiResponse<Object> bindCredential(@PathVariable String connectorId,
                                               @PathVariable String operationId,
                                               @RequestBody ConnectorCredentialBindingRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.CONNECTOR_MANAGEMENT);
         ConnectorCredentialBindingRequest safeRequest = request == null
                 ? new ConnectorCredentialBindingRequest(null, null, null)
                 : request;
@@ -93,6 +110,7 @@ public class SeahorseOpenApiConnectorController {
     @GetMapping("/api/connectors/{connectorId}/operations/{operationId}/credential-binding")
     public ApiResponse<Object> listActiveCredentialBindings(@PathVariable String connectorId,
                                                             @PathVariable String operationId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.CONNECTOR_MANAGEMENT);
         return ApiResponses.requireService(connectorPortProvider,
                 port -> port.listActiveCredentialBindings(connectorId, operationId));
     }
@@ -101,6 +119,7 @@ public class SeahorseOpenApiConnectorController {
     public ApiResponse<Object> enableOperation(@PathVariable String connectorId,
                                                @PathVariable String operationId,
                                                @RequestBody(required = false) ConnectorOperationEnableRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.CONNECTOR_MANAGEMENT);
         ConnectorOperationEnableRequest safeRequest = request == null
                 ? new ConnectorOperationEnableRequest(null, false)
                 : request;
@@ -116,6 +135,7 @@ public class SeahorseOpenApiConnectorController {
     public ApiResponse<Object> disableOperation(@PathVariable String connectorId,
                                                 @PathVariable String operationId,
                                                 @RequestBody(required = false) ConnectorOperationDisableRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.CONNECTOR_MANAGEMENT);
         ConnectorOperationDisableRequest safeRequest = request == null
                 ? new ConnectorOperationDisableRequest(null)
                 : request;

@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaUsage;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaDecisionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaPolicyUpsertCommand;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,13 +38,30 @@ import java.time.Instant;
 public class SeahorseQuotaController {
 
     private final ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider;
+    private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseQuotaController(ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider) {
+        this(quotaManagementPortProvider, AdvancedFeatureGate.allEnabledForTests());
+    }
+
+    @Autowired
+    public SeahorseQuotaController(ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider,
+                                   ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
+        this(quotaManagementPortProvider,
+                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
+    }
+
+    public SeahorseQuotaController(ObjectProvider<QuotaManagementInboundPort> quotaManagementPortProvider,
+                                   AdvancedFeatureGate advancedFeatureGate) {
         this.quotaManagementPortProvider = quotaManagementPortProvider;
+        this.advancedFeatureGate = advancedFeatureGate == null
+                ? AdvancedFeatureGate.consumerWebDefaults()
+                : advancedFeatureGate;
     }
 
     @PostMapping("/api/quotas/policies")
     public ApiResponse<Object> upsertPolicy(@RequestBody QuotaPolicyRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.QUOTA_MANAGEMENT);
         QuotaPolicyRequest safeRequest = request == null
                 ? new QuotaPolicyRequest(null, null, null, null, null, null, null, null, null, null, null)
                 : request;
@@ -64,6 +82,7 @@ public class SeahorseQuotaController {
 
     @PostMapping("/api/quotas/policies/{policyId}/disable")
     public ApiResponse<Object> disablePolicy(@PathVariable String policyId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.QUOTA_MANAGEMENT);
         return ApiResponses.requireService(quotaManagementPortProvider, port -> {
             port.disablePolicy(policyId);
             return null;
@@ -72,6 +91,7 @@ public class SeahorseQuotaController {
 
     @PostMapping("/api/quotas/decisions:evaluate")
     public ApiResponse<Object> evaluate(@RequestBody QuotaDecisionRequest request) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.QUOTA_MANAGEMENT);
         QuotaDecisionRequest safeRequest = request == null
                 ? new QuotaDecisionRequest(null, null, null, null, null, null, null, 0L, 0L, 0d)
                 : request;

@@ -44,7 +44,7 @@ public interface ToolPolicyPort {
                         ToolPolicyReasonCodes.TOOL_NOT_FOUND,
                         "Tool is not registered");
             }
-            if (!request.allowedToolIds().isEmpty() && !request.allowedToolIds().contains(request.toolId())) {
+            if (request.allowedToolIds().isEmpty() || !request.allowedToolIds().contains(request.toolId())) {
                 return PolicyDecision.deny("builtin-tool-not-bound",
                         ToolPolicyReasonCodes.TOOL_NOT_BOUND,
                         "Tool is not bound to the current agent version");

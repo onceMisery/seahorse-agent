@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalReques
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -32,6 +33,11 @@ public interface ApprovalManagementInboundPort {
      * 分页查询审批请求；未指定状态时默认查询 PENDING。
      */
     ApprovalRequestPage page(String tenantId, ApprovalRequestStatus status, long current, long size);
+
+    /**
+     * 查询当前用户可处理的 run 内待确认请求，用于 C 端聊天内确认卡片。
+     */
+    List<ApprovalRequest> listPendingByRunId(String runId);
 
     /**
      * 查看审批详情。
