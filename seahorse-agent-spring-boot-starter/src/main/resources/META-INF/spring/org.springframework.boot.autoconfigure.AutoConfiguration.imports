@@ -47,6 +47,8 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelPluginAutoConfi
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelRegistryAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelRetrievalAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelTraceAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelResearchAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelEvalAutoConfiguration
 
 # Layer 7: Runtime guards (after kernel sub-configs)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRuntimeGuardAutoConfiguration

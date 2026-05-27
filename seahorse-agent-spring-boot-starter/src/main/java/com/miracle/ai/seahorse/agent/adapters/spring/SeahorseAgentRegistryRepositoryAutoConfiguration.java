@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDurableTaskQueueAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentDefinitionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentArtifactRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentCatalogQueryAdapter;
@@ -56,6 +57,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepository
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRolloutRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DurableTaskQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
@@ -325,5 +327,13 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     public JdbcAgentRunEventBufferAdapter seahorseJdbcAgentRunEventBufferAdapter(DataSource dataSource,
                                                                                  ObjectMapper objectMapper) {
         return new JdbcAgentRunEventBufferAdapter(dataSource, objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(DurableTaskQueuePort.class)
+    public JdbcDurableTaskQueueAdapter seahorseJdbcDurableTaskQueueAdapter(DataSource dataSource) {
+        return new JdbcDurableTaskQueueAdapter(dataSource);
     }
 }
