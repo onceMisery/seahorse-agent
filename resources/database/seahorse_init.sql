@@ -1222,6 +1222,66 @@ ON sa_agent_run_event_buffer(run_id, event_seq);
 CREATE INDEX IF NOT EXISTS idx_sa_event_buffer_created
 ON sa_agent_run_event_buffer(created_at);
 
+-- ============================================
+-- Durable Task Queue
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sa_durable_task_queue (
+  task_id       VARCHAR(64) PRIMARY KEY,
+  run_id        VARCHAR(64) NOT NULL,
+  step_type     VARCHAR(32) NOT NULL,
+  status        VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+  attempt_count INT NOT NULL DEFAULT 0,
+  worker_id     VARCHAR(64),
+  payload_json  TEXT,
+  last_error    TEXT,
+  retry_at      TIMESTAMP,
+  created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+  claimed_at    TIMESTAMP,
+  completed_at  TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_dtq_status_retry
+  ON sa_durable_task_queue(status, retry_at);
+
+CREATE INDEX IF NOT EXISTS idx_sa_dtq_run_id
+  ON sa_durable_task_queue(run_id);
+
+-- ============================================
+-- Eval Dataset & Candidate Tables
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sa_eval_candidate (
+  candidate_id VARCHAR(64) PRIMARY KEY,
+  run_id VARCHAR(64) NOT NULL,
+  message_id VARCHAR(64),
+  user_query TEXT NOT NULL,
+  assistant_response TEXT NOT NULL,
+  feedback_reason VARCHAR(1000),
+  status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+  reviewer_note VARCHAR(1000),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  decided_at TIMESTAMP,
+  CONSTRAINT chk_sa_eval_candidate_status
+    CHECK (status IN ('PENDING', 'ACCEPTED', 'REJECTED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_eval_candidate_status
+  ON sa_eval_candidate(status, created_at);
+
+CREATE TABLE IF NOT EXISTS sa_eval_sample (
+  sample_id VARCHAR(64) PRIMARY KEY,
+  dataset_id VARCHAR(64) NOT NULL,
+  user_query TEXT NOT NULL,
+  expected_response TEXT NOT NULL,
+  feedback_reason VARCHAR(1000),
+  source_run_id VARCHAR(64),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_eval_sample_dataset
+  ON sa_eval_sample(dataset_id, created_at);
+
 -- PostgreSQL Initial Data for Seahorse Agent
 
 INSERT INTO t_user (id, username, password, role, avatar, create_time, update_time, deleted)

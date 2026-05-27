@@ -41,11 +41,16 @@ public class JdbcEvalDatasetRepositoryAdapter implements EvalDatasetRepositoryPo
     @Override
     public void addSample(EvalSample sample) {
         Objects.requireNonNull(sample, "sample must not be null");
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sa_eval_sample WHERE sample_id = ?",
+                Integer.class, sample.sampleId());
+        if (count != null && count > 0) {
+            return;
+        }
         jdbcTemplate.update("""
                 INSERT INTO sa_eval_sample
                 (sample_id, dataset_id, user_query, expected_response, feedback_reason, source_run_id, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (sample_id) DO NOTHING
                 """,
                 sample.sampleId(),
                 sample.datasetId(),

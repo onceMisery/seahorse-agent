@@ -56,26 +56,33 @@ public class JdbcEvalCandidateRepositoryAdapter implements EvalCandidateReposito
     @Override
     public void save(EvalCandidate candidate) {
         Objects.requireNonNull(candidate, "candidate must not be null");
-        jdbcTemplate.update("""
-                INSERT INTO sa_eval_candidate
-                (candidate_id, run_id, message_id, user_query, assistant_response,
-                 feedback_reason, status, reviewer_note, created_at, decided_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (candidate_id) DO UPDATE SET
-                  status = EXCLUDED.status,
-                  reviewer_note = EXCLUDED.reviewer_note,
-                  decided_at = EXCLUDED.decided_at
+        int updated = jdbcTemplate.update("""
+                UPDATE sa_eval_candidate
+                SET status = ?, reviewer_note = ?, decided_at = ?
+                WHERE candidate_id = ?
                 """,
-                candidate.candidateId(),
-                candidate.runId(),
-                candidate.messageId(),
-                candidate.userQuery(),
-                candidate.assistantResponse(),
-                candidate.feedbackReason(),
                 candidate.status().name(),
                 candidate.reviewerNote(),
-                timestamp(candidate.createdAt()),
-                candidate.decidedAt() != null ? Timestamp.from(candidate.decidedAt()) : null);
+                candidate.decidedAt() != null ? Timestamp.from(candidate.decidedAt()) : null,
+                candidate.candidateId());
+        if (updated == 0) {
+            jdbcTemplate.update("""
+                    INSERT INTO sa_eval_candidate
+                    (candidate_id, run_id, message_id, user_query, assistant_response,
+                     feedback_reason, status, reviewer_note, created_at, decided_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    candidate.candidateId(),
+                    candidate.runId(),
+                    candidate.messageId(),
+                    candidate.userQuery(),
+                    candidate.assistantResponse(),
+                    candidate.feedbackReason(),
+                    candidate.status().name(),
+                    candidate.reviewerNote(),
+                    timestamp(candidate.createdAt()),
+                    candidate.decidedAt() != null ? Timestamp.from(candidate.decidedAt()) : null);
+        }
     }
 
     private EvalCandidate mapCandidate(ResultSet rs, int rowNum) throws SQLException {
