@@ -17,9 +17,11 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.adapters.web.ResearchSseBridge;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.CitationVerifier;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.ExtractEvidenceStepHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.FetchStepHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.research.KernelResearchInboundService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.PlanStepHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.ResearchRunOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.ResearchStepHandler;
@@ -27,9 +29,12 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.research.SearchSte
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.SynthesizeStepHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.VerifyCitationsStepHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.WriteReportStepHandler;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResearchInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DurableTaskQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -99,10 +104,12 @@ public class SeahorseAgentKernelResearchAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(ChatModelPort.class)
+    @ConditionalOnBean({ChatModelPort.class, ObjectStoragePort.class, AgentArtifactRepositoryPort.class})
     @ConditionalOnMissingBean
-    public WriteReportStepHandler seahorseWriteReportStepHandler(ChatModelPort chatModel) {
-        return new WriteReportStepHandler(chatModel);
+    public WriteReportStepHandler seahorseWriteReportStepHandler(ChatModelPort chatModel,
+                                                                 ObjectStoragePort objectStorage,
+                                                                 AgentArtifactRepositoryPort artifactRepository) {
+        return new WriteReportStepHandler(chatModel, objectStorage, artifactRepository);
     }
 
     @Bean
@@ -122,5 +129,26 @@ public class SeahorseAgentKernelResearchAutoConfiguration {
                 taskQueue,
                 eventBuffer.getIfAvailable(AgentRunEventBufferPort::noop),
                 stepHandlers.orderedStream().toList());
+    }
+
+    @Bean
+    @ConditionalOnBean(ResearchRunOrchestrator.class)
+    @ConditionalOnMissingBean
+    public ResearchInboundPort seahorseResearchInboundPort(ResearchRunOrchestrator orchestrator) {
+        return new KernelResearchInboundService(orchestrator);
+    }
+
+    @Bean
+    @ConditionalOnBean(ResearchRunOrchestrator.class)
+    @ConditionalOnMissingBean
+    public SeahorseResearchWorkerJob seahorseResearchWorkerJob(ResearchRunOrchestrator orchestrator) {
+        return new SeahorseResearchWorkerJob(orchestrator);
+    }
+
+    @Bean
+    @ConditionalOnBean(ResearchRunOrchestrator.class)
+    @ConditionalOnMissingBean
+    public ResearchSseBridge seahorseResearchSseBridge(ObjectProvider<AgentRunEventBufferPort> eventBuffer) {
+        return new ResearchSseBridge(eventBuffer.getIfAvailable(AgentRunEventBufferPort::noop));
     }
 }

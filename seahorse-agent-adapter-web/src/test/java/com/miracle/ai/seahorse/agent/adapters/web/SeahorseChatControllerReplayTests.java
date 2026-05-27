@@ -148,6 +148,8 @@ class SeahorseChatControllerReplayTests {
                 (emitter, conversationId, taskId) -> new NoopStreamCallback(),
                 streamTaskPort,
                 provider(AgentRunSnapshotInboundPort.class, snapshotPort),
+                provider(com.miracle.ai.seahorse.agent.ports.inbound.agent.ResearchInboundPort.class, null),
+                provider(ResearchSseBridge.class, null),
                 provider(com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort.class, null),
                 provider(AgentRunEventBufferPort.class, eventBufferPort),
                 provider(AdvancedFeatureGate.class, null),

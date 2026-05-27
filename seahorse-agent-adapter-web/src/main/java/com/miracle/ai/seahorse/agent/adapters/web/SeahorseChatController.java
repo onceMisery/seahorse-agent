@@ -24,6 +24,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventEnvelope;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResearchInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.ResearchStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
@@ -62,6 +64,8 @@ public class SeahorseChatController {
 
     private final ObjectProvider<ChatInboundPort> chatInboundPortProvider;
     private final ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider;
+    private final ObjectProvider<ResearchInboundPort> researchInboundPortProvider;
+    private final ObjectProvider<ResearchSseBridge> researchSseBridgeProvider;
     private final ChatStreamCallbackFactoryPort callbackFactory;
     private final StreamTaskPort streamTaskPort;
     private final RateLimiterPort rateLimiterPort;
@@ -85,6 +89,7 @@ public class SeahorseChatController {
                                   long sseTimeoutMs,
                                   AdvancedFeatureGate advancedFeatureGate) {
         this(chatInboundPortProvider, callbackFactory, streamTaskPort, null,
+                null, null,
                 RateLimiterPort.noop(), AgentRunEventBufferPort.noop(),
                 advancedFeatureGate, sseTimeoutMs, 60, Duration.ofMinutes(1));
     }
@@ -98,6 +103,8 @@ public class SeahorseChatController {
                 callbackFactory,
                 streamTaskPort,
                 snapshotPortProvider,
+                null,
+                null,
                 RateLimiterPort.noop(),
                 AgentRunEventBufferPort.noop(),
                 AdvancedFeatureGate.consumerWebDefaults(),
@@ -111,6 +118,8 @@ public class SeahorseChatController {
                                   ChatStreamCallbackFactoryPort callbackFactory,
                                   StreamTaskPort streamTaskPort,
                                   ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
+                                  ObjectProvider<ResearchInboundPort> researchInboundPortProvider,
+                                  ObjectProvider<ResearchSseBridge> researchSseBridgeProvider,
                                   ObjectProvider<RateLimiterPort> rateLimiterPortProvider,
                                   ObjectProvider<AgentRunEventBufferPort> eventBufferPortProvider,
                                   ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
@@ -123,6 +132,8 @@ public class SeahorseChatController {
                 callbackFactory,
                 streamTaskPort,
                 snapshotPortProvider,
+                researchInboundPortProvider,
+                researchSseBridgeProvider,
                 Objects.requireNonNullElse(rateLimiterPortProvider.getIfAvailable(), RateLimiterPort.noop()),
                 Objects.requireNonNullElse(eventBufferPortProvider.getIfAvailable(), AgentRunEventBufferPort.noop()),
                 advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults),
@@ -135,6 +146,8 @@ public class SeahorseChatController {
                                    ChatStreamCallbackFactoryPort callbackFactory,
                                    StreamTaskPort streamTaskPort,
                                    ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
+                                   ObjectProvider<ResearchInboundPort> researchInboundPortProvider,
+                                   ObjectProvider<ResearchSseBridge> researchSseBridgeProvider,
                                    RateLimiterPort rateLimiterPort,
                                    AgentRunEventBufferPort eventBufferPort,
                                    AdvancedFeatureGate advancedFeatureGate,
@@ -143,6 +156,8 @@ public class SeahorseChatController {
                                    Duration chatRateLimitWindow) {
         this.chatInboundPortProvider = chatInboundPortProvider;
         this.snapshotPortProvider = snapshotPortProvider;
+        this.researchInboundPortProvider = researchInboundPortProvider;
+        this.researchSseBridgeProvider = researchSseBridgeProvider;
         this.callbackFactory = Objects.requireNonNull(callbackFactory, "callbackFactory must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPort, RateLimiterPort.noop());
@@ -179,6 +194,9 @@ public class SeahorseChatController {
         requireChatModeAllowed(chatMode, resolvedChatMode, taskTemplateId, agentId, versionId);
         String taskId = nextShortId();
         SseEmitter emitter = new SseEmitter(sseTimeoutMs);
+        if (isDeepResearchTemplate(taskTemplateId)) {
+            return dispatchResearch(emitter, question, actualConversationId, actualUserId, taskId, taskTemplateId);
+        }
         StreamCallback callback = callbackFactory.create(emitter, actualConversationId, taskId, actualUserId);
         StreamChatCommand command = new StreamChatCommand(
                 question,
@@ -197,6 +215,46 @@ public class SeahorseChatController {
                 throw new IllegalStateException("ChatInboundPort is not configured");
             }
             chatInboundPort.streamChat(command, callback);
+        } catch (RuntimeException ex) {
+            emitSseError(emitter, ex);
+        }
+        return emitter;
+    }
+
+    private boolean isDeepResearchTemplate(String taskTemplateId) {
+        if (!hasText(taskTemplateId)) {
+            return false;
+        }
+        try {
+            return TaskTemplateId.fromValue(taskTemplateId.trim()) == TaskTemplateId.DEEP_RESEARCH;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private SseEmitter dispatchResearch(SseEmitter emitter,
+                                        String question,
+                                        String conversationId,
+                                        String userId,
+                                        String taskId,
+                                        String taskTemplateId) {
+        if (!hasText(question)) {
+            emitSseError(emitter, new IllegalArgumentException("question must not be blank"));
+            return emitter;
+        }
+        ResearchInboundPort researchInboundPort = researchInboundPortProvider == null
+                ? null : researchInboundPortProvider.getIfAvailable();
+        ResearchSseBridge bridge = researchSseBridgeProvider == null
+                ? null : researchSseBridgeProvider.getIfAvailable();
+        if (researchInboundPort == null || bridge == null) {
+            emitSseError(emitter, new IllegalStateException("Research pipeline is not configured"));
+            return emitter;
+        }
+        try {
+            String runId = nextShortId();
+            researchInboundPort.startResearch(new ResearchStartCommand(
+                    runId, question, conversationId, userId, null, taskTemplateId));
+            bridge.attach(emitter, runId, conversationId, taskId);
         } catch (RuntimeException ex) {
             emitSseError(emitter, ex);
         }

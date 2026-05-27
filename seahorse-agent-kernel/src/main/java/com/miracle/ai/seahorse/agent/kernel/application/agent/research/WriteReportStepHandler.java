@@ -17,15 +17,23 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.research;
 
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.EvidenceItem;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.ResearchStepType;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.WebSource;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DurableTask;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -42,10 +50,18 @@ public class WriteReportStepHandler implements ResearchStepHandler {
             4. 语言流畅，逻辑清晰
             """;
 
-    private final ChatModelPort chatModel;
+    private static final String ARTIFACT_BUCKET = "research-artifacts";
 
-    public WriteReportStepHandler(ChatModelPort chatModel) {
+    private final ChatModelPort chatModel;
+    private final ObjectStoragePort objectStorage;
+    private final AgentArtifactRepositoryPort artifactRepository;
+
+    public WriteReportStepHandler(ChatModelPort chatModel,
+                                  ObjectStoragePort objectStorage,
+                                  AgentArtifactRepositoryPort artifactRepository) {
         this.chatModel = Objects.requireNonNull(chatModel);
+        this.objectStorage = Objects.requireNonNull(objectStorage);
+        this.artifactRepository = Objects.requireNonNull(artifactRepository);
     }
 
     @Override
@@ -74,6 +90,39 @@ public class WriteReportStepHandler implements ResearchStepHandler {
 
         if (report != null && !report.isBlank()) {
             context.setReportContent(report);
+            publishArtifact(task.runId(), context, report);
         }
+    }
+
+    private void publishArtifact(String runId, ResearchStepContext context, String report) {
+        byte[] bytes = report.getBytes(StandardCharsets.UTF_8);
+        String filename = "research-report-" + runId + ".md";
+        StoredObject stored = objectStorage.upload(
+                ARTIFACT_BUCKET,
+                new ByteArrayInputStream(bytes),
+                bytes.length,
+                filename,
+                "text/markdown");
+
+        String artifactId = UUID.randomUUID().toString();
+        String previewText = report.length() > 200 ? report.substring(0, 200) + "..." : report;
+
+        AgentArtifact artifact = new AgentArtifact(
+                artifactId,
+                runId,
+                null,
+                Objects.requireNonNullElse(context.tenantId(), "default"),
+                Objects.requireNonNullElse(context.userId(), "system"),
+                AgentArtifactType.REPORT,
+                "研究报告",
+                "text/markdown",
+                stored.url(),
+                previewText,
+                null,
+                AgentArtifactScanStatus.CLEAN,
+                Instant.now());
+
+        artifactRepository.save(artifact);
+        context.setArtifactId(artifactId);
     }
 }

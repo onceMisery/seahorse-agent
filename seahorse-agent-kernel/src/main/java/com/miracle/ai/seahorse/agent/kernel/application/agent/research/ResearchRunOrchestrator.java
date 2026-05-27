@@ -65,9 +65,14 @@ public class ResearchRunOrchestrator {
         this.workerId = "worker-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
-    public String startResearch(String runId, ResearchTaskProfile profile, String query) {
+    public String startResearch(String runId, ResearchTaskProfile profile, String query,
+                               String tenantId, String userId) {
         Objects.requireNonNull(runId, "runId must not be null");
-        contexts.put(runId, new ResearchStepContext(runId, query));
+        long initialSeq = eventBuffer.getLatestSeq(runId).orElse(0L);
+        ResearchStepContext context = new ResearchStepContext(runId, query, initialSeq);
+        context.setTenantId(tenantId);
+        context.setUserId(userId);
+        contexts.put(runId, context);
         DurableTask task = new DurableTask(
                 UUID.randomUUID().toString(),
                 runId,
@@ -75,7 +80,7 @@ public class ResearchRunOrchestrator {
                 0,
                 Instant.now(),
                 null,
-                "{\"query\":\"" + escapeJson(query) + "\",\"profileId\":\"" + profile.profileId() + "\"}");
+                context.toJson());
         taskQueue.enqueue(task);
         emitEvent(runId, StreamEventType.RUN_STARTED, Map.of("runId", runId, "title", "Research started"));
         return runId;
@@ -99,12 +104,19 @@ public class ResearchRunOrchestrator {
                     Map.of("stepId", task.taskId(), "title", stepType.name(), "status", "RUNNING"));
 
             ResearchStepContext context = contexts.computeIfAbsent(task.runId(),
-                    id -> new ResearchStepContext(id, ""));
+                    id -> restoreContext(id, task.payloadJson()));
             ResearchStepHandler handler = handlers.get(stepType);
             if (handler != null) {
                 handler.execute(task, context);
             } else {
                 log.debug("No handler registered for step {} (run={})", stepType, task.runId());
+            }
+
+            if (context.artifactId() != null && stepType == ResearchStepType.WRITE_REPORT) {
+                emitEvent(task.runId(), StreamEventType.ARTIFACT_CREATED,
+                        Map.of("artifactId", context.artifactId(),
+                                "artifactType", "REPORT",
+                                "title", "研究报告"));
             }
 
             emitEvent(task.runId(), StreamEventType.STEP_FINISHED,
@@ -132,6 +144,8 @@ public class ResearchRunOrchestrator {
     private void enqueueNextStep(String runId, ResearchStepType current) {
         ResearchStepType next = current.next();
         if (next != null) {
+            ResearchStepContext context = contexts.get(runId);
+            String payload = context != null ? context.toJson() : null;
             DurableTask nextTask = new DurableTask(
                     UUID.randomUUID().toString(),
                     runId,
@@ -139,27 +153,39 @@ public class ResearchRunOrchestrator {
                     0,
                     Instant.now(),
                     null,
-                    null);
+                    payload);
             taskQueue.enqueue(nextTask);
         } else {
             emitEvent(runId, StreamEventType.STEP_FINISHED,
                     Map.of("stepId", "run-complete-" + runId, "title", "Research completed", "status", "SUCCEEDED"));
+            emitEvent(runId, StreamEventType.FINISH,
+                    Map.of("runId", runId, "status", "SUCCEEDED"));
             contexts.remove(runId);
         }
     }
 
+    private ResearchStepContext restoreContext(String runId, String payloadJson) {
+        if (payloadJson != null && !payloadJson.isBlank()) {
+            try {
+                ResearchStepContext restored = ResearchStepContext.fromJson(payloadJson);
+                if (restored != null) {
+                    return restored;
+                }
+            } catch (RuntimeException ex) {
+                log.warn("Failed to restore research context from payload for run={}", runId, ex);
+            }
+        }
+        return new ResearchStepContext(runId, "", eventBuffer.getLatestSeq(runId).orElse(0L));
+    }
+
     private void emitEvent(String runId, StreamEventType type, Object payload) {
         try {
-            StreamEventEnvelope envelope = StreamEventEnvelope.of(
-                    System.nanoTime(), type, runId, payload);
+            ResearchStepContext context = contexts.get(runId);
+            long seq = (context != null) ? context.nextSeq() : eventBuffer.getLatestSeq(runId).orElse(0L) + 1;
+            StreamEventEnvelope envelope = StreamEventEnvelope.of(seq, type, runId, payload);
             eventBuffer.append(runId, envelope);
         } catch (Exception e) {
             log.debug("Failed to emit event for run={}", runId, e);
         }
-    }
-
-    private static String escapeJson(String value) {
-        if (value == null) return "";
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }
