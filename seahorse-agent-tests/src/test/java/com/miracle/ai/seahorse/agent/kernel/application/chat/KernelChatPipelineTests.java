@@ -24,6 +24,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItemSourceType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextResourceType;
+import com.miracle.ai.seahorse.agent.kernel.domain.conversation.ConversationAttachment;
+import com.miracle.ai.seahorse.agent.kernel.domain.conversation.ConversationAttachmentParseStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentGroup;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.SubQuestionIntent;
@@ -45,12 +47,16 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryRewritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.QueryOptimizerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.RetrievalContextPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNode;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNodeFinish;
@@ -72,6 +78,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamChatContext;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -206,6 +216,67 @@ class KernelChatPipelineTests {
     }
 
     @Test
+    void shouldAddConversationAttachmentContentToContextPack() {
+        RetrievedChunk chunk = RetrievedChunk.builder()
+                .id("chunk-1")
+                .tenantId("tenant-a")
+                .kbId("kb-1")
+                .docId("doc-1")
+                .text("baseline retrieval result")
+                .score(0.92F)
+                .build();
+        RetrievalContext retrievalContext = RetrievalContext.builder()
+                .kbContext("kb context")
+                .intentChunks(Map.of(REWRITTEN_QUESTION, List.of(chunk)))
+                .build();
+        RecordingChatPorts ports = new RecordingChatPorts(GuidanceDecision.none(), retrievalContext);
+        RecordingContextPackBuilder builder = new RecordingContextPackBuilder();
+        InMemoryConversationAttachmentRepository attachments = new InMemoryConversationAttachmentRepository(
+                new ConversationAttachment(
+                        "attachment-1",
+                        "conversation-1",
+                        null,
+                        "user-1",
+                        "requirements.txt",
+                        "text/plain",
+                        38L,
+                        "memory://attachment-1",
+                        ConversationAttachmentParseStatus.PENDING,
+                        "{}",
+                        Instant.EPOCH));
+        ConversationAttachmentContextAssembler attachmentContextAssembler =
+                new ConversationAttachmentContextAssembler(
+                        attachments,
+                        new InMemoryObjectStoragePort("must support invoice exports"),
+                        DocumentParserPort.plainText());
+        KernelChatPipeline pipeline = pipeline(
+                ports,
+                fixedMemoryEngine(memoryContext()),
+                builder,
+                attachmentContextAssembler);
+        RecordingCallback callback = new RecordingCallback();
+        StreamChatContext context = context(callback);
+        context.setAttachmentIds(List.of("attachment-1"));
+
+        pipeline.execute(context);
+
+        Assertions.assertNotNull(builder.lastRequest);
+        List<ContextBuildItemCandidate> candidates = builder.lastRequest.candidates();
+        Assertions.assertTrue(candidates.stream()
+                .anyMatch(candidate -> candidate.sourceType() == ContextItemSourceType.CONVERSATION_ATTACHMENT
+                        && candidate.content().contains("must support invoice exports")
+                        && candidate.resourceRef().resourceType().equals(ContextResourceType.DOCUMENT.value())
+                        && candidate.resourceRef().ownerUserId().equals("user-1")));
+        Assertions.assertEquals(ConversationAttachmentParseStatus.PARSED,
+                attachments.saved.parseStatus());
+        Assertions.assertNotNull(ports.lastPromptContext);
+        Assertions.assertNotNull(ports.lastPromptContext.getContextPack());
+        Assertions.assertTrue(ports.lastPromptContext.getContextPack().items().stream()
+                .anyMatch(item -> item.sourceType() == ContextItemSourceType.CONVERSATION_ATTACHMENT
+                        && item.content().contains("must support invoice exports")));
+    }
+
+    @Test
     void shouldFallbackToLegacyPromptContextWhenContextPackBuilderFails() {
         RetrievedChunk chunk = RetrievedChunk.builder()
                 .id("chunk-1")
@@ -277,12 +348,21 @@ class KernelChatPipelineTests {
     private KernelChatPipeline pipeline(RecordingChatPorts ports,
                                         MemoryEnginePort memoryEnginePort,
                                         ContextPackBuilderInboundPort contextPackBuilder) {
+        return pipeline(ports, memoryEnginePort, contextPackBuilder,
+                ConversationAttachmentContextAssembler.noop());
+    }
+
+    private KernelChatPipeline pipeline(RecordingChatPorts ports,
+                                        MemoryEnginePort memoryEnginePort,
+                                        ContextPackBuilderInboundPort contextPackBuilder,
+                                        ConversationAttachmentContextAssembler attachmentContextAssembler) {
         ChatPreparationPorts preparationPorts = new ChatPreparationPorts(ports, memoryEnginePort,
                 QueryOptimizerPort.passthrough(), ports, ports, ports, ports);
         ChatResponsePorts responsePorts = new ChatResponsePorts(ports, ports, ports, ports);
         return new KernelChatPipeline(preparationPorts, responsePorts, KernelRagTraceRecorder.noop(),
                 KernelChatPipeline.EmptyRetrievalStrategy.FALLBACK_GENERIC,
-                Optional.of(contextPackBuilder));
+                Optional.of(contextPackBuilder),
+                attachmentContextAssembler);
     }
 
     private KernelChatPipeline pipeline(RecordingChatPorts ports, MemoryIngestionWorkflowPort workflowPort) {
@@ -524,6 +604,74 @@ class KernelChatPipelineTests {
         public MemoryIngestionResult ingest(MemoryIngestionCommand command) {
             lastCommand = command;
             return MemoryIngestionResult.accepted(MemoryIngestionAction.ADD, List.of("profile:occupation"));
+        }
+    }
+
+    private static final class InMemoryConversationAttachmentRepository
+            implements ConversationAttachmentRepositoryPort {
+
+        private ConversationAttachment saved;
+
+        private InMemoryConversationAttachmentRepository(ConversationAttachment attachment) {
+            this.saved = attachment;
+        }
+
+        @Override
+        public ConversationAttachment save(ConversationAttachment attachment) {
+            saved = attachment;
+            return attachment;
+        }
+
+        @Override
+        public Optional<ConversationAttachment> findById(String attachmentId) {
+            if (saved == null || !saved.attachmentId().equals(attachmentId)) {
+                return Optional.empty();
+            }
+            return Optional.of(saved);
+        }
+
+        @Override
+        public List<ConversationAttachment> listByConversation(String conversationId, String userId) {
+            if (saved == null || !saved.belongsTo(conversationId, userId)) {
+                return List.of();
+            }
+            return List.of(saved);
+        }
+
+        @Override
+        public boolean delete(String attachmentId, String userId) {
+            if (saved == null || !saved.attachmentId().equals(attachmentId) || !saved.userId().equals(userId)) {
+                return false;
+            }
+            saved = null;
+            return true;
+        }
+    }
+
+    private static final class InMemoryObjectStoragePort implements ObjectStoragePort {
+
+        private final byte[] content;
+
+        private InMemoryObjectStoragePort(String content) {
+            this.content = content.getBytes(StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public StoredObject upload(String bucketName,
+                                   InputStream content,
+                                   long size,
+                                   String originalFilename,
+                                   String contentType) {
+            return new StoredObject("memory://uploaded", contentType, size, originalFilename);
+        }
+
+        @Override
+        public InputStream openStream(String url) {
+            return new ByteArrayInputStream(content);
+        }
+
+        @Override
+        public void deleteByUrl(String url) {
         }
     }
 
