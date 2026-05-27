@@ -201,3 +201,64 @@ seahorse-agent:
 3. 高级能力的所有输出都回到 AgentArtifact、ContextPack、Audit、Quota。
 4. 文档和 UI 都明确高级能力不是 C 端 AI Infra 完成标准。
 
+---
+
+## 12. ADR 准入模板
+
+任何 Phase 4+ 能力进入实施前，必须产出 ADR（Architecture Decision Record），至少覆盖：
+
+```markdown
+# ADR-XXX: [能力名称]
+
+## 状态
+PROPOSED / ACCEPTED / REJECTED
+
+## 背景
+- 当前 bounded orchestrator 遇到的具体瓶颈（附线上证据）
+- 用户价值和业务需求
+
+## 决策
+- 引入什么技术/框架
+- 如何与现有 port/adapter 架构集成
+
+## 必须回答的问题
+1. 部署模型：需要哪些新组件？如何运维？
+2. 数据归属：状态存在哪里？谁是 owner？
+3. 状态映射：与现有 AgentRun/AgentStep/AgentCheckpoint 如何关联？
+4. 幂等约束：重试时如何保证不重复执行？
+5. 版本兼容：升级时线上未完成任务如何处理？
+6. 降级策略：新组件不可用时用户任务如何降级？
+7. 迁移策略：现有数据如何迁移？是否需要双写期？
+8. 成本分析：引入后的运维成本和资源消耗
+
+## 后果
+- 正面影响
+- 负面影响和风险
+- 回滚方案
+```
+
+## 13. Temporal / 外部 Workflow Engine 准入条件
+
+**当前决策**：不引入。使用 `DurableTaskQueuePort`（JDBC 实现）+ `ResearchRunOrchestrator` 固定步骤编排。
+
+**准入门槛**（必须同时满足以下条件才评估引入）：
+
+| 条件 | 当前状态 | 触发阈值 |
+|------|---------|---------|
+| 任务持续时间 | < 10 分钟 | 需要支持多天长任务 |
+| 步骤拓扑 | 线性固定步骤 | 需要复杂 fan-out/fan-in |
+| Worker 崩溃恢复 | JDBC `FOR UPDATE SKIP LOCKED` 足够 | 需要跨进程强恢复保证 |
+| 跨服务补偿 | 单服务内 | 需要分布式事务补偿 |
+| Workflow 历史审计 | AgentRun/AgentStep 已覆盖 | 需要独立 workflow 审计维度 |
+| 可观测性 | 现有 tracing 足够 | 需要 workflow-level 独立 dashboard |
+
+**升级路径**：
+```
+当前：JDBC DurableTaskQueue
+  ↓ 吞吐/调度不够时
+db-scheduler 或 JobRunr（仍基于 JDBC，增加调度和 dashboard）
+  ↓ 上述条件触发时（需 ADR）
+Temporal / Inngest（完整持久化执行引擎）
+```
+
+每步升级只替换 adapter 实现，Kernel 代码不变。

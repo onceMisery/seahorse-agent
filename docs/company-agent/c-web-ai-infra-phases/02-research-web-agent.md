@@ -327,3 +327,240 @@ npm run build
 5. 外部网页内容被标记为不可信资料。
 6. 研究任务失败时能显示失败 step 和重试入口。
 
+## 实现指南
+
+### 代码落点
+
+| 类型 | 位置 |
+|------|------|
+| 领域对象 | `seahorse-agent-kernel/src/main/java/.../kernel/domain/agent/research/` |
+| 应用服务 | `seahorse-agent-kernel/src/main/java/.../kernel/application/agent/research/` |
+| Inbound port | `seahorse-agent-kernel/src/main/java/.../ports/inbound/agent/` |
+| Outbound port | `seahorse-agent-kernel/src/main/java/.../ports/outbound/web/`（已有 WebSearchPort/WebFetchPort） |
+| JDBC adapter | `seahorse-agent-adapter-repository-jdbc/src/main/java/.../jdbc/` |
+| Web controller | `seahorse-agent-adapter-web/src/main/java/.../web/` |
+
+### Step C.1：DurableTaskQueuePort
+
+新增文件：`seahorse-agent-kernel/src/main/java/.../ports/outbound/agent/DurableTaskQueuePort.java`
+
+```java
+public interface DurableTaskQueuePort {
+    void enqueue(DurableTask task);
+    Optional<DurableTask> claimNext(String workerId);
+    void ack(String taskId);
+    void retry(String taskId, Instant retryAt, String reason);
+    void fail(String taskId, String reason);
+    void cancel(String runId);
+}
+
+public record DurableTask(
+    String taskId,
+    String runId,
+    String stepType,
+    int attemptCount,
+    Instant createdAt,
+    Instant claimedAt,
+    String payloadJson
+) {}
+```
+
+JDBC adapter：`JdbcDurableTaskQueueAdapter.java`
+
+SQL 表：
+```sql
+CREATE TABLE durable_task_queue (
+    task_id       VARCHAR(64) PRIMARY KEY,
+    run_id        VARCHAR(64) NOT NULL,
+    step_type     VARCHAR(32) NOT NULL,
+    status        VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    attempt_count INT NOT NULL DEFAULT 0,
+    worker_id     VARCHAR(64),
+    payload_json  TEXT,
+    last_error    TEXT,
+    retry_at      TIMESTAMP,
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    claimed_at    TIMESTAMP,
+    completed_at  TIMESTAMP
+);
+CREATE INDEX idx_dtq_status_retry ON durable_task_queue (status, retry_at);
+CREATE INDEX idx_dtq_run_id ON durable_task_queue (run_id);
+```
+
+claimNext 实现要点：`SELECT ... WHERE status = 'PENDING' AND (retry_at IS NULL OR retry_at <= NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`
+
+### Step C.2：ResearchStepType 和 ResearchTaskProfile
+
+```java
+// ResearchStepType.java
+public enum ResearchStepType {
+    PLAN,
+    SEARCH,
+    FETCH,
+    EXTRACT_EVIDENCE,
+    SYNTHESIZE,
+    WRITE_REPORT,
+    VERIFY_CITATIONS
+}
+
+// ResearchTaskProfile.java
+public record ResearchTaskProfile(
+    String profileId,
+    String name,
+    int defaultDepth,
+    int maxSearchQueries,
+    int maxSources,
+    List<String> allowedSourceTypes,
+    String outputArtifactType,
+    String costLimitPolicyId
+) {}
+```
+
+### Step C.3：ResearchRunOrchestrator
+
+```java
+@Service
+public class ResearchRunOrchestrator {
+    private final DurableTaskQueuePort taskQueue;
+    private final ResearchPlannerService planner;
+    private final WebSearchPort webSearch;
+    private final WebFetchPort webFetch;
+    private final AgentRunEventBufferPort eventBuffer;
+    
+    // 启动研究任务：创建 AgentRun，入队第一步
+    public String startResearch(String userId, ResearchTaskProfile profile, String query) {
+        var run = AgentRun.create(userId, "research", profile.profileId());
+        agentRunRepository.save(run);
+        
+        var task = new DurableTask(
+            UUID.randomUUID().toString(), run.runId(),
+            ResearchStepType.PLAN.name(), 0, Instant.now(), null,
+            objectMapper.writeValueAsString(Map.of("query", query, "profile", profile))
+        );
+        taskQueue.enqueue(task);
+        return run.runId();
+    }
+    
+    // Worker 轮询消费
+    @Scheduled(fixedDelay = 1000)
+    public void poll() {
+        taskQueue.claimNext(workerId).ifPresent(this::executeTask);
+    }
+    
+    private void executeTask(DurableTask task) {
+        var stepType = ResearchStepType.valueOf(task.stepType());
+        try {
+            // 写入 AgentStep（开始）
+            emitStepStarted(task.runId(), stepType);
+            
+            var result = switch (stepType) {
+                case PLAN -> executePlan(task);
+                case SEARCH -> executeSearch(task);
+                case FETCH -> executeFetch(task);
+                case EXTRACT_EVIDENCE -> executeExtract(task);
+                case SYNTHESIZE -> executeSynthesize(task);
+                case WRITE_REPORT -> executeWriteReport(task);
+                case VERIFY_CITATIONS -> executeVerify(task);
+            };
+            
+            // 写入 AgentStep（完成）
+            emitStepFinished(task.runId(), stepType);
+            taskQueue.ack(task.taskId());
+            
+            // 入队下一步
+            enqueueNextStep(task.runId(), stepType, result);
+        } catch (RetryableException e) {
+            taskQueue.retry(task.taskId(), 
+                Instant.now().plusSeconds(30 * (task.attemptCount() + 1)), 
+                e.getMessage());
+        } catch (Exception e) {
+            taskQueue.fail(task.taskId(), e.getMessage());
+            emitRecoverableError(task.runId(), stepType, e.getMessage());
+        }
+    }
+    
+    private void enqueueNextStep(String runId, ResearchStepType current, Object result) {
+        var next = switch (current) {
+            case PLAN -> ResearchStepType.SEARCH;
+            case SEARCH -> ResearchStepType.FETCH;
+            case FETCH -> ResearchStepType.EXTRACT_EVIDENCE;
+            case EXTRACT_EVIDENCE -> ResearchStepType.SYNTHESIZE;
+            case SYNTHESIZE -> ResearchStepType.WRITE_REPORT;
+            case WRITE_REPORT -> ResearchStepType.VERIFY_CITATIONS;
+            case VERIFY_CITATIONS -> null; // 完成
+        };
+        if (next != null) {
+            taskQueue.enqueue(new DurableTask(..., next.name(), ...));
+        } else {
+            emitRunFinished(runId);
+        }
+    }
+}
+```
+
+### Step C.4：WebSource 和 EvidenceItem
+
+```java
+public record WebSource(
+    String sourceId,
+    String runId,
+    String url,
+    String title,
+    String snippet,
+    Instant retrievedAt,
+    SourceTrustLevel trustLevel,
+    String contentHash,
+    ExtractionStatus extractionStatus
+) {}
+
+public record EvidenceItem(
+    String evidenceId,
+    String sourceId,
+    String claim,
+    String quotePreview,
+    String summary,
+    double confidence,
+    int citationIndex
+) {}
+```
+
+### Step C.5：CitationVerifier
+
+```java
+@Service
+public class CitationVerifier {
+    public VerificationResult verify(AgentArtifact report, List<EvidenceItem> evidence) {
+        // 1. 解析报告中的引用标号 [1], [2], ...
+        // 2. 检查每个引用是否有对应 EvidenceItem
+        // 3. 检查 EvidenceItem 的 source 是否可达
+        // 4. 返回 verified/unverified/missing 分类
+    }
+}
+```
+
+### Step C.6：前端研究时间线
+
+修改文件：`frontend/src/components/chat/AgentTracePanel.tsx`
+
+增加研究步骤的中文标签映射：
+```typescript
+const RESEARCH_STEP_LABELS: Record<string, string> = {
+  PLAN: '规划研究方向',
+  SEARCH: '搜索相关资料',
+  FETCH: '抓取网页内容',
+  EXTRACT_EVIDENCE: '提取关键证据',
+  SYNTHESIZE: '综合分析',
+  WRITE_REPORT: '撰写报告',
+  VERIFY_CITATIONS: '验证引用',
+};
+```
+
+### 测试清单
+
+必须覆盖：
+- `ResearchRunOrchestratorTests` — 完整步骤流转
+- `DurableTaskQueuePortTests` — enqueue/claim/ack/retry/fail/cancel
+- `WebSearchToolPortAdapterTests`（已有）
+- `WebFetchSafetyPolicyTests`（已有）— localhost/内网 URL 被拒绝
+- `CitationVerifierTests` — 引用缺失时失败
+- `ResearchSourcePanel.test.tsx` — 前端来源面板渲染

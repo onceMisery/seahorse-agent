@@ -33,8 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * 研究任务编排器。
@@ -50,7 +48,6 @@ public class ResearchRunOrchestrator {
     private final DurableTaskQueuePort taskQueue;
     private final AgentRunEventBufferPort eventBuffer;
     private final EnumMap<ResearchStepType, ResearchStepHandler> handlers;
-    private final ConcurrentMap<String, ResearchStepContext> contexts = new ConcurrentHashMap<>();
     private final String workerId;
 
     public ResearchRunOrchestrator(DurableTaskQueuePort taskQueue,
@@ -72,7 +69,7 @@ public class ResearchRunOrchestrator {
         ResearchStepContext context = new ResearchStepContext(runId, query, initialSeq);
         context.setTenantId(tenantId);
         context.setUserId(userId);
-        contexts.put(runId, context);
+        emitEvent(runId, context, StreamEventType.RUN_STARTED, Map.of("runId", runId, "title", "Research started"));
         DurableTask task = new DurableTask(
                 UUID.randomUUID().toString(),
                 runId,
@@ -82,7 +79,6 @@ public class ResearchRunOrchestrator {
                 null,
                 context.toJson());
         taskQueue.enqueue(task);
-        emitEvent(runId, StreamEventType.RUN_STARTED, Map.of("runId", runId, "title", "Research started"));
         return runId;
     }
 
@@ -99,12 +95,12 @@ public class ResearchRunOrchestrator {
             return false;
         }
 
+        ResearchStepContext context = restoreContext(task.runId(), task.payloadJson());
+
         try {
-            emitEvent(task.runId(), StreamEventType.STEP_STARTED,
+            emitEvent(task.runId(), context, StreamEventType.STEP_STARTED,
                     Map.of("stepId", task.taskId(), "title", stepType.name(), "status", "RUNNING"));
 
-            ResearchStepContext context = contexts.computeIfAbsent(task.runId(),
-                    id -> restoreContext(id, task.payloadJson()));
             ResearchStepHandler handler = handlers.get(stepType);
             if (handler != null) {
                 handler.execute(task, context);
@@ -113,17 +109,17 @@ public class ResearchRunOrchestrator {
             }
 
             if (context.artifactId() != null && stepType == ResearchStepType.WRITE_REPORT) {
-                emitEvent(task.runId(), StreamEventType.ARTIFACT_CREATED,
+                emitEvent(task.runId(), context, StreamEventType.ARTIFACT_CREATED,
                         Map.of("artifactId", context.artifactId(),
                                 "artifactType", "REPORT",
                                 "title", "研究报告"));
             }
 
-            emitEvent(task.runId(), StreamEventType.STEP_FINISHED,
+            emitEvent(task.runId(), context, StreamEventType.STEP_FINISHED,
                     Map.of("stepId", task.taskId(), "title", stepType.name(), "status", "SUCCEEDED"));
             taskQueue.ack(task.taskId());
 
-            enqueueNextStep(task.runId(), stepType);
+            enqueueNextStep(task.runId(), stepType, context);
             return true;
         } catch (RetryableResearchException e) {
             int nextAttempt = task.attemptCount() + 1;
@@ -133,7 +129,7 @@ public class ResearchRunOrchestrator {
             return true;
         } catch (Exception e) {
             taskQueue.fail(task.taskId(), e.getMessage());
-            emitEvent(task.runId(), StreamEventType.RECOVERABLE_ERROR,
+            emitEvent(task.runId(), context, StreamEventType.RECOVERABLE_ERROR,
                     Map.of("stepId", task.taskId(), "title", stepType.name(),
                             "message", Objects.requireNonNullElse(e.getMessage(), "Unknown error")));
             log.warn("Research step {} failed for run={}", stepType, task.runId(), e);
@@ -141,11 +137,9 @@ public class ResearchRunOrchestrator {
         }
     }
 
-    private void enqueueNextStep(String runId, ResearchStepType current) {
+    private void enqueueNextStep(String runId, ResearchStepType current, ResearchStepContext context) {
         ResearchStepType next = current.next();
         if (next != null) {
-            ResearchStepContext context = contexts.get(runId);
-            String payload = context != null ? context.toJson() : null;
             DurableTask nextTask = new DurableTask(
                     UUID.randomUUID().toString(),
                     runId,
@@ -153,14 +147,13 @@ public class ResearchRunOrchestrator {
                     0,
                     Instant.now(),
                     null,
-                    payload);
+                    context.toJson());
             taskQueue.enqueue(nextTask);
         } else {
-            emitEvent(runId, StreamEventType.STEP_FINISHED,
+            emitEvent(runId, context, StreamEventType.STEP_FINISHED,
                     Map.of("stepId", "run-complete-" + runId, "title", "Research completed", "status", "SUCCEEDED"));
-            emitEvent(runId, StreamEventType.FINISH,
+            emitEvent(runId, context, StreamEventType.FINISH,
                     Map.of("runId", runId, "status", "SUCCEEDED"));
-            contexts.remove(runId);
         }
     }
 
@@ -178,10 +171,9 @@ public class ResearchRunOrchestrator {
         return new ResearchStepContext(runId, "", eventBuffer.getLatestSeq(runId).orElse(0L));
     }
 
-    private void emitEvent(String runId, StreamEventType type, Object payload) {
+    private void emitEvent(String runId, ResearchStepContext context, StreamEventType type, Object payload) {
         try {
-            ResearchStepContext context = contexts.get(runId);
-            long seq = (context != null) ? context.nextSeq() : eventBuffer.getLatestSeq(runId).orElse(0L) + 1;
+            long seq = context.nextSeq();
             StreamEventEnvelope envelope = StreamEventEnvelope.of(seq, type, runId, payload);
             eventBuffer.append(runId, envelope);
         } catch (Exception e) {

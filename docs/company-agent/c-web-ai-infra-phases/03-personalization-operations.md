@@ -304,3 +304,126 @@ npm run build
 6. 高成本任务有额度和耗时提示。
 7. 滥用防护覆盖聊天、上传、搜索、抓取和高成本任务。
 
+## 实现指南
+
+### Step D：附件解析进入 ContextPack
+
+#### D.1 后端：附件解析服务
+
+新增文件：`seahorse-agent-kernel/src/main/java/.../kernel/application/conversation/ConversationAttachmentParserService.java`
+
+关键逻辑：
+- 接收 attachmentId
+- 调用 DocumentParserPort（已有 tika adapter）解析文件
+- 更新 parseStatus
+- 生成 ResourceRef JSON
+- 写入 ConversationAttachment.resourceRefJson
+
+状态流转：
+```
+PENDING → PARSING → PARSED (成功)
+                  → FAILED (解析失败)
+                  → BLOCKED (文件类型不支持/大小超限/安全扫描不通过)
+```
+
+#### D.2 后端：ContextPack 装配增强
+
+修改文件：`seahorse-agent-kernel/src/main/java/.../kernel/application/chat/ConversationAttachmentContextAssembler.java`
+
+当 StreamChatCommand.attachmentIds 非空时：
+1. 查询 attachments，过滤 parseStatus = PARSED
+2. 提取 resourceRefJson
+3. 构建 ContextItem（sourceType = ATTACHMENT）
+4. 加入 ContextPack
+5. 校验 ACL（attachment.userId == currentUserId）
+6. 隐私模式下不写长期记忆
+
+#### D.3 前端：附件状态展示
+
+修改文件：`frontend/src/components/chat/ChatInput.tsx`
+
+已有附件上传 UI，需补充：
+- 显示 parseStatus 状态标签（解析中/已解析/失败/已阻止）
+- 失败时显示原因
+- BLOCKED 时显示安全提示
+
+### Step E：反馈评测闭环
+
+#### E.1 后端：候选状态机
+
+修改文件：`KernelFeedbackEvaluationCandidateQueryService.java` 或新增 `KernelEvalCandidateDecisionService.java`
+
+```java
+public void acceptCandidate(String candidateId, String reviewerNote) {
+    var candidate = queryPort.findById(candidateId);
+    candidate.accept(reviewerNote);
+    // 写入 eval_dataset 表
+    evalDatasetPort.addSample(EvalSample.from(candidate));
+}
+
+public void rejectCandidate(String candidateId, String reason) {
+    var candidate = queryPort.findById(candidateId);
+    candidate.reject(reason);
+}
+```
+
+#### E.2 后端：回归运行
+
+新增文件：`seahorse-agent-kernel/src/main/java/.../kernel/application/agent/eval/KernelEvalRegressionService.java`
+
+```java
+public EvalReport runRegression(String datasetId, String agentVersionId) {
+    var samples = evalDatasetPort.findByDatasetId(datasetId);
+    var results = samples.stream()
+        .map(sample -> replaySample(sample, agentVersionId))
+        .toList();
+    return EvalReport.aggregate(results);
+}
+```
+
+#### E.3 管理端 UI
+
+修改文件：`frontend/src/pages/admin/ai-infra/AiInfraConsolePage.tsx`
+
+在 Feedback tab 中增加：
+- Accept/Reject 按钮
+- 已接受候选列表
+- 回归运行触发和结果展示
+
+### Step F：模型路由和滥用防护
+
+#### F.1 后端：模型路由策略
+
+新增文件：`seahorse-agent-kernel/src/main/java/.../kernel/application/agent/routing/ModelRoutingPolicy.java`
+
+```java
+public ModelSelection selectModel(TaskTemplate template, UserQuotaSummary quota, int contextTokens) {
+    // 1. 模板绑定的默认模型档位
+    // 2. 用户剩余额度是否支持高档模型
+    // 3. 上下文长度是否需要大窗口模型
+    // 4. 返回 modelId + 降级原因（如有）
+}
+```
+
+#### F.2 后端：限流策略
+
+新增文件：`seahorse-agent-adapter-web/src/main/java/.../web/RateLimitFilter.java`
+
+维度：
+- IP 级：每分钟最大请求数
+- 用户级：每小时最大任务数
+- 模板级：高成本模板每日上限
+- 上传级：单文件大小 + 每日上传总量
+- 搜索/抓取级：每任务最大 search/fetch 次数
+
+### 测试清单
+
+- `ConversationAttachmentParserServiceTests`
+- `AttachmentContextPackAssemblerTests`
+- `PrivacyModeContextPackTests`
+- `FeedbackEvaluationCandidateDecisionTests`
+- `EvalDatasetPromotionTests`
+- `TaskTemplateRoutingPolicyTests`
+- `QuotaLimitDecisionTests`
+- `AbuseRateLimitPolicyTests`
+

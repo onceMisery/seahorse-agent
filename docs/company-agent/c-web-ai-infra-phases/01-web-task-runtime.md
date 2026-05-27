@@ -324,3 +324,272 @@ npm run build
 5. RAG 来源能以卡片展示并关联 ContextPack。
 6. 所有新增状态、类型、事件均为 enum 或具名常量。
 
+## 10. 实现指南
+
+本章节为接手开发者提供逐步实现路径，按 Step A（事件协议和断线恢复）和 Step B（Artifact Panel 和 Source/Citation UX）两个阶段组织。
+
+### Step A：事件协议和断线恢复
+
+#### A.1 后端：StreamEventEnvelope
+
+新增文件位置：`seahorse-agent-kernel/src/main/java/.../kernel/domain/stream/StreamEventEnvelope.java`
+
+```java
+public record StreamEventEnvelope(
+    String eventId,
+    long eventSeq,
+    StreamEventType eventType,
+    String runId,
+    String stepId,
+    Instant timestamp,
+    Object typedPayload
+) {
+    public static StreamEventEnvelope of(long seq, StreamEventType type, String runId, Object payload) {
+        return new StreamEventEnvelope(
+            UUID.randomUUID().toString(), seq, type, runId, null, Instant.now(), payload);
+    }
+}
+```
+
+设计要点：
+
+- `eventId` 使用 UUID，保证全局唯一，便于幂等去重。
+- `eventSeq` 为 run 内递增序号，前端据此判断是否有 missed event。
+- `typedPayload` 使用 Object 类型，序列化时由 Jackson 根据 `eventType` 多态处理。
+- `stepId` 可为 null（run 级事件不关联 step）。
+
+#### A.2 后端：AgentRunEventBufferPort
+
+新增文件位置：`seahorse-agent-kernel/src/main/java/.../ports/outbound/agent/AgentRunEventBufferPort.java`
+
+```java
+public interface AgentRunEventBufferPort {
+    void append(String runId, StreamEventEnvelope event);
+    List<StreamEventEnvelope> getAfter(String runId, long afterSeq);
+    Optional<Long> getLatestSeq(String runId);
+    void expire(String runId);
+}
+```
+
+JDBC adapter 位置：`seahorse-agent-adapter-repository-jdbc/src/main/java/.../jdbc/JdbcAgentRunEventBufferAdapter.java`
+
+建表 DDL：
+
+```sql
+CREATE TABLE agent_run_event_buffer (
+    id          BIGSERIAL PRIMARY KEY,
+    run_id      VARCHAR(64) NOT NULL,
+    event_seq   BIGINT NOT NULL,
+    event_id    VARCHAR(64) NOT NULL,
+    event_type  VARCHAR(64) NOT NULL,
+    payload     JSONB NOT NULL,
+    created_at  TIMESTAMP NOT NULL DEFAULT now(),
+    UNIQUE (run_id, event_seq)
+);
+
+CREATE INDEX idx_event_buffer_run_seq ON agent_run_event_buffer(run_id, event_seq);
+```
+
+TTL 策略：使用定时任务（`@Scheduled`）每分钟清理 `created_at + interval '5 minutes' < now()` 的记录。生产环境可改用 PostgreSQL 分区表或 Redis Sorted Set。
+
+#### A.3 后端：SeahorseChatController 增强
+
+修改文件：`seahorse-agent-adapter-web/src/main/java/.../web/SeahorseChatController.java`
+
+增加请求参数：
+
+- `resumeRunId`（String，可选）：恢复指定 run
+- `lastEventSeq`（Long，可选）：从此序号之后开始补发
+
+处理逻辑：
+
+1. 如果 `resumeRunId` 存在且 `lastEventSeq` 存在：
+   - 查询 `AgentRunEventBufferPort.getAfter(resumeRunId, lastEventSeq)`
+   - 如果有结果 → 先批量发送 missed events，然后继续正常流式推送
+   - 如果 buffer 已过期（无结果且 run 仍在运行）→ 调用 `KernelAgentRunSnapshotService` 返回 `RUN_SNAPSHOT` 事件
+2. 如果 `resumeRunId` 存在但 `lastEventSeq` 缺失 → 直接返回 `RUN_SNAPSHOT`
+3. 如果 run 已终态 → 返回 snapshot + `done` 事件，不重新执行
+4. 无 `resumeRunId` → 正常新建 run 流程
+
+#### A.4 后端：LocalChatStreamCallbackFactory 增强
+
+修改文件：`seahorse-agent-adapter-web/src/main/java/.../local/LocalChatStreamCallbackFactory.java`
+
+改造要点：
+
+1. 在 callback 实例中维护 `AtomicLong seqCounter`（per run）
+2. 每次发射事件时：
+   - 调用 `seqCounter.incrementAndGet()` 分配递增 eventSeq
+   - 构造 `StreamEventEnvelope.of(seq, type, runId, payload)`
+   - 调用 `agentRunEventBufferPort.append(runId, envelope)` 写入 buffer
+   - 将 envelope 序列化为 JSON 写入 SSE（`data: {json}\n\n`）
+3. SSE 输出格式变更：
+
+```
+event: stream_event
+data: {"eventId":"...","eventSeq":1,"eventType":"MESSAGE","runId":"...","stepId":null,"timestamp":"...","typedPayload":{...}}
+
+```
+
+4. 旧事件（message/thinking/finish/done）保持兼容：同时发送旧格式 `event: message` 和新格式 `event: stream_event`，过渡期后移除旧格式。
+
+#### A.5 前端：chatStore 增强
+
+修改文件：`frontend/src/stores/chatStore.ts`
+
+- 新增状态字段 `lastEventSeq: number | null`
+- EventSource 创建时，如果存在 `lastEventSeq`，URL 拼接 `&lastEventSeq=${lastEventSeq}`
+- 页面刷新时，从 localStorage 读取 `{conversationId}_lastRunId` 和 `{conversationId}_lastEventSeq`
+- 收到 `run_started` 时保存 runId 到 localStorage
+- 收到任意事件后更新 `lastEventSeq`
+
+修改文件：`frontend/src/stores/chatStreamUtils.ts`
+
+- 新增 `parseStreamEvent(raw: string): StreamEventEnvelope | null` 函数
+- 解析 envelope 格式：如果 JSON 包含 `eventSeq` 字段则按新协议处理
+- 兼容旧格式：如果没有 `eventSeq` 字段则走原有解析逻辑
+- 未知 `eventType` 安全忽略（`console.debug` 记录，不报错不中断）
+
+#### A.6 测试清单
+
+后端测试：
+
+| 测试类 | 验证点 |
+| --- | --- |
+| `StreamEventEnvelopeTests` | 序列化/反序列化、eventSeq 递增、null stepId 处理 |
+| `AgentRunEventBufferPortTests` | append/getAfter/expire、并发写入、TTL 过期 |
+| `SeahorseChatControllerReplayTests` | lastEventSeq 命中补发、buffer 过期返回 snapshot、已终态 run 不重执行、未知事件安全忽略 |
+
+前端测试：
+
+- `npm run build` 通过（无 TypeScript 编译错误）
+- 手动测试场景：
+  - 正常聊天流程不受影响
+  - 刷新页面后能看到当前 run snapshot
+  - 网络断开 5 秒内重连能补发 missed events
+  - 网络断开超过 5 分钟重连返回 snapshot
+
+### Step B：Artifact Panel 和 Source/Citation UX
+
+#### B.1 后端：Artifact 流式事件
+
+已有 `ARTIFACT_CREATED` 事件类型。需要补充增量流式事件：
+
+- `ARTIFACT_CONTENT`：增量内容 delta（用于边生成边渲染长文档/报告）
+- `ARTIFACT_COMPLETE`：标记产物生成完成，携带最终 metadata
+
+修改文件：`StreamEventType.java` — 新增枚举值 `ARTIFACT_CONTENT`、`ARTIFACT_COMPLETE`
+
+修改文件：`AgentStreamTimelineEvents.java` — 新增方法：
+
+```java
+public StreamEventEnvelope artifactContent(String artifactId, String delta) { ... }
+public StreamEventEnvelope artifactComplete(String artifactId, ArtifactMetadata metadata) { ... }
+```
+
+Payload 设计：
+
+```json
+// ARTIFACT_CONTENT
+{"artifactId": "art_1", "delta": "新增的文本片段", "offset": 1024}
+
+// ARTIFACT_COMPLETE
+{"artifactId": "art_1", "title": "分析报告", "mimeType": "text/markdown", "size": 4096, "scanStatus": "CLEAN"}
+```
+
+#### B.2 前端：独立 ArtifactPanel
+
+新增文件：`frontend/src/components/chat/ArtifactPanel.tsx`
+
+功能需求：
+
+- 接收 `artifacts: ArtifactCard[]` 列表
+- Tab 切换多个产物（超过 5 个时显示下拉选择）
+- 每个产物支持操作：preview / download / fullscreen / copy
+- 流式产物显示 streaming 状态指示器（脉冲动画 + 已接收字节数）
+- 主动内容（HTML/JS/SVG）默认 attachment 下载，不内联执行
+- 安全产物（Markdown/纯文本/图片）可内联预览
+
+集成方式：
+
+- 在 `ChatPage.tsx` 中使用 `react-resizable-panels` 实现 Chat | ArtifactPanel 双栏布局
+- 移动端（`< 768px`）改为底部抽屉（Drawer）
+- 无产物时 ArtifactPanel 不渲染，聊天区占满宽度
+
+组件层次：
+
+```
+ChatPage
+├── ChatPanel (flex: 1)
+│   ├── MessageList
+│   └── ChatInput
+├── ResizeHandle (可拖拽)
+└── ArtifactPanel (flex: 0.6, min: 300px)
+    ├── ArtifactTabs
+    ├── ArtifactPreview (Markdown renderer / image / iframe sandbox)
+    └── ArtifactToolbar (download / copy / fullscreen)
+```
+
+#### B.3 前端：Source 卡片增强
+
+修改文件：`frontend/src/components/chat/SourceList.tsx`（如不存在则新建 `SourceCardList.tsx`）
+
+增加展示信息：
+
+| 字段 | 展示方式 |
+| --- | --- |
+| 引用编号 | `[1]`、`[2]`... 与消息正文中的上标对应 |
+| 抓取时间 | 相对时间（"3 分钟前"）或绝对时间 |
+| 可信度标签 | 彩色 badge：HIGH(绿) / MEDIUM(黄) / LOW(红) / UNKNOWN(灰) |
+| 支撑结论 | 1-2 句摘要，说明该来源支撑了哪个结论 |
+| 原文链接 | 点击展开，显示 URL + favicon |
+
+交互：
+
+- 默认折叠，只显示编号 + 标题 + 可信度
+- 点击展开显示完整信息
+- 消息正文中的 `[1]` 上标可 hover 预览对应来源
+
+#### B.4 后端：Source 统一映射
+
+确保 RAG source 和 Web source 都映射为统一的 `AgentRunSnapshotSource` 格式：
+
+```java
+public record AgentRunSnapshotSource(
+    String sourceId,
+    String sourceType,    // "RAG" | "WEB_SEARCH" | "WEB_CRAWL"
+    String title,
+    String url,
+    String snippet,
+    String confidence,    // "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN"
+    String supportingConclusion,
+    Instant fetchedAt,
+    int citationIndex
+) {}
+```
+
+修改文件：`KernelAgentRunSnapshotService.java`
+
+- 从 `ContextPack` 中提取 RAG 来源（向量检索结果）
+- 从 `WebSearchResult` / `WebCrawlResult` 中提取 Web 来源
+- 统一映射为 `AgentRunSnapshotSource`，按 citationIndex 排序
+- 前端不需要区分来源类型，统一渲染 SourceCard
+
+映射规则：
+
+| 来源 | sourceType | confidence 计算 |
+| --- | --- | --- |
+| 向量检索 | `RAG` | score >= 0.85 → HIGH, >= 0.7 → MEDIUM, else LOW |
+| Web 搜索 | `WEB_SEARCH` | 默认 MEDIUM，可由 LLM 评估覆盖 |
+| Web 爬取 | `WEB_CRAWL` | 默认 MEDIUM，可由 LLM 评估覆盖 |
+
+---
+
+### 实施顺序建议
+
+```
+Step A.1 → A.2 → A.4 → A.3 → A.5 → A.6（测试验证）
+Step B.4 → B.1 → B.2 → B.3
+```
+
+Step A 和 Step B 可并行开发（后端/前端分工），但 B.1 依赖 A.1 的 StreamEventEnvelope 基础设施。
