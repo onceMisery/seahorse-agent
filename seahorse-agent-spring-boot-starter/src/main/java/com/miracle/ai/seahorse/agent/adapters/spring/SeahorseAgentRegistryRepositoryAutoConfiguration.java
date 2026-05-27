@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDurableTaskQueueAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcEvalCandidateRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcEvalDatasetRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentDefinitionRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentArtifactRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentCatalogQueryAdapter;
@@ -77,6 +79,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxSessionReposito
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalCandidateRepositoryPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalDatasetQueryPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalDatasetRepositoryPort;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -335,5 +340,21 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(DurableTaskQueuePort.class)
     public JdbcDurableTaskQueueAdapter seahorseJdbcDurableTaskQueueAdapter(DataSource dataSource) {
         return new JdbcDurableTaskQueueAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(EvalCandidateRepositoryPort.class)
+    public JdbcEvalCandidateRepositoryAdapter seahorseJdbcEvalCandidateRepositoryAdapter(DataSource dataSource) {
+        return new JdbcEvalCandidateRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean({EvalDatasetRepositoryPort.class, EvalDatasetQueryPort.class})
+    public JdbcEvalDatasetRepositoryAdapter seahorseJdbcEvalDatasetRepositoryAdapter(DataSource dataSource) {
+        return new JdbcEvalDatasetRepositoryAdapter(dataSource);
     }
 }
