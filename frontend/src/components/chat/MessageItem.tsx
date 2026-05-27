@@ -110,7 +110,7 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
               </span>
             </div>
           ) : null}
-          {hasContent ? <MessageContent blocks={message.blocks ?? []} rawText={message.content} /> : null}
+          {hasContent ? <MessageContent blocks={message.blocks ?? []} rawText={message.content} sources={message.sources} /> : null}
           {!isUser ? <AgentTracePanel message={message} /> : null}
           {showEmptyResult ? (
             <p className="text-sm" style={{ color: "var(--theme-text-muted)" }}>

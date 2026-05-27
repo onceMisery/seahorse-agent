@@ -43,6 +43,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   approveAiInfraApproval,
+  acceptEvalCandidate,
   createAiInfraCanaryRollout,
   generateAiInfraReadinessReport,
   getAiInfraAgents,
@@ -56,6 +57,7 @@ import {
   pauseAiInfraRollout,
   promoteAiInfraRollout,
   rejectAiInfraApproval,
+  rejectEvalCandidate,
   rollbackAiInfraRollout,
   type ApiRecord,
   type ApprovalStatus,
@@ -429,6 +431,24 @@ export function AiInfraConsolePage() {
     }
   };
 
+  const runEvalCandidateAction = async (candidateId: string, action: "accept" | "reject") => {
+    setActionLoading(`${action}:${candidateId}`);
+    try {
+      if (action === "accept") {
+        await acceptEvalCandidate(candidateId);
+        toast.success("Candidate accepted into eval dataset");
+      } else {
+        await rejectEvalCandidate(candidateId);
+        toast.success("Candidate rejected");
+      }
+      await loadConsole();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Eval candidate action failed"));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const runReadinessAction = async (action: "generate" | "latest") => {
     if (!readinessForm.tenantId || !readinessForm.agentId || !readinessForm.versionId) {
       toast.error("tenantId, agentId and versionId are required");
@@ -623,19 +643,11 @@ export function AiInfraConsolePage() {
             </>
           }
         >
-          <GenericRecordsTable
-            loading={loading}
-            emptyLabel="No feedback candidates"
+          <EvalCandidateTable
             records={pageRecords(feedbackCandidates)}
-            columns={[
-              { key: "feedbackId", label: "Feedback ID" },
-              { key: "messageId", label: "Message ID" },
-              { key: "agentRunId", label: "Run ID" },
-              { key: "userId", label: "User" },
-              { key: "reason", label: "Reason", status: true },
-              { key: "comment", label: "Comment" },
-              { key: "createdAt", label: "Created", time: true }
-            ]}
+            loading={loading}
+            actionLoading={actionLoading}
+            onAction={runEvalCandidateAction}
           />
         </DataPanel>
       ) : null}
@@ -802,6 +814,78 @@ export function AiInfraConsolePage() {
         Consumer Web mode keeps local agent, host shell, sandbox, enterprise connectors, credential management and remote agent mesh behind advanced feature gates.
       </section>
     </div>
+  );
+}
+
+function EvalCandidateTable({
+  records,
+  loading,
+  actionLoading,
+  onAction
+}: {
+  records: ApiRecord[];
+  loading: boolean;
+  actionLoading: string | null;
+  onAction: (candidateId: string, action: "accept" | "reject") => void;
+}) {
+  if (!records.length) {
+    return <EmptyState loading={loading} label="No feedback candidates" />;
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Feedback ID</TableHead>
+          <TableHead>Message / Run</TableHead>
+          <TableHead>User</TableHead>
+          <TableHead>Reason</TableHead>
+          <TableHead>Comment</TableHead>
+          <TableHead>Created</TableHead>
+          <TableHead className="text-right">Action</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {records.map((item) => {
+          const candidateId = asString(item.feedbackId);
+          return (
+            <TableRow key={candidateId}>
+              <TableCell className="font-mono text-xs">{candidateId}</TableCell>
+              <TableCell>
+                <div className="space-y-1">
+                  <p className="font-mono text-xs text-slate-700">{asString(item.messageId)}</p>
+                  <p className="text-xs text-slate-500">{asString(item.agentRunId)}</p>
+                </div>
+              </TableCell>
+              <TableCell className="text-xs">{asString(item.userId)}</TableCell>
+              <TableCell><StatusBadge value={item.reason} /></TableCell>
+              <TableCell className="max-w-[200px] truncate text-xs">{asString(item.comment)}</TableCell>
+              <TableCell>{formatTime(item.createdAt)}</TableCell>
+              <TableCell>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    size="sm"
+                    disabled={actionLoading === `accept:${candidateId}`}
+                    onClick={() => onAction(candidateId, "accept")}
+                  >
+                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                    Accept
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={actionLoading === `reject:${candidateId}`}
+                    onClick={() => onAction(candidateId, "reject")}
+                  >
+                    <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                    Reject
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }
 

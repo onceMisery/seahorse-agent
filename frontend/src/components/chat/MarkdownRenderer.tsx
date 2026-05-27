@@ -9,17 +9,26 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 import { Button } from "@/components/ui/button";
+import { CitationBadge } from "@/components/chat/CitationBadge";
 import { cn } from "@/lib/utils";
+import type { AgentSource } from "@/types";
 
 interface MarkdownRendererProps {
   content: string;
+  sources?: AgentSource[];
 }
 
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
+        p({ children, ...props }) {
+          return <p {...props}>{renderWithCitations(children, sources)}</p>;
+        },
+        li({ children, ...props }) {
+          return <li {...props}>{renderWithCitations(children, sources)}</li>;
+        },
         code({ inline, className, children, node, ...props }) {
           const match = /language-(\w+)/.exec(className || "");
           const language = match?.[1] || "text";
@@ -175,6 +184,40 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
       {content}
     </ReactMarkdown>
   );
+}
+
+const CITATION_PATTERN = /\[(\d+)\]/g;
+
+function renderWithCitations(children: React.ReactNode, sources?: AgentSource[]): React.ReactNode {
+  if (!sources || sources.length === 0) {
+    return children;
+  }
+  return React.Children.map(children, (child, idx) => {
+    if (typeof child !== "string") {
+      return child;
+    }
+    const segments: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    CITATION_PATTERN.lastIndex = 0;
+    while ((match = CITATION_PATTERN.exec(child)) !== null) {
+      const num = parseInt(match[1], 10);
+      const source = sources[num - 1];
+      if (!source) continue;
+      if (match.index > lastIndex) {
+        segments.push(child.slice(lastIndex, match.index));
+      }
+      segments.push(
+        <CitationBadge key={`cite-${idx}-${match.index}`} index={num} source={source} />
+      );
+      lastIndex = match.index + match[0].length;
+    }
+    if (segments.length === 0) return child;
+    if (lastIndex < child.length) {
+      segments.push(child.slice(lastIndex));
+    }
+    return <React.Fragment key={`frag-${idx}`}>{segments}</React.Fragment>;
+  });
 }
 
 function CopyButton({ value }: { value: string }) {

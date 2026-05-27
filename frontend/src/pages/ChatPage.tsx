@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Group, Panel, Separator } from "react-resizable-panels";
 
 import { ArtifactPanel } from "@/components/chat/ArtifactPanel";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -103,40 +104,49 @@ export function ChatPage() {
     }
   }, [latestArtifacts]);
 
+  const showArtifactPanel = artifactPanelOpen
+    && (latestArtifacts.artifacts.length > 0 || latestArtifacts.serverArtifacts.length > 0);
+
   return (
     <MainLayout>
       <div className="relative flex h-full">
-        {/* 聊天主区域 */}
-        <div className="relative flex flex-1 min-w-0 flex-col">
-          <DeepSeaBackground />
-          <div className="flex-1 min-h-0">
-            <MessageList
-              messages={messages}
-              isLoading={isLoading}
-              isStreaming={isStreaming}
-              sessionKey={currentSessionId}
-            />
-          </div>
-          {showWelcome ? null : (
-            <div className="relative z-20">
-              <div className="mx-auto max-w-[800px] px-6 pt-1 pb-4">
-                <ChatInput />
+        <Group id="seahorse-chat-panels">
+          <Panel minSize={40}>
+            <div className="relative flex h-full min-w-0 flex-col">
+              <DeepSeaBackground />
+              <div className="flex-1 min-h-0">
+                <MessageList
+                  messages={messages}
+                  isLoading={isLoading}
+                  isStreaming={isStreaming}
+                  sessionKey={currentSessionId}
+                />
               </div>
+              {showWelcome ? null : (
+                <div className="relative z-20">
+                  <div className="mx-auto max-w-[800px] px-6 pt-1 pb-4">
+                    <ChatInput />
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </Panel>
 
-        {/* 产物侧边面板 */}
-        {artifactPanelOpen && (latestArtifacts.artifacts.length > 0 || latestArtifacts.serverArtifacts.length > 0) && (
-          <div className="hidden md:flex w-[400px] max-w-[40vw] shrink-0"
-            style={{ borderLeft: "1px solid var(--theme-glass-border)" }}>
-            <ArtifactPanel
-              artifacts={latestArtifacts.artifacts}
-              serverArtifacts={latestArtifacts.serverArtifacts}
-              onClose={() => setArtifactPanelOpen(false)}
-            />
-          </div>
-        )}
+          {showArtifactPanel && (
+            <>
+              <Separator className="hidden md:flex w-[3px] items-center justify-center
+                bg-[var(--theme-glass-border)] hover:bg-[var(--color-accent-primary)] transition-colors
+                cursor-col-resize" />
+              <Panel defaultSize={30} minSize={20} maxSize={50} className="hidden md:flex">
+                <ArtifactPanel
+                  artifacts={latestArtifacts.artifacts}
+                  serverArtifacts={latestArtifacts.serverArtifacts}
+                  onClose={() => setArtifactPanelOpen(false)}
+                />
+              </Panel>
+            </>
+          )}
+        </Group>
       </div>
     </MainLayout>
   );

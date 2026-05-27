@@ -128,6 +128,27 @@ export async function getFeedbackEvaluationCandidates(
   });
 }
 
+export async function acceptEvalCandidate(candidateId: string, note?: string): Promise<ApiRecord> {
+  return api.post<ApiRecord, ApiRecord>(
+    `/api/eval-candidates/${encodeURIComponent(candidateId)}/accept`,
+    { note: note ?? null }
+  );
+}
+
+export async function rejectEvalCandidate(candidateId: string, note?: string): Promise<ApiRecord> {
+  return api.post<ApiRecord, ApiRecord>(
+    `/api/eval-candidates/${encodeURIComponent(candidateId)}/reject`,
+    { note: note ?? null }
+  );
+}
+
+export async function runEvalRegression(datasetId: string, modelId?: string): Promise<ApiRecord> {
+  return api.post<ApiRecord, ApiRecord>(
+    `/api/eval-datasets/${encodeURIComponent(datasetId)}/regression`,
+    { modelId: modelId ?? null }
+  );
+}
+
 export async function generateAiInfraReadinessReport(request: ReadinessRequest): Promise<ApiRecord> {
   return api.post<ApiRecord, ApiRecord>(
     `/api/agents/${encodeURIComponent(request.agentId)}/versions/${encodeURIComponent(request.versionId)}/pilot-readiness/generate`,
