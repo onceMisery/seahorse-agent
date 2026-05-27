@@ -130,7 +130,17 @@ public enum StreamEventType {
     /**
      * Structured agent memory event.
      */
-    AGENT_MEMORY("agent.memory");
+    AGENT_MEMORY("agent.memory"),
+
+    /**
+     * 产物增量内容 delta（边生成边渲染）。
+     */
+    ARTIFACT_CONTENT("artifact_content"),
+
+    /**
+     * 产物生成完成，携带最终 metadata。
+     */
+    ARTIFACT_COMPLETE("artifact_complete");
 
     private final String value;
 

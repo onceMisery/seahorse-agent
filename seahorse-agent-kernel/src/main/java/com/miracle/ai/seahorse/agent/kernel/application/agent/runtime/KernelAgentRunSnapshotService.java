@@ -248,6 +248,18 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
     }
 
     private AgentRunSnapshotSource toSnapshotSource(ContextItem item) {
+        String title = null;
+        String url = null;
+        String snippet = null;
+        if (hasText(item.citationJson())) {
+            try {
+                JsonNode citation = objectMapper.readTree(item.citationJson());
+                title = text(citation, "title");
+                url = text(citation, "url");
+                snippet = firstText(text(citation, "snippet"), text(citation, "text"));
+            } catch (JsonProcessingException ignored) {
+            }
+        }
         return new AgentRunSnapshotSource(
                 item.itemId(),
                 item.contextPackId(),
@@ -257,7 +269,21 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
                 item.score(),
                 item.confidence(),
                 item.sensitivity(),
-                item.citationJson());
+                item.citationJson(),
+                title,
+                url,
+                snippet,
+                confidenceLevelFromScore(item.score()),
+                null,
+                null,
+                0);
+    }
+
+    private static String confidenceLevelFromScore(double score) {
+        if (score >= 0.85) return "HIGH";
+        if (score >= 0.7) return "MEDIUM";
+        if (score > 0) return "LOW";
+        return "UNKNOWN";
     }
 
     private String currentStepId(List<AgentStep> steps, Optional<AgentCheckpoint> latestCheckpoint) {

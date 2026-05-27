@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentCheckpoin
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentEvalSummaryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentHandoffRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRolloutRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunEventBufferAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunLeaseRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunQueueRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunRepositoryAdapter;
@@ -54,6 +55,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryReposi
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRolloutRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
@@ -81,6 +83,7 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import javax.sql.DataSource;
 
 @Configuration(proxyBeanMethods = false)
@@ -313,5 +316,14 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(SandboxSessionRepositoryPort.class)
     public JdbcSandboxRepositoryAdapter seahorseJdbcSandboxRepositoryAdapter(DataSource dataSource) {
         return new JdbcSandboxRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentRunEventBufferPort.class)
+    public JdbcAgentRunEventBufferAdapter seahorseJdbcAgentRunEventBufferAdapter(DataSource dataSource,
+                                                                                 ObjectMapper objectMapper) {
+        return new JdbcAgentRunEventBufferAdapter(dataSource, objectMapper);
     }
 }

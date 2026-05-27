@@ -684,3 +684,42 @@ CREATE INDEX IF NOT EXISTS idx_sa_agent_handoff_parent
 
 CREATE INDEX IF NOT EXISTS idx_sa_agent_handoff_child
   ON sa_agent_handoff(child_run_id);
+
+CREATE TABLE IF NOT EXISTS sa_agent_run_event_buffer (
+  id          BIGSERIAL PRIMARY KEY,
+  run_id      VARCHAR(64) NOT NULL,
+  event_seq   BIGINT NOT NULL,
+  event_id    VARCHAR(64) NOT NULL,
+  event_type  VARCHAR(64) NOT NULL,
+  step_id     VARCHAR(64),
+  payload     JSONB NOT NULL DEFAULT '{}',
+  created_at  TIMESTAMP NOT NULL DEFAULT now(),
+  UNIQUE (run_id, event_seq)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_event_buffer_run_seq
+  ON sa_agent_run_event_buffer(run_id, event_seq);
+
+CREATE INDEX IF NOT EXISTS idx_sa_event_buffer_created
+  ON sa_agent_run_event_buffer(created_at);
+
+CREATE TABLE IF NOT EXISTS sa_durable_task_queue (
+  task_id       VARCHAR(64) PRIMARY KEY,
+  run_id        VARCHAR(64) NOT NULL,
+  step_type     VARCHAR(32) NOT NULL,
+  status        VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+  attempt_count INT NOT NULL DEFAULT 0,
+  worker_id     VARCHAR(64),
+  payload_json  TEXT,
+  last_error    TEXT,
+  retry_at      TIMESTAMP,
+  created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+  claimed_at    TIMESTAMP,
+  completed_at  TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_dtq_status_retry
+  ON sa_durable_task_queue(status, retry_at);
+
+CREATE INDEX IF NOT EXISTS idx_sa_dtq_run_id
+  ON sa_durable_task_queue(run_id);

@@ -20,19 +20,24 @@ package com.miracle.ai.seahorse.agent.adapters.local;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamCompletionPayload;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventEnvelope;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventSender;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamMessageDelta;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamMetaPayload;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Local stream chat callback factory.
+ * Local stream chat callback factory with event envelope support.
  */
 public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactoryPort {
 
@@ -40,17 +45,26 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
     private static final String TYPE_THINK = "think";
     private static final String TYPE_RESPONSE = "response";
     private static final String DONE_PAYLOAD = "[DONE]";
+    private static final String STREAM_EVENT_NAME = "stream_event";
 
     private final StreamTaskPort streamTaskPort;
     private final ConversationMemoryPort memoryPort;
+    private final AgentRunEventBufferPort eventBufferPort;
 
     public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort) {
-        this(streamTaskPort, ConversationMemoryPort.noop());
+        this(streamTaskPort, ConversationMemoryPort.noop(), AgentRunEventBufferPort.noop());
     }
 
     public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort, ConversationMemoryPort memoryPort) {
+        this(streamTaskPort, memoryPort, AgentRunEventBufferPort.noop());
+    }
+
+    public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort,
+                                          ConversationMemoryPort memoryPort,
+                                          AgentRunEventBufferPort eventBufferPort) {
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
+        this.eventBufferPort = Objects.requireNonNullElse(eventBufferPort, AgentRunEventBufferPort.noop());
     }
 
     @Override
@@ -60,10 +74,13 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
 
     @Override
     public StreamCallback create(SseEmitter emitter, String conversationId, String taskId, String userId) {
-        return new LocalChatStreamCallback(emitter, conversationId, taskId, userId, streamTaskPort, memoryPort);
+        return new LocalChatStreamCallback(emitter, conversationId, taskId, userId,
+                streamTaskPort, memoryPort, eventBufferPort);
     }
 
     private static final class LocalChatStreamCallback implements StreamCallback {
+
+        private static final Logger log = LoggerFactory.getLogger(LocalChatStreamCallback.class);
 
         private final StreamEventSender sender;
         private final String conversationId;
@@ -71,8 +88,10 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         private final String userId;
         private final StreamTaskPort streamTaskPort;
         private final ConversationMemoryPort memoryPort;
+        private final AgentRunEventBufferPort eventBufferPort;
         private final StringBuilder answer = new StringBuilder();
         private final StringBuilder thinking = new StringBuilder();
+        private final AtomicLong seqCounter = new AtomicLong(0);
         private String currentRunId;
         private long runStartedAtMs;
 
@@ -81,13 +100,15 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
                                         String taskId,
                                         String userId,
                                         StreamTaskPort streamTaskPort,
-                                        ConversationMemoryPort memoryPort) {
+                                        ConversationMemoryPort memoryPort,
+                                        AgentRunEventBufferPort eventBufferPort) {
             this.sender = new SpringSseEventSender(Objects.requireNonNull(emitter, "emitter must not be null"));
             this.conversationId = conversationId;
             this.taskId = taskId;
             this.userId = Objects.requireNonNullElse(userId, "");
             this.streamTaskPort = streamTaskPort;
             this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
+            this.eventBufferPort = Objects.requireNonNullElse(eventBufferPort, AgentRunEventBufferPort.noop());
             initialize();
         }
 
@@ -117,8 +138,10 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             currentRunId = runId;
             runStartedAtMs = System.currentTimeMillis();
             sender.sendEvent(StreamEventType.META.value(), new StreamMetaPayload(conversationId, taskId, runId));
-            sender.sendEvent(StreamEventType.RUN_STARTED.value(),
-                    AgentStreamTimelineEvents.runStartedProtocol(runId, conversationId, taskId));
+
+            Object runStartedPayload = AgentStreamTimelineEvents.runStartedProtocol(runId, conversationId, taskId);
+            emitEnveloped(StreamEventType.RUN_STARTED, runStartedPayload);
+
             sender.sendEvent(StreamEventType.AGENT_TIMELINE.value(), AgentStreamTimelineEvents.runStarted(runId));
         }
 
@@ -127,7 +150,12 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             if (streamTaskPort.isCancelled(taskId) || isBlank(eventName)) {
                 return;
             }
-            sender.sendEvent(eventName, payload);
+            StreamEventType eventType = resolveEventType(eventName);
+            if (eventType != null && currentRunId != null) {
+                emitEnveloped(eventType, payload);
+            } else {
+                sender.sendEvent(eventName, payload);
+            }
         }
 
         @Override
@@ -155,6 +183,22 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         private void initialize() {
             sender.sendEvent(StreamEventType.META.value(), new StreamMetaPayload(conversationId, taskId));
             streamTaskPort.register(taskId, sender, () -> new StreamCompletionPayload(null, null));
+        }
+
+        private void emitEnveloped(StreamEventType eventType, Object payload) {
+            if (currentRunId == null) {
+                sender.sendEvent(eventType.value(), payload);
+                return;
+            }
+            long seq = seqCounter.incrementAndGet();
+            StreamEventEnvelope envelope = StreamEventEnvelope.of(seq, eventType, currentRunId, payload);
+            try {
+                eventBufferPort.append(currentRunId, envelope);
+            } catch (Exception e) {
+                log.debug("Failed to buffer event seq={} for run={}", seq, currentRunId, e);
+            }
+            sender.sendEvent(STREAM_EVENT_NAME, envelope);
+            sender.sendEvent(eventType.value(), payload);
         }
 
         private void appendAssistantMessage() {
@@ -196,8 +240,28 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         }
 
         private void sendMessage(String type, StringBuilder buffer) {
-            sender.sendEvent(StreamEventType.MESSAGE.value(), new StreamMessageDelta(type, buffer.toString()));
+            StreamMessageDelta delta = new StreamMessageDelta(type, buffer.toString());
+            if (currentRunId != null) {
+                long seq = seqCounter.incrementAndGet();
+                StreamEventEnvelope envelope = StreamEventEnvelope.of(seq, StreamEventType.MESSAGE, currentRunId, delta);
+                try {
+                    eventBufferPort.append(currentRunId, envelope);
+                } catch (Exception e) {
+                    log.debug("Failed to buffer message event seq={}", seq, e);
+                }
+                sender.sendEvent(STREAM_EVENT_NAME, envelope);
+            }
+            sender.sendEvent(StreamEventType.MESSAGE.value(), delta);
             buffer.setLength(0);
+        }
+
+        private StreamEventType resolveEventType(String eventName) {
+            for (StreamEventType type : StreamEventType.values()) {
+                if (type.value().equals(eventName)) {
+                    return type;
+                }
+            }
+            return null;
         }
 
         private boolean isBlank(String content) {

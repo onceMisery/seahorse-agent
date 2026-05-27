@@ -67,6 +67,27 @@ final class AgentStreamTimelineEvents {
                 Math.max(0L, durationMs)));
     }
 
+    /**
+     * 产物增量内容事件 payload。
+     */
+    static ArtifactContentPayload artifactContent(String artifactId, String delta, long offset) {
+        return new ArtifactContentPayload(
+                Objects.requireNonNull(artifactId, "artifactId must not be null"),
+                Objects.requireNonNullElse(delta, ""),
+                offset);
+    }
+
+    /**
+     * 产物生成完成事件 payload。
+     */
+    static ArtifactCompletePayload artifactComplete(String artifactId, String title,
+                                                     String mimeType, long size, String scanStatus) {
+        return new ArtifactCompletePayload(
+                Objects.requireNonNull(artifactId, "artifactId must not be null"),
+                title, mimeType, size,
+                Objects.requireNonNullElse(scanStatus, "PENDING"));
+    }
+
     private static AgentTimelinePayload payload(AgentTimelineItem item) {
         return new AgentTimelinePayload(List.of(item));
     }

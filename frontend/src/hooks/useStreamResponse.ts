@@ -1,4 +1,4 @@
-import type { CompletionPayload, MessageDeltaPayload, StreamMetaPayload } from "@/types";
+import type { CompletionPayload, MessageDeltaPayload, StreamEventEnvelope, StreamMetaPayload } from "@/types";
 
 export interface StreamHandlers {
   onMeta?: (payload: StreamMetaPayload) => void;
@@ -11,6 +11,7 @@ export interface StreamHandlers {
   onTitle?: (payload: { title: string }) => void;
   onError?: (error: Error) => void;
   onEvent?: (event: string, payload: unknown) => void;
+  onStreamEvent?: (envelope: StreamEventEnvelope) => void;
 }
 
 export interface StreamOptions {
@@ -79,6 +80,17 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
     const raw = dataLines.join("\n");
     const payload = parseData(raw);
     handlers.onEvent?.(eventName, payload);
+
+    if (eventName === "stream_event") {
+      const envelope = payload as StreamEventEnvelope;
+      if (envelope && typeof envelope === "object" && "eventSeq" in envelope) {
+        handlers.onStreamEvent?.(envelope);
+        handlers.onEvent?.(envelope.eventType, envelope.typedPayload);
+      }
+      eventName = "message";
+      dataLines = [];
+      return;
+    }
 
     switch (eventName) {
       case "meta":

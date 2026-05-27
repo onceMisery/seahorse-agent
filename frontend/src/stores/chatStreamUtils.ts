@@ -325,6 +325,14 @@ export function normalizeAgentStreamEvent(event: string, payload: unknown): Agen
       const artifacts = normalizeArtifactPayload(payload);
       return { type: AGENT_STREAM_EVENTS.ARTIFACT, items: artifacts.blocks, serverArtifacts: artifacts.serverArtifacts };
     }
+    case AGENT_STREAM_EVENTS.ARTIFACT_CONTENT: {
+      const artifacts = normalizeArtifactPayload(payload);
+      return { type: AGENT_STREAM_EVENTS.ARTIFACT, items: artifacts.blocks, serverArtifacts: artifacts.serverArtifacts };
+    }
+    case AGENT_STREAM_EVENTS.ARTIFACT_COMPLETE: {
+      const artifacts = normalizeArtifactPayload(payload);
+      return { type: AGENT_STREAM_EVENTS.ARTIFACT, items: artifacts.blocks, serverArtifacts: artifacts.serverArtifacts };
+    }
     case AGENT_STREAM_EVENTS.APPROVAL:
       return { type: event, items: normalizeApprovals(payload) };
     case AGENT_STREAM_EVENTS.TOOL_CALL_WAITING_USER:

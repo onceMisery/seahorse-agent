@@ -7,6 +7,22 @@ import { Button } from "@/components/ui/button";
 import { downloadAgentArtifact } from "@/services/agentArtifactService";
 import { AGENT_ARTIFACT_SCAN_STATUS, type AgentArtifact, type Message } from "@/types";
 
+/** 研究步骤中文标签映射 */
+const RESEARCH_STEP_LABELS: Record<string, string> = {
+  PLAN: "规划研究方向",
+  SEARCH: "搜索相关资料",
+  FETCH: "抓取网页内容",
+  EXTRACT_EVIDENCE: "提取关键证据",
+  SYNTHESIZE: "综合分析",
+  WRITE_REPORT: "撰写报告",
+  VERIFY_CITATIONS: "验证引用"
+};
+
+function localizeStepTitle(title: string): string {
+  const upper = title.toUpperCase().replace(/\s+/g, "_");
+  return RESEARCH_STEP_LABELS[upper] ?? RESEARCH_STEP_LABELS[title] ?? title;
+}
+
 interface AgentTracePanelProps {
   message: Message;
 }
@@ -93,7 +109,7 @@ export function AgentTracePanel({ message }: AgentTracePanelProps) {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium" style={{ color: "var(--theme-text-primary)" }}>
-                      {item.title}
+                      {localizeStepTitle(item.title)}
                     </span>
                     {item.status ? (
                       <span className="text-[11px]" style={{ color: "var(--theme-text-muted)" }}>

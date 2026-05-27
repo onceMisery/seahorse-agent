@@ -21,10 +21,12 @@ import cn.hutool.core.util.IdUtil;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.task.TaskTemplateId;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventEnvelope;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimitDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
@@ -63,6 +65,7 @@ public class SeahorseChatController {
     private final ChatStreamCallbackFactoryPort callbackFactory;
     private final StreamTaskPort streamTaskPort;
     private final RateLimiterPort rateLimiterPort;
+    private final AgentRunEventBufferPort eventBufferPort;
     private final AdvancedFeatureGate advancedFeatureGate;
     private final long sseTimeoutMs;
     private final int chatRateLimitPermits;
@@ -85,6 +88,7 @@ public class SeahorseChatController {
                 streamTaskPort,
                 snapshotPortProvider,
                 RateLimiterPort.noop(),
+                AgentRunEventBufferPort.noop(),
                 AdvancedFeatureGate.consumerWebDefaults(),
                 sseTimeoutMs,
                 60,
@@ -97,6 +101,7 @@ public class SeahorseChatController {
                                   StreamTaskPort streamTaskPort,
                                   ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
                                   ObjectProvider<RateLimiterPort> rateLimiterPortProvider,
+                                  ObjectProvider<AgentRunEventBufferPort> eventBufferPortProvider,
                                   ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider,
                                   @Value("${seahorse-agent.web.sse-timeout-ms:300000}")
                                   long sseTimeoutMs,
@@ -108,6 +113,7 @@ public class SeahorseChatController {
                 streamTaskPort,
                 snapshotPortProvider,
                 Objects.requireNonNullElse(rateLimiterPortProvider.getIfAvailable(), RateLimiterPort.noop()),
+                Objects.requireNonNullElse(eventBufferPortProvider.getIfAvailable(), AgentRunEventBufferPort.noop()),
                 advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults),
                 sseTimeoutMs,
                 chatRateLimitPermits,
@@ -119,6 +125,7 @@ public class SeahorseChatController {
                                    StreamTaskPort streamTaskPort,
                                    ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
                                    RateLimiterPort rateLimiterPort,
+                                   AgentRunEventBufferPort eventBufferPort,
                                    AdvancedFeatureGate advancedFeatureGate,
                                    long sseTimeoutMs,
                                    int chatRateLimitPermits,
@@ -128,6 +135,7 @@ public class SeahorseChatController {
         this.callbackFactory = Objects.requireNonNull(callbackFactory, "callbackFactory must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.rateLimiterPort = Objects.requireNonNullElse(rateLimiterPort, RateLimiterPort.noop());
+        this.eventBufferPort = Objects.requireNonNullElse(eventBufferPort, AgentRunEventBufferPort.noop());
         this.advancedFeatureGate = Objects.requireNonNullElseGet(
                 advancedFeatureGate,
                 AdvancedFeatureGate::consumerWebDefaults);
@@ -188,6 +196,19 @@ public class SeahorseChatController {
         checkChatRateLimit(actualUserId);
         SseEmitter emitter = new SseEmitter(sseTimeoutMs);
         try {
+            if (lastEventSeq != null) {
+                List<StreamEventEnvelope> missed = eventBufferPort.getAfter(resumeRunId, lastEventSeq);
+                if (!missed.isEmpty()) {
+                    for (StreamEventEnvelope envelope : missed) {
+                        emitter.send(SseEmitter.event()
+                                .name("stream_event")
+                                .data(envelope));
+                    }
+                    emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
+                    emitter.complete();
+                    return emitter;
+                }
+            }
             AgentRunSnapshotInboundPort snapshotPort = snapshotPort();
             emitter.send(SseEmitter.event()
                     .name(StreamEventType.RUN_SNAPSHOT.value())

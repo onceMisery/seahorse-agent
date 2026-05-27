@@ -1204,6 +1204,24 @@ CREATE TABLE IF NOT EXISTS sa_secret_ref (
 CREATE INDEX IF NOT EXISTS idx_sa_secret_ref_tenant
 ON sa_secret_ref(tenant_id, created_at);
 
+CREATE TABLE IF NOT EXISTS sa_agent_run_event_buffer (
+    id          BIGSERIAL PRIMARY KEY,
+    run_id      VARCHAR(64) NOT NULL,
+    event_seq   BIGINT NOT NULL,
+    event_id    VARCHAR(64) NOT NULL,
+    event_type  VARCHAR(64) NOT NULL,
+    step_id     VARCHAR(64),
+    payload     JSONB NOT NULL DEFAULT '{}',
+    created_at  TIMESTAMP NOT NULL DEFAULT now(),
+    UNIQUE (run_id, event_seq)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_event_buffer_run_seq
+ON sa_agent_run_event_buffer(run_id, event_seq);
+
+CREATE INDEX IF NOT EXISTS idx_sa_event_buffer_created
+ON sa_agent_run_event_buffer(created_at);
+
 -- PostgreSQL Initial Data for Seahorse Agent
 
 INSERT INTO t_user (id, username, password, role, avatar, create_time, update_time, deleted)

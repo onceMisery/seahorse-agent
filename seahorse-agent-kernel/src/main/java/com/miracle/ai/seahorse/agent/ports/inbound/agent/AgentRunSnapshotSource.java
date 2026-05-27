@@ -20,6 +20,9 @@ package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextItemSourceType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 
+/**
+ * 统一来源快照，同时支持 RAG 向量检索和 Web 搜索/爬取来源。
+ */
 public record AgentRunSnapshotSource(String itemId,
                                      String contextPackId,
                                      ContextItemSourceType sourceType,
@@ -28,5 +31,36 @@ public record AgentRunSnapshotSource(String itemId,
                                      double score,
                                      double confidence,
                                      ContextSensitivity sensitivity,
-                                     String citationJson) {
+                                     String citationJson,
+                                     String title,
+                                     String url,
+                                     String snippet,
+                                     String confidenceLevel,
+                                     String supportingConclusion,
+                                     String fetchedAt,
+                                     int citationIndex) {
+
+    /**
+     * 兼容旧构造（不含扩展字段）。
+     */
+    public AgentRunSnapshotSource(String itemId,
+                                  String contextPackId,
+                                  ContextItemSourceType sourceType,
+                                  String sourceId,
+                                  String summary,
+                                  double score,
+                                  double confidence,
+                                  ContextSensitivity sensitivity,
+                                  String citationJson) {
+        this(itemId, contextPackId, sourceType, sourceId, summary, score, confidence,
+                sensitivity, citationJson, null, null, null,
+                confidenceLevelFromScore(score), null, null, 0);
+    }
+
+    private static String confidenceLevelFromScore(double score) {
+        if (score >= 0.85) return "HIGH";
+        if (score >= 0.7) return "MEDIUM";
+        if (score > 0) return "LOW";
+        return "UNKNOWN";
+    }
 }

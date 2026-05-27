@@ -14,6 +14,7 @@ import {
   type CompletionPayload,
   type Message,
   type MessageDeltaPayload,
+  type StreamEventEnvelope,
   type StreamMetaPayload,
   type TaskTemplateId
 } from "@/types";
@@ -449,6 +450,24 @@ export const useChatStore = create<ChatState>()(
       };
 
       const handlers = {
+        onStreamEvent: (envelope: StreamEventEnvelope) => {
+          if (get().streamingMessageId !== assistantId) return;
+          set((state) => {
+            const msg = state.messages.find((m) => m.id === assistantId);
+            if (msg) {
+              msg.lastEventSeq = envelope.eventSeq;
+            }
+          });
+          const convId = get().currentSessionId;
+          if (convId && envelope.runId) {
+            try {
+              localStorage.setItem(`${convId}_lastRunId`, envelope.runId);
+              localStorage.setItem(`${convId}_lastEventSeq`, String(envelope.eventSeq));
+            } catch {
+              // localStorage may be unavailable
+            }
+          }
+        },
         onEvent: (event: string, payload: unknown) => {
           mergeAgentEvent(event, payload);
         },

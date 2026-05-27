@@ -59,6 +59,8 @@ export const AGENT_STREAM_EVENTS = {
   TOOL_CALL_WAITING_USER: "tool_call_waiting_user",
   SOURCE_FOUND: "source_found",
   ARTIFACT_CREATED: "artifact_created",
+  ARTIFACT_CONTENT: "artifact_content",
+  ARTIFACT_COMPLETE: "artifact_complete",
   RECOVERABLE_ERROR: "recoverable_error"
 } as const;
 
@@ -158,6 +160,13 @@ export interface AgentRunSnapshotSource {
   confidence?: number;
   sensitivity?: string;
   citationJson?: string | null;
+  title?: string | null;
+  url?: string | null;
+  snippet?: string | null;
+  confidenceLevel?: string | null;
+  supportingConclusion?: string | null;
+  fetchedAt?: string | null;
+  citationIndex?: number;
 }
 
 export interface AgentRunMessageSnapshot {
@@ -262,6 +271,16 @@ export interface MessageDeltaPayload {
 export interface CompletionPayload {
   messageId?: string | null;
   title?: string | null;
+}
+
+export interface StreamEventEnvelope {
+  eventId: string;
+  eventSeq: number;
+  eventType: string;
+  runId: string;
+  stepId?: string | null;
+  timestamp: string;
+  typedPayload: unknown;
 }
 
 export type TaskTemplateId = "quick-answer" | "deep-research" | "web-summary" | "compare-analysis";
