@@ -47,6 +47,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolExecutorPort;
@@ -83,6 +84,7 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
     @Test
     void shouldKeepAgentModeDisabledByDefault() {
         contextRunner.withUserConfiguration(StreamingModelConfiguration.class)
+                .withPropertyValues("seahorse-agent.chat.web-task-agent-enabled=false")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).doesNotHaveBean(KernelAgentLoop.class);
@@ -130,7 +132,8 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
 
     @Test
     void shouldRegisterOnlyIncludedMcpTools() throws Exception {
-        contextRunner.withUserConfiguration(StreamingModelConfiguration.class, McpConfiguration.class)
+        contextRunner.withUserConfiguration(StreamingModelConfiguration.class, McpConfiguration.class,
+                        AdvancedFeatureGateAllEnabledConfiguration.class)
                 .withPropertyValues(
                         "seahorse-agent.chat.agent-mode-enabled=true",
                         "seahorse-agent.chat.agent.tools.mcp.include=weather_query, missing_tool")
@@ -209,7 +212,8 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
                 .withPropertyValues(
                         "seahorse-agent.chat.agent-mode-enabled=true",
                         "seahorse-agent.chat.agent.tools.search.enabled=false",
-                        "seahorse-agent.chat.agent.tools.memory.enabled=false")
+                        "seahorse-agent.chat.agent.tools.memory.enabled=false",
+                        "seahorse-agent.chat.agent.tools.web-research.enabled=false")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).doesNotHaveBean(SearchKnowledgeBaseToolPortAdapter.class);
@@ -425,6 +429,20 @@ class SeahorseAgentKernelAgentAutoConfigurationTests {
                     return OutputRepairResult.of("");
                 }
             };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class AdvancedFeatureGateAllEnabledConfiguration {
+
+        @Bean
+        com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeatureGate advancedFeatureGate() {
+            return com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeatureGate.allEnabledForTests();
+        }
+
+        @Bean
+        ToolProviderExposurePolicyPort toolProviderExposurePolicyPort() {
+            return ToolProviderExposurePolicyPort.allEnabled();
         }
     }
 }

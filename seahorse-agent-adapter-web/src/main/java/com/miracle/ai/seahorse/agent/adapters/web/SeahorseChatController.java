@@ -75,7 +75,18 @@ public class SeahorseChatController {
                                   ChatStreamCallbackFactoryPort callbackFactory,
                                   StreamTaskPort streamTaskPort,
                                   long sseTimeoutMs) {
-        this(chatInboundPortProvider, callbackFactory, streamTaskPort, sseTimeoutMs, null);
+        this(chatInboundPortProvider, callbackFactory, streamTaskPort, sseTimeoutMs,
+                AdvancedFeatureGate.consumerWebDefaults());
+    }
+
+    public SeahorseChatController(ObjectProvider<ChatInboundPort> chatInboundPortProvider,
+                                  ChatStreamCallbackFactoryPort callbackFactory,
+                                  StreamTaskPort streamTaskPort,
+                                  long sseTimeoutMs,
+                                  AdvancedFeatureGate advancedFeatureGate) {
+        this(chatInboundPortProvider, callbackFactory, streamTaskPort, null,
+                RateLimiterPort.noop(), AgentRunEventBufferPort.noop(),
+                advancedFeatureGate, sseTimeoutMs, 60, Duration.ofMinutes(1));
     }
 
     public SeahorseChatController(ObjectProvider<ChatInboundPort> chatInboundPortProvider,

@@ -307,20 +307,6 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(MemoryEnginePort.class)
-    @ConditionalOnMissingBean(MemoryIngestionWorkflowPort.class)
-    public MemoryIngestionWorkflowPort seahorseMemoryIngestionWorkflowPort(MemoryEnginePort memoryEnginePort) {
-        return command -> {
-            if (memoryEnginePort instanceof MemoryIngestionWorkflowPort workflowPort) {
-                return workflowPort.ingest(command);
-            }
-            memoryEnginePort.writeMemory(command == null ? null : command.writeRequest());
-            return com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult.ignored(
-                    "delegated_to_memory_engine");
-        };
-    }
-
-    @Bean
     @ConditionalOnMissingBean
     public KernelMemoryEngine seahorseKernelMemoryEngine(ObjectProvider<MemoryEnginePort> memoryEnginePort) {
         return new KernelMemoryEngine(memoryEnginePort.getIfAvailable(MemoryEnginePort::noop));

@@ -91,7 +91,7 @@ class KernelAgentLoopTests {
                 (callId, toolId, arguments) -> ToolInvocationResult.ok("{\"temp\":21}"));
         KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
 
-        AgentLoopResult result = loop.execute(defaultRequest());
+        AgentLoopResult result = loop.execute(requestWithAllowedTools(6, "weather"));
 
         assertEquals("上海 21 度", result.finalAnswer());
         assertFalse(result.truncated());
@@ -127,7 +127,7 @@ class KernelAgentLoopTests {
         KernelAgentLoop loop = new KernelAgentLoop(model, registry,
                 KernelAgentLoopOptions.builder().maxSteps(2).build());
 
-        AgentLoopResult result = loop.execute(defaultRequest(2));
+        AgentLoopResult result = loop.execute(requestWithAllowedTools(2, "weather"));
 
         assertTrue(result.truncated());
         assertTrue(result.finalAnswer().contains("Task step limit reached"));
@@ -160,7 +160,7 @@ class KernelAgentLoopTests {
         registry.register(WEATHER_DESCRIPTOR, throwingTool("boom"));
         KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
 
-        AgentLoopResult result = loop.execute(defaultRequest());
+        AgentLoopResult result = loop.execute(requestWithAllowedTools(6, "weather"));
 
         AgentObservation observation = result.steps().get(0).observations().get(0);
         assertFalse(observation.success());
@@ -179,7 +179,7 @@ class KernelAgentLoopTests {
         registry.register(WEATHER_DESCRIPTOR, (callId, toolId, arguments) -> ToolInvocationResult.ok(largeResult));
         KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
 
-        AgentLoopResult result = loop.execute(defaultRequest());
+        AgentLoopResult result = loop.execute(requestWithAllowedTools(6, "weather"));
 
         AgentObservation observation = result.steps().get(0).observations().get(0);
         assertTrue(observation.success());
@@ -204,7 +204,7 @@ class KernelAgentLoopTests {
         KernelAgentLoop loop = new KernelAgentLoop(model, registry,
                 KernelAgentLoopOptions.builder().perToolTimeout(Duration.ofMillis(50)).build());
 
-        AgentLoopResult result = loop.execute(defaultRequest());
+        AgentLoopResult result = loop.execute(requestWithAllowedTools(6, "weather"));
 
         AgentObservation observation = result.steps().get(0).observations().get(0);
         assertFalse(observation.success());
@@ -236,7 +236,7 @@ class KernelAgentLoopTests {
                         .perToolTimeout(Duration.ofSeconds(1))
                         .build());
 
-        AgentLoopResult result = loop.execute(defaultRequest());
+        AgentLoopResult result = loop.execute(requestWithAllowedTools(6, "first_tool", "second_tool"));
 
         List<AgentObservation> observations = result.steps().get(0).observations();
         assertEquals("call-1", observations.get(0).toolCallId());
@@ -308,7 +308,7 @@ class KernelAgentLoopTests {
         KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
         RecordingCallback callback = new RecordingCallback();
 
-        loop.streamExecute(defaultRequest(), callback);
+        loop.streamExecute(requestWithAllowedTools(6, "weather"), callback);
 
         assertTrue(callback.awaitTerminal(1_000));
         assertEquals(List.of("上海 21 度"), callback.contents);
@@ -346,7 +346,7 @@ class KernelAgentLoopTests {
         });
         KernelAgentLoop loop = new KernelAgentLoop(model, registry, KernelAgentLoopOptions.defaults());
 
-        AgentLoopResult result = loop.execute(defaultRequest());
+        AgentLoopResult result = loop.execute(requestWithAllowedTools(6, "weather"));
 
         AgentObservation observation = result.steps().get(0).observations().get(0);
         assertFalse(observation.success());
@@ -375,6 +375,7 @@ class KernelAgentLoopTests {
                 .question("真实问题")
                 .history(List.of())
                 .samplingOptions(ChatSamplingOptions.builder().temperature(0.3D).build())
+                .allowedToolIds(List.of("weather"))
                 .memoryContext(MemoryContext.builder()
                         .userId("admin-user")
                         .conversationId("conversation-a")
@@ -480,6 +481,16 @@ class KernelAgentLoopTests {
                 .history(List.of(ChatMessage.system("你是助手")))
                 .samplingOptions(ChatSamplingOptions.builder().temperature(0.3D).build())
                 .maxSteps(maxSteps)
+                .build();
+    }
+
+    private static AgentLoopRequest requestWithAllowedTools(int maxSteps, String... toolIds) {
+        return AgentLoopRequest.builder()
+                .question("天气如何")
+                .history(List.of(ChatMessage.system("你是助手")))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.3D).build())
+                .maxSteps(maxSteps)
+                .allowedToolIds(List.of(toolIds))
                 .build();
     }
 

@@ -288,7 +288,8 @@ class SeahorseWebApiContractTests {
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseAgentDefinitionController(provider(AgentDefinitionInboundPort.class, definitionPort)),
-                new SeahorseAgentRunController(provider(AgentRunInboundPort.class, runPort))).build();
+                new SeahorseAgentRunController(provider(AgentRunInboundPort.class, runPort),
+                        null, null, null, null, AdvancedFeatureGate.allEnabledForTests())).build();
 
         mvc.perform(post("/agents")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -399,7 +400,7 @@ class SeahorseWebApiContractTests {
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseChatController(provider(ChatInboundPort.class, chatPort), callbackFactory,
-                        streamTaskPort, 1_000L)).build();
+                        streamTaskPort, 1_000L, AdvancedFeatureGate.allEnabledForTests())).build();
 
         mvc.perform(get("/rag/v3/chat")
                         .param("question", "hello")
