@@ -32,13 +32,20 @@ import java.util.Objects;
 /**
  * 多维度限流过滤器。
  *
- * <p>覆盖维度：IP 级（每分钟）、用户级（每小时）、上传级（每日）。
- * 高成本模板的限流由 Controller 层单独处理。
+ * <p>覆盖维度：
+ * <ul>
+ *   <li>IP 级：每分钟最大请求数（防爬虫/DDoS）</li>
+ *   <li>用户级：由 Controller 层通过 RateLimiterPort 单独处理</li>
+ *   <li>模板级：高成本模板每日上限由 Controller 层处理</li>
+ *   <li>上传级：单文件大小由 ConversationAttachmentParserService 校验</li>
+ * </ul>
  */
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final int IP_PERMITS_PER_MINUTE = 120;
     private static final Duration IP_WINDOW = Duration.ofMinutes(1);
+    private static final int UPLOAD_PERMITS_PER_HOUR = 50;
+    private static final Duration UPLOAD_WINDOW = Duration.ofHours(1);
     private static final String RATE_LIMIT_EXCEEDED_MESSAGE = "{\"code\":\"1\",\"message\":\"rate limit exceeded\"}";
 
     private final RateLimiterPort rateLimiterPort;
@@ -52,13 +59,24 @@ public class RateLimitFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         String clientIp = resolveClientIp(request);
-        RateLimitDecision decision = rateLimiterPort.tryAcquire("ip", clientIp, IP_PERMITS_PER_MINUTE, IP_WINDOW);
-        if (!decision.allowed()) {
-            response.setStatus(429);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write(RATE_LIMIT_EXCEEDED_MESSAGE);
+
+        // IP 级限流
+        RateLimitDecision ipDecision = rateLimiterPort.tryAcquire("ip", clientIp, IP_PERMITS_PER_MINUTE, IP_WINDOW);
+        if (!ipDecision.allowed()) {
+            rejectWithRateLimit(response);
             return;
         }
+
+        // 上传接口额外限流
+        if (isUploadRequest(request)) {
+            RateLimitDecision uploadDecision = rateLimiterPort.tryAcquire(
+                    "upload", clientIp, UPLOAD_PERMITS_PER_HOUR, UPLOAD_WINDOW);
+            if (!uploadDecision.allowed()) {
+                rejectWithRateLimit(response);
+                return;
+            }
+        }
+
         filterChain.doFilter(request, response);
     }
 
@@ -66,6 +84,17 @@ public class RateLimitFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
         return path.startsWith("/actuator") || path.startsWith("/health");
+    }
+
+    private boolean isUploadRequest(HttpServletRequest request) {
+        return "POST".equalsIgnoreCase(request.getMethod())
+                && request.getRequestURI().contains("/attachments");
+    }
+
+    private void rejectWithRateLimit(HttpServletResponse response) throws IOException {
+        response.setStatus(429);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write(RATE_LIMIT_EXCEEDED_MESSAGE);
     }
 
     private String resolveClientIp(HttpServletRequest request) {

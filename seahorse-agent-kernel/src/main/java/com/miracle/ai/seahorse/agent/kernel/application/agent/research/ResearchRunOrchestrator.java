@@ -28,16 +28,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * 研究任务编排器。
  *
  * <p>使用固定步骤序列（bounded orchestrator）编排研究任务，
- * 每个步骤写入 AgentStep 并通过事件协议通知前端。
+ * 每个步骤通过注入的 ResearchStepHandler 执行，并通过事件协议通知前端。
  * 不引入通用工作流引擎，保持 KISS 原则。
  */
 public class ResearchRunOrchestrator {
@@ -46,20 +49,25 @@ public class ResearchRunOrchestrator {
 
     private final DurableTaskQueuePort taskQueue;
     private final AgentRunEventBufferPort eventBuffer;
+    private final EnumMap<ResearchStepType, ResearchStepHandler> handlers;
+    private final ConcurrentMap<String, ResearchStepContext> contexts = new ConcurrentHashMap<>();
     private final String workerId;
 
     public ResearchRunOrchestrator(DurableTaskQueuePort taskQueue,
-                                   AgentRunEventBufferPort eventBuffer) {
+                                   AgentRunEventBufferPort eventBuffer,
+                                   List<ResearchStepHandler> stepHandlers) {
         this.taskQueue = Objects.requireNonNull(taskQueue, "taskQueue must not be null");
         this.eventBuffer = Objects.requireNonNull(eventBuffer, "eventBuffer must not be null");
+        this.handlers = new EnumMap<>(ResearchStepType.class);
+        for (ResearchStepHandler handler : Objects.requireNonNullElseGet(stepHandlers, List::<ResearchStepHandler>of)) {
+            handlers.put(handler.stepType(), handler);
+        }
         this.workerId = "worker-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
-    /**
-     * 启动研究任务：入队第一步 PLAN。
-     */
     public String startResearch(String runId, ResearchTaskProfile profile, String query) {
         Objects.requireNonNull(runId, "runId must not be null");
+        contexts.put(runId, new ResearchStepContext(runId, query));
         DurableTask task = new DurableTask(
                 UUID.randomUUID().toString(),
                 runId,
@@ -73,9 +81,6 @@ public class ResearchRunOrchestrator {
         return runId;
     }
 
-    /**
-     * Worker 轮询消费一个任务。返回是否消费了任务。
-     */
     public boolean pollAndExecute() {
         return taskQueue.claimNext(workerId).map(this::executeTask).orElse(false);
     }
@@ -93,7 +98,14 @@ public class ResearchRunOrchestrator {
             emitEvent(task.runId(), StreamEventType.STEP_STARTED,
                     Map.of("stepId", task.taskId(), "title", stepType.name(), "status", "RUNNING"));
 
-            executeStep(stepType, task);
+            ResearchStepContext context = contexts.computeIfAbsent(task.runId(),
+                    id -> new ResearchStepContext(id, ""));
+            ResearchStepHandler handler = handlers.get(stepType);
+            if (handler != null) {
+                handler.execute(task, context);
+            } else {
+                log.debug("No handler registered for step {} (run={})", stepType, task.runId());
+            }
 
             emitEvent(task.runId(), StreamEventType.STEP_FINISHED,
                     Map.of("stepId", task.taskId(), "title", stepType.name(), "status", "SUCCEEDED"));
@@ -117,12 +129,6 @@ public class ResearchRunOrchestrator {
         }
     }
 
-    private void executeStep(ResearchStepType stepType, DurableTask task) {
-        // 各步骤的具体执行逻辑由子类或注入的 handler 实现
-        // 当前为骨架实现，后续通过 ResearchStepHandler 接口扩展
-        log.debug("Executing research step {} for run={}", stepType, task.runId());
-    }
-
     private void enqueueNextStep(String runId, ResearchStepType current) {
         ResearchStepType next = current.next();
         if (next != null) {
@@ -138,6 +144,7 @@ public class ResearchRunOrchestrator {
         } else {
             emitEvent(runId, StreamEventType.STEP_FINISHED,
                     Map.of("stepId", "run-complete-" + runId, "title", "Research completed", "status", "SUCCEEDED"));
+            contexts.remove(runId);
         }
     }
 
