@@ -22,19 +22,11 @@ import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentKernelPropertie
 import com.miracle.ai.seahorse.agent.adapters.spring.config.AgentPluginProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.metadata.MetadataIndexCompensationAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeDocumentVectorPorts;
-import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelVersionQualityComparisonService;
-import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.DocumentRefreshInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataBackfillInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
-import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -70,7 +62,6 @@ import org.springframework.context.annotation.Import;
         SeahorseAgentMemoryMaintenanceAutoConfiguration.class,
         SeahorseAgentMemoryOutboxAutoConfiguration.class,
         SeahorseAgentMemoryRecallAutoConfiguration.class,
-        SeahorseAgentKernelMetadataAutoConfiguration.class,
         SeahorseAgentKernelModelAutoConfiguration.class,
         SeahorseAgentKernelOpsAutoConfiguration.class,
         SeahorseAgentKernelPluginAutoConfiguration.class,
@@ -80,19 +71,6 @@ import org.springframework.context.annotation.Import;
         SeahorseAgentKernelTraceAutoConfiguration.class
 })
 public class SeahorseAgentKernelAutoConfiguration {
-    @Bean
-    @ConditionalOnBean({MetadataQualityInboundPort.class, RetrievalEvaluationInboundPort.class})
-    @ConditionalOnMissingBean(VersionQualityComparisonInboundPort.class)
-    public KernelVersionQualityComparisonService seahorseVersionQualityComparisonInboundPort(
-            MetadataQualityInboundPort metadataQualityInboundPort,
-            RetrievalEvaluationInboundPort retrievalEvaluationInboundPort,
-            ObjectProvider<ObservationPort> observationPort) {
-        return new KernelVersionQualityComparisonService(
-                metadataQualityInboundPort,
-                retrievalEvaluationInboundPort,
-                observationPort.getIfAvailable());
-    }
-
     @Bean
     @ConditionalOnBean({KeywordIndexMaintenanceInboundPort.class, KnowledgeDocumentRepositoryPort.class,
             KnowledgeDocumentVectorPorts.class})

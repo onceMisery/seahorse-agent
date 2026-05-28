@@ -264,7 +264,9 @@ import static org.mockito.Mockito.verify;
 class SeahorseAgentKernelAutoConfigurationTests {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(SeahorseAgentKernelAutoConfiguration.class));
+            .withConfiguration(AutoConfigurations.of(
+                    SeahorseAgentKernelAutoConfiguration.class,
+                    SeahorseAgentKernelMetadataAutoConfiguration.class));
 
     @Test
     void shouldStartKernelInfrastructureWithNativePorts() {

@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataQ
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataReviewService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataSchemaService;
 import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelMetadataSchemaUsageService;
+import com.miracle.ai.seahorse.agent.kernel.application.metadata.KernelVersionQualityComparisonService;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataDictionaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataExtractionResultInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQualityInboundPort;
@@ -31,6 +32,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineIn
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataReviewInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataSchemaUsageInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
@@ -136,5 +139,18 @@ public class SeahorseAgentKernelMetadataAutoConfiguration {
     public KernelMetadataExtractionResultService seahorseMetadataExtractionResultInboundPort(
             MetadataExtractionResultManagementRepositoryPort repositoryPort) {
         return new KernelMetadataExtractionResultService(repositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({MetadataQualityInboundPort.class, RetrievalEvaluationInboundPort.class})
+    @ConditionalOnMissingBean(VersionQualityComparisonInboundPort.class)
+    public KernelVersionQualityComparisonService seahorseVersionQualityComparisonInboundPort(
+            MetadataQualityInboundPort metadataQualityInboundPort,
+            RetrievalEvaluationInboundPort retrievalEvaluationInboundPort,
+            ObjectProvider<ObservationPort> observationPort) {
+        return new KernelVersionQualityComparisonService(
+                metadataQualityInboundPort,
+                retrievalEvaluationInboundPort,
+                observationPort.getIfAvailable());
     }
 }
