@@ -21,6 +21,8 @@ import { SampleQuestionPage } from "@/pages/admin/sample-questions/SampleQuestio
 import { QueryTermMappingPage } from "@/pages/admin/query-term-mapping/QueryTermMappingPage";
 import { UserListPage } from "@/pages/admin/users/UserListPage";
 import { AiInfraConsolePage } from "@/pages/admin/ai-infra/AiInfraConsolePage";
+import { AgentConsolePage } from "@/pages/admin/agent-console/AgentConsolePage";
+import { AgentInspectorPage } from "@/pages/admin/agent-inspector/AgentInspectorPage";
 import { ADVANCED_ADMIN_FEATURES, isAdvancedAdminEnabled } from "@/config/productMode";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -89,7 +91,15 @@ const advancedAdminRoutes = [
     ? [
         {
           path: "ai-infra",
-          element: <AiInfraConsolePage />
+          element: <AgentConsolePage />
+        },
+        {
+          path: "agent-inspector",
+          element: <AgentInspectorPage />
+        },
+        {
+          path: "agent-inspector/:runId",
+          element: <AgentInspectorPage />
         }
       ]
     : [])

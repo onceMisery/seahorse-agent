@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInb
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Objects;
@@ -43,10 +45,11 @@ public class SeahorseAgentRunController {
     private final ObjectProvider<AgentCheckpointQueryInboundPort> checkpointQueryPortProvider;
     private final ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider;
     private final ObjectProvider<AgentRunCostSummaryInboundPort> costSummaryPortProvider;
+    private final ObjectProvider<AgentRunEventBufferPort> eventBufferPortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
 
     public SeahorseAgentRunController(ObjectProvider<AgentRunInboundPort> agentRunPortProvider) {
-        this(agentRunPortProvider, null, null, null, null, AdvancedFeatureGate.consumerWebDefaults());
+        this(agentRunPortProvider, null, null, null, null, null, AdvancedFeatureGate.consumerWebDefaults());
     }
 
     @Autowired
@@ -55,19 +58,21 @@ public class SeahorseAgentRunController {
                                        ObjectProvider<AgentCheckpointQueryInboundPort> checkpointQueryPortProvider,
                                        ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
                                        ObjectProvider<AgentRunCostSummaryInboundPort> costSummaryPortProvider,
+                                       ObjectProvider<AgentRunEventBufferPort> eventBufferPortProvider,
                                        ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
         this(agentRunPortProvider,
                 agentRunResumePortProvider,
                 checkpointQueryPortProvider,
                 snapshotPortProvider,
                 costSummaryPortProvider,
+                eventBufferPortProvider,
                 advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
     }
 
     public SeahorseAgentRunController(ObjectProvider<AgentRunInboundPort> agentRunPortProvider,
                                       ObjectProvider<AgentRunResumeInboundPort> agentRunResumePortProvider,
                                       ObjectProvider<AgentCheckpointQueryInboundPort> checkpointQueryPortProvider) {
-        this(agentRunPortProvider, agentRunResumePortProvider, checkpointQueryPortProvider, null, null,
+        this(agentRunPortProvider, agentRunResumePortProvider, checkpointQueryPortProvider, null, null, null,
                 AdvancedFeatureGate.consumerWebDefaults());
     }
 
@@ -81,6 +86,7 @@ public class SeahorseAgentRunController {
                 checkpointQueryPortProvider,
                 snapshotPortProvider,
                 null,
+                null,
                 advancedFeatureGate);
     }
 
@@ -89,12 +95,14 @@ public class SeahorseAgentRunController {
                                       ObjectProvider<AgentCheckpointQueryInboundPort> checkpointQueryPortProvider,
                                       ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
                                       ObjectProvider<AgentRunCostSummaryInboundPort> costSummaryPortProvider,
+                                      ObjectProvider<AgentRunEventBufferPort> eventBufferPortProvider,
                                       AdvancedFeatureGate advancedFeatureGate) {
         this.agentRunPortProvider = agentRunPortProvider;
         this.agentRunResumePortProvider = agentRunResumePortProvider;
         this.checkpointQueryPortProvider = checkpointQueryPortProvider;
         this.snapshotPortProvider = snapshotPortProvider;
         this.costSummaryPortProvider = costSummaryPortProvider;
+        this.eventBufferPortProvider = eventBufferPortProvider;
         this.advancedFeatureGate = advancedFeatureGate == null
                 ? AdvancedFeatureGate.consumerWebDefaults()
                 : advancedFeatureGate;
@@ -169,6 +177,17 @@ public class SeahorseAgentRunController {
     public ApiResponse<Object> costSummary(@PathVariable String runId, HttpServletRequest request) {
         requireApiOrRunManagement(request);
         return ApiResponses.requireService(costSummaryPortProvider, port -> port.getCostSummary(runId));
+    }
+
+    @GetMapping("/api/agent-runs/{runId}/events")
+    public ApiResponse<Object> events(@PathVariable String runId,
+                                      @RequestParam(defaultValue = "0") long afterSeq,
+                                      HttpServletRequest request) {
+        requireApiOrRunManagement(request);
+        AgentRunEventBufferPort port = eventBufferPortProvider != null
+                ? eventBufferPortProvider.getIfAvailable(AgentRunEventBufferPort::noop)
+                : AgentRunEventBufferPort.noop();
+        return ApiResponse.ok(port.getAfter(runId, Math.max(0L, afterSeq)));
     }
 
     private void requireApiOrRunManagement(HttpServletRequest request) {
