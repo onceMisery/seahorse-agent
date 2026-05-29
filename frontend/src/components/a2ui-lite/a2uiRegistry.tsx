@@ -177,7 +177,7 @@ function ActionRowComponent({
         .filter((a) => WHITELISTED_ACTION_TYPES.has(a.actionType))
         .map((a, i) => (
           <button
-            key={i}
+            key={`${a.actionType}-${i}`}
             type="button"
             onClick={() =>
               onAction({

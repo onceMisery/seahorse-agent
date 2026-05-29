@@ -149,7 +149,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
             style={{ borderRight: "1px solid var(--sh-workbench-border)" }}
           >
             {allItems.map((item) => {
-              const isActive = item.id === selectedId;
+              const isActive = item.id === active.id;
               return (
                 <button
                   key={item.id}

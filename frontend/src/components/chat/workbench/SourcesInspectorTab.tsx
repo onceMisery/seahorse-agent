@@ -1,26 +1,12 @@
 import * as React from "react";
 import { ExternalLink } from "lucide-react";
 
+import { TRUST_STYLES, trustLevelFromSource } from "@/components/chat/SourceList";
 import { InspectorEmptyState } from "@/components/chat/workbench/InspectorEmptyState";
 import type { AgentSource } from "@/types";
 
 interface SourcesInspectorTabProps {
   sources: AgentSource[];
-}
-
-const CONFIDENCE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  HIGH: { bg: "rgba(34,197,94,0.15)", text: "rgb(34,197,94)", label: "高可信" },
-  MEDIUM: { bg: "rgba(234,179,8,0.15)", text: "rgb(234,179,8)", label: "中可信" },
-  LOW: { bg: "rgba(239,68,68,0.15)", text: "rgb(239,68,68)", label: "低可信" },
-  UNKNOWN: { bg: "rgba(156,163,175,0.15)", text: "rgb(156,163,175)", label: "未知" }
-};
-
-function confidenceFromScore(score?: number): string {
-  if (score == null) return "UNKNOWN";
-  if (score >= 0.85) return "HIGH";
-  if (score >= 0.7) return "MEDIUM";
-  if (score > 0) return "LOW";
-  return "UNKNOWN";
 }
 
 export function SourcesInspectorTab({ sources }: SourcesInspectorTabProps) {
@@ -31,8 +17,8 @@ export function SourcesInspectorTab({ sources }: SourcesInspectorTabProps) {
   return (
     <div className="p-3 space-y-1.5">
       {sources.map((source, index) => {
-        const confidence = confidenceFromScore(source.score);
-        const style = CONFIDENCE_STYLES[confidence] ?? CONFIDENCE_STYLES.UNKNOWN;
+        const confidence = trustLevelFromSource(source);
+        const style = TRUST_STYLES[confidence] ?? TRUST_STYLES.UNKNOWN;
         const isExpanded = expandedId === source.id;
 
         return (
