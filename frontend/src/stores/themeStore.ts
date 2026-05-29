@@ -14,6 +14,8 @@ export const COLOR_THEMES = {
 
 export type ColorThemeKey = keyof typeof COLOR_THEMES;
 
+export const VISIBLE_COLOR_THEME_KEYS: ColorThemeKey[] = ["marine", "white"];
+
 interface ThemeState {
   theme: ThemeMode;
   colorTheme: ColorThemeKey;
@@ -31,8 +33,9 @@ function applyTheme(theme: ThemeMode) {
 
 function applyColorTheme(key: ColorThemeKey) {
   const root = document.documentElement;
-  Object.values(COLOR_THEMES).forEach((t) => {
-    if (t.class) root.classList.remove(t.class);
+  // Remove all theme classes including legacy ones not in COLOR_THEMES
+  ["theme-purple", "theme-emerald", "theme-amber", ...Object.values(COLOR_THEMES).map((t) => t.class)].forEach((cls) => {
+    if (cls) root.classList.remove(cls);
   });
   const preset = COLOR_THEMES[key];
   if (preset.class) root.classList.add(preset.class);
