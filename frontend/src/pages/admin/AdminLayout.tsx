@@ -17,6 +17,7 @@ import {
   Menu,
   MessageSquare,
   KeyRound,
+  ScanSearch,
   Search,
   Settings,
   ShieldCheck,
@@ -142,8 +143,14 @@ const menuGroups: MenuGroup[] = [
       {
         path: "/admin/ai-infra",
         feature: "AI_INFRA_CONSOLE",
-        label: "AI Infra 控制台",
+        label: "Agent Console",
         icon: Cpu
+      },
+      {
+        path: "/admin/agent-inspector",
+        feature: "AI_INFRA_CONSOLE",
+        label: "Agent Inspector",
+        icon: ScanSearch
       },
     ]
   },

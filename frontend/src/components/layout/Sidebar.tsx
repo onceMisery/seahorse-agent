@@ -36,7 +36,7 @@ import { Loading } from "@/components/common/Loading";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
-import { COLOR_THEMES, useThemeStore, type ColorThemeKey } from "@/stores/themeStore";
+import { COLOR_THEMES, VISIBLE_COLOR_THEME_KEYS, useThemeStore, type ColorThemeKey } from "@/stores/themeStore";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -523,7 +523,7 @@ function ThemeColorSwitcher() {
     <div className="flex items-center gap-2 px-2 py-2">
       <Palette className="h-3.5 w-3.5 flex-shrink-0" style={{ color: "var(--theme-text-muted)" }} />
       <div className="flex items-center gap-1.5">
-        {(Object.keys(COLOR_THEMES) as ColorThemeKey[]).map((key) => (
+        {VISIBLE_COLOR_THEME_KEYS.map((key) => (
           <button
             key={key}
             type="button"

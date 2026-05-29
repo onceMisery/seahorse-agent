@@ -1,5 +1,5 @@
 import { api } from "@/services/api";
-import type { AgentRunCostSummary, AgentRunSnapshot } from "@/types";
+import type { AgentRunCostSummary, AgentRunSnapshot, StreamEventEnvelope } from "@/types";
 
 const AGENT_RUNS_API_BASE = "/api/agent-runs";
 
@@ -24,5 +24,12 @@ export async function resumeAgentRun(runId: string) {
 export async function retryAgentRun(runId: string) {
   return api.post<Record<string, unknown>, Record<string, unknown>>(
     `${AGENT_RUNS_API_BASE}/${encodeURIComponent(runId)}/retry`
+  );
+}
+
+export async function listAgentRunEvents(runId: string, afterSeq = 0) {
+  return api.get<StreamEventEnvelope[], StreamEventEnvelope[]>(
+    `${AGENT_RUNS_API_BASE}/${encodeURIComponent(runId)}/events`,
+    { params: { afterSeq } }
   );
 }

@@ -1,11 +1,12 @@
 import * as React from "react";
-import { Brain, ChevronDown } from "lucide-react";
+import { Brain, ChevronDown, ScanSearch } from "lucide-react";
 
 import { AgentTracePanel } from "@/components/chat/AgentTracePanel";
 import { FeedbackButtons } from "@/components/chat/FeedbackButtons";
 import { MessageContent } from "@/components/chat/MessageContent";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { cn } from "@/lib/utils";
+import { useWorkbenchStore } from "@/stores/workbenchStore";
 import type { Message } from "@/types";
 
 interface MessageItemProps {
@@ -15,8 +16,22 @@ interface MessageItemProps {
 
 const EMPTY_RESULT_TEXT = "本次对话没有返回有效内容，请稍后重试。";
 
+function hasRunData(message: Message) {
+  return Boolean(
+    message.timeline?.length ||
+    message.sources?.length ||
+    message.artifacts?.length ||
+    message.serverArtifacts?.length ||
+    message.approvals?.length ||
+    message.quota?.length ||
+    message.memories?.length ||
+    message.costSummary
+  );
+}
+
 export const MessageItem = React.memo(function MessageItem({ message, isLast }: MessageItemProps) {
   const isUser = message.role === "user";
+  const openInspector = useWorkbenchStore((s) => s.openInspector);
   const showFeedback =
     message.role === "assistant" &&
     message.status !== "streaming" &&
@@ -112,6 +127,21 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
           ) : null}
           {hasContent ? <MessageContent blocks={message.blocks ?? []} rawText={message.content} sources={message.sources} /> : null}
           {!isUser ? <AgentTracePanel message={message} /> : null}
+          {!isUser && hasRunData(message) && message.status !== "streaming" ? (
+            <button
+              type="button"
+              onClick={() => openInspector(message.id, "timeline")}
+              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors"
+              style={{
+                color: "var(--sh-workbench-accent)",
+                backgroundColor: "var(--sh-workbench-accent-soft)"
+              }}
+              aria-label="查看运行详情"
+            >
+              <ScanSearch className="h-3.5 w-3.5" />
+              查看运行详情
+            </button>
+          ) : null}
           {showEmptyResult ? (
             <p className="text-sm" style={{ color: "var(--theme-text-muted)" }}>
               {EMPTY_RESULT_TEXT}

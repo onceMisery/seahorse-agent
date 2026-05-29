@@ -2,13 +2,13 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Group, Panel, Separator } from "react-resizable-panels";
 
-import { ArtifactPanel } from "@/components/chat/ArtifactPanel";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { DeepSeaBackground } from "@/components/chat/DeepSeaBackground";
 import { MessageList } from "@/components/chat/MessageList";
+import { WorkspaceInspector } from "@/components/chat/workbench/WorkspaceInspector";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { useActiveArtifacts } from "@/stores/artifactStore";
 import { useChatStore } from "@/stores/chatStore";
+import { useWorkbenchStore } from "@/stores/workbenchStore";
 
 export function ChatPage() {
   const navigate = useNavigate();
@@ -24,14 +24,19 @@ export function ChatPage() {
     selectSession,
     createSession
   } = useChatStore();
+  const { activeMessageId, inspectorOpen, closeInspector } = useWorkbenchStore();
   const showWelcome = messages.length === 0 && !isLoading;
   const [sessionsReady, setSessionsReady] = React.useState(false);
-  const [artifactPanelOpen, setArtifactPanelOpen] = React.useState(false);
   const invalidSessionHandledRef = React.useRef<string | null>(null);
   const sessionExists = React.useMemo(() => {
     if (!sessionId) return false;
     return sessions.some((session) => session.id === sessionId);
   }, [sessionId, sessions]);
+
+  const activeMessage = React.useMemo(
+    () => messages.find((m) => m.id === activeMessageId) ?? null,
+    [messages, activeMessageId]
+  );
 
   React.useEffect(() => {
     let active = true;
@@ -94,22 +99,11 @@ export function ChatPage() {
     }
   }, [currentSessionId, sessionId, navigate]);
 
-  const latestArtifacts = useActiveArtifacts();
-
-  React.useEffect(() => {
-    if (latestArtifacts.artifacts.length > 0 || latestArtifacts.serverArtifacts.length > 0) {
-      setArtifactPanelOpen(true);
-    }
-  }, [latestArtifacts.artifacts.length, latestArtifacts.serverArtifacts.length, latestArtifacts.version]);
-
-  const showArtifactPanel = artifactPanelOpen
-    && (latestArtifacts.artifacts.length > 0 || latestArtifacts.serverArtifacts.length > 0);
-
   return (
     <MainLayout>
       <div className="relative flex h-full">
         <Group id="seahorse-chat-panels">
-          <Panel minSize={40}>
+          <Panel minSize={44}>
             <div className="relative flex h-full min-w-0 flex-col">
               <DeepSeaBackground />
               <div className="flex-1 min-h-0">
@@ -130,34 +124,36 @@ export function ChatPage() {
             </div>
           </Panel>
 
-          {showArtifactPanel && (
+          {inspectorOpen && (
             <>
               <Separator className="hidden md:flex w-[3px] items-center justify-center
-                bg-[var(--theme-glass-border)] hover:bg-[var(--color-accent-primary)] transition-colors
+                bg-[var(--sh-workbench-border)] hover:bg-[var(--sh-workbench-accent)] transition-colors
                 cursor-col-resize" />
-              <Panel defaultSize={30} minSize={20} maxSize={50} className="hidden md:flex">
-                <ArtifactPanel
-                  artifacts={latestArtifacts.artifacts}
-                  serverArtifacts={latestArtifacts.serverArtifacts}
-                  onClose={() => setArtifactPanelOpen(false)}
+              <Panel defaultSize={34} minSize={26} maxSize={48} className="hidden md:flex">
+                <WorkspaceInspector
+                  message={activeMessage}
+                  open={inspectorOpen}
+                  onClose={closeInspector}
                 />
               </Panel>
             </>
           )}
         </Group>
-        {showArtifactPanel && (
+
+        {inspectorOpen && (
           <div
-            className="fixed inset-x-0 bottom-0 z-40 h-[62dvh] overflow-hidden rounded-t-lg border-t shadow-[0_-18px_42px_rgba(0,0,0,0.18)] md:hidden"
-            style={{
-              backgroundColor: "var(--theme-bg-elevated)",
-              borderColor: "var(--theme-glass-border)"
-            }}
+            className="workspace-inspector-mobile fixed inset-x-0 bottom-0 z-[var(--sh-z-inspector-mobile)] md:hidden"
           >
-            <ArtifactPanel
-              artifacts={latestArtifacts.artifacts}
-              serverArtifacts={latestArtifacts.serverArtifacts}
-              onClose={() => setArtifactPanelOpen(false)}
-            />
+            <div
+              className="h-full rounded-t-xl shadow-xl"
+              style={{ background: "var(--sh-workbench-panel)", border: "1px solid var(--sh-workbench-border)" }}
+            >
+              <WorkspaceInspector
+                message={activeMessage}
+                open={inspectorOpen}
+                onClose={closeInspector}
+              />
+            </div>
           </div>
         )}
       </div>

@@ -1,5 +1,7 @@
 import * as React from "react";
 import { Gauge, Lightbulb, Loader2, Paperclip, Send, Square, X } from "lucide-react";
+import { PromptEnhancerButton } from "@/components/chat/prompt/PromptEnhancerButton";
+import { PromptEnhancerDialog } from "@/components/chat/prompt/PromptEnhancerDialog";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 
@@ -139,6 +141,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
   const [attachments, setAttachments] = React.useState<AttachmentChip[]>([]);
   const [uploadingCount, setUploadingCount] = React.useState(0);
   const [pendingConversationId, setPendingConversationId] = React.useState<string | null>(null);
+  const [enhancerOpen, setEnhancerOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const isComposingRef = React.useRef(false);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -498,6 +501,12 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                 >
                   <Paperclip className="h-4 w-4" />
                 </button>
+                {hasContent && (
+                  <PromptEnhancerButton
+                    disabled={isStreaming}
+                    onClick={() => setEnhancerOpen(true)}
+                  />
+                )}
                 <div className="flex items-center gap-3">
                   <span
                     className="text-xs font-bold uppercase tracking-widest"
@@ -577,6 +586,15 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
         new line
         {isStreaming ? <span className="ml-2 animate-pulse-soft">Generating...</span> : null}
       </p>
+      <PromptEnhancerDialog
+        open={enhancerOpen}
+        draft={value}
+        onClose={() => setEnhancerOpen(false)}
+        onApply={(enhanced) => {
+          setValue(enhanced);
+          window.requestAnimationFrame(focusInput);
+        }}
+      />
     </div>
   );
 }
