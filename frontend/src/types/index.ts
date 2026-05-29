@@ -368,3 +368,5 @@ export interface UserMemoryCenterResponse {
   privacyMode: boolean;
   memories: UserMemory[];
 }
+
+export type AgentUiSurfaceMimeType = "application/vnd.seahorse.a2ui+json";

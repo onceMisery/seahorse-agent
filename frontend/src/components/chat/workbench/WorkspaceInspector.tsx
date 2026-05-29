@@ -6,14 +6,20 @@ import {
   Brain,
   CheckSquare,
   Coins,
-  Database,
   Globe,
   LayoutGrid,
   X
 } from "lucide-react";
 
+import { ArtifactInspectorTab } from "@/components/chat/workbench/ArtifactInspectorTab";
+import { ApprovalsInspectorTab } from "@/components/chat/workbench/ApprovalsInspectorTab";
+import { CostQuotaInspectorTab } from "@/components/chat/workbench/CostQuotaInspectorTab";
 import { InspectorEmptyState } from "@/components/chat/workbench/InspectorEmptyState";
 import { InspectorTabButton } from "@/components/chat/workbench/InspectorTabButton";
+import { MemoryInspectorTab } from "@/components/chat/workbench/MemoryInspectorTab";
+import { SourcesInspectorTab } from "@/components/chat/workbench/SourcesInspectorTab";
+import { TimelineInspectorTab } from "@/components/chat/workbench/TimelineInspectorTab";
+import { UIInspectorTab } from "@/components/chat/workbench/UIInspectorTab";
 import { useWorkbenchStore } from "@/stores/workbenchStore";
 import type { Message } from "@/types";
 
@@ -43,7 +49,6 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
         borderLeft: "1px solid var(--sh-workbench-border)"
       }}
     >
-      {/* Header */}
       <div
         className="flex items-center justify-between px-3 py-2"
         style={{ borderBottom: "1px solid var(--sh-workbench-border)" }}
@@ -86,7 +91,6 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
         </button>
       </div>
 
-      {/* Tabs */}
       <Tabs.Root
         value={activeTab}
         onValueChange={(v) => setActiveTab(v as typeof activeTab)}
@@ -126,25 +130,40 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
           ) : (
             <>
               <Tabs.Content value="timeline" className="h-full">
-                <InspectorEmptyState />
+                <TimelineInspectorTab
+                  timeline={message.timeline ?? []}
+                  currentStepId={message.currentStepId}
+                />
               </Tabs.Content>
-              <Tabs.Content value="artifacts" className="h-full">
-                <InspectorEmptyState />
+              <Tabs.Content value="artifacts" className="h-full overflow-y-auto">
+                <ArtifactInspectorTab
+                  artifacts={message.artifacts ?? []}
+                  serverArtifacts={message.serverArtifacts ?? []}
+                />
               </Tabs.Content>
               <Tabs.Content value="sources" className="h-full">
-                <InspectorEmptyState />
+                <SourcesInspectorTab sources={message.sources ?? []} />
               </Tabs.Content>
               <Tabs.Content value="approvals" className="h-full">
-                <InspectorEmptyState />
+                <ApprovalsInspectorTab approvals={message.approvals ?? []} />
               </Tabs.Content>
               <Tabs.Content value="cost" className="h-full">
-                <InspectorEmptyState />
+                <CostQuotaInspectorTab
+                  costSummary={message.costSummary}
+                  quota={message.quota}
+                  canResume={message.canResume}
+                  canRetry={message.canRetry}
+                  agentRunId={message.agentRunId}
+                />
               </Tabs.Content>
               <Tabs.Content value="memory" className="h-full">
-                <InspectorEmptyState />
+                <MemoryInspectorTab memories={message.memories ?? []} />
               </Tabs.Content>
               <Tabs.Content value="ui" className="h-full">
-                <InspectorEmptyState />
+                <UIInspectorTab
+                  artifacts={message.artifacts ?? []}
+                  serverArtifacts={message.serverArtifacts ?? []}
+                />
               </Tabs.Content>
             </>
           )}
