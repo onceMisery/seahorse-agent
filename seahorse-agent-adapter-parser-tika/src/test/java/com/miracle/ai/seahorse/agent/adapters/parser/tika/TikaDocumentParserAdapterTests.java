@@ -18,8 +18,18 @@
 package com.miracle.ai.seahorse.agent.adapters.parser.tika;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParseResult;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -92,5 +102,61 @@ class TikaDocumentParserAdapterTests {
                 .containsEntry("warnings", List.of())
                 .containsKeys("Content-Type", "dc:title", "dc:creator");
         assertThat((Long) result.metadata().get("parseDurationMs")).isGreaterThanOrEqualTo(0L);
+    }
+
+    @Test
+    void shouldParsePdfDocxAndXlsxWithTika() throws Exception {
+        assertParsedText(pdf("pdf invoice export policy"), "application/pdf", "policy.pdf",
+                "pdf invoice export policy");
+        assertParsedText(docx("docx approval matrix"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "approval.docx", "docx approval matrix");
+        assertParsedText(xlsx("xlsx revenue forecast"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "forecast.xlsx", "xlsx revenue forecast");
+    }
+
+    private void assertParsedText(byte[] content, String mimeType, String fileName, String expectedText) {
+        DocumentParseResult result = adapter.parse(content, mimeType, fileName, Map.of());
+
+        assertThat(result.text()).contains(expectedText);
+        assertThat(result.metadata())
+                .containsEntry("parser", "tika")
+                .containsEntry("mimeType", mimeType)
+                .containsEntry("fileName", fileName);
+    }
+
+    private byte[] pdf(String text) throws IOException {
+        try (PDDocument document = new PDDocument();
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                content.beginText();
+                content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+                content.newLineAtOffset(72, 720);
+                content.showText(text);
+                content.endText();
+            }
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    private byte[] docx(String text) throws IOException {
+        try (XWPFDocument document = new XWPFDocument();
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            document.createParagraph().createRun().setText(text);
+            document.write(output);
+            return output.toByteArray();
+        }
+    }
+
+    private byte[] xlsx(String text) throws IOException {
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            Row row = workbook.createSheet("Sheet1").createRow(0);
+            row.createCell(0).setCellValue(text);
+            workbook.write(output);
+            return output.toByteArray();
+        }
     }
 }

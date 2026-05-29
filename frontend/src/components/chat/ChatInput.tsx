@@ -72,6 +72,14 @@ interface ChatInputProps {
   draft?: ChatInputDraft | null;
 }
 
+type LocalAttachmentState = "uploading" | "ready" | "failed";
+
+type AttachmentChip = ConversationAttachment & {
+  uploadState?: LocalAttachmentState;
+  localId?: string;
+  errorMessage?: string;
+};
+
 function quotaTone(status?: QuotaSummaryStatus | string | null) {
   if (status === QUOTA_EXCEEDED_STATUS) return { color: "#ef4444", label: "Limit reached" };
   if (status === "NEAR_LIMIT") return { color: "#f59e0b", label: "Running low" };
@@ -105,6 +113,22 @@ function formatBytes(value: number) {
   return `${size >= 10 || index === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[index]}`;
 }
 
+function pendingAttachmentChip(file: File, conversationId: string): AttachmentChip {
+  const localId = `upload-${nanoid()}`;
+  return {
+    attachmentId: localId,
+    localId,
+    conversationId,
+    userId: "",
+    fileName: file.name,
+    mimeType: file.type || "application/octet-stream",
+    sizeBytes: file.size,
+    storageRef: "",
+    parseStatus: "PENDING",
+    uploadState: "uploading"
+  };
+}
+
 export function ChatInput({ draft }: ChatInputProps = {}) {
   const [value, setValue] = React.useState("");
   const [isFocused, setIsFocused] = React.useState(false);
@@ -112,7 +136,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
   const [templatesLoading, setTemplatesLoading] = React.useState(false);
   const [quotaSummary, setQuotaSummary] = React.useState<UserQuotaSummary | null>(null);
   const [quotaLoading, setQuotaLoading] = React.useState(false);
-  const [attachments, setAttachments] = React.useState<ConversationAttachment[]>([]);
+  const [attachments, setAttachments] = React.useState<AttachmentChip[]>([]);
   const [uploadingCount, setUploadingCount] = React.useState(0);
   const [pendingConversationId, setPendingConversationId] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -230,15 +254,38 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
     const selectedFiles = Array.from(files ?? []);
     if (selectedFiles.length === 0 || isStreaming) return;
     const conversationId = conversationIdForUpload();
+    const pending = selectedFiles.map((file) => pendingAttachmentChip(file, conversationId));
+    setAttachments((current) => [...current, ...pending]);
     setUploadingCount((count) => count + selectedFiles.length);
     try {
-      const uploaded = await Promise.all(
+      const results = await Promise.allSettled(
         selectedFiles.map((file) => uploadConversationAttachment(conversationId, file))
       );
-      setAttachments((current) => [...current, ...uploaded]);
-      toast.success(uploaded.length === 1 ? "File attached" : `${uploaded.length} files attached`);
-    } catch (error) {
-      toast.error((error as Error).message || "Upload failed");
+      let uploadedCount = 0;
+      let failedCount = 0;
+      setAttachments((current) =>
+        current.map((attachment) => {
+          const pendingIndex = pending.findIndex((item) => item.localId === attachment.localId);
+          if (pendingIndex < 0) return attachment;
+          const result = results[pendingIndex];
+          if (result.status === "fulfilled") {
+            uploadedCount += 1;
+            return { ...result.value, uploadState: "ready" };
+          }
+          failedCount += 1;
+          return {
+            ...attachment,
+            uploadState: "failed",
+            errorMessage: (result.reason as Error)?.message || "Upload failed"
+          };
+        })
+      );
+      if (uploadedCount > 0) {
+        toast.success(uploadedCount === 1 ? "File attached" : `${uploadedCount} files attached`);
+      }
+      if (failedCount > 0) {
+        toast.error(failedCount === 1 ? "1 upload failed" : `${failedCount} uploads failed`);
+      }
     } finally {
       setUploadingCount((count) => Math.max(0, count - selectedFiles.length));
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -246,7 +293,12 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
     }
   };
 
-  const handleDeleteAttachment = async (attachment: ConversationAttachment) => {
+  const handleDeleteAttachment = async (attachment: AttachmentChip) => {
+    if (attachment.uploadState === "failed") {
+      setAttachments((current) => current.filter((item) => item.attachmentId !== attachment.attachmentId));
+      return;
+    }
+    if (attachment.uploadState === "uploading") return;
     try {
       await deleteConversationAttachment(attachment.conversationId, attachment.attachmentId);
       setAttachments((current) => current.filter((item) => item.attachmentId !== attachment.attachmentId));
@@ -277,7 +329,9 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
       if (!confirmed) return;
     }
     const conversationIdOverride = currentSessionId ? null : pendingConversationId;
-    const attachmentIds = attachments.map((attachment) => attachment.attachmentId);
+    const attachmentIds = attachments
+      .filter((attachment) => attachment.uploadState !== "failed" && attachment.uploadState !== "uploading")
+      .map((attachment) => attachment.attachmentId);
     setValue("");
     focusInput();
     await sendMessage(next, { attachmentIds, conversationIdOverride });
@@ -309,7 +363,13 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
             {attachments.length > 0 || uploadingCount > 0 ? (
               <div className="flex flex-wrap gap-2 px-1">
                 {attachments.map((attachment) => {
-                  const status = parseStatusTone(attachment.parseStatus);
+                  const isUploading = attachment.uploadState === "uploading";
+                  const isFailed = attachment.uploadState === "failed";
+                  const status = isUploading
+                    ? { color: "var(--theme-accent)", label: "Uploading" }
+                    : isFailed
+                      ? { color: "#ef4444", label: "Failed" }
+                      : parseStatusTone(attachment.parseStatus);
                   return (
                     <span
                       key={attachment.attachmentId}
@@ -319,36 +379,28 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                         border: "1px solid var(--theme-accent-alpha-10)",
                         color: "var(--theme-text-secondary)"
                       }}
-                      title={`${attachment.fileName} - ${status.label}`}
+                      title={`${attachment.fileName} - ${attachment.errorMessage ?? status.label}`}
                     >
-                      <Paperclip className="h-3.5 w-3.5" style={{ color: status.color }} />
+                      {isUploading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: status.color }} />
+                      ) : (
+                        <Paperclip className="h-3.5 w-3.5" style={{ color: status.color }} />
+                      )}
                       <span className="max-w-[180px] truncate">{attachment.fileName}</span>
                       <span style={{ color: "var(--theme-text-muted)" }}>{formatBytes(attachment.sizeBytes)}</span>
+                      <span style={{ color: status.color }}>{status.label}</span>
                       <button
                         type="button"
                         className="rounded-full p-0.5 transition-colors hover:bg-white/10"
                         onClick={() => handleDeleteAttachment(attachment)}
                         aria-label={`Remove ${attachment.fileName}`}
-                        disabled={isStreaming}
+                        disabled={isStreaming || isUploading}
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </span>
                   );
                 })}
-                {uploadingCount > 0 ? (
-                  <span
-                    className="inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs"
-                    style={{
-                      backgroundColor: "var(--theme-bg-elevated)",
-                      border: "1px solid var(--theme-accent-alpha-10)",
-                      color: "var(--theme-text-secondary)"
-                    }}
-                  >
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: "var(--theme-accent)" }} />
-                    Uploading
-                  </span>
-                ) : null}
               </div>
             ) : null}
             <div className="relative">

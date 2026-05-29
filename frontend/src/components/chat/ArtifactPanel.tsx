@@ -18,9 +18,6 @@ function canPreviewInline(artifact: AgentArtifact): boolean {
   return artifact.canPreview === true;
 }
 
-/**
- * 独立产物面板，支持 Tab 切换、预览、复制、下载。
- */
 export function ArtifactPanel({ artifacts, serverArtifacts, onClose }: ArtifactPanelProps) {
   const [activeTab, setActiveTab] = React.useState<string>(artifacts[0]?.id ?? "");
   const [copied, setCopied] = React.useState(false);
@@ -28,16 +25,21 @@ export function ArtifactPanel({ artifacts, serverArtifacts, onClose }: ArtifactP
 
   const allItems = React.useMemo(() => {
     const items: { id: string; title: string; code?: string; server?: AgentArtifact; isComplete: boolean }[] = [];
-    for (const a of artifacts) {
-      items.push({ id: a.id, title: a.title, code: a.code, isComplete: a.isComplete });
+    for (const artifact of artifacts) {
+      items.push({
+        id: artifact.id,
+        title: artifact.title,
+        code: artifact.code,
+        isComplete: artifact.isComplete
+      });
     }
-    for (const sa of serverArtifacts ?? []) {
-      if (!items.some((i) => i.id === sa.artifactId)) {
+    for (const serverArtifact of serverArtifacts ?? []) {
+      if (!items.some((item) => item.id === serverArtifact.artifactId)) {
         items.push({
-          id: sa.artifactId,
-          title: sa.title ?? "Artifact",
-          code: sa.previewText ?? undefined,
-          server: sa,
+          id: serverArtifact.artifactId,
+          title: serverArtifact.title ?? "Artifact",
+          code: serverArtifact.previewText ?? undefined,
+          server: serverArtifact,
           isComplete: true
         });
       }
@@ -46,32 +48,35 @@ export function ArtifactPanel({ artifacts, serverArtifacts, onClose }: ArtifactP
   }, [artifacts, serverArtifacts]);
 
   React.useEffect(() => {
-    if (!allItems.some((i) => i.id === activeTab) && allItems.length > 0) {
+    if (!allItems.some((item) => item.id === activeTab) && allItems.length > 0) {
       setActiveTab(allItems[0].id);
     }
   }, [allItems, activeTab]);
 
   if (allItems.length === 0) return null;
 
-  const active = allItems.find((i) => i.id === activeTab) ?? allItems[0];
+  const active = allItems.find((item) => item.id === activeTab) ?? allItems[0];
+  const actionsEnabled = Boolean(active?.isComplete && active?.code);
 
   const handleCopy = async () => {
-    if (!active?.code) return;
+    if (!actionsEnabled || !active?.code) return;
     try {
       await navigator.clipboard.writeText(active.code);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch { /* clipboard unavailable */ }
+    } catch {
+      // Clipboard can be unavailable in restricted browser contexts.
+    }
   };
 
   const handleDownload = () => {
-    if (!active?.code) return;
+    if (!actionsEnabled || !active?.code) return;
     const blob = new Blob([active.code], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${active.title || "artifact"}.txt`;
-    a.click();
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${active.title || "artifact"}.txt`;
+    anchor.click();
     URL.revokeObjectURL(url);
   };
 
@@ -81,60 +86,80 @@ export function ArtifactPanel({ artifacts, serverArtifacts, onClose }: ArtifactP
 
   return (
     <div className={panelClass} style={{ backgroundColor: "var(--theme-bg-elevated)" }}>
-      {/* 顶部工具栏 */}
       <div
-        className="flex items-center justify-between px-3 py-2 shrink-0"
+        className="flex shrink-0 items-center justify-between px-3 py-2"
         style={{ borderBottom: "1px solid var(--theme-glass-border)" }}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
           <FileText className="h-4 w-4 shrink-0" style={{ color: "var(--theme-accent)" }} />
-          <span className="text-sm font-medium truncate" style={{ color: "var(--theme-text-primary)" }}>
+          <span className="truncate text-sm font-medium" style={{ color: "var(--theme-text-primary)" }}>
             {active?.title ?? "Artifact"}
           </span>
           {!active?.isComplete && (
-            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full animate-pulse"
-              style={{ backgroundColor: "var(--theme-accent-muted)", color: "var(--theme-accent)" }}>
-              streaming...
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] animate-pulse"
+              style={{ backgroundColor: "var(--theme-accent-muted)", color: "var(--theme-accent)" }}
+            >
+              生成中
             </span>
           )}
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={handleCopy} className="p-1.5 rounded hover:bg-white/10 transition-colors"
-            title="复制">
-            {copied ? <Check className="h-3.5 w-3.5" style={{ color: "var(--theme-success)" }} />
-              : <Copy className="h-3.5 w-3.5" style={{ color: "var(--theme-text-muted)" }} />}
+          <button
+            onClick={handleCopy}
+            disabled={!actionsEnabled}
+            className="rounded p-1.5 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title="复制"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5" style={{ color: "var(--theme-success)" }} />
+            ) : (
+              <Copy className="h-3.5 w-3.5" style={{ color: "var(--theme-text-muted)" }} />
+            )}
           </button>
-          <button onClick={handleDownload} className="p-1.5 rounded hover:bg-white/10 transition-colors"
-            title="下载">
+          <button
+            onClick={handleDownload}
+            disabled={!actionsEnabled}
+            className="rounded p-1.5 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title="下载"
+          >
             <Download className="h-3.5 w-3.5" style={{ color: "var(--theme-text-muted)" }} />
           </button>
-          <button onClick={() => setFullscreen(!fullscreen)}
-            className="p-1.5 rounded hover:bg-white/10 transition-colors" title="全屏">
-            {fullscreen
-              ? <Minimize2 className="h-3.5 w-3.5" style={{ color: "var(--theme-text-muted)" }} />
-              : <Maximize2 className="h-3.5 w-3.5" style={{ color: "var(--theme-text-muted)" }} />}
+          <button
+            onClick={() => setFullscreen(!fullscreen)}
+            className="rounded p-1.5 transition-colors hover:bg-white/10"
+            title="全屏"
+          >
+            {fullscreen ? (
+              <Minimize2 className="h-3.5 w-3.5" style={{ color: "var(--theme-text-muted)" }} />
+            ) : (
+              <Maximize2 className="h-3.5 w-3.5" style={{ color: "var(--theme-text-muted)" }} />
+            )}
           </button>
           {onClose && (
-            <button onClick={onClose} className="p-1.5 rounded hover:bg-white/10 transition-colors"
-              title="关闭">
+            <button onClick={onClose} className="rounded p-1.5 transition-colors hover:bg-white/10" title="关闭">
               <X className="h-3.5 w-3.5" style={{ color: "var(--theme-text-muted)" }} />
             </button>
           )}
         </div>
       </div>
 
-      {/* Tab 切换（多产物时显示） */}
       {allItems.length > 1 && (
         <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
-          <Tabs.List className="flex gap-1 px-3 py-1.5 overflow-x-auto shrink-0"
-            style={{ borderBottom: "1px solid var(--theme-glass-border)" }}>
+          <Tabs.List
+            className="flex shrink-0 gap-1 overflow-x-auto px-3 py-1.5"
+            style={{ borderBottom: "1px solid var(--theme-glass-border)" }}
+          >
             {allItems.slice(0, 5).map((item) => (
-              <Tabs.Trigger key={item.id} value={item.id}
-                className="px-2.5 py-1 text-xs rounded transition-colors whitespace-nowrap data-[state=active]:font-medium"
+              <Tabs.Trigger
+                key={item.id}
+                value={item.id}
+                className="whitespace-nowrap rounded px-2.5 py-1 text-xs transition-colors data-[state=active]:font-medium"
                 style={{
                   color: activeTab === item.id ? "var(--theme-accent)" : "var(--theme-text-muted)",
                   backgroundColor: activeTab === item.id ? "var(--theme-accent-muted)" : "transparent"
-                }}>
+                }}
+              >
                 {item.title}
               </Tabs.Trigger>
             ))}
@@ -147,15 +172,20 @@ export function ArtifactPanel({ artifacts, serverArtifacts, onClose }: ArtifactP
         </Tabs.Root>
       )}
 
-      {/* 内容预览区 */}
-      <div className="flex-1 min-h-0 overflow-auto p-4">
+      <div className="min-h-0 flex-1 overflow-auto p-4">
         {active?.server && canPreviewInline(active.server) && active.server.mimeType?.startsWith("image/") ? (
-          <img src={active.server.storageRef ?? ""} alt={active.title}
-            className="max-w-full h-auto rounded" />
+          <img src={active.server.storageRef ?? ""} alt={active.title} className="h-auto max-w-full rounded" />
         ) : (
-          <pre className="text-sm font-mono whitespace-pre-wrap break-words leading-relaxed"
-            style={{ color: "var(--theme-text-primary)" }}>
-            {active?.code ?? "(无内容)"}
+          <pre
+            className="whitespace-pre-wrap break-words font-mono text-sm leading-relaxed"
+            style={{ color: "var(--theme-text-primary)" }}
+          >
+            <code>{active?.code || "(暂无内容)"}</code>
+            {!active?.isComplete && (
+              <span className="ml-0.5 inline-block animate-pulse" style={{ color: "var(--theme-accent)" }}>
+                |
+              </span>
+            )}
           </pre>
         )}
       </div>

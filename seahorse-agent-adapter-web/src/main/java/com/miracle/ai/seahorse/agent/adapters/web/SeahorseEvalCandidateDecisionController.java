@@ -70,11 +70,12 @@ public class SeahorseEvalCandidateDecisionController {
                                              @RequestBody(required = false) RegressionRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_EVALUATION);
         String modelId = request != null ? request.modelId() : null;
+        Double baselinePassRate = request != null ? request.baselinePassRate() : null;
         return ApiResponses.requireService(regressionServiceProvider,
-                service -> service.runRegression(datasetId, modelId));
+                service -> service.runRegression(datasetId, modelId, baselinePassRate));
     }
 
     public record DecisionRequest(String note) {}
 
-    public record RegressionRequest(String modelId) {}
+    public record RegressionRequest(String modelId, Double baselinePassRate) {}
 }

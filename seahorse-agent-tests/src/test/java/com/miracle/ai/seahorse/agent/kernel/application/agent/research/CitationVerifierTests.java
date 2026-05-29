@@ -18,8 +18,10 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent.research;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.EvidenceItem;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.DurableTask;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -112,5 +114,34 @@ class CitationVerifierTests {
 
         assertTrue(result.isFullyVerified());
         assertEquals(1, result.verified().size());
+    }
+
+    @Test
+    void handlerRetriesWhenReportReferencesMissingEvidence() {
+        VerifyCitationsStepHandler handler = new VerifyCitationsStepHandler(verifier);
+        ResearchStepContext context = new ResearchStepContext("run-missing-citation", "q", 0);
+        context.setReportContent("Claim [1] is supported, but claim [3] is not.");
+        context.addEvidence(new EvidenceItem("e1", "s1", "claim1", "q1", "sum1", 0.9, 1));
+
+        RetryableResearchException ex = assertThrows(RetryableResearchException.class,
+                () -> handler.execute(task("run-missing-citation"), context));
+
+        assertTrue(ex.getMessage().contains("Missing citation evidence"));
+        assertEquals("Claim [1] is supported, but claim [引用待补] is not.", context.reportContent());
+    }
+
+    @Test
+    void handlerAcceptsReportWhenAllReferencesHaveEvidence() {
+        VerifyCitationsStepHandler handler = new VerifyCitationsStepHandler(verifier);
+        ResearchStepContext context = new ResearchStepContext("run-good-citation", "q", 0);
+        context.setReportContent("Claim [1] is supported.");
+        context.addEvidence(new EvidenceItem("e1", "s1", "claim1", "q1", "sum1", 0.9, 1));
+
+        assertDoesNotThrow(() -> handler.execute(task("run-good-citation"), context));
+        assertEquals("Claim [1] is supported.", context.reportContent());
+    }
+
+    private static DurableTask task(String runId) {
+        return new DurableTask("task-verify", runId, "VERIFY_CITATIONS", 0, Instant.now(), null, null);
     }
 }

@@ -22,11 +22,37 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.research;
  */
 public class RetryableResearchException extends RuntimeException {
 
+    private static final int DEFAULT_MAX_ATTEMPTS = 3;
+    private static final Class<?>[] NON_RETRYABLE_TYPES = {
+            SecurityException.class,
+            IllegalArgumentException.class
+    };
+
     public RetryableResearchException(String message) {
         super(message);
     }
 
     public RetryableResearchException(String message, Throwable cause) {
         super(message, cause);
+    }
+
+    public boolean shouldRetry(int attemptCount) {
+        return shouldRetry(attemptCount, DEFAULT_MAX_ATTEMPTS);
+    }
+
+    public boolean shouldRetry(int attemptCount, int maxAttempts) {
+        if (attemptCount >= Math.max(1, maxAttempts)) {
+            return false;
+        }
+        Throwable current = this;
+        while (current != null) {
+            for (Class<?> type : NON_RETRYABLE_TYPES) {
+                if (type.isInstance(current)) {
+                    return false;
+                }
+            }
+            current = current.getCause();
+        }
+        return true;
     }
 }

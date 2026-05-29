@@ -32,6 +32,9 @@ class StreamEventTypeTests {
         assertEquals("tool_call_waiting_user", StreamEventType.TOOL_CALL_WAITING_USER.value());
         assertEquals("source_found", StreamEventType.SOURCE_FOUND.value());
         assertEquals("artifact_created", StreamEventType.ARTIFACT_CREATED.value());
+        assertEquals("artifact_start", StreamEventType.ARTIFACT_START.value());
+        assertEquals("artifact_content", StreamEventType.ARTIFACT_CONTENT.value());
+        assertEquals("artifact_end", StreamEventType.ARTIFACT_END.value());
         assertEquals("recoverable_error", StreamEventType.RECOVERABLE_ERROR.value());
         assertEquals("agent.source", StreamEventType.AGENT_SOURCE.value());
         assertEquals("agent.artifact", StreamEventType.AGENT_ARTIFACT.value());

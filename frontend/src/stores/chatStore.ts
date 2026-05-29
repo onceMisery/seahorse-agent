@@ -31,6 +31,7 @@ import { buildQuery } from "@/utils/helpers";
 import { createStreamResponse } from "@/hooks/useStreamResponse";
 import { handleUnauthorizedSession } from "@/utils/authSession";
 import { storage } from "@/utils/storage";
+import { useArtifactStore } from "@/stores/artifactStore";
 import type { ChatState } from "@/stores/chatStoreTypes";
 import { mapVoteToFeedback, upsertSession } from "@/stores/chatSessionUtils";
 import {
@@ -64,7 +65,35 @@ function mergeById<T extends { id: string }>(current: T[] | undefined, incoming:
 }
 
 function mergeArtifacts(current: ArtifactBlock[] | undefined, incoming: ArtifactBlock[]) {
-  return mergeById(current, incoming);
+  const map = new Map<string, ArtifactBlock>();
+  for (const item of current ?? []) map.set(item.id, item);
+  for (const item of incoming) {
+    const existing = map.get(item.id);
+    if (!existing) {
+      map.set(item.id, item);
+      continue;
+    }
+    if (item.append) {
+      map.set(item.id, {
+        ...existing,
+        ...item,
+        language: existing.language,
+        title: existing.title,
+        code: `${existing.code ?? ""}${item.code ?? ""}`,
+        isComplete: item.isComplete
+      });
+      continue;
+    }
+    map.set(item.id, {
+      ...existing,
+      ...item,
+      language: item.language === "javascript" ? existing.language : item.language,
+      title: /^Artifact(?: \d+)?$/.test(item.title) ? existing.title : item.title,
+      code: item.code || existing.code,
+      isComplete: item.isComplete
+    });
+  }
+  return Array.from(map.values()).map(({ append, ...item }) => item);
 }
 
 function mergeServerArtifacts(current: AgentArtifact[] | undefined, incoming: AgentArtifact[]) {
@@ -115,7 +144,8 @@ function snapshotSources(snapshot: AgentRunSnapshot): AgentSource[] {
     title: source.sourceId || source.sourceType || source.itemId || `Source ${index + 1}`,
     snippet: source.summary ?? undefined,
     score: typeof source.confidence === "number" ? source.confidence : source.score,
-    sourceType: source.sourceType
+    sourceType: source.sourceType,
+    trustLevel: source.trustLevel ?? source.confidenceLevel ?? undefined
   }));
 }
 
@@ -131,7 +161,11 @@ function snapshotApprovals(snapshot: AgentRunSnapshot): AgentApproval[] {
 function mergeRunSnapshot(message: Message, snapshot: AgentRunSnapshot) {
   const messageSnapshot = snapshot.messageSnapshot;
   if (messageSnapshot?.assistantMessageId) {
-    message.id = String(messageSnapshot.assistantMessageId);
+    const nextMessageId = String(messageSnapshot.assistantMessageId);
+    if (nextMessageId !== message.id) {
+      retargetArtifacts(message.id, nextMessageId);
+      message.id = nextMessageId;
+    }
   }
   if (messageSnapshot?.content && !message.rawText?.trim()) {
     message.rawText = messageSnapshot.content;
@@ -163,6 +197,43 @@ function parseMessageBlocks(rawText: string | undefined, messageId: string) {
     blocks,
     artifacts: extractArtifactsFromBlocks(blocks)
   };
+}
+
+function publishArtifacts(message: Message | undefined) {
+  if (!message) return;
+  useArtifactStore.getState().upsertMessageArtifacts(
+    message.id,
+    message.artifacts ?? [],
+    message.serverArtifacts ?? []
+  );
+}
+
+function retargetArtifacts(previousMessageId: string, nextMessageId: string) {
+  useArtifactStore.getState().retargetMessageArtifacts(previousMessageId, nextMessageId);
+}
+
+function artifactSnapshot(messageId: string) {
+  return useArtifactStore.getState().snapshots[messageId];
+}
+
+function applyArtifactSnapshot(message: Message) {
+  const snapshot = artifactSnapshot(message.id);
+  if (!snapshot) return;
+  message.artifacts = snapshot.artifacts;
+  message.serverArtifacts = snapshot.serverArtifacts;
+}
+
+function currentAssistantMessage(messages: Message[], currentMessageId: string, initialMessageId: string) {
+  return messages.find((message) => message.id === currentMessageId || message.id === initialMessageId);
+}
+
+function isWaitingForUser(payload: unknown) {
+  if (!payload || typeof payload !== "object") return false;
+  const record = payload as Record<string, unknown>;
+  const status = String(record.status ?? record.state ?? record.runStatus ?? "").toUpperCase();
+  const run = record.run && typeof record.run === "object" ? record.run as Record<string, unknown> : null;
+  const runStatus = run ? String(run.status ?? run.state ?? "").toUpperCase() : "";
+  return status === "WAITING_USER" || runStatus === "WAITING_USER" || runStatus === "PAUSED";
 }
 
 export const useChatStore = create<ChatState>()(
@@ -302,6 +373,9 @@ export const useChatStore = create<ChatState>()(
           };
         });
         set((s) => { s.messages = mapped; });
+        publishArtifacts([...mapped].reverse().find((message) =>
+          message.role === "assistant" && Boolean(message.artifacts?.length || message.serverArtifacts?.length)
+        ));
         mapped
           .filter((message) => message.agentRunId)
           .forEach((message) => {
@@ -393,10 +467,13 @@ export const useChatStore = create<ChatState>()(
       const url = `${API_BASE_URL}/rag/v3/chat${query}`;
       const token = storage.getToken();
 
+      let currentAssistantMessageId = assistantId;
+      let stagedApprovals: AgentApproval[] = [];
+
       // RenderBuffer：rAF 批量刷盘，解决流式渲染闪烁
       const buffer = new RenderBuffer((flushedText) => {
         set((state) => {
-          const msg = state.messages.find((m) => m.id === assistantId);
+          const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
           if (!msg) return;
           msg.rawText = (msg.rawText ?? "") + flushedText;
           msg.content = msg.rawText;
@@ -404,24 +481,69 @@ export const useChatStore = create<ChatState>()(
           msg.blocks = parsed.blocks;
           msg.artifacts = mergeArtifacts(msg.artifacts, parsed.artifacts);
         });
+        publishArtifacts(currentAssistantMessage(get().messages, currentAssistantMessageId, assistantId));
       });
 
       const mergeAgentEvent = (event: string, payload: unknown) => {
         if (get().streamingMessageId !== assistantId) return;
+        if (event === AGENT_STREAM_EVENTS.TOOL_CALL_WAITING_USER) {
+          const normalized = normalizeAgentStreamEvent(event, payload);
+          if (normalized?.type === AGENT_STREAM_EVENTS.APPROVAL) {
+            stagedApprovals = mergeById(stagedApprovals, normalized.items);
+          }
+          return;
+        }
         if (event === AGENT_STREAM_EVENTS.RUN_SNAPSHOT && payload && typeof payload === "object") {
+          const snapshotPayload = payload as AgentRunSnapshot;
+          const snapshotMessageId = snapshotPayload.messageSnapshot?.assistantMessageId;
+          if (snapshotMessageId) {
+            const nextMessageId = String(snapshotMessageId);
+            if (nextMessageId !== currentAssistantMessageId) {
+              retargetArtifacts(currentAssistantMessageId, nextMessageId);
+              currentAssistantMessageId = nextMessageId;
+            }
+          }
           set((state) => {
-            const msg = state.messages.find((m) => m.id === assistantId);
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
             if (!msg || msg.status === "cancelled" || msg.status === "error") return;
-            mergeRunSnapshot(msg, payload as AgentRunSnapshot);
+            mergeRunSnapshot(msg, snapshotPayload);
           });
+          if (isWaitingForUser(payload) && stagedApprovals.length > 0) {
+            const approvals = stagedApprovals;
+            stagedApprovals = [];
+            mergeAgentEvent(AGENT_STREAM_EVENTS.APPROVAL, approvals);
+          }
+          publishArtifacts(currentAssistantMessage(get().messages, currentAssistantMessageId, assistantId));
           return;
         }
         const normalized = normalizeAgentStreamEvent(event, payload);
         if (!normalized || (normalized.items.length === 0 && normalized.type !== AGENT_STREAM_EVENTS.ARTIFACT)) {
+          if (event === AGENT_STREAM_EVENTS.STEP_FINISHED && isWaitingForUser(payload) && stagedApprovals.length > 0) {
+            const approvals = stagedApprovals;
+            stagedApprovals = [];
+            mergeAgentEvent(AGENT_STREAM_EVENTS.APPROVAL, approvals);
+          }
+          return;
+        }
+        if (normalized.type === AGENT_STREAM_EVENTS.ARTIFACT) {
+          const snapshot = useArtifactStore.getState().mergeMessageArtifacts(
+            currentAssistantMessageId,
+            normalized.items,
+            normalized.serverArtifacts
+          );
+          if (event === AGENT_STREAM_EVENTS.ARTIFACT_CONTENT) {
+            return;
+          }
+          set((state) => {
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+            if (!msg || msg.status === "cancelled" || msg.status === "error") return;
+            msg.artifacts = snapshot?.artifacts ?? mergeArtifacts(msg.artifacts, normalized.items);
+            msg.serverArtifacts = snapshot?.serverArtifacts ?? mergeServerArtifacts(msg.serverArtifacts, normalized.serverArtifacts);
+          });
           return;
         }
         set((state) => {
-          const msg = state.messages.find((m) => m.id === assistantId);
+          const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
           if (!msg || msg.status === "cancelled" || msg.status === "error") return;
           switch (normalized.type) {
             case AGENT_STREAM_EVENTS.TIMELINE:
@@ -447,14 +569,20 @@ export const useChatStore = create<ChatState>()(
               break;
           }
         });
+        if (event === AGENT_STREAM_EVENTS.STEP_FINISHED && isWaitingForUser(payload) && stagedApprovals.length > 0) {
+          const approvals = stagedApprovals;
+          stagedApprovals = [];
+          mergeAgentEvent(AGENT_STREAM_EVENTS.APPROVAL, approvals);
+        }
       };
 
       const handlers = {
         onStreamEvent: (envelope: StreamEventEnvelope) => {
           if (get().streamingMessageId !== assistantId) return;
           set((state) => {
-            const msg = state.messages.find((m) => m.id === assistantId);
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
             if (msg) {
+              msg.agentRunId = envelope.runId || msg.agentRunId;
               msg.lastEventSeq = envelope.eventSeq;
             }
           });
@@ -480,7 +608,7 @@ export const useChatStore = create<ChatState>()(
           set((state) => {
             state.currentSessionId = nextId;
             state.isCreatingNew = false;
-            state.streamTaskId = payload.taskId;
+            state.streamTaskId = payload.taskId || state.streamTaskId;
             const idx = state.sessions.findIndex((s) => s.id === nextId);
             if (idx >= 0) {
               state.sessions[idx] = { ...state.sessions[idx], title: existing?.title || "New Chat", lastTime };
@@ -488,7 +616,7 @@ export const useChatStore = create<ChatState>()(
               state.sessions.unshift({ id: nextId, title: existing?.title || "New Chat", lastTime });
             }
             if (payload.runId) {
-              const msg = state.messages.find((m) => m.id === state.streamingMessageId);
+              const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
               if (msg) msg.agentRunId = payload.runId || undefined;
             }
           });
@@ -499,7 +627,10 @@ export const useChatStore = create<ChatState>()(
               .catch(() => null);
           }
           if (get().cancelRequested) {
-            stopTask(payload.taskId).catch(() => null);
+            const taskId = payload.taskId || get().streamTaskId;
+            if (taskId) {
+              stopTask(taskId).catch(() => null);
+            }
           }
         },
         onMessage: (payload: MessageDeltaPayload) => {
@@ -514,7 +645,15 @@ export const useChatStore = create<ChatState>()(
         onThinking: (payload: MessageDeltaPayload) => {
           if (!payload || typeof payload !== "object") return;
           if (payload.type !== "think") return;
-          get().appendThinkingContent(payload.delta);
+          if (!payload.delta) return;
+          set((state) => {
+            state.thinkingStartAt = state.thinkingStartAt ?? Date.now();
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+            if (msg && msg.status !== "cancelled" && msg.status !== "error") {
+              msg.thinking = `${msg.thinking ?? ""}${payload.delta}`;
+              msg.isThinking = true;
+            }
+          });
         },
         onReject: (payload: MessageDeltaPayload) => {
           if (!payload || typeof payload !== "object") return;
@@ -543,10 +682,17 @@ export const useChatStore = create<ChatState>()(
             });
           }
           // 终态解析，锁定 artifact 完成状态
+          if (payload.messageId) {
+            const nextMessageId = String(payload.messageId);
+            if (nextMessageId !== currentAssistantMessageId) {
+              retargetArtifacts(currentAssistantMessageId, nextMessageId);
+              currentAssistantMessageId = nextMessageId;
+            }
+          }
           set((state) => {
-            const msg = state.messages.find((m) => m.id === assistantId);
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
             if (!msg) return;
-            if (payload.messageId) msg.id = String(payload.messageId);
+            msg.id = currentAssistantMessageId;
             msg.status = "done";
             msg.isThinking = false;
             msg.thinkingDuration = msg.thinkingDuration ?? computeThinkingDuration(state.thinkingStartAt);
@@ -557,7 +703,10 @@ export const useChatStore = create<ChatState>()(
               return block;
             });
             msg.artifacts = mergeArtifacts(msg.artifacts, extractArtifactsFromBlocks(msg.blocks));
+            applyArtifactSnapshot(msg);
+            msg.artifacts = (msg.artifacts ?? []).map((artifact) => ({ ...artifact, isComplete: true }));
           });
+          publishArtifacts(currentAssistantMessage(get().messages, currentAssistantMessageId, assistantId));
         },
         onCancel: (payload: CompletionPayload) => {
           if (get().streamingMessageId !== assistantId) return;
@@ -566,16 +715,24 @@ export const useChatStore = create<ChatState>()(
           if (payload?.title && get().currentSessionId) {
             get().updateSessionTitle(get().currentSessionId as string, payload.title);
           }
+          if (payload?.messageId) {
+            const nextMessageId = String(payload.messageId);
+            if (nextMessageId !== currentAssistantMessageId) {
+              retargetArtifacts(currentAssistantMessageId, nextMessageId);
+              currentAssistantMessageId = nextMessageId;
+            }
+          }
           set((state) => {
-            const msg = state.messages.find((m) => m.id === state.streamingMessageId);
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
             if (msg) {
               const suffix = msg.rawText?.includes("(Stopped)") ? "" : "\n\n(Stopped)";
-              if (payload?.messageId) msg.id = String(payload.messageId);
+              msg.id = currentAssistantMessageId;
               msg.rawText = (msg.rawText ?? "") + suffix;
               msg.content = msg.rawText;
               const parsed = parseMessageBlocks(msg.rawText, msg.id);
               msg.blocks = parsed.blocks;
               msg.artifacts = mergeArtifacts(msg.artifacts, parsed.artifacts);
+              applyArtifactSnapshot(msg);
               msg.status = "cancelled";
               msg.isThinking = false;
               msg.thinkingDuration = msg.thinkingDuration ?? computeThinkingDuration(state.thinkingStartAt);
@@ -587,6 +744,7 @@ export const useChatStore = create<ChatState>()(
             state.streamingMessageId = null;
             state.cancelRequested = false;
           });
+          publishArtifacts(currentAssistantMessage(get().messages, currentAssistantMessageId, assistantId));
         },
         onDone: () => {
           if (get().streamingMessageId !== assistantId) return;
@@ -599,7 +757,7 @@ export const useChatStore = create<ChatState>()(
             state.streamAbort = null;
             state.streamingMessageId = null;
             state.cancelRequested = false;
-            const msg = state.messages.find((m) => m.id === assistantId);
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
             if (msg) {
               if (!msg.content.trim() && msg.status !== "cancelled" && msg.status !== "error") {
                 msg.content = EMPTY_ASSISTANT_MESSAGE;
@@ -607,11 +765,13 @@ export const useChatStore = create<ChatState>()(
                 msg.blocks = [{ type: "text", text: EMPTY_ASSISTANT_MESSAGE }];
               }
               msg.artifacts = mergeArtifacts(msg.artifacts, extractArtifactsFromBlocks(msg.blocks));
+              applyArtifactSnapshot(msg);
               msg.status = "done";
               msg.isThinking = false;
               msg.thinkingDuration = msg.thinkingDuration ?? computeThinkingDuration(state.thinkingStartAt);
             }
           });
+          publishArtifacts(currentAssistantMessage(get().messages, currentAssistantMessageId, assistantId));
         },
         onTitle: (payload: { title: string }) => {
           if (get().streamingMessageId !== assistantId) return;
@@ -625,8 +785,9 @@ export const useChatStore = create<ChatState>()(
           buffer.dispose();
           const unauthorized = (error as Error & { status?: number }).status === 401;
           set((state) => {
-            const msg = state.messages.find((m) => m.id === assistantId);
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
             if (msg) {
+              applyArtifactSnapshot(msg);
               msg.status = "error";
               msg.isThinking = false;
               msg.thinkingDuration = msg.thinkingDuration ?? computeThinkingDuration(state.thinkingStartAt);
@@ -636,8 +797,10 @@ export const useChatStore = create<ChatState>()(
             state.thinkingStartAt = null;
             state.streamTaskId = null;
             state.streamAbort = null;
+            state.streamingMessageId = null;
             state.cancelRequested = false;
           });
+          publishArtifacts(currentAssistantMessage(get().messages, currentAssistantMessageId, assistantId));
           if (unauthorized) {
             handleUnauthorizedSession(error.message);
             return;
@@ -650,7 +813,14 @@ export const useChatStore = create<ChatState>()(
         {
           url,
           headers: token ? { Authorization: token } : undefined,
-          retryCount: 1
+          retryCount: 3,
+          resume: () => {
+            const msg = currentAssistantMessage(get().messages, currentAssistantMessageId, assistantId);
+            return {
+              runId: msg?.agentRunId ?? null,
+              lastEventSeq: msg?.lastEventSeq ?? null
+            };
+          }
         },
         handlers
       );
@@ -690,6 +860,8 @@ export const useChatStore = create<ChatState>()(
         mergeRunSnapshot(msg, snapshot);
         if (costSummary) msg.costSummary = costSummary;
       });
+      const updated = get().messages.find((message) => message.id === messageId || message.agentRunId === runId);
+      publishArtifacts(updated);
     },
 
     cancelGeneration: () => {

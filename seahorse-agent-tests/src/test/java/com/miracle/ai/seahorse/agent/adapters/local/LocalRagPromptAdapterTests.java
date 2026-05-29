@@ -62,11 +62,13 @@ class LocalRagPromptAdapterTests {
         List<ChatMessage> messages = adapter.buildStructuredMessages(
                 context, List.of(ChatMessage.assistant("历史回答")), "Seahorse 支持什么？", List.of("Seahorse 支持什么"));
 
-        assertThat(messages).hasSize(3);
+        assertThat(messages).hasSize(4);
         assertThat(messages.get(0).getRole()).isEqualTo(ChatRole.SYSTEM);
-        assertThat(messages.get(0).getContent()).contains("知识库上下文", "Seahorse 支持可插拔适配器", "工具上下文");
-        assertThat(messages.get(1).getContent()).isEqualTo("历史回答");
-        assertThat(messages.get(2).getContent()).contains("Seahorse 支持什么？");
+        assertThat(messages.get(0).getContent()).doesNotContain("知识库上下文", "Seahorse 支持可插拔适配器", "工具上下文");
+        assertThat(messages.get(1).getRole()).isEqualTo(ChatRole.USER);
+        assertThat(messages.get(1).getContent()).contains("知识库上下文", "Seahorse 支持可插拔适配器", "工具上下文");
+        assertThat(messages.get(2).getContent()).isEqualTo("历史回答");
+        assertThat(messages.get(3).getContent()).contains("Seahorse 支持什么？");
     }
 
     @Test
@@ -82,10 +84,34 @@ class LocalRagPromptAdapterTests {
         List<ChatMessage> messages = adapter.buildStructuredMessages(
                 context, List.of(), "What is the policy?", List.of());
 
-        assertThat(messages).hasSize(2);
+        assertThat(messages).hasSize(3);
         assertThat(messages.get(0).getRole()).isEqualTo(ChatRole.SYSTEM);
-        assertThat(messages.get(0).getContent()).contains("context pack policy evidence", "aclDecision=decision-1");
-        assertThat(messages.get(0).getContent()).doesNotContain("legacy memory evidence");
+        assertThat(messages.get(0).getContent()).doesNotContain("context pack policy evidence", "legacy memory evidence");
+        assertThat(messages.get(1).getRole()).isEqualTo(ChatRole.USER);
+        assertThat(messages.get(1).getContent()).contains("context pack policy evidence", "aclDecision=decision-1");
+        assertThat(messages.get(1).getContent()).doesNotContain("legacy memory evidence");
+    }
+
+    @Test
+    void shouldKeepRagSystemPromptStaticAndInjectRuntimeContextAfterIt() {
+        LocalRagPromptAdapter adapter = new LocalRagPromptAdapter();
+        PromptContext context = PromptContext.builder()
+                .kbContext("[1] Seahorse 支持可插拔适配器")
+                .mcpContext("[1 tool=time] 当前时间")
+                .contextPack(contextPack("context pack policy evidence"))
+                .build();
+
+        List<ChatMessage> messages = adapter.buildStructuredMessages(
+                context, List.of(ChatMessage.assistant("历史回答")), "Seahorse 支持什么？", List.of());
+
+        assertThat(messages).hasSize(4);
+        assertThat(messages.get(0).getRole()).isEqualTo(ChatRole.SYSTEM);
+        assertThat(messages.get(0).getContent())
+                .doesNotContain("知识库上下文", "工具上下文", "context pack policy evidence");
+        assertThat(messages.get(1).getRole()).isEqualTo(ChatRole.USER);
+        assertThat(messages.get(1).getContent())
+                .contains("<runtime-context>", "知识库上下文", "工具上下文", "context pack policy evidence");
+        assertThat(messages.get(2).getContent()).isEqualTo("历史回答");
     }
 
     private static ContextPack contextPack(String content) {

@@ -102,6 +102,8 @@ public enum StreamEventType {
      */
     ARTIFACT_CREATED("artifact_created"),
 
+    ARTIFACT_START("artifact_start"),
+
     /**
      * Recoverable runtime error.
      */
@@ -136,6 +138,8 @@ public enum StreamEventType {
      * 产物增量内容 delta（边生成边渲染）。
      */
     ARTIFACT_CONTENT("artifact_content"),
+
+    ARTIFACT_END("artifact_end"),
 
     /**
      * 产物生成完成，携带最终 metadata。

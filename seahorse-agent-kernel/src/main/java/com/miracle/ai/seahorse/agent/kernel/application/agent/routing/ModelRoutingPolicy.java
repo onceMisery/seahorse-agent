@@ -17,64 +17,147 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.routing;
 
+import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimitDecision;
+import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelProviderPort;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+
 /**
- * 模型路由策略。
- *
- * <p>根据任务模板、用户额度和上下文长度选择合适的模型档位。
- * 当高档模型不可用时自动降级并记录原因。
+ * Selects the model tier for research and web-agent tasks.
  */
 public class ModelRoutingPolicy {
 
-    private static final int LARGE_CONTEXT_THRESHOLD = 32_000;
-    private static final int VERY_LARGE_CONTEXT_THRESHOLD = 100_000;
-    private static final String DEFAULT_MODEL = "gpt-4o-mini";
-    private static final String LARGE_CONTEXT_MODEL = "gpt-4o";
-    private static final String HIGH_QUALITY_MODEL = "gpt-4o";
-    private static final String VERY_LARGE_CONTEXT_MODEL = "gpt-4o";
-    private static final double HIGH_COST_THRESHOLD = 0.5;
+    private static final String CAPABILITY_CHAT = "chat";
+    private static final String HIGH_COST_RESOURCE = "high_cost_concurrency";
 
-    /**
-     * 选择模型。
-     *
-     * @param templateModelTier 模板绑定的默认模型档位（HIGH/MEDIUM/LOW）
-     * @param remainingQuota    用户剩余额度（美元）
-     * @param contextTokens     当前上下文 token 数
-     * @return 模型选择结果
-     */
-    public ModelSelection selectModel(String templateModelTier, double remainingQuota, int contextTokens) {
-        // 超大上下文强制使用大窗口模型
-        if (contextTokens > VERY_LARGE_CONTEXT_THRESHOLD) {
-            if (remainingQuota < HIGH_COST_THRESHOLD) {
-                return new ModelSelection(DEFAULT_MODEL, "上下文过长但额度不足，已降级");
-            }
-            return new ModelSelection(VERY_LARGE_CONTEXT_MODEL, null);
-        }
+    private final ModelRoutingProperties properties;
+    private final ModelProviderPort modelProviderPort;
+    private final RateLimiterPort rateLimiterPort;
 
-        // 大上下文优先使用大窗口模型
-        if (contextTokens > LARGE_CONTEXT_THRESHOLD) {
-            return new ModelSelection(LARGE_CONTEXT_MODEL, null);
-        }
+    public ModelRoutingPolicy() {
+        this(ModelRoutingProperties.defaults(), null, null);
+    }
 
-        // 高档模板需要额度支撑
-        if ("HIGH".equalsIgnoreCase(templateModelTier)) {
-            if (remainingQuota <= 0) {
-                return new ModelSelection(DEFAULT_MODEL, "额度不足，已降级到基础模型");
-            }
-            return new ModelSelection(HIGH_QUALITY_MODEL, null);
-        }
-
-        // MEDIUM 档位使用默认模型
-        if ("MEDIUM".equalsIgnoreCase(templateModelTier)) {
-            return new ModelSelection(DEFAULT_MODEL, null);
-        }
-
-        // LOW 档位或未指定
-        return new ModelSelection(DEFAULT_MODEL, null);
+    public ModelRoutingPolicy(ModelRoutingProperties properties,
+                              ModelProviderPort modelProviderPort,
+                              RateLimiterPort rateLimiterPort) {
+        this.properties = Objects.requireNonNullElseGet(properties, ModelRoutingProperties::defaults);
+        this.modelProviderPort = modelProviderPort;
+        this.rateLimiterPort = rateLimiterPort;
     }
 
     /**
-     * 模型选择结果。
+     * Backward-compatible entry point. Uses the configured policy and skips user-specific concurrency keys.
      */
+    public ModelSelection selectModel(String templateModelTier, double remainingQuota, int contextTokens) {
+        return selectWithFallback(templateModelTier, remainingQuota, contextTokens, "");
+    }
+
+    public ModelSelection selectWithFallback(String templateModelTier,
+                                             double remainingQuota,
+                                             int contextTokens,
+                                             String subject) {
+        String requestedTier = requestedTier(templateModelTier);
+        ModelSelection queued = rejectIfHighCostQueueFull(requestedTier, subject);
+        if (queued != null) {
+            return queued;
+        }
+
+        ModelSelection direct = selectDirect(requestedTier, remainingQuota, contextTokens);
+        if (direct != null) {
+            return direct;
+        }
+
+        return selectFallback(requestedTier);
+    }
+
+    private ModelSelection selectDirect(String requestedTier, double remainingQuota, int contextTokens) {
+        ModelRoutingProperties.Tier tier = properties.tier(requestedTier);
+        if (tier == null) {
+            return availableSelection(ModelRoutingProperties.LOW,
+                    "unknown tier " + requestedTier + ", downgraded to low");
+        }
+        if (contextTokens > 0 && tier.maxContextTokens() > 0 && contextTokens > tier.maxContextTokens()) {
+            ModelSelection largeContext = availableSelection(ModelRoutingProperties.LARGE_CONTEXT, null);
+            if (largeContext != null) {
+                return largeContext;
+            }
+        }
+        if (remainingQuota <= 0 && isHighCost(tier)) {
+            return availableSelection(ModelRoutingProperties.LOW, "quota exhausted, downgraded to low");
+        }
+        return availableSelection(requestedTier, null);
+    }
+
+    private ModelSelection selectFallback(String requestedTier) {
+        List<String> attempted = new ArrayList<>();
+        attempted.add(requestedTier);
+        for (ModelRoutingProperties.Fallback fallback : properties.fallbackChain()) {
+            String fallbackTier = fallback.tier();
+            if (attempted.contains(fallbackTier)) {
+                continue;
+            }
+            ModelSelection selection = availableSelection(
+                    fallbackTier,
+                    "tier " + requestedTier + " unavailable, downgraded to " + fallbackTier);
+            if (selection != null) {
+                return selection;
+            }
+            attempted.add(fallbackTier);
+        }
+        return new ModelSelection(null, "no available model in fallback chain: " + String.join(" -> ", attempted));
+    }
+
+    private ModelSelection availableSelection(String tierId, String downgradeReason) {
+        ModelRoutingProperties.Tier tier = properties.tier(tierId);
+        if (tier == null || tier.modelId().isBlank()) {
+            return null;
+        }
+        if (!providerKnowsModels() || modelProviderPort.available(tier.modelId())) {
+            return new ModelSelection(tier.modelId(), downgradeReason);
+        }
+        return null;
+    }
+
+    private boolean providerKnowsModels() {
+        return modelProviderPort != null && !modelProviderPort.listModels(CAPABILITY_CHAT).isEmpty();
+    }
+
+    private ModelSelection rejectIfHighCostQueueFull(String requestedTier, String subject) {
+        if (rateLimiterPort == null || properties.highCostConcurrencyLimit() <= 0) {
+            return null;
+        }
+        ModelRoutingProperties.Tier tier = properties.tier(requestedTier);
+        if (tier == null || !isHighCost(tier)) {
+            return null;
+        }
+        RateLimitDecision decision = rateLimiterPort.tryAcquire(
+                HIGH_COST_RESOURCE,
+                Objects.requireNonNullElse(subject, ""),
+                properties.highCostConcurrencyLimit(),
+                properties.highCostConcurrencyWindow());
+        if (decision.allowed()) {
+            return null;
+        }
+        return new ModelSelection(null, "high cost model queue is full, please retry later");
+    }
+
+    private boolean isHighCost(ModelRoutingProperties.Tier tier) {
+        return tier.costPer1kInput() >= properties.highCostThreshold();
+    }
+
+    private String requestedTier(String templateModelTier) {
+        String normalized = ModelRoutingProperties.normalizeTierId(templateModelTier);
+        if ("largecontext".equals(normalized)) {
+            return ModelRoutingProperties.LARGE_CONTEXT;
+        }
+        return normalized.toLowerCase(Locale.ROOT);
+    }
+
     public record ModelSelection(String modelId, String downgradeReason) {
 
         public boolean isDowngraded() {

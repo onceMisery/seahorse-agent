@@ -26,7 +26,9 @@ interface ThemeState {
 const COLOR_THEME_STORAGE_KEY = "seahorse-color-theme";
 
 function applyTheme(theme: ThemeMode) {
-  document.documentElement.classList.toggle("dark", theme === "dark");
+  const root = document.documentElement;
+  root.classList.toggle("dark", theme === "dark");
+  root.dataset.theme = theme;
 }
 
 function applyColorTheme(key: ColorThemeKey) {

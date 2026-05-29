@@ -98,7 +98,8 @@ public class ConversationAttachmentContextAssembler {
                     .ifPresentOrElse(
                             attachment -> addCandidate(candidates, attachment, conversationId.trim(), userId.trim()),
                             () -> {
-                                throw new IllegalArgumentException("attachment not found");
+                                LOG.debug("Conversation attachment skipped because it no longer exists: attachmentId={}",
+                                        attachmentId);
                             });
         }
         return List.copyOf(candidates);

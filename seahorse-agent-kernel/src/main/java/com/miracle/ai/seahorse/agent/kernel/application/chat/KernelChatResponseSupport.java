@@ -40,6 +40,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import static com.miracle.ai.seahorse.agent.kernel.domain.retrieval.KernelRagDefaults.CHAT_SYSTEM_PROMPT_PATH;
 
@@ -127,8 +128,11 @@ final class KernelChatResponseSupport {
                 rewriteResult.subQuestions()
         );
         if (!messages.isEmpty() && messages.get(0).getRole() == ChatRole.SYSTEM) {
-            String enriched = prependCoreContext(messages.get(0).getContent());
+            String enriched = renderStaticSystemPrompt(prependCoreContext(messages.get(0).getContent()));
             messages.set(0, ChatMessage.system(enriched));
+            if (!hasRuntimeContextMessage(messages)) {
+                runtimeContextMessage(context).ifPresent(runtimeMessage -> messages.add(1, runtimeMessage));
+            }
         }
         ChatRequest chatRequest = ChatRequest.builder()
                 .messages(messages)
@@ -167,10 +171,10 @@ final class KernelChatResponseSupport {
                 ? responsePorts.promptTemplatePort().load(CHAT_SYSTEM_PROMPT_PATH)
                 : customPrompt;
         systemPrompt = prependCoreContext(systemPrompt);
-        systemPrompt = renderSystemPrompt(systemPrompt, context);
-        systemPrompt = appendRuntimeContext(systemPrompt, context);
+        systemPrompt = renderStaticSystemPrompt(systemPrompt);
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.system(systemPrompt));
+        runtimeContextMessage(context).ifPresent(messages::add);
         messages.addAll(safeHistory(context));
         messages.add(ChatMessage.user(rewriteResult.rewrittenQuestion()));
 
@@ -184,52 +188,51 @@ final class KernelChatResponseSupport {
         return responsePorts.streamingChatModelPort().streamChat(request, requireCallback(context));
     }
 
-    private String appendRuntimeContext(String systemPrompt, StreamChatContext context) {
+    private Optional<ChatMessage> runtimeContextMessage(StreamChatContext context) {
         String contextText = responsePorts.contextWeaverPort()
                 .weave(context.getContextPack(), context.getMemoryContext(), ContextBudget.defaults());
-        if (contextText.isBlank()) {
-            return systemPrompt;
+        StringBuilder builder = new StringBuilder("<runtime-context>\n")
+                .append("当前时间：")
+                .append(currentDateTime())
+                .append(" Asia/Shanghai");
+        if (!contextText.isBlank()) {
+            builder.append("\n\n").append(contextText.trim());
         }
-        String safeSystemPrompt = Objects.requireNonNullElse(systemPrompt, "").trim();
-        if (safeSystemPrompt.isBlank()) {
-            return contextText;
-        }
-        return safeSystemPrompt + "\n\n" + contextText;
+        builder.append("\n</runtime-context>");
+        return Optional.of(ChatMessage.user(builder.toString()));
+    }
+
+    private boolean hasRuntimeContextMessage(List<ChatMessage> messages) {
+        return messages.stream()
+                .filter(Objects::nonNull)
+                .map(ChatMessage::getContent)
+                .filter(Objects::nonNull)
+                .anyMatch(content -> content.contains("<runtime-context>"));
     }
 
     private static final String CORE_CONTEXT_HEADER =
-            "你是 SeahorseAgent，一个智能 AI 协作伙伴。当用户问你是谁时，请自我介绍并说明你的协作能力。\n\n"
-            + "## 当前时间\n";
+            "你是 SeahorseAgent，一个智能 AI 协作伙伴。当用户问你是谁时，请自我介绍并说明你的协作能力。";
 
     private String prependCoreContext(String systemPrompt) {
         String safe = Objects.requireNonNullElse(systemPrompt, "").trim();
         if (safe.contains("你是 SeahorseAgent") || safe.contains("SeahorseAgent")) {
             return safe;
         }
-        String now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
-                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        return CORE_CONTEXT_HEADER + now + "\n\n" + safe;
+        return CORE_CONTEXT_HEADER + "\n\n" + safe;
     }
 
-    private String renderSystemPrompt(String template, StreamChatContext context) {
+    private String renderStaticSystemPrompt(String template) {
         if (template == null || template.isBlank()) {
             return template;
         }
-        String now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
-                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         return template
-                .replace("{currentDateTime}", now)
-                .replace("{history}", formatHistory(context.getHistory()));
+                .replace("{currentDateTime}", "见后续 runtime context 消息")
+                .replace("{history}", "见后续 history messages");
     }
 
-    private String formatHistory(List<ChatMessage> history) {
-        if (history == null || history.isEmpty()) return "（无历史对话）";
-        StringBuilder sb = new StringBuilder();
-        for (ChatMessage msg : history) {
-            String role = msg.getRole() == null ? "user" : msg.getRole().name().toLowerCase();
-            sb.append(role).append(": ").append(msg.getContent()).append("\n");
-        }
-        return sb.toString();
+    private String currentDateTime() {
+        return LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
     }
 
     private double resolveTemperature(RetrievalContext retrievalContext) {

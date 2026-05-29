@@ -59,6 +59,7 @@ import {
   rejectAiInfraApproval,
   rejectEvalCandidate,
   rollbackAiInfraRollout,
+  runEvalRegression,
   type ApiRecord,
   type ApprovalStatus,
   type PageResult
@@ -88,6 +89,12 @@ type RolloutForm = ReadinessForm & {
   canaryPercent: string;
   targetVersionId: string;
   comment: string;
+};
+
+type EvalRegressionForm = {
+  datasetId: string;
+  modelId: string;
+  baselinePassRate: string;
 };
 
 const PAGE_SIZE = 10;
@@ -166,6 +173,38 @@ function formatMoney(value: unknown) {
   });
 }
 
+function asOptionalNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function asRecord(value: unknown): ApiRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as ApiRecord;
+}
+
+function asRecordArray(value: unknown): ApiRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is ApiRecord => !!item && typeof item === "object" && !Array.isArray(item));
+}
+
+function formatPercent(value: unknown) {
+  const number = asOptionalNumber(value);
+  if (number === null) return "-";
+  return `${(number * 100).toFixed(1)}%`;
+}
+
+function formatPercentDelta(value: unknown) {
+  const number = asOptionalNumber(value);
+  if (number === null) return "-";
+  const sign = number > 0 ? "+" : "";
+  return `${sign}${(number * 100).toFixed(1)} pts`;
+}
+
 function pageRecords(page: PageResult<ApiRecord> | null) {
   return page?.records ?? [];
 }
@@ -181,6 +220,8 @@ function statusTone(status: string): StatusTone {
   if (["FAIL", "FAILED", "REJECTED", "DENIED", "DISABLED", "PAUSED", "CANCELLED"].includes(normalized)) {
     return "danger";
   }
+  if (["REGRESSED"].includes(normalized)) return "danger";
+  if (["IMPROVED"].includes(normalized)) return "success";
   if (["MODIFIED", "PROMOTED"].includes(normalized)) return "info";
   return "neutral";
 }
@@ -294,6 +335,7 @@ export function AiInfraConsolePage() {
   const [costUsage, setCostUsage] = useState<ApiRecord | null>(null);
   const [readinessResult, setReadinessResult] = useState<ApiRecord | null>(null);
   const [rolloutResult, setRolloutResult] = useState<ApiRecord | null>(null);
+  const [evalRegressionResult, setEvalRegressionResult] = useState<ApiRecord | null>(null);
   const [approvalComment, setApprovalComment] = useState("Reviewed in AI Infra console");
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -312,6 +354,11 @@ export function AiInfraConsolePage() {
     canaryPercent: "10",
     targetVersionId: "",
     comment: "Managed from AI Infra console"
+  });
+  const [evalRegressionForm, setEvalRegressionForm] = useState<EvalRegressionForm>({
+    datasetId: "default",
+    modelId: "",
+    baselinePassRate: ""
   });
 
   const loadConsole = useCallback(async () => {
@@ -413,6 +460,10 @@ export function AiInfraConsolePage() {
     setRolloutForm((current) => ({ ...current, [field]: value }));
   };
 
+  const updateEvalRegressionForm = (field: keyof EvalRegressionForm, value: string) => {
+    setEvalRegressionForm((current) => ({ ...current, [field]: value }));
+  };
+
   const runApprovalAction = async (approvalId: string, action: "approve" | "reject") => {
     setActionLoading(`${action}:${approvalId}`);
     try {
@@ -464,6 +515,36 @@ export function AiInfraConsolePage() {
       toast.success(action === "generate" ? "Readiness report generated" : "Latest readiness report loaded");
     } catch (error) {
       toast.error(getErrorMessage(error, "Readiness action failed"));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const runEvalRegressionAction = async () => {
+    const datasetId = evalRegressionForm.datasetId.trim();
+    if (!datasetId) {
+      toast.error("datasetId is required");
+      return;
+    }
+    const baseline =
+      evalRegressionForm.baselinePassRate.trim() === ""
+        ? undefined
+        : Number(evalRegressionForm.baselinePassRate);
+    if (baseline !== undefined && (!Number.isFinite(baseline) || baseline < 0 || baseline > 1)) {
+      toast.error("baselinePassRate must be between 0 and 1");
+      return;
+    }
+    setActionLoading("eval:regression");
+    try {
+      const result = await runEvalRegression({
+        datasetId,
+        modelId: evalRegressionForm.modelId.trim() || undefined,
+        baselinePassRate: baseline
+      });
+      setEvalRegressionResult(result);
+      toast.success("Eval regression completed");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Eval regression failed"));
     } finally {
       setActionLoading(null);
     }
@@ -754,6 +835,40 @@ export function AiInfraConsolePage() {
             </div>
           </DataPanel>
 
+          <DataPanel title="Eval regression" description="Run an eval dataset against the current model and compare it with a baseline.">
+            <div className="grid gap-3 md:grid-cols-3">
+              <Field label="datasetId">
+                <Input
+                  value={evalRegressionForm.datasetId}
+                  onChange={(event) => updateEvalRegressionForm("datasetId", event.target.value)}
+                />
+              </Field>
+              <Field label="modelId">
+                <Input
+                  value={evalRegressionForm.modelId}
+                  onChange={(event) => updateEvalRegressionForm("modelId", event.target.value)}
+                  placeholder="optional"
+                />
+              </Field>
+              <Field label="baselinePassRate">
+                <Input
+                  value={evalRegressionForm.baselinePassRate}
+                  onChange={(event) => updateEvalRegressionForm("baselinePassRate", event.target.value)}
+                  placeholder="0.82"
+                />
+              </Field>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button onClick={runEvalRegressionAction} disabled={actionLoading === "eval:regression"}>
+                <Gauge className="mr-2 h-4 w-4" />
+                Run regression
+              </Button>
+            </div>
+            <div className="mt-4">
+              <EvalRegressionResult value={evalRegressionResult} />
+            </div>
+          </DataPanel>
+
           <DataPanel title="Rollout" description="Use canary, latest, pause, promote and rollback APIs.">
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="tenantId">
@@ -886,6 +1001,78 @@ function EvalCandidateTable({
         })}
       </TableBody>
     </Table>
+  );
+}
+
+function EvalRegressionResult({ value }: { value: ApiRecord | null }) {
+  if (!value) {
+    return <EmptyState loading={false} label="No regression result" />;
+  }
+  const baseline = asRecord(value.baseline);
+  const dimensions = asRecordArray(value.dimensions);
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-medium text-slate-500">Current</p>
+          <p className="mt-1 text-xl font-semibold text-slate-950">
+            {formatPercent(baseline.currentPassRate)}
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-medium text-slate-500">Baseline</p>
+          <p className="mt-1 text-xl font-semibold text-slate-950">
+            {formatPercent(baseline.baselinePassRate)}
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-medium text-slate-500">Delta</p>
+          <p className="mt-1 text-xl font-semibold text-slate-950">
+            {formatPercentDelta(baseline.passRateDelta)}
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-medium text-slate-500">Cases</p>
+          <p className="mt-1 text-xl font-semibold text-slate-950">
+            {asString(value.passed, "0")} / {asString(value.total, "0")}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <StatusBadge value={baseline.status} />
+        <span className="font-mono text-xs text-slate-500">
+          {asString(value.datasetId)} · {formatTime(value.runAt)}
+        </span>
+      </div>
+      {dimensions.length ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Dimension</TableHead>
+              <TableHead>Score</TableHead>
+              <TableHead>Mode</TableHead>
+              <TableHead>Reason</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {dimensions.map((dimension) => (
+              <TableRow key={asString(dimension.dimension)}>
+                <TableCell className="font-mono text-xs">{asString(dimension.dimension)}</TableCell>
+                <TableCell>{formatPercent(dimension.score)}</TableCell>
+                <TableCell>
+                  <StatusBadge value={dimension.automated ? "AUTO" : "MANUAL"} />
+                </TableCell>
+                <TableCell className="max-w-[280px] text-xs text-slate-500">
+                  {asString(dimension.reason)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <JsonPreview value={value} />
+      )}
+    </div>
   );
 }
 

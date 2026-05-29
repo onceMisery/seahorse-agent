@@ -84,6 +84,52 @@ class SeahorseChatControllerReplayTests {
     }
 
     @Test
+    void resumeWithBufferHitShouldContinueStreamingAfterMissedEvents() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+        AgentRunSnapshotInboundPort snapshotPort = mock(AgentRunSnapshotInboundPort.class);
+        AgentRunEventBufferPort eventBufferPort = mock(AgentRunEventBufferPort.class);
+        ResearchSseBridge bridge = mock(ResearchSseBridge.class);
+
+        StreamEventEnvelope missed = StreamEventEnvelope.of(2, StreamEventType.MESSAGE, "run-1",
+                Map.of("type", "response", "delta", "missed"));
+        StreamEventEnvelope live = StreamEventEnvelope.of(3, StreamEventType.MESSAGE, "run-1",
+                Map.of("type", "response", "delta", " live"));
+        when(eventBufferPort.getAfter("run-1", 1L)).thenReturn(List.of(missed));
+        doAnswer(invocation -> {
+            org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter = invocation.getArgument(0);
+            emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event()
+                    .name("stream_event")
+                    .data(live));
+            emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event()
+                    .name(StreamEventType.DONE.value())
+                    .data("[DONE]"));
+            emitter.complete();
+            return null;
+        }).when(bridge).attach(any(), eq("run-1"), isNull(), isNull(), eq(2L));
+
+        MockMvc mvc = buildMvc(chatPort, streamTaskPort, snapshotPort, eventBufferPort, bridge);
+
+        MvcResult result = mvc.perform(get("/rag/v3/chat")
+                        .param("resumeRunId", "run-1")
+                        .param("lastEventSeq", "1")
+                        .param("userId", "user-1"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        result.getAsyncResult(1_000L);
+        String body = result.getResponse().getContentAsString();
+
+        assertThat(body).contains("\"eventSeq\":2");
+        assertThat(body).contains("\"eventSeq\":3");
+        assertThat(body).contains("event:done");
+        verify(bridge).attach(any(), eq("run-1"), isNull(), isNull(), eq(2L));
+        verifyNoInteractions(snapshotPort);
+        verifyNoInteractions(chatPort);
+    }
+
+    @Test
     void resumeWithExpiredBufferShouldFallbackToSnapshot() throws Exception {
         ChatInboundPort chatPort = mock(ChatInboundPort.class);
         StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
@@ -110,6 +156,51 @@ class SeahorseChatControllerReplayTests {
         assertThat(body).contains("\"runId\":\"run-1\"");
         assertThat(body).contains("event:done");
         verify(snapshotPort).getSnapshot("run-1");
+    }
+
+    @Test
+    void resumeWithExpiredBufferShouldContinueStreamingWhenSnapshotCanResume() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+        AgentRunSnapshotInboundPort snapshotPort = mock(AgentRunSnapshotInboundPort.class);
+        AgentRunEventBufferPort eventBufferPort = mock(AgentRunEventBufferPort.class);
+        ResearchSseBridge bridge = mock(ResearchSseBridge.class);
+
+        StreamEventEnvelope live = StreamEventEnvelope.of(6, StreamEventType.MESSAGE, "run-1",
+                Map.of("type", "response", "delta", " live"));
+        when(eventBufferPort.getAfter("run-1", 100L)).thenReturn(List.of());
+        when(snapshotPort.getSnapshot("run-1")).thenReturn(snapshot());
+        doAnswer(invocation -> {
+            org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter = invocation.getArgument(0);
+            emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event()
+                    .name("stream_event")
+                    .data(live));
+            emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event()
+                    .name(StreamEventType.DONE.value())
+                    .data("[DONE]"));
+            emitter.complete();
+            return null;
+        }).when(bridge).attach(any(), eq("run-1"), isNull(), isNull(), eq(5L));
+
+        MockMvc mvc = buildMvc(chatPort, streamTaskPort, snapshotPort, eventBufferPort, bridge);
+
+        MvcResult result = mvc.perform(get("/rag/v3/chat")
+                        .param("resumeRunId", "run-1")
+                        .param("lastEventSeq", "100")
+                        .param("userId", "user-1"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        result.getAsyncResult(1_000L);
+        String body = result.getResponse().getContentAsString();
+
+        assertThat(body).contains("event:run_snapshot");
+        assertThat(body).contains("\"runId\":\"run-1\"");
+        assertThat(body).contains("\"eventSeq\":6");
+        assertThat(body).contains("event:done");
+        verify(snapshotPort).getSnapshot("run-1");
+        verify(bridge).attach(any(), eq("run-1"), isNull(), isNull(), eq(5L));
     }
 
     @Test
@@ -143,13 +234,21 @@ class SeahorseChatControllerReplayTests {
                              StreamTaskPort streamTaskPort,
                              AgentRunSnapshotInboundPort snapshotPort,
                              AgentRunEventBufferPort eventBufferPort) {
+        return buildMvc(chatPort, streamTaskPort, snapshotPort, eventBufferPort, null);
+    }
+
+    private MockMvc buildMvc(ChatInboundPort chatPort,
+                             StreamTaskPort streamTaskPort,
+                             AgentRunSnapshotInboundPort snapshotPort,
+                             AgentRunEventBufferPort eventBufferPort,
+                             ResearchSseBridge researchSseBridge) {
         SeahorseChatController controller = new SeahorseChatController(
                 provider(ChatInboundPort.class, chatPort),
                 (emitter, conversationId, taskId) -> new NoopStreamCallback(),
                 streamTaskPort,
                 provider(AgentRunSnapshotInboundPort.class, snapshotPort),
                 provider(com.miracle.ai.seahorse.agent.ports.inbound.agent.ResearchInboundPort.class, null),
-                provider(ResearchSseBridge.class, null),
+                provider(ResearchSseBridge.class, researchSseBridge),
                 provider(com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort.class, null),
                 provider(AgentRunEventBufferPort.class, eventBufferPort),
                 provider(AdvancedFeatureGate.class, null),

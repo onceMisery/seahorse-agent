@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.ResearchStepTy
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.SourceTrustLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.WebSource;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.ExtractionStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DurableTask;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchHit;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchPort;
@@ -28,7 +29,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchResult;
 
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -39,9 +43,15 @@ public class SearchStepHandler implements ResearchStepHandler {
     private static final int MAX_RESULTS_PER_QUERY = 5;
 
     private final WebSearchPort webSearch;
+    private final SourceTrustEvaluator sourceTrustEvaluator;
 
     public SearchStepHandler(WebSearchPort webSearch) {
+        this(webSearch, new SourceTrustEvaluator());
+    }
+
+    public SearchStepHandler(WebSearchPort webSearch, SourceTrustEvaluator sourceTrustEvaluator) {
         this.webSearch = Objects.requireNonNull(webSearch);
+        this.sourceTrustEvaluator = Objects.requireNonNull(sourceTrustEvaluator);
     }
 
     @Override
@@ -51,26 +61,69 @@ public class SearchStepHandler implements ResearchStepHandler {
 
     @Override
     public void execute(DurableTask task, ResearchStepContext context) {
-        for (String query : context.searchQueries()) {
+        int maxQueries = context.maxSearchQueries() > 0 ? context.maxSearchQueries() : context.searchQueries().size();
+        int maxSources = context.maxSources() > 0 ? context.maxSources() : Integer.MAX_VALUE;
+        List<String> queries = context.searchQueries().stream()
+                .limit(maxQueries)
+                .toList();
+        Set<String> seenHashes = new HashSet<>();
+        for (WebSource source : context.sources()) {
+            if (source.contentHash() != null && !source.contentHash().isBlank()) {
+                seenHashes.add(source.contentHash());
+            }
+        }
+        for (String query : queries) {
+            if (context.sources().size() >= maxSources) {
+                break;
+            }
+            int remainingSources = maxSources - context.sources().size();
             WebSearchResult result = webSearch.search(
-                    new WebSearchRequest(query, null, null, MAX_RESULTS_PER_QUERY));
+                    new WebSearchRequest(query, null, null, Math.min(MAX_RESULTS_PER_QUERY, remainingSources)));
             for (WebSearchHit hit : result.hits()) {
+                if (context.sources().size() >= maxSources) {
+                    break;
+                }
+                Instant retrievedAt = Instant.now();
                 WebSource source = new WebSource(
                         UUID.randomUUID().toString(),
                         task.runId(),
                         hit.url(),
                         hit.title(),
                         hit.snippet(),
-                        Instant.now(),
+                        retrievedAt,
                         SourceTrustLevel.UNTRUSTED,
                         null,
                         ExtractionStatus.PENDING);
-                context.addSource(source);
+                String contentHash = sourceTrustEvaluator.contentHash(source);
+                if (!seenHashes.add(contentHash)) {
+                    continue;
+                }
+                context.addSource(new WebSource(
+                        source.sourceId(),
+                        source.runId(),
+                        source.url(),
+                        source.title(),
+                        source.snippet(),
+                        source.retrievedAt(),
+                        sourceTrustEvaluator.evaluate(source),
+                        contentHash,
+                        source.extractionStatus()));
             }
         }
 
         if (context.sources().isEmpty()) {
             throw new RetryableResearchException("搜索未返回结果，稍后重试");
+        }
+    }
+
+    @Override
+    public void execute(DurableTask task, ResearchStepContext context, ResearchEventPublisher events) {
+        int previousSize = context.sources().size();
+        execute(task, context);
+        List<WebSource> newSources = context.sources().stream().skip(previousSize).toList();
+        if (!newSources.isEmpty()) {
+            Objects.requireNonNullElseGet(events, ResearchEventPublisher::noop)
+                    .publish(task.runId(), context, StreamEventType.SOURCE_FOUND, newSources);
         }
     }
 }

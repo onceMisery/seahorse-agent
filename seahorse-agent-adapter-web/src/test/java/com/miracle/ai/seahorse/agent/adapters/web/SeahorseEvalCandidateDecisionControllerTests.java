@@ -28,6 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
+import java.util.List;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -76,21 +77,21 @@ class SeahorseEvalCandidateDecisionControllerTests {
 
     @Test
     void shouldRunRegression() throws Exception {
-        EvalReport report = new EvalReport("ds-1", "gpt-4", 5, 4, 1, Instant.now());
-        when(regressionService.runRegression("ds-1", "gpt-4")).thenReturn(report);
+        EvalReport report = EvalReport.aggregate("ds-1", "gpt-4", List.of(), 0.8d);
+        when(regressionService.runRegression("ds-1", "gpt-4", 0.8d)).thenReturn(report);
         MockMvc mvc = buildMvc(AdvancedFeatureGate.allEnabledForTests());
 
         mvc.perform(post("/api/eval-datasets/ds-1/regression")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"modelId\": \"gpt-4\"}"))
+                        .content("{\"modelId\": \"gpt-4\", \"baselinePassRate\": 0.8}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.datasetId").value("ds-1"))
                 .andExpect(jsonPath("$.data.modelId").value("gpt-4"))
-                .andExpect(jsonPath("$.data.total").value(5))
-                .andExpect(jsonPath("$.data.passed").value(4));
+                .andExpect(jsonPath("$.data.baseline.baselinePassRate").value(0.8))
+                .andExpect(jsonPath("$.data.dimensions[0].dimension").value("CITATION_COMPLETENESS"));
 
-        verify(regressionService).runRegression("ds-1", "gpt-4");
+        verify(regressionService).runRegression("ds-1", "gpt-4", 0.8d);
     }
 
     @Test

@@ -53,6 +53,16 @@ public class VerifyCitationsStepHandler implements ResearchStepHandler {
         if (!result.isFullyVerified()) {
             log.info("Citation verification for run={}: verified={}, missing={}, unreferenced={}",
                     task.runId(), result.verified().size(), result.missing().size(), result.unreferenced().size());
+            context.setReportContent(markMissingCitations(report, result.missing()));
+            throw new RetryableResearchException("Missing citation evidence: " + result.missing());
         }
+    }
+
+    private String markMissingCitations(String report, java.util.List<Integer> missing) {
+        String marked = report;
+        for (Integer index : missing) {
+            marked = marked.replace("[" + index + "]", "[引用待补]");
+        }
+        return marked;
     }
 }

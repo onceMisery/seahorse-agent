@@ -124,4 +124,16 @@ class ResearchStepContextSerializationTests {
         assertEquals(1, restored.sources().size());
         assertNull(restored.sources().get(0).retrievedAt());
     }
+
+    @Test
+    void profileLimits_preservedAcrossRoundTrip() {
+        ResearchStepContext ctx = new ResearchStepContext("run-limits", "q", 0L);
+        ctx.setMaxSearchQueries(2);
+        ctx.setMaxSources(4);
+
+        ResearchStepContext restored = ResearchStepContext.fromJson(ctx.toJson());
+
+        assertEquals(2, restored.maxSearchQueries());
+        assertEquals(4, restored.maxSources());
+    }
 }

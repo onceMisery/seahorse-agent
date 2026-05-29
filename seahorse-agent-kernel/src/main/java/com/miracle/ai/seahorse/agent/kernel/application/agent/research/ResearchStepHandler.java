@@ -34,4 +34,8 @@ public interface ResearchStepHandler {
      * @param context 步骤执行上下文（可读写中间结果）
      */
     void execute(DurableTask task, ResearchStepContext context);
+
+    default void execute(DurableTask task, ResearchStepContext context, ResearchEventPublisher events) {
+        execute(task, context);
+    }
 }

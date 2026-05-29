@@ -24,25 +24,30 @@ export function ApprovalCard({ approval }: ApprovalCardProps) {
 
   const runAction = async (action: "approve" | "reject" | "modify") => {
     if (!pending || loading) return;
+    const previousStatus = status;
+    const nextStatus =
+      action === "approve"
+        ? AGENT_APPROVAL_STATUS.APPROVED
+        : action === "reject"
+          ? AGENT_APPROVAL_STATUS.REJECTED
+          : AGENT_APPROVAL_STATUS.MODIFIED;
     setLoading(action);
+    setStatus(nextStatus);
     try {
       if (action === "approve") {
         await approveApprovalRequest(approval.id, "Reviewed from chat");
-        setStatus(AGENT_APPROVAL_STATUS.APPROVED);
       } else if (action === "reject") {
         await rejectApprovalRequest(approval.id, "Rejected from chat");
-        setStatus(AGENT_APPROVAL_STATUS.REJECTED);
       } else {
         await modifyApprovalRequest(
           approval.id,
           modifiedArguments.trim(),
           "Modified and approved from chat"
         );
-        setStatus(AGENT_APPROVAL_STATUS.MODIFIED);
       }
       toast.success(action === "reject" ? "Rejection submitted" : "Approval submitted");
     } catch {
-      setStatus(AGENT_APPROVAL_STATUS.ERROR);
+      setStatus(previousStatus);
       toast.error("Approval action failed");
     } finally {
       setLoading(null);
@@ -96,7 +101,11 @@ export function ApprovalCard({ approval }: ApprovalCardProps) {
               className="mt-3 min-h-20 text-xs"
               placeholder="Adjust the approved parameters before allowing"
             />
-          ) : null}
+          ) : (
+            <p className="mt-2 text-xs" style={{ color: "var(--theme-text-muted)" }}>
+              {loading ? "Submitting decision..." : "Decision recorded"}
+            </p>
+          )}
         </div>
       </div>
       <div className="mt-3 flex justify-end gap-2">

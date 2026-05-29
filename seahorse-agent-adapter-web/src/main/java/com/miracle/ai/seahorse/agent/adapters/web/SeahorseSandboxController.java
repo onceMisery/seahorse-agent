@@ -18,6 +18,12 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxRuntimeType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxArtifactScanStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecution;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxExecutionResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxPolicyReasonCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxExecutionCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxSessionCreateCommand;
@@ -30,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.time.Instant;
 
 @RestController
 public class SeahorseSandboxController {
@@ -75,11 +82,11 @@ public class SeahorseSandboxController {
                 ? new SandboxExecutionRequest(null, false, List.of())
                 : request;
         return ApiResponses.requireService(sandboxRuntimePortProvider,
-                port -> port.execute(new SandboxExecutionCommand(
+                port -> toResponse(port.execute(new SandboxExecutionCommand(
                         sessionId,
                         safeRequest.input(),
                         safeRequest.networkRequested(),
-                        safeRequest.requestedHosts())));
+                        safeRequest.requestedHosts()))));
     }
 
     @PostMapping("/api/sandbox/sessions/{sessionId}/close")
@@ -91,7 +98,29 @@ public class SeahorseSandboxController {
     @GetMapping("/api/sandbox/sessions/{sessionId}/artifacts")
     public ApiResponse<Object> listArtifacts(@PathVariable String sessionId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SANDBOX);
-        return ApiResponses.requireService(sandboxRuntimePortProvider, port -> port.listArtifacts(sessionId));
+        return ApiResponses.requireService(sandboxRuntimePortProvider, port -> port.listArtifacts(sessionId).stream()
+                .map(SeahorseSandboxController::toResponse)
+                .toList());
+    }
+
+    private static SandboxExecutionResultResponse toResponse(SandboxExecutionResult result) {
+        return new SandboxExecutionResultResponse(
+                result.execution(),
+                result.artifacts().stream()
+                        .map(SeahorseSandboxController::toResponse)
+                        .toList(),
+                result.reasonCode());
+    }
+
+    private static SandboxArtifactResponse toResponse(SandboxArtifact artifact) {
+        return new SandboxArtifactResponse(
+                artifact.artifactId(),
+                artifact.sessionId(),
+                artifact.executionId(),
+                artifact.mediaType(),
+                artifact.scanStatus(),
+                artifact.sensitivity(),
+                artifact.createdAt());
     }
 
     public record SandboxSessionCreateRequest(String tenantId,
@@ -113,5 +142,23 @@ public class SeahorseSandboxController {
             input = input == null ? "" : input;
             requestedHosts = requestedHosts == null ? List.of() : List.copyOf(requestedHosts);
         }
+    }
+
+    public record SandboxExecutionResultResponse(SandboxExecution execution,
+                                                 List<SandboxArtifactResponse> artifacts,
+                                                 SandboxPolicyReasonCode reasonCode) {
+
+        public SandboxExecutionResultResponse {
+            artifacts = artifacts == null ? List.of() : List.copyOf(artifacts);
+        }
+    }
+
+    public record SandboxArtifactResponse(String artifactId,
+                                          String sessionId,
+                                          String executionId,
+                                          String mediaType,
+                                          SandboxArtifactScanStatus scanStatus,
+                                          ContextSensitivity sensitivity,
+                                          Instant createdAt) {
     }
 }

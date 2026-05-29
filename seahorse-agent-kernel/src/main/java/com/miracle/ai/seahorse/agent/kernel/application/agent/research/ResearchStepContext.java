@@ -54,6 +54,8 @@ public class ResearchStepContext {
     private String tenantId;
     private String userId;
     private String artifactId;
+    private int maxSearchQueries;
+    private int maxSources;
 
     public ResearchStepContext(String runId, String query) {
         this(runId, query, 0L);
@@ -97,6 +99,12 @@ public class ResearchStepContext {
     public String artifactId() { return artifactId; }
     public void setArtifactId(String artifactId) { this.artifactId = artifactId; }
 
+    public int maxSearchQueries() { return maxSearchQueries; }
+    public void setMaxSearchQueries(int maxSearchQueries) { this.maxSearchQueries = Math.max(0, maxSearchQueries); }
+
+    public int maxSources() { return maxSources; }
+    public void setMaxSources(int maxSources) { this.maxSources = Math.max(0, maxSources); }
+
     /**
      * 将上下文序列化为可写入 DurableTask.payloadJson 的 JSON 字符串。
      */
@@ -135,7 +143,9 @@ public class ResearchStepContext {
                 reportContent,
                 tenantId,
                 userId,
-                artifactId);
+                artifactId,
+                maxSearchQueries,
+                maxSources);
     }
 
     public static ResearchStepContext restore(Snapshot snap) {
@@ -159,6 +169,8 @@ public class ResearchStepContext {
         ctx.tenantId = snap.tenantId();
         ctx.userId = snap.userId();
         ctx.artifactId = snap.artifactId();
+        ctx.maxSearchQueries = snap.maxSearchQueries();
+        ctx.maxSources = snap.maxSources();
         return ctx;
     }
 
@@ -176,13 +188,17 @@ public class ResearchStepContext {
             String reportContent,
             String tenantId,
             String userId,
-            String artifactId
+            String artifactId,
+            int maxSearchQueries,
+            int maxSources
     ) {
         public Snapshot {
             searchQueries = searchQueries == null ? List.of() : List.copyOf(searchQueries);
             sources = sources == null ? List.of() : List.copyOf(sources);
             evidence = evidence == null ? List.of() : List.copyOf(evidence);
             fetchedContent = fetchedContent == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(fetchedContent));
+            maxSearchQueries = Math.max(0, maxSearchQueries);
+            maxSources = Math.max(0, maxSources);
         }
     }
 

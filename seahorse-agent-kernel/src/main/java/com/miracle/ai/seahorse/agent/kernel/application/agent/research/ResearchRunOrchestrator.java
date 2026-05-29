@@ -44,10 +44,12 @@ import java.util.UUID;
 public class ResearchRunOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(ResearchRunOrchestrator.class);
+    private static final int MAX_RETRY_ATTEMPTS = 3;
 
     private final DurableTaskQueuePort taskQueue;
     private final AgentRunEventBufferPort eventBuffer;
     private final EnumMap<ResearchStepType, ResearchStepHandler> handlers;
+    private final ResearchLoopDetector loopDetector;
     private final String workerId;
 
     public ResearchRunOrchestrator(DurableTaskQueuePort taskQueue,
@@ -55,6 +57,7 @@ public class ResearchRunOrchestrator {
                                    List<ResearchStepHandler> stepHandlers) {
         this.taskQueue = Objects.requireNonNull(taskQueue, "taskQueue must not be null");
         this.eventBuffer = Objects.requireNonNull(eventBuffer, "eventBuffer must not be null");
+        this.loopDetector = new ResearchLoopDetector();
         this.handlers = new EnumMap<>(ResearchStepType.class);
         for (ResearchStepHandler handler : Objects.requireNonNullElseGet(stepHandlers, List::<ResearchStepHandler>of)) {
             handlers.put(handler.stepType(), handler);
@@ -65,10 +68,13 @@ public class ResearchRunOrchestrator {
     public String startResearch(String runId, ResearchTaskProfile profile, String query,
                                String tenantId, String userId) {
         Objects.requireNonNull(runId, "runId must not be null");
+        ResearchTaskProfile safeProfile = Objects.requireNonNullElseGet(profile, ResearchTaskProfile::defaultProfile);
         long initialSeq = eventBuffer.getLatestSeq(runId).orElse(0L);
         ResearchStepContext context = new ResearchStepContext(runId, query, initialSeq);
         context.setTenantId(tenantId);
         context.setUserId(userId);
+        context.setMaxSearchQueries(safeProfile.maxSearchQueries());
+        context.setMaxSources(safeProfile.maxSources());
         emitEvent(runId, context, StreamEventType.RUN_STARTED, Map.of("runId", runId, "title", "Research started"));
         DurableTask task = new DurableTask(
                 UUID.randomUUID().toString(),
@@ -98,12 +104,22 @@ public class ResearchRunOrchestrator {
         ResearchStepContext context = restoreContext(task.runId(), task.payloadJson());
 
         try {
+            if (shouldSkipToSynthesize(stepType, context)) {
+                emitEvent(task.runId(), context, StreamEventType.STEP_FINISHED,
+                        Map.of("stepId", task.taskId(),
+                                "title", stepType.name(),
+                                "status", "SKIPPED",
+                                "skippedReason", "loop_detected"));
+                taskQueue.ack(task.taskId());
+                enqueueSpecificStep(task.runId(), ResearchStepType.SYNTHESIZE, context);
+                return true;
+            }
             emitEvent(task.runId(), context, StreamEventType.STEP_STARTED,
                     Map.of("stepId", task.taskId(), "title", stepType.name(), "status", "RUNNING"));
 
             ResearchStepHandler handler = handlers.get(stepType);
             if (handler != null) {
-                handler.execute(task, context);
+                handler.execute(task, context, this::emitEvent);
             } else {
                 log.debug("No handler registered for step {} (run={})", stepType, task.runId());
             }
@@ -122,19 +138,34 @@ public class ResearchRunOrchestrator {
             enqueueNextStep(task.runId(), stepType, context);
             return true;
         } catch (RetryableResearchException e) {
+            if (!e.shouldRetry(task.attemptCount(), MAX_RETRY_ATTEMPTS)) {
+                failStep(task, stepType, context, e);
+                return true;
+            }
             int nextAttempt = task.attemptCount() + 1;
             Instant retryAt = Instant.now().plusSeconds(30L * nextAttempt);
             taskQueue.retry(task.taskId(), retryAt, e.getMessage());
             log.info("Research step {} retry scheduled for run={}, attempt={}", stepType, task.runId(), nextAttempt);
             return true;
         } catch (Exception e) {
-            taskQueue.fail(task.taskId(), e.getMessage());
-            emitEvent(task.runId(), context, StreamEventType.RECOVERABLE_ERROR,
-                    Map.of("stepId", task.taskId(), "title", stepType.name(),
-                            "message", Objects.requireNonNullElse(e.getMessage(), "Unknown error")));
+            failStep(task, stepType, context, e);
             log.warn("Research step {} failed for run={}", stepType, task.runId(), e);
             return true;
         }
+    }
+
+    private boolean shouldSkipToSynthesize(ResearchStepType stepType, ResearchStepContext context) {
+        if (stepType != ResearchStepType.SEARCH && stepType != ResearchStepType.FETCH) {
+            return false;
+        }
+        return loopDetector.isSearchLooping(context.searchQueries());
+    }
+
+    private void failStep(DurableTask task, ResearchStepType stepType, ResearchStepContext context, Exception e) {
+        taskQueue.fail(task.taskId(), e.getMessage());
+        emitEvent(task.runId(), context, StreamEventType.RECOVERABLE_ERROR,
+                Map.of("stepId", task.taskId(), "title", stepType.name(),
+                        "message", Objects.requireNonNullElse(e.getMessage(), "Unknown error")));
     }
 
     private void enqueueNextStep(String runId, ResearchStepType current, ResearchStepContext context) {
@@ -155,6 +186,18 @@ public class ResearchRunOrchestrator {
             emitEvent(runId, context, StreamEventType.FINISH,
                     Map.of("runId", runId, "status", "SUCCEEDED"));
         }
+    }
+
+    private void enqueueSpecificStep(String runId, ResearchStepType stepType, ResearchStepContext context) {
+        DurableTask nextTask = new DurableTask(
+                UUID.randomUUID().toString(),
+                runId,
+                stepType.name(),
+                0,
+                Instant.now(),
+                null,
+                context.toJson());
+        taskQueue.enqueue(nextTask);
     }
 
     private ResearchStepContext restoreContext(String runId, String payloadJson) {

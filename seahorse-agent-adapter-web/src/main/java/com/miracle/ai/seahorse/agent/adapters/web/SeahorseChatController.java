@@ -61,6 +61,11 @@ public class SeahorseChatController {
             TaskTemplateId.DEEP_RESEARCH,
             TaskTemplateId.WEB_SUMMARY,
             TaskTemplateId.COMPARE_ANALYSIS);
+    private static final EnumSet<TaskTemplateId> HIGH_COST_TASK_TEMPLATES = EnumSet.of(
+            TaskTemplateId.DEEP_RESEARCH,
+            TaskTemplateId.COMPARE_ANALYSIS);
+    private static final int TEMPLATE_PERMITS_PER_DAY = 50;
+    private static final Duration TEMPLATE_WINDOW = Duration.ofDays(1);
 
     private final ObjectProvider<ChatInboundPort> chatInboundPortProvider;
     private final ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider;
@@ -190,6 +195,7 @@ public class SeahorseChatController {
             return resumeStream(resumeRunId, lastEventSeq, actualUserId);
         }
         checkChatRateLimit(actualUserId);
+        checkTaskTemplateRateLimit(taskTemplateId);
         ChatMode resolvedChatMode = resolveChatMode(chatMode, taskTemplateId);
         requireChatModeAllowed(chatMode, resolvedChatMode, taskTemplateId, agentId, versionId);
         String taskId = nextShortId();
@@ -268,10 +274,20 @@ public class SeahorseChatController {
             if (lastEventSeq != null) {
                 List<StreamEventEnvelope> missed = eventBufferPort.getAfter(resumeRunId, lastEventSeq);
                 if (!missed.isEmpty()) {
+                    long cursor = lastEventSeq;
                     for (StreamEventEnvelope envelope : missed) {
                         emitter.send(SseEmitter.event()
                                 .name("stream_event")
                                 .data(envelope));
+                        cursor = Math.max(cursor, envelope.eventSeq());
+                        if (envelope.eventType() == StreamEventType.FINISH) {
+                            emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
+                            emitter.complete();
+                            return emitter;
+                        }
+                    }
+                    if (attachResumeStream(emitter, resumeRunId, cursor)) {
+                        return emitter;
                     }
                     emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
                     emitter.complete();
@@ -279,9 +295,13 @@ public class SeahorseChatController {
                 }
             }
             AgentRunSnapshotInboundPort snapshotPort = snapshotPort();
+            var snapshot = snapshotPort.getSnapshot(resumeRunId);
             emitter.send(SseEmitter.event()
                     .name(StreamEventType.RUN_SNAPSHOT.value())
-                    .data(snapshotPort.getSnapshot(resumeRunId)));
+                    .data(snapshot));
+            if (snapshot.canResume() && attachResumeStream(emitter, resumeRunId, snapshot.lastEventSeq())) {
+                return emitter;
+            }
             emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
             emitter.complete();
         } catch (RuntimeException | IOException ex) {
@@ -290,6 +310,16 @@ public class SeahorseChatController {
                     : new IllegalStateException(ex.getMessage(), ex));
         }
         return emitter;
+    }
+
+    private boolean attachResumeStream(SseEmitter emitter, String runId, long afterSeq) {
+        ResearchSseBridge bridge = researchSseBridgeProvider == null
+                ? null : researchSseBridgeProvider.getIfAvailable();
+        if (bridge == null) {
+            return false;
+        }
+        bridge.attach(emitter, runId, null, null, afterSeq);
+        return true;
     }
 
     private AgentRunSnapshotInboundPort snapshotPort() {
@@ -372,9 +402,32 @@ public class SeahorseChatController {
 
     private void checkChatRateLimit(String userId) {
         RateLimitDecision decision = rateLimiterPort.tryAcquire(
-                "chat", userId, chatRateLimitPermits, chatRateLimitWindow);
+                "user", userId, chatRateLimitPermits, chatRateLimitWindow);
         if (!decision.allowed()) {
             throw new IllegalStateException("chat rate limit exceeded");
+        }
+    }
+
+    private void checkTaskTemplateRateLimit(String taskTemplateId) {
+        if (!isHighCostTaskTemplate(taskTemplateId)) {
+            return;
+        }
+        String normalized = TaskTemplateId.fromValue(taskTemplateId.trim()).value();
+        RateLimitDecision decision = rateLimiterPort.tryAcquire(
+                "template", normalized, TEMPLATE_PERMITS_PER_DAY, TEMPLATE_WINDOW);
+        if (!decision.allowed()) {
+            throw new IllegalStateException("task template rate limit exceeded");
+        }
+    }
+
+    private boolean isHighCostTaskTemplate(String taskTemplateId) {
+        if (!hasText(taskTemplateId)) {
+            return false;
+        }
+        try {
+            return HIGH_COST_TASK_TEMPLATES.contains(TaskTemplateId.fromValue(taskTemplateId.trim()));
+        } catch (IllegalArgumentException ex) {
+            return false;
         }
     }
 

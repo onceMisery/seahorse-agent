@@ -23,12 +23,14 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalDatasetRe
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalCandidateDecisionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalRegressionService;
 import com.miracle.ai.seahorse.agent.adapters.web.RateLimitFilter;
+import com.miracle.ai.seahorse.agent.adapters.spring.properties.RoutingProperties;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.routing.ModelRoutingPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.conversation.ConversationAttachmentParserService;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelProviderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -37,6 +39,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -53,13 +56,20 @@ import org.springframework.context.annotation.Configuration;
         SeahorseAgentKernelChatAutoConfiguration.class,
         SeahorseAgentAiAdapterAutoConfiguration.class
 })
+@EnableConfigurationProperties(RoutingProperties.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelEvalAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public ModelRoutingPolicy seahorseModelRoutingPolicy() {
-        return new ModelRoutingPolicy();
+    public ModelRoutingPolicy seahorseModelRoutingPolicy(
+            RoutingProperties routingProperties,
+            ObjectProvider<ModelProviderPort> modelProviderPort,
+            ObjectProvider<RateLimiterPort> rateLimiterPort) {
+        return new ModelRoutingPolicy(
+                routingProperties.toKernelProperties(),
+                modelProviderPort.getIfAvailable(),
+                rateLimiterPort.getIfAvailable());
     }
 
     @Bean

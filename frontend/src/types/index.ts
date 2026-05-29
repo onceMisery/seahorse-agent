@@ -41,6 +41,7 @@ export interface ArtifactBlock {
   title: string;
   code: string;
   isComplete: boolean;
+  append?: boolean;
 }
 
 export const AGENT_STREAM_EVENTS = {
@@ -59,7 +60,9 @@ export const AGENT_STREAM_EVENTS = {
   TOOL_CALL_WAITING_USER: "tool_call_waiting_user",
   SOURCE_FOUND: "source_found",
   ARTIFACT_CREATED: "artifact_created",
+  ARTIFACT_START: "artifact_start",
   ARTIFACT_CONTENT: "artifact_content",
+  ARTIFACT_END: "artifact_end",
   ARTIFACT_COMPLETE: "artifact_complete",
   RECOVERABLE_ERROR: "recoverable_error"
 } as const;
@@ -92,6 +95,7 @@ export interface AgentSource {
   snippet?: string;
   score?: number;
   sourceType?: string;
+  trustLevel?: string;
 }
 
 export interface AgentApproval {
@@ -163,6 +167,7 @@ export interface AgentRunSnapshotSource {
   title?: string | null;
   url?: string | null;
   snippet?: string | null;
+  trustLevel?: string | null;
   confidenceLevel?: string | null;
   supportingConclusion?: string | null;
   fetchedAt?: string | null;
@@ -258,8 +263,8 @@ export interface Message {
 }
 
 export interface StreamMetaPayload {
-  conversationId: string;
-  taskId: string;
+  conversationId?: string | null;
+  taskId?: string | null;
   runId?: string | null;
 }
 

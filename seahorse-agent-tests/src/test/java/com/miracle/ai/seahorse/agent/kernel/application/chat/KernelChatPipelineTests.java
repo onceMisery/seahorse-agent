@@ -66,6 +66,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRun;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventSender;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
@@ -302,6 +303,29 @@ class KernelChatPipelineTests {
         Assertions.assertNull(ports.lastPromptContext.getContextPack());
         Assertions.assertNotNull(ports.lastPromptContext.getMemoryContext());
         Assertions.assertNotNull(ports.lastChatRequest);
+    }
+
+    @Test
+    void shouldKeepSystemPromptStaticAndInjectRuntimeContextAfterSystemPrompt() {
+        RecordingChatPorts ports = new RecordingChatPorts(GuidanceDecision.none(),
+                RetrievalContext.builder().build());
+        RecordingContextPackBuilder builder = new RecordingContextPackBuilder();
+        KernelChatPipeline pipeline = pipeline(ports, fixedMemoryEngine(memoryContext()), builder);
+
+        pipeline.execute(context(new RecordingCallback()));
+
+        Assertions.assertNotNull(ports.lastChatRequest);
+        List<ChatMessage> messages = ports.lastChatRequest.getMessages();
+        Assertions.assertTrue(messages.size() >= 3);
+        Assertions.assertEquals(ChatRole.SYSTEM, messages.get(0).getRole());
+        Assertions.assertFalse(messages.get(0).getContent().contains("ContextPack context:"));
+        Assertions.assertFalse(messages.get(0).getContent().contains("user is interested in HR onboarding"));
+        Assertions.assertFalse(messages.get(0).getContent().contains("历史问题"));
+        Assertions.assertFalse(messages.get(0).getContent().contains("{currentDateTime}"));
+        Assertions.assertEquals(ChatRole.USER, messages.get(1).getRole());
+        Assertions.assertTrue(messages.get(1).getContent().contains("当前时间"));
+        Assertions.assertTrue(messages.get(1).getContent().contains("ContextPack context:"));
+        Assertions.assertTrue(messages.get(1).getContent().contains("user is interested in HR onboarding"));
     }
 
     @Test

@@ -69,6 +69,12 @@ export type RolloutActionRequest = {
   targetVersionId?: string;
 };
 
+export type EvalRegressionRequest = {
+  datasetId: string;
+  modelId?: string;
+  baselinePassRate?: number;
+};
+
 const DEFAULT_PAGE_SIZE = 10;
 
 function withPageDefaults<T extends { current?: number; size?: number }>(params: T) {
@@ -142,10 +148,13 @@ export async function rejectEvalCandidate(candidateId: string, note?: string): P
   );
 }
 
-export async function runEvalRegression(datasetId: string, modelId?: string): Promise<ApiRecord> {
+export async function runEvalRegression(request: EvalRegressionRequest): Promise<ApiRecord> {
   return api.post<ApiRecord, ApiRecord>(
-    `/api/eval-datasets/${encodeURIComponent(datasetId)}/regression`,
-    { modelId: modelId ?? null }
+    `/api/eval-datasets/${encodeURIComponent(request.datasetId)}/regression`,
+    {
+      modelId: request.modelId ?? null,
+      baselinePassRate: request.baselinePassRate ?? null
+    }
   );
 }
 

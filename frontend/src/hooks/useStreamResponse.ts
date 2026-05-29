@@ -20,6 +20,7 @@ export interface StreamOptions {
   signal?: AbortSignal;
   retryCount?: number;
   retryDelayMs?: number;
+  resume?: () => { runId?: string | null; lastEventSeq?: number | null } | null;
   /** 看门狗超时时间 (毫秒)，默认 30 秒 */
   timeoutMs?: number;
 }
@@ -37,6 +38,42 @@ function parseData(raw: string): unknown {
   }
 }
 
+function payloadKey(payload: unknown): string {
+  try {
+    return JSON.stringify(payload ?? null);
+  } catch {
+    return String(payload);
+  }
+}
+
+function safeInvoke<Args extends unknown[]>(handler: ((...args: Args) => unknown) | undefined, ...args: Args) {
+  if (!handler) return;
+  try {
+    const result = handler(...args);
+    if (result && typeof (result as PromiseLike<unknown>).then === "function") {
+      Promise.resolve(result).catch((error) => {
+        console.error("[stream] async handler error, skipping:", error);
+      });
+    }
+  } catch (error) {
+    console.error("[stream] handler error, skipping:", error);
+  }
+}
+
+function isTerminalEvent(name: string) {
+  return name === "done" || name === "finish" || name === "cancel" || name === "error";
+}
+
+function resumeUrl(originalUrl: string, runId: string, lastEventSeq?: number | null) {
+  const [path] = originalUrl.split("?");
+  const search = new URLSearchParams();
+  search.set("resumeRunId", runId);
+  if (typeof lastEventSeq === "number" && Number.isFinite(lastEventSeq)) {
+    search.set("lastEventSeq", String(lastEventSeq));
+  }
+  return `${path}?${search.toString()}`;
+}
+
 async function readSseStream(response: Response, handlers: StreamHandlers, signal?: AbortSignal, timeoutMs?: number) {
   if (!response.body) {
     throw new Error("Stream response body is empty");
@@ -47,6 +84,8 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
   let buffer = "";
   let eventName = "message";
   let dataLines: string[] = [];
+  let pendingDuplicate: { eventName: string; payloadKey: string } | null = null;
+  let terminalEventReceived = false;
 
   // 看门狗：每次收到数据重置定时器，超时则报错
   const watchdogMs = timeoutMs ?? 30000;
@@ -58,7 +97,6 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
     if (watchdogTimer !== null) clearTimeout(watchdogTimer);
     watchdogTimer = setTimeout(() => {
       watchdogFired = true;
-      handlers.onError?.(new Error("Stream timeout: 服务器未在规定时间内响应"));
       reader.cancel();
     }, watchdogMs);
   };
@@ -72,6 +110,47 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
 
   resetWatchdog();
 
+  const dispatchTypedEvent = (name: string, payload: unknown) => {
+    if (isTerminalEvent(name)) {
+      terminalEventReceived = true;
+    }
+    safeInvoke(handlers.onEvent, name, payload);
+
+    switch (name) {
+      case "meta":
+        safeInvoke(handlers.onMeta, payload as StreamMetaPayload);
+        break;
+      case "message": {
+        const messagePayload = payload as MessageDeltaPayload;
+        if (messagePayload?.type === "think") {
+          safeInvoke(handlers.onThinking, messagePayload);
+        }
+        safeInvoke(handlers.onMessage, messagePayload);
+        break;
+      }
+      case "finish":
+        safeInvoke(handlers.onFinish, payload as CompletionPayload);
+        break;
+      case "done":
+        safeInvoke(handlers.onDone);
+        break;
+      case "cancel":
+        safeInvoke(handlers.onCancel, payload as CompletionPayload);
+        break;
+      case "reject":
+        safeInvoke(handlers.onReject, payload as MessageDeltaPayload);
+        break;
+      case "title":
+        safeInvoke(handlers.onTitle, payload as { title: string });
+        break;
+      case "error":
+        safeInvoke(handlers.onError, new Error(String((payload as { error?: string })?.error || payload)));
+        break;
+      default:
+        break;
+    }
+  };
+
   const dispatchEvent = () => {
     if (dataLines.length === 0) {
       eventName = "message";
@@ -79,52 +158,31 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
     }
     const raw = dataLines.join("\n");
     const payload = parseData(raw);
-    handlers.onEvent?.(eventName, payload);
 
     if (eventName === "stream_event") {
       const envelope = payload as StreamEventEnvelope;
       if (envelope && typeof envelope === "object" && "eventSeq" in envelope) {
-        handlers.onStreamEvent?.(envelope);
-        handlers.onEvent?.(envelope.eventType, envelope.typedPayload);
+        safeInvoke(handlers.onStreamEvent, envelope);
+        pendingDuplicate = {
+          eventName: envelope.eventType,
+          payloadKey: payloadKey(envelope.typedPayload)
+        };
+        dispatchTypedEvent(envelope.eventType, envelope.typedPayload);
       }
       eventName = "message";
       dataLines = [];
       return;
     }
 
-    switch (eventName) {
-      case "meta":
-        handlers.onMeta?.(payload as StreamMetaPayload);
-        break;
-      case "message": {
-        const messagePayload = payload as MessageDeltaPayload;
-        if (messagePayload?.type === "think") {
-          handlers.onThinking?.(messagePayload);
-        }
-        handlers.onMessage?.(messagePayload);
-        break;
-      }
-      case "finish":
-        handlers.onFinish?.(payload as CompletionPayload);
-        break;
-      case "done":
-        handlers.onDone?.();
-        break;
-      case "cancel":
-        handlers.onCancel?.(payload as CompletionPayload);
-        break;
-      case "reject":
-        handlers.onReject?.(payload as MessageDeltaPayload);
-        break;
-      case "title":
-        handlers.onTitle?.(payload as { title: string });
-        break;
-      case "error":
-        handlers.onError?.(new Error(String((payload as { error?: string })?.error || payload)));
-        break;
-      default:
-        break;
+    const currentPayloadKey = payloadKey(payload);
+    if (pendingDuplicate?.eventName === eventName && pendingDuplicate.payloadKey === currentPayloadKey) {
+      pendingDuplicate = null;
+      eventName = "message";
+      dataLines = [];
+      return;
     }
+    pendingDuplicate = null;
+    dispatchTypedEvent(eventName, payload);
 
     eventName = "message";
     dataLines = [];
@@ -140,6 +198,12 @@ async function readSseStream(response: Response, handlers: StreamHandlers, signa
     if (done) {
       dispatchEvent();
       clearWatchdog();
+      if (watchdogFired) {
+        throw new Error("Stream timeout: 服务器未在规定时间内响应");
+      }
+      if (!terminalEventReceived && !signal?.aborted) {
+        throw new Error("Stream connection closed before completion");
+      }
       break;
     }
     resetWatchdog();
@@ -194,14 +258,22 @@ async function streamWithRetry(
   options: StreamOptions,
   handlers: StreamHandlers
 ): Promise<void> {
-  const { url, headers, signal, timeoutMs } = options;
+  const { url, headers, signal, timeoutMs, resume } = options;
   const retryCount = options.retryCount ?? 2;
   const retryDelayMs = options.retryDelayMs ?? 600;
 
   let attempt = 0;
+  let shouldResumeNextAttempt = false;
   while (attempt <= retryCount) {
     try {
-      const response = await fetch(url, {
+      const checkpoint = shouldResumeNextAttempt ? resume?.() : null;
+      if (shouldResumeNextAttempt && !checkpoint?.runId) {
+        throw new Error("Stream interrupted before a resume checkpoint was available");
+      }
+      const nextUrl = checkpoint?.runId
+        ? resumeUrl(url, checkpoint.runId, checkpoint.lastEventSeq)
+        : url;
+      const response = await fetch(nextUrl, {
         method: "GET",
         headers: {
           Accept: "text/event-stream",
@@ -214,11 +286,15 @@ async function streamWithRetry(
         throw await buildHttpError(response);
       }
 
+      shouldResumeNextAttempt = true;
       await readSseStream(response, handlers, signal, timeoutMs);
       return;
     } catch (error) {
       const err = error as Error;
       if (signal?.aborted) {
+        throw err;
+      }
+      if (shouldResumeNextAttempt && !resume?.()?.runId) {
         throw err;
       }
       if (attempt >= retryCount) {

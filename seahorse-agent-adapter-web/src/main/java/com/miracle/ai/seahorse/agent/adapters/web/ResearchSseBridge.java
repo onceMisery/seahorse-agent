@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -34,6 +35,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * 把 ResearchRunOrchestrator 写入 eventBuffer 的事件流转发到 SSE。
@@ -47,6 +49,7 @@ public class ResearchSseBridge {
     private static final String STREAM_EVENT_NAME = "stream_event";
     private static final long DEFAULT_POLL_INTERVAL_MS = 200L;
     private static final long DEFAULT_MAX_DURATION_MS = 10 * 60 * 1000L;
+    private static final long DEFAULT_CONTENT_THROTTLE_MS = 50L;
 
     private final AgentRunEventBufferPort eventBufferPort;
     private final ScheduledExecutorService executor;
@@ -68,19 +71,22 @@ public class ResearchSseBridge {
     }
 
     public void attach(SseEmitter emitter, String runId, String conversationId, String taskId) {
+        attach(emitter, runId, conversationId, taskId, 0L);
+    }
+
+    public void attach(SseEmitter emitter, String runId, String conversationId, String taskId, long afterSeq) {
         Objects.requireNonNull(emitter, "emitter must not be null");
         Objects.requireNonNull(runId, "runId must not be null");
         try {
-            emitter.send(SseEmitter.event()
-                    .name(StreamEventType.META.value())
-                    .data(Map.of("conversationId", conversationId, "taskId", taskId, "runId", runId)));
+            emitter.send(SseEmitter.event().name(StreamEventType.META.value()).data(meta(runId, conversationId, taskId)));
         } catch (IOException ex) {
             emitter.complete();
             return;
         }
-        AtomicLong cursor = new AtomicLong(0L);
+        AtomicLong cursor = new AtomicLong(Math.max(0L, afterSeq));
         AtomicBoolean closed = new AtomicBoolean(false);
         long startedAt = System.currentTimeMillis();
+        ThrottledEventSender throttledSender = new ThrottledEventSender(DEFAULT_CONTENT_THROTTLE_MS);
         ScheduledFuture<?>[] handle = new ScheduledFuture<?>[1];
 
         Runnable poller = () -> {
@@ -89,12 +95,16 @@ public class ResearchSseBridge {
             }
             try {
                 List<StreamEventEnvelope> events = eventBufferPort.getAfter(runId, cursor.get());
+                long now = System.currentTimeMillis();
+                EventSink sink = envelope -> sendEnvelope(emitter, envelope);
+                if (events.isEmpty()) {
+                    throttledSender.flushDue(now, sink);
+                }
                 for (StreamEventEnvelope envelope : events) {
                     if (closed.get()) {
                         return;
                     }
-                    emitter.send(SseEmitter.event().name(STREAM_EVENT_NAME).data(envelope));
-                    emitter.send(SseEmitter.event().name(envelope.eventType().value()).data(envelope.typedPayload()));
+                    throttledSender.accept(envelope, now, sink);
                     cursor.set(envelope.eventSeq());
                     if (envelope.eventType() == StreamEventType.FINISH) {
                         completeStream(emitter, closed, handle);
@@ -102,6 +112,7 @@ public class ResearchSseBridge {
                     }
                 }
                 if (System.currentTimeMillis() - startedAt > maxDurationMs) {
+                    throttledSender.flushNow(sink);
                     completeStream(emitter, closed, handle);
                 }
             } catch (IOException ex) {
@@ -117,6 +128,23 @@ public class ResearchSseBridge {
         emitter.onError(ex -> cancelStream(emitter, closed, handle));
 
         handle[0] = executor.scheduleWithFixedDelay(poller, 0, pollIntervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    private static Map<String, Object> meta(String runId, String conversationId, String taskId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("runId", runId);
+        if (conversationId != null) {
+            payload.put("conversationId", conversationId);
+        }
+        if (taskId != null) {
+            payload.put("taskId", taskId);
+        }
+        return payload;
+    }
+
+    private void sendEnvelope(SseEmitter emitter, StreamEventEnvelope envelope) throws IOException {
+        emitter.send(SseEmitter.event().name(STREAM_EVENT_NAME).data(envelope));
+        emitter.send(SseEmitter.event().name(envelope.eventType().value()).data(envelope.typedPayload()));
     }
 
     private void completeStream(SseEmitter emitter, AtomicBoolean closed, ScheduledFuture<?>[] handle) {
@@ -156,5 +184,124 @@ public class ResearchSseBridge {
             thread.setDaemon(true);
             return thread;
         });
+    }
+
+    @FunctionalInterface
+    interface EventSink {
+        void send(StreamEventEnvelope envelope) throws IOException;
+    }
+
+    static final class ThrottledEventSender {
+
+        private final long throttleMs;
+        private StreamEventEnvelope pending;
+        private long pendingSinceMs;
+
+        ThrottledEventSender(long throttleMs) {
+            this.throttleMs = Math.max(1L, throttleMs);
+        }
+
+        void accept(StreamEventEnvelope envelope, long nowMs, EventSink sink) throws IOException {
+            Objects.requireNonNull(envelope, "envelope must not be null");
+            Objects.requireNonNull(sink, "sink must not be null");
+            if (!isContentEvent(envelope.eventType())) {
+                flushNow(sink);
+                sink.send(envelope);
+                return;
+            }
+            flushDue(nowMs, sink);
+            if (pending == null) {
+                pending = envelope;
+                pendingSinceMs = nowMs;
+                return;
+            }
+            if (canMerge(pending, envelope)) {
+                pending = merge(pending, envelope);
+                return;
+            }
+            flushNow(sink);
+            pending = envelope;
+            pendingSinceMs = nowMs;
+        }
+
+        void flushDue(long nowMs, EventSink sink) throws IOException {
+            Objects.requireNonNull(sink, "sink must not be null");
+            if (pending != null && nowMs - pendingSinceMs >= throttleMs) {
+                flushNow(sink);
+            }
+        }
+
+        void flushNow(EventSink sink) throws IOException {
+            Objects.requireNonNull(sink, "sink must not be null");
+            if (pending == null) {
+                return;
+            }
+            StreamEventEnvelope envelope = pending;
+            pending = null;
+            pendingSinceMs = 0L;
+            sink.send(envelope);
+        }
+
+        private static boolean isContentEvent(StreamEventType eventType) {
+            return eventType == StreamEventType.MESSAGE || eventType == StreamEventType.ARTIFACT_CONTENT;
+        }
+
+        private static boolean canMerge(StreamEventEnvelope current, StreamEventEnvelope next) {
+            if (current.eventType() != next.eventType()) {
+                return false;
+            }
+            if (current.typedPayload() instanceof Map<?, ?> currentMap
+                    && next.typedPayload() instanceof Map<?, ?> nextMap) {
+                Object currentArtifactId = currentMap.get("artifactId");
+                Object nextArtifactId = nextMap.get("artifactId");
+                return currentArtifactId == null || nextArtifactId == null || currentArtifactId.equals(nextArtifactId);
+            }
+            return current.typedPayload() instanceof String && next.typedPayload() instanceof String;
+        }
+
+        private static StreamEventEnvelope merge(StreamEventEnvelope current, StreamEventEnvelope next) {
+            Object mergedPayload = mergePayload(current.typedPayload(), next.typedPayload());
+            return new StreamEventEnvelope(
+                    next.eventId(),
+                    next.eventSeq(),
+                    next.eventType(),
+                    next.runId(),
+                    next.stepId(),
+                    next.timestamp(),
+                    mergedPayload);
+        }
+
+        private static Object mergePayload(Object currentPayload, Object nextPayload) {
+            if (currentPayload instanceof Map<?, ?> currentMap && nextPayload instanceof Map<?, ?> nextMap) {
+                Map<String, Object> merged = new LinkedHashMap<>();
+                copyMap(merged, currentMap);
+                copyMap(merged, nextMap);
+                mergeTextField(merged, currentMap, nextMap, "delta");
+                mergeTextField(merged, currentMap, nextMap, "content");
+                return merged;
+            }
+            if (currentPayload instanceof String currentText && nextPayload instanceof String nextText) {
+                return currentText + nextText;
+            }
+            return nextPayload;
+        }
+
+        private static void copyMap(Map<String, Object> target, Map<?, ?> source) {
+            for (Map.Entry<?, ?> entry : source.entrySet()) {
+                if (entry.getKey() != null) {
+                    target.put(String.valueOf(entry.getKey()), entry.getValue());
+                }
+            }
+        }
+
+        private static void mergeTextField(Map<String, Object> target,
+                                           Map<?, ?> currentMap,
+                                           Map<?, ?> nextMap,
+                                           String field) {
+            if (!currentMap.containsKey(field) || !nextMap.containsKey(field)) {
+                return;
+            }
+            target.put(field, String.valueOf(currentMap.get(field)) + nextMap.get(field));
+        }
     }
 }

@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.research.PlanStepH
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.ResearchRunOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.ResearchStepHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.SearchStepHandler;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.research.SourceTrustEvaluator;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.SynthesizeStepHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.VerifyCitationsStepHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.research.WriteReportStepHandler;
@@ -34,6 +35,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositor
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DurableTaskQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchPort;
@@ -69,6 +71,12 @@ public class SeahorseAgentKernelResearchAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    public SourceTrustEvaluator seahorseSourceTrustEvaluator() {
+        return new SourceTrustEvaluator();
+    }
+
+    @Bean
     @ConditionalOnBean(ChatModelPort.class)
     @ConditionalOnMissingBean
     public PlanStepHandler seahorsePlanStepHandler(ChatModelPort chatModel) {
@@ -78,8 +86,9 @@ public class SeahorseAgentKernelResearchAutoConfiguration {
     @Bean
     @ConditionalOnBean(WebSearchPort.class)
     @ConditionalOnMissingBean
-    public SearchStepHandler seahorseSearchStepHandler(WebSearchPort webSearch) {
-        return new SearchStepHandler(webSearch);
+    public SearchStepHandler seahorseSearchStepHandler(WebSearchPort webSearch,
+                                                       SourceTrustEvaluator sourceTrustEvaluator) {
+        return new SearchStepHandler(webSearch, sourceTrustEvaluator);
     }
 
     @Bean
@@ -107,9 +116,14 @@ public class SeahorseAgentKernelResearchAutoConfiguration {
     @ConditionalOnBean({ChatModelPort.class, ObjectStoragePort.class, AgentArtifactRepositoryPort.class})
     @ConditionalOnMissingBean
     public WriteReportStepHandler seahorseWriteReportStepHandler(ChatModelPort chatModel,
+                                                                 ObjectProvider<StreamingChatModelPort> streamingChatModel,
                                                                  ObjectStoragePort objectStorage,
                                                                  AgentArtifactRepositoryPort artifactRepository) {
-        return new WriteReportStepHandler(chatModel, objectStorage, artifactRepository);
+        return new WriteReportStepHandler(
+                chatModel,
+                streamingChatModel.getIfAvailable(),
+                objectStorage,
+                artifactRepository);
     }
 
     @Bean

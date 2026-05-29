@@ -106,6 +106,47 @@ class ResearchRunOrchestratorTests {
     }
 
     @Test
+    void stepHandlerCanPublishIncrementalArtifactEvents() {
+        List<ResearchStepHandler> handlers = new ArrayList<>();
+        handlers.add(new ResearchStepHandler() {
+            @Override
+            public ResearchStepType stepType() {
+                return ResearchStepType.PLAN;
+            }
+
+            @Override
+            public void execute(DurableTask task, ResearchStepContext context) {
+                throw new AssertionError("orchestrator must call event-aware execute");
+            }
+
+            @Override
+            public void execute(DurableTask task, ResearchStepContext context, ResearchEventPublisher events) {
+                events.publish(task.runId(), context, StreamEventType.ARTIFACT_START,
+                        java.util.Map.of("artifactId", "artifact-1"));
+                events.publish(task.runId(), context, StreamEventType.ARTIFACT_CONTENT,
+                        java.util.Map.of("artifactId", "artifact-1", "delta", "hello"));
+                events.publish(task.runId(), context, StreamEventType.ARTIFACT_END,
+                        java.util.Map.of("artifactId", "artifact-1", "totalChars", 5));
+            }
+        });
+        orchestrator = new ResearchRunOrchestrator(taskQueue, eventBuffer, handlers);
+
+        orchestrator.startResearch("run-artifact-stream", ResearchTaskProfile.defaultProfile(),
+                "q", "t", "u");
+        orchestrator.pollAndExecute();
+
+        List<StreamEventType> eventTypes = eventBuffer.allEvents("run-artifact-stream").stream()
+                .map(StreamEventEnvelope::eventType)
+                .toList();
+        assertTrue(eventTypes.indexOf(StreamEventType.ARTIFACT_START)
+                < eventTypes.indexOf(StreamEventType.ARTIFACT_CONTENT));
+        assertTrue(eventTypes.indexOf(StreamEventType.ARTIFACT_CONTENT)
+                < eventTypes.indexOf(StreamEventType.ARTIFACT_END));
+        assertTrue(eventTypes.indexOf(StreamEventType.ARTIFACT_END)
+                < eventTypes.indexOf(StreamEventType.STEP_FINISHED));
+    }
+
+    @Test
     void retryableExceptionSchedulesRetry() {
         List<ResearchStepHandler> handlers = new ArrayList<>();
         handlers.add(new ResearchStepHandler() {
@@ -132,6 +173,61 @@ class ResearchRunOrchestratorTests {
 
         while (orchestrator.pollAndExecute()) { }
         assertTrue(executedSteps.contains(ResearchStepType.VERIFY_CITATIONS));
+    }
+
+    @Test
+    void retryableExceptionWithSecurityCauseFailsWithoutRetry() {
+        List<ResearchStepHandler> handlers = new ArrayList<>();
+        handlers.add(new ResearchStepHandler() {
+            @Override
+            public ResearchStepType stepType() { return ResearchStepType.PLAN; }
+            @Override
+            public void execute(DurableTask task, ResearchStepContext context) {
+                throw new RetryableResearchException("blocked by safety policy", new SecurityException("denied"));
+            }
+        });
+        orchestrator = new ResearchRunOrchestrator(taskQueue, eventBuffer, handlers);
+        orchestrator.startResearch("run-non-retryable", ResearchTaskProfile.defaultProfile(),
+                "q", "t", "u");
+
+        orchestrator.pollAndExecute();
+
+        assertEquals(0, taskQueue.retryCount);
+        assertEquals(1, taskQueue.failCount);
+        assertTrue(eventBuffer.allEvents("run-non-retryable").stream()
+                .anyMatch(event -> event.eventType() == StreamEventType.RECOVERABLE_ERROR));
+    }
+
+    @Test
+    void repeatedSearchQueryLoopSkipsToSynthesize() {
+        List<ResearchStepHandler> handlers = new ArrayList<>();
+        handlers.add(new TrackingHandler(ResearchStepType.SEARCH, executedSteps));
+        handlers.add(new TrackingHandler(ResearchStepType.SYNTHESIZE, executedSteps));
+        orchestrator = new ResearchRunOrchestrator(taskQueue, eventBuffer, handlers);
+        ResearchStepContext context = new ResearchStepContext("run-loop", "q", 0);
+        context.addSearchQuery("same query");
+        context.addSearchQuery(" same   query ");
+        context.addSearchQuery("same query");
+        taskQueue.enqueue(new DurableTask(
+                "task-search",
+                "run-loop",
+                ResearchStepType.SEARCH.name(),
+                0,
+                Instant.now(),
+                null,
+                context.toJson()));
+
+        assertTrue(orchestrator.pollAndExecute());
+        DurableTask nextTask = taskQueue.peek();
+
+        assertFalse(executedSteps.contains(ResearchStepType.SEARCH));
+        assertNotNull(nextTask);
+        assertEquals(ResearchStepType.SYNTHESIZE.name(), nextTask.stepType());
+        assertTrue(eventBuffer.allEvents("run-loop").stream()
+                .filter(event -> event.eventType() == StreamEventType.STEP_FINISHED)
+                .map(StreamEventEnvelope::typedPayload)
+                .map(Object::toString)
+                .anyMatch(payload -> payload.contains("loop_detected")));
     }
 
     @Test

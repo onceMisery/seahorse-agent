@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { ApprovalCard } from "@/components/chat/ApprovalCard";
 import { SourceList } from "@/components/chat/SourceList";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { downloadAgentArtifact } from "@/services/agentArtifactService";
 import { AGENT_ARTIFACT_SCAN_STATUS, type AgentArtifact, type Message } from "@/types";
 
@@ -41,6 +42,15 @@ function formatNumber(value?: number) {
 function formatCost(value?: number) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "$0.0000";
   return `$${value.toFixed(4)}`;
+}
+
+function timelineStatusKind(status?: string): "running" | "waiting" | "done" | "failed" | "neutral" {
+  const normalized = (status ?? "").toUpperCase();
+  if (["RUNNING", "STARTED", "IN_PROGRESS", "PROCESSING"].includes(normalized)) return "running";
+  if (["WAITING_USER", "PAUSED", "PENDING_APPROVAL"].includes(normalized)) return "waiting";
+  if (["COMPLETED", "DONE", "SUCCESS", "SUCCEEDED", "FINISHED"].includes(normalized)) return "done";
+  if (["FAILED", "ERROR", "TIMEOUT", "CANCELLED", "CANCELED"].includes(normalized)) return "failed";
+  return "neutral";
 }
 
 function artifactTitle(artifact: AgentArtifact) {
@@ -102,10 +112,22 @@ export function AgentTracePanel({ message }: AgentTracePanelProps) {
             <Clock3 className="h-3.5 w-3.5" />
             Timeline
           </div>
-          <div className="space-y-2">
-            {timeline.map((item) => (
-              <div key={item.id} className="flex gap-3 text-sm">
-                <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: "var(--theme-accent)" }} />
+          <div className="agent-trace-list space-y-2">
+            {timeline.map((item, index) => {
+              const statusKind = timelineStatusKind(item.status);
+              const isActive = message.currentStepId === item.id || statusKind === "running" || statusKind === "waiting";
+              const showDetail = Boolean(item.detail && statusKind !== "done");
+              return (
+              <div
+                key={item.id}
+                className={cn(
+                  "agent-trace-item flex gap-3 text-sm",
+                  `agent-trace-item--${statusKind}`,
+                  isActive && "is-active"
+                )}
+                style={{ animationDelay: `${Math.min(index * 30, 180)}ms` }}
+              >
+                <span className="agent-trace-dot mt-1 h-2 w-2 shrink-0 rounded-full" />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium" style={{ color: "var(--theme-text-primary)" }}>
@@ -122,14 +144,15 @@ export function AgentTracePanel({ message }: AgentTracePanelProps) {
                       </span>
                     ) : null}
                   </div>
-                  {item.detail ? (
+                  {showDetail ? (
                     <p className="mt-0.5 text-xs leading-relaxed" style={{ color: "var(--theme-text-muted)" }}>
                       {item.detail}
                     </p>
                   ) : null}
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       ) : null}

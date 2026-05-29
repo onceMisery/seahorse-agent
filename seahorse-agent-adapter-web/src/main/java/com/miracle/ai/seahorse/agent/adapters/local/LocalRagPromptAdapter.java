@@ -24,9 +24,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.chat.RagPromptPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextBudget;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 本地 RAG Prompt 组装适配器。
@@ -60,14 +64,19 @@ public class LocalRagPromptAdapter implements RagPromptPort {
                                                      String question,
                                                      List<String> subQuestions) {
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.system(buildSystemPrompt(context)));
+        messages.add(ChatMessage.system(DEFAULT_SYSTEM_PROMPT.trim()));
+        buildRuntimeContext(context).ifPresent(runtimeContext -> messages.add(ChatMessage.user(runtimeContext)));
         messages.addAll(safeHistory(history));
         messages.add(ChatMessage.user(buildUserPrompt(question, subQuestions)));
         return messages;
     }
 
-    private String buildSystemPrompt(PromptContext context) {
-        StringBuilder builder = new StringBuilder(DEFAULT_SYSTEM_PROMPT.trim());
+    private Optional<String> buildRuntimeContext(PromptContext context) {
+        StringBuilder builder = new StringBuilder("<runtime-context>\n")
+                .append("当前时间：")
+                .append(LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
+                        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
+                .append(" Asia/Shanghai");
         String kbContext = context == null ? "" : Objects.requireNonNullElse(context.getKbContext(), "");
         String mcpContext = context == null ? "" : Objects.requireNonNullElse(context.getMcpContext(), "");
         appendContext(builder, KB_CONTEXT_TITLE, kbContext);
@@ -79,7 +88,8 @@ public class LocalRagPromptAdapter implements RagPromptPort {
         if (!memoryContext.isBlank()) {
             builder.append("\n\n").append(memoryContext);
         }
-        return builder.toString();
+        builder.append("\n</runtime-context>");
+        return Optional.of(builder.toString());
     }
 
     private String buildUserPrompt(String question, List<String> subQuestions) {

@@ -91,6 +91,9 @@ function jsonStringValue(record: Record<string, unknown>, keys: string[]): strin
 
 function normalizeArtifactLanguage(value: string | undefined): ArtifactLanguage {
   const normalized = value?.toLowerCase();
+  if (normalized === "markdown_report" || normalized === "report" || normalized === "text/markdown") {
+    return "markdown";
+  }
   if (normalized && ARTIFACT_LANGUAGES.includes(normalized as ArtifactLanguage)) {
     return normalized as ArtifactLanguage;
   }
@@ -188,7 +191,8 @@ function normalizeSources(payload: unknown): AgentSource[] {
       url: stringValue(item, ["url", "href", "sourceLocation"]),
       snippet: stringValue(item, ["snippet", "content", "text", "summary"]),
       score: numberValue(item, ["score", "relevance", "similarity", "confidence"]),
-      sourceType: stringValue(item, ["sourceType", "type", "kind"])
+      sourceType: stringValue(item, ["sourceType", "type", "kind"]),
+      trustLevel: stringValue(item, ["trustLevel", "trust", "confidenceLevel"])
     }];
   });
 }
@@ -208,6 +212,52 @@ function normalizeArtifacts(payload: unknown): ArtifactBlock[] {
   });
 }
 
+function normalizeArtifactStarts(payload: unknown): ArtifactBlock[] {
+  return payloadItems(payload).flatMap((item, index) => {
+    if (!isRecord(item)) return [];
+    const id = stringValue(item, ["artifactId", "id"]) ?? `artifact-stream-${index}`;
+    return [{
+      id,
+      language: normalizeArtifactLanguage(stringValue(item, ["language", "lang", "artifactType", "mimeType"])),
+      title: stringValue(item, ["title", "name"]) ?? "Artifact",
+      code: "",
+      isComplete: false
+    }];
+  });
+}
+
+function normalizeArtifactContent(payload: unknown): ArtifactBlock[] {
+  return payloadItems(payload).flatMap((item, index) => {
+    if (!isRecord(item)) return [];
+    const delta = stringValue(item, ["delta"]);
+    const code = delta ?? stringValue(item, ["code", "content", "text"]);
+    if (!code) return [];
+    return [{
+      id: fallbackId("artifact", index, item),
+      language: normalizeArtifactLanguage(stringValue(item, ["language", "lang", "artifactType", "mimeType"])),
+      title: stringValue(item, ["title", "name"]) ?? "Artifact",
+      code,
+      isComplete: false,
+      append: Boolean(delta)
+    }];
+  });
+}
+
+function normalizeArtifactEnds(payload: unknown): ArtifactBlock[] {
+  return payloadItems(payload).flatMap((item, index) => {
+    if (!isRecord(item)) return [];
+    const id = stringValue(item, ["artifactId", "id"]);
+    if (!id) return [];
+    return [{
+      id,
+      language: normalizeArtifactLanguage(stringValue(item, ["language", "lang", "artifactType", "mimeType"])),
+      title: stringValue(item, ["title", "name"]) ?? `Artifact ${index + 1}`,
+      code: stringValue(item, ["code", "content", "text", "previewText", "preview"]) ?? "",
+      isComplete: true
+    }];
+  });
+}
+
 function normalizeServerArtifacts(payload: unknown): AgentArtifact[] {
   return payloadItems(payload).flatMap((item, index) => {
     if (!isRecord(item)) return [];
@@ -222,7 +272,7 @@ function normalizeServerArtifacts(payload: unknown): AgentArtifact[] {
       artifactType: stringValue(item, ["artifactType", "type", "kind"]),
       title: stringValue(item, ["title", "name"]) ?? `Artifact ${index + 1}`,
       mimeType: stringValue(item, ["mimeType", "contentType"]),
-      storageRef: stringValue(item, ["storageRef"]),
+      storageRef: stringValue(item, ["storageRef", "url"]),
       previewText: stringValue(item, ["previewText", "preview", "summary"]),
       provenanceJson: stringValue(item, ["provenanceJson", "provenance"]),
       scanStatus: stringValue(item, ["scanStatus", "status"]),
@@ -325,13 +375,28 @@ export function normalizeAgentStreamEvent(event: string, payload: unknown): Agen
       const artifacts = normalizeArtifactPayload(payload);
       return { type: AGENT_STREAM_EVENTS.ARTIFACT, items: artifacts.blocks, serverArtifacts: artifacts.serverArtifacts };
     }
+    case AGENT_STREAM_EVENTS.ARTIFACT_START:
+      return { type: AGENT_STREAM_EVENTS.ARTIFACT, items: normalizeArtifactStarts(payload), serverArtifacts: [] };
     case AGENT_STREAM_EVENTS.ARTIFACT_CONTENT: {
-      const artifacts = normalizeArtifactPayload(payload);
-      return { type: AGENT_STREAM_EVENTS.ARTIFACT, items: artifacts.blocks, serverArtifacts: artifacts.serverArtifacts };
+      return {
+        type: AGENT_STREAM_EVENTS.ARTIFACT,
+        items: normalizeArtifactContent(payload),
+        serverArtifacts: normalizeServerArtifacts(payload)
+      };
+    }
+    case AGENT_STREAM_EVENTS.ARTIFACT_END: {
+      return {
+        type: AGENT_STREAM_EVENTS.ARTIFACT,
+        items: normalizeArtifactEnds(payload),
+        serverArtifacts: normalizeServerArtifacts(payload)
+      };
     }
     case AGENT_STREAM_EVENTS.ARTIFACT_COMPLETE: {
-      const artifacts = normalizeArtifactPayload(payload);
-      return { type: AGENT_STREAM_EVENTS.ARTIFACT, items: artifacts.blocks, serverArtifacts: artifacts.serverArtifacts };
+      return {
+        type: AGENT_STREAM_EVENTS.ARTIFACT,
+        items: normalizeArtifactEnds(payload),
+        serverArtifacts: normalizeServerArtifacts(payload)
+      };
     }
     case AGENT_STREAM_EVENTS.APPROVAL:
       return { type: event, items: normalizeApprovals(payload) };

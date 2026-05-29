@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent.research;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.ResearchStepType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.SourceTrustLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.WebSource;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DurableTask;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchPort;
@@ -27,6 +28,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Comparator;
 import java.util.Objects;
 
 /**
@@ -53,8 +55,11 @@ public class FetchStepHandler implements ResearchStepHandler {
     @Override
     public void execute(DurableTask task, ResearchStepContext context) {
         int fetched = 0;
-        for (WebSource source : context.sources()) {
-            if (fetched >= MAX_FETCH_COUNT) break;
+        int maxFetchCount = context.maxSources() > 0 ? context.maxSources() : MAX_FETCH_COUNT;
+        for (WebSource source : context.sources().stream()
+                .sorted(Comparator.comparingInt(FetchStepHandler::trustRank).reversed())
+                .toList()) {
+            if (fetched >= maxFetchCount) break;
             try {
                 WebFetchResult result = webFetch.fetch(new WebFetchRequest(source.url(), 8000));
                 if (result.status() == WebFetchStatus.FETCHED && !result.contentText().isBlank()) {
@@ -68,5 +73,15 @@ public class FetchStepHandler implements ResearchStepHandler {
                 log.debug("Fetch failed: url={}", source.url(), e);
             }
         }
+    }
+
+    private static int trustRank(WebSource source) {
+        SourceTrustLevel trustLevel = Objects.requireNonNullElse(source.trustLevel(), SourceTrustLevel.UNTRUSTED);
+        return switch (trustLevel) {
+            case HIGH -> 3;
+            case MEDIUM -> 2;
+            case LOW -> 1;
+            case UNTRUSTED -> 0;
+        };
     }
 }

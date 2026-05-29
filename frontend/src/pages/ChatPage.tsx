@@ -7,6 +7,7 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { DeepSeaBackground } from "@/components/chat/DeepSeaBackground";
 import { MessageList } from "@/components/chat/MessageList";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { useActiveArtifacts } from "@/stores/artifactStore";
 import { useChatStore } from "@/stores/chatStore";
 
 export function ChatPage() {
@@ -93,16 +94,13 @@ export function ChatPage() {
     }
   }, [currentSessionId, sessionId, navigate]);
 
-  const latestArtifacts = React.useMemo(() => {
-    const last = [...messages].reverse().find((m) => m.role === "assistant" && (m.artifacts?.length || m.serverArtifacts?.length));
-    return { artifacts: last?.artifacts ?? [], serverArtifacts: last?.serverArtifacts ?? [] };
-  }, [messages]);
+  const latestArtifacts = useActiveArtifacts();
 
   React.useEffect(() => {
     if (latestArtifacts.artifacts.length > 0 || latestArtifacts.serverArtifacts.length > 0) {
       setArtifactPanelOpen(true);
     }
-  }, [latestArtifacts]);
+  }, [latestArtifacts.artifacts.length, latestArtifacts.serverArtifacts.length, latestArtifacts.version]);
 
   const showArtifactPanel = artifactPanelOpen
     && (latestArtifacts.artifacts.length > 0 || latestArtifacts.serverArtifacts.length > 0);
@@ -147,6 +145,21 @@ export function ChatPage() {
             </>
           )}
         </Group>
+        {showArtifactPanel && (
+          <div
+            className="fixed inset-x-0 bottom-0 z-40 h-[62dvh] overflow-hidden rounded-t-lg border-t shadow-[0_-18px_42px_rgba(0,0,0,0.18)] md:hidden"
+            style={{
+              backgroundColor: "var(--theme-bg-elevated)",
+              borderColor: "var(--theme-glass-border)"
+            }}
+          >
+            <ArtifactPanel
+              artifacts={latestArtifacts.artifacts}
+              serverArtifacts={latestArtifacts.serverArtifacts}
+              onClose={() => setArtifactPanelOpen(false)}
+            />
+          </div>
+        )}
       </div>
     </MainLayout>
   );
