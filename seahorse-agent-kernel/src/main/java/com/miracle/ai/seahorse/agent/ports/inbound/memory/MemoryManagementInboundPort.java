@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryQualitySnapshot;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReadinessReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ProfileFact;
 
@@ -63,6 +64,16 @@ public interface MemoryManagementInboundPort {
     default MemoryHealthReport memoryHealth(String userId, String tenantId) {
         return new MemoryHealthReport(userId, tenantId, 0, 0, 0, 0, 0,
                 java.util.Map.of(), 0D, 0D, 0, 0, 0D, 0D, java.util.Map.of(), List.of(),
+                java.time.Instant.now());
+    }
+
+    default MemoryReadinessReport memoryReadiness(String userId, String tenantId) {
+        return new MemoryReadinessReport(
+                userId,
+                tenantId,
+                MemoryReadinessReport.STATUS_NO_EVIDENCE,
+                List.of(),
+                List.of("memory readiness service is not available"),
                 java.time.Instant.now());
     }
 

@@ -6,6 +6,13 @@
 > - **横向 `MemoryTrack`**（profile / correction / business-doc / 等）是与 layer 正交的语义轨，落在 `MemoryContext` 字段或独立 repository port 上，**不**塞进 `MemoryLayer` enum。
 > 历史描述中"七层记忆"或"七个一等公民"等措辞已被替代为上述二维度模型；继续按 7 enum 扩 `MemoryLayer` 视为反模式。
 
+> **2026-05-29 当前代码落地边界：**
+> - 四层 `MemoryLayer` x 多条 `MemoryTrack` 仍是当前 canonical model。
+> - 运行时闭环不再只看端口或类是否存在，而是通过 `GET /memories/readiness?userId=...&tenantId=...` 返回的 capability 证据判断。
+> - readiness 会检查写入操作日志、召回 trace、上下文注入 trace、审核记录、派生索引 outbox trace、维护 trace，并按 userId/tenantId 隔离证据。
+> - `self_training_loop` 目前是 `MANUAL_EXPORT_ONLY`：审核反馈可沉淀/导出，但自动 SFT/DPO 不属于当前运行时链路。
+> - 向量、BM25、图谱、维护任务等能力仍取决于实际启用的 adapter、配置和后台任务，不能仅凭文档判断为生产可用。
+
 Q:你的agent和记忆系统设计的非常棒，能不能说说这些是怎么设计的l，尽可能的详细：LLM Refiner、Debounce/跨轮聚合、真实 Vector/BM25/Graph 多路召回、REVIEW 人工审核闭环、自动 compaction/alias/GC 这些文档中说明了该实现吗
 
 A:
@@ -728,9 +735,9 @@ JSON
 >
 > - **Chosen Output（标准答案）：** 用户点击 Reject 时，标准答案就是 `{"memory_mutations": []}`（什么都不做）；用户点击 Modify 时，标准答案就是用户手动修正后的高内聚纯净事实。
 
-这部分数据会被自动打上标签，以单批次 $1000$ 条的规模滚动存入离线训练集。每隔一段时间，系统会用这批用户真正调教过的高精样本，对后级的 `Refiner 模型` 进行增量监督微调（SFT）或直接偏好优化（DPO）。
+当前代码边界是：审核反馈可以结构化沉淀，并作为离线训练样本的来源导出；但“自动打标签、滚动进入训练集、周期性 SFT/DPO、热更新 Refiner”不属于当前运行时闭环。`GET /memories/readiness` 会把 `self_training_loop` 标记为 `MANUAL_EXPORT_ONLY`，用于避免把离线训练愿景误判为线上已自动运行。
 
-通过这种工程设计，系统完成了真正的自我进化。运行三个月后，系统挂起进入 `REVIEW` 区的频率通常会下降 80% 以上，绝大部分记忆提纯都能安全、高置信度地直接走直通区（Auto-Commit），人机协同的闭环真正跑通。
+因此，当前已经形成的是**运行时记忆闭环 + 人工审核反馈闭环**；模型自我进化仍应作为独立离线训练工程验收，不能仅凭 REVIEW 数据存在就宣称 SFT/DPO 闭环已跑通。
 
 ---
 

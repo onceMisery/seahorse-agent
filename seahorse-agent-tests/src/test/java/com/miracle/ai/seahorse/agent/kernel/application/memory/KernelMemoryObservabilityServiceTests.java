@@ -147,6 +147,32 @@ class KernelMemoryObservabilityServiceTests {
                 "run",
                 Map.of("reason", "manual-maintenance"),
                 Instant.EPOCH));
+        traceRecorder.record(new MemoryTraceEvent(
+                "trace-other-user",
+                "default",
+                "other-user",
+                "conversation-2",
+                "session-2",
+                "memory-recall",
+                "fusion",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "",
+                "recall_fusion",
+                Map.of("fusedCount", 2),
+                Instant.EPOCH));
+        traceRecorder.record(new MemoryTraceEvent(
+                "trace-other-tenant",
+                "other-tenant",
+                "user-1",
+                "conversation-3",
+                "session-3",
+                "memory-context-weaver",
+                "weave",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "conversation-3",
+                "memory-context",
+                Map.of("selectedItemCount", 1),
+                Instant.EPOCH));
 
         KernelMemoryManagementService service = service(
                 new RecordingProfileMemoryPort(),
@@ -193,6 +219,192 @@ class KernelMemoryObservabilityServiceTests {
         assertThat(updated.reviewEnabled()).isTrue();
         assertThat(updated.enabledTracks()).containsEntry("business_doc", false);
         assertThat(service.memoryPolicyConfig()).isEqualTo(updated);
+    }
+
+    @Test
+    void shouldReportMemoryClosedLoopReadinessFromRuntimeEvidence() {
+        RecordingOperationLogPort operationLog = new RecordingOperationLogPort();
+        operationLog.records.add(operation("op-write-1", "SUCCEEDED", Map.of("status", "ACCEPTED")));
+        operationLog.records.add(operation("op-review-1", "SUCCEEDED", Map.of("status", "APPLIED")));
+        RecordingReviewRepository reviews = new RecordingReviewRepository();
+        reviews.records.add(review("review-1", "user-1", "default", MemoryReviewStatus.APPLIED));
+        InMemoryTraceRecorder traceRecorder = new InMemoryTraceRecorder();
+        traceRecorder.record(new MemoryTraceEvent(
+                "trace-aggregation",
+                "default",
+                "user-1",
+                "conversation-1",
+                "session-1",
+                "memory-aggregation",
+                "flush-ready",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "snapshot-1",
+                "snapshot",
+                Map.of("trigger", "FORCE_TURNS"),
+                Instant.EPOCH));
+        traceRecorder.record(new MemoryTraceEvent(
+                "trace-recall",
+                "default",
+                "user-1",
+                "",
+                "",
+                "memory-recall",
+                "fusion",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "",
+                "recall_fusion",
+                Map.of("fusedCount", 2),
+                Instant.EPOCH));
+        traceRecorder.record(new MemoryTraceEvent(
+                "trace-weave",
+                "default",
+                "user-1",
+                "conversation-1",
+                "conversation-1",
+                "memory-context-weaver",
+                "weave",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "conversation-1",
+                "memory-context",
+                Map.of("selectedItemCount", 2),
+                Instant.EPOCH));
+        traceRecorder.record(new MemoryTraceEvent(
+                "trace-outbox",
+                "default",
+                "user-1",
+                "",
+                "",
+                "memory-outbox",
+                "relay-task",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "outbox-1",
+                "outbox_task",
+                Map.of("taskType", "VECTOR_UPSERT"),
+                Instant.EPOCH));
+        traceRecorder.record(new MemoryTraceEvent(
+                "trace-maintenance",
+                "default",
+                "user-1",
+                "",
+                "",
+                "memory-maintenance",
+                "run-maintenance",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "run-1",
+                "run",
+                Map.of("reason", "manual"),
+                Instant.EPOCH));
+        KernelMemoryManagementService service = service(
+                new RecordingProfileMemoryPort(),
+                new RecordingCorrectionLedgerPort(),
+                operationLog,
+                new RecordingConflictLogRepository(),
+                new RecordingMemoryOutboxPort(),
+                new RecordingQualitySnapshotRepository(),
+                reviews,
+                new RecordingPolicyConfigPort(MemoryPolicyConfig.defaults().withReviewEnabled(true)),
+                traceRecorder);
+
+        var report = service.memoryReadiness("user-1", "default");
+
+        assertThat(report.status()).isEqualTo("READY");
+        assertThat(report.gaps()).isEmpty();
+        assertThat(report.capabilities()).extracting("name")
+                .containsExactly(
+                        "capture_write_loop",
+                        "recall_loop",
+                        "context_injection",
+                        "review_loop",
+                        "derived_index_sync",
+                        "maintenance_loop",
+                        "self_training_loop");
+        assertThat(report.capability("capture_write_loop").orElseThrow().status()).isEqualTo("READY");
+        assertThat(report.capability("recall_loop").orElseThrow().status()).isEqualTo("READY");
+        assertThat(report.capability("context_injection").orElseThrow().status()).isEqualTo("READY");
+        assertThat(report.capability("review_loop").orElseThrow().status()).isEqualTo("READY");
+        assertThat(report.capability("derived_index_sync").orElseThrow().status()).isEqualTo("READY");
+        assertThat(report.capability("maintenance_loop").orElseThrow().status()).isEqualTo("READY");
+        assertThat(report.capability("self_training_loop").orElseThrow().status()).isEqualTo("MANUAL_EXPORT_ONLY");
+        assertThat(report.capability("self_training_loop").orElseThrow().gaps())
+                .contains("review feedback can be exported, but automatic SFT/DPO is not part of runtime");
+    }
+
+    @Test
+    void shouldMarkReadinessGapsWhenRuntimeEvidenceIsMissing() {
+        KernelMemoryManagementService service = service(
+                new RecordingProfileMemoryPort(),
+                new RecordingCorrectionLedgerPort(),
+                new RecordingOperationLogPort(),
+                new RecordingConflictLogRepository(),
+                new RecordingMemoryOutboxPort(),
+                new RecordingQualitySnapshotRepository(),
+                MemoryReviewManagementRepositoryPort.empty(),
+                new RecordingPolicyConfigPort(MemoryPolicyConfig.defaults()));
+
+        var report = service.memoryReadiness("user-1", "default");
+
+        assertThat(report.status()).isEqualTo("NO_EVIDENCE");
+        assertThat(report.gaps())
+                .contains(
+                        "capture_write_loop has no recent accepted write operation",
+                        "recall_loop has no recent memory-recall trace",
+                        "context_injection has no recent memory-context-weaver trace");
+        assertThat(report.capability("review_loop").orElseThrow().status()).isEqualTo("DISABLED");
+        assertThat(report.capability("self_training_loop").orElseThrow().status()).isEqualTo("MANUAL_EXPORT_ONLY");
+    }
+
+    @Test
+    void shouldScopeReadinessTraceEvidenceToRequestedUserAndTenant() {
+        RecordingOperationLogPort operationLog = new RecordingOperationLogPort();
+        operationLog.records.add(operation("op-write-1", "SUCCEEDED", Map.of("status", "ACCEPTED")));
+        InMemoryTraceRecorder traceRecorder = new InMemoryTraceRecorder();
+        traceRecorder.record(new MemoryTraceEvent(
+                "trace-other-user-recall",
+                "default",
+                "other-user",
+                "",
+                "",
+                "memory-recall",
+                "fusion",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "",
+                "recall_fusion",
+                Map.of("fusedCount", 2),
+                Instant.EPOCH));
+        traceRecorder.record(new MemoryTraceEvent(
+                "trace-other-tenant-weave",
+                "other-tenant",
+                "user-1",
+                "conversation-1",
+                "conversation-1",
+                "memory-context-weaver",
+                "weave",
+                MemoryTraceEvent.STATUS_SUCCESS,
+                "conversation-1",
+                "memory-context",
+                Map.of("selectedItemCount", 2),
+                Instant.EPOCH));
+        KernelMemoryManagementService service = service(
+                new RecordingProfileMemoryPort(),
+                new RecordingCorrectionLedgerPort(),
+                operationLog,
+                new RecordingConflictLogRepository(),
+                new RecordingMemoryOutboxPort(),
+                new RecordingQualitySnapshotRepository(),
+                MemoryReviewManagementRepositoryPort.empty(),
+                new RecordingPolicyConfigPort(MemoryPolicyConfig.defaults()),
+                traceRecorder);
+
+        var report = service.memoryReadiness("user-1", "default");
+
+        assertThat(report.status()).isEqualTo("NO_EVIDENCE");
+        assertThat(report.capability("capture_write_loop").orElseThrow().status()).isEqualTo("READY");
+        assertThat(report.capability("recall_loop").orElseThrow().status()).isEqualTo("NO_EVIDENCE");
+        assertThat(report.capability("context_injection").orElseThrow().status()).isEqualTo("NO_EVIDENCE");
+        assertThat(report.gaps())
+                .contains(
+                        "recall_loop has no recent memory-recall trace",
+                        "context_injection has no recent memory-context-weaver trace");
     }
 
     private KernelMemoryManagementService service(RecordingProfileMemoryPort profilePort,

@@ -132,6 +132,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryMaintenanceRunR
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOperationRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryOutboxPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryPolicyConfig;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReadinessReport;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReadinessReport.MemoryReadinessCapability;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRefinerFeedbackExportRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewPage;
@@ -493,6 +495,30 @@ class SeahorseWebApiContractTests {
                         "u1", "default", 1, 1, 1, 1, 0,
                         Map.of("SUCCEEDED", 1L), 1D, 0D, 0, 0, 0.25D, 0.1D,
                         Map.of("shortTermCount", 3), List.of("memory.outbox.backlog"), Instant.EPOCH));
+        when(memoryManagementPort.memoryReadiness("u1", "default"))
+                .thenReturn(new MemoryReadinessReport(
+                        "u1",
+                        "default",
+                        MemoryReadinessReport.STATUS_DEGRADED,
+                        List.of(
+                                new MemoryReadinessCapability(
+                                        "capture_write_loop",
+                                        MemoryReadinessReport.STATUS_READY,
+                                        true,
+                                        1,
+                                        Instant.EPOCH,
+                                        List.of(),
+                                        Map.of()),
+                                new MemoryReadinessCapability(
+                                        "review_loop",
+                                        MemoryReadinessReport.STATUS_DISABLED,
+                                        false,
+                                        0,
+                                        Instant.EPOCH,
+                                        List.of("review_loop is disabled by memory policy"),
+                                        Map.of("reviewEnabled", false))),
+                        List.of("review_loop is disabled by memory policy"),
+                        Instant.EPOCH));
         when(memoryManagementPort.memoryPolicyConfig()).thenReturn(MemoryPolicyConfig.defaults()
                 .withCaptureAcceptThreshold(0.55D)
                 .withTokenBudget(1800));
@@ -581,6 +607,14 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.profileFactCount").value(1))
                 .andExpect(jsonPath("$.data.pendingReviewCount").value(0))
                 .andExpect(jsonPath("$.data.alerts[0]").value("memory.outbox.backlog"));
+        mvc.perform(get("/memories/readiness").param("userId", "u1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DEGRADED"))
+                .andExpect(jsonPath("$.data.capabilities[0].name").value("capture_write_loop"))
+                .andExpect(jsonPath("$.data.capabilities[0].status").value("READY"))
+                .andExpect(jsonPath("$.data.capabilities[1].name").value("review_loop"))
+                .andExpect(jsonPath("$.data.capabilities[1].status").value("DISABLED"))
+                .andExpect(jsonPath("$.data.gaps[0]").value("review_loop is disabled by memory policy"));
         mvc.perform(get("/memories/policy-config"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.captureAcceptThreshold").value(0.55))

@@ -120,6 +120,13 @@ public class SeahorseMemoryController {
                 port -> port.memoryHealth(userId, tenantId));
     }
 
+    @GetMapping("/memories/readiness")
+    public ApiResponse<Object> readiness(@RequestParam String userId,
+                                         @RequestParam(defaultValue = "default") String tenantId) {
+        return ApiResponses.requireServiceOrError(managementPortProvider,
+                port -> port.memoryReadiness(userId, tenantId));
+    }
+
     @GetMapping("/memories/policy-config")
     public ApiResponse<Object> policyConfig() {
         return ApiResponses.requireServiceOrError(managementPortProvider, MemoryManagementInboundPort::memoryPolicyConfig);
