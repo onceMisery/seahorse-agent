@@ -67,13 +67,14 @@ public class SeahorseIngestionTaskController {
 
     @Autowired
     public SeahorseIngestionTaskController(ObjectProvider<IngestionTaskInboundPort> taskPortProvider,
-                                           RateLimiterPort rateLimiterPort,
+                                           ObjectProvider<RateLimiterPort> rateLimiterPortProvider,
                                            @Value("${seahorse-agent.web.upload-rate-limit.permits:20}")
                                            int uploadRateLimitPermits,
                                            @Value("${seahorse-agent.web.upload-rate-limit.window-ms:60000}")
                                            long uploadRateLimitWindowMs,
                                            ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
-        this(taskPortProvider, rateLimiterPort, uploadRateLimitPermits, uploadRateLimitWindowMs,
+        this(taskPortProvider, rateLimiterPortProvider.getIfAvailable(RateLimiterPort::noop),
+                uploadRateLimitPermits, uploadRateLimitWindowMs,
                 advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
     }
 
