@@ -271,6 +271,8 @@ public class SeahorseChatController {
         checkChatRateLimit(actualUserId);
         SseEmitter emitter = new SseEmitter(sseTimeoutMs);
         try {
+            AgentRunSnapshotInboundPort snapshotPort = snapshotPort();
+            var snapshot = snapshotPort.getSnapshot(resumeRunId);
             if (lastEventSeq != null) {
                 List<StreamEventEnvelope> missed = eventBufferPort.getAfter(resumeRunId, lastEventSeq);
                 if (!missed.isEmpty()) {
@@ -294,8 +296,6 @@ public class SeahorseChatController {
                     return emitter;
                 }
             }
-            AgentRunSnapshotInboundPort snapshotPort = snapshotPort();
-            var snapshot = snapshotPort.getSnapshot(resumeRunId);
             emitter.send(SseEmitter.event()
                     .name(StreamEventType.RUN_SNAPSHOT.value())
                     .data(snapshot));

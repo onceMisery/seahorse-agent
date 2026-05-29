@@ -60,6 +60,7 @@ class SeahorseChatControllerReplayTests {
                 Map.of("type", "response", "delta", "hello"));
         StreamEventEnvelope e2 = StreamEventEnvelope.of(3, StreamEventType.STEP_STARTED, "run-1",
                 Map.of("stepId", "step-1", "title", "Search"));
+        when(snapshotPort.getSnapshot("run-1")).thenReturn(snapshot());
         when(eventBufferPort.getAfter("run-1", 1L)).thenReturn(List.of(e1, e2));
 
         MockMvc mvc = buildMvc(chatPort, streamTaskPort, snapshotPort, eventBufferPort);
@@ -79,7 +80,7 @@ class SeahorseChatControllerReplayTests {
         assertThat(body).contains("\"eventSeq\":2");
         assertThat(body).contains("\"eventSeq\":3");
         assertThat(body).contains("event:done");
-        verifyNoInteractions(snapshotPort);
+        verify(snapshotPort).getSnapshot("run-1");
         verifyNoInteractions(chatPort);
     }
 
@@ -95,6 +96,7 @@ class SeahorseChatControllerReplayTests {
                 Map.of("type", "response", "delta", "missed"));
         StreamEventEnvelope live = StreamEventEnvelope.of(3, StreamEventType.MESSAGE, "run-1",
                 Map.of("type", "response", "delta", " live"));
+        when(snapshotPort.getSnapshot("run-1")).thenReturn(snapshot());
         when(eventBufferPort.getAfter("run-1", 1L)).thenReturn(List.of(missed));
         doAnswer(invocation -> {
             org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter = invocation.getArgument(0);
@@ -125,7 +127,41 @@ class SeahorseChatControllerReplayTests {
         assertThat(body).contains("\"eventSeq\":3");
         assertThat(body).contains("event:done");
         verify(bridge).attach(any(), eq("run-1"), isNull(), isNull(), eq(2L));
-        verifyNoInteractions(snapshotPort);
+        verify(snapshotPort).getSnapshot("run-1");
+        verifyNoInteractions(chatPort);
+    }
+
+    @Test
+    void resumeWithBufferHitShouldRejectWhenSnapshotIsNotReadable() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+        AgentRunSnapshotInboundPort snapshotPort = mock(AgentRunSnapshotInboundPort.class);
+        AgentRunEventBufferPort eventBufferPort = mock(AgentRunEventBufferPort.class);
+
+        StreamEventEnvelope missed = StreamEventEnvelope.of(2, StreamEventType.MESSAGE, "run-1",
+                Map.of("type", "response", "delta", "secret"));
+        when(snapshotPort.getSnapshot("run-1")).thenThrow(new IllegalStateException("access denied"));
+        when(eventBufferPort.getAfter("run-1", 1L)).thenReturn(List.of(missed));
+
+        MockMvc mvc = buildMvc(chatPort, streamTaskPort, snapshotPort, eventBufferPort);
+
+        MvcResult result = mvc.perform(get("/rag/v3/chat")
+                        .param("resumeRunId", "run-1")
+                        .param("lastEventSeq", "1")
+                        .param("userId", "other-user"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        result.getAsyncResult(1_000L);
+        String body = result.getResponse().getContentAsString();
+
+        assertThat(body).contains("event:error");
+        assertThat(body).contains("access denied");
+        assertThat(body).doesNotContain("secret");
+        assertThat(body).doesNotContain("\"eventSeq\":2");
+        verify(snapshotPort).getSnapshot("run-1");
+        verifyNoInteractions(eventBufferPort);
         verifyNoInteractions(chatPort);
     }
 
