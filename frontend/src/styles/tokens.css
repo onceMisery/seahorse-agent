@@ -1,0 +1,49 @@
+:root {
+  --sh-surface-base: #f8fafc;
+  --sh-surface-raised: #ffffff;
+  --sh-surface-overlay: #ffffff;
+  --sh-surface-sunken: #eef2f7;
+
+  --sh-text-primary: #0f172a;
+  --sh-text-secondary: #475569;
+  --sh-text-muted: #94a3b8;
+
+  --sh-accent: #06b6d4;
+  --sh-accent-muted: rgba(6, 182, 212, 0.14);
+  --sh-success: #16a34a;
+  --sh-warning: #d97706;
+  --sh-danger: #dc2626;
+
+  --sh-trust-high: #16a34a;
+  --sh-trust-high-bg: rgba(22, 163, 74, 0.15);
+  --sh-trust-medium: #ca8a04;
+  --sh-trust-medium-bg: rgba(202, 138, 4, 0.15);
+  --sh-trust-low: #f97316;
+  --sh-trust-low-bg: rgba(249, 115, 22, 0.15);
+  --sh-trust-untrusted: #dc2626;
+  --sh-trust-untrusted-bg: rgba(220, 38, 38, 0.15);
+  --sh-trust-unknown: #94a3b8;
+  --sh-trust-unknown-bg: rgba(148, 163, 184, 0.15);
+
+  --theme-success: var(--sh-success);
+  --theme-warning: var(--sh-warning);
+  --theme-danger: var(--sh-danger);
+  --theme-accent-muted: var(--sh-accent-muted);
+}
+
+[data-theme="dark"] {
+  --sh-surface-base: #020617;
+  --sh-surface-raised: #06182c;
+  --sh-surface-overlay: #0a243e;
+  --sh-surface-sunken: #04101e;
+
+  --sh-text-primary: #e2e8f0;
+  --sh-text-secondary: #94a3b8;
+  --sh-text-muted: #64748b;
+
+  --sh-accent: #06b6d4;
+  --sh-accent-muted: rgba(6, 182, 212, 0.18);
+  --sh-success: #22c55e;
+  --sh-warning: #eab308;
+  --sh-danger: #ef4444;
+}
