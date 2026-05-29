@@ -143,8 +143,7 @@ export function ChatPage() {
         {/* Mobile bottom sheet */}
         {inspectorOpen && (
           <div
-            className="fixed inset-x-0 bottom-0 z-[var(--sh-z-inspector-mobile)] md:hidden"
-            style={{ height: "min(68dvh, 720px)", maxHeight: "calc(100dvh - 72px)" }}
+            className="workspace-inspector-mobile fixed inset-x-0 bottom-0 z-[var(--sh-z-inspector-mobile)] md:hidden"
           >
             <div
               className="h-full rounded-t-xl shadow-xl"

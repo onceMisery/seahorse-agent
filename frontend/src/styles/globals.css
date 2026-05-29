@@ -422,6 +422,11 @@ select:focus:not(:focus-visible),
   transform: translateY(1px);
 }
 
+.workspace-inspector-mobile {
+  height: min(68dvh, 720px);
+  max-height: calc(100dvh - 72px);
+}
+
 .glass-hover {
   transition: all 0.3s ease;
 }
