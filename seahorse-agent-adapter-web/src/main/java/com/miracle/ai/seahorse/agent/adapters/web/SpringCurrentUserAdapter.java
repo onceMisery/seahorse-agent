@@ -53,10 +53,6 @@ public class SpringCurrentUserAdapter implements CurrentUserPort {
     }
 
     private String resolveUserId(HttpServletRequest request) {
-        String parameter = trimToNull(request.getParameter("userId"));
-        if (parameter != null) {
-            return parameter;
-        }
         return trimToNull(request.getHeader(HEADER_USER_ID));
     }
 
