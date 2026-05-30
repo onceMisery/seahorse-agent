@@ -69,14 +69,14 @@ class SeahorseChatControllerTests {
                         .param("question", "Research this")
                         .param("conversationId", "conversation-1")
                         .param("userId", "user-1")
-                        .param("taskTemplateId", "deep-research"))
+                        .param("taskTemplateId", "quick-answer"))
                 .andExpect(status().isOk())
                 .andExpect(request().asyncStarted());
 
         ArgumentCaptor<StreamChatCommand> captor = ArgumentCaptor.forClass(StreamChatCommand.class);
         verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
-        assertThat(captor.getValue().taskTemplateId()).isEqualTo("deep-research");
-        assertThat(captor.getValue().chatMode()).isEqualTo(ChatMode.AGENT);
+        assertThat(captor.getValue().taskTemplateId()).isEqualTo("quick-answer");
+        assertThat(captor.getValue().chatMode()).isEqualTo(ChatMode.RAG);
     }
 
     @Test
