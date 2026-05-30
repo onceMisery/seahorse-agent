@@ -1,7 +1,9 @@
 /**
- * 深海背景 — 阳光穿透水面 + 上升气泡，始终可见。
- * 颜色跟随主题变量切换。
+ * 深海背景 — 阳光穿透水面 + 上升气泡。
+ * 仅在深色主题（深海蓝）下显示水面光线 / 波纹 / 气泡特效；
+ * 浅色主题（海洋 / 皓白）下隐藏这些蓝色特效，避免在白底上出现突兀的蓝色条纹。
  */
+import { useThemeStore } from "@/stores/themeStore";
 
 const BUBBLES = [
   { size: 6, left: "5%", delay: "0s", dur: "8s", opacity: 0.4 },
@@ -32,7 +34,19 @@ const RAYS = [
   { left: "82%", width: 200, opacity: 0.07, rotate: "10deg", animDelay: "1.5s" },
 ];
 
+// 浅色主题下隐藏蓝色水下特效（这些半透明蓝色叠加在白底上会形成突兀的条纹）。
+const LIGHT_COLOR_THEMES = new Set(["marine", "white"]);
+
 export function DeepSeaBackground() {
+  const colorTheme = useThemeStore((state) => state.colorTheme);
+  const theme = useThemeStore((state) => state.theme);
+  // 只有在深色基底（深海蓝/星云/翡翠/琥珀，或显式 dark 模式）下才显示水下特效
+  const showEffects = theme === "dark" || !LIGHT_COLOR_THEMES.has(colorTheme);
+
+  if (!showEffects) {
+    return null;
+  }
+
   return (
     <div aria-hidden="true" className="ds-bg pointer-events-none absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>
 
