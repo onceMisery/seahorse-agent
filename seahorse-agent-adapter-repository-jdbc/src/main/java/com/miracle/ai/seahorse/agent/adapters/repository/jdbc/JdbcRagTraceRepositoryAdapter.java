@@ -43,9 +43,11 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
 
     private static final String DEFAULT_STATUS_RUNNING = "RUNNING";
     private static final String SQL_RUN_SELECT = """
-            SELECT id, trace_id, trace_name, entry_method, conversation_id, task_id, user_id,
-                   status, error_message, duration_ms, start_time, end_time, extra_data
+            SELECT r.id, r.trace_id, r.trace_name, r.entry_method, r.conversation_id, r.task_id, r.user_id,
+                   u.username AS user_name,
+                   r.status, r.error_message, r.duration_ms, r.start_time, r.end_time, r.extra_data
             FROM t_rag_trace_run r
+            LEFT JOIN t_user u ON u.id = r.user_id AND u.deleted = 0
             """;
     private static final String SQL_NODE_SELECT = """
             SELECT id, trace_id, node_id, parent_node_id, depth, node_type, node_name,
@@ -275,6 +277,7 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
         run.setConversationId(resultSet.getString("conversation_id"));
         run.setTaskId(resultSet.getString("task_id"));
         run.setUserId(resultSet.getString("user_id"));
+        run.setUsername(resultSet.getString("user_name"));
         run.setStatus(resultSet.getString("status"));
         run.setErrorMessage(resultSet.getString("error_message"));
         run.setDurationMs(resultSet.getObject("duration_ms", Long.class));

@@ -187,6 +187,7 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
 
     private List<KnowledgeBaseRecord> queryRecords(long current, long size, String whereName, String name) {
         String sql = SQL_PAGE_BASE + whereName + """
+
                 GROUP BY kb.id, kb.name, kb.embedding_model, kb.collection_name,
                          kb.created_by, kb.create_time, kb.update_time
                 ORDER BY kb.update_time DESC

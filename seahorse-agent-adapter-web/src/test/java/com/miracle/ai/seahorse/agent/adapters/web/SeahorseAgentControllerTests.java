@@ -245,7 +245,9 @@ class SeahorseAgentControllerTests {
                         provider(AgentRunResumeInboundPort.class, resumePort),
                         provider(AgentCheckpointQueryInboundPort.class, checkpointPort),
                         provider(AgentRunSnapshotInboundPort.class, snapshotPort),
-                        AdvancedFeatureGate.allEnabledForTests())).build();
+                        null,
+                        null,
+                        provider(AdvancedFeatureGate.class, AdvancedFeatureGate.allEnabledForTests()))).build();
 
         mvc.perform(post("/agents/agent-1/runs")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -309,7 +311,9 @@ class SeahorseAgentControllerTests {
                                 provider(AgentRunResumeInboundPort.class, resumePort),
                                 provider(AgentCheckpointQueryInboundPort.class, checkpointPort),
                                 provider(AgentRunSnapshotInboundPort.class, snapshotPort),
-                                AdvancedFeatureGate.consumerWebDefaults()))
+                                null,
+                                null,
+                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.consumerWebDefaults())))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -340,7 +344,14 @@ class SeahorseAgentControllerTests {
     void consumerWebModeShouldRejectLegacyAgentRunManagement() throws Exception {
         AgentRunInboundPort port = mock(AgentRunInboundPort.class);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                        new SeahorseAgentRunController(provider(AgentRunInboundPort.class, port)))
+                        new SeahorseAgentRunController(
+                                provider(AgentRunInboundPort.class, port),
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 
@@ -370,9 +381,11 @@ class SeahorseAgentControllerTests {
                                 null,
                                 null,
                                 null,
-                                AdvancedFeatureGate.configured(
+                                null,
+                                null,
+                                provider(AdvancedFeatureGate.class, AdvancedFeatureGate.configured(
                                         ProductMode.ENTERPRISE_PLATFORM,
-                                        Map.of(AdvancedFeature.AGENT_RUN_MANAGEMENT, true))))
+                                        Map.of(AdvancedFeature.AGENT_RUN_MANAGEMENT, true)))))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
 

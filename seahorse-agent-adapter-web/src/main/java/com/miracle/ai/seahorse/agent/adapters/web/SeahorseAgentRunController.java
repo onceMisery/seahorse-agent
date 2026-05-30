@@ -48,10 +48,6 @@ public class SeahorseAgentRunController {
     private final ObjectProvider<AgentRunEventBufferPort> eventBufferPortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
 
-    public SeahorseAgentRunController(ObjectProvider<AgentRunInboundPort> agentRunPortProvider) {
-        this(agentRunPortProvider, null, null, null, null, null, AdvancedFeatureGate.consumerWebDefaults());
-    }
-
     @Autowired
     public SeahorseAgentRunController(ObjectProvider<AgentRunInboundPort> agentRunPortProvider,
                                        ObjectProvider<AgentRunResumeInboundPort> agentRunResumePortProvider,
@@ -60,52 +56,15 @@ public class SeahorseAgentRunController {
                                        ObjectProvider<AgentRunCostSummaryInboundPort> costSummaryPortProvider,
                                        ObjectProvider<AgentRunEventBufferPort> eventBufferPortProvider,
                                        ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
-        this(agentRunPortProvider,
-                agentRunResumePortProvider,
-                checkpointQueryPortProvider,
-                snapshotPortProvider,
-                costSummaryPortProvider,
-                eventBufferPortProvider,
-                advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults));
-    }
-
-    public SeahorseAgentRunController(ObjectProvider<AgentRunInboundPort> agentRunPortProvider,
-                                      ObjectProvider<AgentRunResumeInboundPort> agentRunResumePortProvider,
-                                      ObjectProvider<AgentCheckpointQueryInboundPort> checkpointQueryPortProvider) {
-        this(agentRunPortProvider, agentRunResumePortProvider, checkpointQueryPortProvider, null, null, null,
-                AdvancedFeatureGate.consumerWebDefaults());
-    }
-
-    public SeahorseAgentRunController(ObjectProvider<AgentRunInboundPort> agentRunPortProvider,
-                                      ObjectProvider<AgentRunResumeInboundPort> agentRunResumePortProvider,
-                                      ObjectProvider<AgentCheckpointQueryInboundPort> checkpointQueryPortProvider,
-                                      ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
-                                      AdvancedFeatureGate advancedFeatureGate) {
-        this(agentRunPortProvider,
-                agentRunResumePortProvider,
-                checkpointQueryPortProvider,
-                snapshotPortProvider,
-                null,
-                null,
-                advancedFeatureGate);
-    }
-
-    public SeahorseAgentRunController(ObjectProvider<AgentRunInboundPort> agentRunPortProvider,
-                                      ObjectProvider<AgentRunResumeInboundPort> agentRunResumePortProvider,
-                                      ObjectProvider<AgentCheckpointQueryInboundPort> checkpointQueryPortProvider,
-                                      ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
-                                      ObjectProvider<AgentRunCostSummaryInboundPort> costSummaryPortProvider,
-                                      ObjectProvider<AgentRunEventBufferPort> eventBufferPortProvider,
-                                      AdvancedFeatureGate advancedFeatureGate) {
         this.agentRunPortProvider = agentRunPortProvider;
         this.agentRunResumePortProvider = agentRunResumePortProvider;
         this.checkpointQueryPortProvider = checkpointQueryPortProvider;
         this.snapshotPortProvider = snapshotPortProvider;
         this.costSummaryPortProvider = costSummaryPortProvider;
         this.eventBufferPortProvider = eventBufferPortProvider;
-        this.advancedFeatureGate = advancedFeatureGate == null
+        this.advancedFeatureGate = advancedFeatureGateProvider == null
                 ? AdvancedFeatureGate.consumerWebDefaults()
-                : advancedFeatureGate;
+                : advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults);
     }
 
     @PostMapping("/agents/{agentId}/runs")

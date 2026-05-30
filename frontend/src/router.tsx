@@ -17,6 +17,7 @@ import { MetadataGovernancePage } from "@/pages/admin/metadata-governance/Metada
 import { RagTracePage } from "@/pages/admin/traces/RagTracePage";
 import { RagTraceDetailPage } from "@/pages/admin/traces/RagTraceDetailPage";
 import { SystemSettingsPage } from "@/pages/admin/settings/SystemSettingsPage";
+import { ModelConfigPage } from "@/pages/admin/settings/ModelConfigPage";
 import { SampleQuestionPage } from "@/pages/admin/sample-questions/SampleQuestionPage";
 import { QueryTermMappingPage } from "@/pages/admin/query-term-mapping/QueryTermMappingPage";
 import { UserListPage } from "@/pages/admin/users/UserListPage";
@@ -196,6 +197,10 @@ export const router = createBrowserRouter([
       {
         path: "settings",
         element: <SystemSettingsPage />
+      },
+      {
+        path: "model-config",
+        element: <ModelConfigPage />
       },
       {
         path: "sample-questions",

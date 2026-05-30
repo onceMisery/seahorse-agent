@@ -79,30 +79,17 @@ export function WelcomeScreen() {
       <div className="relative w-full max-w-[860px]">
         <div className="mb-10 flex flex-col items-center text-center opacity-0 animate-fade-up" style={{ animationFillMode: "both" }}>
           <div className="relative mb-5">
-            {/* 内层光圈 — 静态 */}
+            {/* 光圈 — 旋转 */}
             <div
               aria-hidden="true"
               className="absolute rounded-full pointer-events-none"
               style={{
-                width: 220,
-                height: 220,
-                top: -10,
-                left: -10,
+                width: 240,
+                height: 240,
+                top: -20,
+                left: -20,
                 border: "1px solid var(--theme-accent-alpha-20)",
                 backgroundImage: "conic-gradient(from 0deg, transparent 75%, var(--theme-accent-alpha-40) 100%)",
-                borderRadius: "50%"
-              }}
-            />
-            {/* 外层光圈 — 旋转 */}
-            <div
-              aria-hidden="true"
-              className="absolute rounded-full pointer-events-none"
-              style={{
-                width: 260,
-                height: 260,
-                top: -30,
-                left: -30,
-                border: "1px dashed var(--theme-accent-alpha-20)",
                 borderRadius: "50%",
                 animation: "spin-slow 12s linear infinite"
               }}

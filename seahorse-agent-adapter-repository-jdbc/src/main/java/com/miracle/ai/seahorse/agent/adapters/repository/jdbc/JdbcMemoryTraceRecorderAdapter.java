@@ -54,7 +54,7 @@ public class JdbcMemoryTraceRecorderAdapter implements MemoryTraceRecorder {
                 INSERT INTO t_memory_trace_event
                     (id, trace_id, tenant_id, user_id, conversation_id, session_id, component, event_type,
                      status, subject_id, subject_type, details_json, occurred_at, create_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)
                 """,
                 id,
                 traceId,

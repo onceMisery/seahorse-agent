@@ -168,6 +168,11 @@ const menuGroups: MenuGroup[] = [
         icon: Lightbulb
       },
       {
+        path: "/admin/model-config",
+        label: "模型配置",
+        icon: Cpu
+      },
+      {
         path: "/admin/settings",
         label: "系统设置",
         icon: Settings
@@ -186,6 +191,7 @@ const breadcrumbMap: Record<string, string> = {
   "ai-infra": "AI Infra 控制台",
   "sample-questions": "示例问题",
   mappings: "关键词映射",
+  "model-config": "模型配置",
   settings: "系统设置",
   users: "用户管理"
 };
