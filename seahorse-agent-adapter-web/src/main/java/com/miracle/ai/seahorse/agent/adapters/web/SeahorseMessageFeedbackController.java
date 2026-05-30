@@ -44,13 +44,9 @@ public class SeahorseMessageFeedbackController {
     private final ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider;
     private final ObjectProvider<FeedbackEvaluationCandidateQueryInboundPort> candidateQueryPortProvider;
 
-    public SeahorseMessageFeedbackController(ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider) {
-        this(feedbackInboundPortProvider, null);
-    }
-
-    public SeahorseMessageFeedbackController(ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider,
-                                             ObjectProvider<FeedbackEvaluationCandidateQueryInboundPort>
-                                                     candidateQueryPortProvider) {
+    public SeahorseMessageFeedbackController(
+            ObjectProvider<MessageFeedbackInboundPort> feedbackInboundPortProvider,
+            ObjectProvider<FeedbackEvaluationCandidateQueryInboundPort> candidateQueryPortProvider) {
         this.feedbackInboundPortProvider = feedbackInboundPortProvider;
         this.candidateQueryPortProvider = candidateQueryPortProvider;
     }
@@ -62,7 +58,7 @@ public class SeahorseMessageFeedbackController {
                                               @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
                                               String headerUserId) {
         MessageFeedbackRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        feedbackInboundPortProvider.getIfAvailable().submit(new SubmitMessageFeedbackCommand(
+        Objects.requireNonNull(feedbackInboundPortProvider.getIfAvailable()).submit(new SubmitMessageFeedbackCommand(
                 messageId,
                 resolveUserId(userId, headerUserId),
                 requireVote(safeRequest.vote()),

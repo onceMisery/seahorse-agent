@@ -580,11 +580,10 @@ const SimpleAreaChart = ({
   // X轴标签
   const xLabels = useMemo(() => {
     if (data.length === 0) return [];
-    const count = timeWindow === "24h" ? 6 : 5;
-    const step = Math.max(1, Math.floor((data.length - 1) / (count - 1)));
+    const count = Math.min(timeWindow === "24h" ? 6 : 5, data.length);
 
     return Array.from({ length: count }, (_, i) => {
-      const idx = Math.min(i * step, data.length - 1);
+      const idx = count <= 1 ? 0 : Math.round((i * (data.length - 1)) / (count - 1));
       const point = data[idx];
       if (!point) return null;
 
@@ -594,7 +593,10 @@ const SimpleAreaChart = ({
               ? date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })
               : date.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
 
-      return { position: i / (count - 1), label };
+      return {
+        position: data.length <= 1 ? 0.5 : idx / (data.length - 1),
+        label
+      };
     }).filter(Boolean) as Array<{ position: number; label: string }>;
   }, [data, timeWindow]);
 

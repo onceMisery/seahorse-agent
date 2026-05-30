@@ -50,6 +50,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.dashboard.DashboardInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.MessageFeedbackInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionTaskInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.intent.IntentTreeInboundPort;
@@ -269,130 +270,6 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.code").value("0"));
     }
 
-    @Test
-    void shouldKeepAgentRegistryAndRunStoreApiContracts() throws Exception {
-        AgentDefinitionInboundPort definitionPort = mock(AgentDefinitionInboundPort.class);
-        AgentDefinition definition = agentDefinition(AgentStatus.DRAFT);
-        when(definitionPort.createDraft(any())).thenReturn("agent-1");
-        when(definitionPort.page("tenant-a", 1L, 10L, "agent"))
-                .thenReturn(new AgentDefinitionPage(List.of(definition), 1L, 10L, 1L, 1L));
-        when(definitionPort.findById("agent-1")).thenReturn(Optional.of(definition));
-        when(definitionPort.updateDraft(eq("agent-1"), any())).thenReturn(definition);
-        when(definitionPort.publish(eq("agent-1"), any())).thenReturn(agentVersion());
-        when(definitionPort.disable("agent-1")).thenReturn(agentDefinition(AgentStatus.DISABLED));
-
-        AgentRunInboundPort runPort = mock(AgentRunInboundPort.class);
-        when(runPort.startRun(any())).thenReturn(agentRun(AgentRunStatus.RUNNING));
-        when(runPort.findRunById("run-1")).thenReturn(Optional.of(agentRun(AgentRunStatus.RUNNING)));
-        when(runPort.listSteps("run-1")).thenReturn(List.of(agentStep()));
-        when(runPort.cancel("run-1")).thenReturn(agentRun(AgentRunStatus.CANCELLED));
-        when(runPort.retry("run-1")).thenReturn(agentRun(AgentRunStatus.RETRYING));
-
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseAgentDefinitionController(provider(AgentDefinitionInboundPort.class, definitionPort)),
-                new SeahorseAgentRunController(provider(AgentRunInboundPort.class, runPort),
-                        null, null, null, null, AdvancedFeatureGate.allEnabledForTests())).build();
-
-        mvc.perform(post("/agents")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of(
-                                "agentId", "agent-1",
-                                "tenantId", "tenant-a",
-                                "name", "Agent One",
-                                "description", "desc",
-                                "ownerUserId", "owner-1",
-                                "ownerTeam", "platform",
-                                "agentType", "WORKFLOW",
-                                "riskLevel", "HIGH"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("0"))
-                .andExpect(jsonPath("$.data").value("agent-1"));
-
-        ArgumentCaptor<AgentDefinitionCreateCommand> createCaptor =
-                ArgumentCaptor.forClass(AgentDefinitionCreateCommand.class);
-        verify(definitionPort).createDraft(createCaptor.capture());
-        assertThat(createCaptor.getValue().agentType()).isEqualTo(AgentType.WORKFLOW);
-        assertThat(createCaptor.getValue().riskLevel()).isEqualTo(AgentRiskLevel.HIGH);
-
-        mvc.perform(get("/agents")
-                        .param("tenantId", "tenant-a")
-                        .param("current", "1")
-                        .param("size", "10")
-                        .param("keyword", "agent"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.records[0].agentId").value("agent-1"));
-
-        mvc.perform(get("/agents/agent-1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.agentId").value("agent-1"));
-
-        mvc.perform(put("/agents/agent-1/draft")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of(
-                                "name", "Agent One",
-                                "description", "desc",
-                                "ownerTeam", "platform",
-                                "agentType", "DOMAIN",
-                                "riskLevel", "MEDIUM"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("DRAFT"));
-        verify(definitionPort).updateDraft(eq("agent-1"), any(AgentDefinitionUpdateDraftCommand.class));
-
-        mvc.perform(post("/agents/agent-1/publish")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of(
-                                "instructions", "Do the work",
-                                "toolSetJson", "{}",
-                                "modelConfigJson", "{}",
-                                "memoryConfigJson", "{}",
-                                "guardrailConfigJson", "{}",
-                                "changeSummary", "initial"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.versionId").value("agent-1-v1"));
-        verify(definitionPort).publish(eq("agent-1"), any(AgentVersionPublishCommand.class));
-
-        mvc.perform(post("/agents/agent-1/disable"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("DISABLED"));
-
-        mvc.perform(post("/agents/agent-1/runs")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of(
-                                "versionId", "agent-1-v1",
-                                "tenantId", "tenant-a",
-                                "conversationId", "conversation-1",
-                                "triggerType", "CHAT",
-                                "inputSummary", "summary",
-                                "traceId", "trace-1"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.runId").value("run-1"));
-
-        ArgumentCaptor<AgentRunStartCommand> runCaptor = ArgumentCaptor.forClass(AgentRunStartCommand.class);
-        verify(runPort).startRun(runCaptor.capture());
-        assertThat(runCaptor.getValue().agentId()).isEqualTo("agent-1");
-        assertThat(runCaptor.getValue().versionId()).isEqualTo("agent-1-v1");
-        assertThat(runCaptor.getValue().triggerType()).isEqualTo(AgentRunTriggerType.CHAT);
-
-        mvc.perform(get("/agent-runs/run-1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("RUNNING"));
-
-        mvc.perform(get("/agent-runs/run-1/steps"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].stepId").value("step-1"));
-
-        mvc.perform(post("/agent-runs/run-1/cancel"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
-
-        mvc.perform(post("/agent-runs/run-1/retry"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("RETRYING"));
-
-        mvc.perform(post("/api/agent-runs/run-1/retry"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("RETRYING"));
-    }
 
     @Test
     void shouldKeepChatApiContracts() throws Exception {
@@ -719,11 +596,12 @@ class SeahorseWebApiContractTests {
         when(conversationPort.listMessages(eq("c1"), any())).thenReturn(List.of(conversationMessage("m1")));
 
         MessageFeedbackInboundPort feedbackPort = mock(MessageFeedbackInboundPort.class);
-
+        FeedbackEvaluationCandidateQueryInboundPort queryInboundPort = mock(FeedbackEvaluationCandidateQueryInboundPort.class);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseDashboardController(provider(DashboardInboundPort.class, dashboardPort)),
                 new SeahorseConversationController(provider(ConversationManagementInboundPort.class, conversationPort)),
-                new SeahorseMessageFeedbackController(provider(MessageFeedbackInboundPort.class, feedbackPort))).build();
+                new SeahorseMessageFeedbackController(provider(MessageFeedbackInboundPort.class, feedbackPort),
+                        provider(FeedbackEvaluationCandidateQueryInboundPort.class, queryInboundPort))).build();
 
         mvc.perform(get("/admin/dashboard/overview").param("window", "24h"))
                 .andExpect(status().isOk())

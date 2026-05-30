@@ -37,7 +37,7 @@ export function MemoryCenterPage() {
       const next = await getUserMemoryCenter();
       setData(next);
     } catch (error) {
-      const msg = (error as Error).message || "Failed to load memories";
+      const msg = (error as Error).message || "加载记忆失败";
       if (!silent) setLoadError(msg);
       toast.error(msg);
     } finally {
@@ -60,7 +60,7 @@ export function MemoryCenterPage() {
       );
       toast.success(next.privacyMode ? "隐私模式已开启" : "隐私模式已关闭");
     } catch (error) {
-      toast.error((error as Error).message || "Failed to update privacy mode");
+      toast.error((error as Error).message || "更新隐私模式失败");
     } finally {
       setUpdatingPrivacy(false);
     }
@@ -77,7 +77,7 @@ export function MemoryCenterPage() {
       );
       toast.success("记忆已删除");
     } catch (error) {
-      toast.error((error as Error).message || "Failed to delete memory");
+      toast.error((error as Error).message || "删除记忆失败");
     } finally {
       setDeletingId(null);
     }

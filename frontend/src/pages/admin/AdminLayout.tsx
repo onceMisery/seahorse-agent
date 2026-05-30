@@ -77,7 +77,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         path: "/admin/dashboard",
-        label: "Dashboard",
+        label: "仪表盘",
         icon: LayoutDashboard
       },
       {
@@ -143,13 +143,13 @@ const menuGroups: MenuGroup[] = [
       {
         path: "/admin/ai-infra",
         feature: "AI_INFRA_CONSOLE",
-        label: "Agent Console",
+        label: "Agent 控制台",
         icon: Cpu
       },
       {
         path: "/admin/agent-inspector",
         feature: "AI_INFRA_CONSOLE",
-        label: "Agent Inspector",
+        label: "Agent 检视器",
         icon: ScanSearch
       },
     ]
@@ -177,7 +177,7 @@ const menuGroups: MenuGroup[] = [
 ];
 
 const breadcrumbMap: Record<string, string> = {
-  dashboard: "Dashboard",
+  dashboard: "仪表盘",
   knowledge: "知识库管理",
   "intent-tree": "意图树配置",
   "intent-list": "意图列表",
@@ -483,8 +483,8 @@ export function AdminLayout() {
             <div className="admin-sidebar__logo">R</div>
             {!collapsed && (
               <div className="min-w-0">
-                <h1 className="admin-sidebar__title">Seahorse Agent Admin</h1>
-                <p className="admin-sidebar__subtitle">Knowledge Console</p>
+                <h1 className="admin-sidebar__title">Seahorse Agent 管理后台</h1>
+                <p className="admin-sidebar__subtitle">知识管理台</p>
               </div>
             )}
           </div>

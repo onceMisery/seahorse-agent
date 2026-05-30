@@ -19,21 +19,21 @@ const PRESET_ICONS = [BookOpen, Check, Lightbulb];
 
 const DEFAULT_PRESETS: PromptPreset[] = [
   {
-    title: "Summarize",
-    description: "Extract the key points.",
-    prompt: "Summarize the following content and list the key points:",
+    title: "总结提炼",
+    description: "提取关键要点",
+    prompt: "总结以下内容并列出关键要点：",
     icon: BookOpen
   },
   {
-    title: "Plan",
-    description: "Break a goal into steps.",
-    prompt: "Break this goal into concrete steps, priorities, and milestones:",
+    title: "制定计划",
+    description: "将目标拆解为步骤",
+    prompt: "将这个目标拆解为具体步骤、优先级和里程碑：",
     icon: Check
   },
   {
-    title: "Explore",
-    description: "Compare multiple options.",
-    prompt: "Give me several approaches for this topic and compare their tradeoffs:",
+    title: "探索对比",
+    description: "对比多种方案",
+    prompt: "针对这个主题给出多种方案并对比优劣：",
     icon: Lightbulb
   }
 ];
@@ -56,7 +56,7 @@ export function WelcomeScreen() {
             return {
               id: item.id,
               title: item.title?.trim() || (prompt.length > 18 ? `${prompt.slice(0, 18)}...` : prompt),
-              description: item.description?.trim() || "Start from this prompt.",
+              description: item.description?.trim() || "从这个提示开始",
               prompt,
               icon: PRESET_ICONS[index % PRESET_ICONS.length]
             };
@@ -79,6 +79,7 @@ export function WelcomeScreen() {
       <div className="relative w-full max-w-[860px]">
         <div className="mb-10 flex flex-col items-center text-center opacity-0 animate-fade-up" style={{ animationFillMode: "both" }}>
           <div className="relative mb-5">
+            {/* 内层光圈 — 静态 */}
             <div
               aria-hidden="true"
               className="absolute rounded-full pointer-events-none"
@@ -87,9 +88,23 @@ export function WelcomeScreen() {
                 height: 220,
                 top: -10,
                 left: -10,
-                border: "1px solid rgba(6,182,212,0.2)",
-                backgroundImage: "conic-gradient(from 0deg, transparent 75%, rgba(6,182,212,0.4) 100%)",
+                border: "1px solid var(--theme-accent-alpha-20)",
+                backgroundImage: "conic-gradient(from 0deg, transparent 75%, var(--theme-accent-alpha-40) 100%)",
                 borderRadius: "50%"
+              }}
+            />
+            {/* 外层光圈 — 旋转 */}
+            <div
+              aria-hidden="true"
+              className="absolute rounded-full pointer-events-none"
+              style={{
+                width: 260,
+                height: 260,
+                top: -30,
+                left: -30,
+                border: "1px dashed var(--theme-accent-alpha-20)",
+                borderRadius: "50%",
+                animation: "spin-slow 12s linear infinite"
               }}
             />
             <div
@@ -100,7 +115,7 @@ export function WelcomeScreen() {
                 height: 280,
                 top: -40,
                 left: -40,
-                background: "radial-gradient(circle, rgba(6,182,212,0.15) 0%, transparent 70%)",
+                background: "radial-gradient(circle, var(--theme-accent-alpha-10) 0%, transparent 70%)",
                 filter: "blur(20px)"
               }}
             />
@@ -115,7 +130,7 @@ export function WelcomeScreen() {
             SEAHORSE AI
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-6" style={{ color: "var(--theme-text-secondary)" }}>
-            Web assistant for research, writing, analysis, file Q&A, and personal memory.
+            研究、写作、分析、文件问答和个人记忆的智能助手。
           </p>
         </div>
 
@@ -125,9 +140,9 @@ export function WelcomeScreen() {
 
         <div className="mt-9 opacity-0 animate-fade-up" style={{ animationDelay: "160ms", animationFillMode: "both" }}>
           <div className="flex items-center justify-center gap-3 text-xs font-mono tracking-normal" style={{ color: "var(--theme-text-muted)" }}>
-            <span className="h-px w-8" style={{ backgroundColor: "rgba(6,182,212,0.3)" }} />
-            Quick prompts
-            <span className="h-px w-8" style={{ backgroundColor: "rgba(6,182,212,0.3)" }} />
+            <span className="h-px w-8" style={{ backgroundColor: "var(--theme-accent-alpha-30)" }} />
+            快速提问
+            <span className="h-px w-8" style={{ backgroundColor: "var(--theme-accent-alpha-30)" }} />
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {promptPresets.map((preset, index) => {
@@ -143,10 +158,10 @@ export function WelcomeScreen() {
                     isStreaming && "cursor-not-allowed opacity-60"
                   )}
                   style={{
-                    background: "rgba(10,36,62,0.5)",
+                    background: "var(--theme-glass-bg)",
                     backdropFilter: "blur(16px)",
-                    border: "1px solid rgba(6,182,212,0.12)",
-                    boxShadow: "0 0 15px rgba(6,182,212,0.05), inset 0 1px 0 rgba(6,182,212,0.08)"
+                    border: "1px solid var(--theme-glass-border)",
+                    boxShadow: "0 0 15px var(--theme-accent-alpha-10), inset 0 1px 0 var(--theme-accent-alpha-20)"
                   }}
                 >
                   <span
@@ -159,9 +174,9 @@ export function WelcomeScreen() {
                     <span
                       className="flex h-10 w-10 items-center justify-center rounded-xl transition-colors duration-200"
                       style={{
-                        backgroundColor: "rgba(6,182,212,0.1)",
+                        backgroundColor: "var(--theme-accent-alpha-10)",
                         color: "var(--theme-accent)",
-                        border: "1px solid rgba(6,182,212,0.15)"
+                        border: "1px solid var(--theme-accent-alpha-20)"
                       }}
                     >
                       <Icon className="h-4 w-4" />

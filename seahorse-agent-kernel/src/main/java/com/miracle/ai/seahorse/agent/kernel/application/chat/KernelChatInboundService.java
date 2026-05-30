@@ -224,8 +224,10 @@ public class KernelChatInboundService implements ChatInboundPort {
                 LOG.warn("chatMode=AGENT but KernelAgentLoop is not configured, fallback to RAG: taskId={}, userId={}",
                         safeCommand.taskId(), safeCommand.userId());
             }
-            chatPipeline.execute(buildContext(safeCommand, safeCallback, traceRunScope));
-            traceRecorder.finishRun(traceRunScope);
+            chatPipeline.execute(buildContext(
+                    safeCommand,
+                    finishTraceOnTerminal(safeCallback, traceRunScope, null),
+                    traceRunScope));
         } catch (Exception ex) {
             traceRecorder.finishRun(traceRunScope, ex);
             safeCallback.onError(ex);

@@ -32,7 +32,7 @@ api.interceptors.response.use(
     const payload = response.data;
     if (payload && typeof payload === "object" && "code" in payload) {
       if (payload.code !== "0") {
-        const message = payload.message || "Request failed";
+        const message = payload.message || "请求失败";
         const isAuthExpired = typeof message === "string" && message.includes("未登录");
         if (isAuthExpired) {
           handleUnauthorizedSession(message);
@@ -51,9 +51,9 @@ api.interceptors.response.use(
     if (responseData && typeof responseData === "object" && "message" in responseData && responseData.message) {
       toast.error(responseData.message);
     } else if (error?.code === "ERR_NETWORK") {
-      toast.error("Network error, please check your connection.");
+      toast.error("网络错误，请检查网络连接");
     } else {
-      toast.error(error?.message || "Network error");
+      toast.error(error?.message || "网络错误");
     }
     return Promise.reject(error);
   }

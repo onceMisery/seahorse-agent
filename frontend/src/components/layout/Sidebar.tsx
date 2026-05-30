@@ -179,7 +179,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
             <div style={{ fontFamily: sessionTitleFont }}>
               <p className="text-base font-semibold glow-text" style={{ color: "var(--theme-text-primary)" }}>Seahorse Agent</p>
-              <p className="text-xs" style={{ color: "var(--theme-text-muted)" }}>Powered by AI</p>
+              <p className="text-xs" style={{ color: "var(--theme-text-muted)" }}>AI 驱动</p>
             </div>
           </div>
         </div>
@@ -238,7 +238,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 }}
               >
                 <Database className="h-3.5 w-3.5" />
-                Memory center
+                记忆中心
               </button>
             </div>
           </div>
@@ -516,7 +516,8 @@ function ThemeColorSwitcher() {
     white: "#e2e8f0",
     purple: "#a855f7",
     emerald: "#10b981",
-    amber: "#f59e0b"
+    amber: "#f59e0b",
+    deepSea: "#3b82f6"
   };
 
   return (

@@ -144,7 +144,7 @@ export function LoginPage() {
           <div className="mt-1 flex items-center gap-2">
             <div className="h-px w-8" style={{ background: "var(--theme-accent-alpha-60)" }} />
             <p className="text-xs uppercase tracking-widest" style={{ color: "var(--theme-accent)" }}>
-              RAG Intelligence System
+              RAG 智能系统
             </p>
             <div className="h-px w-8" style={{ background: "var(--theme-accent-alpha-60)" }} />
           </div>
@@ -176,7 +176,7 @@ export function LoginPage() {
                 style={{ background: "var(--theme-accent)" }}
               />
               <span className="text-xs" style={{ color: "var(--theme-accent)" }}>
-                ONLINE
+                在线
               </span>
             </div>
           </div>

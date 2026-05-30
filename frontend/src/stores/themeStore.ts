@@ -9,12 +9,13 @@ export const COLOR_THEMES = {
   white: { label: "皓白", class: "theme-white" },
   purple: { label: "星云", class: "theme-purple" },
   emerald: { label: "翡翠", class: "theme-emerald" },
-  amber: { label: "琥珀", class: "theme-amber" }
+  amber: { label: "琥珀", class: "theme-amber" },
+  deepSea: { label: "深海蓝", class: "theme-deep-sea" }
 } as const;
 
 export type ColorThemeKey = keyof typeof COLOR_THEMES;
 
-export const VISIBLE_COLOR_THEME_KEYS: ColorThemeKey[] = ["marine", "white"];
+export const VISIBLE_COLOR_THEME_KEYS: ColorThemeKey[] = ["marine", "white", "deepSea"];
 
 interface ThemeState {
   theme: ThemeMode;

@@ -77,9 +77,9 @@ export function SystemSettingsPage() {
           <CardDescription>向量空间与检索基础参数</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
-          <InfoItem label="Collection" value={rag.defaultConfig.collectionName} />
-          <InfoItem label="Dimension" value={rag.defaultConfig.dimension} />
-          <InfoItem label="Metric Type" value={rag.defaultConfig.metricType} />
+          <InfoItem label="集合名" value={rag.defaultConfig.collectionName} />
+          <InfoItem label="向量维度" value={rag.defaultConfig.dimension} />
+          <InfoItem label="距离度量" value={rag.defaultConfig.metricType} />
         </CardContent>
       </Card>
 
@@ -89,7 +89,7 @@ export function SystemSettingsPage() {
           <CardDescription>历史上下文压缩与改写策略</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
-          <InfoItem label="Enabled" value={<BoolBadge value={rag.queryRewrite.enabled} />} />
+          <InfoItem label="启用" value={<BoolBadge value={rag.queryRewrite.enabled} />} />
         </CardContent>
       </Card>
 
@@ -99,11 +99,11 @@ export function SystemSettingsPage() {
           <CardDescription>并发与租约控制</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
-          <InfoItem label="Enabled" value={<BoolBadge value={rag.rateLimit.global.enabled} />} />
-          <InfoItem label="Max Concurrent" value={rag.rateLimit.global.maxConcurrent} />
-          <InfoItem label="Max Wait Seconds" value={rag.rateLimit.global.maxWaitSeconds} />
-          <InfoItem label="Lease Seconds" value={rag.rateLimit.global.leaseSeconds} />
-          <InfoItem label="Poll Interval (ms)" value={rag.rateLimit.global.pollIntervalMs} />
+          <InfoItem label="启用" value={<BoolBadge value={rag.rateLimit.global.enabled} />} />
+          <InfoItem label="最大并发" value={rag.rateLimit.global.maxConcurrent} />
+          <InfoItem label="最大等待(秒)" value={rag.rateLimit.global.maxWaitSeconds} />
+          <InfoItem label="租约(秒)" value={rag.rateLimit.global.leaseSeconds} />
+          <InfoItem label="轮询间隔(ms)" value={rag.rateLimit.global.pollIntervalMs} />
         </CardContent>
       </Card>
 
@@ -113,11 +113,11 @@ export function SystemSettingsPage() {
           <CardDescription>摘要与上下文保留策略</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
-          <InfoItem label="History Keep Turns" value={rag.memory.historyKeepTurns} />
-          <InfoItem label="Summary Start Turns" value={rag.memory.summaryStartTurns} />
-          <InfoItem label="Summary Enabled" value={<BoolBadge value={rag.memory.summaryEnabled} />} />
-          <InfoItem label="Summary Max Chars" value={rag.memory.summaryMaxChars} />
-          <InfoItem label="Title Max Length" value={rag.memory.titleMaxLength} />
+          <InfoItem label="历史保留轮次" value={rag.memory.historyKeepTurns} />
+          <InfoItem label="摘要起始轮次" value={rag.memory.summaryStartTurns} />
+          <InfoItem label="摘要启用" value={<BoolBadge value={rag.memory.summaryEnabled} />} />
+          <InfoItem label="摘要最大字符" value={rag.memory.summaryMaxChars} />
+          <InfoItem label="标题最大长度" value={rag.memory.titleMaxLength} />
         </CardContent>
       </Card>
 
@@ -130,10 +130,10 @@ export function SystemSettingsPage() {
           <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[140px]">Provider</TableHead>
-                <TableHead className="w-[240px]">URL</TableHead>
-                <TableHead className="w-[200px]">API Key</TableHead>
-                <TableHead>Endpoints</TableHead>
+                <TableHead className="w-[140px]">提供方</TableHead>
+                <TableHead className="w-[240px]">地址</TableHead>
+                <TableHead className="w-[200px]">密钥</TableHead>
+                <TableHead>端点</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -164,8 +164,8 @@ export function SystemSettingsPage() {
           <CardDescription>熔断与选择阈值</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
-          <InfoItem label="Failure Threshold" value={ai.selection.failureThreshold} />
-          <InfoItem label="Open Duration (ms)" value={ai.selection.openDurationMs} />
+          <InfoItem label="熔断阈值" value={ai.selection.failureThreshold} />
+          <InfoItem label="熔断恢复(ms)" value={ai.selection.openDurationMs} />
         </CardContent>
       </Card>
 
@@ -175,7 +175,7 @@ export function SystemSettingsPage() {
           <CardDescription>输出分片大小</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
-          <InfoItem label="Message Chunk Size" value={ai.stream.messageChunkSize} />
+          <InfoItem label="消息分片大小" value={ai.stream.messageChunkSize} />
         </CardContent>
       </Card>
 
@@ -186,17 +186,17 @@ export function SystemSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <InfoItem label="Default Model" value={ai.chat.defaultModel} />
-            <InfoItem label="Deep Thinking Model" value={ai.chat.deepThinkingModel} />
+            <InfoItem label="默认模型" value={ai.chat.defaultModel} />
+            <InfoItem label="深度思考模型" value={ai.chat.deepThinkingModel} />
           </div>
           <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[220px]">ID</TableHead>
-                <TableHead className="w-[120px]">Provider</TableHead>
-                <TableHead className="w-[200px]">Model</TableHead>
-                <TableHead className="w-[100px]">Thinking</TableHead>
-                <TableHead className="w-[90px]">Priority</TableHead>
+                <TableHead className="w-[120px]">提供方</TableHead>
+                <TableHead className="w-[200px]">模型</TableHead>
+                <TableHead className="w-[100px]">思维链</TableHead>
+                <TableHead className="w-[90px]">优先级</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -221,16 +221,16 @@ export function SystemSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <InfoItem label="Default Model" value={ai.embedding.defaultModel} />
+            <InfoItem label="默认模型" value={ai.embedding.defaultModel} />
           </div>
           <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[220px]">ID</TableHead>
-                <TableHead className="w-[120px]">Provider</TableHead>
-                <TableHead className="w-[200px]">Model</TableHead>
-                <TableHead className="w-[110px]">Dimension</TableHead>
-                <TableHead className="w-[90px]">Priority</TableHead>
+                <TableHead className="w-[120px]">提供方</TableHead>
+                <TableHead className="w-[200px]">模型</TableHead>
+                <TableHead className="w-[110px]">维度</TableHead>
+                <TableHead className="w-[90px]">优先级</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -255,15 +255,15 @@ export function SystemSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <InfoItem label="Default Model" value={ai.rerank.defaultModel} />
+            <InfoItem label="默认模型" value={ai.rerank.defaultModel} />
           </div>
           <Table className="min-w-[640px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[220px]">ID</TableHead>
-                <TableHead className="w-[120px]">Provider</TableHead>
-                <TableHead className="w-[200px]">Model</TableHead>
-                <TableHead className="w-[90px]">Priority</TableHead>
+                <TableHead className="w-[120px]">提供方</TableHead>
+                <TableHead className="w-[200px]">模型</TableHead>
+                <TableHead className="w-[90px]">优先级</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
