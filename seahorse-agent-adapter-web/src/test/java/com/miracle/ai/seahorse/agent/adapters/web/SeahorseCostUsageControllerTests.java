@@ -129,6 +129,7 @@ class SeahorseCostUsageControllerTests {
                 null,
                 null,
                 provider(AgentRunCostSummaryInboundPort.class, port),
+                null,
                 AdvancedFeatureGate.consumerWebDefaults())).build();
 
         mvc.perform(get("/api/agent-runs/run-1/cost-summary"))
