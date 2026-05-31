@@ -34,8 +34,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
-
 public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
 
     private static final String SELECT_COLUMNS = "id, username, password, role, avatar, create_time, update_time";
@@ -113,7 +111,7 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
     @Override
     public String create(UserCreateValues values) {
         UserCreateValues safeValues = Objects.requireNonNull(values, "values must not be null");
-        String id = UUID.randomUUID().toString().replace("-", "");
+        String id = JdbcMemorySupport.nextId();
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
                 INSERT INTO t_user (id, username, password, avatar, role, create_time, update_time, deleted)

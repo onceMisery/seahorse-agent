@@ -54,6 +54,7 @@ class JdbcUserRepositoryAdapterTests {
         boolean updated = adapter.update(id, new UserUpdateValues("bobby", null, null, null));
         boolean deleted = adapter.delete(id);
 
+        assertThat(id).hasSizeLessThanOrEqualTo(20);
         assertThat(page.total()).isEqualTo(1);
         assertThat(adapter.usernameExists("alice", null)).isTrue();
         assertThat(updated).isTrue();
@@ -73,7 +74,7 @@ class JdbcUserRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_user");
         jdbcTemplate.execute("""
                 CREATE TABLE t_user (
-                    id VARCHAR(64) PRIMARY KEY,
+                    id VARCHAR(20) PRIMARY KEY,
                     username VARCHAR(128) NOT NULL,
                     password VARCHAR(128) NOT NULL,
                     avatar VARCHAR(512),
