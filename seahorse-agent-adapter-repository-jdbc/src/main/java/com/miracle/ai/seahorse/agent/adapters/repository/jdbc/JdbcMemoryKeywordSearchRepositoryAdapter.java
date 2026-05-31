@@ -142,7 +142,7 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
                   AND %s
                 ORDER BY update_time DESC
                 LIMIT ?
-                """.formatted(termFilter(terms, "LOWER(content)", "LOWER(metadata_json)")),
+                """.formatted(termFilter(terms, "LOWER(content)", "LOWER(CAST(metadata_json AS VARCHAR))")),
                 (rs, rowNum) -> mapDocument(rs, "SHORT_TERM"),
                 searchArgs(userId, tenantId, terms, 2, limit));
     }
@@ -159,7 +159,7 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
                   AND %s
                 ORDER BY importance_score DESC, update_time DESC
                 LIMIT ?
-                """.formatted(termFilter(terms, "LOWER(content)", "LOWER(title)", "LOWER(tags)")),
+                """.formatted(termFilter(terms, "LOWER(content)", "LOWER(title)", "LOWER(CAST(tags AS VARCHAR))")),
                 (rs, rowNum) -> mapDocument(rs, "LONG_TERM"),
                 searchArgs(userId, tenantId, terms, 3, limit));
     }
@@ -176,7 +176,7 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
                   AND %s
                 ORDER BY update_time DESC
                 LIMIT ?
-                """.formatted(termFilter(terms, "LOWER(value_json)", "LOWER(semantic_key)")),
+                """.formatted(termFilter(terms, "LOWER(CAST(value_json AS VARCHAR))", "LOWER(semantic_key)")),
                 (rs, rowNum) -> mapDocument(rs, "SEMANTIC"),
                 searchArgs(userId, tenantId, terms, 2, limit));
     }

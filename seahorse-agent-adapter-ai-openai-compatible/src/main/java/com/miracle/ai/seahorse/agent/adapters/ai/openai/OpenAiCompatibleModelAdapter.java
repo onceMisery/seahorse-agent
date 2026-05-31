@@ -213,7 +213,7 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         putIfPresent(payload, "top_p", safeRequest.getTopP());
         putIfPresent(payload, "top_k", safeRequest.getTopK());
         putIfPresent(payload, "max_tokens", safeRequest.getMaxTokens());
-        putIfPresent(payload, "thinking", safeRequest.getThinking());
+        putIfTrue(payload, "thinking", safeRequest.getThinking());
         if (safeRequest.getTools() != null && !safeRequest.getTools().isEmpty()) {
             payload.put("tools", tools(safeRequest.getTools()));
             payload.put("tool_choice", safeRequest.getToolChoice());
@@ -554,6 +554,12 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
     private void putIfPresent(Map<String, Object> payload, String key, Object value) {
         if (value != null) {
             payload.put(key, value);
+        }
+    }
+
+    private void putIfTrue(Map<String, Object> payload, String key, Boolean value) {
+        if (Boolean.TRUE.equals(value)) {
+            payload.put(key, true);
         }
     }
 

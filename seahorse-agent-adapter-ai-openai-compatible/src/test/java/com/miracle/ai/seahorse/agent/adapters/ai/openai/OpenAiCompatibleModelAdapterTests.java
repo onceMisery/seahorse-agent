@@ -20,13 +20,20 @@ package com.miracle.ai.seahorse.agent.adapters.ai.openai;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+import okio.Buffer;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,6 +53,39 @@ class OpenAiCompatibleModelAdapterTests {
                 .build(), new NoopStreamCallback());
 
         assertThat(executor.tasks).hasSize(1);
+    }
+
+    @Test
+    void shouldOmitThinkingWhenDisabledForOpenAiCompatiblePayload() {
+        AtomicReference<String> capturedBody = new AtomicReference<>();
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .addInterceptor(chain -> {
+                    Buffer buffer = new Buffer();
+                    chain.request().body().writeTo(buffer);
+                    capturedBody.set(buffer.readUtf8());
+                    return new Response.Builder()
+                            .request(chain.request())
+                            .protocol(Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("OK")
+                            .body(ResponseBody.create("data: [DONE]\n\n", null))
+                            .build();
+                })
+                .build();
+        OpenAiCompatibleModelAdapter adapter = new OpenAiCompatibleModelAdapter(
+                httpClient,
+                new ObjectMapper(),
+                new OpenAiCompatibleModelProperties("http://127.0.0.1:65535/v1", "", "gpt-test", "", "", List.of()),
+                Runnable::run);
+
+        adapter.streamChat(ChatRequest.builder()
+                .messages(List.of(ChatMessage.user("hello")))
+                .samplingOptions(ChatSamplingOptions.builder()
+                        .thinking(false)
+                        .build())
+                .build(), new NoopStreamCallback());
+
+        assertThat(capturedBody.get()).doesNotContain("\"thinking\"");
     }
 
     private static final class RecordingExecutor implements Executor {
