@@ -111,3 +111,139 @@ export function getMetadataQualityReport(tenantId: string, kbId: string) {
     params: { tenantId, topN: 5 }
   });
 }
+
+// ── Schema 字段 CRUD ──
+
+export function createMetadataSchemaField(tenantId: string, kbId: string, payload: Partial<MetadataSchemaField>) {
+  return api.post<MetadataSchemaField, MetadataSchemaField>(
+    `/knowledge-base/${encodeURIComponent(kbId)}/metadata-schema/fields`,
+    payload,
+    { params: { tenantId } }
+  );
+}
+
+export function updateMetadataSchemaField(fieldId: string, payload: Partial<MetadataSchemaField>) {
+  return api.put<MetadataSchemaField, MetadataSchemaField>(
+    `/metadata-schema/fields/${encodeURIComponent(fieldId)}`,
+    payload
+  );
+}
+
+export function deleteMetadataSchemaField(fieldId: string) {
+  return api.delete(`/metadata-schema/fields/${encodeURIComponent(fieldId)}`);
+}
+
+export function getMetadataSchemaFieldCapabilities(tenantId: string, kbId: string) {
+  return api.get<Record<string, unknown>[]>(
+    `/knowledge-base/${encodeURIComponent(kbId)}/metadata-schema/field-capabilities`,
+    { params: { tenantId } }
+  );
+}
+
+// ── 抽取结果 ──
+
+export function listMetadataExtractionResults(params: {
+  tenantId?: string;
+  kbId?: string;
+  documentId?: string;
+  current?: number;
+  size?: number;
+}) {
+  return api.get<PageResult<Record<string, unknown>>>("/metadata-extraction/results", { params });
+}
+
+export function getMetadataExtractionResult(resultId: string) {
+  return api.get<Record<string, unknown>>(`/metadata-extraction/results/${encodeURIComponent(resultId)}`);
+}
+
+// ── Review 补全 ──
+
+export function getMetadataReviewItemDetail(itemId: string) {
+  return api.get<MetadataReviewItem>(`/metadata-review/items/${encodeURIComponent(itemId)}`);
+}
+
+export function getMetadataReviewAudits(itemId: string) {
+  return api.get<Record<string, unknown>[]>(
+    `/metadata-review/items/${encodeURIComponent(itemId)}/audits`
+  );
+}
+
+export function correctMetadataReviewItem(itemId: string, payload: Record<string, unknown>) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/metadata-review/items/${encodeURIComponent(itemId)}/correct`,
+    payload
+  );
+}
+
+export function ignoreMetadataReviewField(itemId: string, payload: { fieldKey?: string; reason?: string }) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/metadata-review/items/${encodeURIComponent(itemId)}/ignore-field`,
+    payload
+  );
+}
+
+export function reExtractMetadataReviewItem(itemId: string) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/metadata-review/items/${encodeURIComponent(itemId)}/re-extract`
+  );
+}
+
+// ── Backfill ──
+
+export function listMetadataBackfillJobs(tenantId: string, kbId: string, params?: { current?: number; size?: number }) {
+  return api.get<PageResult<Record<string, unknown>>>(
+    `/knowledge-base/${encodeURIComponent(kbId)}/metadata-backfill/jobs`,
+    { params: { tenantId, ...params } }
+  );
+}
+
+export function createMetadataBackfillJob(tenantId: string, kbId: string, payload: Record<string, unknown>) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/knowledge-base/${encodeURIComponent(kbId)}/metadata-backfill/jobs`,
+    payload,
+    { params: { tenantId } }
+  );
+}
+
+export function getMetadataBackfillOverview(tenantId: string, kbId: string) {
+  return api.get<Record<string, unknown>>(
+    `/knowledge-base/${encodeURIComponent(kbId)}/metadata-backfill/overview`,
+    { params: { tenantId } }
+  );
+}
+
+export function runNextMetadataBackfillJob(jobId: string) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/metadata-backfill/jobs/${encodeURIComponent(jobId)}/run-next`
+  );
+}
+
+export function pauseMetadataBackfillJob(jobId: string) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/metadata-backfill/jobs/${encodeURIComponent(jobId)}/pause`
+  );
+}
+
+export function resumeMetadataBackfillJob(jobId: string) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/metadata-backfill/jobs/${encodeURIComponent(jobId)}/resume`
+  );
+}
+
+export function cancelMetadataBackfillJob(jobId: string) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/metadata-backfill/jobs/${encodeURIComponent(jobId)}/cancel`
+  );
+}
+
+// ── 质量对比 ──
+
+export function compareMetadataQuality(tenantId: string, kbId: string, params: {
+  baseVersion?: string;
+  candidateVersion?: string;
+}) {
+  return api.get<Record<string, unknown>>(
+    `/knowledge-base/${encodeURIComponent(kbId)}/metadata-quality/compare`,
+    { params: { tenantId, ...params } }
+  );
+}

@@ -328,6 +328,31 @@ export const batchToggleChunks = async (
   );
 };
 
+// 文档刷新与关键词索引重建
+export const refreshDocument = async (docId: string): Promise<Record<string, unknown>> => {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/knowledge-base/docs/${encodeURIComponent(docId)}/refresh`
+  );
+};
+
+export const refreshDueDocuments = async (): Promise<Record<string, unknown>> => {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    "/knowledge-base/docs/refresh-due"
+  );
+};
+
+export const rebuildDocumentKeywordIndex = async (docId: string): Promise<Record<string, unknown>> => {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/knowledge-base/docs/${encodeURIComponent(docId)}/keyword-index/rebuild`
+  );
+};
+
+export const rebuildKbKeywordIndex = async (kbId: string): Promise<Record<string, unknown>> => {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/knowledge-base/${encodeURIComponent(kbId)}/keyword-index/rebuild`
+  );
+};
+
 // 文档分块日志管理
 export const getChunkLogsPage = async (
   docId: string,

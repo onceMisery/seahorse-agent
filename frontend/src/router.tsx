@@ -27,6 +27,49 @@ import { AgentInspectorPage } from "@/pages/admin/agent-inspector/AgentInspector
 import { ADVANCED_ADMIN_FEATURES, isAdvancedAdminEnabled } from "@/config/productMode";
 import { useAuthStore } from "@/stores/authStore";
 
+// Agent 管理
+import { AgentListPage } from "@/pages/admin/agents/AgentListPage";
+import { AgentCreatePage } from "@/pages/admin/agents/AgentCreatePage";
+import { AgentDetailPage } from "@/pages/admin/agents/AgentDetailPage";
+import { AgentEditorPage } from "@/pages/admin/agents/AgentEditorPage";
+
+// 工具目录
+import { ToolCatalogPage } from "@/pages/admin/tools/ToolCatalogPage";
+import { ToolDetailPage } from "@/pages/admin/tools/ToolDetailPage";
+import { ToolInvocationAuditPage } from "@/pages/admin/tools/ToolInvocationAuditPage";
+
+// 审批中心
+import { ApprovalCenterPage } from "@/pages/admin/approvals/ApprovalCenterPage";
+
+// RAG 评测
+import { RagEvaluationPage } from "@/pages/admin/rag-evaluation/RagEvaluationPage";
+import { RetrievalDatasetDetailPage } from "@/pages/admin/rag-evaluation/RetrievalDatasetDetailPage";
+import { RetrievalStrategyTemplatePage } from "@/pages/admin/rag-evaluation/RetrievalStrategyTemplatePage";
+import { VersionQualityComparePage } from "@/pages/admin/rag-evaluation/VersionQualityComparePage";
+
+// 安全治理
+import { ResourceAclPage } from "@/pages/admin/security/ResourceAclPage";
+import { AccessDecisionPage } from "@/pages/admin/security/AccessDecisionPage";
+import { QuotaPolicyPage } from "@/pages/admin/security/QuotaPolicyPage";
+
+// 集成
+import { OpenApiConnectorPage } from "@/pages/admin/integrations/OpenApiConnectorPage";
+import { OpenApiConnectorDetailPage } from "@/pages/admin/integrations/OpenApiConnectorDetailPage";
+import { SecretPage } from "@/pages/admin/integrations/SecretPage";
+
+// 记忆治理
+import { MemoryGovernancePage } from "@/pages/admin/memory-governance/MemoryGovernancePage";
+
+// 审计与成本
+import { AuditEventPage } from "@/pages/admin/audit/AuditEventPage";
+import { CostAnalyticsPage } from "@/pages/admin/cost/CostAnalyticsPage";
+
+// 沙箱
+import { SandboxPage } from "@/pages/admin/sandbox/SandboxPage";
+
+// Agent 运行管理
+import { AgentRunListPage } from "@/pages/admin/agent-runs/AgentRunListPage";
+
 function RequireAuth({ children }: { children: JSX.Element }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   if (!isAuthenticated) {
@@ -102,6 +145,93 @@ const advancedAdminRoutes = [
           path: "agent-inspector/:runId",
           element: <AgentInspectorPage />
         }
+      ]
+    : []),
+  // Agent 生命周期管理
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT)
+    ? [
+        { path: "agents", element: <AgentListPage /> },
+        { path: "agents/new", element: <AgentCreatePage /> },
+        { path: "agents/:agentId", element: <AgentDetailPage /> },
+        { path: "agents/:agentId/edit", element: <AgentEditorPage /> }
+      ]
+    : []),
+  // 工具目录
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT)
+    ? [
+        { path: "tools", element: <ToolCatalogPage /> },
+        { path: "tools/:toolId", element: <ToolDetailPage /> },
+        { path: "tool-invocations", element: <ToolInvocationAuditPage /> }
+      ]
+    : []),
+  // 审批中心
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT)
+    ? [
+        { path: "approvals", element: <ApprovalCenterPage /> }
+      ]
+    : []),
+  // Agent 运行管理
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT)
+    ? [
+        { path: "agent-runs", element: <AgentRunListPage /> }
+      ]
+    : []),
+  // RAG 评测
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION)
+    ? [
+        { path: "rag-evaluation", element: <RagEvaluationPage /> },
+        { path: "rag-evaluation/:kbId/:datasetId", element: <RetrievalDatasetDetailPage /> },
+        { path: "rag-strategies", element: <RetrievalStrategyTemplatePage /> },
+        { path: "rag-version-compare", element: <VersionQualityComparePage /> }
+      ]
+    : []),
+  // 安全治理
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.RESOURCE_ACL_MANAGEMENT)
+    ? [
+        { path: "security/resource-acl", element: <ResourceAclPage /> },
+        { path: "security/access-decisions", element: <AccessDecisionPage /> }
+      ]
+    : []),
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.QUOTA_MANAGEMENT)
+    ? [
+        { path: "security/quotas", element: <QuotaPolicyPage /> }
+      ]
+    : []),
+  // 密钥管理
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.SECRET_MANAGEMENT)
+    ? [
+        { path: "secrets", element: <SecretPage /> }
+      ]
+    : []),
+  // OpenAPI 连接器
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.CONNECTOR_MANAGEMENT)
+    ? [
+        { path: "integrations/connectors", element: <OpenApiConnectorPage /> },
+        { path: "integrations/connectors/:connectorId", element: <OpenApiConnectorDetailPage /> }
+      ]
+    : []),
+  // 记忆治理
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.MEMORY_GOVERNANCE)
+    ? [
+        { path: "memory-governance", element: <MemoryGovernancePage /> }
+      ]
+    : []),
+  // 审计日志
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.AUDIT_LOG)
+    ? [
+        { path: "audit", element: <AuditEventPage /> }
+      ]
+    : []),
+  // 成本分析
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.COST_ANALYTICS)
+    ? [
+        { path: "cost", element: <CostAnalyticsPage /> }
+      ]
+    : []),
+  // 沙箱
+  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.SANDBOX)
+    ? [
+        { path: "sandbox", element: <SandboxPage /> }
       ]
     : [])
 ];

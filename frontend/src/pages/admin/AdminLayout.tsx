@@ -24,7 +24,19 @@ import {
   Upload,
   Users,
   FolderKanban,
-  Workflow
+  Workflow,
+  Wrench,
+  FileCheck,
+  FlaskConical,
+  Lock,
+  Scale,
+  Plug,
+  BookOpen,
+  Brain,
+  FileText,
+  DollarSign,
+  TerminalSquare,
+  Plus
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { Button } from "@/components/ui/button";
@@ -73,18 +85,172 @@ type MenuGroup = {
 
 const menuGroups: MenuGroup[] = [
   {
-    title: "导航",
+    title: "总览",
     items: [
       {
         path: "/admin/dashboard",
         label: "仪表盘",
         icon: LayoutDashboard
-      },
+      }
+    ]
+  },
+  {
+    title: "知识与 RAG",
+    items: [
       {
         path: "/admin/knowledge",
         label: "知识库管理",
         icon: Database
       },
+      {
+        path: "/admin/rag-evaluation",
+        feature: "RAG_EVALUATION",
+        label: "RAG 评测",
+        icon: FlaskConical
+      },
+      {
+        path: "/admin/traces",
+        label: "链路追踪",
+        icon: Workflow
+      }
+    ]
+  },
+  {
+    title: "Agent",
+    items: [
+      {
+        id: "agent-group",
+        path: "/admin/agents",
+        feature: "AGENT_DEFINITION_MANAGEMENT",
+        label: "Agent 管理",
+        icon: Cpu,
+        children: [
+          {
+            path: "/admin/agents",
+            label: "Agent 列表",
+            icon: Layers
+          },
+          {
+            path: "/admin/agents/new",
+            label: "创建 Agent",
+            icon: Plus
+          }
+        ]
+      },
+      {
+        path: "/admin/agent-inspector",
+        feature: "AI_INFRA_CONSOLE",
+        label: "Agent 检视器",
+        icon: ScanSearch
+      },
+      {
+        path: "/admin/ai-infra",
+        feature: "AI_INFRA_CONSOLE",
+        label: "Agent 控制台",
+        icon: Cpu
+      },
+      {
+        path: "/admin/approvals",
+        feature: "AGENT_DEFINITION_MANAGEMENT",
+        label: "审批中心",
+        icon: FileCheck
+      },
+      {
+        path: "/admin/tools",
+        feature: "TOOL_CATALOG_MANAGEMENT",
+        label: "工具目录",
+        icon: Wrench
+      },
+      {
+        path: "/admin/tool-invocations",
+        feature: "TOOL_CATALOG_MANAGEMENT",
+        label: "工具调用审计",
+        icon: ClipboardList
+      }
+    ]
+  },
+  {
+    title: "集成",
+    items: [
+      {
+        path: "/admin/integrations/connectors",
+        feature: "CONNECTOR_MANAGEMENT",
+        label: "OpenAPI 连接器",
+        icon: Plug
+      },
+      {
+        path: "/admin/secrets",
+        feature: "SECRET_MANAGEMENT",
+        label: "密钥管理",
+        icon: KeyRound
+      }
+    ]
+  },
+  {
+    title: "安全治理",
+    items: [
+      {
+        path: "/admin/security/resource-acl",
+        feature: "RESOURCE_ACL_MANAGEMENT",
+        label: "资源 ACL",
+        icon: Lock
+      },
+      {
+        path: "/admin/security/access-decisions",
+        feature: "RESOURCE_ACL_MANAGEMENT",
+        label: "访问决策",
+        icon: Scale
+      },
+      {
+        path: "/admin/security/quotas",
+        feature: "QUOTA_MANAGEMENT",
+        label: "配额策略",
+        icon: ShieldCheck
+      },
+      {
+        path: "/admin/users",
+        label: "用户管理",
+        icon: Users
+      }
+    ]
+  },
+  {
+    title: "治理与可观测",
+    items: [
+      {
+        path: "/admin/memory-governance",
+        feature: "MEMORY_GOVERNANCE",
+        label: "记忆治理",
+        icon: Brain
+      },
+      {
+        path: "/admin/metadata-governance",
+        label: "元数据治理",
+        icon: ShieldCheck
+      },
+      {
+        path: "/admin/audit",
+        feature: "AUDIT_LOG",
+        label: "审计日志",
+        icon: FileText
+      },
+      {
+        path: "/admin/cost",
+        feature: "COST_ANALYTICS",
+        label: "成本分析",
+        icon: DollarSign
+      },
+      {
+        path: "/admin/sandbox",
+        feature: "SANDBOX",
+        label: "沙箱",
+        icon: TerminalSquare
+      }
+    ]
+  },
+  {
+    title: "设置",
+    items: [
       {
         id: "intent",
         path: "/admin/intent-tree",
@@ -126,41 +292,9 @@ const menuGroups: MenuGroup[] = [
         ]
       },
       {
-        path: "/admin/metadata-governance",
-        label: "元数据治理",
-        icon: ShieldCheck
-      },
-      {
         path: "/admin/mappings",
         label: "关键词映射",
         icon: KeyRound
-      },
-      {
-        path: "/admin/traces",
-        label: "链路追踪",
-        icon: Workflow
-      },
-      {
-        path: "/admin/ai-infra",
-        feature: "AI_INFRA_CONSOLE",
-        label: "Agent 控制台",
-        icon: Cpu
-      },
-      {
-        path: "/admin/agent-inspector",
-        feature: "AI_INFRA_CONSOLE",
-        label: "Agent 检视器",
-        icon: ScanSearch
-      },
-    ]
-  },
-  {
-    title: "设置",
-    items: [
-      {
-        path: "/admin/users",
-        label: "用户管理",
-        icon: Users
       },
       {
         path: "/admin/sample-questions",
@@ -176,7 +310,7 @@ const menuGroups: MenuGroup[] = [
         path: "/admin/settings",
         label: "系统设置",
         icon: Settings
-      },
+      }
     ]
   }
 ];
@@ -189,11 +323,33 @@ const breadcrumbMap: Record<string, string> = {
   ingestion: "数据通道",
   traces: "链路追踪",
   "ai-infra": "AI Infra 控制台",
+  "agent-inspector": "Agent 检视器",
+  agents: "Agent 管理",
+  "new": "创建 Agent",
+  tools: "工具目录",
+  "tool-invocations": "工具调用审计",
+  approvals: "审批中心",
+  "rag-evaluation": "RAG 评测",
+  "rag-strategies": "策略模板",
+  "rag-version-compare": "版本质量对比",
+  security: "安全治理",
+  "resource-acl": "资源 ACL",
+  "access-decisions": "访问决策",
+  quotas: "配额策略",
+  secrets: "密钥管理",
+  integrations: "集成",
+  connectors: "OpenAPI 连接器",
+  "memory-governance": "记忆治理",
+  "metadata-governance": "元数据治理",
+  audit: "审计日志",
+  cost: "成本分析",
+  sandbox: "沙箱",
   "sample-questions": "示例问题",
   mappings: "关键词映射",
   "model-config": "模型配置",
   settings: "系统设置",
-  users: "用户管理"
+  users: "用户管理",
+  edit: "编辑"
 };
 
 function menuItemEnabled(item: MenuItem) {
