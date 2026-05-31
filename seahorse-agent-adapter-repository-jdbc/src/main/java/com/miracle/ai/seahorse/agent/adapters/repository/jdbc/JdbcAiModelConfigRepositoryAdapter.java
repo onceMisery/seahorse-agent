@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
 import com.miracle.ai.seahorse.agent.ports.outbound.config.AiModelConfigRepositoryPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -39,6 +41,8 @@ import java.util.Optional;
  * AI 模型配置 JDBC 仓储适配器
  */
 public class JdbcAiModelConfigRepositoryAdapter implements AiModelConfigRepositoryPort {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(JdbcAiModelConfigRepositoryAdapter.class);
 
     private static final String ENCRYPTION_KEY = "SeahorseAgent16B"; // 16字节密钥
     private static final String ALGORITHM = "AES";
@@ -157,6 +161,16 @@ public class JdbcAiModelConfigRepositoryAdapter implements AiModelConfigReposito
         }
     }
 
+    private String decryptOrUseLegacyPlaintext(String configKey, String value) {
+        try {
+            return decrypt(value);
+        } catch (RuntimeException ex) {
+            LOGGER.warn("AI model config {} is marked encrypted but cannot be decrypted; treating it as legacy plaintext",
+                    configKey);
+            return value;
+        }
+    }
+
     private class AiModelConfigRowMapper implements RowMapper<AiModelConfig> {
         @Override
         public AiModelConfig mapRow(ResultSet rs, int rowNum) throws SQLException {
@@ -166,7 +180,7 @@ public class JdbcAiModelConfigRepositoryAdapter implements AiModelConfigReposito
 
             boolean isEncrypted = rs.getInt("is_encrypted") == 1;
             String value = rs.getString("config_value");
-            config.setConfigValue(isEncrypted ? decrypt(value) : value);
+            config.setConfigValue(isEncrypted ? decryptOrUseLegacyPlaintext(config.getConfigKey(), value) : value);
 
             config.setConfigType(AiModelConfig.ConfigType.valueOf(rs.getString("config_type")));
             config.setEncrypted(isEncrypted);
