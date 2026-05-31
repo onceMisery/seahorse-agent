@@ -1,0 +1,130 @@
+import { api } from "@/services/api";
+import type { PageResult } from "@/services/metadataGovernanceService";
+
+// ── 类型定义 ──
+
+export interface AgentDefinition {
+  agentId?: string;
+  name?: string;
+  description?: string;
+  tenantId?: string;
+  status?: string;
+  currentVersionId?: string;
+  currentVersionNumber?: number;
+  latestPublishedVersionId?: string;
+  latestPublishedVersionNumber?: number;
+  latestPublishStatus?: string;
+  toolCount?: number;
+  riskLevel?: string;
+  owner?: string;
+  instructions?: string;
+  modelStrategy?: Record<string, unknown>;
+  contextStrategy?: Record<string, unknown>;
+  riskStrategy?: Record<string, unknown>;
+  toolBindingSummary?: Record<string, unknown>;
+  createTime?: string;
+  updateTime?: string;
+}
+
+export interface AgentDefinitionDraft {
+  name?: string;
+  description?: string;
+  instructions?: string;
+  modelStrategy?: Record<string, unknown>;
+  contextStrategy?: Record<string, unknown>;
+  riskStrategy?: Record<string, unknown>;
+  toolBindingSummary?: Record<string, unknown>;
+}
+
+export interface AgentPublishCheck {
+  checkId?: string;
+  agentId?: string;
+  versionId?: string;
+  status?: string;
+  checks?: AgentPublishCheckItem[];
+  checkedAt?: string;
+}
+
+export interface AgentPublishCheckItem {
+  checkType?: string;
+  passed?: boolean;
+  message?: string;
+  detail?: string;
+}
+
+export interface AgentVersion {
+  versionId?: string;
+  versionNumber?: number;
+  agentId?: string;
+  status?: string;
+  publishStatus?: string;
+  publishedAt?: string;
+  publishedBy?: string;
+  summary?: string;
+  createTime?: string;
+}
+
+// ── API 调用 ──
+
+export function listAgents(params: {
+  current?: number;
+  size?: number;
+  keyword?: string;
+  status?: string;
+  tenantId?: string;
+  owner?: string;
+  riskLevel?: string;
+}) {
+  return api.get<PageResult<AgentDefinition>>("/agents", { params });
+}
+
+export function getAgent(agentId: string) {
+  return api.get<AgentDefinition>(`/agents/${encodeURIComponent(agentId)}`);
+}
+
+export function createAgent(payload: AgentDefinitionDraft) {
+  return api.post<AgentDefinition, AgentDefinition>("/agents", payload);
+}
+
+export function updateAgentDraft(agentId: string, payload: AgentDefinitionDraft) {
+  return api.put<AgentDefinition, AgentDefinition>(
+    `/agents/${encodeURIComponent(agentId)}/draft`,
+    payload
+  );
+}
+
+export function publishAgent(agentId: string) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/agents/${encodeURIComponent(agentId)}/publish`
+  );
+}
+
+export function disableAgent(agentId: string, reason?: string) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/agents/${encodeURIComponent(agentId)}/disable`,
+    { reason }
+  );
+}
+
+export function getAgentVersions(agentId: string) {
+  return api.get<AgentVersion[]>(`/agents/${encodeURIComponent(agentId)}/versions`);
+}
+
+export function getLatestPublishChecks(agentId: string) {
+  return api.get<AgentPublishCheck>(
+    `/api/agents/${encodeURIComponent(agentId)}/publish-checks/latest`
+  );
+}
+
+export function validateAgent(agentId: string) {
+  return api.post<AgentPublishCheck, AgentPublishCheck>(
+    `/api/agents/${encodeURIComponent(agentId)}/validate`
+  );
+}
+
+export function rollbackAgentVersion(agentId: string, versionId: string, reason: string) {
+  return api.post<Record<string, unknown>, Record<string, unknown>>(
+    `/api/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/rollback`,
+    { reason }
+  );
+}

@@ -1,0 +1,218 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { RefreshCw, Search } from "lucide-react";
+import { toast } from "sonner";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { PageResult } from "@/services/metadataGovernanceService";
+import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
+import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
+import { listTools, enableTool, disableTool, type ToolItem } from "@/services/toolCatalogService";
+import { ToolRiskBadge } from "./components/ToolRiskBadge";
+import { getErrorMessage } from "@/utils/error";
+
+const PAGE_SIZE = 10;
+
+export function ToolCatalogPage() {
+  const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT);
+  const navigate = useNavigate();
+
+  const [pageData, setPageData] = useState<PageResult<ToolItem> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const [pageNo, setPageNo] = useState(1);
+  const [providerFilter, setProviderFilter] = useState("all");
+  const [riskFilter, setRiskFilter] = useState("all");
+  const [enabledFilter, setEnabledFilter] = useState("all");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const tools = pageData?.records || [];
+
+  const loadTools = async (current = pageNo, kw = keyword) => {
+    try {
+      setLoading(true);
+      const data = await listTools({
+        current,
+        size: PAGE_SIZE,
+        keyword: kw || undefined,
+        provider: providerFilter !== "all" ? providerFilter : undefined,
+        riskLevel: riskFilter !== "all" ? riskFilter : undefined,
+        enabled: enabledFilter === "enabled" ? true : enabledFilter === "disabled" ? false : undefined
+      });
+      setPageData(data);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "加载工具列表失败"));
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!featureState.enabled) return;
+    loadTools();
+  }, [pageNo, keyword, providerFilter, riskFilter, enabledFilter]);
+
+  const handleSearch = () => {
+    setPageNo(1);
+    setKeyword(searchInput.trim());
+  };
+
+  const handleRefresh = () => {
+    setPageNo(1);
+    loadTools(1, keyword);
+  };
+
+  const handleToggle = async (toolId: string, currentEnabled: boolean) => {
+    const action = currentEnabled ? "禁用" : "启用";
+    if (!confirm(`确认${action}此工具？${currentEnabled ? "禁用后关联 Agent 将无法使用" : "影响范围请在绑定页确认"}`)) {
+      return;
+    }
+
+    try {
+      setTogglingId(toolId);
+      if (currentEnabled) {
+        await disableTool(toolId);
+      } else {
+        await enableTool(toolId);
+      }
+      toast.success(`工具已${action}`);
+      await loadTools(pageNo, keyword);
+    } catch (error) {
+      toast.error(getErrorMessage(error, `${action}工具失败`));
+      console.error(error);
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  if (!featureState.enabled) {
+    return <FeatureUnavailableState featureState={featureState} featureName="工具目录" />;
+  }
+
+  return (
+    <div className="admin-page">
+      <div className="admin-page-header">
+        <div>
+          <h1 className="admin-page-title">工具目录</h1>
+          <p className="admin-page-subtitle">管理和监控 Agent 可使用的工具</p>
+        </div>
+        <div className="admin-page-actions">
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="搜索工具名称"
+            className="w-[180px]"
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+          />
+          <Button variant="outline" onClick={handleSearch}>
+            <Search className="w-4 h-4 mr-1" />
+            搜索
+          </Button>
+          <Select value={riskFilter} onValueChange={(v) => { setRiskFilter(v); setPageNo(1); }}>
+            <SelectTrigger className="w-[120px]"><SelectValue placeholder="风险等级" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部风险</SelectItem>
+              <SelectItem value="LOW">低</SelectItem>
+              <SelectItem value="MEDIUM">中</SelectItem>
+              <SelectItem value="HIGH">高</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={enabledFilter} onValueChange={(v) => { setEnabledFilter(v); setPageNo(1); }}>
+            <SelectTrigger className="w-[120px]"><SelectValue placeholder="启用状态" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部</SelectItem>
+              <SelectItem value="enabled">已启用</SelectItem>
+              <SelectItem value="disabled">已禁用</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={handleRefresh}>
+            <RefreshCw className="w-4 h-4 mr-1" />
+            刷新
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardContent className="pt-6">
+          {loading ? (
+            <div className="text-center py-8 text-muted-foreground">加载中...</div>
+          ) : tools.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">暂无工具</div>
+          ) : (
+            <Table className="min-w-[900px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[200px]">名称</TableHead>
+                  <TableHead className="w-[120px]">Provider</TableHead>
+                  <TableHead className="w-[100px]">资源类型</TableHead>
+                  <TableHead className="w-[100px]">风险等级</TableHead>
+                  <TableHead className="w-[100px]">状态</TableHead>
+                  <TableHead className="w-[100px]">审批要求</TableHead>
+                  <TableHead className="w-[120px] text-left">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tools.map((tool) => (
+                  <TableRow key={tool.toolId}>
+                    <TableCell>
+                      <div className="font-medium text-slate-900 cursor-pointer hover:text-indigo-600" onClick={() => navigate(`/admin/tools/${tool.toolId}`)}>
+                        {tool.name || "-"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{tool.provider || "-"}</TableCell>
+                    <TableCell className="text-muted-foreground">{tool.resourceType || "-"}</TableCell>
+                    <TableCell><ToolRiskBadge riskLevel={tool.riskLevel} /></TableCell>
+                    <TableCell>
+                      {tool.enabled ? <Badge className="bg-green-100 text-green-700">已启用</Badge> : <Badge variant="secondary">已禁用</Badge>}
+                    </TableCell>
+                    <TableCell>
+                      {tool.approvalRequired ? <Badge variant="destructive">需要审批</Badge> : <Badge variant="secondary">免审批</Badge>}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/admin/tools/${tool.toolId}`)}>
+                          详情
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={tool.enabled ? "text-destructive hover:text-destructive" : "text-green-600 hover:text-green-600"}
+                          disabled={togglingId === tool.toolId}
+                          onClick={() => handleToggle(tool.toolId!, !!tool.enabled)}
+                        >
+                          {tool.enabled ? "禁用" : "启用"}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {pageData ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
+          <span>共 {pageData.total} 条</span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPageNo((prev) => Math.max(1, prev - 1))} disabled={pageData.current <= 1}>
+              上一页
+            </Button>
+            <span>{pageData.current} / {pageData.pages}</span>
+            <Button variant="outline" size="sm" onClick={() => setPageNo((prev) => Math.min(pageData.pages || 1, prev + 1))} disabled={pageData.current >= pageData.pages}>
+              下一页
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
