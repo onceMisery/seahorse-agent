@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSch
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshSchedulePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshScheduleUpdate;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.DocumentRefreshStateRepositoryPort;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -33,7 +34,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * JDBC 文档刷新调度 adapter。
@@ -221,7 +221,7 @@ public class JdbcDocumentRefreshScheduleAdapter
     }
 
     private String nextId() {
-        return Long.toUnsignedString(UUID.randomUUID().getMostSignificantBits());
+        return SnowflakeIds.nextIdString();
     }
 
     private boolean hasText(String value) {

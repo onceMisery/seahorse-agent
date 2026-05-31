@@ -24,7 +24,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 
 /**
  * 负责元数据 Schema Usage 的参数规整与批量写入参数组装，
@@ -52,12 +52,12 @@ public final class JdbcMetadataSchemaUsageSupport {
         }
         Set<String> safeGuardOnlyFieldKeys = Set.copyOf(normalizedFieldKeys(guardOnlyFieldKeys));
         int safeSchemaVersion = schemaVersion == null || schemaVersion <= 0 ? 1 : schemaVersion;
-        String requestId = UUID.randomUUID().toString();
+        String requestId = SnowflakeIds.nextIdString();
         Instant now = Instant.now();
         List<Object[]> batchArgs = new ArrayList<>(safeFieldKeys.size());
         for (String fieldKey : safeFieldKeys) {
             batchArgs.add(new Object[]{
-                    UUID.randomUUID().toString(),
+                    SnowflakeIds.nextIdString(),
                     requestId,
                     safeTenantId,
                     safeKbId,

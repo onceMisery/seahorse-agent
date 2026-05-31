@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 
 import { createKnowledgeBase } from "@/services/knowledgeService";
 import { getSystemSettings, type ModelCandidate } from "@/services/settingsService";
+import { getAiModelConfigs, type AiModelConfigItem } from "@/services/aiConfigService";
 import { getErrorMessage } from "@/utils/error";
 
 const formSchema = z.object({
@@ -46,6 +47,45 @@ const formSchema = z.object({
 });
 
 type FormValues = z.infer<typeof formSchema>;
+
+const EMBEDDING_MODEL_CONFIG_KEY = "ai.embedding.model";
+
+export function resolveEmbeddingModelCandidates(
+  candidates: ModelCandidate[] = [],
+  configs: AiModelConfigItem[] = [],
+  defaultModel?: string | null
+): ModelCandidate[] {
+  const uniqueMap = new Map<string, ModelCandidate>();
+
+  candidates.forEach((item) => {
+    if (!item || item.enabled === false) return;
+    const id = (item.id || item.model || "").trim();
+    if (!id) return;
+    uniqueMap.set(id, { ...item, id });
+  });
+
+  const addFallbackModel = (model?: string | null) => {
+    const normalized = (model || "").trim();
+    if (!normalized) return;
+    const exists = Array.from(uniqueMap.values()).some((item) => {
+      return item.id === normalized || item.model === normalized;
+    });
+    if (exists) return;
+    uniqueMap.set(normalized, {
+      id: normalized,
+      provider: "",
+      model: normalized,
+      enabled: true
+    });
+  };
+
+  addFallbackModel(defaultModel);
+  addFallbackModel(
+    configs.find((item) => item.configKey === EMBEDDING_MODEL_CONFIG_KEY)?.configValue
+  );
+
+  return Array.from(uniqueMap.values());
+}
 
 interface CreateKnowledgeBaseDialogProps {
   open: boolean;
@@ -75,17 +115,19 @@ export function CreateKnowledgeBaseDialog({
     if (!open) return;
     let active = true;
     setModelLoading(true);
-    getSystemSettings()
-      .then((settings) => {
+    Promise.allSettled([getSystemSettings(), getAiModelConfigs()])
+      .then(([settingsResult, configsResult]) => {
         if (!active) return;
-        const candidates = settings.ai?.embedding?.candidates || [];
-        const enabledModels = candidates.filter((item) => item.enabled !== false);
-        setEmbeddingModels(enabledModels);
-      })
-      .catch(() => {
-        if (active) {
-          setEmbeddingModels([]);
-        }
+        const embeddingSettings =
+          settingsResult.status === "fulfilled" ? settingsResult.value.ai?.embedding : undefined;
+        const configs = configsResult.status === "fulfilled" ? configsResult.value : [];
+        setEmbeddingModels(
+          resolveEmbeddingModelCandidates(
+            embeddingSettings?.candidates || [],
+            configs,
+            embeddingSettings?.defaultModel
+          )
+        );
       })
       .finally(() => {
         if (active) {

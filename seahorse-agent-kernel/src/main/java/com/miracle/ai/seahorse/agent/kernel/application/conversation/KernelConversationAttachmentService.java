@@ -21,6 +21,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.conversation.ConversationAttachment;
 import com.miracle.ai.seahorse.agent.kernel.domain.conversation.ConversationAttachmentParseStatus;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationAttachmentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.conversation.UploadConversationAttachmentCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
@@ -31,7 +32,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 public class KernelConversationAttachmentService implements ConversationAttachmentInboundPort {
 
@@ -111,7 +111,7 @@ public class KernelConversationAttachmentService implements ConversationAttachme
     }
 
     private String nextAttachmentId() {
-        return ATTACHMENT_ID_PREFIX + UUID.randomUUID();
+        return ATTACHMENT_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 
     private String fileName(String requestedName, String storedName) {

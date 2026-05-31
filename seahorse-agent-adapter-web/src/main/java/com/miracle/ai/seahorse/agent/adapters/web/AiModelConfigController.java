@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.config.AiModelConfigRepositoryPort;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,7 +27,6 @@ import java.util.LinkedHashMap;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -101,7 +101,7 @@ public class AiModelConfigController {
             String userId = StpUtil.getLoginIdAsString();
 
             AiModelConfig config = new AiModelConfig();
-            config.setId(UUID.randomUUID().toString());
+            config.setId(SnowflakeIds.nextIdString());
             config.setConfigKey((String) request.get("configKey"));
             config.setConfigValue((String) request.get("configValue"));
             config.setConfigType(AiModelConfig.ConfigType.valueOf((String) request.getOrDefault("configType", "STRING")));

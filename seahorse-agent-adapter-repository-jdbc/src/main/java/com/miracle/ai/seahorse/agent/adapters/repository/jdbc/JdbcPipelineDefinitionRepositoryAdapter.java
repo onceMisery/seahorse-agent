@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.ingestion.IngestionPipelinePayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineNodePayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelinePage;
@@ -40,7 +41,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * 基于 JDBC 的入库流水线定义仓储适配器。
@@ -126,7 +126,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
     @Override
     public IngestionPipelineRecord create(IngestionPipelinePayload payload) {
         IngestionPipelinePayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
-        String pipelineId = UUID.randomUUID().toString();
+        String pipelineId = SnowflakeIds.nextIdString();
         String operator = Objects.requireNonNullElse(safePayload.operator(), "");
         jdbcTemplate.update(SQL_INSERT_PIPELINE, pipelineId, requireText(safePayload.name(), "name"),
                 Objects.requireNonNullElse(safePayload.description(), ""), operator, operator);
@@ -300,7 +300,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
         List<IngestionPipelineNodePayload> safeNodes = Objects.requireNonNullElse(nodes, List.of());
         for (IngestionPipelineNodePayload node : safeNodes) {
             jdbcTemplate.update(SQL_INSERT_NODE,
-                    UUID.randomUUID().toString(),
+                    SnowflakeIds.nextIdString(),
                     pipelineId,
                     requireText(node.nodeId(), "nodeId"),
                     requireText(node.nodeType(), "nodeType"),

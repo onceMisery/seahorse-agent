@@ -33,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationComparisonRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -44,7 +45,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * 基于 JDBC 的检索评测集仓储。
@@ -112,7 +112,7 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
     public RetrievalEvaluationDataset upsertDataset(String knowledgeBaseId, RetrievalEvaluationDatasetPayload payload) {
         String safeKnowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, "").trim();
         RetrievalEvaluationDatasetPayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
-        String datasetId = safePayload.datasetId().isBlank() ? UUID.randomUUID().toString() : safePayload.datasetId();
+        String datasetId = safePayload.datasetId().isBlank() ? SnowflakeIds.nextIdString() : safePayload.datasetId();
         String casesJson = casesJson(safePayload.cases());
         int enabled = Boolean.FALSE.equals(safePayload.enabled()) ? 0 : 1;
         int updated = jdbcTemplate.update("""
@@ -166,7 +166,7 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
         RetrievalEvaluationReport safeReport = report == null
                 ? emptyReport()
                 : report;
-        String runId = UUID.randomUUID().toString();
+        String runId = SnowflakeIds.nextIdString();
         try {
             jdbcTemplate.update("""
                     INSERT INTO t_retrieval_evaluation_run(
@@ -248,7 +248,7 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
         RetrievalEvaluationComparisonReport safeReport = report == null
                 ? emptyComparisonReport()
                 : report;
-        String comparisonId = UUID.randomUUID().toString();
+        String comparisonId = SnowflakeIds.nextIdString();
         int strategyCount = safeReport.reports().size();
         int caseCount = safeReport.reports().isEmpty() ? 0 : safeReport.reports().get(0).caseCount();
         try {

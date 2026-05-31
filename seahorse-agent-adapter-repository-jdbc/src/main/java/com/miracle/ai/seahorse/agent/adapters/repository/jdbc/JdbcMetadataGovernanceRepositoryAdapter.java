@@ -71,6 +71,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegis
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageFieldRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -87,7 +88,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRegistryPort,
@@ -221,7 +221,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     @Override
     public String createSchemaField(MetadataSchemaFieldPayload payload) {
         MetadataSchemaFieldPayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
-        String fieldId = UUID.randomUUID().toString();
+        String fieldId = SnowflakeIds.nextIdString();
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_field_schema(
                     id, tenant_id, kb_id, field_key, display_name, value_type, allowed_ops,
@@ -382,7 +382,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     @Override
     public String createDictionaryItem(MetadataDictionaryItemPayload payload) {
         MetadataDictionaryItemPayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
-        String itemId = UUID.randomUUID().toString();
+        String itemId = SnowflakeIds.nextIdString();
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_dictionary_item(
                     id, tenant_id, dict_code, raw_value, canonical_value, display_name,
@@ -436,7 +436,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
     @Override
     public String saveAndReturnId(MetadataExtractionRecord record) {
         MetadataExtractionRecord safeRecord = Objects.requireNonNull(record, "record must not be null");
-        String resultId = UUID.randomUUID().toString();
+        String resultId = SnowflakeIds.nextIdString();
         try {
             jdbcTemplate.update("""
                     INSERT INTO t_metadata_extraction_result(

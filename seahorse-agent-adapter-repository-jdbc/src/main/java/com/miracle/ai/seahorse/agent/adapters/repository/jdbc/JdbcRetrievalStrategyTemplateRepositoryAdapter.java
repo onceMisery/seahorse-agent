@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplate;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalStrategyTemplatePayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
@@ -34,7 +35,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * 基于 JDBC 的知识库检索策略模板覆盖仓储。
@@ -98,7 +98,7 @@ public class JdbcRetrievalStrategyTemplateRepositoryAdapter implements Retrieval
                         id, kb_id, template_key, display_name, description, options_json,
                         sort_order, enabled, create_time, update_time, deleted
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
-                    """, UUID.randomUUID().toString(), safeKbId, safePayload.templateKey(),
+                    """, SnowflakeIds.nextIdString(), safeKbId, safePayload.templateKey(),
                     safePayload.displayName(), safePayload.description(), optionsJson,
                     safePayload.sortOrder(), enabled);
         }

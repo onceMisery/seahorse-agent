@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -35,7 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * 负责 review 子域的 JDBC 读写与状态迁移，
@@ -59,7 +59,7 @@ final class JdbcMetadataReviewSupport {
                         id, tenant_id, kb_id, doc_id, result_id, review_status, priority, reason_code,
                         reason_message, suggested_metadata, review_context, create_time, update_time
                     ) VALUES (?, ?, ?, ?, ?, 'PENDING', 0, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    """, UUID.randomUUID().toString(), safeItem.tenantId(), safeItem.knowledgeBaseId(),
+                    """, SnowflakeIds.nextIdString(), safeItem.tenantId(), safeItem.knowledgeBaseId(),
                     safeItem.documentId(), safeItem.resultId(), safeItem.reasonCode(), safeItem.reasonMessage(),
                     jsonSupport.json(safeItem.suggestedMetadata()), jsonSupport.json(safeItem.reviewContext()));
         } catch (DataAccessException ignored) {
@@ -186,7 +186,7 @@ final class JdbcMetadataReviewSupport {
                         previous_metadata, updated_metadata, decision_metadata, create_time
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
-                    UUID.randomUUID().toString(),
+                    SnowflakeIds.nextIdString(),
                     current.id(),
                     current.tenantId(),
                     current.knowledgeBaseId(),
@@ -222,7 +222,7 @@ final class JdbcMetadataReviewSupport {
                         decision_metadata, create_time
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
-                    UUID.randomUUID().toString(),
+                    SnowflakeIds.nextIdString(),
                     current.id(),
                     current.tenantId(),
                     current.knowledgeBaseId(),

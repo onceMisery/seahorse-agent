@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeLog;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskCreateValues;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskNodeRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskNodeValues;
@@ -39,7 +40,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * 基于 JDBC 的入库任务仓储适配器。
@@ -111,7 +111,7 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
     @Override
     public String createRunningTask(IngestionTaskCreateValues values) {
         IngestionTaskCreateValues safeValues = Objects.requireNonNull(values, "values must not be null");
-        String taskId = UUID.randomUUID().toString();
+        String taskId = SnowflakeIds.nextIdString();
         String operator = Objects.requireNonNullElse(safeValues.operator(), "");
         jdbcTemplate.update(SQL_INSERT_TASK,
                 taskId,
@@ -186,7 +186,7 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
     private void insertNode(IngestionTaskNodeValues node) {
         IngestionTaskNodeValues safeNode = Objects.requireNonNull(node, "node must not be null");
         jdbcTemplate.update(SQL_INSERT_NODE,
-                UUID.randomUUID().toString(),
+                SnowflakeIds.nextIdString(),
                 requireText(safeNode.getTaskId(), "taskId"),
                 requireText(safeNode.getPipelineId(), "pipelineId"),
                 blankToNull(safeNode.getNodeId()),

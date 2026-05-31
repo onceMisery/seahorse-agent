@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineQ
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineResolution;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRetry;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -34,7 +35,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * 负责 quarantine 子域的 JDBC 读写与状态维护，
@@ -58,7 +58,7 @@ final class JdbcMetadataQuarantineSupport {
                         id, tenant_id, kb_id, doc_id, job_id, stage, reason_code, reason_message,
                         source_snapshot, retry_count, resolved, create_time, update_time
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    """, UUID.randomUUID().toString(), safeItem.tenantId(), safeItem.knowledgeBaseId(),
+                    """, SnowflakeIds.nextIdString(), safeItem.tenantId(), safeItem.knowledgeBaseId(),
                     safeItem.documentId(), safeItem.taskId(), safeItem.stage(), safeItem.reasonCode(),
                     safeItem.reasonMessage(), jsonSupport.json(safeItem.sourceSnapshot()));
         } catch (DataAccessException ignored) {

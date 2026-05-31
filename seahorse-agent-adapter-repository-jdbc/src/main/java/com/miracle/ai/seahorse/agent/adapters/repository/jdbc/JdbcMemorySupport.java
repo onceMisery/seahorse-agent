@@ -19,13 +19,13 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ThreadLocalRandom;
 
 final class JdbcMemorySupport {
 
@@ -36,9 +36,7 @@ final class JdbcMemorySupport {
     }
 
     static String nextId() {
-        long millis = System.currentTimeMillis();
-        int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return Long.toString(millis, 36) + suffix;
+        return SnowflakeIds.nextIdString();
     }
 
     static Instant instant(Timestamp timestamp) {

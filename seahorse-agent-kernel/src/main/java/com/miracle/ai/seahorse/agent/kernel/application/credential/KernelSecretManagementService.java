@@ -23,10 +23,10 @@ import com.miracle.ai.seahorse.agent.ports.inbound.credential.SecretManagementIn
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretWriteCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.credential.SecretWritePort;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 
 import java.time.Clock;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
@@ -71,7 +71,7 @@ public class KernelSecretManagementService implements SecretManagementInboundPor
     }
 
     private static String newSecretRef() {
-        return SECRET_REF_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return SECRET_REF_PREFIX + SnowflakeIds.nextIdString();
     }
 
     private static String requireText(String value, String message) {

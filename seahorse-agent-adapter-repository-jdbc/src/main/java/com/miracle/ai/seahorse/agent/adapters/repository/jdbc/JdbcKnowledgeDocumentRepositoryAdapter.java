@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeDocumentCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentChunkLogPage;
@@ -42,7 +43,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * 基于 JDBC 的知识库文档仓储适配器。
@@ -175,7 +175,7 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     @Override
     public KnowledgeDocumentRecord createPendingDocument(CreateKnowledgeDocumentCommand command) {
         CreateKnowledgeDocumentCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
-        String documentId = UUID.randomUUID().toString();
+        String documentId = SnowflakeIds.nextIdString();
         KnowledgeDocumentProcessRef process = normalizeProcess(safeCommand.process());
         jdbcTemplate.update(SQL_INSERT_DOCUMENT,
                 documentId,
