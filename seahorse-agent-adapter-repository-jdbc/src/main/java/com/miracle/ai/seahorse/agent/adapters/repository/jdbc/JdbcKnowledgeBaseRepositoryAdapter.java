@@ -58,7 +58,7 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
     private static final String SQL_COUNT_BY_NAME = """
             SELECT COUNT(1)
             FROM t_knowledge_base
-            WHERE deleted = 0 AND REPLACE(name, ' ', '') = ? AND (? IS NULL OR id <> ?)
+            WHERE deleted = 0 AND REPLACE(name, ' ', '') = ? AND (CAST(? AS VARCHAR) IS NULL OR id <> ?)
             """;
     private static final String SQL_COUNT_PAGE_BASE = """
             SELECT COUNT(1)

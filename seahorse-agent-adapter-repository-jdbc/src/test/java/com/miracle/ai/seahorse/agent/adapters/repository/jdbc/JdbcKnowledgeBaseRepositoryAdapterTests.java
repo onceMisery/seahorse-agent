@@ -24,10 +24,18 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseUpdat
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.AbstractDataSource;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
+import javax.sql.DataSource;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -60,6 +68,23 @@ class JdbcKnowledgeBaseRepositoryAdapterTests {
         assertThat(updatedRecord.getEmbeddingModel()).isEqualTo("embed-b");
         assertThat(deleted).isTrue();
         assertThat(adapter.findById(id)).isEmpty();
+    }
+
+    @Test
+    void shouldCastExcludedKnowledgeBaseIdNullCheckForPostgres() {
+        DriverManagerDataSource delegate = new DriverManagerDataSource(
+                "jdbc:h2:mem:knowledge-base-sql-" + System.nanoTime()
+                        + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        RecordingDataSource dataSource = new RecordingDataSource(delegate);
+        jdbcTemplate = new JdbcTemplate(dataSource);
+        createSchema();
+
+        new JdbcKnowledgeBaseRepositoryAdapter(dataSource).nameExists("Alpha", null);
+
+        assertThat(String.join("\n", dataSource.sql()))
+                .contains("CAST(? AS VARCHAR) IS NULL OR id <> ?");
     }
 
     @Test
@@ -134,5 +159,48 @@ class JdbcKnowledgeBaseRepositoryAdapterTests {
                     deleted SMALLINT DEFAULT 0
                 )
                 """);
+    }
+
+    private static final class RecordingDataSource extends AbstractDataSource {
+
+        private final DataSource delegate;
+        private final List<String> sql = new CopyOnWriteArrayList<>();
+
+        private RecordingDataSource(DataSource delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public Connection getConnection() throws SQLException {
+            return record(delegate.getConnection());
+        }
+
+        @Override
+        public Connection getConnection(String username, String password) throws SQLException {
+            return record(delegate.getConnection(username, password));
+        }
+
+        private List<String> sql() {
+            return sql;
+        }
+
+        private Connection record(Connection connection) {
+            return (Connection) Proxy.newProxyInstance(
+                    connection.getClass().getClassLoader(),
+                    new Class<?>[]{Connection.class},
+                    (proxy, method, args) -> {
+                        if (args != null
+                                && args.length > 0
+                                && args[0] instanceof String statementSql
+                                && method.getName().startsWith("prepare")) {
+                            sql.add(statementSql);
+                        }
+                        try {
+                            return method.invoke(connection, args);
+                        } catch (InvocationTargetException ex) {
+                            throw ex.getTargetException();
+                        }
+                    });
+        }
     }
 }
