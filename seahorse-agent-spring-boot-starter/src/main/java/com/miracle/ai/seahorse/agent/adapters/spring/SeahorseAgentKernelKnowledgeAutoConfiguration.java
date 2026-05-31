@@ -50,6 +50,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSendReceipt;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
@@ -133,16 +134,20 @@ public class SeahorseAgentKernelKnowledgeAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({KnowledgeBaseQueryPort.class, KnowledgeDocumentRepositoryPort.class,
-            ObjectStoragePort.class, MessageQueuePort.class, KernelIngestionEngine.class})
+            ObjectStoragePort.class, KernelIngestionEngine.class})
     @ConditionalOnMissingBean
     public KnowledgeDocumentServicePorts seahorseKnowledgeDocumentServicePorts(
             KnowledgeBaseQueryPort knowledgeBaseQueryPort,
             KnowledgeDocumentRepositoryPort documentRepositoryPort,
             ObjectStoragePort objectStoragePort,
-            MessageQueuePort messageQueuePort,
+            ObjectProvider<MessageQueuePort> messageQueuePort,
             KernelIngestionEngine ingestionEngine) {
         return new KnowledgeDocumentServicePorts(
-                knowledgeBaseQueryPort, documentRepositoryPort, objectStoragePort, messageQueuePort, ingestionEngine);
+                knowledgeBaseQueryPort,
+                documentRepositoryPort,
+                objectStoragePort,
+                messageQueuePort.getIfAvailable(SeahorseAgentKernelKnowledgeAutoConfiguration::noopMessageQueuePort),
+                ingestionEngine);
     }
 
     @Bean
@@ -222,6 +227,19 @@ public class SeahorseAgentKernelKnowledgeAutoConfiguration {
 
             @Override
             public void deleteChunksByIds(String collectionName, java.util.List<String> chunkIds) {
+            }
+        };
+    }
+
+    private static MessageQueuePort noopMessageQueuePort() {
+        return new MessageQueuePort() {
+            @Override
+            public MessageSendReceipt send(String topic, String key, String bizDesc, Object body) {
+                return new MessageSendReceipt("noop", topic, key, System.currentTimeMillis());
+            }
+
+            @Override
+            public void publishReliable(String topic, String key, String bizDesc, Object body) {
             }
         };
     }

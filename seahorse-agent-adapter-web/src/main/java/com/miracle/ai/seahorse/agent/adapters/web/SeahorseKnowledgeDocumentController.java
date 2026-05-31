@@ -69,40 +69,52 @@ public class SeahorseKnowledgeDocumentController {
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId)
             throws IOException {
         KnowledgeDocumentUploadRequest safeRequest = request == null ? new KnowledgeDocumentUploadRequest() : request;
-        KnowledgeDocumentRecord document = documentPortProvider.getIfAvailable().upload(new UploadKnowledgeDocumentCommand(
-                kbId,
-                new UploadFileContent(file.getInputStream(), file.getSize(),
-                        file.getOriginalFilename(), file.getContentType()),
-                operator(userId),
-                new UploadProcessOptions(valueOrDefault(safeRequest.getProcessMode(), "pipeline"),
-                        valueOrDefault(safeRequest.getPipelineId(), ""))));
+        UploadFileContent fileContent = new UploadFileContent(file.getInputStream(), file.getSize(),
+                file.getOriginalFilename(), file.getContentType());
+        KnowledgeDocumentRecord document = ApiResponses.requireService(documentPortProvider, port -> port.upload(
+                new UploadKnowledgeDocumentCommand(
+                        kbId,
+                        fileContent,
+                        operator(userId),
+                        new UploadProcessOptions(valueOrDefault(safeRequest.getProcessMode(), "pipeline"),
+                                valueOrDefault(safeRequest.getPipelineId(), ""))))).data();
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, document);
     }
 
     @PostMapping("/knowledge-base/docs/{doc-id}/chunk")
     public Map<String, Object> startChunk(@PathVariable("doc-id") String docId,
                                           @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        documentPortProvider.getIfAvailable().startChunk(docId, operator(userId));
+        ApiResponses.requireService(documentPortProvider, port -> {
+            port.startChunk(docId, operator(userId));
+            return null;
+        });
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @DeleteMapping("/knowledge-base/docs/{doc-id}")
     public Map<String, Object> delete(@PathVariable("doc-id") String docId,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        documentPortProvider.getIfAvailable().delete(docId, operator(userId));
+        ApiResponses.requireService(documentPortProvider, port -> {
+            port.delete(docId, operator(userId));
+            return null;
+        });
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @GetMapping("/knowledge-base/docs/{doc-id}")
     public Map<String, Object> queryById(@PathVariable("doc-id") String docId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, documentPortProvider.getIfAvailable().queryById(docId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                ApiResponses.requireService(documentPortProvider, port -> port.queryById(docId)).data());
     }
 
     @PutMapping("/knowledge-base/docs/{doc-id}")
     public Map<String, Object> update(@PathVariable("doc-id") String docId,
                                       @RequestBody KnowledgeDocumentUpdateRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        documentPortProvider.getIfAvailable().update(docId, toCommand(request, operator(userId)));
+        ApiResponses.requireService(documentPortProvider, port -> {
+            port.update(docId, toCommand(request, operator(userId)));
+            return null;
+        });
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
@@ -110,22 +122,27 @@ public class SeahorseKnowledgeDocumentController {
     public Map<String, Object> page(@PathVariable("kb-id") String kbId,
                                     @ModelAttribute KnowledgeDocumentPageRequest request) {
         KnowledgeDocumentPageRequest safeRequest = request == null ? new KnowledgeDocumentPageRequest() : request;
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, documentPortProvider.getIfAvailable().page(kbId,
-                new KnowledgeDocumentPageCommand(safeRequest.currentOrDefault(), safeRequest.sizeOrDefault(),
-                        safeRequest.getStatus(), safeRequest.getKeyword())));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                ApiResponses.requireService(documentPortProvider, port -> port.page(kbId,
+                        new KnowledgeDocumentPageCommand(safeRequest.currentOrDefault(), safeRequest.sizeOrDefault(),
+                                safeRequest.getStatus(), safeRequest.getKeyword()))).data());
     }
 
     @GetMapping("/knowledge-base/docs/search")
     public Map<String, Object> search(@RequestParam(required = false) String keyword,
                                       @RequestParam(defaultValue = "8") int limit) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, documentPortProvider.getIfAvailable().search(keyword, limit));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                ApiResponses.requireService(documentPortProvider, port -> port.search(keyword, limit)).data());
     }
 
     @PatchMapping("/knowledge-base/docs/{doc-id}/enable")
     public Map<String, Object> enable(@PathVariable("doc-id") String docId,
                                       @RequestParam("value") boolean enabled,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        documentPortProvider.getIfAvailable().enable(docId, enabled, operator(userId));
+        ApiResponses.requireService(documentPortProvider, port -> {
+            port.enable(docId, enabled, operator(userId));
+            return null;
+        });
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
@@ -134,7 +151,9 @@ public class SeahorseKnowledgeDocumentController {
                                          @ModelAttribute KnowledgeDocumentPageRequest request) {
         KnowledgeDocumentPageRequest safeRequest = request == null ? new KnowledgeDocumentPageRequest() : request;
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                documentPortProvider.getIfAvailable().chunkLogs(docId, safeRequest.currentOrDefault(), safeRequest.sizeOrDefault()));
+                ApiResponses.requireService(documentPortProvider,
+                        port -> port.chunkLogs(docId, safeRequest.currentOrDefault(), safeRequest.sizeOrDefault()))
+                        .data());
     }
 
     private UpdateKnowledgeDocumentCommand toCommand(KnowledgeDocumentUpdateRequest request, String operator) {

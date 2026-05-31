@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledg
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeChunkService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelDocumentRefreshService;
 import com.miracle.ai.seahorse.agent.kernel.application.keyword.KernelKeywordIndexMaintenanceService;
+import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeDocumentService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryGovernanceService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.KernelMemoryManagementService;
@@ -430,6 +431,16 @@ class SeahorseAgentKernelAutoConfigurationTests {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(KernelKnowledgeBaseService.class);
+                });
+    }
+
+    @Test
+    void shouldRegisterKnowledgeDocumentInboundPortWithoutMessageQueuePort() {
+        contextRunner.withUserConfiguration(KnowledgeDocumentPortsWithoutMqConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(KernelKnowledgeDocumentService.class);
+                    assertThat(context).hasSingleBean(KnowledgeDocumentInboundPort.class);
                 });
     }
 
@@ -2167,6 +2178,20 @@ class SeahorseAgentKernelAutoConfigurationTests {
                 public void deleteByUrl(String url) {
                 }
             };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class KnowledgeDocumentPortsWithoutMqConfiguration extends KnowledgeBasePortsConfiguration {
+
+        @Bean
+        KnowledgeBaseQueryPort knowledgeBaseQueryPort() {
+            return mock(KnowledgeBaseQueryPort.class);
+        }
+
+        @Bean
+        KnowledgeDocumentRepositoryPort knowledgeDocumentRepositoryPort() {
+            return mock(KnowledgeDocumentRepositoryPort.class);
         }
     }
 

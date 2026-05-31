@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.dev33.satoken.exception.NotLoginException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -33,6 +35,7 @@ import java.util.Objects;
 @RestControllerAdvice(basePackages = "com.miracle.ai.seahorse.agent.adapters.web")
 public class SeahorseWebExceptionHandler {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(SeahorseWebExceptionHandler.class);
     private static final String ERROR_CODE = "1";
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -44,6 +47,7 @@ public class SeahorseWebExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, Object> conflict(IllegalStateException ex) {
+        LOGGER.warn("Request rejected by application state: {}", ex.getMessage(), ex);
         return error(ex);
     }
 
@@ -67,12 +71,14 @@ public class SeahorseWebExceptionHandler {
 
     @ExceptionHandler(ResponseStatusException.class)
     public org.springframework.http.ResponseEntity<Map<String, Object>> responseStatus(ResponseStatusException ex) {
+        LOGGER.warn("Request rejected with status {}: {}", ex.getStatusCode(), ex.getMessage(), ex);
         return org.springframework.http.ResponseEntity.status(ex.getStatusCode()).body(error(ex));
     }
 
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Map<String, Object> internalError(Exception ex) {
+        LOGGER.error("Unhandled web request failed", ex);
         return error(ex);
     }
 
