@@ -5,38 +5,62 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { rollbackAgentVersion, type AgentVersion } from "@/services/agentDefinitionService";
+import { useAuthStore } from "@/stores/authStore";
 import { getErrorMessage } from "@/utils/error";
 
 interface AgentRollbackDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   agentId: string;
+  tenantId: string;
   versions: AgentVersion[];
   onSuccess: () => void;
 }
 
-export function AgentRollbackDialog({ open, onOpenChange, agentId, versions, onSuccess }: AgentRollbackDialogProps) {
+const rollbackReasonOptions = [
+  { value: "OPERATOR_REQUESTED", label: "人工指定" },
+  { value: "GATE_FAILED", label: "发布门禁失败" },
+  { value: "CANARY_FAILED", label: "灰度失败" },
+  { value: "INCIDENT_RESPONSE", label: "事故响应" }
+] as const;
+
+type RollbackReasonCode = (typeof rollbackReasonOptions)[number]["value"];
+
+export function AgentRollbackDialog({ open, onOpenChange, agentId, tenantId, versions, onSuccess }: AgentRollbackDialogProps) {
+  const user = useAuthStore((state) => state.user);
   const [selectedVersionId, setSelectedVersionId] = useState<string>("");
-  const [reason, setReason] = useState("");
+  const [reasonCode, setReasonCode] = useState<RollbackReasonCode>("OPERATOR_REQUESTED");
+  const [comment, setComment] = useState("");
   const [rolling, setRolling] = useState(false);
 
   const publishedVersions = versions.filter((v) => v.publishStatus === "PUBLISHED" || v.status === "PUBLISHED");
+  const operator = user?.userId || user?.username || "";
 
   const handleRollback = async () => {
     if (!selectedVersionId) {
       toast.error("请选择要回滚的版本");
       return;
     }
-    if (!reason.trim()) {
-      toast.error("请输入回滚原因");
+    if (!tenantId.trim()) {
+      toast.error("缺少 Agent 租户信息，无法回滚");
+      return;
+    }
+    if (!operator.trim()) {
+      toast.error("无法识别当前操作者，无法回滚");
       return;
     }
 
     try {
       setRolling(true);
-      await rollbackAgentVersion(agentId, selectedVersionId, reason.trim());
+      await rollbackAgentVersion(agentId, selectedVersionId, {
+        tenantId: tenantId.trim(),
+        operator: operator.trim(),
+        reasonCode,
+        comment: comment.trim() || undefined
+      });
       toast.success("版本回滚成功");
-      setReason("");
+      setComment("");
+      setReasonCode("OPERATOR_REQUESTED");
       setSelectedVersionId("");
       onSuccess();
     } catch (error) {
@@ -78,21 +102,37 @@ export function AgentRollbackDialog({ open, onOpenChange, agentId, versions, onS
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">回滚原因</label>
+            <label className="text-sm font-medium">回滚原因码</label>
+            <Select value={reasonCode} onValueChange={(value) => setReasonCode(value as RollbackReasonCode)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {rollbackReasonOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">补充说明（可选）</label>
             <Textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="请输入回滚原因"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="请输入回滚说明"
               rows={3}
             />
           </div>
         </div>
 
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => { setReason(""); setSelectedVersionId(""); }}>取消</AlertDialogCancel>
+          <AlertDialogCancel onClick={() => { setComment(""); setReasonCode("OPERATOR_REQUESTED"); setSelectedVersionId(""); }}>取消</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleRollback}
-            disabled={rolling || !selectedVersionId}
+            disabled={rolling || !selectedVersionId || !tenantId.trim() || !operator.trim()}
           >
             {rolling ? "回滚中..." : "确认回滚"}
           </AlertDialogAction>

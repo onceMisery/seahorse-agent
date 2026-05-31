@@ -18,10 +18,11 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.dev33.satoken.stp.StpUtil;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAiModelConfigRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
+import com.miracle.ai.seahorse.agent.ports.outbound.config.AiModelConfigRepositoryPort;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -41,9 +42,9 @@ public class AiModelConfigController {
     private static final String SUCCESS_CODE = "0";
     private static final String ERROR_CODE = "1";
 
-    private final JdbcAiModelConfigRepositoryAdapter configRepository;
+    private final AiModelConfigRepositoryPort configRepository;
 
-    public AiModelConfigController(JdbcAiModelConfigRepositoryAdapter configRepository) {
+    public AiModelConfigController(AiModelConfigRepositoryPort configRepository) {
         this.configRepository = configRepository;
     }
 
@@ -133,19 +134,19 @@ public class AiModelConfigController {
     private Map<String, Object> toResponseMap(AiModelConfig config) {
         String displayValue = config.isEncrypted() ? maskValue(config.getConfigValue()) : config.getConfigValue();
 
-        return Map.of(
-                "id", config.getId(),
-                "configKey", config.getConfigKey(),
-                "configValue", config.getConfigValue(), // 实际值，用于编辑
-                "displayValue", displayValue, // 显示值，敏感信息脱敏
-                "configType", config.getConfigType().name(),
-                "encrypted", config.isEncrypted(),
-                "description", config.getDescription() != null ? config.getDescription() : "",
-                "createdBy", config.getCreatedBy() != null ? config.getCreatedBy() : "",
-                "updatedBy", config.getUpdatedBy() != null ? config.getUpdatedBy() : "",
-                "createdAt", config.getCreatedAt() != null ? config.getCreatedAt().toString() : "",
-                "updatedAt", config.getUpdatedAt() != null ? config.getUpdatedAt().toString() : ""
-        );
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id", config.getId());
+        response.put("configKey", config.getConfigKey());
+        response.put("configValue", config.isEncrypted() ? "" : config.getConfigValue());
+        response.put("displayValue", displayValue); // 显示值，敏感信息脱敏
+        response.put("configType", config.getConfigType().name());
+        response.put("encrypted", config.isEncrypted());
+        response.put("description", config.getDescription() != null ? config.getDescription() : "");
+        response.put("createdBy", config.getCreatedBy() != null ? config.getCreatedBy() : "");
+        response.put("updatedBy", config.getUpdatedBy() != null ? config.getUpdatedBy() : "");
+        response.put("createdAt", config.getCreatedAt() != null ? config.getCreatedAt().toString() : "");
+        response.put("updatedAt", config.getUpdatedAt() != null ? config.getUpdatedAt().toString() : "");
+        return response;
     }
 
     private String maskValue(String value) {

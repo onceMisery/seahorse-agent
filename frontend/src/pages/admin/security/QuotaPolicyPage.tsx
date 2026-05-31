@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -7,16 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { PageResult } from "@/services/metadataGovernanceService";
 import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
 import {
   createQuotaPolicy,
-  disableQuotaPolicy,
   evaluateQuotaDecision,
-  type QuotaPolicy,
   type QuotaDecisionEvaluation
 } from "@/services/securityGovernanceService";
 import { getErrorMessage } from "@/utils/error";
@@ -28,17 +24,50 @@ export function QuotaPolicyPage() {
   const [creating, setCreating] = useState(false);
   const [simResult, setSimResult] = useState<QuotaDecisionEvaluation | null>(null);
   const [simulating, setSimulating] = useState(false);
-  const [simForm, setSimForm] = useState({ tenantId: "", userId: "", agentId: "", resource: "", cost: "0" });
-  const [createForm, setCreateForm] = useState({ name: "", tenantId: "", scope: "", resource: "", limit: 1000, unit: "calls", effect: "allow" });
+  const [simForm, setSimForm] = useState({
+    tenantId: "",
+    userId: "",
+    agentId: "",
+    toolId: "",
+    modelId: "",
+    runId: "",
+    riskLevel: "LOW",
+    tokens: "0",
+    calls: "1",
+    cost: "0"
+  });
+  const [createForm, setCreateForm] = useState({
+    policyId: "",
+    tenantId: "",
+    scope: "AGENT",
+    subjectId: "",
+    status: "ACTIVE",
+    tokenLimit: "1000",
+    callLimit: "100",
+    costLimit: "10",
+    warnRatio: "0.8"
+  });
 
   const handleCreate = async () => {
-    if (!createForm.name || !createForm.tenantId) {
-      toast.error("请填写策略名称和租户 ID");
+    const tenantId = createForm.tenantId.trim();
+    const subjectId = createForm.subjectId.trim() || (createForm.scope === "TENANT" ? tenantId : "");
+    if (!createForm.policyId.trim() || !tenantId || !subjectId) {
+      toast.error("请填写策略 ID、租户 ID 和 Subject ID");
       return;
     }
     try {
       setCreating(true);
-      await createQuotaPolicy(createForm as any);
+      await createQuotaPolicy({
+        policyId: createForm.policyId.trim(),
+        tenantId,
+        scope: createForm.scope,
+        subjectId,
+        status: createForm.status,
+        tokenLimit: Number(createForm.tokenLimit) || undefined,
+        callLimit: Number(createForm.callLimit) || undefined,
+        costLimit: Number(createForm.costLimit) || undefined,
+        warnRatio: Number(createForm.warnRatio) || undefined
+      });
       toast.success("配额策略创建成功");
       setCreateOpen(false);
     } catch (error) {
@@ -54,10 +83,15 @@ export function QuotaPolicyPage() {
       setSimulating(true);
       const result = await evaluateQuotaDecision({
         tenantId: simForm.tenantId || undefined,
-        userId: simForm.userId || undefined,
         agentId: simForm.agentId || undefined,
-        resource: simForm.resource || undefined,
-        cost: parseFloat(simForm.cost) || undefined
+        userId: simForm.userId || undefined,
+        toolId: simForm.toolId || undefined,
+        modelId: simForm.modelId || undefined,
+        runId: simForm.runId || undefined,
+        riskLevel: simForm.riskLevel || undefined,
+        tokens: Number(simForm.tokens) || 0,
+        calls: Number(simForm.calls) || 0,
+        cost: Number(simForm.cost) || 0
       });
       setSimResult(result);
     } catch (error) {
@@ -106,8 +140,16 @@ export function QuotaPolicyPage() {
                 <Input value={simForm.agentId} onChange={(e) => setSimForm((p) => ({ ...p, agentId: e.target.value }))} placeholder="agent-id" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">资源</label>
-                <Input value={simForm.resource} onChange={(e) => setSimForm((p) => ({ ...p, resource: e.target.value }))} placeholder="resource" />
+                <label className="text-sm font-medium">Tool ID</label>
+                <Input value={simForm.toolId} onChange={(e) => setSimForm((p) => ({ ...p, toolId: e.target.value }))} placeholder="tool-id" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Tokens</label>
+                <Input value={simForm.tokens} onChange={(e) => setSimForm((p) => ({ ...p, tokens: e.target.value }))} type="number" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Calls</label>
+                <Input value={simForm.calls} onChange={(e) => setSimForm((p) => ({ ...p, calls: e.target.value }))} type="number" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Cost</label>
@@ -140,8 +182,8 @@ export function QuotaPolicyPage() {
           <CardHeader><CardTitle>快速创建策略</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
-              <label className="text-sm font-medium">策略名称</label>
-              <Input value={createForm.name} onChange={(e) => setCreateForm((p) => ({ ...p, name: e.target.value }))} placeholder="策略名称" />
+              <label className="text-sm font-medium">策略 ID</label>
+              <Input value={createForm.policyId} onChange={(e) => setCreateForm((p) => ({ ...p, policyId: e.target.value }))} placeholder="policy-id" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -149,21 +191,22 @@ export function QuotaPolicyPage() {
                 <Input value={createForm.tenantId} onChange={(e) => setCreateForm((p) => ({ ...p, tenantId: e.target.value }))} placeholder="tenant-id" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">资源</label>
-                <Input value={createForm.resource} onChange={(e) => setCreateForm((p) => ({ ...p, resource: e.target.value }))} placeholder="resource" />
+                <label className="text-sm font-medium">Subject ID</label>
+                <Input value={createForm.subjectId} onChange={(e) => setCreateForm((p) => ({ ...p, subjectId: e.target.value }))} placeholder="agent/user id" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">限额</label>
-                <Input type="number" value={createForm.limit} onChange={(e) => setCreateForm((p) => ({ ...p, limit: parseInt(e.target.value) || 0 }))} />
+                <label className="text-sm font-medium">Token 限额</label>
+                <Input type="number" value={createForm.tokenLimit} onChange={(e) => setCreateForm((p) => ({ ...p, tokenLimit: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">单位</label>
-                <Select value={createForm.unit} onValueChange={(v) => setCreateForm((p) => ({ ...p, unit: v }))}>
+                <label className="text-sm font-medium">作用域</label>
+                <Select value={createForm.scope} onValueChange={(v) => setCreateForm((p) => ({ ...p, scope: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="calls">调用次数</SelectItem>
-                    <SelectItem value="tokens">Token 数</SelectItem>
-                    <SelectItem value="cost">费用</SelectItem>
+                    <SelectItem value="TENANT">TENANT</SelectItem>
+                    <SelectItem value="USER">USER</SelectItem>
+                    <SelectItem value="AGENT">AGENT</SelectItem>
+                    <SelectItem value="TOOL">TOOL</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -184,8 +227,8 @@ export function QuotaPolicyPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
-              <label className="text-sm font-medium">策略名称</label>
-              <Input value={createForm.name} onChange={(e) => setCreateForm((p) => ({ ...p, name: e.target.value }))} placeholder="策略名称" />
+              <label className="text-sm font-medium">策略 ID</label>
+              <Input value={createForm.policyId} onChange={(e) => setCreateForm((p) => ({ ...p, policyId: e.target.value }))} placeholder="policy-id" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -193,29 +236,22 @@ export function QuotaPolicyPage() {
                 <Input value={createForm.tenantId} onChange={(e) => setCreateForm((p) => ({ ...p, tenantId: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">作用域</label>
-                <Input value={createForm.scope} onChange={(e) => setCreateForm((p) => ({ ...p, scope: e.target.value }))} />
+                <label className="text-sm font-medium">Subject ID</label>
+                <Input value={createForm.subjectId} onChange={(e) => setCreateForm((p) => ({ ...p, subjectId: e.target.value }))} />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
-                <label className="text-sm font-medium">资源</label>
-                <Input value={createForm.resource} onChange={(e) => setCreateForm((p) => ({ ...p, resource: e.target.value }))} />
+                <label className="text-sm font-medium">Token 限额</label>
+                <Input type="number" value={createForm.tokenLimit} onChange={(e) => setCreateForm((p) => ({ ...p, tokenLimit: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">限额</label>
-                <Input type="number" value={createForm.limit} onChange={(e) => setCreateForm((p) => ({ ...p, limit: parseInt(e.target.value) || 0 }))} />
+                <label className="text-sm font-medium">调用限额</label>
+                <Input type="number" value={createForm.callLimit} onChange={(e) => setCreateForm((p) => ({ ...p, callLimit: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">单位</label>
-                <Select value={createForm.unit} onValueChange={(v) => setCreateForm((p) => ({ ...p, unit: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="calls">调用次数</SelectItem>
-                    <SelectItem value="tokens">Token 数</SelectItem>
-                    <SelectItem value="cost">费用</SelectItem>
-                  </SelectContent>
-                </Select>
+                <label className="text-sm font-medium">成本限额</label>
+                <Input type="number" value={createForm.costLimit} onChange={(e) => setCreateForm((p) => ({ ...p, costLimit: e.target.value }))} />
               </div>
             </div>
           </div>

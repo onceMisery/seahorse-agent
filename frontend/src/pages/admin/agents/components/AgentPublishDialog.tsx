@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { publishAgent, type AgentPublishCheck } from "@/services/agentDefinitionService";
 import { getErrorMessage } from "@/utils/error";
 
@@ -17,16 +18,51 @@ interface AgentPublishDialogProps {
 
 export function AgentPublishDialog({ open, onOpenChange, agentId, publishCheck, onSuccess }: AgentPublishDialogProps) {
   const [publishing, setPublishing] = useState(false);
-  const [reason, setReason] = useState("");
+  const [form, setForm] = useState({
+    instructions: "",
+    toolSetJson: "[]",
+    modelConfigJson: "{}",
+    memoryConfigJson: "{}",
+    guardrailConfigJson: "{}",
+    changeSummary: ""
+  });
 
   const hasFailedChecks = publishCheck?.checks?.some((c) => !c.passed);
 
   const handlePublish = async () => {
+    if (!form.instructions.trim()) {
+      toast.error("请输入发布指令");
+      return;
+    }
+    const changeSummary = form.changeSummary.trim();
+    if (!changeSummary) {
+      toast.error("请输入发布备注");
+      return;
+    }
+    if (changeSummary.length > 500) {
+      toast.error("发布备注不能超过 500 字符");
+      return;
+    }
+
     try {
       setPublishing(true);
-      await publishAgent(agentId);
+      await publishAgent(agentId, {
+        instructions: form.instructions.trim(),
+        toolSetJson: form.toolSetJson.trim() || "[]",
+        modelConfigJson: form.modelConfigJson.trim() || "{}",
+        memoryConfigJson: form.memoryConfigJson.trim() || "{}",
+        guardrailConfigJson: form.guardrailConfigJson.trim() || "{}",
+        changeSummary
+      });
       toast.success("Agent 发布成功");
-      setReason("");
+      setForm({
+        instructions: "",
+        toolSetJson: "[]",
+        modelConfigJson: "{}",
+        memoryConfigJson: "{}",
+        guardrailConfigJson: "{}",
+        changeSummary: ""
+      });
       onSuccess();
     } catch (error) {
       toast.error(getErrorMessage(error, "发布失败"));
@@ -60,12 +96,38 @@ export function AgentPublishDialog({ open, onOpenChange, agentId, publishCheck, 
           </div>
         )}
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium">发布备注（可选）</label>
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">发布指令</label>
+            <Textarea
+              value={form.instructions}
+              onChange={(e) => setForm((prev) => ({ ...prev, instructions: e.target.value }))}
+              placeholder="请输入本版本 Agent instructions"
+              rows={4}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">工具集 JSON</label>
+              <Input
+                value={form.toolSetJson}
+                onChange={(e) => setForm((prev) => ({ ...prev, toolSetJson: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">模型配置 JSON</label>
+              <Input
+                value={form.modelConfigJson}
+                onChange={(e) => setForm((prev) => ({ ...prev, modelConfigJson: e.target.value }))}
+              />
+            </div>
+          </div>
+          <label className="text-sm font-medium">发布备注</label>
           <Textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
+            value={form.changeSummary}
+            onChange={(e) => setForm((prev) => ({ ...prev, changeSummary: e.target.value }))}
             placeholder="请输入发布原因或备注"
+            maxLength={500}
             rows={3}
           />
         </div>
@@ -74,7 +136,7 @@ export function AgentPublishDialog({ open, onOpenChange, agentId, publishCheck, 
           <AlertDialogCancel>取消</AlertDialogCancel>
           <AlertDialogAction
             onClick={handlePublish}
-            disabled={publishing || !!hasFailedChecks}
+            disabled={publishing || !!hasFailedChecks || !form.instructions.trim() || !form.changeSummary.trim()}
             className={hasFailedChecks ? "opacity-50 cursor-not-allowed" : ""}
           >
             {publishing ? "发布中..." : "确认发布"}

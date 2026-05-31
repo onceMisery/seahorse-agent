@@ -6,7 +6,6 @@ module.exports = {
     "plugin:@typescript-eslint/recommended",
     "plugin:react/recommended",
     "plugin:react-hooks/recommended",
-    "plugin:react-refresh/recommended",
     "prettier"
   ],
   ignorePatterns: ["dist", "node_modules"],
@@ -15,12 +14,13 @@ module.exports = {
     ecmaVersion: "latest",
     sourceType: "module"
   },
-  plugins: ["@typescript-eslint"],
+  plugins: ["@typescript-eslint", "react-refresh"],
   settings: {
     react: { version: "detect" }
   },
   rules: {
     "react/react-in-jsx-scope": "off",
-    "react/prop-types": "off"
+    "react/prop-types": "off",
+    "react-refresh/only-export-components": "error"
   }
 };

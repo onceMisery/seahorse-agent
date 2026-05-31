@@ -56,7 +56,7 @@ export function ModelConfigPage() {
 
       const newFormData = {
         baseUrl: configMap["ai.base.url"] || "",
-        apiKey: configMap["ai.api.key"] || "",
+        apiKey: "",
         chatModel: configMap["ai.chat.model"] || "",
         embeddingModel: configMap["ai.embedding.model"] || "",
         rerankModel: configMap["ai.rerank.model"] || "",

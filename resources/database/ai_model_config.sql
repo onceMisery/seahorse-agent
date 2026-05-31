@@ -35,7 +35,7 @@ COMMENT ON COLUMN sa_ai_model_config.deleted IS '是否删除：0-否 1-是';
 INSERT INTO sa_ai_model_config (id, config_key, config_value, config_type, is_encrypted, description, created_by, created_at, updated_at, deleted)
 VALUES
     ('ai-config-1', 'ai.base.url', 'https://api.siliconflow.cn/v1', 'STRING', 0, 'AI 服务基础地址', 'system', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    ('ai-config-2', 'ai.api.key', 'sk-kclrgduyezrwqnmhxfqmodwegdhbplysnpoiarivhypixctm', 'STRING', 1, 'AI 服务 API 密钥', 'system', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    ('ai-config-2', 'ai.api.key', '3JvECMxYoV7DShtYsEhBxA==', 'STRING', 1, 'AI 服务 API 密钥占位值，请通过系统设置界面配置真实密钥', 'system', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     ('ai-config-3', 'ai.chat.model', 'deepseek-ai/DeepSeek-V3.2', 'STRING', 0, '对话模型', 'system', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     ('ai-config-4', 'ai.embedding.model', 'BAAI/bge-m3', 'STRING', 0, '向量化模型', 'system', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     ('ai-config-5', 'ai.rerank.model', 'Qwen/Qwen3-Reranker-8B', 'STRING', 0, '重排序模型', 'system', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)

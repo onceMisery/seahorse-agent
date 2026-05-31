@@ -64,6 +64,22 @@ export interface AgentVersion {
   createTime?: string;
 }
 
+export interface AgentPublishPayload {
+  instructions: string;
+  toolSetJson?: string;
+  modelConfigJson?: string;
+  memoryConfigJson?: string;
+  guardrailConfigJson?: string;
+  changeSummary: string;
+}
+
+export interface AgentRollbackPayload {
+  tenantId: string;
+  operator: string;
+  reasonCode: string;
+  comment?: string;
+}
+
 // ── API 调用 ──
 
 export function listAgents(params: {
@@ -93,9 +109,10 @@ export function updateAgentDraft(agentId: string, payload: AgentDefinitionDraft)
   );
 }
 
-export function publishAgent(agentId: string) {
+export function publishAgent(agentId: string, payload: AgentPublishPayload) {
   return api.post<Record<string, unknown>, Record<string, unknown>>(
-    `/agents/${encodeURIComponent(agentId)}/publish`
+    `/agents/${encodeURIComponent(agentId)}/publish`,
+    payload
   );
 }
 
@@ -104,10 +121,6 @@ export function disableAgent(agentId: string, reason?: string) {
     `/agents/${encodeURIComponent(agentId)}/disable`,
     { reason }
   );
-}
-
-export function getAgentVersions(agentId: string) {
-  return api.get<AgentVersion[]>(`/agents/${encodeURIComponent(agentId)}/versions`);
 }
 
 export function getLatestPublishChecks(agentId: string) {
@@ -122,9 +135,9 @@ export function validateAgent(agentId: string) {
   );
 }
 
-export function rollbackAgentVersion(agentId: string, versionId: string, reason: string) {
+export function rollbackAgentVersion(agentId: string, versionId: string, payload: AgentRollbackPayload) {
   return api.post<Record<string, unknown>, Record<string, unknown>>(
     `/api/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/rollback`,
-    { reason }
+    payload
   );
 }

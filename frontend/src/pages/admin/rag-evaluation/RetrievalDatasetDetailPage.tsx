@@ -7,11 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
 import {
@@ -69,7 +66,7 @@ export function RetrievalDatasetDetailPage() {
       }
     };
     load();
-  }, [kbId, datasetId]);
+  }, [featureState.enabled, kbId, datasetId]);
 
   const handleEvaluate = async () => {
     if (!kbId || !datasetId || !selectedStrategy) {
@@ -79,7 +76,10 @@ export function RetrievalDatasetDetailPage() {
 
     try {
       setRunning(true);
-      await evaluateDataset(kbId, datasetId, selectedStrategy);
+      await evaluateDataset(kbId, datasetId, {
+        strategyName: selectedStrategy,
+        topK: 5
+      });
       toast.success("评测已触发");
       setEvaluateOpen(false);
       const rs = await listEvaluationRuns(kbId, datasetId);
@@ -100,7 +100,14 @@ export function RetrievalDatasetDetailPage() {
 
     try {
       setRunning(true);
-      await compareStrategies(kbId, datasetId, baseStrategy, candidateStrategy);
+      await compareStrategies(kbId, datasetId, {
+        baselineStrategyName: baseStrategy,
+        topK: 5,
+        strategies: [
+          { strategyName: baseStrategy, topK: 5, options: {} },
+          { strategyName: candidateStrategy, topK: 5, options: {} }
+        ]
+      });
       toast.success("对比已触发");
       setCompareOpen(false);
       const cs = await listEvaluationComparisons(kbId, datasetId);

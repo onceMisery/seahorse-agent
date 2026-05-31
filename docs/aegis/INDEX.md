@@ -126,6 +126,7 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-ai-infra-mcp-static-bearer/proof-bundle.md | 2026-05-25-ai-infra-mcp-static-bearer proof bundle |
 | 2026-05-25 | spec | docs/aegis/specs/2026-05-25-gemini-memory-alignment-current-state.md | Gemini memory alignment current-state design |
 | 2026-05-25 | plan | docs/aegis/plans/2026-05-25-gemini-memory-alignment-completion.md | Gemini memory alignment completion plan |
+| 2026-05-30 | plan | docs/aegis/plans/2026-05-30-frontend-missing-capabilities-development-plan.md | Frontend missing capabilities development plan |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-gemini-memory-alignment-completion/10-intent.md | Gemini memory alignment completion intent |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-gemini-memory-alignment-completion/20-checkpoint.md | Gemini memory alignment completion checkpoint |
 | 2026-05-25 | work | docs/aegis/work/2026-05-25-gemini-memory-alignment-completion/90-evidence.md | Gemini memory alignment completion evidence |

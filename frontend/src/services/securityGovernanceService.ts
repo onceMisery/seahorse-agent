@@ -48,17 +48,36 @@ export interface SecretItem {
   createTime?: string;
 }
 
+export interface CreateSecretPayload {
+  tenantId: string;
+  secretValue: string;
+  metadataJson?: string;
+}
+
 export interface QuotaPolicy {
   policyId?: string;
-  name?: string;
   tenantId?: string;
   scope?: string;
-  resource?: string;
-  limit?: number;
-  unit?: string;
-  effect?: string;
+  subjectId?: string;
   status?: string;
-  createTime?: string;
+  tokenLimit?: number;
+  callLimit?: number;
+  costLimit?: number;
+  warnRatio?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface QuotaPolicyPayload {
+  policyId: string;
+  tenantId: string;
+  scope: string;
+  subjectId: string;
+  status?: string;
+  tokenLimit?: number;
+  callLimit?: number;
+  costLimit?: number;
+  warnRatio?: number;
 }
 
 export interface QuotaDecisionEvaluation {
@@ -123,17 +142,13 @@ export function listAccessDecisions(params: {
 
 // ── 密钥 ──
 
-export function createSecret(payload: { name: string; type: string; value: string; description?: string }) {
+export function createSecret(payload: CreateSecretPayload) {
   return api.post<Record<string, unknown>, Record<string, unknown>>("/api/secrets", payload);
-}
-
-export function listSecrets(params?: { current?: number; size?: number; keyword?: string }) {
-  return api.get<PageResult<SecretItem>>("/api/secrets", { params });
 }
 
 // ── 配额策略 ──
 
-export function createQuotaPolicy(payload: Omit<QuotaPolicy, "policyId" | "createTime">) {
+export function createQuotaPolicy(payload: QuotaPolicyPayload) {
   return api.post<QuotaPolicy, QuotaPolicy>("/api/quotas/policies", payload);
 }
 
@@ -145,9 +160,14 @@ export function disableQuotaPolicy(policyId: string) {
 
 export function evaluateQuotaDecision(payload: {
   tenantId?: string;
-  userId?: string;
   agentId?: string;
-  resource?: string;
+  userId?: string;
+  toolId?: string;
+  modelId?: string;
+  runId?: string;
+  riskLevel?: string;
+  tokens?: number;
+  calls?: number;
   cost?: number;
 }) {
   return api.post<QuotaDecisionEvaluation, QuotaDecisionEvaluation>(

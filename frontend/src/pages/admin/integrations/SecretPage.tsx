@@ -1,56 +1,43 @@
-import { useEffect, useState } from "react";
-import { Eye, EyeOff, Key, Plus, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { Eye, EyeOff, Key, Plus } from "lucide-react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
-import { createSecret, type SecretItem } from "@/services/securityGovernanceService";
+import { createSecret } from "@/services/securityGovernanceService";
 import { getErrorMessage } from "@/utils/error";
 
 export function SecretPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.SECRET_MANAGEMENT);
 
-  const [secrets, setSecrets] = useState<SecretItem[]>([]);
-  const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [oneTimeValue, setOneTimeValue] = useState<string | null>(null);
   const [showOneTime, setShowOneTime] = useState(false);
-  const [form, setForm] = useState({ name: "", type: "api_key", value: "", description: "" });
-
-  const loadSecrets = async () => {
-    try {
-      setLoading(true);
-      const data = await createSecret({ name: "__list__", type: "__list__", value: "__list__" }).catch(() => null);
-      // listSecrets may not exist yet, so we use a simple approach
-      setSecrets([]);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (featureState.enabled) loadSecrets();
-  }, [featureState.enabled]);
+  const [form, setForm] = useState({ tenantId: "", name: "", type: "api_key", value: "", description: "" });
 
   const handleCreate = async () => {
-    if (!form.name || !form.value) {
-      toast.error("请填写密钥名称和值");
+    if (!form.tenantId.trim() || !form.name.trim() || !form.value.trim()) {
+      toast.error("请填写租户 ID、密钥名称和值");
       return;
     }
 
     try {
       setCreating(true);
-      const result = await createSecret(form);
+      const result = await createSecret({
+        tenantId: form.tenantId.trim(),
+        secretValue: form.value,
+        metadataJson: JSON.stringify({
+          name: form.name.trim(),
+          type: form.type,
+          description: form.description
+        })
+      });
       toast.success("密钥创建成功");
 
       // 如果后端返回一次性 secret
@@ -61,7 +48,7 @@ export function SecretPage() {
       }
 
       setCreateOpen(false);
-      setForm({ name: "", type: "api_key", value: "", description: "" });
+      setForm({ tenantId: "", name: "", type: "api_key", value: "", description: "" });
     } catch (error) {
       toast.error(getErrorMessage(error, "创建密钥失败"));
       console.error(error);
@@ -122,8 +109,8 @@ export function SecretPage() {
         <CardContent className="pt-6">
           <div className="text-center py-8 text-muted-foreground">
             <Key className="h-12 w-12 mx-auto mb-3 text-slate-300" />
-            <p>密钥列表通过后端 API 获取</p>
-            <p className="text-sm mt-1">密钥值不在列表、日志或 toast 中展示明文</p>
+            <p>后端当前只提供密钥创建接口，未提供密钥列表接口</p>
+            <p className="text-sm mt-1">页面不会通过写操作模拟列表查询，密钥值不在列表、日志或 toast 中展示明文</p>
           </div>
         </CardContent>
       </Card>
@@ -139,6 +126,10 @@ export function SecretPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">密钥名称</label>
               <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="密钥名称" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">租户 ID</label>
+              <Input value={form.tenantId} onChange={(e) => setForm((p) => ({ ...p, tenantId: e.target.value }))} placeholder="tenant-id" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">类型</label>

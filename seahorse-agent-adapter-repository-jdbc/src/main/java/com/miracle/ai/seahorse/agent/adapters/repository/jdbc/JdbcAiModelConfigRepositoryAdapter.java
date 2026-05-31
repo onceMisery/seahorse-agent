@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
+import com.miracle.ai.seahorse.agent.ports.outbound.config.AiModelConfigRepositoryPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -37,7 +38,7 @@ import java.util.Optional;
 /**
  * AI 模型配置 JDBC 仓储适配器
  */
-public class JdbcAiModelConfigRepositoryAdapter {
+public class JdbcAiModelConfigRepositoryAdapter implements AiModelConfigRepositoryPort {
 
     private static final String ENCRYPTION_KEY = "SeahorseAgent16B"; // 16字节密钥
     private static final String ALGORITHM = "AES";
@@ -48,6 +49,7 @@ public class JdbcAiModelConfigRepositoryAdapter {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
     }
 
+    @Override
     public List<AiModelConfig> findAll() {
         String sql = """
                 SELECT id, config_key, config_value, config_type, is_encrypted, description,
@@ -59,6 +61,7 @@ public class JdbcAiModelConfigRepositoryAdapter {
         return jdbcTemplate.query(sql, new AiModelConfigRowMapper());
     }
 
+    @Override
     public Optional<AiModelConfig> findByKey(String configKey) {
         String sql = """
                 SELECT id, config_key, config_value, config_type, is_encrypted, description,
@@ -70,6 +73,7 @@ public class JdbcAiModelConfigRepositoryAdapter {
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
+    @Override
     public void save(AiModelConfig config) {
         String sql = """
                 INSERT INTO sa_ai_model_config
@@ -100,6 +104,7 @@ public class JdbcAiModelConfigRepositoryAdapter {
                 Timestamp.valueOf(config.getUpdatedAt()));
     }
 
+    @Override
     public void update(String configKey, String configValue, String updatedBy) {
         Optional<AiModelConfig> existing = findByKey(configKey);
         if (existing.isEmpty()) {
@@ -118,6 +123,7 @@ public class JdbcAiModelConfigRepositoryAdapter {
         jdbcTemplate.update(sql, valueToStore, updatedBy, Timestamp.valueOf(LocalDateTime.now()), configKey);
     }
 
+    @Override
     public void delete(String configKey) {
         String sql = """
                 UPDATE sa_ai_model_config

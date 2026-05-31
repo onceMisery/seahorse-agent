@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Edit, Play, RefreshCw } from "lucide-react";
+import { ArrowLeft, Edit, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,6 @@ import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/produ
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
 import {
   getAgent,
-  getAgentVersions,
   getLatestPublishChecks,
   validateAgent,
   type AgentDefinition,
@@ -37,7 +36,7 @@ export function AgentDetailPage() {
   const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
   const [validating, setValidating] = useState(false);
 
-  const loadAgent = async () => {
+  const loadAgent = useCallback(async () => {
     if (!agentId) return;
     try {
       setLoading(true);
@@ -49,19 +48,9 @@ export function AgentDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [agentId]);
 
-  const loadVersions = async () => {
-    if (!agentId) return;
-    try {
-      const data = await getAgentVersions(agentId);
-      setVersions(data || []);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const loadPublishChecks = async () => {
+  const loadPublishChecks = useCallback(async () => {
     if (!agentId) return;
     try {
       const data = await getLatestPublishChecks(agentId);
@@ -69,14 +58,28 @@ export function AgentDetailPage() {
     } catch (error) {
       console.error(error);
     }
-  };
+  }, [agentId]);
 
   useEffect(() => {
     if (!featureState.enabled) return;
     loadAgent();
-    loadVersions();
     loadPublishChecks();
-  }, [agentId]);
+  }, [featureState.enabled, loadAgent, loadPublishChecks]);
+
+  useEffect(() => {
+    const currentVersion =
+      agent && (agent.currentVersionId || agent.latestPublishedVersionId)
+        ? [{
+            versionId: agent.currentVersionId || agent.latestPublishedVersionId,
+            versionNumber: agent.currentVersionNumber || agent.latestPublishedVersionNumber,
+            agentId,
+            status: agent.status,
+            publishStatus: agent.latestPublishStatus,
+            createTime: agent.updateTime
+          }]
+        : [];
+    setVersions(currentVersion);
+  }, [agent, agentId]);
 
   const handleValidate = async () => {
     if (!agentId) return;
@@ -100,14 +103,12 @@ export function AgentDetailPage() {
   const handlePublishSuccess = () => {
     setPublishDialogOpen(false);
     loadAgent();
-    loadVersions();
     loadPublishChecks();
   };
 
   const handleRollbackSuccess = () => {
     setRollbackDialogOpen(false);
     loadAgent();
-    loadVersions();
   };
 
   const formatTime = (dateStr?: string | null) => {
@@ -174,7 +175,7 @@ export function AgentDetailPage() {
               发布
             </Button>
           )}
-          <Button variant="outline" onClick={() => { loadAgent(); loadVersions(); }}>
+          <Button variant="outline" onClick={() => { loadAgent(); }}>
             <RefreshCw className="w-4 h-4 mr-1" />
             刷新
           </Button>
@@ -291,7 +292,7 @@ export function AgentDetailPage() {
             <CardHeader><CardTitle>校验结果</CardTitle></CardHeader>
             <CardContent>
               {!validationResult ? (
-                <div className="text-center py-4 text-muted-foreground">点击"校验"按钮检查 Agent 配置</div>
+                <div className="text-center py-4 text-muted-foreground">点击校验按钮检查 Agent 配置</div>
               ) : (
                 <div className="space-y-2">
                   {validationResult.checks?.map((check, idx) => (
@@ -324,6 +325,7 @@ export function AgentDetailPage() {
         open={rollbackDialogOpen}
         onOpenChange={setRollbackDialogOpen}
         agentId={agentId || ""}
+        tenantId={agent.tenantId || ""}
         versions={versions}
         onSuccess={handleRollbackSuccess}
       />

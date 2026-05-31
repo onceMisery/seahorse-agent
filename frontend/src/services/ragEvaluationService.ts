@@ -75,6 +75,24 @@ export interface RetrievalStrategyTemplate {
   updateTime?: string;
 }
 
+export interface RetrievalEvaluationStrategy {
+  strategyName?: string;
+  topK?: number;
+  options?: Record<string, unknown>;
+}
+
+export interface DatasetEvaluatePayload {
+  strategyName: string;
+  topK?: number;
+  options?: Record<string, unknown>;
+}
+
+export interface DatasetComparePayload {
+  baselineStrategyName: string;
+  topK?: number;
+  strategies: RetrievalEvaluationStrategy[];
+}
+
 export interface VersionQualityDiff {
   baseVersionId?: string;
   candidateVersionId?: string;
@@ -130,17 +148,17 @@ export function listDatasetSamples(kbId: string, datasetId: string, params?: { c
 }
 
 // 评测与对比
-export function evaluateDataset(kbId: string, datasetId: string, strategyKey: string) {
+export function evaluateDataset(kbId: string, datasetId: string, payload: DatasetEvaluatePayload) {
   return api.post<EvaluationRun, EvaluationRun>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/evaluate`,
-    { strategyKey }
+    payload
   );
 }
 
-export function compareStrategies(kbId: string, datasetId: string, baseStrategyKey: string, candidateStrategyKey: string) {
+export function compareStrategies(kbId: string, datasetId: string, payload: DatasetComparePayload) {
   return api.post<EvaluationComparison, EvaluationComparison>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets/${encodeURIComponent(datasetId)}/compare`,
-    { baseStrategyKey, candidateStrategyKey }
+    payload
   );
 }
 
