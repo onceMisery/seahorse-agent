@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
@@ -32,7 +33,6 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 public class RepositoryAgentRunStepRecorder implements AgentRunStepRecorder {
 
@@ -98,7 +98,7 @@ public class RepositoryAgentRunStepRecorder implements AgentRunStepRecorder {
     }
 
     private String nextStepId() {
-        return AgentRuntimeConstants.AGENT_STEP_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return AgentRuntimeConstants.AGENT_STEP_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 
     private String toolCallJson(AgentToolCall toolCall) {

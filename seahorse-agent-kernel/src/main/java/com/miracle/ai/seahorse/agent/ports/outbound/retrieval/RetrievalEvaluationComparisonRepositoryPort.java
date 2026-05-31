@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.retrieval;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationComparisonSummary;
@@ -24,7 +25,6 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * 检索评测对比批次仓储端口。
@@ -44,7 +44,7 @@ public interface RetrievalEvaluationComparisonRepositoryPort {
             @Override
             public RetrievalEvaluationComparisonRecord saveComparison(String knowledgeBaseId, String datasetId,
                                                                      RetrievalEvaluationComparisonReport report) {
-                return new RetrievalEvaluationComparisonRecord(UUID.randomUUID().toString(),
+                return new RetrievalEvaluationComparisonRecord(SnowflakeIds.nextIdString(),
                         knowledgeBaseId, datasetId, report, Instant.now());
             }
 

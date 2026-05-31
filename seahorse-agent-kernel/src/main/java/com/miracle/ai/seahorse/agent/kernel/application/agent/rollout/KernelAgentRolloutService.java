@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.rollout;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentRollbackReasonCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentRollbackResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentRollbackStatus;
@@ -38,7 +39,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateReposito
 import java.time.Clock;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 public class KernelAgentRolloutService implements AgentRolloutInboundPort {
 
@@ -143,6 +143,6 @@ public class KernelAgentRolloutService implements AgentRolloutInboundPort {
     }
 
     private String rolloutId() {
-        return ROLLOUT_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return ROLLOUT_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 }

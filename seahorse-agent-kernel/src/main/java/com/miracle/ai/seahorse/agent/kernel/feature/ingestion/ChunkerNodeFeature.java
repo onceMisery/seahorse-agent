@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.feature.ingestion;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
@@ -30,7 +31,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * 原生文本分块节点。
@@ -188,7 +188,7 @@ public class ChunkerNodeFeature implements IngestionNodeFeature {
 
     private VectorChunk chunk(int index, String content) {
         return VectorChunk.builder()
-                .chunkId(UUID.randomUUID().toString())
+                .chunkId(SnowflakeIds.nextIdString())
                 .index(index)
                 .content(content)
                 .build();

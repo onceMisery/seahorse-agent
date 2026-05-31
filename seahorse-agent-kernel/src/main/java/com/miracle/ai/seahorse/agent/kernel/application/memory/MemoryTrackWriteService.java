@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.CorrectionLedgerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryLifecyclePort;
@@ -27,7 +28,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * Slice 3 续：将 profile / correction 横向轨写入逻辑从 {@code DefaultMemoryEnginePort} 拆出。
@@ -96,7 +96,7 @@ public final class MemoryTrackWriteService {
                                                   String messageId,
                                                   String incorrectValue,
                                                   String correctValue) {
-        String generationId = "identity.occupation:" + UUID.randomUUID();
+        String generationId = "identity.occupation:" + SnowflakeIds.nextIdString();
         List<String> sourceIds = isBlank(messageId) ? List.of() : List.of(messageId);
         try {
             correctionLedgerPort.upsert(new CorrectionCommand(

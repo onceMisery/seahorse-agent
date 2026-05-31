@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.context;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
@@ -51,7 +52,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 public class KernelResourceAclManagementService implements ResourceAclManagementInboundPort {
 
@@ -91,7 +91,7 @@ public class KernelResourceAclManagementService implements ResourceAclManagement
         ResourceAclCreateCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         Instant now = clock.instant();
         ResourceAclRule created = repository.save(new ResourceAclRule(
-                RULE_ID_PREFIX + UUID.randomUUID().toString().replace("-", ""),
+                RULE_ID_PREFIX + SnowflakeIds.nextIdString(),
                 safeCommand.tenantId(),
                 ResourceAclRuleScope.EXACT_RESOURCE,
                 safeCommand.resourceType(),
@@ -270,7 +270,7 @@ public class KernelResourceAclManagementService implements ResourceAclManagement
 
     private ResourceAclRule toRule(ResourceAclImportItem item, String createdBy, Instant now) {
         return new ResourceAclRule(
-                RULE_ID_PREFIX + UUID.randomUUID().toString().replace("-", ""),
+                RULE_ID_PREFIX + SnowflakeIds.nextIdString(),
                 item.tenantId(),
                 item.scope(),
                 item.resourceType(),
@@ -360,7 +360,7 @@ public class KernelResourceAclManagementService implements ResourceAclManagement
         }
         Instant now = clock.instant();
         auditLedger.append(new AuditEvent(
-                AUDIT_ID_PREFIX + UUID.randomUUID().toString().replace("-", ""),
+                AUDIT_ID_PREFIX + SnowflakeIds.nextIdString(),
                 safeTenantId,
                 AuditEventType.RESOURCE_ACL_CHANGED,
                 AuditActorType.USER,

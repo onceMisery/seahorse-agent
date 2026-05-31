@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.context;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
@@ -28,7 +29,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionLogPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAccessPolicyPort;
 
 import java.util.Objects;
-import java.util.UUID;
 
 public class AuditedResourceAccessPolicyPort implements ResourceAccessPolicyPort {
 
@@ -64,7 +64,7 @@ public class AuditedResourceAccessPolicyPort implements ResourceAccessPolicyPort
             return;
         }
         auditLedger.append(new AuditEvent(
-                AUDIT_ID_PREFIX + UUID.randomUUID().toString().replace("-", ""),
+                AUDIT_ID_PREFIX + SnowflakeIds.nextIdString(),
                 decision.tenantId(),
                 AuditEventType.CONTEXT_ACCESSED,
                 actorType(decision.subjectType()),

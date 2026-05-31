@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBufferSnapshot;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBufferState;
@@ -31,7 +32,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 public class InMemoryMemoryAggregationBufferPort implements MemoryAggregationBufferPort {
 
@@ -157,7 +157,7 @@ public class InMemoryMemoryAggregationBufferPort implements MemoryAggregationBuf
 
         private MemoryBufferSnapshot snapshot(MemoryFlushTrigger trigger) {
             return new MemoryBufferSnapshot(
-                    "memory-snapshot-" + UUID.randomUUID(),
+                    "memory-snapshot-" + SnowflakeIds.nextIdString(),
                     tenantId,
                     userId,
                     conversationId,

@@ -17,10 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 
 import java.util.Objects;
-import java.util.UUID;
 
 public record MemoryIngestionCommand(
         String operationId,
@@ -74,6 +74,6 @@ public record MemoryIngestionCommand(
         if (writeRequest != null && writeRequest.messageId() != null && !writeRequest.messageId().isBlank()) {
             return "memory-write-" + writeRequest.messageId().trim();
         }
-        return "memory-write-" + UUID.randomUUID();
+        return "memory-write-" + SnowflakeIds.nextIdString();
     }
 }

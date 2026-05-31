@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryGovernanceInboundPort;
@@ -33,7 +34,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkfl
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 public class MemoryWriteToolPortAdapter implements DescribedToolPort {
 
@@ -88,7 +88,7 @@ public class MemoryWriteToolPortAdapter implements DescribedToolPort {
             MemoryWriteRequest writeRequest = MemoryWriteRequest.builder()
                     .userId(userId)
                     .conversationId(jsonSupport.string(arguments, "_seahorseConversationId"))
-                    .messageId("agent-tool-" + UUID.randomUUID())
+                    .messageId("agent-tool-" + SnowflakeIds.nextIdString())
                     .message(ChatMessage.user(content))
                     .build();
             MemoryIngestionResult ingestionResult;

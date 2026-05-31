@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryCompactionFragment;
@@ -35,7 +36,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 public class MemoryCompactionService {
 
@@ -141,7 +141,7 @@ public class MemoryCompactionService {
     }
 
     private MemoryRecord masterMemory(MemoryCompactionCandidate candidate, Instant now) {
-        String masterId = "mem-compact-" + UUID.randomUUID();
+        String masterId = "mem-compact-" + SnowflakeIds.nextIdString();
         MemoryCompactionSummary summary = summarize(candidate);
         List<String> sourceMemoryIds = candidate.fragments().stream()
                 .map(MemoryCompactionFragment::memoryId)
@@ -160,7 +160,7 @@ public class MemoryCompactionService {
         if (!summary.metadata().isEmpty()) {
             metadata.put("compactionSummaryMetadata", summary.metadata());
         }
-        metadata.put("compactionGenerationId", "compaction-" + UUID.randomUUID());
+        metadata.put("compactionGenerationId", "compaction-" + SnowflakeIds.nextIdString());
         metadata.put("compactedAt", now.toString());
         metadata.put(METADATA_IMPORTANCE_SCORE,
                 summaryScore(summary, METADATA_IMPORTANCE_SCORE, DEFAULT_MASTER_IMPORTANCE_SCORE));

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.readiness;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.readiness.EnterprisePilotReadinessCheckResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.readiness.EnterprisePilotReadinessReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.EnterprisePilotReadinessGenerateCommand;
@@ -31,7 +32,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 public class KernelEnterprisePilotReadinessService implements EnterprisePilotReadinessInboundPort {
 
@@ -99,6 +99,6 @@ public class KernelEnterprisePilotReadinessService implements EnterprisePilotRea
     }
 
     private String reportId() {
-        return REPORT_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return REPORT_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 }

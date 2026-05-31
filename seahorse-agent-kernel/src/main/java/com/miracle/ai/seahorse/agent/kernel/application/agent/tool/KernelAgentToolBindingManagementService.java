@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.tool;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.AgentToolBinding;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingItemCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
@@ -34,7 +35,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 
 public class KernelAgentToolBindingManagementService implements AgentToolBindingManagementInboundPort {
 
@@ -121,7 +121,7 @@ public class KernelAgentToolBindingManagementService implements AgentToolBinding
     }
 
     private String nextBindingId() {
-        return BINDING_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return BINDING_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 
     private String requireText(String value, String message) {

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
@@ -35,7 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 
 public class RepositoryAgentApprovalWaitHandler implements AgentApprovalWaitHandler {
 
@@ -112,7 +112,7 @@ public class RepositoryAgentApprovalWaitHandler implements AgentApprovalWaitHand
     }
 
     private String nextCheckpointId() {
-        return CHECKPOINT_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return CHECKPOINT_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 
     private String messageHistoryJson(List<ChatMessage> messageHistory) {

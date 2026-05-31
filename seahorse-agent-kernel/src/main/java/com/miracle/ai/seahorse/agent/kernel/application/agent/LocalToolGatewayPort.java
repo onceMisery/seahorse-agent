@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
@@ -46,7 +47,6 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 public class LocalToolGatewayPort implements ToolGatewayPort {
 
@@ -218,7 +218,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     }
 
     private String nextInvocationId() {
-        return UUID.randomUUID().toString();
+        return SnowflakeIds.nextIdString();
     }
 
     private String createApprovalRequest(ToolInvocationRequest request,

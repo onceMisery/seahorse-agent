@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.gate;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.eval.AgentEvalStatus;
@@ -42,7 +43,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 public class KernelProductionGateService implements ProductionGateInboundPort {
 
@@ -247,7 +247,7 @@ public class KernelProductionGateService implements ProductionGateInboundPort {
     }
 
     private String reportId() {
-        return REPORT_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return REPORT_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 
     private static final class EvalCheckAccumulator {

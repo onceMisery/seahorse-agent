@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.trace;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
@@ -32,7 +33,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 
@@ -218,7 +218,7 @@ public class KernelRagTraceRecorder {
     }
 
     private String newTraceId() {
-        return UUID.randomUUID().toString().replace("-", "");
+        return SnowflakeIds.nextIdString();
     }
 
     private boolean sampled() {

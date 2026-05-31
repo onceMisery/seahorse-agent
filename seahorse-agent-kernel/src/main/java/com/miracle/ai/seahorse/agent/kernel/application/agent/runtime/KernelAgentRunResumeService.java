@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -58,7 +59,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -367,7 +367,7 @@ public class KernelAgentRunResumeService implements AgentRunResumeInboundPort {
     }
 
     private String nextStepId() {
-        return RESULT_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return RESULT_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 
     private String toJson(Object payload) {

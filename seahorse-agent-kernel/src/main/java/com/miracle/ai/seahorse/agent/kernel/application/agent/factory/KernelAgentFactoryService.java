@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.factory;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.factory.AgentCatalogPage;
@@ -51,7 +52,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 public class KernelAgentFactoryService implements AgentFactoryInboundPort {
 
@@ -380,14 +380,14 @@ public class KernelAgentFactoryService implements AgentFactoryInboundPort {
     }
 
     private String checkId() {
-        return CHECK_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return CHECK_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 
     private String rollbackId() {
-        return ROLLBACK_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return ROLLBACK_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 
     private String activationId() {
-        return ACTIVATION_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return ACTIVATION_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 }

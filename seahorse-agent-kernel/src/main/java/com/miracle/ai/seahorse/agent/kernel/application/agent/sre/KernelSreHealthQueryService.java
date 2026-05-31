@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.sre;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthStatus;
@@ -28,7 +29,6 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 
 public class KernelSreHealthQueryService implements SreHealthInboundPort, SreHealthReportProviderPort {
 
@@ -61,6 +61,6 @@ public class KernelSreHealthQueryService implements SreHealthInboundPort, SreHea
     }
 
     private String reportId() {
-        return REPORT_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return REPORT_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 }

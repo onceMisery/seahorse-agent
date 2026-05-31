@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.handoff;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
@@ -38,7 +39,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 
 public class KernelAgentHandoffService implements AgentHandoffInboundPort {
 
@@ -146,7 +146,7 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
     }
 
     private String nextHandoffId() {
-        return HANDOFF_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return HANDOFF_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 
     private void appendCreatedAudit(AgentHandoff handoff) {
@@ -162,7 +162,7 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
             return;
         }
         auditLedger.append(new AuditEvent(
-                "audit_" + UUID.randomUUID().toString().replace("-", ""),
+                "audit_" + SnowflakeIds.nextIdString(),
                 handoff.tenantId(),
                 eventType,
                 AuditActorType.AGENT,

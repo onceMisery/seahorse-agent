@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
@@ -75,7 +76,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * 默认记忆引擎端口实现。
@@ -734,7 +734,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                                                              MemoryClassificationResult classification) {
         MemoryCaptureDecision decision = classification.decision();
         String profileSlot = profileValueNormalizer.resolveSlot(decision, classification);
-        String profileGenerationId = isBlank(profileSlot) ? "" : profileSlot + ":" + UUID.randomUUID();
+        String profileGenerationId = isBlank(profileSlot) ? "" : profileSlot + ":" + SnowflakeIds.nextIdString();
         Map<String, Object> metadata = captureMetadata(operationId, tenantId, request, message, decision);
         refinerMetadataWriter.appendRefined(metadata, classification);
         if (!isBlank(profileSlot)) {

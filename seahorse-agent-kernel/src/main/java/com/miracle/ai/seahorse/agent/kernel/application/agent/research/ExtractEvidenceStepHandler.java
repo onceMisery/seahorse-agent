@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.research;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.EvidenceItem;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.ResearchStepType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.WebSource;
@@ -26,7 +27,6 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -89,7 +89,7 @@ public class ExtractEvidenceStepHandler implements ResearchStepHandler {
             if (claim == null || claim.isBlank()) continue;
 
             context.addEvidence(new EvidenceItem(
-                    UUID.randomUUID().toString(),
+                    SnowflakeIds.nextIdString(),
                     sourceId,
                     claim,
                     quote,

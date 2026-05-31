@@ -21,7 +21,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SnowflakeIdsTests {
 
@@ -30,11 +31,11 @@ class SnowflakeIdsTests {
         String first = SnowflakeIds.nextIdString();
         String second = SnowflakeIds.nextIdString();
 
-        assertThat(first).containsOnlyDigits();
-        assertThat(second).containsOnlyDigits();
-        assertThat(first.length()).isLessThanOrEqualTo(19);
-        assertThat(second.length()).isLessThanOrEqualTo(19);
-        assertThat(Long.parseLong(second)).isGreaterThan(Long.parseLong(first));
+        assertTrue(first.chars().allMatch(Character::isDigit));
+        assertTrue(second.chars().allMatch(Character::isDigit));
+        assertTrue(first.length() <= 19);
+        assertTrue(second.length() <= 19);
+        assertTrue(Long.parseLong(second) > Long.parseLong(first));
     }
 
     @Test
@@ -43,6 +44,6 @@ class SnowflakeIdsTests {
         for (int i = 0; i < 1000; i++) {
             ids.add(SnowflakeIds.nextIdString());
         }
-        assertThat(ids).hasSize(1000);
+        assertEquals(1000, ids.size());
     }
 }

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.context;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.AccessDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.AccessDecisionEffect;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAccessReasonCodes;
@@ -31,7 +32,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 
 public class AclBackedResourceAccessPolicyPort implements ResourceAccessPolicyPort {
 
@@ -78,7 +78,7 @@ public class AclBackedResourceAccessPolicyPort implements ResourceAccessPolicyPo
                                     Instant now) {
         ResourceRef resource = request.resourceRef();
         return new AccessDecision(
-                DECISION_ID_PREFIX + UUID.randomUUID().toString().replace("-", ""),
+                DECISION_ID_PREFIX + SnowflakeIds.nextIdString(),
                 request.tenantId(),
                 request.subjectType(),
                 request.subjectId(),

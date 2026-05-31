@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
@@ -49,7 +50,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
@@ -242,15 +242,15 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     }
 
     private String sessionId() {
-        return SESSION_ID_PREFIX + uuid();
+        return SESSION_ID_PREFIX + nextId();
     }
 
     private String executionId() {
-        return EXECUTION_ID_PREFIX + uuid();
+        return EXECUTION_ID_PREFIX + nextId();
     }
 
-    private String uuid() {
-        return UUID.randomUUID().toString().replace("-", "");
+    private String nextId() {
+        return SnowflakeIds.nextIdString();
     }
 
     private void appendSessionAudit(SandboxSession session) {
@@ -307,7 +307,7 @@ public class KernelSandboxRuntimeService implements SandboxRuntimeInboundPort {
     }
 
     private String auditId() {
-        return AUDIT_ID_PREFIX + uuid();
+        return AUDIT_ID_PREFIX + nextId();
     }
 
     private static String requireText(String value, String message) {

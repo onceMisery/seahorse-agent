@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.research;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactType;
@@ -40,7 +41,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -102,7 +102,7 @@ public class WriteReportStepHandler implements ResearchStepHandler {
     @Override
     public void execute(DurableTask task, ResearchStepContext context, ResearchEventPublisher events) {
         ChatRequest request = buildRequest(context);
-        String artifactId = UUID.randomUUID().toString();
+        String artifactId = SnowflakeIds.nextIdString();
         String report = streamingChatModel == null
                 ? generateBlockingReport(request, task, context, events, artifactId)
                 : generateStreamingReport(request, task, context, events, artifactId);

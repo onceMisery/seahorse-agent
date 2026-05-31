@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.research;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.ResearchStepType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.SourceTrustLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.WebSource;
@@ -33,7 +34,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * SEARCH 步骤：对 PLAN 阶段生成的每个查询词执行 Web 搜索。
@@ -85,7 +85,7 @@ public class SearchStepHandler implements ResearchStepHandler {
                 }
                 Instant retrievedAt = Instant.now();
                 WebSource source = new WebSource(
-                        UUID.randomUUID().toString(),
+                        SnowflakeIds.nextIdString(),
                         task.runId(),
                         hit.url(),
                         hit.title(),

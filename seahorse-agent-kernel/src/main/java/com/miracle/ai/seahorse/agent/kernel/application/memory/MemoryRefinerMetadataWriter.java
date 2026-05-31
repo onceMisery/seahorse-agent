@@ -17,11 +17,11 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryWriteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionAction;
 
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Slice 3 续 cut 8：refiner 决策结果到 metadata 的写入器 + memoryId 构造器。
@@ -34,7 +34,7 @@ import java.util.UUID;
  *         深合入 capture metadata；遇 {@code refinerBatch} key 跳过避免循环；
  *         decision policy 为 {@code llm_refiner_v1} 时盖戳 {@code capturePolicy=llm_refiner}。</li>
  *     <li>{@link #buildMemoryId(MemoryWriteRequest, MemoryClassificationResult)} —
- *         {@code stm-<messageId|uuid>}，多 op batch 时附 {@code -r<index>} 后缀。</li>
+ *         {@code stm-<messageId|snowflakeId>}，多 op batch 时附 {@code -r<index>} 后缀。</li>
  * </ul>
  *
  * <p>所有 metadata key 字面量与 facade 完全一致，下游消费者无感知变更。
@@ -81,14 +81,14 @@ public final class MemoryRefinerMetadataWriter {
     }
 
     /**
-     * 构造 memoryId：{@code stm-<messageId|uuid>(-r<index> if batch)}。
+     * 构造 memoryId：{@code stm-<messageId|snowflakeId>(-r<index> if batch)}。
      */
     public String buildMemoryId(MemoryWriteRequest request, MemoryClassificationResult classification) {
         String suffix = refinerOperationSuffix(classification);
         if (!isBlank(request.messageId())) {
             return MEMORY_ID_PREFIX + request.messageId() + suffix;
         }
-        return MEMORY_ID_PREFIX + UUID.randomUUID() + suffix;
+        return MEMORY_ID_PREFIX + SnowflakeIds.nextIdString() + suffix;
     }
 
     private static String refinerStatus(RefinedMemoryDelta delta) {

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
@@ -55,7 +56,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * 元数据历史回填 kernel 编排服务。
@@ -148,7 +148,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         int batchSize = normalizeBatchSize(safeCommand.batchSize());
         Instant now = Instant.now();
         MetadataBackfillJobRecord job = new MetadataBackfillJobRecord(
-                UUID.randomUUID().toString(),
+                SnowflakeIds.nextIdString(),
                 safeCommand.tenantId(),
                 kbId,
                 safeCommand.pipelineId(),

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
@@ -34,7 +35,6 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 public class KernelAgentRunService implements AgentRunInboundPort {
 
@@ -179,7 +179,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     }
 
     private String nextRunId() {
-        return RUN_ID_PREFIX + UUID.randomUUID().toString().replace("-", "");
+        return RUN_ID_PREFIX + SnowflakeIds.nextIdString();
     }
 
     private String requireText(String value, String message) {

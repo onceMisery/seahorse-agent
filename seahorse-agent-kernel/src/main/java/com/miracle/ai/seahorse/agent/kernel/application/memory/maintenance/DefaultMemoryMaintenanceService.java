@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryMaintenanceRunResult;
@@ -40,7 +41,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInboundPort {
 
@@ -302,7 +302,7 @@ public class DefaultMemoryMaintenanceService implements MemoryMaintenanceInbound
             MemoryAliasResolutionRunResult alias = result.aliasResolutionResult();
             MemoryGarbageCollectionResult gc = result.garbageCollectionResult();
             maintenanceRunRepositoryPort.save(new MemoryMaintenanceRunRecord(
-                    "maintenance-" + UUID.randomUUID(),
+                    "maintenance-" + SnowflakeIds.nextIdString(),
                     result.reason(),
                     status(result),
                     result.compactionEnabled(),

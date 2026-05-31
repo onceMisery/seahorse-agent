@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.retrieval;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationReport;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationRunSummary;
@@ -24,7 +25,6 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * 检索评测运行结果仓储端口。
@@ -45,7 +45,7 @@ public interface RetrievalEvaluationRunRepositoryPort {
             @Override
             public RetrievalEvaluationRunRecord saveRun(String knowledgeBaseId, String datasetId,
                                                         RetrievalEvaluationReport report) {
-                return new RetrievalEvaluationRunRecord(UUID.randomUUID().toString(),
+                return new RetrievalEvaluationRunRecord(SnowflakeIds.nextIdString(),
                         knowledgeBaseId, datasetId, report, Instant.now());
             }
 

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.research;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.ResearchStepType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.research.ResearchTaskProfile;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventEnvelope;
@@ -32,7 +33,6 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * 研究任务编排器。
@@ -62,7 +62,7 @@ public class ResearchRunOrchestrator {
         for (ResearchStepHandler handler : Objects.requireNonNullElseGet(stepHandlers, List::<ResearchStepHandler>of)) {
             handlers.put(handler.stepType(), handler);
         }
-        this.workerId = "worker-" + UUID.randomUUID().toString().substring(0, 8);
+        this.workerId = "worker-" + SnowflakeIds.nextIdString().substring(0, 8);
     }
 
     public String startResearch(String runId, ResearchTaskProfile profile, String query,
@@ -77,7 +77,7 @@ public class ResearchRunOrchestrator {
         context.setMaxSources(safeProfile.maxSources());
         emitEvent(runId, context, StreamEventType.RUN_STARTED, Map.of("runId", runId, "title", "Research started"));
         DurableTask task = new DurableTask(
-                UUID.randomUUID().toString(),
+                SnowflakeIds.nextIdString(),
                 runId,
                 ResearchStepType.PLAN.name(),
                 0,
@@ -172,7 +172,7 @@ public class ResearchRunOrchestrator {
         ResearchStepType next = current.next();
         if (next != null) {
             DurableTask nextTask = new DurableTask(
-                    UUID.randomUUID().toString(),
+                    SnowflakeIds.nextIdString(),
                     runId,
                     next.name(),
                     0,
@@ -190,7 +190,7 @@ public class ResearchRunOrchestrator {
 
     private void enqueueSpecificStep(String runId, ResearchStepType stepType, ResearchStepContext context) {
         DurableTask nextTask = new DurableTask(
-                UUID.randomUUID().toString(),
+                SnowflakeIds.nextIdString(),
                 runId,
                 stepType.name(),
                 0,

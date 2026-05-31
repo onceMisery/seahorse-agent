@@ -17,9 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.stream;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.UUID;
 
 public record StreamEventEnvelope(
     String eventId,
@@ -40,11 +40,11 @@ public record StreamEventEnvelope(
 
     public static StreamEventEnvelope of(long seq, StreamEventType type, String runId, Object payload) {
         return new StreamEventEnvelope(
-            UUID.randomUUID().toString(), seq, type, runId, null, Instant.now(), payload);
+            SnowflakeIds.nextIdString(), seq, type, runId, null, Instant.now(), payload);
     }
 
     public static StreamEventEnvelope of(long seq, StreamEventType type, String runId, String stepId, Object payload) {
         return new StreamEventEnvelope(
-            UUID.randomUUID().toString(), seq, type, runId, stepId, Instant.now(), payload);
+            SnowflakeIds.nextIdString(), seq, type, runId, stepId, Instant.now(), payload);
     }
 }

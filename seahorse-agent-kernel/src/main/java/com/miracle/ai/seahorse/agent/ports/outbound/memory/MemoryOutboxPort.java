@@ -17,13 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.common.NoopFallback;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 public interface MemoryOutboxPort {
 
@@ -68,7 +68,7 @@ public interface MemoryOutboxPort {
             Instant createdAt) {
 
         public MemoryOutboxTask {
-            id = Objects.requireNonNullElseGet(id, () -> "mem-outbox-" + UUID.randomUUID());
+            id = Objects.requireNonNullElseGet(id, () -> "mem-outbox-" + SnowflakeIds.nextIdString());
             taskType = Objects.requireNonNullElse(taskType, "");
             targetId = Objects.requireNonNullElse(targetId, "");
             userId = Objects.requireNonNullElse(userId, "");
