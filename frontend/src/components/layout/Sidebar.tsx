@@ -49,6 +49,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     currentSessionId,
     isLoading,
     sessionsLoaded,
+    isCreating,
     createSession,
     deleteSession,
     renameSession,
@@ -200,6 +201,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <button
                 type="button"
                 className="mt-2 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left glass-hover transition-all hover:-translate-y-[1px]"
+                disabled={isCreating}
                 onClick={() => {
                   createSession().catch(() => null);
                   navigate("/chat");
@@ -207,10 +209,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 }}
               >
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl text-white shadow-lg" style={{ background: "var(--theme-gradient)", boxShadow: "0 6px 14px var(--theme-accent-alpha-30)" }}>
-                  <Plus className="h-4 w-4" />
+                  {isCreating ? (
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
                 </span>
                 <span className="flex-1">
-                  <span className="block text-sm font-semibold" style={{ color: "var(--theme-text-primary)" }}>新建对话</span>
+                  <span className="block text-sm font-semibold" style={{ color: "var(--theme-text-primary)" }}>{isCreating ? "创建中..." : "新建对话"}</span>
                   <span className="block text-xs" style={{ color: "var(--theme-text-muted)" }}>从空白开始</span>
                 </span>
               </button>

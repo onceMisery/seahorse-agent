@@ -123,6 +123,23 @@ public class SeahorseAgentEvalController {
                         size)));
     }
 
+    @GetMapping("/api/agents/{agentId}/eval-summaries")
+    public ApiResponse<Object> listByAgent(@PathVariable String agentId,
+                                           @RequestParam String tenantId,
+                                           @RequestParam(required = false) AgentEvalType evalType,
+                                           @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
+                                           @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_EVALUATION);
+        return ApiResponses.requireService(agentEvalPortProvider,
+                port -> port.history(new AgentEvalSummaryHistoryQuery(
+                        tenantId,
+                        agentId,
+                        null,
+                        evalType,
+                        current,
+                        size)));
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record AgentEvalSummarySaveRequest(String summaryId,
                                               String tenantId,

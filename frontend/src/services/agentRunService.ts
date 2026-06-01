@@ -1,5 +1,37 @@
 import { api } from "@/services/api";
 import type { AgentRunCostSummary, AgentRunSnapshot, StreamEventEnvelope } from "@/types";
+import {
+  createAgentRun,
+  getAgentRun,
+  getAgentRunSteps,
+  cancelAgentRun,
+  retryAgentRunAction,
+  resumeAgentRunAction,
+  getAgentRunCheckpoints,
+  getAgentRunHandoffs,
+  getAgentHandoff,
+  cancelAgentHandoff,
+  getAgentRunArtifacts,
+  getAgentArtifact,
+  downloadAgentArtifact
+} from "@/services/agentArtifactService";
+
+// Re-export from agentArtifactService for unified facade
+export {
+  createAgentRun,
+  getAgentRun,
+  getAgentRunSteps,
+  cancelAgentRun,
+  retryAgentRunAction,
+  resumeAgentRunAction,
+  getAgentRunCheckpoints,
+  getAgentRunHandoffs,
+  getAgentHandoff,
+  cancelAgentHandoff,
+  getAgentRunArtifacts,
+  getAgentArtifact,
+  downloadAgentArtifact
+};
 
 const AGENT_RUNS_API_BASE = "/api/agent-runs";
 
@@ -32,4 +64,22 @@ export async function listAgentRunEvents(runId: string, afterSeq = 0) {
     `${AGENT_RUNS_API_BASE}/${encodeURIComponent(runId)}/events`,
     { params: { afterSeq } }
   );
+}
+
+export async function listAgentRuns(params: {
+  agentId?: string;
+  status?: string;
+  runId?: string;
+  from?: string;
+  to?: string;
+  current?: number;
+  size?: number;
+}) {
+  return api.get<{
+    records: Record<string, unknown>[];
+    total: number;
+    size: number;
+    current: number;
+    pages: number;
+  }>("/api/agent-runs", { params });
 }

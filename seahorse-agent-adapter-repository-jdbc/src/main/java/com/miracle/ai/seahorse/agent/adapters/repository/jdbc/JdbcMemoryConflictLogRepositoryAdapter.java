@@ -45,8 +45,8 @@ public class JdbcMemoryConflictLogRepositoryAdapter implements MemoryConflictLog
                  resolution_action, resolved_by, resolved_at, create_time, update_time, deleted)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                 """,
-                JdbcMemorySupport.hasText(record.id()) ? record.id() : JdbcMemorySupport.nextId(),
-                record.userId(),
+                JdbcMemorySupport.hasText(record.id()) ? record.id() : "mem-conflict-" + JdbcMemorySupport.nextId(),
+                JdbcMemorySupport.toLongId(record.userId()),
                 record.memoryId1(),
                 record.memoryId2(),
                 record.conflictType(),
@@ -67,14 +67,14 @@ public class JdbcMemoryConflictLogRepositoryAdapter implements MemoryConflictLog
                     WHERE user_id = ? AND resolution_status = ? AND deleted = 0
                     ORDER BY create_time DESC
                     LIMIT ?
-                    """, this::mapRecord, userId, status.trim(), safeLimit(limit));
+                    """, this::mapRecord, JdbcMemorySupport.toLongId(userId), status.trim(), safeLimit(limit));
         }
         return jdbcTemplate.query("""
                 SELECT * FROM t_memory_conflict_log
                 WHERE user_id = ? AND deleted = 0
                 ORDER BY create_time DESC
                 LIMIT ?
-                """, this::mapRecord, userId, safeLimit(limit));
+                """, this::mapRecord, JdbcMemorySupport.toLongId(userId), safeLimit(limit));
     }
 
     @Override

@@ -66,7 +66,7 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
                   AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY update_time DESC
                 LIMIT ?
-                """, this::mapRecord, userId, safeLimit(limit));
+                """, this::mapRecord, JdbcMemorySupport.toLongId(userId), safeLimit(limit));
     }
 
     @Override
@@ -88,8 +88,8 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
                     VALUES (?, ?, ?, ?, CAST(? AS JSON), ?, CAST(? AS JSON),
                             ?, 'ACTIVE', ?, ?, NULL, NULL, ?, ?, ?, NULL, ?, ?, 0)
                     """,
-                    JdbcMemorySupport.hasText(record.id()) ? record.id() : JdbcMemorySupport.nextId(),
-                    userId,
+                    JdbcMemorySupport.hasText(record.id()) ? record.id() : Long.toString(JdbcMemorySupport.nextId()),
+                    JdbcMemorySupport.toLongId(userId),
                     semanticKey,
                     record.type(),
                     JdbcMemorySupport.writeJson(objectMapper, Map.of(
@@ -182,7 +182,7 @@ public class JdbcSemanticMemoryRepositoryAdapter implements SemanticMemoryPort {
                       AND deleted = 0
                       AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                     LIMIT 1
-                    """, String.class, userId, semanticKey, semanticType);
+                    """, String.class, JdbcMemorySupport.toLongId(userId), semanticKey, semanticType);
         } catch (EmptyResultDataAccessException ex) {
             return null;
         }

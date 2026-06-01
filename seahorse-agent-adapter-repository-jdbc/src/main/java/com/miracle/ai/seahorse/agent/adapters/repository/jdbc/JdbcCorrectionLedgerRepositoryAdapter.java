@@ -54,7 +54,7 @@ public class JdbcCorrectionLedgerRepositoryAdapter implements CorrectionLedgerPo
                   AND deleted = 0
                 ORDER BY update_time DESC
                 LIMIT ?
-                """, this::mapRule, userId, defaultTenant(tenantId), safeLimit(limit));
+                """, this::mapRule, JdbcMemorySupport.toLongId(userId), defaultTenant(tenantId), safeLimit(limit));
     }
 
     @Override
@@ -78,7 +78,7 @@ public class JdbcCorrectionLedgerRepositoryAdapter implements CorrectionLedgerPo
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'HARD_RULE', CAST(? AS JSON), ?, 'ACTIVE', ?, ?, 0)
                     """,
                     JdbcMemorySupport.nextId(),
-                    command.userId(),
+                    JdbcMemorySupport.toLongId(command.userId()),
                     tenantId,
                     command.correctionType(),
                     command.targetKind(),
@@ -113,7 +113,7 @@ public class JdbcCorrectionLedgerRepositoryAdapter implements CorrectionLedgerPo
                 sourceIds(command.sourceIds()),
                 command.generationId(),
                 JdbcMemorySupport.timestamp(now),
-                existingId);
+                JdbcMemorySupport.toLongId(existingId));
     }
 
     private String findActiveId(String userId, String tenantId, String targetKind, String targetKey) {
@@ -128,7 +128,7 @@ public class JdbcCorrectionLedgerRepositoryAdapter implements CorrectionLedgerPo
                   AND deleted = 0
                 ORDER BY update_time DESC
                 LIMIT 1
-                """, (rs, rowNum) -> rs.getString("id"), userId, tenantId, targetKind, targetKey)
+                """, (rs, rowNum) -> rs.getString("id"), JdbcMemorySupport.toLongId(userId), tenantId, targetKind, targetKey)
                 .stream()
                 .findFirst()
                 .orElse(null);

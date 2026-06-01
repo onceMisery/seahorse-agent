@@ -310,7 +310,7 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
 
     private Object[] searchArgs(String userId, String tenantId, List<String> terms, int columnCount, int limit) {
         List<Object> args = new ArrayList<>();
-        args.add(userId);
+        args.add(JdbcMemorySupport.toLongId(userId));
         args.add(tenantId);
         for (String term : terms) {
             for (int i = 0; i < columnCount; i++) {

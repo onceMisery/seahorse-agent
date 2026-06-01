@@ -44,8 +44,8 @@ public class JdbcMemoryQualitySnapshotRepositoryAdapter implements MemoryQuality
                 INSERT INTO t_memory_quality_snapshot (id, user_id, snapshot_json, create_time)
                 VALUES (?, ?, CAST(? AS JSON), ?)
                 """,
-                JdbcMemorySupport.hasText(snapshot.id()) ? snapshot.id() : JdbcMemorySupport.nextId(),
-                snapshot.userId(),
+                JdbcMemorySupport.hasText(snapshot.id()) ? snapshot.id() : "mem-quality-" + JdbcMemorySupport.nextId(),
+                JdbcMemorySupport.toLongId(snapshot.userId()),
                 JdbcMemorySupport.writeJson(objectMapper, snapshot.snapshot()),
                 JdbcMemorySupport.timestamp(snapshot.createTime().equals(Instant.EPOCH) ? now : snapshot.createTime()));
     }
@@ -58,7 +58,7 @@ public class JdbcMemoryQualitySnapshotRepositoryAdapter implements MemoryQuality
                 WHERE user_id = ?
                 ORDER BY create_time DESC
                 LIMIT ?
-                """, this::mapSnapshot, userId, limit <= 0 ? 20 : limit);
+                """, this::mapSnapshot, JdbcMemorySupport.toLongId(userId), limit <= 0 ? 20 : limit);
     }
 
     private MemoryQualitySnapshot mapSnapshot(ResultSet rs, int rowNum) throws SQLException {

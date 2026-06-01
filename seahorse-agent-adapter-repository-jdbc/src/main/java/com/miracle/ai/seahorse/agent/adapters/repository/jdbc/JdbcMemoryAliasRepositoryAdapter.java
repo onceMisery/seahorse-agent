@@ -74,7 +74,7 @@ public class JdbcMemoryAliasRepositoryAdapter implements MemoryAliasPort {
                         rs.getString("canonical_name"),
                         rs.getString("entity_type"),
                         rs.getDouble("confidence_level")),
-                userId,
+                JdbcMemorySupport.toLongId(userId),
                 safeTenantId,
                 normalizedAlias).stream().findFirst();
     }
@@ -131,7 +131,7 @@ public class JdbcMemoryAliasRepositoryAdapter implements MemoryAliasPort {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                 """,
                 id,
-                command.userId(),
+                JdbcMemorySupport.toLongId(command.userId()),
                 command.tenantId(),
                 command.aliasText(),
                 normalizedAlias,
@@ -156,7 +156,7 @@ public class JdbcMemoryAliasRepositoryAdapter implements MemoryAliasPort {
         return findMergeCandidates("""
                 WHERE user_id = ?
                   AND tenant_id = ?
-                """, userId, safeTenantId, limit);
+                """, JdbcMemorySupport.toLongId(userId), safeTenantId, limit);
     }
 
     @Override
@@ -262,7 +262,7 @@ public class JdbcMemoryAliasRepositoryAdapter implements MemoryAliasPort {
                 ORDER BY update_time DESC
                 LIMIT 1
                 """, (rs, rowNum) -> rs.getString("id"),
-                userId,
+                JdbcMemorySupport.toLongId(userId),
                 tenantId,
                 normalizedAlias).stream().findFirst();
     }

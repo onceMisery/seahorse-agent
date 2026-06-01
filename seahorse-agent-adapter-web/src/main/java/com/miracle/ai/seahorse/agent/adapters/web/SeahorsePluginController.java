@@ -39,10 +39,6 @@ import java.util.Set;
 @RestController
 public class SeahorsePluginController {
 
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
-
     private final ObjectProvider<FeatureHealthAggregator> healthAggregator;
     private final ObjectProvider<AgentExtensionStatusPort> statusPort;
     private final ObjectProvider<ExtensionRegistry> extensionRegistry;
@@ -56,28 +52,28 @@ public class SeahorsePluginController {
     }
 
     @GetMapping("/agent/plugins/health")
-    public Map<String, Object> health() {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+    public ApiResponse<Object> health() {
+        return ApiResponse.ok(
                 healthAggregator.getIfAvailable(() -> new FeatureHealthAggregator(List.of(), List.of())).health());
     }
 
     @GetMapping("/agent/plugins/status")
-    public Map<String, Object> statuses() {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+    public ApiResponse<Object> statuses() {
+        return ApiResponse.ok(
                 statusPort.getIfAvailable(AgentExtensionStatusPort::empty).listStatuses());
     }
 
     @GetMapping("/agent/plugins/registry")
-    public Map<String, Object> registry() {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+    public ApiResponse<Object> registry() {
+        return ApiResponse.ok(
                 extensionRegistry.getIfAvailable(ExtensionRegistry::empty).registeredExtensions());
     }
 
     @PostMapping("/agent/plugins/status")
-    public Map<String, Object> saveStatus(@RequestBody PluginStatusRequest request) {
+    public ApiResponse<Object> saveStatus(@RequestBody PluginStatusRequest request) {
         AgentExtensionStatus status = request.toStatus();
         statusPort.getIfAvailable(AgentExtensionStatusPort::empty).saveStatus(status);
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, status);
+        return ApiResponse.ok(status);
     }
 
     public record PluginStatusRequest(

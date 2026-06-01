@@ -52,7 +52,7 @@ public class JdbcMemoryOutboxRepositoryAdapter implements MemoryOutboxPort {
                 VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, ?, ?, ?, ?)
                 """,
                 task.id(),
-                task.userId(),
+                JdbcMemorySupport.toLongId(task.userId()),
                 task.tenantId(),
                 task.taskType(),
                 task.targetId(),
@@ -137,7 +137,7 @@ public class JdbcMemoryOutboxRepositoryAdapter implements MemoryOutboxPort {
                   AND status IN ('PENDING', 'SUCCEEDED')
                 """,
                 Integer.class,
-                task.userId(),
+                JdbcMemorySupport.toLongId(task.userId()),
                 task.tenantId(),
                 task.taskType(),
                 task.targetId());

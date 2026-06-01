@@ -7,7 +7,8 @@
 *.ipr
 node_modules
 dist
-target
+**/target/
+!seahorse-agent-bootstrap/target/
 build
 .mvn/wrapper/maven-wrapper.jar
 .env

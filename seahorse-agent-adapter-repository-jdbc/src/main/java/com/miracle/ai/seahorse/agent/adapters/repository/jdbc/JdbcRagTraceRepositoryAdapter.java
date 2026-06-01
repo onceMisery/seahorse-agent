@@ -258,7 +258,7 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
             return;
         }
         clauses.add(column + " = ?");
-        args.add(value);
+        args.add(column.endsWith("_id") ? toLongId(value) : value);
     }
 
     private RagTracePageRequest normalize(RagTracePageRequest request) {

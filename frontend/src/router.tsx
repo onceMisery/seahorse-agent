@@ -20,6 +20,8 @@ import { RagTracePage } from "@/pages/admin/traces/RagTracePage";
 import { RagTraceDetailPage } from "@/pages/admin/traces/RagTraceDetailPage";
 import { SystemSettingsPage } from "@/pages/admin/settings/SystemSettingsPage";
 import { ModelConfigPage } from "@/pages/admin/settings/ModelConfigPage";
+import { ContextPackPage } from "@/pages/admin/settings/ContextPackPage";
+import { TaskTemplatePage } from "@/pages/admin/settings/TaskTemplatePage";
 import { SampleQuestionPage } from "@/pages/admin/sample-questions/SampleQuestionPage";
 import { QueryTermMappingPage } from "@/pages/admin/query-term-mapping/QueryTermMappingPage";
 import { UserListPage } from "@/pages/admin/users/UserListPage";
@@ -29,6 +31,8 @@ import { AgentListPage } from "@/pages/admin/agents/AgentListPage";
 import { AgentCreatePage } from "@/pages/admin/agents/AgentCreatePage";
 import { AgentDetailPage } from "@/pages/admin/agents/AgentDetailPage";
 import { AgentEditorPage } from "@/pages/admin/agents/AgentEditorPage";
+import { AgentRolloutPage } from "@/pages/admin/agents/AgentRolloutPage";
+import { AgentEvalPage } from "@/pages/admin/agents/AgentEvalPage";
 import { ToolCatalogPage } from "@/pages/admin/tools/ToolCatalogPage";
 import { ToolDetailPage } from "@/pages/admin/tools/ToolDetailPage";
 import { ToolInvocationAuditPage } from "@/pages/admin/tools/ToolInvocationAuditPage";
@@ -44,6 +48,7 @@ import { OpenApiConnectorPage } from "@/pages/admin/integrations/OpenApiConnecto
 import { OpenApiConnectorDetailPage } from "@/pages/admin/integrations/OpenApiConnectorDetailPage";
 import { SecretPage } from "@/pages/admin/integrations/SecretPage";
 import { MemoryGovernancePage } from "@/pages/admin/memory-governance/MemoryGovernancePage";
+import { PluginManagementPage } from "@/pages/admin/plugins/PluginManagementPage";
 import { AuditEventPage } from "@/pages/admin/audit/AuditEventPage";
 import { CostAnalyticsPage } from "@/pages/admin/cost/CostAnalyticsPage";
 import { SandboxPage } from "@/pages/admin/sandbox/SandboxPage";
@@ -131,6 +136,8 @@ const advancedAdminRoutes = [
   { path: "agents/new", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "Agent 管理", <AgentCreatePage />) },
   { path: "agents/:agentId", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "Agent 管理", <AgentDetailPage />) },
   { path: "agents/:agentId/edit", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "Agent 管理", <AgentEditorPage />) },
+  { path: "agents/:agentId/rollout", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_ROLLOUT_MANAGEMENT, "灰度发布", <AgentRolloutPage />) },
+  { path: "agents/:agentId/eval", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_EVALUATION, "Agent 评测", <AgentEvalPage />) },
   { path: "tools", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具目录", <ToolCatalogPage />) },
   { path: "tools/:toolId", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具目录", <ToolDetailPage />) },
   { path: "tool-invocations", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具调用审计", <ToolInvocationAuditPage />) },
@@ -147,6 +154,7 @@ const advancedAdminRoutes = [
   { path: "integrations/connectors", element: withFeature(ADVANCED_ADMIN_FEATURES.CONNECTOR_MANAGEMENT, "OpenAPI 连接器", <OpenApiConnectorPage />) },
   { path: "integrations/connectors/:connectorId", element: withFeature(ADVANCED_ADMIN_FEATURES.CONNECTOR_MANAGEMENT, "OpenAPI 连接器", <OpenApiConnectorDetailPage />) },
   { path: "memory-governance", element: withFeature(ADVANCED_ADMIN_FEATURES.MEMORY_GOVERNANCE, "记忆治理", <MemoryGovernancePage />) },
+  { path: "plugins", element: withFeature(ADVANCED_ADMIN_FEATURES.MCP_TOOL, "插件管理", <PluginManagementPage />) },
   { path: "audit", element: withFeature(ADVANCED_ADMIN_FEATURES.AUDIT_LOG, "审计日志", <AuditEventPage />) },
   { path: "cost", element: withFeature(ADVANCED_ADMIN_FEATURES.COST_ANALYTICS, "成本分析", <CostAnalyticsPage />) },
   { path: "sandbox", element: withFeature(ADVANCED_ADMIN_FEATURES.SANDBOX, "沙箱", <SandboxPage />) }
@@ -207,13 +215,15 @@ export const router = createBrowserRouter([
       { path: "knowledge/:kbId", element: <KnowledgeDocumentsPage /> },
       { path: "knowledge/:kbId/docs/:docId", element: <KnowledgeChunksPage /> },
       ...advancedAdminRoutes,
-      { path: "metadata-governance", element: <MetadataGovernancePage /> },
+      { path: "metadata-governance", element: withFeature(ADVANCED_ADMIN_FEATURES.METADATA_GOVERNANCE, "元数据治理", <MetadataGovernancePage />) },
       { path: "traces", element: <RagTracePage /> },
       { path: "traces/:traceId", element: <RagTraceDetailPage /> },
       { path: "settings", element: <SystemSettingsPage /> },
       { path: "model-config", element: <ModelConfigPage /> },
       { path: "sample-questions", element: <SampleQuestionPage /> },
       { path: "mappings", element: <QueryTermMappingPage /> },
+      { path: "context-packs", element: <ContextPackPage /> },
+      { path: "task-templates", element: <TaskTemplatePage /> },
       { path: "users", element: <UserListPage /> }
     ]
   },

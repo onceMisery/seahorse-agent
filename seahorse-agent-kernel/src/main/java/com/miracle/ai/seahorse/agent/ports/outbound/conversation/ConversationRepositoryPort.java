@@ -20,7 +20,7 @@ package com.miracle.ai.seahorse.agent.ports.outbound.conversation;
 import java.util.List;
 
 /**
- * 会话管理仓储端口。
+ * Conversation repository port.
  */
 public interface ConversationRepositoryPort {
 

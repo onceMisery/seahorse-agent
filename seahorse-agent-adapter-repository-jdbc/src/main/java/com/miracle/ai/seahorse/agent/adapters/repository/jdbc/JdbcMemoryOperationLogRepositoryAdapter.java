@@ -54,7 +54,7 @@ public class JdbcMemoryOperationLogRepositoryAdapter implements MemoryOperationL
                     VALUES (?, ?, ?, ?, ?, ?, CAST(? AS JSON), NULL, ?, ?, NULL, ?, ?)
                     """,
                     operation.operationId(),
-                    operation.userId(),
+                    JdbcMemorySupport.toLongId(operation.userId()),
                     operation.tenantId(),
                     operation.operationType().name(),
                     operation.targetKind(),
@@ -114,7 +114,7 @@ public class JdbcMemoryOperationLogRepositoryAdapter implements MemoryOperationL
                       AND status = ?
                     ORDER BY create_time DESC
                     LIMIT ?
-                    """, this::mapRecord, userId, safeTenantId, status, safeLimit);
+                    """, this::mapRecord, JdbcMemorySupport.toLongId(userId), safeTenantId, status, safeLimit);
         }
         return jdbcTemplate.query("""
                 SELECT *
@@ -123,7 +123,7 @@ public class JdbcMemoryOperationLogRepositoryAdapter implements MemoryOperationL
                   AND tenant_id = ?
                 ORDER BY create_time DESC
                 LIMIT ?
-                """, this::mapRecord, userId, safeTenantId, safeLimit);
+                """, this::mapRecord, JdbcMemorySupport.toLongId(userId), safeTenantId, safeLimit);
     }
 
     private MemoryOperationRecord mapRecord(ResultSet rs, int rowNum) throws SQLException {

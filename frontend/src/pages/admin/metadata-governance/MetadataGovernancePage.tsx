@@ -23,14 +23,18 @@ import {
   type MetadataSchemaField
 } from "@/services/metadataGovernanceService";
 import { getErrorMessage } from "@/utils/error";
+import { MetadataDictionaryPanel } from "./components/MetadataDictionaryPanel";
+import { MetadataExtractionResultDrawer } from "./components/MetadataExtractionResultDrawer";
 
-type TabKey = "schema" | "review" | "quarantine" | "quality";
+type TabKey = "schema" | "review" | "quarantine" | "quality" | "dictionary" | "extraction";
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "schema", label: "Schema" },
   { key: "review", label: "Review" },
   { key: "quarantine", label: "Quarantine" },
-  { key: "quality", label: "Quality" }
+  { key: "quality", label: "Quality" },
+  { key: "dictionary", label: "字典" },
+  { key: "extraction", label: "抽取结果" }
 ];
 
 function formatPercent(value?: number) {
@@ -340,6 +344,14 @@ export function MetadataGovernancePage() {
             </Table>
           </CardContent>
         </Card>
+      ) : null}
+
+      {activeTab === "dictionary" ? (
+        <MetadataDictionaryPanel />
+      ) : null}
+
+      {activeTab === "extraction" ? (
+        <MetadataExtractionResultDrawer />
       ) : null}
     </div>
   );

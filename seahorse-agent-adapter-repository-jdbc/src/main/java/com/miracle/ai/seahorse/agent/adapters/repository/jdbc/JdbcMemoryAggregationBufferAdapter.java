@@ -149,10 +149,10 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                      version, first_activity_at, last_activity_at, create_time, update_time)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                buffer.id(),
+                JdbcMemorySupport.toLongId(buffer.id()),
                 buffer.tenantId(),
-                buffer.userId(),
-                buffer.conversationId(),
+                JdbcMemorySupport.toLongId(buffer.userId()),
+                JdbcMemorySupport.toLongId(buffer.conversationId()),
                 buffer.sessionId(),
                 buffer.turns().size(),
                 buffer.totalTokens(),
@@ -178,8 +178,8 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                     update_time = ?
                 WHERE tenant_id = ? AND session_id = ? AND version = ?
                 """,
-                buffer.userId(),
-                buffer.conversationId(),
+                JdbcMemorySupport.toLongId(buffer.userId()),
+                JdbcMemorySupport.toLongId(buffer.conversationId()),
                 buffer.turns().size(),
                 buffer.totalTokens(),
                 writeTurns(buffer.turns()),
@@ -308,7 +308,7 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
 
         static StoredBuffer from(MemoryTurnEvent event) {
             return new StoredBuffer(
-                    "memory-buffer-" + JdbcMemorySupport.nextId(),
+                    Long.toString(JdbcMemorySupport.nextId()),
                     event.tenantId(),
                     event.userId(),
                     event.conversationId(),

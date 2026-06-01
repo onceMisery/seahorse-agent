@@ -20,6 +20,7 @@ export function ChatPage() {
     currentSessionId,
     sessions,
     isCreatingNew,
+    isCreating,
     fetchSessions,
     selectSession,
     createSession
@@ -75,7 +76,7 @@ export function ChatPage() {
     if (!sessionsReady) {
       return;
     }
-    if (isCreatingNew) {
+    if (isCreatingNew || isCreating) {
       return;
     }
     if (currentSessionId) {
@@ -87,6 +88,7 @@ export function ChatPage() {
     sessionsReady,
     sessionExists,
     isCreatingNew,
+    isCreating,
     currentSessionId,
     selectSession,
     createSession,

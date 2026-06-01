@@ -86,7 +86,8 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
 
     @Override
     public void delete(MemoryDerivedIndexDeleteCommand command) {
-        if (command == null || !JdbcMemorySupport.hasText(command.memoryId())) {
+        if (command == null || !JdbcMemorySupport.hasText(command.memoryId())
+                || !JdbcMemorySupport.hasText(command.userId())) {
             return;
         }
         jdbcTemplate.update("""
@@ -101,7 +102,7 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
                 """,
                 JdbcMemorySupport.timestamp(Instant.now()),
                 command.memoryId(),
-                command.userId(),
+                JdbcMemorySupport.toLongId(command.userId()),
                 safeTenantId(command.tenantId()));
     }
 
@@ -162,7 +163,7 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, 0)
                 """,
                 id,
-                document.userId(),
+                JdbcMemorySupport.toLongId(document.userId()),
                 safeTenantId(document.tenantId()),
                 document.memoryId(),
                 document.layer(),
@@ -195,7 +196,7 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
                 ORDER BY weight DESC, confidence_level DESC, update_time DESC
                 LIMIT ?
                 """, (rs, rowNum) -> mapCandidate(rs, userId, tenantId, rowNum + 1, hopDistance),
-                userId,
+                JdbcMemorySupport.toLongId(userId),
                 tenantId,
                 entityId,
                 entityId,
@@ -282,7 +283,7 @@ public class JdbcMemoryGraphRepositoryAdapter implements MemoryGraphPort, Memory
                 ORDER BY confidence_level DESC, update_time DESC
                 LIMIT 1
                 """, (rs, rowNum) -> rs.getString("canonical_entity_id"),
-                userId,
+                JdbcMemorySupport.toLongId(userId),
                 tenantId,
                 normalizedAlias).stream().findFirst();
     }

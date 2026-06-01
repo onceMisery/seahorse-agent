@@ -14,6 +14,9 @@ import { MemoryConflictPanel } from "./components/MemoryConflictPanel";
 import { MemoryQualityPanel } from "./components/MemoryQualityPanel";
 import { MemoryMaintenancePanel } from "./components/MemoryMaintenancePanel";
 import { MemoryTracePanel } from "./components/MemoryTracePanel";
+import { MemoryRecallEvalPanel } from "./components/MemoryRecallEvalPanel";
+import { MemoryPolicyConfigPanel } from "./components/MemoryPolicyConfigPanel";
+import { MemoryOperationsPanel } from "./components/MemoryOperationsPanel";
 import { getErrorMessage } from "@/utils/error";
 
 export function MemoryGovernancePage() {
@@ -39,6 +42,9 @@ export function MemoryGovernancePage() {
           <TabsTrigger value="quality">质量快照</TabsTrigger>
           <TabsTrigger value="maintenance">维护任务</TabsTrigger>
           <TabsTrigger value="traces">Trace</TabsTrigger>
+          <TabsTrigger value="recall">Recall 评测</TabsTrigger>
+          <TabsTrigger value="policy">策略配置</TabsTrigger>
+          <TabsTrigger value="operations">运维视图</TabsTrigger>
         </TabsList>
 
         <TabsContent value="review">
@@ -59,6 +65,18 @@ export function MemoryGovernancePage() {
 
         <TabsContent value="traces">
           <MemoryTracePanel />
+        </TabsContent>
+
+        <TabsContent value="recall">
+          <MemoryRecallEvalPanel />
+        </TabsContent>
+
+        <TabsContent value="policy">
+          <MemoryPolicyConfigPanel />
+        </TabsContent>
+
+        <TabsContent value="operations">
+          <MemoryOperationsPanel />
         </TabsContent>
       </Tabs>
     </div>

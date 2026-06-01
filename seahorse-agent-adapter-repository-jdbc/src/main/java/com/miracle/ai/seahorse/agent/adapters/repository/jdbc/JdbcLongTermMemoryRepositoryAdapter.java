@@ -17,8 +17,6 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
-import static com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemorySupport.toLongId;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.LongTermMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
@@ -50,7 +48,7 @@ public class JdbcLongTermMemoryRepositoryAdapter implements LongTermMemoryPort {
                 WHERE id = ?
                   AND deleted = 0
                   AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
-                """, this::mapRecord, toLongId(id)).stream().findFirst();
+                """, this::mapRecord, id).stream().findFirst();
     }
 
     @Override
@@ -67,7 +65,7 @@ public class JdbcLongTermMemoryRepositoryAdapter implements LongTermMemoryPort {
                   AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY importance_score DESC, create_time DESC
                 LIMIT ?
-                """, this::mapRecord, toLongId(userId), safeLimit(limit));
+                """, this::mapRecord, JdbcMemorySupport.toLongId(userId), safeLimit(limit));
     }
 
     
@@ -85,8 +83,8 @@ public class JdbcLongTermMemoryRepositoryAdapter implements LongTermMemoryPort {
                 VALUES (?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, ?, ?, ?,
                         ?, 'ACTIVE', ?, ?, NULL, NULL, ?, ?, ?, NULL, ?, ?, 0)
                 """,
-                JdbcMemorySupport.hasText(record.id()) ? JdbcMemorySupport.nextId() : JdbcMemorySupport.nextId(),
-                toLongId(string(record.metadata().get("userId"))),
+                JdbcMemorySupport.hasText(record.id()) ? record.id() : Long.toString(JdbcMemorySupport.nextId()),
+                JdbcMemorySupport.toLongId(string(record.metadata().get("userId"))),
                 record.type(),
                 title(record.content()),
                 record.content(),
@@ -109,7 +107,7 @@ public class JdbcLongTermMemoryRepositoryAdapter implements LongTermMemoryPort {
 
     @Override
     public boolean deleteById(String id) {
-        return jdbcTemplate.update("UPDATE t_long_term_memory SET deleted = 1 WHERE id = ? AND deleted = 0", toLongId(id)) > 0;
+        return jdbcTemplate.update("UPDATE t_long_term_memory SET deleted = 1 WHERE id = ? AND deleted = 0", id) > 0;
     }
 
     private MemoryRecord mapRecord(ResultSet rs, int rowNum) throws SQLException {

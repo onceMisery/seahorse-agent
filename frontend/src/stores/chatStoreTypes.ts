@@ -19,6 +19,7 @@ export interface ChatState {
   inputFocusKey: number;
   isStreaming: boolean;
   isCreatingNew: boolean;
+  isCreating: boolean;
   deepThinkingEnabled: boolean;
   thinkingStartAt: number | null;
   streamTaskId: string | null;

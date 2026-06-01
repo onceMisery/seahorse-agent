@@ -113,7 +113,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     public JdbcMetadataGovernanceRepositoryAdapter(DataSource dataSource, ObjectMapper objectMapper) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
-        // 閹?JSON 閸楀繗顔呴妴涓糲hema Usage 缂佸嫬瀵橀崪灞藉灙閹恒垺绁撮幏鍡欑舶閸楀繋缍旈懓鍜冪礉閺€鑸垫殐娑撳鈧倿鍘ら崳銊ㄤ捍鐠愶絻鈧?
+        // Reuse the same JSON support for schema usage and governance records.
         this.jsonSupport = new JdbcMetadataJsonSupport(objectMapper);
         this.schemaUsageSupport = new JdbcMetadataSchemaUsageSupport();
         this.canonicalWriteSupport = new JdbcMetadataCanonicalWriteSupport(jdbcTemplate, jsonSupport);
@@ -269,10 +269,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 safePayload.minConfidence(), json(safePayload.trustedSources()), json(safePayload.extractionHints()),
                 json(safePayload.backendMapping()), safePayload.schemaVersion(), fieldId);
         if (updated <= 0) {
-            throw new IllegalArgumentException("Metadata Schema 鐎涙顔屾稉宥呯摠閸? " + fieldId);
+            throw new IllegalArgumentException("Metadata Schema not found: " + fieldId);
         }
         return findSchemaField(fieldId)
-                .orElseThrow(() -> new IllegalArgumentException("Metadata Schema 鐎涙顔屾稉宥呯摠閸? " + fieldId));
+                .orElseThrow(() -> new IllegalArgumentException("Metadata Schema not found: " + fieldId));
     }
 
     @Override
@@ -409,10 +409,10 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                 """, safePayload.tenantId(), safePayload.dictionaryCode(), safePayload.rawValue(),
                 safePayload.canonicalValue(), safePayload.displayName(), flag(safePayload.enabled()), itemId);
         if (updated <= 0) {
-            throw new IllegalArgumentException("Metadata Dictionary 鐎涙鍚€妞ら€涚瑝鐎涙ê婀? " + itemId);
+            throw new IllegalArgumentException("Metadata Dictionary item not found: " + itemId);
         }
         return findDictionaryItem(itemId)
-                .orElseThrow(() -> new IllegalArgumentException("Metadata Dictionary 鐎涙鍚€妞ら€涚瑝鐎涙ê婀? " + itemId));
+                .orElseThrow(() -> new IllegalArgumentException("Metadata Dictionary item not found: " + itemId));
     }
 
     @Override
@@ -853,7 +853,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
             }
             return documentIds.size();
         }
-        // KB 缁狙喫夐崑鎸庣梾閺?documentIds 閺冩儼绻戦崶?0閿涘矂浼╅崗宥嗗Ω閺堫亞鐓￠懠鍐ㄦ纯娴碱亣顥婇幋鎰翱绾喖绶熸径鍕倞闁插繈鈧?
+        // Backward compatible checkpoint parsing: older jobs may store documentIds as comma-separated text.
         String text = text(value, "");
         if (blank(text)) {
             return 0L;

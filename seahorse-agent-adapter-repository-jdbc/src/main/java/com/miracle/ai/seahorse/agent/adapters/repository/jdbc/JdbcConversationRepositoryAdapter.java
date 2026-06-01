@@ -31,14 +31,14 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 基于旧会话表的 JDBC 会话管理 adapter。
+ * JDBC conversation repository adapter.
  */
 public class JdbcConversationRepositoryAdapter implements ConversationRepositoryPort {
 
     private static final String SQL_INSERT_CONVERSATION = """
             INSERT INTO t_conversation
-            (conversation_id, user_id, title, create_time, update_time, last_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, 0)
+            (id, conversation_id, user_id, title, create_time, update_time, last_time, deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
             """;
     private static final String SQL_LIST_CONVERSATIONS = """
             SELECT conversation_id, title, last_time
@@ -89,8 +89,8 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
         }
         long conversationId = JdbcMemorySupport.nextId();
         Timestamp now = Timestamp.from(Instant.now());
-        jdbcTemplate.update(SQL_INSERT_CONVERSATION, conversationId, Long.parseLong(userId), 
-                "新会话", now, now, now);
+        jdbcTemplate.update(SQL_INSERT_CONVERSATION, conversationId, conversationId, Long.parseLong(userId),
+                "New conversation", now, now, now);
         return conversationId;
     }
 
@@ -107,7 +107,7 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
         if (!hasText(conversationId) || !hasText(userId) || !hasText(title)) {
             return false;
         }
-        int updated = jdbcTemplate.update(SQL_RENAME, title, Timestamp.from(Instant.now()), 
+        int updated = jdbcTemplate.update(SQL_RENAME, title, Timestamp.from(Instant.now()),
                 Long.parseLong(conversationId), Long.parseLong(userId));
         return updated > 0;
     }
@@ -118,9 +118,11 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
             return false;
         }
         Timestamp now = Timestamp.from(Instant.now());
-        int updated = jdbcTemplate.update(SQL_DELETE_CONVERSATION, now, Long.parseLong(conversationId), Long.parseLong(userId));
-        jdbcTemplate.update(SQL_DELETE_MESSAGES, now, Long.parseLong(conversationId), Long.parseLong(userId));
-        jdbcTemplate.update(SQL_DELETE_SUMMARY, now, Long.parseLong(conversationId), Long.parseLong(userId));
+        long cid = Long.parseLong(conversationId);
+        long uid = Long.parseLong(userId);
+        int updated = jdbcTemplate.update(SQL_DELETE_CONVERSATION, now, cid, uid);
+        jdbcTemplate.update(SQL_DELETE_MESSAGES, now, cid, uid);
+        jdbcTemplate.update(SQL_DELETE_SUMMARY, now, cid, uid);
         return updated > 0;
     }
 
@@ -129,7 +131,8 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
         if (!hasText(conversationId) || !hasText(userId)) {
             return List.of();
         }
-        return jdbcTemplate.query(SQL_LIST_MESSAGES, this::mapMessage, Long.parseLong(conversationId), Long.parseLong(userId));
+        return jdbcTemplate.query(SQL_LIST_MESSAGES, this::mapMessage,
+                Long.parseLong(conversationId), Long.parseLong(userId));
     }
 
     private ConversationRecord mapConversation(ResultSet resultSet, int rowNum) throws SQLException {

@@ -54,7 +54,8 @@ public class JdbcChatSchemaUpgrade {
     private void ensureConversationAttachmentTable() {
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS sa_conversation_attachment (
-                    attachment_id VARCHAR(64) PRIMARY KEY,
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    attachment_id VARCHAR(64) NOT NULL UNIQUE,
                     conversation_id VARCHAR(64) NOT NULL,
                     message_id VARCHAR(64),
                     user_id VARCHAR(64) NOT NULL,
@@ -88,8 +89,9 @@ public class JdbcChatSchemaUpgrade {
     private void ensureMemoryProfileTables() {
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_operation_log (
-                    operation_id VARCHAR(128) PRIMARY KEY,
-                    user_id VARCHAR(64) NOT NULL,
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    operation_id VARCHAR(128) NOT NULL UNIQUE,
+                    user_id BIGINT NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
                     operation_type VARCHAR(32) NOT NULL,
                     target_kind VARCHAR(32) NOT NULL,
@@ -109,11 +111,12 @@ public class JdbcChatSchemaUpgrade {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_outbox (
-                    id VARCHAR(128) PRIMARY KEY,
-                    user_id VARCHAR(64) NOT NULL,
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    id VARCHAR(128) NOT NULL UNIQUE,
+                    user_id BIGINT NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
                     task_type VARCHAR(64) NOT NULL,
-                    target_id VARCHAR(128),
+                    target_id VARCHAR(64),
                     payload_json JSONB NOT NULL,
                     status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
                     attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -129,9 +132,10 @@ public class JdbcChatSchemaUpgrade {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_review_candidate (
-                    id VARCHAR(64) PRIMARY KEY,
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    id VARCHAR(128) NOT NULL UNIQUE,
                     operation_id VARCHAR(128),
-                    user_id VARCHAR(64) NOT NULL,
+                    user_id BIGINT NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
                     conversation_id VARCHAR(64),
                     message_id VARCHAR(64),
@@ -152,7 +156,7 @@ public class JdbcChatSchemaUpgrade {
                     reviewer_comment TEXT,
                     chosen_content TEXT,
                     chosen_metadata JSONB,
-                    reviewed_memory_id VARCHAR(64),
+                    reviewed_memory_id VARCHAR(128),
                     reviewed_layer VARCHAR(32),
                     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -170,7 +174,8 @@ public class JdbcChatSchemaUpgrade {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_maintenance_run (
-                    id VARCHAR(128) PRIMARY KEY,
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    id VARCHAR(128) NOT NULL UNIQUE,
                     reason VARCHAR(128),
                     status VARCHAR(32) NOT NULL,
                     compaction_requested SMALLINT NOT NULL DEFAULT 0,
@@ -207,10 +212,11 @@ public class JdbcChatSchemaUpgrade {
         ensureMemoryEntityAliasTables();
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_review_feedback_sample (
-                    id VARCHAR(128) PRIMARY KEY,
-                    candidate_id VARCHAR(64) NOT NULL,
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    id VARCHAR(128) NOT NULL UNIQUE,
+                    candidate_id VARCHAR(128) NOT NULL,
                     operation_id VARCHAR(128),
-                    user_id VARCHAR(64) NOT NULL,
+                    user_id BIGINT NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
                     requested_action VARCHAR(32) NOT NULL,
                     review_status VARCHAR(32) NOT NULL,
@@ -224,7 +230,7 @@ public class JdbcChatSchemaUpgrade {
                     rejected_metadata JSONB,
                     chosen_metadata JSONB,
                     source_message_ids JSONB,
-                    reviewed_memory_id VARCHAR(64),
+                    reviewed_memory_id VARCHAR(128),
                     reviewed_layer VARCHAR(32),
                     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -235,11 +241,11 @@ public class JdbcChatSchemaUpgrade {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_trace_event (
-                    id VARCHAR(128) PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     trace_id VARCHAR(128) NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
-                    user_id VARCHAR(64),
-                    conversation_id VARCHAR(64),
+                    user_id BIGINT,
+                    conversation_id BIGINT,
                     session_id VARCHAR(128),
                     component VARCHAR(64) NOT NULL,
                     event_type VARCHAR(64) NOT NULL,
@@ -261,10 +267,10 @@ public class JdbcChatSchemaUpgrade {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_aggregation_buffer (
-                    id VARCHAR(128) PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
-                    user_id VARCHAR(64) NOT NULL,
-                    conversation_id VARCHAR(64) NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    conversation_id BIGINT NOT NULL,
                     session_id VARCHAR(128) NOT NULL,
                     turn_count INTEGER NOT NULL DEFAULT 0,
                     total_tokens INTEGER NOT NULL DEFAULT 0,
@@ -287,8 +293,8 @@ public class JdbcChatSchemaUpgrade {
         ensureMemoryAggregationBufferColumns();
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_user_profile_fact (
-                    id VARCHAR(64) PRIMARY KEY,
-                    user_id VARCHAR(64) NOT NULL,
+                    id BIGINT PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
                     slot_key VARCHAR(128) NOT NULL,
                     value_text TEXT NOT NULL,
@@ -323,8 +329,8 @@ public class JdbcChatSchemaUpgrade {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_correction_ledger (
-                    id VARCHAR(64) PRIMARY KEY,
-                    user_id VARCHAR(64) NOT NULL,
+                    id BIGINT PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
                     correction_type VARCHAR(32) NOT NULL,
                     target_kind VARCHAR(32) NOT NULL,
@@ -353,13 +359,50 @@ public class JdbcChatSchemaUpgrade {
                 CREATE INDEX IF NOT EXISTS uk_memory_correction_active_target
                 ON t_memory_correction_ledger (user_id, tenant_id, target_kind, target_key)
                 """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_memory_conflict_log (
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    id VARCHAR(128) NOT NULL UNIQUE,
+                    user_id BIGINT NOT NULL,
+                    memory_id_1 VARCHAR(64) NOT NULL,
+                    memory_id_2 VARCHAR(64) NOT NULL,
+                    conflict_type VARCHAR(32) NOT NULL,
+                    severity VARCHAR(16) NOT NULL,
+                    resolution_status VARCHAR(16) NOT NULL,
+                    resolution_action VARCHAR(32),
+                    resolved_by VARCHAR(32),
+                    resolved_at TIMESTAMP,
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_conflict_user_status
+                ON t_memory_conflict_log (user_id, resolution_status, create_time DESC)
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS t_memory_quality_snapshot (
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    id VARCHAR(128) NOT NULL UNIQUE,
+                    user_id BIGINT NOT NULL,
+                    snapshot_json JSONB NOT NULL,
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_memory_quality_snapshot_user_time
+                ON t_memory_quality_snapshot (user_id, create_time DESC)
+                """);
+        ensureMemoryBusinessIdColumnTypes();
     }
 
     private void ensureMemoryEntityAliasTables() {
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_entity_alias (
-                    id VARCHAR(128) PRIMARY KEY,
-                    user_id VARCHAR(64) NOT NULL,
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    id VARCHAR(128) NOT NULL UNIQUE,
+                    user_id BIGINT NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
                     alias_text VARCHAR(256) NOT NULL,
                     normalized_alias VARCHAR(256) NOT NULL,
@@ -382,10 +425,11 @@ public class JdbcChatSchemaUpgrade {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_entity_relation (
-                    id VARCHAR(128) PRIMARY KEY,
-                    user_id VARCHAR(64) NOT NULL,
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    id VARCHAR(128) NOT NULL UNIQUE,
+                    user_id BIGINT NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
-                    memory_id VARCHAR(128) NOT NULL,
+                    memory_id VARCHAR(64) NOT NULL,
                     layer_name VARCHAR(32),
                     memory_type VARCHAR(64),
                     content TEXT,
@@ -415,10 +459,10 @@ public class JdbcChatSchemaUpgrade {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS t_memory_keyword_index (
-                    id VARCHAR(128) PRIMARY KEY,
-                    user_id VARCHAR(64) NOT NULL,
+                    id BIGINT PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
-                    memory_id VARCHAR(128) NOT NULL,
+                    memory_id VARCHAR(64) NOT NULL,
                     layer_name VARCHAR(32),
                     memory_type VARCHAR(64),
                     content TEXT,
@@ -462,6 +506,39 @@ public class JdbcChatSchemaUpgrade {
             return;
         }
         addColumnIfMissing("t_memory_aggregation_buffer", "version", "BIGINT NOT NULL DEFAULT 1");
+    }
+
+    private void ensureMemoryBusinessIdColumnTypes() {
+        alterColumnToVarcharIfExists("t_memory_operation_log", "operation_id", 128);
+        alterColumnToVarcharIfExists("t_memory_outbox", "id", 128);
+        alterColumnToVarcharIfExists("t_memory_outbox", "target_id", 64);
+        alterColumnToVarcharIfExists("t_memory_review_candidate", "id", 128);
+        alterColumnToVarcharIfExists("t_memory_review_candidate", "operation_id", 128);
+        alterColumnToVarcharIfExists("t_memory_review_candidate", "conversation_id", 64);
+        alterColumnToVarcharIfExists("t_memory_review_candidate", "message_id", 64);
+        alterColumnToVarcharIfExists("t_memory_review_candidate", "reviewer_id", 64);
+        alterColumnToVarcharIfExists("t_memory_review_candidate", "reviewed_memory_id", 128);
+        alterColumnToVarcharIfExists("t_memory_maintenance_run", "id", 128);
+        alterColumnToVarcharIfExists("t_memory_review_feedback_sample", "id", 128);
+        alterColumnToVarcharIfExists("t_memory_review_feedback_sample", "candidate_id", 128);
+        alterColumnToVarcharIfExists("t_memory_review_feedback_sample", "operation_id", 128);
+        alterColumnToVarcharIfExists("t_memory_review_feedback_sample", "reviewer_id", 64);
+        alterColumnToVarcharIfExists("t_memory_review_feedback_sample", "reviewed_memory_id", 128);
+        alterColumnToVarcharIfExists("t_memory_trace_event", "trace_id", 128);
+        alterColumnToVarcharIfExists("t_memory_trace_event", "subject_id", 128);
+        alterColumnToVarcharIfExists("t_user_profile_fact", "generation_id", 64);
+        alterColumnToVarcharIfExists("t_memory_correction_ledger", "effective_generation_id", 64);
+        alterColumnToVarcharIfExists("t_memory_entity_alias", "id", 128);
+        alterColumnToVarcharIfExists("t_memory_entity_alias", "canonical_entity_id", 128);
+        alterColumnToVarcharIfExists("t_memory_entity_relation", "id", 128);
+        alterColumnToVarcharIfExists("t_memory_entity_relation", "memory_id", 64);
+        alterColumnToVarcharIfExists("t_memory_entity_relation", "source_entity_id", 128);
+        alterColumnToVarcharIfExists("t_memory_entity_relation", "target_entity_id", 128);
+        alterColumnToVarcharIfExists("t_memory_keyword_index", "memory_id", 64);
+        alterColumnToVarcharIfExists("t_memory_conflict_log", "id", 128);
+        alterColumnToVarcharIfExists("t_memory_conflict_log", "memory_id_1", 64);
+        alterColumnToVarcharIfExists("t_memory_conflict_log", "memory_id_2", 64);
+        alterColumnToVarcharIfExists("t_memory_quality_snapshot", "id", 128);
     }
 
     private void executePostgresPartialIndexOrPlainIndex(String postgresSql, String fallbackSql) {
@@ -550,6 +627,18 @@ public class JdbcChatSchemaUpgrade {
             return;
         }
         jdbcTemplate.execute("ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + definition);
+    }
+
+    private void alterColumnToVarcharIfExists(String tableName, String columnName, int length) {
+        if (!columnExists(tableName, columnName)) {
+            return;
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + tableName + " ALTER COLUMN " + columnName
+                    + " TYPE VARCHAR(" + length + ") USING " + columnName + "::VARCHAR");
+        } catch (Exception ignored) {
+            // Some embedded databases do not support PostgreSQL USING syntax; leave init SQL as the source of truth.
+        }
     }
 
     private boolean tableExists(String tableName) {

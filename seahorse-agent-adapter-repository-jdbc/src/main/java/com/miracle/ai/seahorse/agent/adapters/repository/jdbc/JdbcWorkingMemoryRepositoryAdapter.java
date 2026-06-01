@@ -42,7 +42,7 @@ public class JdbcWorkingMemoryRepositoryAdapter implements WorkingMemoryPort {
                 SELECT id, conversation_id, role, content, update_time
                 FROM t_message
                 WHERE id = ? AND deleted = 0
-                """, this::mapRecord, id);
+                """, this::mapRecord, JdbcMemorySupport.toLongId(id));
         return records.stream().findFirst();
     }
 
@@ -54,7 +54,7 @@ public class JdbcWorkingMemoryRepositoryAdapter implements WorkingMemoryPort {
                 WHERE conversation_id = ? AND deleted = 0
                 ORDER BY create_time DESC
                 LIMIT ?
-                """, this::mapRecord, conversationId, safeLimit(limit));
+                """, this::mapRecord, JdbcMemorySupport.toLongId(conversationId), safeLimit(limit));
     }
 
     @Override
@@ -65,7 +65,7 @@ public class JdbcWorkingMemoryRepositoryAdapter implements WorkingMemoryPort {
                 WHERE user_id = ? AND deleted = 0
                 ORDER BY create_time DESC
                 LIMIT ?
-                """, this::mapRecord, userId, safeLimit(limit));
+                """, this::mapRecord, JdbcMemorySupport.toLongId(userId), safeLimit(limit));
     }
 
     @Override
@@ -75,7 +75,8 @@ public class JdbcWorkingMemoryRepositoryAdapter implements WorkingMemoryPort {
 
     @Override
     public boolean deleteById(String id) {
-        return jdbcTemplate.update("UPDATE t_message SET deleted = 1 WHERE id = ? AND deleted = 0", id) > 0;
+        return jdbcTemplate.update("UPDATE t_message SET deleted = 1 WHERE id = ? AND deleted = 0",
+                JdbcMemorySupport.toLongId(id)) > 0;
     }
 
     private MemoryRecord mapRecord(ResultSet rs, int rowNum) throws SQLException {

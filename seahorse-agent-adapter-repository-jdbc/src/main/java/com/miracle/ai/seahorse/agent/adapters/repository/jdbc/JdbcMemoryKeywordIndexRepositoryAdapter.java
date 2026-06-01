@@ -46,6 +46,7 @@ public class JdbcMemoryKeywordIndexRepositoryAdapter implements MemoryKeywordInd
             return;
         }
         String tenantId = safeTenantId(document.tenantId());
+        long userId = JdbcMemorySupport.toLongId(document.userId());
         Instant now = Instant.now();
         int updated = jdbcTemplate.update("""
                 UPDATE t_memory_keyword_index
@@ -68,7 +69,7 @@ public class JdbcMemoryKeywordIndexRepositoryAdapter implements MemoryKeywordInd
                 JdbcMemorySupport.timestamp(document.updatedAt()),
                 JdbcMemorySupport.timestamp(now),
                 document.memoryId(),
-                document.userId(),
+                userId,
                 tenantId);
         if (updated > 0) {
             return;
@@ -80,7 +81,7 @@ public class JdbcMemoryKeywordIndexRepositoryAdapter implements MemoryKeywordInd
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, 0)
                 """,
                 JdbcMemorySupport.nextId(),
-                document.userId(),
+                userId,
                 tenantId,
                 document.memoryId(),
                 document.layer(),
@@ -110,7 +111,7 @@ public class JdbcMemoryKeywordIndexRepositoryAdapter implements MemoryKeywordInd
                 """,
                 JdbcMemorySupport.timestamp(Instant.now()),
                 command.memoryId(),
-                command.userId(),
+                JdbcMemorySupport.toLongId(command.userId()),
                 safeTenantId(command.tenantId()));
     }
 

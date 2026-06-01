@@ -61,7 +61,7 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
                   AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY create_time DESC
                 LIMIT ?
-                """, this::mapRecord, conversationId, safeLimit(limit));
+                """, this::mapRecord, JdbcMemorySupport.toLongId(conversationId), safeLimit(limit));
     }
 
     @Override
@@ -73,7 +73,7 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
                   AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY importance_score DESC, create_time DESC
                 LIMIT ?
-                """, this::mapRecord, userId, safeLimit(limit));
+                """, this::mapRecord, JdbcMemorySupport.toLongId(userId), safeLimit(limit));
     }
 
     @Override
@@ -89,9 +89,9 @@ public class JdbcShortTermMemoryRepositoryAdapter implements ShortTermMemoryPort
                 VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, 0, ?, ?, ?,
                         ?, 'ACTIVE', ?, ?, NULL, NULL, ?, ?, ?, NULL, ?, ?, 0)
                 """,
-                JdbcMemorySupport.hasText(record.id()) ? record.id() : JdbcMemorySupport.nextId(),
-                string(record.metadata().get("userId")),
-                string(record.metadata().get("conversationId")),
+                JdbcMemorySupport.hasText(record.id()) ? record.id() : Long.toString(JdbcMemorySupport.nextId()),
+                JdbcMemorySupport.toLongId(string(record.metadata().get("userId"))),
+                JdbcMemorySupport.toLongIdOrNull(string(record.metadata().get("conversationId"))),
                 record.type(),
                 record.content(),
                 JdbcMemorySupport.writeJson(objectMapper, record.metadata()),

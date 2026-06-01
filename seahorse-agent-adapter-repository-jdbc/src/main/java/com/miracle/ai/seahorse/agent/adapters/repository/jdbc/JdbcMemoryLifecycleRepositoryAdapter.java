@@ -369,7 +369,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                 reason,
                 JdbcMemorySupport.timestamp(now),
                 JdbcMemorySupport.timestamp(now),
-                userId,
+                JdbcMemorySupport.toLongId(userId),
                 tenantId,
                 Objects.requireNonNullElse(activeGenerationId, ""),
                 containsJsonValue("profileSlot", profileSlot),
@@ -411,7 +411,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                 reason,
                 JdbcMemorySupport.timestamp(now),
                 JdbcMemorySupport.timestamp(now),
-                userId,
+                JdbcMemorySupport.toLongId(userId),
                 tenantId,
                 Objects.requireNonNullElse(activeGenerationId, ""),
                 containsJsonValue("profileSlot", profileSlot),
@@ -454,7 +454,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                 reason,
                 JdbcMemorySupport.timestamp(now),
                 JdbcMemorySupport.timestamp(now),
-                userId,
+                JdbcMemorySupport.toLongId(userId),
                 tenantId,
                 Objects.requireNonNullElse(activeGenerationId, ""),
                 profileSlot,
@@ -784,7 +784,7 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                 JdbcMemorySupport.timestamp(now),
                 JdbcMemorySupport.timestamp(now),
                 fragment.memoryId(),
-                userId,
+                JdbcMemorySupport.toLongId(userId),
                 JdbcMemorySupport.hasText(tenantId) ? tenantId : DEFAULT_TENANT_ID);
     }
 

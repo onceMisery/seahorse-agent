@@ -17,12 +17,21 @@ import { AgentEventStream } from "./components/AgentEventStream";
 import { AgentStateView } from "./components/AgentStateView";
 import { AgentContextView } from "./components/AgentContextView";
 import { AgentToolsView } from "./components/AgentToolsView";
+import { AgentStepsView } from "./components/AgentStepsView";
+import { AgentCheckpointsView } from "./components/AgentCheckpointsView";
+import { AgentHandoffsView } from "./components/AgentHandoffsView";
+import { AgentArtifactsView } from "./components/AgentArtifactsView";
+import { AgentRunActions } from "./components/AgentRunActions";
 
 const TABS = [
   { value: "events", label: "Events" },
   { value: "state", label: "State" },
   { value: "context", label: "Context" },
-  { value: "tools", label: "Tools" }
+  { value: "tools", label: "Tools" },
+  { value: "steps", label: "Steps" },
+  { value: "checkpoints", label: "Checkpoints" },
+  { value: "handoffs", label: "Handoffs" },
+  { value: "artifacts", label: "Artifacts" }
 ] as const;
 
 type InspectorTab = (typeof TABS)[number]["value"];
@@ -103,14 +112,26 @@ export function AgentInspectorPage() {
       </div>
 
       {activeRunId ? (
-        <div className="space-y-1 text-sm text-slate-500">
-          Inspecting: <span className="font-mono text-slate-700">{activeRunId}</span>
-          {costSummary ? (
-            <span className="ml-4">
-              Tokens: {costSummary.totalTokens} · Calls: {costSummary.totalCalls} · Cost:{" "}
-              {costSummary.totalCost.toLocaleString("zh-CN", { minimumFractionDigits: 4 })}
-            </span>
-          ) : null}
+        <div className="flex items-center justify-between">
+          <div className="space-y-1 text-sm text-slate-500">
+            Inspecting: <span className="font-mono text-slate-700">{activeRunId}</span>
+            {costSummary ? (
+              <span className="ml-4">
+                Tokens: {costSummary.totalTokens} · Calls: {costSummary.totalCalls} · Cost:{" "}
+                {costSummary.totalCost.toLocaleString("zh-CN", { minimumFractionDigits: 4 })}
+              </span>
+            ) : null}
+            {snapshot?.status ? (
+              <span className="ml-3 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700">
+                {snapshot.status}
+              </span>
+            ) : null}
+          </div>
+          <AgentRunActions
+            runId={activeRunId}
+            status={snapshot?.status}
+            onActionComplete={() => setActiveRunId((prev) => prev)}
+          />
         </div>
       ) : null}
 
@@ -145,6 +166,22 @@ export function AgentInspectorPage() {
 
         <Tabs.Content value="tools">
           <AgentToolsView events={events} />
+        </Tabs.Content>
+
+        <Tabs.Content value="steps">
+          <AgentStepsView runId={activeRunId} />
+        </Tabs.Content>
+
+        <Tabs.Content value="checkpoints">
+          <AgentCheckpointsView runId={activeRunId} />
+        </Tabs.Content>
+
+        <Tabs.Content value="handoffs">
+          <AgentHandoffsView runId={activeRunId} />
+        </Tabs.Content>
+
+        <Tabs.Content value="artifacts">
+          <AgentArtifactsView runId={activeRunId} />
         </Tabs.Content>
       </Tabs.Root>
     </div>

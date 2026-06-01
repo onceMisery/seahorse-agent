@@ -29,7 +29,7 @@ import { listPendingApprovalRequests } from "@/services/approvalService";
 import { getAgentRunCostSummary, getAgentRunSnapshot } from "@/services/agentRunService";
 import { stopTask, submitFeedback } from "@/services/chatService";
 import { buildQuery } from "@/utils/helpers";
-import { createStreamResponse } from "@/hooks/useStreamResponse";
+import { createStreamResponse, type StreamHandlers } from "@/hooks/useStreamResponse";
 import { handleUnauthorizedSession } from "@/utils/authSession";
 import { storage } from "@/utils/storage";
 import { useArtifactStore } from "@/stores/artifactStore";
@@ -62,6 +62,7 @@ export const useChatStore = create<ChatState>()(
     isLoading: true,
     isStreaming: false,
     isCreatingNew: true,
+    isCreating: false,
     deepThinkingEnabled: false,
     thinkingStartAt: null,
     streamTaskId: null,
@@ -88,6 +89,9 @@ export const useChatStore = create<ChatState>()(
 
     createSession: async () => {
       const state = get();
+      if (state.isCreating) {
+        return state.currentSessionId || "";
+      }
       if (state.messages.length === 0 && !state.currentSessionId) {
         set((s) => {
           s.isCreatingNew = true;
@@ -100,6 +104,7 @@ export const useChatStore = create<ChatState>()(
       if (state.isStreaming) {
         get().cancelGeneration();
       }
+      set((s) => { s.isCreating = true; });
       try {
         const conversationId = await createSessionRequest();
         set((s) => {
@@ -108,12 +113,14 @@ export const useChatStore = create<ChatState>()(
           s.isStreaming = false;
           s.isLoading = false;
           s.isCreatingNew = true;
+          s.isCreating = false;
           s.deepThinkingEnabled = false;
           s.thinkingStartAt = null;
           s.streamTaskId = null;
           s.streamAbort = null;
           s.streamingMessageId = null;
           s.cancelRequested = false;
+          s.sessions = upsertSession(s.sessions, { id: conversationId, title: "New conversation", lastTime: new Date().toISOString() });
         });
         return conversationId;
       } catch (error) {
@@ -125,6 +132,7 @@ export const useChatStore = create<ChatState>()(
           s.isStreaming = false;
           s.isLoading = false;
           s.isCreatingNew = true;
+          s.isCreating = false;
           s.deepThinkingEnabled = false;
           s.thinkingStartAt = null;
           s.streamTaskId = null;
@@ -250,9 +258,11 @@ export const useChatStore = create<ChatState>()(
       });
       const url = `${API_BASE_URL}/rag/v3/chat${query}`;
       const token = storage.getToken();
+      const headers: Record<string, string> = { Accept: "text/event-stream" };
+      if (token) headers.Authorization = token;
 
       let currentAssistantMessageId = assistantId;
-      let stagedApprovals: AgentApproval[] = [];
+      const stagedApprovals: AgentApproval[] = [];
 
       const buffer = new RenderBuffer((flushedText) => {
         set((state) => {
@@ -263,106 +273,74 @@ export const useChatStore = create<ChatState>()(
         });
       });
 
-      try {
-        const response = await createStreamResponse({ url, token });
-        const abortController = response.controller;
-        set((s) => { s.streamAbort = abortController; });
-
-        for await (const chunk of response.stream) {
-          if (get().cancelRequested) {
-            abortController.abort();
-            throw new Error("User cancelled");
-          }
-
-          const event = normalizeAgentStreamEvent(chunk);
-          if (!event) continue;
-
-          switch (event.type) {
-            case AGENT_STREAM_EVENTS.TEXT: {
-              const text = event.data?.text || "";
-              buffer.append(text);
-              break;
-            }
-            case AGENT_STREAM_EVENTS.BLOCK: {
-              const block = event.data?.block;
-              if (block) {
-                buffer.flush();
-                set((state) => {
-                  const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
-                  if (msg) {
-                    msg.blocks = [...(msg.blocks || []), block];
-                  }
-                });
-              }
-              break;
-            }
-            case AGENT_STREAM_EVENTS.APPROVAL: {
-              const approval = event.data?.approval;
-              if (approval) {
-                stagedApprovals.push(approval);
-              }
-              break;
-            }
-            case AGENT_STREAM_EVENTS.TASK_ID: {
-              const taskId = event.data?.taskId;
-              if (taskId) {
-                set((s) => { s.streamTaskId = taskId; });
-              }
-              break;
-            }
-            case AGENT_STREAM_EVENTS.THOUGHT: {
-              const thought = event.data?.text || "";
-              set((state) => {
-                const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
-                if (msg) {
-                  msg.thinking = (msg.thinking || "") + thought;
-                  msg.isThinking = true;
-                  if (!msg.thinkingStartAt) {
-                    msg.thinkingStartAt = Date.now();
-                  }
-                }
-              });
-              break;
-            }
-            case AGENT_STREAM_EVENTS.ERROR: {
-              const error = event.data?.error || "未知错误";
-              buffer.flush();
-              set((state) => {
-                const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
-                if (msg) {
-                  msg.status = "error";
-                  msg.content = error;
-                }
-              });
-              throw new Error(error);
-            }
-            case AGENT_STREAM_EVENTS.DONE: {
-              buffer.flush();
-              set((state) => {
-                const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
-                if (msg) {
-                  msg.status = "done";
-                  msg.isStreaming = false;
-                  msg.isThinking = false;
-                  msg.thinkingDuration = computeThinkingDuration(msg.thinkingStartAt);
-                }
-              });
-              break;
-            }
-          }
-        }
-      } catch (error) {
+      const markDone = () => {
         buffer.flush();
-        console.error("Stream error:", error);
+        set((state) => {
+          const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+          if (msg) {
+            msg.status = "done";
+            msg.isStreaming = false;
+            msg.isThinking = false;
+            msg.thinkingDuration = computeThinkingDuration(msg.thinkingStartAt);
+          }
+        });
+      };
+
+      const markError = (errorText: string) => {
+        buffer.flush();
         set((state) => {
           const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
           if (msg) {
             msg.status = "error";
-            if (!msg.content) {
-              msg.content = error instanceof Error ? error.message : "对话失败";
-            }
+            if (!msg.content) msg.content = errorText;
           }
         });
+      };
+
+      const handlers: StreamHandlers = {
+        onMeta: (payload) => {
+          if (payload?.taskId) {
+            set((s) => { s.streamTaskId = payload.taskId!; });
+          }
+        },
+        onMessage: (payload) => {
+          buffer.append(payload?.delta || "");
+        },
+        onThinking: (payload) => {
+          const thought = payload?.delta || "";
+          set((state) => {
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+            if (msg) {
+              msg.thinking = (msg.thinking || "") + thought;
+              msg.isThinking = true;
+              if (!msg.thinkingStartAt) msg.thinkingStartAt = Date.now();
+            }
+          });
+        },
+        onFinish: () => { markDone(); },
+        onDone: () => { markDone(); },
+        onCancel: () => { markDone(); },
+        onStreamEvent: (envelope) => {
+          const normalized = normalizeAgentStreamEvent(envelope.eventType, envelope.typedPayload);
+          if (!normalized) return;
+          switch (normalized.type) {
+            case AGENT_STREAM_EVENTS.APPROVAL: {
+              const approval = (envelope.typedPayload as { approval?: AgentApproval })?.approval;
+              if (approval) stagedApprovals.push(approval);
+              break;
+            }
+          }
+        },
+        onError: (error) => { markError(error.message || "对话失败"); }
+      };
+
+      try {
+        const stream = createStreamResponse({ url, headers }, handlers);
+        set((s) => { s.streamAbort = stream.cancel; });
+        await stream.start();
+      } catch (error) {
+        console.error("Stream error:", error);
+        markError(error instanceof Error ? error.message : "对话失败");
       } finally {
         set((s) => {
           s.isStreaming = false;

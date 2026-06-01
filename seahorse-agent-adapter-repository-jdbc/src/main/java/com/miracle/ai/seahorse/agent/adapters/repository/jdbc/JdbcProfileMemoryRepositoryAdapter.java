@@ -57,7 +57,7 @@ public class JdbcProfileMemoryRepositoryAdapter implements ProfileMemoryPort {
                   AND deleted = 0
                 ORDER BY update_time DESC
                 LIMIT 1
-                """, this::mapFact, userId, defaultTenant(tenantId), slotKey).stream().findFirst();
+                """, this::mapFact, JdbcMemorySupport.toLongId(userId), defaultTenant(tenantId), slotKey).stream().findFirst();
     }
 
     @Override
@@ -74,7 +74,7 @@ public class JdbcProfileMemoryRepositoryAdapter implements ProfileMemoryPort {
                   AND deleted = 0
                 ORDER BY update_time DESC
                 LIMIT ?
-                """, this::mapFact, userId, defaultTenant(tenantId), safeLimit(limit));
+                """, this::mapFact, JdbcMemorySupport.toLongId(userId), defaultTenant(tenantId), safeLimit(limit));
     }
 
     @Override
@@ -102,7 +102,7 @@ public class JdbcProfileMemoryRepositoryAdapter implements ProfileMemoryPort {
                     """,
                     JdbcMemorySupport.timestamp(now),
                     JdbcMemorySupport.timestamp(now),
-                    existing.id());
+                    JdbcMemorySupport.toLongId(existing.id()));
         }
         jdbcTemplate.update("""
                 INSERT INTO t_user_profile_fact
@@ -113,7 +113,7 @@ public class JdbcProfileMemoryRepositoryAdapter implements ProfileMemoryPort {
                         0, ?, ?, 0)
                 """,
                 JdbcMemorySupport.nextId(),
-                update.userId(),
+                JdbcMemorySupport.toLongId(update.userId()),
                 tenantId,
                 update.slotKey(),
                 update.valueText(),
@@ -146,7 +146,7 @@ public class JdbcProfileMemoryRepositoryAdapter implements ProfileMemoryPort {
                 """,
                 JdbcMemorySupport.timestamp(Objects.requireNonNullElseGet(referencedAt, Instant::now)),
                 JdbcMemorySupport.timestamp(Instant.now()),
-                userId,
+                JdbcMemorySupport.toLongId(userId),
                 defaultTenant(tenantId),
                 slotKey);
     }

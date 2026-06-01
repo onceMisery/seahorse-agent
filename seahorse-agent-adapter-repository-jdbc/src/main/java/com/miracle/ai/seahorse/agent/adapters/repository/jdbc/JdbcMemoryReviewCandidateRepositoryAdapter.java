@@ -65,7 +65,7 @@ public class JdbcMemoryReviewCandidateRepositoryAdapter implements MemoryReviewM
                 """,
                 candidate.candidateId(),
                 candidate.operationId(),
-                candidate.userId(),
+                JdbcMemorySupport.toLongId(candidate.userId()),
                 candidate.tenantId(),
                 candidate.conversationId(),
                 candidate.messageId(),
@@ -182,7 +182,7 @@ public class JdbcMemoryReviewCandidateRepositoryAdapter implements MemoryReviewM
         }
         if (JdbcMemorySupport.hasText(query.userId())) {
             sql.append(" AND user_id = ?");
-            args.add(query.userId());
+            args.add(JdbcMemorySupport.toLongId(query.userId()));
         }
         if (query.reviewStatus() != null) {
             sql.append(" AND review_status = ?");

@@ -111,6 +111,18 @@ const menuGroups: MenuGroup[] = [
         icon: FlaskConical
       },
       {
+        path: "/admin/rag-strategies",
+        feature: "RAG_EVALUATION",
+        label: "RAG 策略模板",
+        icon: FlaskConical
+      },
+      {
+        path: "/admin/rag-version-compare",
+        feature: "RAG_EVALUATION",
+        label: "RAG 版本对比",
+        icon: FlaskConical
+      },
+      {
         path: "/admin/traces",
         label: "链路追踪",
         icon: Workflow
@@ -138,6 +150,12 @@ const menuGroups: MenuGroup[] = [
             icon: Plus
           }
         ]
+      },
+      {
+        path: "/admin/agent-runs",
+        feature: "AGENT_RUN_MANAGEMENT",
+        label: "Agent 运行",
+        icon: Workflow
       },
       {
         path: "/admin/agent-inspector",
@@ -179,6 +197,12 @@ const menuGroups: MenuGroup[] = [
         feature: "CONNECTOR_MANAGEMENT",
         label: "OpenAPI 连接器",
         icon: Plug
+      },
+      {
+        path: "/admin/plugins",
+        feature: "MCP_TOOL",
+        label: "插件管理",
+        icon: Layers
       },
       {
         path: "/admin/secrets",
@@ -326,8 +350,10 @@ const breadcrumbMap: Record<string, string> = {
   traces: "链路追踪",
   "ai-infra": "AI Infra 控制台",
   "agent-inspector": "Agent 检视器",
-  agents: "Agent 管理",
+  "agents": "Agent 管理",
   "new": "创建 Agent",
+  "rollout": "灰度发布",
+  "eval": "Agent 评测",
   tools: "工具目录",
   "tool-invocations": "工具调用审计",
   approvals: "审批中心",
