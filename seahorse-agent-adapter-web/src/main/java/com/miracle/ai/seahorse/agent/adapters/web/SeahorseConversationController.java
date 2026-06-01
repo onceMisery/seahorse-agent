@@ -22,6 +22,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -49,7 +50,15 @@ public class SeahorseConversationController {
         this.conversationPortProvider = conversationPortProvider;
     }
 
-    @GetMapping("/conversations")
+    @PostMapping({"/conversations", "/api/conversations"})
+    public Map<String, Object> create(@RequestParam(required = false) String userId,
+                                      @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
+                                      String headerUserId) {
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                conversationPortProvider.getIfAvailable().create(resolveUserId(userId, headerUserId)));
+    }
+
+    @GetMapping({"/conversations", "/api/conversations"})
     public Map<String, Object> listConversations(@RequestParam(required = false) String userId,
                                                  @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
                                                  String headerUserId) {
@@ -57,7 +66,7 @@ public class SeahorseConversationController {
                 conversationPortProvider.getIfAvailable().listConversations(resolveUserId(userId, headerUserId)));
     }
 
-    @PutMapping("/conversations/{conversationId}")
+    @PutMapping({"/conversations/{conversationId}", "/api/conversations/{conversationId}"})
     public Map<String, Object> rename(@PathVariable String conversationId,
                                       @RequestBody ConversationUpdateRequest request,
                                       @RequestParam(required = false) String userId,
@@ -68,7 +77,7 @@ public class SeahorseConversationController {
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
-    @DeleteMapping("/conversations/{conversationId}")
+    @DeleteMapping({"/conversations/{conversationId}", "/api/conversations/{conversationId}"})
     public Map<String, Object> delete(@PathVariable String conversationId,
                                       @RequestParam(required = false) String userId,
                                       @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)
@@ -77,7 +86,7 @@ public class SeahorseConversationController {
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
-    @GetMapping("/conversations/{conversationId}/messages")
+    @GetMapping({"/conversations/{conversationId}/messages", "/api/conversations/{conversationId}/messages"})
     public Map<String, Object> listMessages(@PathVariable String conversationId,
                                             @RequestParam(required = false) String userId,
                                             @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false)

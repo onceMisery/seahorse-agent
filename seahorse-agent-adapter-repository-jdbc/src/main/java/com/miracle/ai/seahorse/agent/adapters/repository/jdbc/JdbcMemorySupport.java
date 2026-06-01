@@ -93,7 +93,7 @@ final class JdbcMemorySupport {
         try {
             return Long.parseLong(id);
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("id must be numeric: " + id, e);
+            return Math.abs(id.hashCode());
         }
     }
 
@@ -104,7 +104,7 @@ final class JdbcMemorySupport {
         try {
             return Long.parseLong(id);
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("id must be numeric: " + id, e);
+            return (long) Math.abs(id.hashCode());
         }
     }
 }

@@ -24,6 +24,8 @@ import java.util.List;
  */
 public interface ConversationRepositoryPort {
 
+    Long create(String userId);
+
     List<ConversationRecord> listConversations(String userId);
 
     boolean rename(String conversationId, String userId, String title);

@@ -35,11 +35,28 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class SeahorseConversationControllerTests {
+
+    @Test
+    void shouldCreateConversationFromApiAlias() throws Exception {
+        ConversationManagementInboundPort port = mock(ConversationManagementInboundPort.class);
+        when(port.create("user-1")).thenReturn("conv-1");
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseConversationController(provider(ConversationManagementInboundPort.class, port))).build();
+
+        mvc.perform(post("/api/conversations")
+                        .param("userId", "user-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data").value("conv-1"));
+
+        verify(port).create("user-1");
+    }
 
     @Test
     void shouldListConversationsForUser() throws Exception {

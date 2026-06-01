@@ -19,6 +19,11 @@ export interface ConversationMessageVO {
   createTime?: string;
 }
 
+export async function createSession(): Promise<string> {
+  const response = await api.post<string>("/conversations");
+  return response;
+}
+
 export async function listSessions() {
   return api.get<ConversationVO[]>("/conversations");
 }

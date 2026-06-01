@@ -35,6 +35,11 @@ import java.util.Objects;
  */
 public class JdbcConversationRepositoryAdapter implements ConversationRepositoryPort {
 
+    private static final String SQL_INSERT_CONVERSATION = """
+            INSERT INTO t_conversation
+            (conversation_id, user_id, title, create_time, update_time, last_time, deleted)
+            VALUES (?, ?, ?, ?, ?, ?, 0)
+            """;
     private static final String SQL_LIST_CONVERSATIONS = """
             SELECT conversation_id, title, last_time
             FROM t_conversation
@@ -75,6 +80,18 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
 
     public JdbcConversationRepositoryAdapter(DataSource dataSource) {
         this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
+    }
+
+    @Override
+    public Long create(String userId) {
+        if (!hasText(userId)) {
+            throw new IllegalArgumentException("userId must not be blank");
+        }
+        long conversationId = JdbcMemorySupport.nextId();
+        Timestamp now = Timestamp.from(Instant.now());
+        jdbcTemplate.update(SQL_INSERT_CONVERSATION, conversationId, Long.parseLong(userId), 
+                "新会话", now, now, now);
+        return conversationId;
     }
 
     @Override

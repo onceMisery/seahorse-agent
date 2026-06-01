@@ -39,6 +39,15 @@ public class KernelConversationManagementService implements ConversationManageme
     }
 
     @Override
+    public String create(String userId) {
+        if (!hasText(userId)) {
+            throw new IllegalArgumentException("userId must not be blank");
+        }
+        Long conversationId = repositoryPort.create(userId);
+        return String.valueOf(conversationId);
+    }
+
+    @Override
     public List<ConversationRecord> listConversations(String userId) {
         if (!hasText(userId)) {
             return List.of();

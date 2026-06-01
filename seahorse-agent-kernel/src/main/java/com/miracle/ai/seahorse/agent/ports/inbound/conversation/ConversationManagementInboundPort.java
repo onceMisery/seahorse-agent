@@ -27,6 +27,8 @@ import java.util.List;
  */
 public interface ConversationManagementInboundPort {
 
+    String create(String userId);
+
     List<ConversationRecord> listConversations(String userId);
 
     void rename(String conversationId, String userId, String title);
