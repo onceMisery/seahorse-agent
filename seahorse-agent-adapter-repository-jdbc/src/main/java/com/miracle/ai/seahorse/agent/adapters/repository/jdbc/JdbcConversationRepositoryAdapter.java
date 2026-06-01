@@ -82,7 +82,7 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
         if (!hasText(userId)) {
             return List.of();
         }
-        return jdbcTemplate.query(SQL_LIST_CONVERSATIONS, this::mapConversation, userId);
+        return jdbcTemplate.query(SQL_LIST_CONVERSATIONS, this::mapConversation, Long.parseLong(userId));
     }
 
     @Override
@@ -90,7 +90,8 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
         if (!hasText(conversationId) || !hasText(userId) || !hasText(title)) {
             return false;
         }
-        int updated = jdbcTemplate.update(SQL_RENAME, title, Timestamp.from(Instant.now()), conversationId, userId);
+        int updated = jdbcTemplate.update(SQL_RENAME, title, Timestamp.from(Instant.now()), 
+                Long.parseLong(conversationId), Long.parseLong(userId));
         return updated > 0;
     }
 
@@ -100,9 +101,9 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
             return false;
         }
         Timestamp now = Timestamp.from(Instant.now());
-        int updated = jdbcTemplate.update(SQL_DELETE_CONVERSATION, now, conversationId, userId);
-        jdbcTemplate.update(SQL_DELETE_MESSAGES, now, conversationId, userId);
-        jdbcTemplate.update(SQL_DELETE_SUMMARY, now, conversationId, userId);
+        int updated = jdbcTemplate.update(SQL_DELETE_CONVERSATION, now, Long.parseLong(conversationId), Long.parseLong(userId));
+        jdbcTemplate.update(SQL_DELETE_MESSAGES, now, Long.parseLong(conversationId), Long.parseLong(userId));
+        jdbcTemplate.update(SQL_DELETE_SUMMARY, now, Long.parseLong(conversationId), Long.parseLong(userId));
         return updated > 0;
     }
 
@@ -111,7 +112,7 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
         if (!hasText(conversationId) || !hasText(userId)) {
             return List.of();
         }
-        return jdbcTemplate.query(SQL_LIST_MESSAGES, this::mapMessage, conversationId, userId);
+        return jdbcTemplate.query(SQL_LIST_MESSAGES, this::mapMessage, Long.parseLong(conversationId), Long.parseLong(userId));
     }
 
     private ConversationRecord mapConversation(ResultSet resultSet, int rowNum) throws SQLException {

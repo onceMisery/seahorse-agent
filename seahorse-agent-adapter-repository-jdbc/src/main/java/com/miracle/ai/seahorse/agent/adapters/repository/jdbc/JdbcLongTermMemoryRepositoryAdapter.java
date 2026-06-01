@@ -48,7 +48,7 @@ public class JdbcLongTermMemoryRepositoryAdapter implements LongTermMemoryPort {
                 WHERE id = ?
                   AND deleted = 0
                   AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
-                """, this::mapRecord, id).stream().findFirst();
+                """, this::mapRecord, toLongId(id)).stream().findFirst();
     }
 
     @Override
@@ -65,8 +65,10 @@ public class JdbcLongTermMemoryRepositoryAdapter implements LongTermMemoryPort {
                   AND COALESCE(status, 'ACTIVE') NOT IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED', 'PHYSICAL_DELETED')
                 ORDER BY importance_score DESC, create_time DESC
                 LIMIT ?
-                """, this::mapRecord, userId, safeLimit(limit));
+                """, this::mapRecord, toLongId(userId), safeLimit(limit));
     }
+
+    
 
     @Override
     public void save(MemoryRecord record) {
@@ -81,8 +83,8 @@ public class JdbcLongTermMemoryRepositoryAdapter implements LongTermMemoryPort {
                 VALUES (?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, ?, ?, ?,
                         ?, 'ACTIVE', ?, ?, NULL, NULL, ?, ?, ?, NULL, ?, ?, 0)
                 """,
-                JdbcMemorySupport.hasText(record.id()) ? record.id() : JdbcMemorySupport.nextId(),
-                string(record.metadata().get("userId")),
+                JdbcMemorySupport.hasText(record.id()) ? JdbcMemorySupport.nextId() : JdbcMemorySupport.nextId(),
+                toLongId(string(record.metadata().get("userId"))),
                 record.type(),
                 title(record.content()),
                 record.content(),
@@ -105,7 +107,7 @@ public class JdbcLongTermMemoryRepositoryAdapter implements LongTermMemoryPort {
 
     @Override
     public boolean deleteById(String id) {
-        return jdbcTemplate.update("UPDATE t_long_term_memory SET deleted = 1 WHERE id = ? AND deleted = 0", id) > 0;
+        return jdbcTemplate.update("UPDATE t_long_term_memory SET deleted = 1 WHERE id = ? AND deleted = 0", toLongId(id)) > 0;
     }
 
     private MemoryRecord mapRecord(ResultSet rs, int rowNum) throws SQLException {

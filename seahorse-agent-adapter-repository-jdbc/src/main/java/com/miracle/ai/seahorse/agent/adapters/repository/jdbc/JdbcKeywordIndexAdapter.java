@@ -43,13 +43,13 @@ public class JdbcKeywordIndexAdapter implements KeywordIndexPort {
 
     @Override
     public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
-        List<String> chunkIds = chunkIds(chunks);
+        List<Long> chunkIds = chunkIds(chunks);
         if (chunkIds.isEmpty() || !searchTextColumnExists()) {
             return;
         }
         Object[] args = new Object[2 + chunkIds.size()];
-        args[0] = kbId;
-        args[1] = docId;
+        args[0] = toLongId(kbId);
+        args[1] = toLongId(docId);
         for (int index = 0; index < chunkIds.size(); index++) {
             args[index + 2] = chunkIds.get(index);
         }
@@ -61,7 +61,7 @@ public class JdbcKeywordIndexAdapter implements KeywordIndexPort {
         if (!searchTextColumnExists()) {
             return;
         }
-        jdbcTemplate.update(deleteSql(), kbId, docId);
+        jdbcTemplate.update(deleteSql(), toLongId(kbId), toLongId(docId));
     }
 
     @Override
@@ -69,7 +69,7 @@ public class JdbcKeywordIndexAdapter implements KeywordIndexPort {
         if (!hasText(kbId) || !hasText(docId) || !searchTextColumnExists()) {
             return;
         }
-        jdbcTemplate.update(rebuildDocumentSql(), kbId, docId);
+        jdbcTemplate.update(rebuildDocumentSql(), toLongId(kbId), toLongId(docId));
     }
 
     @Override
@@ -77,8 +77,10 @@ public class JdbcKeywordIndexAdapter implements KeywordIndexPort {
         if (!hasText(kbId) || !searchTextColumnExists()) {
             return;
         }
-        jdbcTemplate.update(rebuildKnowledgeBaseSql(), kbId);
+        jdbcTemplate.update(rebuildKnowledgeBaseSql(), toLongId(kbId));
     }
+
+    
 
     String indexSql(int chunkCount) {
         String placeholders = java.util.stream.IntStream.range(0, chunkCount)
@@ -115,7 +117,7 @@ public class JdbcKeywordIndexAdapter implements KeywordIndexPort {
                 """;
     }
 
-    private List<String> chunkIds(List<VectorChunk> chunks) {
+    private List<Long> chunkIds(List<VectorChunk> chunks) {
         if (chunks == null || chunks.isEmpty()) {
             return List.of();
         }
@@ -123,6 +125,7 @@ public class JdbcKeywordIndexAdapter implements KeywordIndexPort {
                 .filter(Objects::nonNull)
                 .map(VectorChunk::getChunkId)
                 .filter(chunkId -> chunkId != null && !chunkId.isBlank())
+                .map(this::toLongId)
                 .toList();
     }
 

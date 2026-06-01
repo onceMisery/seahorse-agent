@@ -34,8 +34,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
+
 /**
  * 基于 RAG Trace 表的 JDBC adapter。
  */
@@ -127,7 +126,7 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
         List<RagTraceRun> runs = jdbcTemplate.query(
                 SQL_RUN_SELECT + " WHERE r.trace_id = ? AND r.deleted = 0 LIMIT 1",
                 this::mapRun,
-                traceId);
+                toLongId(traceId));
         if (runs.isEmpty()) {
             return Optional.empty();
         }
@@ -139,7 +138,7 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
         if (!hasText(traceId)) {
             return List.of();
         }
-        return jdbcTemplate.query(SQL_NODE_SELECT, this::mapNode, traceId);
+        return jdbcTemplate.query(SQL_NODE_SELECT, this::mapNode, toLongId(traceId));
     }
 
     @Override
@@ -148,12 +147,12 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
         Instant now = Instant.now();
         jdbcTemplate.update(SQL_INSERT_RUN,
                 resolveId(safeRun.getId()),
-                safeRun.getTraceId(),
+                toLongId(safeRun.getTraceId()),
                 safeRun.getTraceName(),
                 safeRun.getEntryMethod(),
-                safeRun.getConversationId(),
-                safeRun.getTaskId(),
-                safeRun.getUserId(),
+                toLongIdOrNull(safeRun.getConversationId()),
+                toLongIdOrNull(safeRun.getTaskId()),
+                toLongIdOrNull(safeRun.getUserId()),
                 statusOrRunning(safeRun.getStatus()),
                 safeRun.getErrorMessage(),
                 toTimestamp(nullToNow(safeRun.getStartTime())),
@@ -176,7 +175,7 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
                 toTimestamp(endTime),
                 finish.durationMs(),
                 toTimestamp(Instant.now()),
-                finish.traceId());
+                toLongId(finish.traceId()));
     }
 
     @Override
@@ -185,9 +184,9 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
         Instant now = Instant.now();
         jdbcTemplate.update(SQL_INSERT_NODE,
                 resolveId(safeNode.getId()),
-                safeNode.getTraceId(),
-                safeNode.getNodeId(),
-                safeNode.getParentNodeId(),
+                toLongId(safeNode.getTraceId()),
+                toLongId(safeNode.getNodeId()),
+                toLongIdOrNull(safeNode.getParentNodeId()),
                 safeNode.getDepth(),
                 safeNode.getNodeType(),
                 safeNode.getNodeName(),
@@ -215,8 +214,8 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
                 toTimestamp(endTime),
                 finish.durationMs(),
                 toTimestamp(Instant.now()),
-                finish.traceId(),
-                finish.nodeId());
+                toLongId(finish.traceId()),
+                toLongId(finish.nodeId()));
     }
 
     @Override
@@ -224,15 +223,14 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
         if (before == null || limit <= 0) {
             return 0;
         }
-        List<String> traceIds = jdbcTemplate.queryForList(SQL_SELECT_EXPIRED_RUNS,
-                String.class, toTimestamp(before), limit);
+        List<Long> traceIds = jdbcTemplate.queryForList(SQL_SELECT_EXPIRED_RUNS,
+                Long.class, toTimestamp(before), limit);
         if (traceIds.isEmpty()) {
             return 0;
         }
         Instant now = Instant.now();
         int deleted = 0;
-        for (String traceId : traceIds) {
-            // run 与 node 同步软删，保留审计痕迹并避免清理任务直接物理删除历史数据。
+        for (Long traceId : traceIds) {
             jdbcTemplate.update(SQL_DELETE_EXPIRED_NODES, toTimestamp(now), traceId);
             deleted += jdbcTemplate.update(SQL_DELETE_EXPIRED_RUNS, toTimestamp(now), traceId);
         }
@@ -270,13 +268,16 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
 
     private RagTraceRun mapRun(ResultSet resultSet, int rowNum) throws SQLException {
         RagTraceRun run = new RagTraceRun();
-        run.setId(resultSet.getString("id"));
-        run.setTraceId(resultSet.getString("trace_id"));
+        run.setId(String.valueOf(resultSet.getLong("id")));
+        run.setTraceId(String.valueOf(resultSet.getLong("trace_id")));
         run.setTraceName(resultSet.getString("trace_name"));
         run.setEntryMethod(resultSet.getString("entry_method"));
-        run.setConversationId(resultSet.getString("conversation_id"));
-        run.setTaskId(resultSet.getString("task_id"));
-        run.setUserId(resultSet.getString("user_id"));
+        Long conversationId = resultSet.getObject("conversation_id", Long.class);
+        run.setConversationId(conversationId != null ? String.valueOf(conversationId) : null);
+        Long taskId = resultSet.getObject("task_id", Long.class);
+        run.setTaskId(taskId != null ? String.valueOf(taskId) : null);
+        Long userId = resultSet.getObject("user_id", Long.class);
+        run.setUserId(userId != null ? String.valueOf(userId) : null);
         run.setUsername(resultSet.getString("user_name"));
         run.setStatus(resultSet.getString("status"));
         run.setErrorMessage(resultSet.getString("error_message"));
@@ -289,10 +290,11 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
 
     private RagTraceNode mapNode(ResultSet resultSet, int rowNum) throws SQLException {
         RagTraceNode node = new RagTraceNode();
-        node.setId(resultSet.getString("id"));
-        node.setTraceId(resultSet.getString("trace_id"));
-        node.setNodeId(resultSet.getString("node_id"));
-        node.setParentNodeId(resultSet.getString("parent_node_id"));
+        node.setId(String.valueOf(resultSet.getLong("id")));
+        node.setTraceId(String.valueOf(resultSet.getLong("trace_id")));
+        node.setNodeId(String.valueOf(resultSet.getLong("node_id")));
+        Long parentNodeId = resultSet.getObject("parent_node_id", Long.class);
+        node.setParentNodeId(parentNodeId != null ? String.valueOf(parentNodeId) : null);
         node.setDepth(resultSet.getObject("depth", Integer.class));
         node.setNodeType(resultSet.getString("node_type"));
         node.setNodeName(resultSet.getString("node_name"));
@@ -331,18 +333,14 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
         return status;
     }
 
-    private String resolveId(String id) {
+    private long resolveId(String id) {
         if (hasText(id)) {
-            return id;
+            return toLongId(id);
         }
-        long millis = System.currentTimeMillis();
-        int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return Long.toString(millis, 36) + suffix;
+        return JdbcMemorySupport.nextId();
     }
 
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
-    }
+    
 
     private record QueryParts(String where, List<Object> argList) {
 

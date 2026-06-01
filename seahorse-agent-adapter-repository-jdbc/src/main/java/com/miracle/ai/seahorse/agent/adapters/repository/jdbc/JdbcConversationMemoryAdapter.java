@@ -30,8 +30,6 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 基于旧会话表的原生会话记忆 adapter。
@@ -45,7 +43,6 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
     private static final String ROLE_USER = "user";
     private static final String ROLE_ASSISTANT = "assistant";
     private static final String DEFAULT_TITLE = "New conversation";
-    private static final AtomicLong LAST_SORTABLE_ID = new AtomicLong();
     private static final String SQL_LIST_MESSAGES = """
             SELECT role, content, thinking_content, thinking_duration
             FROM t_message
@@ -105,9 +102,9 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
         }
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update(SQL_INSERT_MESSAGE,
-                nextId(),
-                conversationId,
-                userId,
+                JdbcMemorySupport.nextId(),
+                toLongId(conversationId),
+                toLongId(userId),
                 roleValue(message.getRole()),
                 message.getContent(),
                 message.getThinkingContent(),
@@ -123,10 +120,12 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
             return List.of();
         }
         List<ChatMessage> messages = jdbcTemplate.query(SQL_LIST_MESSAGES, this::mapMessage,
-                conversationId, userId, historyLimit);
+                toLongId(conversationId), toLongId(userId), historyLimit);
         Collections.reverse(messages);
         return trimLeadingAssistant(messages);
     }
+
+    
 
     private ChatMessage mapMessage(ResultSet resultSet, int rowNum) throws SQLException {
         ChatRole role = role(resultSet.getString("role"));
@@ -151,15 +150,17 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
     }
 
     private void upsertConversation(String conversationId, String userId, ChatMessage message, Timestamp now) {
-        Integer count = jdbcTemplate.queryForObject(SQL_COUNT_CONVERSATION, Integer.class, conversationId, userId);
+        long convId = toLongId(conversationId);
+        long uid = toLongId(userId);
+        Integer count = jdbcTemplate.queryForObject(SQL_COUNT_CONVERSATION, Integer.class, convId, uid);
         if (count != null && count > 0) {
-            jdbcTemplate.update(SQL_UPDATE_CONVERSATION, now, now, conversationId, userId);
+            jdbcTemplate.update(SQL_UPDATE_CONVERSATION, now, now, convId, uid);
             return;
         }
         jdbcTemplate.update(SQL_INSERT_CONVERSATION,
-                nextId(),
-                conversationId,
-                userId,
+                JdbcMemorySupport.nextId(),
+                convId,
+                uid,
                 title(message.getContent()),
                 now,
                 now,
@@ -191,19 +192,7 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
         return ROLE_USER;
     }
 
-    private String nextId() {
-        long current = System.currentTimeMillis() * 1_000_000L;
-        long sortable = LAST_SORTABLE_ID.updateAndGet(previous -> Math.max(current, previous + 1));
-        int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return leftPad(Long.toString(sortable, 36), 13) + suffix;
-    }
-
-    private String leftPad(String value, int length) {
-        if (value.length() >= length) {
-            return value;
-        }
-        return "0".repeat(length - value.length()) + value;
-    }
+    
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();

@@ -85,4 +85,26 @@ final class JdbcMemorySupport {
     static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
+
+    static long toLongId(String id) {
+        if (!hasText(id)) {
+            throw new IllegalArgumentException("id must not be empty");
+        }
+        try {
+            return Long.parseLong(id);
+        } catch (NumberFormatException e) {
+            return Math.abs(id.hashCode());
+        }
+    }
+
+    static Long toLongIdOrNull(String id) {
+        if (!hasText(id)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(id);
+        } catch (NumberFormatException e) {
+            return (long) Math.abs(id.hashCode());
+        }
+    }
 }

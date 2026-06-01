@@ -49,7 +49,10 @@ public class JdbcMemoryTraceRecorderAdapter implements MemoryTraceRecorder {
                 () -> new MemoryTraceEvent("memory", "event", MemoryTraceEvent.STATUS_IGNORED, "", "default", "",
                         Map.of(), Instant.now()));
         long id = JdbcMemorySupport.nextId();
-        String traceId = JdbcMemorySupport.hasText(safeEvent.traceId()) ? safeEvent.traceId() : String.valueOf(id);
+        long traceId = JdbcMemorySupport.hasText(safeEvent.traceId()) ? Long.parseLong(safeEvent.traceId()) : id;
+        Long userId = JdbcMemorySupport.hasText(safeEvent.userId()) ? Long.parseLong(safeEvent.userId()) : null;
+        Long conversationId = JdbcMemorySupport.hasText(safeEvent.conversationId()) ? Long.parseLong(safeEvent.conversationId()) : null;
+        Long subjectId = JdbcMemorySupport.hasText(safeEvent.subjectId()) ? Long.parseLong(safeEvent.subjectId()) : null;
         jdbcTemplate.update("""
                 INSERT INTO t_memory_trace_event
                     (id, trace_id, tenant_id, user_id, conversation_id, session_id, component, event_type,
@@ -59,13 +62,13 @@ public class JdbcMemoryTraceRecorderAdapter implements MemoryTraceRecorder {
                 id,
                 traceId,
                 safeEvent.tenantId(),
-                safeEvent.userId(),
-                safeEvent.conversationId(),
+                userId,
+                conversationId,
                 safeEvent.sessionId(),
                 safeEvent.component(),
                 safeEvent.eventType(),
                 safeEvent.status(),
-                safeEvent.subjectId(),
+                subjectId,
                 safeEvent.subjectType(),
                 JdbcMemorySupport.writeJson(objectMapper, safeEvent.details()),
                 JdbcMemorySupport.timestamp(safeEvent.occurredAt()),
