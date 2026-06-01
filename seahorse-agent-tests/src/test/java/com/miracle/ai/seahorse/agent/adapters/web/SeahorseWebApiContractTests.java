@@ -336,8 +336,8 @@ class SeahorseWebApiContractTests {
         when(tracePort.listNodes("trace-1")).thenReturn(List.of());
 
         KnowledgeBaseInboundPort knowledgeBasePort = mock(KnowledgeBaseInboundPort.class);
-        when(knowledgeBasePort.create(any())).thenReturn("kb-1");
-        when(knowledgeBasePort.queryById("kb-1")).thenReturn(knowledgeBase("kb-1"));
+        when(knowledgeBasePort.create(any())).thenReturn(1L);
+        when(knowledgeBasePort.queryById(1L)).thenReturn(knowledgeBase(1L));
         when(knowledgeBasePort.page(any())).thenReturn(new KnowledgeBasePage(List.of(), 0, 10, 1, 0));
         when(knowledgeBasePort.listChunkStrategies()).thenReturn(List.of());
 
@@ -452,10 +452,10 @@ class SeahorseWebApiContractTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("name", "kb", "embeddingModel", "embed", "collectionName", "col"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data").value("kb-1"));
-        mvc.perform(get("/knowledge-base/kb-1"))
+                .andExpect(jsonPath("$.data").value(1L));
+        mvc.perform(get("/knowledge-base/1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").value("kb-1"));
+                .andExpect(jsonPath("$.data.id").value(1));
         mvc.perform(get("/knowledge-base"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.records").isArray());
@@ -723,77 +723,77 @@ class SeahorseWebApiContractTests {
     @Test
     void shouldKeepKnowledgeDocumentAndChunkFrontendContracts() throws Exception {
         KnowledgeDocumentInboundPort documentPort = mock(KnowledgeDocumentInboundPort.class);
-        when(documentPort.upload(any())).thenReturn(knowledgeDocument("doc-1"));
-        when(documentPort.queryById("doc-1")).thenReturn(knowledgeDocumentDetail("doc-1"));
-        when(documentPort.page(eq("kb-1"), any()))
-                .thenReturn(new KnowledgeDocumentPage(List.of(knowledgeDocumentDetail("doc-1")), 1, 10, 1, 1));
+        when(documentPort.upload(any())).thenReturn(knowledgeDocument(1L));
+        when(documentPort.queryById(1L)).thenReturn(knowledgeDocumentDetail(1L));
+        when(documentPort.page(eq(1L), any()))
+                .thenReturn(new KnowledgeDocumentPage(List.of(knowledgeDocumentDetail(1L)), 1, 10, 1, 1));
         when(documentPort.search(any(), anyInt()))
-                .thenReturn(List.of(new KnowledgeDocumentSummary("doc-1", "kb-1", "Doc", "Knowledge")));
-        when(documentPort.chunkLogs(eq("doc-1"), anyLong(), anyLong()))
+                .thenReturn(List.of(new KnowledgeDocumentSummary(1L, 1L, "Doc", "Knowledge")));
+        when(documentPort.chunkLogs(eq(1L), anyLong(), anyLong()))
                 .thenReturn(new KnowledgeDocumentChunkLogPage(List.of(), 0, 10, 1, 0));
 
         KnowledgeChunkInboundPort chunkPort = mock(KnowledgeChunkInboundPort.class);
-        when(chunkPort.page(eq("doc-1"), any()))
-                .thenReturn(new KnowledgeChunkPage(List.of(knowledgeChunk("chunk-1")), 1, 10, 1, 1));
-        when(chunkPort.create(eq("doc-1"), any())).thenReturn(knowledgeChunk("chunk-1"));
+        when(chunkPort.page(eq(1L), any()))
+                .thenReturn(new KnowledgeChunkPage(List.of(knowledgeChunk(1L)), 1, 10, 1, 1));
+        when(chunkPort.create(eq(1L), any())).thenReturn(knowledgeChunk(1L));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeDocumentController(provider(KnowledgeDocumentInboundPort.class, documentPort)),
                 new SeahorseKnowledgeChunkController(provider(KnowledgeChunkInboundPort.class, chunkPort))).build();
 
-        mvc.perform(multipart("/knowledge-base/kb-1/docs/upload").file("file", "hello".getBytes()))
+        mvc.perform(multipart("/knowledge-base/1/docs/upload").file("file", "hello".getBytes()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").value("doc-1"));
-        mvc.perform(get("/knowledge-base/kb-1/docs"))
+                .andExpect(jsonPath("$.data.id").value(1));
+        mvc.perform(get("/knowledge-base/1/docs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.records[0].id").value("doc-1"));
+                .andExpect(jsonPath("$.data.records[0].id").value(1));
         mvc.perform(get("/knowledge-base/docs/search").param("keyword", "Doc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].id").value("doc-1"));
-        mvc.perform(get("/knowledge-base/docs/doc-1"))
+                .andExpect(jsonPath("$.data[0].id").value(1));
+        mvc.perform(get("/knowledge-base/docs/1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").value("doc-1"));
-        mvc.perform(put("/knowledge-base/docs/doc-1")
+                .andExpect(jsonPath("$.data.id").value(1));
+        mvc.perform(put("/knowledge-base/docs/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("docName", "Doc"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
-        mvc.perform(post("/knowledge-base/docs/doc-1/chunk"))
+        mvc.perform(post("/knowledge-base/docs/1/chunk"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
-        mvc.perform(patch("/knowledge-base/docs/doc-1/enable").param("value", "true"))
+        mvc.perform(patch("/knowledge-base/docs/1/enable").param("value", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
-        mvc.perform(get("/knowledge-base/docs/doc-1/chunk-logs"))
+        mvc.perform(get("/knowledge-base/docs/1/chunk-logs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.records").isArray());
 
-        mvc.perform(get("/knowledge-base/docs/doc-1/chunks"))
+        mvc.perform(get("/knowledge-base/docs/1/chunks"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.records[0].id").value("chunk-1"));
-        mvc.perform(post("/knowledge-base/docs/doc-1/chunks")
+                .andExpect(jsonPath("$.data.records[0].id").value(1));
+        mvc.perform(post("/knowledge-base/docs/1/chunks")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("chunkId", "chunk-1", "content", "hello", "index", 1))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value("chunk-1"));
-        mvc.perform(put("/knowledge-base/docs/doc-1/chunks/chunk-1")
+        mvc.perform(put("/knowledge-base/docs/1/chunks/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("content", "updated"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
-        mvc.perform(patch("/knowledge-base/docs/doc-1/chunks/chunk-1/enable").param("value", "false"))
+        mvc.perform(patch("/knowledge-base/docs/1/chunks/1/enable").param("value", "false"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
-        mvc.perform(patch("/knowledge-base/docs/doc-1/chunks/batch-enable")
+        mvc.perform(patch("/knowledge-base/docs/1/chunks/batch-enable")
                         .param("value", "true")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("chunkIds", List.of("chunk-1")))))
+                        .content(json(Map.of("chunkIds", List.of(1)))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
-        mvc.perform(delete("/knowledge-base/docs/doc-1/chunks/chunk-1"))
+        mvc.perform(delete("/knowledge-base/docs/1/chunks/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
-        mvc.perform(delete("/knowledge-base/docs/doc-1"))
+        mvc.perform(delete("/knowledge-base/docs/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
     }
@@ -801,22 +801,22 @@ class SeahorseWebApiContractTests {
     @Test
     void shouldKeepKeywordIndexMaintenanceContracts() throws Exception {
         KeywordIndexMaintenanceInboundPort maintenancePort = mock(KeywordIndexMaintenanceInboundPort.class);
-        when(maintenancePort.rebuildDocument("doc-1"))
-                .thenReturn(new KeywordIndexRebuildResult("document", "doc-1", 1, 1, 2, 1, 0, 0, List.of()));
-        when(maintenancePort.rebuildKnowledgeBase(eq("kb-1"), anyInt()))
-                .thenReturn(new KeywordIndexRebuildResult("knowledge_base", "kb-1", 3, 2, 8, 3, 1, 0, List.of()));
+        when(maintenancePort.rebuildDocument(1L))
+                .thenReturn(new KeywordIndexRebuildResult("document", "1", 1, 1, 2, 1, 0, 0, List.of()));
+        when(maintenancePort.rebuildKnowledgeBase(eq(1L), anyInt()))
+                .thenReturn(new KeywordIndexRebuildResult("knowledge_base", "1", 3, 2, 8, 3, 1, 0, List.of()));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKeywordIndexMaintenanceController(
                         provider(KeywordIndexMaintenanceInboundPort.class, maintenancePort))).build();
 
-        mvc.perform(post("/knowledge-base/docs/doc-1/keyword-index/rebuild"))
+        mvc.perform(post("/knowledge-base/docs/1/keyword-index/rebuild"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.scope").value("document"))
                 .andExpect(jsonPath("$.data.indexedChunks").value(2));
 
-        mvc.perform(post("/knowledge-base/kb-1/keyword-index/rebuild").param("batchSize", "100"))
+        mvc.perform(post("/knowledge-base/1/keyword-index/rebuild").param("batchSize", "100"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.scope").value("knowledge_base"))
@@ -833,7 +833,7 @@ class SeahorseWebApiContractTests {
         when(backfillPort.pageJobs(any(MetadataBackfillJobQuery.class)))
                 .thenReturn(new MetadataBackfillJobPage(
                         List.of(metadataBackfillJob(MetadataBackfillJobStatus.PENDING)), 1, 10, 1, 1));
-        when(backfillPort.overview("tenant-1", "kb-1"))
+        when(backfillPort.overview("tenant-1", 1L))
                 .thenReturn(metadataBackfillOverview());
         when(backfillPort.runNextBatch("job-1"))
                 .thenReturn(new MetadataBackfillRunResult(
@@ -849,7 +849,7 @@ class SeahorseWebApiContractTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMetadataBackfillController(provider(MetadataBackfillInboundPort.class, backfillPort))).build();
 
-        mvc.perform(post("/knowledge-base/kb-1/metadata-backfill/jobs")
+        mvc.perform(post("/knowledge-base/1/metadata-backfill/jobs")
                         .header("X-User-Id", "admin")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("tenantId", "tenant-1", "pipelineId", "pipe-1", "batchSize", 50))))
@@ -858,7 +858,7 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.jobId").value("job-1"))
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
 
-        mvc.perform(get("/knowledge-base/kb-1/metadata-backfill/jobs")
+        mvc.perform(get("/knowledge-base/1/metadata-backfill/jobs")
                         .param("tenantId", "tenant-1")
                         .param("status", "PENDING")
                         .param("pipelineId", "pipe-1")
@@ -886,7 +886,7 @@ class SeahorseWebApiContractTests {
         assertThat(capturedBackfillQuery.hasFailures()).isTrue();
         assertThat(capturedBackfillQuery.reExtract()).isTrue();
 
-        mvc.perform(get("/knowledge-base/kb-1/metadata-backfill/overview")
+        mvc.perform(get("/knowledge-base/1/metadata-backfill/overview")
                         .param("tenantId", "tenant-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
@@ -895,7 +895,7 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.pendingSchemaCompensationJobs").value(1))
                 .andExpect(jsonPath("$.data.statusCounts[0].key").value("PENDING"))
                 .andExpect(jsonPath("$.data.latestReExtractJob.jobId").value("job-1"));
-        verify(backfillPort).overview("tenant-1", "kb-1");
+        verify(backfillPort).overview("tenant-1", 1L);
 
         mvc.perform(get("/metadata-backfill/jobs/job-1"))
                 .andExpect(status().isOk())
@@ -920,10 +920,10 @@ class SeahorseWebApiContractTests {
     @Test
     void shouldKeepMetadataQualityReportContract() throws Exception {
         MetadataQualityInboundPort qualityPort = mock(MetadataQualityInboundPort.class);
-        when(qualityPort.report("tenant-1", "kb-1", 3, 2, "extractor-v2", "prompt-v3"))
+        when(qualityPort.report("tenant-1", 1L, 3, 2, "extractor-v2", "prompt-v3"))
                 .thenReturn(metadataQualityReport());
         when(qualityPort.compare(
-                "tenant-1", "kb-1", 3,
+                "tenant-1", 1L, 3,
                 1, "extractor-v1", "prompt-v1",
                 2, "extractor-v2", "prompt-v3"))
                 .thenReturn(metadataQualityComparisonReport());
@@ -931,7 +931,7 @@ class SeahorseWebApiContractTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMetadataQualityController(provider(MetadataQualityInboundPort.class, qualityPort))).build();
 
-                mvc.perform(get("/knowledge-base/kb-1/metadata-quality/report")
+                mvc.perform(get("/knowledge-base/1/metadata-quality/report")
                         .param("tenantId", "tenant-1")
                         .param("schemaVersion", "2")
                         .param("extractorVersion", "extractor-v2")
@@ -959,7 +959,7 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.reviewFeedbackSummaries[0].sampleAuditIds[0]").value("audit-1"))
                 .andExpect(jsonPath("$.data.quarantineReasons[0].reasonCode").value("SCHEMA_MISSING"));
 
-        mvc.perform(get("/knowledge-base/kb-1/metadata-quality/compare")
+        mvc.perform(get("/knowledge-base/1/metadata-quality/compare")
                         .param("tenantId", "tenant-1")
                         .param("baselineSchemaVersion", "1")
                         .param("baselineExtractorVersion", "extractor-v1")
@@ -979,12 +979,12 @@ class SeahorseWebApiContractTests {
     @Test
     void shouldKeepMetadataSchemaUsageReportContract() throws Exception {
         MetadataSchemaUsageInboundPort usagePort = mock(MetadataSchemaUsageInboundPort.class);
-        when(usagePort.report("tenant-1", "kb-1", 2)).thenReturn(metadataSchemaUsageReport());
+        when(usagePort.report("tenant-1", 1L, 2)).thenReturn(metadataSchemaUsageReport());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMetadataSchemaUsageController(usagePort)).build();
 
-        mvc.perform(get("/knowledge-base/kb-1/metadata-schema/usage-report")
+        mvc.perform(get("/knowledge-base/1/metadata-schema/usage-report")
                         .param("tenantId", "tenant-1")
                         .param("schemaVersion", "2"))
                 .andExpect(status().isOk())
@@ -1011,7 +1011,7 @@ class SeahorseWebApiContractTests {
                 new SeahorseRetrievalEvaluationController(
                         provider(RetrievalEvaluationInboundPort.class, evaluationPort))).build();
 
-        mvc.perform(post("/knowledge-base/kb-1/retrieval-quality/evaluate")
+        mvc.perform(post("/knowledge-base/1/retrieval-quality/evaluate")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
                                 "tenantId", "tenant-1",
@@ -1035,7 +1035,7 @@ class SeahorseWebApiContractTests {
                         com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand.class);
         verify(evaluationPort).evaluate(captor.capture());
         assertThat(captor.getValue().cases().get(0).filter().system().tenantId()).isEqualTo("tenant-1");
-        assertThat(captor.getValue().cases().get(0).filter().system().knowledgeBaseIds()).containsExactly("kb-1");
+        assertThat(captor.getValue().cases().get(0).filter().system().knowledgeBaseIds()).containsExactly(1L);
         assertThat(captor.getValue().cases().get(0).filter().system().aclSubjectIds()).containsExactly("dept-a");
     }
 
@@ -1059,7 +1059,7 @@ class SeahorseWebApiContractTests {
                 new SeahorseRetrievalEvaluationController(
                         provider(RetrievalEvaluationInboundPort.class, evaluationPort))).build();
 
-        mvc.perform(post("/knowledge-base/kb-1/retrieval-quality/compare")
+        mvc.perform(post("/knowledge-base/1/retrieval-quality/compare")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
                                 "tenantId", "tenant-1",
@@ -1772,7 +1772,7 @@ class SeahorseWebApiContractTests {
         };
     }
 
-    private static KnowledgeBaseRecord knowledgeBase(String id) {
+    private static KnowledgeBaseRecord knowledgeBase(Long id) {
         KnowledgeBaseRecord record = new KnowledgeBaseRecord();
         record.setId(id);
         record.setName("kb");
@@ -1826,26 +1826,26 @@ class SeahorseWebApiContractTests {
         return record;
     }
 
-    private static KnowledgeDocumentRecord knowledgeDocument(String id) {
-        return new KnowledgeDocumentRecord(id, "kb-1", "Doc",
+    private static KnowledgeDocumentRecord knowledgeDocument(Long id) {
+        return new KnowledgeDocumentRecord(id, 1L, "Doc",
                 new KnowledgeDocumentFileRef("s3://bucket/doc.txt", "txt", 5L),
                 new KnowledgeDocumentProcessRef("PENDING", "pipeline", "pipe-1"));
     }
 
-    private static KnowledgeDocumentDetail knowledgeDocumentDetail(String id) {
+    private static KnowledgeDocumentDetail knowledgeDocumentDetail(Long id) {
         KnowledgeDocumentDetail detail = new KnowledgeDocumentDetail();
         detail.setId(id);
-        detail.setKbId("kb-1");
+        detail.setKbId(1L);
         detail.setDocName("Doc");
         detail.setEnabled(true);
         detail.setStatus("PENDING");
         return detail;
     }
 
-    private static KnowledgeChunkRecord knowledgeChunk(String id) {
+    private static KnowledgeChunkRecord knowledgeChunk(Long id) {
         KnowledgeChunkRecord record = new KnowledgeChunkRecord();
         record.setId(id);
-        record.setDocId("doc-1");
+        record.setDocId(1L);
         record.setContent("hello");
         record.setEnabled(1);
         return record;
@@ -1855,7 +1855,7 @@ class SeahorseWebApiContractTests {
         return new MetadataBackfillJobRecord(
                 "job-1",
                 "tenant-1",
-                "kb-1",
+                1L,
                 "pipe-1",
                 status,
                 1,
@@ -1876,7 +1876,7 @@ class SeahorseWebApiContractTests {
     private static MetadataBackfillOperationsOverview metadataBackfillOverview() {
         return new MetadataBackfillOperationsOverview(
                 "tenant-1",
-                "kb-1",
+                1L,
                 2,
                 8,
                 6,
@@ -1903,7 +1903,7 @@ class SeahorseWebApiContractTests {
     private static MetadataQualityReport metadataQualityReport() {
         return new MetadataQualityReport(
                 "tenant-1",
-                "kb-1",
+                1L,
                 2,
                 "extractor-v2",
                 "prompt-v3",
@@ -1927,7 +1927,7 @@ class SeahorseWebApiContractTests {
 
     private static MetadataQualityComparisonReport metadataQualityComparisonReport() {
         MetadataQualityReport baseline = new MetadataQualityReport(
-                "tenant-1", "kb-1", 1, "extractor-v1", "prompt-v1",
+                "tenant-1", 1L, 1, "extractor-v1", "prompt-v1",
                 4, 2, 0.65D, 0.3D, 0.7D, 0.1D, 2, 1, 1,
                 List.of(new MetadataFieldCoverage("department", "部门", true,
                         2, 4, 0.5D, 1, 0.5D, 1, 0, 0D)),
@@ -1937,7 +1937,7 @@ class SeahorseWebApiContractTests {
         MetadataQualityReport candidate = metadataQualityReport();
         return new MetadataQualityComparisonReport(
                 "tenant-1",
-                "kb-1",
+                1L,
                 baseline,
                 candidate,
                 new MetadataQualityComparisonDelta(0, 1, 0.1D, -0.05D, 0.1D, 0.1D, 0, 0, 0),
@@ -1948,7 +1948,7 @@ class SeahorseWebApiContractTests {
     private static MetadataSchemaUsageReport metadataSchemaUsageReport() {
         return new MetadataSchemaUsageReport(
                 "tenant-1",
-                "kb-1",
+                1L,
                 2,
                 4L,
                 1L,
@@ -1964,7 +1964,7 @@ class SeahorseWebApiContractTests {
     private static VersionQualityComparisonReport versionQualityComparisonReport() {
         return new VersionQualityComparisonReport(
                 "tenant-1",
-                "kb-1",
+                1L,
                 metadataQualityComparisonReport(),
                 new RetrievalEvaluationComparisonReport(
                         "baseline",

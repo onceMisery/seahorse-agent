@@ -29,17 +29,14 @@ import java.util.Objects;
  * @param content    Chunk 正文
  * @param enabled    是否启用
  */
-public record KnowledgeChunkSummary(String id,
-                                    String kbId,
-                                    String docId,
+public record KnowledgeChunkSummary(Long id,
+                                    Long kbId,
+                                    Long docId,
                                     Integer chunkIndex,
                                     String content,
                                     boolean enabled) {
 
     public KnowledgeChunkSummary {
-        id = Objects.requireNonNullElse(id, "");
-        kbId = Objects.requireNonNullElse(kbId, "");
-        docId = Objects.requireNonNullElse(docId, "");
         content = Objects.requireNonNullElse(content, "");
     }
 }

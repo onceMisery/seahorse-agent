@@ -26,11 +26,11 @@ public interface UserInboundPort {
 
     UserPage page(long current, long size, String keyword);
 
-    String create(UserCreateCommand command);
+    Long create(UserCreateCommand command);
 
-    void update(String id, UserUpdateCommand command);
+    void update(Long id, UserUpdateCommand command);
 
-    void delete(String id);
+    void delete(Long id);
 
     void changePassword(ChangePasswordCommand command);
 }

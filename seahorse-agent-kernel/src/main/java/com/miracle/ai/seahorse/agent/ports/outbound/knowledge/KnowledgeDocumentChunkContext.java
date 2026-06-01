@@ -20,6 +20,6 @@ package com.miracle.ai.seahorse.agent.ports.outbound.knowledge;
 /**
  * Chunk 管理所需的文档与知识库上下文。
  */
-public record KnowledgeDocumentChunkContext(String docId, String kbId, String status, int enabled,
+public record KnowledgeDocumentChunkContext(Long docId, Long kbId, String status, int enabled,
                                             String collectionName, String embeddingModel) {
 }

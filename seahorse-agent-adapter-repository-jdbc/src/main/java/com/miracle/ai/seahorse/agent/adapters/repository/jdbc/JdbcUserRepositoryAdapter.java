@@ -45,8 +45,8 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
     }
 
     @Override
-    public Optional<UserRecord> findById(String id) {
-        if (!hasText(id)) {
+    public Optional<UserRecord> findById(Long id) {
+        if (id == null) {
             return Optional.empty();
         }
         try {
@@ -73,14 +73,14 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
     }
 
     @Override
-    public boolean usernameExists(String username, String excludedId) {
+    public boolean usernameExists(String username, Long excludedId) {
         if (!hasText(username)) {
             return false;
         }
         StringBuilder sql = new StringBuilder("SELECT COUNT(1) FROM t_user WHERE username = ? AND deleted = 0");
         List<Object> args = new ArrayList<>();
         args.add(username);
-        if (hasText(excludedId)) {
+        if (excludedId != null) {
             sql.append(" AND id <> ?");
             args.add(excludedId);
         }
@@ -109,9 +109,9 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
     }
 
     @Override
-    public String create(UserCreateValues values) {
+    public Long create(UserCreateValues values) {
         UserCreateValues safeValues = Objects.requireNonNull(values, "values must not be null");
-        String id = JdbcMemorySupport.nextId();
+        long id = JdbcMemorySupport.nextId();
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
                 INSERT INTO t_user (id, username, password, avatar, role, create_time, update_time, deleted)
@@ -122,8 +122,8 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
     }
 
     @Override
-    public boolean update(String id, UserUpdateValues values) {
-        if (!hasText(id)) {
+    public boolean update(Long id, UserUpdateValues values) {
+        if (id == null) {
             return false;
         }
         UserUpdateValues safeValues = Objects.requireNonNull(values, "values must not be null");
@@ -145,8 +145,8 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
     }
 
     @Override
-    public boolean delete(String id) {
-        if (!hasText(id)) {
+    public boolean delete(Long id) {
+        if (id == null) {
             return false;
         }
         int updated = jdbcTemplate.update("""
@@ -176,7 +176,7 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
 
     private UserRecord mapUser(ResultSet resultSet, int rowNum) throws SQLException {
         return new UserRecord(
-                resultSet.getString("id"),
+                resultSet.getLong("id"),
                 resultSet.getString("username"),
                 resultSet.getString("password"),
                 resultSet.getString("role"),

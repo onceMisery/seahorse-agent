@@ -579,23 +579,31 @@ public class JdbcChatSchemaUpgrade {
 
     private void widenColumns(String tableName, List<String> columns) {
         for (String column : columns) {
-            Integer currentLength = jdbcTemplate.query(
-                            """
-                            SELECT character_maximum_length
-                            FROM information_schema.columns
-                            WHERE table_name = ? AND column_name = ?
-                            """,
-                            (rs, rowNum) -> rs.getObject(1, Integer.class),
-                            tableName,
-                            column)
-                    .stream()
-                    .findFirst()
-                    .orElse(null);
-            if (currentLength == null || currentLength >= TARGET_LENGTH) {
+            try {
+                List<Integer> results = jdbcTemplate.query(
+                        """
+                        SELECT character_maximum_length
+                        FROM information_schema.columns
+                        WHERE table_name = ? AND column_name = ?
+                        """,
+                        (rs, rowNum) -> rs.getObject(1, Integer.class),
+                        tableName,
+                        column);
+                
+                if (results.isEmpty()) {
+                    continue;
+                }
+                
+                Integer currentLength = results.get(0);
+                if (currentLength == null || currentLength >= TARGET_LENGTH) {
+                    continue;
+                }
+                jdbcTemplate.execute(
+                        "ALTER TABLE " + tableName + " ALTER COLUMN " + column + " TYPE VARCHAR(" + TARGET_LENGTH + ")");
+            } catch (Exception e) {
+                // Skip if column is not VARCHAR type (e.g., BIGINT) or any other error
                 continue;
             }
-            jdbcTemplate.execute(
-                    "ALTER TABLE " + tableName + " ALTER COLUMN " + column + " TYPE VARCHAR(" + TARGET_LENGTH + ")");
         }
     }
 }

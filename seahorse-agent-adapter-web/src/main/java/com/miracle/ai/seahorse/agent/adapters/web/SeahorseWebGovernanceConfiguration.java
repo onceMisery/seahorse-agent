@@ -56,27 +56,68 @@ public class SeahorseWebGovernanceConfiguration implements WebMvcConfigurer, Fil
             @Value("${seahorse-agent.advanced.sandbox-enabled:false}") boolean sandboxEnabled,
             @Value("${seahorse-agent.advanced.connector-management-enabled:false}")
             boolean connectorManagementEnabled,
+            @Value("${seahorse-agent.advanced.mcp-tool-enabled:false}") boolean mcpToolEnabled,
             @Value("${seahorse-agent.advanced.secret-management-enabled:false}") boolean secretManagementEnabled,
             @Value("${seahorse-agent.advanced.agent-handoff-enabled:false}") boolean agentHandoffEnabled,
             @Value("${seahorse-agent.advanced.remote-agent-enabled:false}") boolean remoteAgentEnabled,
             @Value("${seahorse-agent.advanced.local-agent-enabled:false}") boolean localAgentEnabled,
-            @Value("${seahorse-agent.advanced.mcp-tool-enabled:false}") boolean mcpToolEnabled,
+            @Value("${seahorse-agent.advanced.intent-tree-management-enabled:false}") boolean intentTreeManagementEnabled,
+            @Value("${seahorse-agent.advanced.ingestion-task-management-enabled:false}")
+            boolean ingestionTaskManagementEnabled,
+            @Value("${seahorse-agent.advanced.ingestion-pipeline-management-enabled:false}")
+            boolean ingestionPipelineManagementEnabled,
+            @Value("${seahorse-agent.advanced.tool-catalog-management-enabled:false}")
+            boolean toolCatalogManagementEnabled,
+            @Value("${seahorse-agent.advanced.agent-definition-management-enabled:false}")
+            boolean agentDefinitionManagementEnabled,
+            @Value("${seahorse-agent.advanced.agent-factory-management-enabled:false}")
+            boolean agentFactoryManagementEnabled,
+            @Value("${seahorse-agent.advanced.agent-tool-binding-management-enabled:false}")
+            boolean agentToolBindingManagementEnabled,
             @Value("${seahorse-agent.advanced.agent-run-management-enabled:false}")
             boolean agentRunManagementEnabled,
             @Value("${seahorse-agent.advanced.agent-evaluation-enabled:false}") boolean agentEvaluationEnabled,
-            @Value("${seahorse-agent.advanced.production-gate-enabled:false}") boolean productionGateEnabled) {
+            @Value("${seahorse-agent.advanced.production-gate-enabled:false}") boolean productionGateEnabled,
+            @Value("${seahorse-agent.advanced.enterprise-pilot-readiness-enabled:false}")
+            boolean enterprisePilotReadinessEnabled,
+            @Value("${seahorse-agent.advanced.agent-rollout-management-enabled:false}")
+            boolean agentRolloutManagementEnabled,
+            @Value("${seahorse-agent.advanced.quota-management-enabled:false}") boolean quotaManagementEnabled,
+            @Value("${seahorse-agent.advanced.resource-acl-management-enabled:false}")
+            boolean resourceAclManagementEnabled,
+            @Value("${seahorse-agent.advanced.memory-governance-enabled:false}") boolean memoryGovernanceEnabled,
+            @Value("${seahorse-agent.advanced.rag-evaluation-enabled:false}") boolean ragEvaluationEnabled,
+            @Value("${seahorse-agent.advanced.metadata-governance-enabled:false}") boolean metadataGovernanceEnabled,
+            @Value("${seahorse-agent.advanced.audit-log-enabled:false}") boolean auditLogEnabled,
+            @Value("${seahorse-agent.advanced.cost-analytics-enabled:false}") boolean costAnalyticsEnabled) {
         return AdvancedFeatureGate.configured(
                 ProductMode.fromProperty(productMode),
                 sandboxEnabled,
                 connectorManagementEnabled,
+                mcpToolEnabled,
                 secretManagementEnabled,
                 agentHandoffEnabled,
                 remoteAgentEnabled,
                 localAgentEnabled,
-                mcpToolEnabled,
+                intentTreeManagementEnabled,
+                ingestionTaskManagementEnabled,
+                ingestionPipelineManagementEnabled,
+                toolCatalogManagementEnabled,
+                agentDefinitionManagementEnabled,
+                agentFactoryManagementEnabled,
+                agentToolBindingManagementEnabled,
                 agentRunManagementEnabled,
                 agentEvaluationEnabled,
-                productionGateEnabled);
+                productionGateEnabled,
+                enterprisePilotReadinessEnabled,
+                agentRolloutManagementEnabled,
+                quotaManagementEnabled,
+                resourceAclManagementEnabled,
+                memoryGovernanceEnabled,
+                ragEvaluationEnabled,
+                metadataGovernanceEnabled,
+                auditLogEnabled,
+                costAnalyticsEnabled);
     }
 
     @Override

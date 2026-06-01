@@ -129,7 +129,7 @@ public class KernelOpenApiConnectorImportService implements OpenApiConnectorInbo
         String name = requireText(safeCommand.name(), "name must not be blank");
         String specJson = requireText(safeCommand.specJson(), "specJson must not be blank");
         CurrentUser user = currentUserPort.requireCurrentUser();
-        String importedBy = textOrDefault(safeCommand.importedBy(), user.userId());
+        String importedBy = textOrDefault(safeCommand.importedBy(), String.valueOf(user.userId()));
         Instant now = clock.instant();
         OpenApiSpecDocument document = parser.parse(new OpenApiSpecParseRequest(specJson));
         String connectorId = connectorId(tenantId, name);
@@ -167,7 +167,7 @@ public class KernelOpenApiConnectorImportService implements OpenApiConnectorInbo
         appendAudit(
                 AuditEventType.CONNECTOR_IMPORTED,
                 tenantId,
-                user.userId(),
+                String.valueOf(user.userId()),
                 RESOURCE_TYPE_CONNECTOR,
                 connectorId,
                 """
@@ -200,7 +200,7 @@ public class KernelOpenApiConnectorImportService implements OpenApiConnectorInbo
         CredentialAuthType authType = Objects.requireNonNull(safeCommand.authType(), "authType must not be null");
         String credentialRef = requireText(safeCommand.credentialRef(), "credentialRef must not be blank");
         CurrentUser user = currentUserPort.requireCurrentUser();
-        String boundBy = textOrDefault(safeCommand.boundBy(), user.userId());
+        String boundBy = textOrDefault(safeCommand.boundBy(), String.valueOf(user.userId()));
         Connector connector = connectorRepository.findConnectorById(connectorId)
                 .orElseThrow(() -> new IllegalArgumentException(CONNECTOR_NOT_FOUND));
         connectorRepository.findOperation(connectorId, operationId)
@@ -222,7 +222,7 @@ public class KernelOpenApiConnectorImportService implements OpenApiConnectorInbo
         appendAudit(
                 AuditEventType.CONNECTOR_CREDENTIAL_BOUND,
                 connector.tenantId(),
-                user.userId(),
+                String.valueOf(user.userId()),
                 RESOURCE_TYPE_CONNECTOR_OPERATION,
                 operationId,
                 """
@@ -264,7 +264,7 @@ public class KernelOpenApiConnectorImportService implements OpenApiConnectorInbo
         appendAudit(
                 AuditEventType.CONNECTOR_OPERATION_ENABLED,
                 connector.tenantId(),
-                user.userId(),
+                String.valueOf(user.userId()),
                 RESOURCE_TYPE_CONNECTOR_OPERATION,
                 operationId,
                 """
@@ -290,7 +290,7 @@ public class KernelOpenApiConnectorImportService implements OpenApiConnectorInbo
         appendAudit(
                 AuditEventType.CONNECTOR_OPERATION_DISABLED,
                 connector.tenantId(),
-                user.userId(),
+                String.valueOf(user.userId()),
                 RESOURCE_TYPE_CONNECTOR_OPERATION,
                 operationId,
                 """

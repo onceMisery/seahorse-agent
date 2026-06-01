@@ -51,5 +51,5 @@ public interface KnowledgeBaseQueryPort {
      * @param docId 文档 ID
      * @return Chunk 摘要列表
      */
-    List<KnowledgeChunkSummary> listChunksByDocId(String docId);
+    List<KnowledgeChunkSummary> listChunksByDocId(Long docId);
 }

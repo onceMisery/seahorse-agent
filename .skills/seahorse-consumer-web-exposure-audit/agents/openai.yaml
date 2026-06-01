@@ -1,0 +1,4 @@
+interface:
+  display_name: "Seahorse Consumer Web Exposure Audit"
+  short_description: "Audit consumer-web exposure gates"
+  default_prompt: "Use $seahorse-consumer-web-exposure-audit to audit consumer-web default exposure risks in Seahorse Agent."

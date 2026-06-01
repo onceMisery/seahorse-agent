@@ -81,8 +81,8 @@ public class JdbcKnowledgeBaseQueryAdapter implements KnowledgeBaseQueryPort {
     }
 
     @Override
-    public List<KnowledgeChunkSummary> listChunksByDocId(String docId) {
-        if (docId == null || docId.isBlank()) {
+    public List<KnowledgeChunkSummary> listChunksByDocId(Long docId) {
+        if (docId == null) {
             return List.of();
         }
         return jdbcTemplate.query(SQL_LIST_CHUNKS, this::toChunkSummary, docId);
@@ -90,17 +90,17 @@ public class JdbcKnowledgeBaseQueryAdapter implements KnowledgeBaseQueryPort {
 
     private KnowledgeDocumentSummary toDocumentSummary(ResultSet resultSet, int rowNumber) throws SQLException {
         return new KnowledgeDocumentSummary(
-                resultSet.getString("id"),
-                resultSet.getString("kb_id"),
+                resultSet.getLong("id"),
+                resultSet.getLong("kb_id"),
                 resultSet.getString("doc_name"),
                 resultSet.getString("kb_name"));
     }
 
     private KnowledgeChunkSummary toChunkSummary(ResultSet resultSet, int rowNumber) throws SQLException {
         return new KnowledgeChunkSummary(
-                resultSet.getString("id"),
-                resultSet.getString("kb_id"),
-                resultSet.getString("doc_id"),
+                resultSet.getLong("id"),
+                resultSet.getLong("kb_id"),
+                resultSet.getLong("doc_id"),
                 resultSet.getObject("chunk_index", Integer.class),
                 resultSet.getString("content"),
                 resultSet.getInt("enabled") == ENABLED_VALUE);
@@ -108,7 +108,7 @@ public class JdbcKnowledgeBaseQueryAdapter implements KnowledgeBaseQueryPort {
 
     private KnowledgeBaseRef toKnowledgeBaseRef(ResultSet resultSet, int rowNumber) throws SQLException {
         return new KnowledgeBaseRef(
-                resultSet.getString("id"),
+                resultSet.getLong("id"),
                 resultSet.getString("name"),
                 resultSet.getString("collection_name"));
     }

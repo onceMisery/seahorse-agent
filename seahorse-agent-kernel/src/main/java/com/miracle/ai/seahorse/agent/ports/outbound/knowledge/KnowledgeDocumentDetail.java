@@ -24,8 +24,8 @@ import java.time.Instant;
  */
 public class KnowledgeDocumentDetail {
 
-    private String id;
-    private String kbId;
+    private Long id;
+    private Long kbId;
     private String kbName;
     private String collectionName;
     private String embeddingModel;
@@ -49,19 +49,19 @@ public class KnowledgeDocumentDetail {
     private Instant createTime;
     private Instant updateTime;
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
-    public String getKbId() {
+    public Long getKbId() {
         return kbId;
     }
 
-    public void setKbId(String kbId) {
+    public void setKbId(Long kbId) {
         this.kbId = kbId;
     }
 

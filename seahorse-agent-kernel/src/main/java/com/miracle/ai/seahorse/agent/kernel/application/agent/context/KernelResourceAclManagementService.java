@@ -103,7 +103,7 @@ public class KernelResourceAclManagementService implements ResourceAclManagement
                 ResourceAclRuleStatus.ENABLED,
                 safeCommand.priority(),
                 safeCommand.expiresAt(),
-                currentUser.userId(),
+                String.valueOf(currentUser.userId()),
                 now,
                 now));
         appendRuleAudit(currentUser, created, AUDIT_OPERATION_CREATE);
@@ -162,7 +162,7 @@ public class KernelResourceAclManagementService implements ResourceAclManagement
         List<ResourceAclRule> createdRules = new ArrayList<>();
         for (ResourceAclImportDryRunItem item : report.items()) {
             if (item.status() == ResourceAclImportItemStatus.VALID) {
-                createdRules.add(repository.save(toRule(item.item(), currentUser.userId(), now)));
+                createdRules.add(repository.save(toRule(item.item(), String.valueOf(currentUser.userId()), now)));
             }
         }
         ResourceAclImportResult result = new ResourceAclImportResult(
@@ -364,7 +364,7 @@ public class KernelResourceAclManagementService implements ResourceAclManagement
                 safeTenantId,
                 AuditEventType.RESOURCE_ACL_CHANGED,
                 AuditActorType.USER,
-                user.userId(),
+                String.valueOf(user.userId()),
                 null,
                 null,
                 resourceType,

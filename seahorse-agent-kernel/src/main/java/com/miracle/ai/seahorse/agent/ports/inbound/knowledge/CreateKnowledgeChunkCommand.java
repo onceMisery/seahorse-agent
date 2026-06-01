@@ -20,5 +20,5 @@ package com.miracle.ai.seahorse.agent.ports.inbound.knowledge;
 /**
  * 创建 Chunk 命令。
  */
-public record CreateKnowledgeChunkCommand(String chunkId, String content, Integer index, String operator) {
+public record CreateKnowledgeChunkCommand(Long chunkId, String content, Integer index, String operator) {
 }

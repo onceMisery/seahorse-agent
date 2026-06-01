@@ -49,7 +49,7 @@ public class SpringCurrentUserAdapter implements CurrentUserPort {
         if (userId == null) {
             return Optional.empty();
         }
-        return userRepositoryPort.findById(userId).map(this::toCurrentUser);
+        return userRepositoryPort.findById(Long.parseLong(userId)).map(this::toCurrentUser);
     }
 
     private String resolveUserId(HttpServletRequest request) {

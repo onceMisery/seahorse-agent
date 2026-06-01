@@ -28,13 +28,13 @@ import java.util.List;
  */
 public interface KnowledgeBaseInboundPort {
 
-    String create(CreateKnowledgeBaseCommand command);
+    Long create(CreateKnowledgeBaseCommand command);
 
-    void update(String kbId, UpdateKnowledgeBaseCommand command);
+    void update(Long kbId, UpdateKnowledgeBaseCommand command);
 
-    void delete(String kbId, String operator);
+    void delete(Long kbId, String operator);
 
-    KnowledgeBaseRecord queryById(String kbId);
+    KnowledgeBaseRecord queryById(Long kbId);
 
     KnowledgeBasePage page(KnowledgeBasePageCommand command);
 

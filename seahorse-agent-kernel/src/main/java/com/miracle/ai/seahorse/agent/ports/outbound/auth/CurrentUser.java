@@ -17,7 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.auth;
 
-public record CurrentUser(String userId, String username, String role, String avatar) {
+public record CurrentUser(Long userId, String username, String role, String avatar) {
 
     public boolean hasRole(String expectedRole) {
         return expectedRole != null && role != null && expectedRole.equalsIgnoreCase(role);

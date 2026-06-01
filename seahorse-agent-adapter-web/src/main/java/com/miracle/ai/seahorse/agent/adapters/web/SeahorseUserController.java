@@ -62,7 +62,7 @@ public class SeahorseUserController {
     @PostMapping("/users")
     public Map<String, Object> create(@RequestBody UserSaveRequest request) {
         UserSaveRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        String id = userInboundPortProvider.getIfAvailable().create(new UserCreateCommand(
+        Long id = userInboundPortProvider.getIfAvailable().create(new UserCreateCommand(
                 safeRequest.getUsername(), safeRequest.getPassword(), safeRequest.getRole(), safeRequest.getAvatar()));
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, id);
     }
@@ -70,14 +70,14 @@ public class SeahorseUserController {
     @PutMapping("/users/{id}")
     public Map<String, Object> update(@PathVariable String id, @RequestBody UserSaveRequest request) {
         UserSaveRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        userInboundPortProvider.getIfAvailable().update(id, new UserUpdateCommand(
+        userInboundPortProvider.getIfAvailable().update(Long.parseLong(id), new UserUpdateCommand(
                 safeRequest.getUsername(), safeRequest.getPassword(), safeRequest.getRole(), safeRequest.getAvatar()));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @DeleteMapping("/users/{id}")
     public Map<String, Object> delete(@PathVariable String id) {
-        userInboundPortProvider.getIfAvailable().delete(id);
+        userInboundPortProvider.getIfAvailable().delete(Long.parseLong(id));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 

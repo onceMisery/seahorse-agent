@@ -21,17 +21,17 @@ import java.util.Optional;
 
 public interface UserRepositoryPort {
 
-    Optional<UserRecord> findById(String id);
+    Optional<UserRecord> findById(Long id);
 
     Optional<UserRecord> findByUsername(String username);
 
-    boolean usernameExists(String username, String excludedId);
+    boolean usernameExists(String username, Long excludedId);
 
     UserPage page(long current, long size, String keyword);
 
-    String create(UserCreateValues values);
+    Long create(UserCreateValues values);
 
-    boolean update(String id, UserUpdateValues values);
+    boolean update(Long id, UserUpdateValues values);
 
-    boolean delete(String id);
+    boolean delete(Long id);
 }

@@ -15,8 +15,8 @@ public interface MetadataExtractionResultRepositoryPort {
     }
 
     default boolean hasAcceptedResult(String tenantId,
-                                      String knowledgeBaseId,
-                                      String documentId,
+                                      Long knowledgeBaseId,
+                                      Long documentId,
                                       int schemaVersion,
                                       String extractorVersion) {
         return false;

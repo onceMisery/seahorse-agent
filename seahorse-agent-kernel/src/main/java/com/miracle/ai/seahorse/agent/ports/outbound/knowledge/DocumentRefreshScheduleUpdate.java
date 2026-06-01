@@ -24,7 +24,7 @@ import java.util.Objects;
  * 文档刷新后写回调度主状态的值对象。
  */
 public record DocumentRefreshScheduleUpdate(
-        String scheduleId,
+        Long scheduleId,
         String status,
         String message,
         Instant lastRunTime,
@@ -35,7 +35,6 @@ public record DocumentRefreshScheduleUpdate(
 ) {
 
     public DocumentRefreshScheduleUpdate {
-        scheduleId = Objects.requireNonNullElse(scheduleId, "");
         status = Objects.requireNonNullElse(status, "");
     }
 }

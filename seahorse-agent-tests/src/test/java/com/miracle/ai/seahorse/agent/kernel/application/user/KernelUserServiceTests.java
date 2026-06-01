@@ -40,18 +40,18 @@ class KernelUserServiceTests {
     void shouldRequireAdminWhenCreatingUser() {
         MemoryUserRepository repository = new MemoryUserRepository();
         KernelUserService service = new KernelUserService(repository, PasswordHasherPort.plainText(),
-                () -> Optional.of(new CurrentUser("admin-1", "root", "admin", null)));
+                () -> Optional.of(new CurrentUser(1L, "root", "admin", null)));
 
-        String id = service.create(new UserCreateCommand("bob", "pw", null, null));
+        Long id = service.create(new UserCreateCommand("bob", "pw", null, null));
 
-        assertThat(id).isEqualTo("new-1");
+        assertThat(id).isEqualTo(1L);
         assertThat(repository.created.role()).isEqualTo("user");
     }
 
     @Test
     void shouldRejectNonAdminForUserManagement() {
         KernelUserService service = new KernelUserService(new MemoryUserRepository(), PasswordHasherPort.plainText(),
-                () -> Optional.of(new CurrentUser("user-1", "u", "user", null)));
+                () -> Optional.of(new CurrentUser(1L, "u", "user", null)));
 
         assertThatThrownBy(() -> service.page(1, 10, null))
                 .isInstanceOf(IllegalStateException.class)
@@ -61,7 +61,7 @@ class KernelUserServiceTests {
     @Test
     void shouldChangeCurrentUserPassword() {
         MemoryUserRepository repository = new MemoryUserRepository();
-        CurrentUserPort currentUserPort = () -> Optional.of(new CurrentUser("user-1", "alice", "user", null));
+        CurrentUserPort currentUserPort = () -> Optional.of(new CurrentUser(1L, "alice", "user", null));
         KernelUserService service = new KernelUserService(repository, PasswordHasherPort.plainText(), currentUserPort);
 
         service.changePassword(new ChangePasswordCommand("old", "new"));
@@ -72,10 +72,10 @@ class KernelUserServiceTests {
     private static class MemoryUserRepository implements UserRepositoryPort {
         private UserCreateValues created;
         private UserUpdateValues updated;
-        private final UserRecord current = new UserRecord("user-1", "alice", "old", "user", null, null, null);
+        private final UserRecord current = new UserRecord(1L, "alice", "old", "user", null, null, null);
 
         @Override
-        public Optional<UserRecord> findById(String id) {
+        public Optional<UserRecord> findById(Long id) {
             return Optional.of(current);
         }
 
@@ -85,7 +85,7 @@ class KernelUserServiceTests {
         }
 
         @Override
-        public boolean usernameExists(String username, String excludedId) {
+        public boolean usernameExists(String username, Long excludedId) {
             return false;
         }
 
@@ -95,19 +95,19 @@ class KernelUserServiceTests {
         }
 
         @Override
-        public String create(UserCreateValues values) {
+        public Long create(UserCreateValues values) {
             created = values;
-            return "new-1";
+            return 1L;
         }
 
         @Override
-        public boolean update(String id, UserUpdateValues values) {
+        public boolean update(Long id, UserUpdateValues values) {
             updated = values;
             return true;
         }
 
         @Override
-        public boolean delete(String id) {
+        public boolean delete(Long id) {
             return true;
         }
     }

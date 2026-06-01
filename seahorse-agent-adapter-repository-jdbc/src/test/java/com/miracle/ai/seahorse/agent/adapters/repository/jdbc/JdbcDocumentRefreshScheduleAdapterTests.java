@@ -49,17 +49,17 @@ class JdbcDocumentRefreshScheduleAdapterTests {
     void shouldUpsertFindDueAndWriteExecutionState() {
         Instant now = Instant.parse("2026-05-10T00:00:00Z");
         adapter.upsert(new DocumentRefreshSchedule(
-                null, "doc-1", "kb-1", "0 0/5 * * * ?", true,
+                null, "1", "kb-1", "0 0/5 * * * ?", true,
                 now.minusSeconds(1), null, null, null));
 
-        DocumentRefreshSchedule stored = adapter.findByDocumentId("doc-1").orElseThrow();
+        DocumentRefreshSchedule stored = adapter.findByDocumentId(1L).orElseThrow();
         assertThat(adapter.findDueSchedules(now, 10)).extracting(DocumentRefreshSchedule::docId)
-                .containsExactly("doc-1");
+                .containsExactly("1");
 
         String execId = adapter.start(new DocumentRefreshExecutionStart(
-                stored.id(), "doc-1", "kb-1", now));
+                stored.id(), "1", "kb-1", now));
         adapter.finish(new DocumentRefreshExecutionFinish(
-                execId, stored.id(), "doc-1", "kb-1", "success", "OK",
+                execId, stored.id(), "1", "kb-1", "success", "OK",
                 now, now.plusSeconds(2), "remote.txt", 12L, "hash-1", null, null));
         adapter.updateState(new DocumentRefreshScheduleUpdate(
                 stored.id(), "success", null, now, now.plusSeconds(300), "hash-1", null, null));

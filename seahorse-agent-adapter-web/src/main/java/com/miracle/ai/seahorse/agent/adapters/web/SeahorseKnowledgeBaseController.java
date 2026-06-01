@@ -60,7 +60,7 @@ public class SeahorseKnowledgeBaseController {
     public Map<String, Object> create(@RequestBody KnowledgeBaseCreateRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         KnowledgeBaseCreateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        String id = knowledgeBasePortProvider.getIfAvailable().create(new CreateKnowledgeBaseCommand(
+        Long id = knowledgeBasePortProvider.getIfAvailable().create(new CreateKnowledgeBaseCommand(
                 safeRequest.name(), safeRequest.embeddingModel(), safeRequest.collectionName(), operator(userId)));
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, id);
     }
@@ -70,7 +70,7 @@ public class SeahorseKnowledgeBaseController {
                                       @RequestBody KnowledgeBaseUpdateRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         KnowledgeBaseUpdateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        knowledgeBasePortProvider.getIfAvailable().update(kbId, new UpdateKnowledgeBaseCommand(
+        knowledgeBasePortProvider.getIfAvailable().update(Long.parseLong(kbId), new UpdateKnowledgeBaseCommand(
                 safeRequest.name(), safeRequest.embeddingModel(), operator(userId)));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
@@ -78,13 +78,13 @@ public class SeahorseKnowledgeBaseController {
     @DeleteMapping("/knowledge-base/{kb-id}")
     public Map<String, Object> delete(@PathVariable("kb-id") String kbId,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        knowledgeBasePortProvider.getIfAvailable().delete(kbId, operator(userId));
+        knowledgeBasePortProvider.getIfAvailable().delete(Long.parseLong(kbId), operator(userId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @GetMapping("/knowledge-base/{kb-id}")
     public Map<String, Object> queryById(@PathVariable("kb-id") String kbId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, knowledgeBasePortProvider.getIfAvailable().queryById(kbId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, knowledgeBasePortProvider.getIfAvailable().queryById(Long.parseLong(kbId)));
     }
 
     @GetMapping("/knowledge-base")

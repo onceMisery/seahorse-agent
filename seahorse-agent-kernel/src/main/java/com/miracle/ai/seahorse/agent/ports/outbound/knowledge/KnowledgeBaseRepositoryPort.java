@@ -24,19 +24,19 @@ import java.util.Optional;
  */
 public interface KnowledgeBaseRepositoryPort {
 
-    String create(CreateKnowledgeBaseValues values);
+    Long create(CreateKnowledgeBaseValues values);
 
-    boolean nameExists(String normalizedName, String excludedKbId);
+    boolean nameExists(String normalizedName, Long excludedKbId);
 
-    Optional<KnowledgeBaseRecord> findById(String kbId);
+    Optional<KnowledgeBaseRecord> findById(Long kbId);
 
     KnowledgeBasePage page(long current, long size, String name);
 
-    boolean hasDocuments(String kbId);
+    boolean hasDocuments(Long kbId);
 
-    boolean hasVectorizedDocuments(String kbId);
+    boolean hasVectorizedDocuments(Long kbId);
 
-    boolean update(String kbId, KnowledgeBaseUpdateValues values);
+    boolean update(Long kbId, KnowledgeBaseUpdateValues values);
 
-    boolean delete(String kbId, String operator);
+    boolean delete(Long kbId, String operator);
 }

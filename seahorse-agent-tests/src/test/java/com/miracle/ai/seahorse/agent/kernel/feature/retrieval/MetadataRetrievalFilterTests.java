@@ -212,7 +212,7 @@ class MetadataRetrievalFilterTests {
     void shouldGenerateQueryEmbeddingForVectorGlobalSearch() {
         RecordingVectorSearchPort vectorSearchPort = new RecordingVectorSearchPort();
         VectorGlobalSearchFeature feature = new VectorGlobalSearchFeature(
-                new StaticKnowledgeBaseQueryPort(List.of(new KnowledgeBaseRef("kb-a", "知识库", "collection-a"))),
+                new StaticKnowledgeBaseQueryPort(List.of(new KnowledgeBaseRef(1L, "知识库", "collection-a"))),
                 vectorSearchPort,
                 (modelId, text) -> List.of(0.1F, 0.2F, 0.3F));
 
@@ -426,7 +426,7 @@ class MetadataRetrievalFilterTests {
         }
 
         @Override
-        public List<KnowledgeChunkSummary> listChunksByDocId(String docId) {
+        public List<KnowledgeChunkSummary> listChunksByDocId(Long docId) {
             return List.of();
         }
     }

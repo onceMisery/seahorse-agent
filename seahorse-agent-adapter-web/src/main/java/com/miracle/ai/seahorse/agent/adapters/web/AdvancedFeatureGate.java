@@ -53,6 +53,63 @@ public final class AdvancedFeatureGate {
     public static AdvancedFeatureGate configured(ProductMode productMode,
                                                  boolean sandboxEnabled,
                                                  boolean connectorManagementEnabled,
+                                                 boolean mcpToolEnabled,
+                                                 boolean secretManagementEnabled,
+                                                 boolean agentHandoffEnabled,
+                                                 boolean remoteAgentEnabled,
+                                                 boolean localAgentEnabled,
+                                                 boolean intentTreeManagementEnabled,
+                                                 boolean ingestionTaskManagementEnabled,
+                                                 boolean ingestionPipelineManagementEnabled,
+                                                 boolean toolCatalogManagementEnabled,
+                                                 boolean agentDefinitionManagementEnabled,
+                                                 boolean agentFactoryManagementEnabled,
+                                                 boolean agentToolBindingManagementEnabled,
+                                                 boolean agentRunManagementEnabled,
+                                                 boolean agentEvaluationEnabled,
+                                                 boolean productionGateEnabled,
+                                                 boolean enterprisePilotReadinessEnabled,
+                                                 boolean agentRolloutManagementEnabled,
+                                                 boolean quotaManagementEnabled,
+                                                 boolean resourceAclManagementEnabled,
+                                                 boolean memoryGovernanceEnabled,
+                                                 boolean ragEvaluationEnabled,
+                                                 boolean metadataGovernanceEnabled,
+                                                 boolean auditLogEnabled,
+                                                 boolean costAnalyticsEnabled) {
+        EnumMap<AdvancedFeature, Boolean> features = new EnumMap<>(AdvancedFeature.class);
+        features.put(AdvancedFeature.SANDBOX, sandboxEnabled);
+        features.put(AdvancedFeature.CONNECTOR_MANAGEMENT, connectorManagementEnabled);
+        features.put(AdvancedFeature.MCP_TOOL, mcpToolEnabled);
+        features.put(AdvancedFeature.SECRET_MANAGEMENT, secretManagementEnabled);
+        features.put(AdvancedFeature.AGENT_HANDOFF, agentHandoffEnabled);
+        features.put(AdvancedFeature.REMOTE_AGENT, remoteAgentEnabled);
+        features.put(AdvancedFeature.LOCAL_AGENT, localAgentEnabled);
+        features.put(AdvancedFeature.INTENT_TREE_MANAGEMENT, intentTreeManagementEnabled);
+        features.put(AdvancedFeature.INGESTION_TASK_MANAGEMENT, ingestionTaskManagementEnabled);
+        features.put(AdvancedFeature.INGESTION_PIPELINE_MANAGEMENT, ingestionPipelineManagementEnabled);
+        features.put(AdvancedFeature.TOOL_CATALOG_MANAGEMENT, toolCatalogManagementEnabled);
+        features.put(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT, agentDefinitionManagementEnabled);
+        features.put(AdvancedFeature.AGENT_FACTORY_MANAGEMENT, agentFactoryManagementEnabled);
+        features.put(AdvancedFeature.AGENT_TOOL_BINDING_MANAGEMENT, agentToolBindingManagementEnabled);
+        features.put(AdvancedFeature.AGENT_RUN_MANAGEMENT, agentRunManagementEnabled);
+        features.put(AdvancedFeature.AGENT_EVALUATION, agentEvaluationEnabled);
+        features.put(AdvancedFeature.PRODUCTION_GATE, productionGateEnabled);
+        features.put(AdvancedFeature.ENTERPRISE_PILOT_READINESS, enterprisePilotReadinessEnabled);
+        features.put(AdvancedFeature.AGENT_ROLLOUT_MANAGEMENT, agentRolloutManagementEnabled);
+        features.put(AdvancedFeature.QUOTA_MANAGEMENT, quotaManagementEnabled);
+        features.put(AdvancedFeature.RESOURCE_ACL_MANAGEMENT, resourceAclManagementEnabled);
+        features.put(AdvancedFeature.MEMORY_GOVERNANCE, memoryGovernanceEnabled);
+        features.put(AdvancedFeature.RAG_EVALUATION, ragEvaluationEnabled);
+        features.put(AdvancedFeature.METADATA_GOVERNANCE, metadataGovernanceEnabled);
+        features.put(AdvancedFeature.AUDIT_LOG, auditLogEnabled);
+        features.put(AdvancedFeature.COST_ANALYTICS, costAnalyticsEnabled);
+        return new AdvancedFeatureGate(productMode, features);
+    }
+
+    public static AdvancedFeatureGate configured(ProductMode productMode,
+                                                 boolean sandboxEnabled,
+                                                 boolean connectorManagementEnabled,
                                                  boolean secretManagementEnabled,
                                                  boolean agentHandoffEnabled,
                                                  boolean remoteAgentEnabled,

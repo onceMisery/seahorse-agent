@@ -26,10 +26,9 @@ import java.util.Objects;
  * @param name           知识库名称
  * @param collectionName 向量集合名称
  */
-public record KnowledgeBaseRef(String id, String name, String collectionName) {
+public record KnowledgeBaseRef(Long id, String name, String collectionName) {
 
     public KnowledgeBaseRef {
-        id = Objects.requireNonNullElse(id, "");
         name = Objects.requireNonNullElse(name, "");
         collectionName = Objects.requireNonNullElse(collectionName, "");
     }

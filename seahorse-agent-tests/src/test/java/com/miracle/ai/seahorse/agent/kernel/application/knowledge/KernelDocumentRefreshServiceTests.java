@@ -65,11 +65,11 @@ class KernelDocumentRefreshServiceTests {
         ports.fetcher.result = new DocumentFetchResult("fresh content".getBytes(), "text/plain", "fresh.txt");
         KernelDocumentRefreshService service = newService(ports);
 
-        DocumentRefreshResult result = service.refreshDocument("doc-1", "system");
+        DocumentRefreshResult result = service.refreshDocument("1", "system");
 
         assertThat(result.status()).isEqualTo("success");
         assertThat(ports.repository.replacedFile.fileUrl()).isEqualTo("local://fresh.txt");
-        assertThat(ports.documentPort.executedDocIds).containsExactly("doc-1");
+        assertThat(ports.documentPort.executedDocIds).containsExactly(1L);
         assertThat(ports.schedulePort.updates).extracting(DocumentRefreshScheduleUpdate::status)
                 .containsExactly("success");
         assertThat(ports.stateRepository.finishes).extracting(DocumentRefreshExecutionFinish::status)
@@ -84,7 +84,7 @@ class KernelDocumentRefreshServiceTests {
                 KernelDocumentRefreshService.contentHash("same content".getBytes()));
         KernelDocumentRefreshService service = newService(ports);
 
-        DocumentRefreshResult result = service.refreshDocument("doc-1", "system");
+        DocumentRefreshResult result = service.refreshDocument("1", "system");
 
         assertThat(result.status()).isEqualTo("skipped");
         assertThat(ports.repository.replacedFile).isNull();
@@ -99,7 +99,7 @@ class KernelDocumentRefreshServiceTests {
         ports.fetcher.failure = new IllegalStateException("remote unavailable");
         KernelDocumentRefreshService service = newService(ports);
 
-        DocumentRefreshResult result = service.refreshDocument("doc-1", "system");
+        DocumentRefreshResult result = service.refreshDocument("1", "system");
 
         assertThat(result.status()).isEqualTo("failed");
         assertThat(result.message()).contains("remote unavailable");
@@ -138,12 +138,12 @@ class KernelDocumentRefreshServiceTests {
     private static class InMemorySchedulePort implements DocumentRefreshSchedulePort {
 
         private DocumentRefreshSchedule schedule = new DocumentRefreshSchedule(
-                "schedule-1", "doc-1", "kb-1", "0 0/5 * * * ?", true,
+                1L, 1L, 1L, "0 0/5 * * * ?", true,
                 Instant.parse("2026-05-10T00:00:00Z"), null, null, null);
         private final List<DocumentRefreshScheduleUpdate> updates = new ArrayList<>();
 
         @Override
-        public Optional<DocumentRefreshSchedule> findByDocumentId(String docId) {
+        public Optional<DocumentRefreshSchedule> findByDocumentId(Long docId) {
             return Optional.ofNullable(schedule).filter(value -> value.docId().equals(docId));
         }
 
@@ -188,15 +188,15 @@ class KernelDocumentRefreshServiceTests {
         }
 
         @Override
-        public Optional<KnowledgeDocumentRecord> findById(String docId) {
+        public Optional<KnowledgeDocumentRecord> findById(Long docId) {
             return Optional.empty();
         }
 
         @Override
-        public Optional<KnowledgeDocumentDetail> findDetailById(String docId) {
+        public Optional<KnowledgeDocumentDetail> findDetailById(Long docId) {
             KnowledgeDocumentDetail detail = new KnowledgeDocumentDetail();
             detail.setId(docId);
-            detail.setKbId("kb-1");
+            detail.setKbId(1L);
             detail.setCollectionName("collection-a");
             detail.setDocName("remote.txt");
             detail.setSourceType("URL");
@@ -210,20 +210,35 @@ class KernelDocumentRefreshServiceTests {
         }
 
         @Override
-        public boolean markRunning(String docId, String operator) {
+        public boolean markRunning(Long docId, String operator) {
             return true;
         }
 
         @Override
-        public void markSuccess(String docId, int chunkCount, String operator) {
+        public void markSuccess(Long docId, int chunkCount, String operator) {
         }
 
         @Override
-        public void markFailed(String docId, String operator, String errorMessage) {
+        public void markFailed(Long docId, String operator, String errorMessage) {
         }
 
         @Override
-        public boolean replaceFileForRefresh(String docId, KnowledgeDocumentFileRef file, String operator) {
+        public boolean updateEnabled(Long docId, boolean enabled, String operator) {
+            return false;
+        }
+
+        @Override
+        public boolean delete(Long docId, String operator) {
+            return false;
+        }
+
+        @Override
+        public List<KnowledgeChunkRecord> listEnabledChunks(Long docId) {
+            return List.of();
+        }
+
+        @Override
+        public boolean replaceFileForRefresh(Long docId, KnowledgeDocumentFileRef file, String operator) {
             replacedFile = file;
             return true;
         }
@@ -274,7 +289,7 @@ class KernelDocumentRefreshServiceTests {
 
     private static class RecordingDocumentPort implements KnowledgeDocumentInboundPort {
 
-        private final List<String> executedDocIds = new ArrayList<>();
+        private final List<Long> executedDocIds = new ArrayList<>();
 
         @Override
         public KnowledgeDocumentRecord upload(UploadKnowledgeDocumentCommand command) {
@@ -282,43 +297,43 @@ class KernelDocumentRefreshServiceTests {
         }
 
         @Override
-        public void startChunk(String docId, String operator) {
+        public void startChunk(Long docId, String operator) {
         }
 
         @Override
-        public void executeChunk(String docId, PipelineDefinition pipeline, String operator) {
+        public void executeChunk(Long docId, PipelineDefinition pipeline, String operator) {
             executedDocIds.add(docId);
         }
 
         @Override
-        public KnowledgeDocumentDetail queryById(String docId) {
+        public KnowledgeDocumentDetail queryById(Long docId) {
             return null;
         }
 
         @Override
-        public KnowledgeDocumentPage page(String kbId, KnowledgeDocumentPageCommand command) {
+        public KnowledgeDocumentPage page(Long kbId, KnowledgeDocumentPageCommand command) {
             return null;
         }
 
         @Override
-        public List<KnowledgeDocumentSummary> search(String keyword, int limit) {
-            return List.of();
+        public java.util.List<KnowledgeDocumentSummary> search(String keyword, int limit) {
+            return java.util.List.of();
         }
 
         @Override
-        public void update(String docId, UpdateKnowledgeDocumentCommand command) {
+        public void update(Long docId, UpdateKnowledgeDocumentCommand command) {
         }
 
         @Override
-        public void enable(String docId, boolean enabled, String operator) {
+        public void enable(Long docId, boolean enabled, String operator) {
         }
 
         @Override
-        public void delete(String docId, String operator) {
+        public void delete(Long docId, String operator) {
         }
 
         @Override
-        public KnowledgeDocumentChunkLogPage chunkLogs(String docId, long current, long size) {
+        public KnowledgeDocumentChunkLogPage chunkLogs(Long docId, long current, long size) {
             return null;
         }
     }

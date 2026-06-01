@@ -56,11 +56,11 @@ public class KernelAuthService implements AuthInboundPort {
         if (!passwordHasherPort.matches(password, user.password())) {
             throw new IllegalArgumentException("用户名或密码错误");
         }
-        if (user.id() == null || user.id().isBlank()) {
+        if (user.id() == null) {
             throw new IllegalStateException("用户信息异常");
         }
-        String token = tokenServicePort.login(user.id());
-        return new LoginResult(user.id(), user.role(), token, defaultAvatar(user.avatar()));
+        String token = tokenServicePort.login(String.valueOf(user.id()));
+        return new LoginResult(String.valueOf(user.id()), user.role(), token, defaultAvatar(user.avatar()));
     }
 
     @Override

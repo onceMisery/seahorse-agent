@@ -19,6 +19,6 @@ package com.miracle.ai.seahorse.agent.ports.outbound.auth;
 
 import java.time.Instant;
 
-public record UserRecord(String id, String username, String password, String role, String avatar,
+public record UserRecord(Long id, String username, String password, String role, String avatar,
                          Instant createTime, Instant updateTime) {
 }

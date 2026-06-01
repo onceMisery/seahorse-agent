@@ -41,7 +41,7 @@ class KernelContextPackQueryServiceTests {
     @Test
     void shouldAllowOwnerToQueryPackAndItems() {
         RecordingContextPackRepository repository = new RecordingContextPackRepository(pack("user-1"));
-        KernelContextPackQueryService service = new KernelContextPackQueryService(repository, currentUser("user-1",
+        KernelContextPackQueryService service = new KernelContextPackQueryService(repository, currentUser(2L,
                 "user"));
 
         Optional<ContextPack> result = service.findById("context-pack-1");
@@ -55,7 +55,7 @@ class KernelContextPackQueryServiceTests {
     @Test
     void shouldAllowAdminToQueryAnotherUsersPackAndItems() {
         RecordingContextPackRepository repository = new RecordingContextPackRepository(pack("user-1"));
-        KernelContextPackQueryService service = new KernelContextPackQueryService(repository, currentUser("admin-1",
+        KernelContextPackQueryService service = new KernelContextPackQueryService(repository, currentUser(1L,
                 "admin"));
 
         Optional<ContextPack> result = service.findById("context-pack-1");
@@ -69,7 +69,7 @@ class KernelContextPackQueryServiceTests {
     @Test
     void shouldDenyUnrelatedUserForPackAndItems() {
         RecordingContextPackRepository repository = new RecordingContextPackRepository(pack("user-1"));
-        KernelContextPackQueryService service = new KernelContextPackQueryService(repository, currentUser("user-2",
+        KernelContextPackQueryService service = new KernelContextPackQueryService(repository, currentUser(3L,
                 "user"));
 
         assertThrows(IllegalStateException.class, () -> service.findById("context-pack-1"));
@@ -79,14 +79,14 @@ class KernelContextPackQueryServiceTests {
     @Test
     void shouldReturnEmptyWhenPackDoesNotExist() {
         KernelContextPackQueryService service = new KernelContextPackQueryService(new RecordingContextPackRepository(
-                null), currentUser("user-1", "user"));
+                null), currentUser(2L, "user"));
 
         assertTrue(service.findById("missing").isEmpty());
         assertEquals(List.of(), service.listItems("missing"));
     }
 
-    private static CurrentUserPort currentUser(String userId, String role) {
-        return () -> Optional.of(new CurrentUser(userId, userId, role, null));
+    private static CurrentUserPort currentUser(Long userId, String role) {
+        return () -> Optional.of(new CurrentUser(userId, String.valueOf(userId), role, null));
     }
 
     private static ContextPack pack(String userId) {

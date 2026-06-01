@@ -48,8 +48,8 @@ public class JdbcMemoryTraceRecorderAdapter implements MemoryTraceRecorder {
         MemoryTraceEvent safeEvent = Objects.requireNonNullElseGet(event,
                 () -> new MemoryTraceEvent("memory", "event", MemoryTraceEvent.STATUS_IGNORED, "", "default", "",
                         Map.of(), Instant.now()));
-        String id = "memory-trace-" + JdbcMemorySupport.nextId();
-        String traceId = JdbcMemorySupport.hasText(safeEvent.traceId()) ? safeEvent.traceId() : id;
+        long id = JdbcMemorySupport.nextId();
+        String traceId = JdbcMemorySupport.hasText(safeEvent.traceId()) ? safeEvent.traceId() : String.valueOf(id);
         jdbcTemplate.update("""
                 INSERT INTO t_memory_trace_event
                     (id, trace_id, tenant_id, user_id, conversation_id, session_id, component, event_type,

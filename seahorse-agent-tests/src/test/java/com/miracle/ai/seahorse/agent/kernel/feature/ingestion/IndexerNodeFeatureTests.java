@@ -278,7 +278,7 @@ class IndexerNodeFeatureTests {
         }
 
         @Override
-        public void replaceDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
+        public void replaceDocumentChunks(Long kbId, Long docId, List<VectorChunk> chunks) {
             repositoryWrites.add(kbId + "/" + docId + "/" + chunks.size());
             repositoryBatches.add(List.copyOf(chunks));
         }

@@ -140,9 +140,9 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     }
 
     @Override
-    public void replaceDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
-        String safeKbId = requireText(kbId, "kbId");
-        String safeDocId = requireText(docId, "docId");
+    public void replaceDocumentChunks(Long kbId, Long docId, List<VectorChunk> chunks) {
+        Long safeKbId = requireId(kbId, "kbId");
+        Long safeDocId = requireId(docId, "docId");
         List<VectorChunk> safeChunks = Objects.requireNonNullElse(chunks, List.of());
         jdbcTemplate.update(SQL_DELETE_BY_DOC_ID, safeDocId);
         if (!safeChunks.isEmpty()) {
@@ -155,8 +155,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     }
 
     @Override
-    public Optional<KnowledgeDocumentChunkContext> findDocumentContext(String docId) {
-        if (!hasText(docId)) {
+    public Optional<KnowledgeDocumentChunkContext> findDocumentContext(Long docId) {
+        if (docId == null) {
             return Optional.empty();
         }
         return jdbcTemplate.query(SQL_FIND_DOCUMENT_CONTEXT, this::toDocumentContext, docId)
@@ -165,8 +165,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     }
 
     @Override
-    public KnowledgeChunkPage page(String docId, long current, long size, Boolean enabled) {
-        String safeDocId = requireText(docId, "docId");
+    public KnowledgeChunkPage page(Long docId, long current, long size, Boolean enabled) {
+        Long safeDocId = requireId(docId, "docId");
         long safeCurrent = current <= 0 ? 1 : current;
         long safeSize = clampSize(size);
         String enabledWhere = enabled == null ? "" : " AND enabled = ?";
@@ -177,13 +177,13 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     }
 
     @Override
-    public KnowledgeChunkRecord create(String docId, CreateKnowledgeChunkValues values) {
-        String safeDocId = requireText(docId, "docId");
+    public KnowledgeChunkRecord create(Long docId, CreateKnowledgeChunkValues values) {
+        Long safeDocId = requireId(docId, "docId");
         CreateKnowledgeChunkValues safeValues = Objects.requireNonNull(values, "values must not be null");
         KnowledgeDocumentChunkContext context = findDocumentContext(safeDocId)
                 .orElseThrow(() -> new IllegalArgumentException("document not found: " + safeDocId));
         String content = requireText(safeValues.content(), "content");
-        String chunkId = hasText(safeValues.chunkId()) ? safeValues.chunkId().trim() : nextId();
+        Long chunkId = safeValues.chunkId() != null ? safeValues.chunkId() : nextId();
         int chunkIndex = safeValues.index() == null ? nextChunkIndex(safeDocId) : safeValues.index();
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update(SQL_INSERT_MANAGED_CHUNK,
@@ -206,8 +206,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     }
 
     @Override
-    public Optional<KnowledgeChunkRecord> findChunk(String docId, String chunkId) {
-        if (!hasText(docId) || !hasText(chunkId)) {
+    public Optional<KnowledgeChunkRecord> findChunk(Long docId, Long chunkId) {
+        if (docId == null || chunkId == null) {
             return Optional.empty();
         }
         return jdbcTemplate.query(SQL_FIND_CHUNK, this::toChunkRecord, chunkId, docId)
@@ -216,7 +216,7 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     }
 
     @Override
-    public boolean update(String docId, String chunkId, UpdateKnowledgeChunkValues values) {
+    public boolean update(Long docId, Long chunkId, UpdateKnowledgeChunkValues values) {
         UpdateKnowledgeChunkValues safeValues = Objects.requireNonNull(values, "values must not be null");
         String content = requireText(safeValues.content(), "content");
         int updated = jdbcTemplate.update(SQL_UPDATE_CHUNK,
@@ -226,17 +226,17 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
                 content.length(),
                 Objects.requireNonNullElse(safeValues.operator(), ""),
                 Timestamp.from(Instant.now()),
-                requireText(chunkId, "chunkId"),
-                requireText(docId, "docId"));
+                requireId(chunkId, "chunkId"),
+                requireId(docId, "docId"));
         return updated > 0;
     }
 
     @Override
-    public boolean delete(String docId, String chunkId) {
+    public boolean delete(Long docId, Long chunkId) {
         int updated = jdbcTemplate.update(SQL_DELETE_CHUNK,
                 Timestamp.from(Instant.now()),
-                requireText(chunkId, "chunkId"),
-                requireText(docId, "docId"));
+                requireId(chunkId, "chunkId"),
+                requireId(docId, "docId"));
         if (updated > 0) {
             jdbcTemplate.update(SQL_DECREMENT_DOCUMENT_COUNT, docId);
         }
@@ -244,8 +244,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     }
 
     @Override
-    public List<KnowledgeChunkRecord> findChunksByIds(String docId, List<String> chunkIds) {
-        if (!hasText(docId) || chunkIds == null || chunkIds.isEmpty()) {
+    public List<KnowledgeChunkRecord> findChunksByIds(Long docId, List<Long> chunkIds) {
+        if (docId == null || chunkIds == null || chunkIds.isEmpty()) {
             return List.of();
         }
         String placeholders = placeholders(chunkIds.size());
@@ -258,8 +258,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     }
 
     @Override
-    public boolean updateEnabled(String docId, List<String> chunkIds, boolean enabled, String operator) {
-        if (!hasText(docId) || chunkIds == null || chunkIds.isEmpty()) {
+    public boolean updateEnabled(Long docId, List<Long> chunkIds, boolean enabled, String operator) {
+        if (docId == null || chunkIds == null || chunkIds.isEmpty()) {
             return false;
         }
         String placeholders = placeholders(chunkIds.size());
@@ -274,14 +274,15 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         return jdbcTemplate.update(SQL_UPDATE_ENABLED_BY_IDS.formatted(placeholders), args) > 0;
     }
 
-    private void bindChunk(java.sql.PreparedStatement statement, String kbId, String docId, VectorChunk chunk,
+    private void bindChunk(java.sql.PreparedStatement statement, Long kbId, Long docId, VectorChunk chunk,
                            boolean writeMetadata)
             throws java.sql.SQLException {
         VectorChunk safeChunk = Objects.requireNonNull(chunk, "chunk must not be null");
         String content = Objects.requireNonNullElse(safeChunk.getContent(), "");
-        statement.setString(1, requireText(safeChunk.getChunkId(), "chunkId"));
-        statement.setString(2, kbId);
-        statement.setString(3, docId);
+        Long chunkId = safeChunk.getChunkId() != null ? Long.parseLong(safeChunk.getChunkId()) : nextId();
+        statement.setLong(1, chunkId);
+        statement.setLong(2, kbId);
+        statement.setLong(3, docId);
         statement.setObject(4, safeChunk.getIndex());
         statement.setString(5, content);
         statement.setString(6, sha256(content));
@@ -323,8 +324,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
 
     private KnowledgeDocumentChunkContext toDocumentContext(ResultSet resultSet, int rowNumber) throws SQLException {
         return new KnowledgeDocumentChunkContext(
-                resultSet.getString("doc_id"),
-                resultSet.getString("kb_id"),
+                resultSet.getLong("doc_id"),
+                resultSet.getLong("kb_id"),
                 resultSet.getString("status"),
                 resultSet.getInt("enabled"),
                 resultSet.getString("collection_name"),
@@ -333,9 +334,9 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
 
     private KnowledgeChunkRecord toChunkRecord(ResultSet resultSet, int rowNumber) throws SQLException {
         KnowledgeChunkRecord record = new KnowledgeChunkRecord();
-        record.setId(resultSet.getString("id"));
-        record.setKbId(resultSet.getString("kb_id"));
-        record.setDocId(resultSet.getString("doc_id"));
+        record.setId(resultSet.getLong("id"));
+        record.setKbId(resultSet.getLong("kb_id"));
+        record.setDocId(resultSet.getLong("doc_id"));
         record.setChunkIndex(resultSet.getObject("chunk_index", Integer.class));
         record.setContent(resultSet.getString("content"));
         record.setContentHash(resultSet.getString("content_hash"));
@@ -349,7 +350,7 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         return record;
     }
 
-    private long queryChunkTotal(String docId, String enabledWhere, Boolean enabled) {
+    private long queryChunkTotal(Long docId, String enabledWhere, Boolean enabled) {
         Long total = enabled == null
                 ? jdbcTemplate.queryForObject(SQL_COUNT_CHUNKS, Long.class, docId)
                 : jdbcTemplate.queryForObject(SQL_COUNT_CHUNKS + enabledWhere, Long.class, docId, enabled ? 1 : 0);
@@ -357,7 +358,7 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     }
 
     private List<KnowledgeChunkRecord> queryChunkPage(
-            String docId, long current, long size, String enabledWhere, Boolean enabled) {
+            Long docId, long current, long size, String enabledWhere, Boolean enabled) {
         String sql = SQL_PAGE_CHUNKS_BASE + enabledWhere + " ORDER BY chunk_index ASC LIMIT ? OFFSET ?";
         long offset = (current - 1) * size;
         if (enabled == null) {
@@ -366,7 +367,7 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         return jdbcTemplate.query(sql, this::toChunkRecord, docId, enabled ? 1 : 0, size, offset);
     }
 
-    private int nextChunkIndex(String docId) {
+    private int nextChunkIndex(Long docId) {
         Integer currentMax = jdbcTemplate.queryForObject(SQL_MAX_CHUNK_INDEX, Integer.class, docId);
         return currentMax == null ? 0 : currentMax + 1;
     }
@@ -388,6 +389,13 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         return value.trim();
     }
 
+    private Long requireId(Long value, String name) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " must not be null");
+        }
+        return value;
+    }
+
     private Instant toInstant(Timestamp timestamp) {
         return timestamp == null ? null : timestamp.toInstant();
     }
@@ -399,10 +407,10 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         return Math.min(size, MAX_PAGE_SIZE);
     }
 
-    private String nextId() {
+    private Long nextId() {
         long millis = System.currentTimeMillis();
         int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return Long.toString(millis, 36) + suffix;
+        return millis * 1_000_000 + suffix;
     }
 
     private String placeholders(int size) {

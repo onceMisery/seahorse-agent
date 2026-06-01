@@ -1,0 +1,37 @@
+[     368ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NUMECXU6.js?v=94df5689:21550
+[     839ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=297814db:4435
+[21990988ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/components/chat/MarkdownRenderer.tsx?t=1779503185266:0
+[21990989ms] [ERROR] [hmr] Failed to reload /src/components/chat/MarkdownRenderer.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21990989ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/styles/globals.css?t=1779503185266:0
+[21990989ms] [ERROR] [hmr] Failed to reload /src/styles/globals.css. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991012ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/pages/admin/AdminLayout.tsx?t=1779503185279:0
+[21991012ms] [ERROR] [hmr] Failed to reload /src/pages/admin/AdminLayout.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991015ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/components/common/SeahorseLogo.tsx?t=1779503185275:0
+[21991015ms] [ERROR] [hmr] Failed to reload /src/components/common/SeahorseLogo.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991016ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/styles/globals.css?t=1779503185275:0
+[21991016ms] [ERROR] [hmr] Failed to reload /src/styles/globals.css. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991022ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/pages/ChatPage.tsx?t=1779503185276:0
+[21991022ms] [ERROR] [hmr] Failed to reload /src/pages/ChatPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991024ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/styles/globals.css?t=1779503185276:0
+[21991024ms] [ERROR] [hmr] Failed to reload /src/styles/globals.css. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991029ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/styles/globals.css?t=1779503185283:0
+[21991029ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/styles/globals.css?t=1779503185286:0
+[21991029ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/router.tsx?t=1779503185307:0
+[21991030ms] [ERROR] [hmr] Failed to reload /src/styles/globals.css. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991030ms] [ERROR] [hmr] Failed to reload /src/styles/globals.css. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991030ms] [ERROR] [hmr] Failed to reload /src/router.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991048ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/styles/globals.css?t=1779503185279:0
+[21991049ms] [ERROR] [hmr] Failed to reload /src/styles/globals.css. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991057ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/components/chat/WelcomeScreen.tsx?t=1779503185286:0
+[21991057ms] [ERROR] [hmr] Failed to reload /src/components/chat/WelcomeScreen.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991060ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/styles/globals.css?t=1779503185307:0
+[21991060ms] [ERROR] [hmr] Failed to reload /src/styles/globals.css. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991073ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/components/chat/DeepSeaBackground.tsx?t=1779503185342:0
+[21991074ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/styles/globals.css?t=1779503185342:0
+[21991074ms] [ERROR] [hmr] Failed to reload /src/components/chat/DeepSeaBackground.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991074ms] [ERROR] [hmr] Failed to reload /src/styles/globals.css. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991083ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/pages/admin/ai-infra/AiInfraPrototypePage.tsx?t=1779503185356:0
+[21991083ms] [ERROR] [hmr] Failed to reload /src/pages/admin/ai-infra/AiInfraPrototypePage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991105ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Request) @ http://127.0.0.1:5173/src/styles/globals.css?t=1779503185356:0
+[21991105ms] [ERROR] [hmr] Failed to reload /src/styles/globals.css. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:175
+[21991134ms] [ERROR] Failed to load resource: the server responded with a status of 504 () @ chrome-error://chromewebdata/:0

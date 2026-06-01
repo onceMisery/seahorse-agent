@@ -59,7 +59,7 @@ class KernelAgentArtifactQueryServiceTests {
         KernelAgentArtifactQueryService service = new KernelAgentArtifactQueryService(
                 artifactRepository,
                 runRepository,
-                currentUser("user-1", "user"));
+                currentUser(1L, "user"));
 
         List<AgentArtifact> artifacts = service.listByRunId("run-1");
         AgentArtifactDownloadDecision decision = service.downloadDecision("artifact-2");
@@ -77,7 +77,7 @@ class KernelAgentArtifactQueryServiceTests {
                 new MemoryArtifactRepository(List.of(artifact("artifact-1", "user-1", AgentArtifactType.REPORT,
                         "text/markdown", AgentArtifactScanStatus.CLEAN))),
                 new MemoryRunRepository(run("user-1")),
-                currentUser("user-2", "user"));
+                currentUser(2L, "user"));
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> service.getById("artifact-1"));
@@ -91,7 +91,7 @@ class KernelAgentArtifactQueryServiceTests {
                 new MemoryArtifactRepository(List.of(artifact("artifact-1", "user-1", AgentArtifactType.REPORT,
                         "text/markdown", AgentArtifactScanStatus.BLOCKED))),
                 new MemoryRunRepository(run("user-1")),
-                currentUser("user-1", "user"));
+                currentUser(1L, "user"));
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> service.downloadDecision("artifact-1"));
@@ -104,7 +104,7 @@ class KernelAgentArtifactQueryServiceTests {
         KernelAgentArtifactQueryService service = new KernelAgentArtifactQueryService(
                 new MemoryArtifactRepository(List.of()),
                 new MemoryRunRepository(run("user-1")),
-                currentUser("user-1", "user"));
+                currentUser(1L, "user"));
 
         assertFalse(service.findById("missing").isPresent());
     }
@@ -151,8 +151,8 @@ class KernelAgentArtifactQueryServiceTests {
                 NOW);
     }
 
-    private static CurrentUserPort currentUser(String userId, String role) {
-        return () -> Optional.of(new CurrentUser(userId, userId, role, null));
+    private static CurrentUserPort currentUser(Long userId, String role) {
+        return () -> Optional.of(new CurrentUser(userId, String.valueOf(userId), role, null));
     }
 
     private static final class MemoryArtifactRepository implements AgentArtifactRepositoryPort {

@@ -56,14 +56,14 @@ public class KernelKnowledgeChunkService implements KnowledgeChunkInboundPort {
     }
 
     @Override
-    public KnowledgeChunkPage page(String docId, KnowledgeChunkPageCommand command) {
+    public KnowledgeChunkPage page(Long docId, KnowledgeChunkPageCommand command) {
         requireContext(docId);
         KnowledgeChunkPageCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         return chunkRepositoryPort.page(docId, safeCommand.current(), safeCommand.size(), safeCommand.enabled());
     }
 
     @Override
-    public KnowledgeChunkRecord create(String docId, CreateKnowledgeChunkCommand command) {
+    public KnowledgeChunkRecord create(Long docId, CreateKnowledgeChunkCommand command) {
         KnowledgeDocumentChunkContext context = requireEditableContext(docId);
         if (context.enabled() != ENABLED_VALUE) {
             throw new IllegalStateException("文档未启用，暂不支持新增 Chunk");
@@ -77,7 +77,7 @@ public class KernelKnowledgeChunkService implements KnowledgeChunkInboundPort {
     }
 
     @Override
-    public void update(String docId, String chunkId, UpdateKnowledgeChunkCommand command) {
+    public void update(Long docId, Long chunkId, UpdateKnowledgeChunkCommand command) {
         KnowledgeDocumentChunkContext context = requireEditableContext(docId);
         UpdateKnowledgeChunkCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         KnowledgeChunkRecord current = requireChunk(docId, chunkId);
@@ -89,21 +89,21 @@ public class KernelKnowledgeChunkService implements KnowledgeChunkInboundPort {
             throw new IllegalArgumentException("Chunk 不存在：" + chunkId);
         }
         KnowledgeChunkRecord updated = requireChunk(docId, chunkId);
-        vectorIndexPort.updateChunk(context.collectionName(), docId, toVectorChunk(context, updated));
+        vectorIndexPort.updateChunk(context.collectionName(), String.valueOf(docId), toVectorChunk(context, updated));
     }
 
     @Override
-    public void delete(String docId, String chunkId) {
+    public void delete(Long docId, Long chunkId) {
         KnowledgeDocumentChunkContext context = requireEditableContext(docId);
         requireChunk(docId, chunkId);
         if (!chunkRepositoryPort.delete(docId, chunkId)) {
             throw new IllegalArgumentException("Chunk 不存在：" + chunkId);
         }
-        vectorIndexPort.deleteChunkById(context.collectionName(), chunkId);
+        vectorIndexPort.deleteChunkById(context.collectionName(), String.valueOf(chunkId));
     }
 
     @Override
-    public void enable(String docId, String chunkId, boolean enabled, String operator) {
+    public void enable(Long docId, Long chunkId, boolean enabled, String operator) {
         KnowledgeDocumentChunkContext context = requireEditableContext(docId);
         validateDocumentEnabled(context, enabled);
         KnowledgeChunkRecord current = requireChunk(docId, chunkId);
@@ -114,17 +114,17 @@ public class KernelKnowledgeChunkService implements KnowledgeChunkInboundPort {
         if (enabled) {
             indexChunk(context, requireChunk(docId, chunkId));
         } else {
-            vectorIndexPort.deleteChunkById(context.collectionName(), chunkId);
+            vectorIndexPort.deleteChunkById(context.collectionName(), String.valueOf(chunkId));
         }
     }
 
     @Override
-    public void batchEnable(String docId, List<String> chunkIds, boolean enabled, String operator) {
+    public void batchEnable(Long docId, List<Long> chunkIds, boolean enabled, String operator) {
         KnowledgeDocumentChunkContext context = requireEditableContext(docId);
         validateDocumentEnabled(context, enabled);
-        List<String> requestedChunkIds = chunkIds == null ? List.of() : chunkIds;
-        List<String> safeChunkIds = requestedChunkIds.stream()
-                .filter(this::hasText)
+        List<Long> requestedChunkIds = chunkIds == null ? List.of() : chunkIds;
+        List<Long> safeChunkIds = requestedChunkIds.stream()
+                .filter(Objects::nonNull)
                 .toList();
         if (safeChunkIds.isEmpty()) {
             throw new IllegalArgumentException("请指定需要操作的 Chunk");
@@ -142,18 +142,18 @@ public class KernelKnowledgeChunkService implements KnowledgeChunkInboundPort {
         if (needUpdate.isEmpty()) {
             return;
         }
-        List<String> needUpdateIds = needUpdate.stream().map(KnowledgeChunkRecord::getId).toList();
+        List<Long> needUpdateIds = needUpdate.stream().map(KnowledgeChunkRecord::getId).toList();
         chunkRepositoryPort.updateEnabled(docId, needUpdateIds, enabled, operator);
         if (enabled) {
             List<KnowledgeChunkRecord> updatedChunks = chunkRepositoryPort.findChunksByIds(docId, needUpdateIds);
-            vectorIndexPort.indexDocumentChunks(context.collectionName(), docId,
+            vectorIndexPort.indexDocumentChunks(context.collectionName(), String.valueOf(docId),
                     updatedChunks.stream().map(chunk -> toVectorChunk(context, chunk)).toList());
         } else {
-            vectorIndexPort.deleteChunksByIds(context.collectionName(), needUpdateIds);
+            vectorIndexPort.deleteChunksByIds(context.collectionName(), needUpdateIds.stream().map(String::valueOf).toList());
         }
     }
 
-    private KnowledgeDocumentChunkContext requireEditableContext(String docId) {
+    private KnowledgeDocumentChunkContext requireEditableContext(Long docId) {
         KnowledgeDocumentChunkContext context = requireContext(docId);
         if (STATUS_RUNNING.equalsIgnoreCase(context.status())) {
             throw new IllegalStateException("文档正在分块处理中，暂不支持修改 Chunk");
@@ -161,13 +161,22 @@ public class KernelKnowledgeChunkService implements KnowledgeChunkInboundPort {
         return context;
     }
 
-    private KnowledgeDocumentChunkContext requireContext(String docId) {
-        return chunkRepositoryPort.findDocumentContext(requireText(docId, "docId"))
+    private KnowledgeDocumentChunkContext requireContext(Long docId) {
+        if (docId == null) {
+            throw new IllegalArgumentException("docId must not be null");
+        }
+        return chunkRepositoryPort.findDocumentContext(docId)
                 .orElseThrow(() -> new IllegalArgumentException("文档不存在：" + docId));
     }
 
-    private KnowledgeChunkRecord requireChunk(String docId, String chunkId) {
-        return chunkRepositoryPort.findChunk(requireText(docId, "docId"), requireText(chunkId, "chunkId"))
+    private KnowledgeChunkRecord requireChunk(Long docId, Long chunkId) {
+        if (docId == null) {
+            throw new IllegalArgumentException("docId must not be null");
+        }
+        if (chunkId == null) {
+            throw new IllegalArgumentException("chunkId must not be null");
+        }
+        return chunkRepositoryPort.findChunk(docId, chunkId)
                 .orElseThrow(() -> new IllegalArgumentException("Chunk 不存在：" + chunkId));
     }
 
@@ -178,13 +187,13 @@ public class KernelKnowledgeChunkService implements KnowledgeChunkInboundPort {
     }
 
     private void indexChunk(KnowledgeDocumentChunkContext context, KnowledgeChunkRecord record) {
-        vectorIndexPort.indexDocumentChunks(context.collectionName(), context.docId(),
+        vectorIndexPort.indexDocumentChunks(context.collectionName(), String.valueOf(context.docId()),
                 List.of(toVectorChunk(context, record)));
     }
 
     private VectorChunk toVectorChunk(KnowledgeDocumentChunkContext context, KnowledgeChunkRecord record) {
         VectorChunk chunk = new VectorChunk();
-        chunk.setChunkId(record.getId());
+        chunk.setChunkId(String.valueOf(record.getId()));
         chunk.setContent(record.getContent());
         chunk.setIndex(record.getChunkIndex());
         chunk.setEmbedding(toArray(embeddingModelPort.embed(context.embeddingModel(), record.getContent())));

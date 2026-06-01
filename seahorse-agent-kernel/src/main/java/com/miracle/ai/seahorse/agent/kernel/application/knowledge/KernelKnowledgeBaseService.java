@@ -55,7 +55,7 @@ public class KernelKnowledgeBaseService implements KnowledgeBaseInboundPort {
     }
 
     @Override
-    public String create(CreateKnowledgeBaseCommand command) {
+    public Long create(CreateKnowledgeBaseCommand command) {
         CreateKnowledgeBaseCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         String name = requireText(safeCommand.name(), "name");
         String collectionName = requireText(safeCommand.collectionName(), "collectionName");
@@ -69,40 +69,47 @@ public class KernelKnowledgeBaseService implements KnowledgeBaseInboundPort {
     }
 
     @Override
-    public void update(String kbId, UpdateKnowledgeBaseCommand command) {
-        String safeKbId = requireText(kbId, "kbId");
+    public void update(Long kbId, UpdateKnowledgeBaseCommand command) {
+        if (kbId == null) {
+            throw new IllegalArgumentException("kbId must not be null");
+        }
         UpdateKnowledgeBaseCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
-        KnowledgeBaseRecord current = queryById(safeKbId);
-        if (hasText(safeCommand.name()) && repositoryPort.nameExists(normalizeName(safeCommand.name()), safeKbId)) {
+        KnowledgeBaseRecord current = queryById(kbId);
+        if (hasText(safeCommand.name()) && repositoryPort.nameExists(normalizeName(safeCommand.name()), kbId)) {
             throw new IllegalStateException("知识库名称已存在：" + safeCommand.name());
         }
         if (hasText(safeCommand.embeddingModel())
                 && !safeCommand.embeddingModel().equals(current.getEmbeddingModel())
-                && repositoryPort.hasVectorizedDocuments(safeKbId)) {
+                && repositoryPort.hasVectorizedDocuments(kbId)) {
             throw new IllegalStateException("知识库已存在向量化文档，不允许修改嵌入模型");
         }
-        boolean updated = repositoryPort.update(safeKbId, new KnowledgeBaseUpdateValues(
+        boolean updated = repositoryPort.update(kbId, new KnowledgeBaseUpdateValues(
                 safeCommand.name(), safeCommand.embeddingModel(), operator(safeCommand.operator())));
         if (!updated) {
-            throw new IllegalArgumentException("知识库不存在：" + safeKbId);
+            throw new IllegalArgumentException("知识库不存在：" + kbId);
         }
     }
 
     @Override
-    public void delete(String kbId, String operator) {
-        String safeKbId = requireText(kbId, "kbId");
-        queryById(safeKbId);
-        if (repositoryPort.hasDocuments(safeKbId)) {
+    public void delete(Long kbId, String operator) {
+        if (kbId == null) {
+            throw new IllegalArgumentException("kbId must not be null");
+        }
+        queryById(kbId);
+        if (repositoryPort.hasDocuments(kbId)) {
             throw new IllegalStateException("当前知识库下还有文档，请删除文档");
         }
-        if (!repositoryPort.delete(safeKbId, operator(operator))) {
-            throw new IllegalArgumentException("知识库不存在：" + safeKbId);
+        if (!repositoryPort.delete(kbId, operator(operator))) {
+            throw new IllegalArgumentException("知识库不存在：" + kbId);
         }
     }
 
     @Override
-    public KnowledgeBaseRecord queryById(String kbId) {
-        return repositoryPort.findById(requireText(kbId, "kbId"))
+    public KnowledgeBaseRecord queryById(Long kbId) {
+        if (kbId == null) {
+            throw new IllegalArgumentException("kbId must not be null");
+        }
+        return repositoryPort.findById(kbId)
                 .orElseThrow(() -> new IllegalArgumentException("知识库不存在：" + kbId));
     }
 

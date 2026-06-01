@@ -43,23 +43,23 @@ class KernelKeywordIndexMaintenanceServiceTests {
     @Test
     void shouldRebuildDocumentFromEnabledChunkSnapshot() {
         InMemoryDocumentRepository repository = new InMemoryDocumentRepository();
-        repository.addDocument(document("doc-1", "kb-1", true));
-        repository.addChunks("doc-1", List.of(
-                chunk("chunk-1", 0, "元数据治理", Map.of("department", "研发", "file_type", "stale")),
-                chunk("chunk-2", 1, "混合检索")));
+        repository.addDocument(document(1L, 1L, true));
+        repository.addChunks(1L, List.of(
+                chunk("1", 0, "元数据治理", Map.of("department", "研发", "file_type", "stale")),
+                chunk("2", 1, "混合检索")));
         RecordingKeywordIndexPort keywordIndex = new RecordingKeywordIndexPort();
         KernelKeywordIndexMaintenanceService service = new KernelKeywordIndexMaintenanceService(repository, keywordIndex);
 
-        KeywordIndexRebuildResult result = service.rebuildDocument("doc-1");
+        KeywordIndexRebuildResult result = service.rebuildDocument(1L);
 
         assertThat(result.success()).isTrue();
         assertThat(result.processedDocuments()).isEqualTo(1);
         assertThat(result.indexedDocuments()).isEqualTo(1);
         assertThat(result.indexedChunks()).isEqualTo(2);
-        assertThat(keywordIndex.operations).containsExactly("delete:kb-1:doc-1", "index:kb-1:doc-1:2");
+        assertThat(keywordIndex.operations).containsExactly("delete:1:1", "index:1:1:2");
         assertThat(keywordIndex.lastChunks.get(0).getMetadata())
-                .containsEntry("kb_id", "kb-1")
-                .containsEntry("doc_id", "doc-1")
+                .containsEntry("kb_id", "1")
+                .containsEntry("doc_id", "1")
                 .containsEntry("collection_name", "collection-a")
                 .containsEntry("department", "研发")
                 .containsEntry("file_type", "text/plain")
@@ -69,44 +69,44 @@ class KernelKeywordIndexMaintenanceServiceTests {
     @Test
     void shouldDeleteOnlyWhenDocumentDisabled() {
         InMemoryDocumentRepository repository = new InMemoryDocumentRepository();
-        repository.addDocument(document("doc-1", "kb-1", false));
-        repository.addChunks("doc-1", List.of(chunk("chunk-1", 0, "禁用文档")));
+        repository.addDocument(document(1L, 1L, false));
+        repository.addChunks(1L, List.of(chunk("1", 0, "禁用文档")));
         RecordingKeywordIndexPort keywordIndex = new RecordingKeywordIndexPort();
         KernelKeywordIndexMaintenanceService service = new KernelKeywordIndexMaintenanceService(repository, keywordIndex);
 
-        KeywordIndexRebuildResult result = service.rebuildDocument("doc-1");
+        KeywordIndexRebuildResult result = service.rebuildDocument(1L);
 
         assertThat(result.indexedDocuments()).isZero();
         assertThat(result.skippedDocuments()).isEqualTo(1);
-        assertThat(keywordIndex.operations).containsExactly("delete:kb-1:doc-1");
+        assertThat(keywordIndex.operations).containsExactly("delete:1:1");
     }
 
     @Test
     void shouldRebuildKnowledgeBaseByPagesAndKeepFailureSummary() {
         InMemoryDocumentRepository repository = new InMemoryDocumentRepository();
-        repository.addDocument(document("doc-1", "kb-1", true));
-        repository.addDocument(document("doc-2", "kb-1", true));
-        repository.addChunks("doc-1", List.of(chunk("chunk-1", 0, "成功文档")));
-        repository.addChunks("doc-2", List.of(chunk("chunk-2", 0, "失败文档")));
+        repository.addDocument(document(1L, 1L, true));
+        repository.addDocument(document(2L, 1L, true));
+        repository.addChunks(1L, List.of(chunk("1", 0, "成功文档")));
+        repository.addChunks(2L, List.of(chunk("2", 0, "失败文档")));
         RecordingKeywordIndexPort keywordIndex = new RecordingKeywordIndexPort();
-        keywordIndex.failOnDocId = "doc-2";
+        keywordIndex.failOnDocId = "2";
         RecordingObservationPort observationPort = new RecordingObservationPort();
         KernelKeywordIndexMaintenanceService service = new KernelKeywordIndexMaintenanceService(
                 repository, keywordIndex, observationPort);
 
-        KeywordIndexRebuildResult result = service.rebuildKnowledgeBase("kb-1", 1);
+        KeywordIndexRebuildResult result = service.rebuildKnowledgeBase(1L, 1);
 
         assertThat(result.processedDocuments()).isEqualTo(2);
         assertThat(result.indexedDocuments()).isEqualTo(1);
         assertThat(result.indexedChunks()).isEqualTo(1);
         assertThat(result.failedDocuments()).isEqualTo(1);
-        assertThat(result.failures()).singleElement().asString().contains("doc-2");
+        assertThat(result.failures()).singleElement().asString().contains("2");
         assertThat(observationPort.events)
                 .extracting(ObservationEvent::name)
                 .contains("keyword.index.rebuild.failure");
     }
 
-    private static KnowledgeDocumentDetail document(String docId, String kbId, boolean enabled) {
+    private static KnowledgeDocumentDetail document(Long docId, Long kbId, boolean enabled) {
         KnowledgeDocumentDetail detail = new KnowledgeDocumentDetail();
         detail.setId(docId);
         detail.setKbId(kbId);
@@ -124,7 +124,7 @@ class KernelKeywordIndexMaintenanceServiceTests {
 
     private static KnowledgeChunkRecord chunk(String chunkId, int index, String content, Map<String, Object> metadata) {
         KnowledgeChunkRecord record = new KnowledgeChunkRecord();
-        record.setId(chunkId);
+        record.setId(Long.parseLong(chunkId));
         record.setChunkIndex(index);
         record.setContent(content);
         record.setEnabled(1);
@@ -134,24 +134,24 @@ class KernelKeywordIndexMaintenanceServiceTests {
 
     private static final class InMemoryDocumentRepository implements KnowledgeDocumentRepositoryPort {
 
-        private final Map<String, KnowledgeDocumentDetail> documents = new LinkedHashMap<>();
-        private final Map<String, List<KnowledgeChunkRecord>> chunks = new LinkedHashMap<>();
+        private final Map<Long, KnowledgeDocumentDetail> documents = new LinkedHashMap<>();
+        private final Map<Long, List<KnowledgeChunkRecord>> chunks = new LinkedHashMap<>();
 
         void addDocument(KnowledgeDocumentDetail document) {
             documents.put(document.getId(), document);
         }
 
-        void addChunks(String docId, List<KnowledgeChunkRecord> records) {
+        void addChunks(Long docId, List<KnowledgeChunkRecord> records) {
             chunks.put(docId, records);
         }
 
         @Override
-        public Optional<KnowledgeDocumentDetail> findDetailById(String docId) {
+        public Optional<KnowledgeDocumentDetail> findDetailById(Long docId) {
             return Optional.ofNullable(documents.get(docId));
         }
 
         @Override
-        public KnowledgeDocumentPage page(String kbId, long current, long size, String status, String keyword) {
+        public KnowledgeDocumentPage page(Long kbId, long current, long size, String status, String keyword) {
             List<KnowledgeDocumentDetail> matched = documents.values().stream()
                     .filter(document -> kbId.equals(document.getKbId()))
                     .toList();
@@ -162,7 +162,7 @@ class KernelKeywordIndexMaintenanceServiceTests {
         }
 
         @Override
-        public List<KnowledgeChunkRecord> listEnabledChunks(String docId) {
+        public List<KnowledgeChunkRecord> listEnabledChunks(Long docId) {
             return chunks.getOrDefault(docId, List.of()).stream()
                     .filter(record -> record.getEnabled() == null || record.getEnabled() == 1)
                     .toList();
@@ -176,21 +176,31 @@ class KernelKeywordIndexMaintenanceServiceTests {
 
         @Override
         public Optional<com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRecord> findById(
-                String docId) {
+                Long docId) {
             return Optional.empty();
         }
 
         @Override
-        public boolean markRunning(String docId, String operator) {
+        public boolean markRunning(Long docId, String operator) {
             return false;
         }
 
         @Override
-        public void markSuccess(String docId, int chunkCount, String operator) {
+        public void markSuccess(Long docId, int chunkCount, String operator) {
         }
 
         @Override
-        public void markFailed(String docId, String operator, String errorMessage) {
+        public void markFailed(Long docId, String operator, String errorMessage) {
+        }
+
+        @Override
+        public boolean updateEnabled(Long docId, boolean enabled, String operator) {
+            return false;
+        }
+
+        @Override
+        public boolean delete(Long docId, String operator) {
+            return false;
         }
     }
 

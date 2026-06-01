@@ -32,12 +32,12 @@ class SeahorseKeywordIndexMaintenanceJobTests {
     void shouldRebuildConfiguredDocumentsAndKnowledgeBases() {
         RecordingKeywordIndexMaintenancePort maintenancePort = new RecordingKeywordIndexMaintenancePort();
         SeahorseKeywordIndexMaintenanceJob job = new SeahorseKeywordIndexMaintenanceJob(
-                maintenancePort, "doc-1, doc-2, doc-1", "kb-1", 120);
+                maintenancePort, "1, 2, 1", "1", 120);
 
         job.rebuildConfiguredTargets();
 
         assertThat(maintenancePort.operations)
-                .containsExactly("doc:doc-1", "doc:doc-2", "kb:kb-1:120");
+                .containsExactly("doc:1", "doc:2", "kb:1:120");
     }
 
     private static final class RecordingKeywordIndexMaintenancePort implements KeywordIndexMaintenanceInboundPort {
@@ -45,15 +45,15 @@ class SeahorseKeywordIndexMaintenanceJobTests {
         private final List<String> operations = new ArrayList<>();
 
         @Override
-        public KeywordIndexRebuildResult rebuildDocument(String docId) {
+        public KeywordIndexRebuildResult rebuildDocument(Long docId) {
             operations.add("doc:" + docId);
-            return new KeywordIndexRebuildResult("document", docId, 1, 1, 1, 1, 0, 0, List.of());
+            return new KeywordIndexRebuildResult("document", String.valueOf(docId), 1, 1, 1, 1, 0, 0, List.of());
         }
 
         @Override
-        public KeywordIndexRebuildResult rebuildKnowledgeBase(String kbId, int batchSize) {
+        public KeywordIndexRebuildResult rebuildKnowledgeBase(Long kbId, int batchSize) {
             operations.add("kb:" + kbId + ":" + batchSize);
-            return new KeywordIndexRebuildResult("knowledge_base", kbId, 1, 1, 1, 1, 0, 0, List.of());
+            return new KeywordIndexRebuildResult("knowledge_base", String.valueOf(kbId), 1, 1, 1, 1, 0, 0, List.of());
         }
     }
 }

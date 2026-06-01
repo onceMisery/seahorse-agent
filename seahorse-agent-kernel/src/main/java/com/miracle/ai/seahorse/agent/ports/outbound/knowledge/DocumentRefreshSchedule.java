@@ -24,9 +24,9 @@ import java.util.Objects;
  * 文档定时刷新配置。
  */
 public record DocumentRefreshSchedule(
-        String id,
-        String docId,
-        String kbId,
+        Long id,
+        Long docId,
+        Long kbId,
         String cronExpr,
         boolean enabled,
         Instant nextRunTime,
@@ -36,8 +36,6 @@ public record DocumentRefreshSchedule(
 ) {
 
     public DocumentRefreshSchedule {
-        docId = Objects.requireNonNullElse(docId, "");
-        kbId = Objects.requireNonNullElse(kbId, "");
         cronExpr = Objects.requireNonNullElse(cronExpr, "");
     }
 

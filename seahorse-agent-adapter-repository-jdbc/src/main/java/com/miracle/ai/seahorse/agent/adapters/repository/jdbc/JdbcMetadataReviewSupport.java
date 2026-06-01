@@ -251,8 +251,8 @@ final class JdbcMetadataReviewSupport {
         return new MetadataReviewRecord(
                 rs.getString("id"),
                 rs.getString("tenant_id"),
-                rs.getString("kb_id"),
-                rs.getString("doc_id"),
+                rs.getLong("kb_id"),
+                rs.getLong("doc_id"),
                 rs.getString("result_id"),
                 enumValue(MetadataReviewStatus.class, rs.getString("review_status"), MetadataReviewStatus.PENDING),
                 rs.getInt("priority"),

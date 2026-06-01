@@ -27,9 +27,9 @@ import java.util.Objects;
  */
 public class KnowledgeChunkRecord {
 
-    private String id;
-    private String kbId;
-    private String docId;
+    private Long id;
+    private Long kbId;
+    private Long docId;
     private Integer chunkIndex;
     private String content;
     private String contentHash;
@@ -42,27 +42,27 @@ public class KnowledgeChunkRecord {
     private Instant updateTime;
     private Map<String, Object> metadata = Map.of();
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
-    public String getKbId() {
+    public Long getKbId() {
         return kbId;
     }
 
-    public void setKbId(String kbId) {
+    public void setKbId(Long kbId) {
         this.kbId = kbId;
     }
 
-    public String getDocId() {
+    public Long getDocId() {
         return docId;
     }
 
-    public void setDocId(String docId) {
+    public void setDocId(Long docId) {
         this.docId = docId;
     }
 

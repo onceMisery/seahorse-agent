@@ -516,7 +516,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
         contextRunner.withUserConfiguration(DocumentRefreshPortsConfiguration.class)
                 .withPropertyValues(
                         "seahorse-agent.keyword-index.maintenance.scheduler-enabled=true",
-                        "seahorse-agent.keyword-index.maintenance.kb-ids=kb-1")
+                        "seahorse-agent.keyword-index.maintenance.kb-ids=1")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(KeywordIndexMaintenanceInboundPort.class);
@@ -1233,7 +1233,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
 
                 @Override
                 public java.util.List<com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkSummary> listChunksByDocId(
-                        String docId) {
+                        Long docId) {
                     return java.util.List.of();
                 }
             };
@@ -2099,17 +2099,17 @@ class SeahorseAgentKernelAutoConfigurationTests {
         KnowledgeBaseRepositoryPort knowledgeBaseRepositoryPort() {
             return new KnowledgeBaseRepositoryPort() {
                 @Override
-                public String create(CreateKnowledgeBaseValues values) {
-                    return "1";
+                public Long create(CreateKnowledgeBaseValues values) {
+                    return 1L;
                 }
 
                 @Override
-                public boolean nameExists(String normalizedName, String excludedKbId) {
+                public boolean nameExists(String normalizedName, Long excludedKbId) {
                     return false;
                 }
 
                 @Override
-                public java.util.Optional<KnowledgeBaseRecord> findById(String kbId) {
+                public java.util.Optional<KnowledgeBaseRecord> findById(Long kbId) {
                     return java.util.Optional.empty();
                 }
 
@@ -2119,22 +2119,22 @@ class SeahorseAgentKernelAutoConfigurationTests {
                 }
 
                 @Override
-                public boolean hasDocuments(String kbId) {
+                public boolean hasDocuments(Long kbId) {
                     return false;
                 }
 
                 @Override
-                public boolean hasVectorizedDocuments(String kbId) {
+                public boolean hasVectorizedDocuments(Long kbId) {
                     return false;
                 }
 
                 @Override
-                public boolean update(String kbId, KnowledgeBaseUpdateValues values) {
+                public boolean update(Long kbId, KnowledgeBaseUpdateValues values) {
                     return true;
                 }
 
                 @Override
-                public boolean delete(String kbId, String operator) {
+                public boolean delete(Long kbId, String operator) {
                     return true;
                 }
             };
@@ -2280,7 +2280,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
         UserRepositoryPort userRepositoryPort() {
             return new UserRepositoryPort() {
                 @Override
-                public java.util.Optional<UserRecord> findById(String id) {
+                public java.util.Optional<UserRecord> findById(Long id) {
                     return java.util.Optional.of(new UserRecord(id, "admin", "pw", "admin", null, null, null));
                 }
 
@@ -2290,7 +2290,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
                 }
 
                 @Override
-                public boolean usernameExists(String username, String excludedId) {
+                public boolean usernameExists(String username, Long excludedId) {
                     return false;
                 }
 
@@ -2300,17 +2300,17 @@ class SeahorseAgentKernelAutoConfigurationTests {
                 }
 
                 @Override
-                public String create(UserCreateValues values) {
-                    return "1";
+                public Long create(UserCreateValues values) {
+                    return 1L;
                 }
 
                 @Override
-                public boolean update(String id, UserUpdateValues values) {
+                public boolean update(Long id, UserUpdateValues values) {
                     return true;
                 }
 
                 @Override
-                public boolean delete(String id) {
+                public boolean delete(Long id) {
                     return true;
                 }
             };

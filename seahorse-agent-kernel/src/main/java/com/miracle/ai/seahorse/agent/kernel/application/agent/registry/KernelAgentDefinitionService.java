@@ -107,7 +107,7 @@ public class KernelAgentDefinitionService implements AgentDefinitionInboundPort 
                 safeCommand.modelConfigJson(),
                 safeCommand.memoryConfigJson(),
                 safeCommand.guardrailConfigJson(),
-                currentUser.userId(),
+                String.valueOf(currentUser.userId()),
                 clock.instant(),
                 safeCommand.changeSummary());
         repository.saveVersion(version);

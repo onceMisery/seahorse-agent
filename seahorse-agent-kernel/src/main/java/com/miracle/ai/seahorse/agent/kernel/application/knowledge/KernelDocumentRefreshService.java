@@ -111,15 +111,15 @@ public class KernelDocumentRefreshService implements DocumentRefreshInboundPort 
                 .orElseGet(() -> defaultSchedule(document));
         Instant startTime = Instant.now();
         String executionId = stateRepositoryPort.start(new DocumentRefreshExecutionStart(
-                schedule.id(), document.getId(), document.getKbId(), startTime));
+                String.valueOf(schedule.id()), String.valueOf(document.getId()), String.valueOf(document.getKbId()), startTime));
         RefreshOutcome outcome = executeRefresh(document, schedule, operator);
         Instant endTime = Instant.now();
         Instant nextRunTime = nextRun(schedule, startTime);
         stateRepositoryPort.finish(new DocumentRefreshExecutionFinish(
                 executionId,
-                schedule.id(),
-                document.getId(),
-                document.getKbId(),
+                String.valueOf(schedule.id()),
+                String.valueOf(document.getId()),
+                String.valueOf(document.getKbId()),
                 outcome.status(),
                 outcome.message(),
                 startTime,
@@ -138,7 +138,7 @@ public class KernelDocumentRefreshService implements DocumentRefreshInboundPort 
                 outcome.contentHash() == null ? schedule.lastContentHash() : outcome.contentHash(),
                 schedule.lastEtag(),
                 schedule.lastModified()));
-        return new DocumentRefreshResult(document.getId(), outcome.status(), outcome.message(), outcome.contentHash());
+        return new DocumentRefreshResult(String.valueOf(document.getId()), outcome.status(), outcome.message(), outcome.contentHash());
     }
 
     @Override
@@ -146,7 +146,7 @@ public class KernelDocumentRefreshService implements DocumentRefreshInboundPort 
         Instant safeNow = now == null ? Instant.now() : now;
         int safeLimit = limit <= 0 ? DEFAULT_LIMIT : limit;
         return schedulePort.findDueSchedules(safeNow, safeLimit).stream()
-                .map(schedule -> refreshDocument(schedule.docId(), operator))
+                .map(schedule -> refreshDocument(String.valueOf(schedule.docId()), operator))
                 .toList();
     }
 
@@ -233,7 +233,7 @@ public class KernelDocumentRefreshService implements DocumentRefreshInboundPort 
     }
 
     private KnowledgeDocumentDetail requireRefreshableDocument(String docId) {
-        KnowledgeDocumentDetail document = documentRepositoryPort.findDetailById(requireText(docId, "docId"))
+        KnowledgeDocumentDetail document = documentRepositoryPort.findDetailById(Long.parseLong(requireText(docId, "docId")))
                 .orElseThrow(() -> new IllegalArgumentException("document not found: " + docId));
         if (!Boolean.TRUE.equals(document.getEnabled())) {
             throw new IllegalStateException("document disabled: " + docId);
@@ -245,7 +245,7 @@ public class KernelDocumentRefreshService implements DocumentRefreshInboundPort 
 
     private DocumentRefreshSchedule defaultSchedule(KnowledgeDocumentDetail document) {
         return new DocumentRefreshSchedule(
-                "",
+                null,
                 document.getId(),
                 document.getKbId(),
                 Objects.requireNonNullElse(document.getScheduleCron(), ""),

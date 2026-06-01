@@ -1,0 +1,86 @@
+- generic [ref=e2]:
+  - generic [ref=e50]:
+    - complementary [ref=e51]:
+      - generic [ref=e53]:
+        - img "Seahorse" [ref=e55]
+        - generic [ref=e56]:
+          - paragraph [ref=e57]: Seahorse Agent
+          - paragraph [ref=e58]: Powered by AI
+      - generic [ref=e59]:
+        - generic [ref=e62]:
+          - generic [ref=e63]:
+            - generic [ref=e64]: 快速开始
+            - generic [ref=e65]: 新内容
+          - button "新建对话 从空白开始" [ref=e66] [cursor=pointer]:
+            - img [ref=e68]
+            - generic [ref=e69]:
+              - generic [ref=e70]: 新建对话
+              - generic [ref=e71]: 从空白开始
+          - button "管理后台" [ref=e72] [cursor=pointer]:
+            - img [ref=e73]
+            - text: 管理后台
+        - generic [ref=e76]:
+          - generic [ref=e78]: 搜索对话
+          - generic [ref=e80]:
+            - img [ref=e81]
+            - textbox "搜索对话..." [ref=e84]
+      - generic [ref=e88]:
+        - paragraph [ref=e89]: 今天
+        - button "New Chat 会话操作" [ref=e238] [cursor=pointer]:
+          - generic [ref=e239]: New Chat
+          - button "会话操作" [ref=e240]:
+            - img [ref=e241]
+        - button "你好 会话操作" [ref=e90] [cursor=pointer]:
+          - generic [ref=e91]: 你好
+          - button "会话操作":
+            - img
+        - button "你好 会话操作" [ref=e92] [cursor=pointer]:
+          - generic [ref=e93]: 你好
+          - button "会话操作":
+            - img
+        - button "nihao 会话操作" [ref=e94] [cursor=pointer]:
+          - generic [ref=e95]: nihao
+          - button "会话操作":
+            - img
+        - button "你好 会话操作" [ref=e96] [cursor=pointer]:
+          - generic [ref=e97]: 你好
+          - button "会话操作":
+            - img
+      - generic [ref=e98]:
+        - img [ref=e99]
+        - generic [ref=e105]:
+          - button "海洋" [ref=e106] [cursor=pointer]
+          - button "皓白" [ref=e107] [cursor=pointer]
+          - button "星云" [ref=e108] [cursor=pointer]
+          - button "翡翠" [ref=e109] [cursor=pointer]
+          - button "琥珀" [ref=e110] [cursor=pointer]
+      - button "用户菜单" [ref=e112] [cursor=pointer]:
+        - img "admin" [ref=e114]
+        - generic [ref=e115]: admin
+        - img [ref=e116]
+    - generic [ref=e120]:
+      - banner [ref=e121]:
+        - generic [ref=e122]:
+          - paragraph [ref=e124]: New Chat
+          - link "打开 GitHub 仓库" [ref=e126] [cursor=pointer]:
+            - /url: https://github.com/onceMisery/seahorse-agent
+            - img [ref=e127]
+            - generic [ref=e130]: Star
+            - generic [ref=e131]: "2"
+      - main [ref=e132]:
+        - generic [ref=e133]:
+          - generic [ref=e247]:
+            - paragraph [ref=e252]: test
+            - paragraph [ref=e259]: 本次对话没有返回有效内容，请稍后重试。
+          - generic [ref=e264]:
+            - generic [ref=e268]:
+              - textbox "聊天输入框" [active] [ref=e270]:
+                - /placeholder: 问我任何关于研究、分析或创意的问题...
+              - generic [ref=e271]:
+                - generic [ref=e273]:
+                  - generic [ref=e274]: 深度思考
+                  - button [ref=e275] [cursor=pointer]
+                - button "发送消息" [disabled] [ref=e277]:
+                  - img [ref=e278]
+            - paragraph [ref=e281]: Enter 发送·Shift + Enter 换行
+  - region "Notifications alt+T"

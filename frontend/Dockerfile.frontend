@@ -3,13 +3,20 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+ARG VITE_API_BASE_URL=/api
+ARG VITE_SEAHORSE_PRODUCT_MODE=consumer-web
+ARG VITE_SEAHORSE_ENABLE_ADVANCED_ADMIN=false
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_SEAHORSE_PRODUCT_MODE=$VITE_SEAHORSE_PRODUCT_MODE
+ENV VITE_SEAHORSE_ENABLE_ADVANCED_ADMIN=$VITE_SEAHORSE_ENABLE_ADVANCED_ADMIN
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
 
-# Build with empty API base URL (nginx will proxy /api)
-RUN VITE_API_BASE_URL=/api npm run build
+# Build with nginx proxy-aware API base URL and product-mode args.
+RUN npm run build
 
 # Stage 2: Serve
 FROM nginx:alpine

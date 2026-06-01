@@ -27,15 +27,15 @@ import java.util.List;
  */
 public interface KnowledgeChunkInboundPort {
 
-    KnowledgeChunkPage page(String docId, KnowledgeChunkPageCommand command);
+    KnowledgeChunkPage page(Long docId, KnowledgeChunkPageCommand command);
 
-    KnowledgeChunkRecord create(String docId, CreateKnowledgeChunkCommand command);
+    KnowledgeChunkRecord create(Long docId, CreateKnowledgeChunkCommand command);
 
-    void update(String docId, String chunkId, UpdateKnowledgeChunkCommand command);
+    void update(Long docId, Long chunkId, UpdateKnowledgeChunkCommand command);
 
-    void delete(String docId, String chunkId);
+    void delete(Long docId, Long chunkId);
 
-    void enable(String docId, String chunkId, boolean enabled, String operator);
+    void enable(Long docId, Long chunkId, boolean enabled, String operator);
 
-    void batchEnable(String docId, List<String> chunkIds, boolean enabled, String operator);
+    void batchEnable(Long docId, List<Long> chunkIds, boolean enabled, String operator);
 }

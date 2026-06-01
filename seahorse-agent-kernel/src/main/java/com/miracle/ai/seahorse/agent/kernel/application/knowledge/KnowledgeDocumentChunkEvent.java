@@ -30,8 +30,8 @@ import java.util.Objects;
  * @param pipelineId 入库流水线 ID
  */
 public record KnowledgeDocumentChunkEvent(
-        String docId,
-        String kbId,
+        Long docId,
+        Long kbId,
         String operator,
         String pipelineId
 ) implements Serializable {
@@ -43,8 +43,6 @@ public record KnowledgeDocumentChunkEvent(
      * 构造不可变事件。
      */
     public KnowledgeDocumentChunkEvent {
-        docId = Objects.requireNonNullElse(docId, "");
-        kbId = Objects.requireNonNullElse(kbId, "");
         operator = Objects.requireNonNullElse(operator, "");
         pipelineId = Objects.requireNonNullElse(pipelineId, "");
     }

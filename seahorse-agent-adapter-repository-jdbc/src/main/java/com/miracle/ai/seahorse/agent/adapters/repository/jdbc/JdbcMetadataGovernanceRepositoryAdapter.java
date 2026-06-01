@@ -457,11 +457,11 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
 
     @Override
     public boolean hasAcceptedResult(String tenantId,
-                                     String knowledgeBaseId,
-                                     String documentId,
+                                     Long knowledgeBaseId,
+                                     Long documentId,
                                      int schemaVersion,
                                      String extractorVersion) {
-        if (blank(documentId) || schemaVersion <= 0) {
+        if (documentId == null || schemaVersion <= 0) {
             return false;
         }
         try {
@@ -475,7 +475,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
                       AND COALESCE(extractor_version, '') = ?
                       AND status IN ('ACCEPT', 'ACCEPTED')
                     """, Objects.requireNonNullElse(tenantId, ""),
-                    Objects.requireNonNullElse(knowledgeBaseId, ""),
+                    knowledgeBaseId,
                     documentId,
                     schemaVersion,
                     Objects.requireNonNullElse(extractorVersion, "")) > 0;
@@ -1073,7 +1073,7 @@ public class JdbcMetadataGovernanceRepositoryAdapter implements MetadataSchemaRe
         return new MetadataBackfillJobRecord(
                 rs.getString("id"),
                 rs.getString("tenant_id"),
-                rs.getString("kb_id"),
+                rs.getLong("kb_id"),
                 rs.getString("pipeline_id"),
                 enumValue(MetadataBackfillJobStatus.class, rs.getString("status"), MetadataBackfillJobStatus.PENDING),
                 Math.max(1L, rs.getLong("current_page")),

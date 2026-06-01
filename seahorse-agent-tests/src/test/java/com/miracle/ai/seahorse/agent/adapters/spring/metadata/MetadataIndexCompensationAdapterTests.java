@@ -61,7 +61,7 @@ class MetadataIndexCompensationAdapterTests {
     void shouldRebuildKeywordAndVectorIndexesWithFilteredVectorMetadata() {
         InMemoryDocumentRepository repository = new InMemoryDocumentRepository();
         repository.put(document(true));
-        repository.putChunks("doc-1", List.of(chunk("chunk-1", 0, Map.of(
+        repository.putChunks(1L, List.of(chunk("1", 0, Map.of(
                 "department", "hr",
                 "owner", "alice",
                 "acl_subjects", List.of("user-1"),
@@ -77,16 +77,16 @@ class MetadataIndexCompensationAdapterTests {
                 schemaRegistry(),
                 null);
 
-        adapter.rebuildDocument("tenant-1", "kb-1", "doc-1");
+        adapter.rebuildDocument("tenant-1", 1L, 1L);
 
-        assertThat(keywordPort.rebuiltDocumentIds).containsExactly("doc-1");
-        assertThat(vectorIndexPort.deletedDocuments).containsExactly("collection-1/doc-1");
-        assertThat(vectorIndexPort.indexedDocuments).containsExactly("collection-1/doc-1");
+        assertThat(keywordPort.rebuiltDocumentIds).containsExactly(1L);
+        assertThat(vectorIndexPort.deletedDocuments).containsExactly("collection-1/1");
+        assertThat(vectorIndexPort.indexedDocuments).containsExactly("collection-1/1");
         assertThat(vectorIndexPort.lastIndexedChunks).hasSize(1);
         assertThat(vectorIndexPort.lastIndexedChunks.get(0).getMetadata())
                 .containsEntry("tenant_id", "tenant-1")
-                .containsEntry("kb_id", "kb-1")
-                .containsEntry("doc_id", "doc-1")
+                .containsEntry("kb_id", "1")
+                .containsEntry("doc_id", "1")
                 .containsEntry("collection_name", "collection-1")
                 .containsEntry("chunk_id", "chunk-1")
                 .containsEntry("chunk_index", 0)
@@ -104,7 +104,7 @@ class MetadataIndexCompensationAdapterTests {
     void shouldOnlyDeleteVectorDocumentWhenDocumentDisabled() {
         InMemoryDocumentRepository repository = new InMemoryDocumentRepository();
         repository.put(document(false));
-        repository.putChunks("doc-1", List.of(chunk("chunk-1", 0, Map.of("department", "hr"))));
+        repository.putChunks(1L, List.of(chunk("1", 0, Map.of("department", "hr"))));
         TrackingKeywordIndexMaintenanceInboundPort keywordPort = new TrackingKeywordIndexMaintenanceInboundPort();
         TrackingVectorIndexPort vectorIndexPort = new TrackingVectorIndexPort();
         MetadataIndexCompensationAdapter adapter = new MetadataIndexCompensationAdapter(
@@ -116,10 +116,10 @@ class MetadataIndexCompensationAdapterTests {
                 schemaRegistry(),
                 null);
 
-        adapter.rebuildDocument("tenant-1", "kb-1", "doc-1");
+        adapter.rebuildDocument("tenant-1", 1L, 1L);
 
-        assertThat(keywordPort.rebuiltDocumentIds).containsExactly("doc-1");
-        assertThat(vectorIndexPort.deletedDocuments).containsExactly("collection-1/doc-1");
+        assertThat(keywordPort.rebuiltDocumentIds).containsExactly(1L);
+        assertThat(vectorIndexPort.deletedDocuments).containsExactly("collection-1/1");
         assertThat(vectorIndexPort.indexedDocuments).isEmpty();
     }
 
@@ -146,7 +146,7 @@ class MetadataIndexCompensationAdapterTests {
                         MetadataBackfillCommand::pipelineId,
                         MetadataBackfillCommand::batchSize,
                         MetadataBackfillCommand::operator)
-                .containsExactly("tenant-1", "kb-1", "", 0, "metadata-schema-compensation"));
+                .containsExactly("tenant-1", "1", "", 0, "metadata-schema-compensation"));
         assertThat(backfillPort.commands.get(0).metadata())
                 .containsEntry("schemaVersion", 5)
                 .containsEntry("forceRerun", true)
@@ -160,7 +160,7 @@ class MetadataIndexCompensationAdapterTests {
     private MetadataSchemaRegistryPort schemaRegistry() {
         return (tenantId, knowledgeBaseId) -> new MetadataSchema(
                 tenantId,
-                knowledgeBaseId,
+                knowledgeBaseId.toString(),
                 5,
                 List.of(
                         fieldDescriptor("department", true),
@@ -189,7 +189,7 @@ class MetadataIndexCompensationAdapterTests {
         return new MetadataSchemaFieldRecord(
                 "field-" + schemaVersion,
                 "tenant-1",
-                "kb-1",
+                1L,
                 fieldKey,
                 fieldKey,
                 MetadataValueType.STRING,
@@ -211,8 +211,8 @@ class MetadataIndexCompensationAdapterTests {
 
     private KnowledgeDocumentDetail document(boolean enabled) {
         KnowledgeDocumentDetail detail = new KnowledgeDocumentDetail();
-        detail.setId("doc-1");
-        detail.setKbId("kb-1");
+        detail.setId(1L);
+        detail.setKbId(1L);
         detail.setCollectionName("collection-1");
         detail.setEmbeddingModel("text-embedding-3-small");
         detail.setDocName("doc-1.txt");
@@ -226,9 +226,9 @@ class MetadataIndexCompensationAdapterTests {
 
     private KnowledgeChunkRecord chunk(String id, int index, Map<String, Object> metadata) {
         KnowledgeChunkRecord record = new KnowledgeChunkRecord();
-        record.setId(id);
-        record.setDocId("doc-1");
-        record.setKbId("kb-1");
+        record.setId(Long.parseLong(id));
+        record.setDocId(1L);
+        record.setKbId(1L);
         record.setChunkIndex(index);
         record.setContent("hello world");
         record.setEnabled(1);
@@ -238,17 +238,17 @@ class MetadataIndexCompensationAdapterTests {
 
     private static final class TrackingKeywordIndexMaintenanceInboundPort implements KeywordIndexMaintenanceInboundPort {
 
-        private final List<String> rebuiltDocumentIds = new ArrayList<>();
+        private final List<Long> rebuiltDocumentIds = new ArrayList<>();
 
         @Override
-        public KeywordIndexRebuildResult rebuildDocument(String docId) {
+        public KeywordIndexRebuildResult rebuildDocument(Long docId) {
             rebuiltDocumentIds.add(docId);
-            return new KeywordIndexRebuildResult("DOCUMENT", docId, 1, 1, 1, 1, 0, 0, List.of());
+            return new KeywordIndexRebuildResult("DOCUMENT", String.valueOf(docId), 1, 1, 1, 1, 0, 0, List.of());
         }
 
         @Override
-        public KeywordIndexRebuildResult rebuildKnowledgeBase(String kbId, int batchSize) {
-            return new KeywordIndexRebuildResult("KNOWLEDGE_BASE", kbId, 0, 0, 0, 0, 0, 0, List.of());
+        public KeywordIndexRebuildResult rebuildKnowledgeBase(Long kbId, int batchSize) {
+            return new KeywordIndexRebuildResult("KNOWLEDGE_BASE", String.valueOf(kbId), 0, 0, 0, 0, 0, 0, List.of());
         }
     }
 
@@ -292,7 +292,7 @@ class MetadataIndexCompensationAdapterTests {
             return new MetadataBackfillJobRecord(
                     "job-1",
                     command.tenantId(),
-                    command.knowledgeBaseId(),
+                    Long.parseLong(command.knowledgeBaseId()),
                     command.pipelineId(),
                     MetadataBackfillJobStatus.PENDING,
                     1,
@@ -343,14 +343,14 @@ class MetadataIndexCompensationAdapterTests {
 
     private static final class InMemoryDocumentRepository implements KnowledgeDocumentRepositoryPort {
 
-        private final Map<String, KnowledgeDocumentDetail> documents = new LinkedHashMap<>();
-        private final Map<String, List<KnowledgeChunkRecord>> chunksByDocument = new LinkedHashMap<>();
+        private final Map<Long, KnowledgeDocumentDetail> documents = new LinkedHashMap<>();
+        private final Map<Long, List<KnowledgeChunkRecord>> chunksByDocument = new LinkedHashMap<>();
 
         void put(KnowledgeDocumentDetail detail) {
             documents.put(detail.getId(), detail);
         }
 
-        void putChunks(String docId, List<KnowledgeChunkRecord> chunks) {
+        void putChunks(Long docId, List<KnowledgeChunkRecord> chunks) {
             chunksByDocument.put(docId, List.copyOf(chunks));
         }
 
@@ -360,35 +360,45 @@ class MetadataIndexCompensationAdapterTests {
         }
 
         @Override
-        public Optional<KnowledgeDocumentRecord> findById(String docId) {
+        public Optional<KnowledgeDocumentRecord> findById(Long docId) {
             return Optional.empty();
         }
 
         @Override
-        public Optional<KnowledgeDocumentDetail> findDetailById(String docId) {
+        public Optional<KnowledgeDocumentDetail> findDetailById(Long docId) {
             return Optional.ofNullable(documents.get(docId));
         }
 
         @Override
-        public KnowledgeDocumentPage page(String kbId, long current, long size, String status, String keyword) {
+        public KnowledgeDocumentPage page(Long kbId, long current, long size, String status, String keyword) {
             return new KnowledgeDocumentPage(List.of(), 0, size, current, 0);
         }
 
         @Override
-        public boolean markRunning(String docId, String operator) {
+        public boolean markRunning(Long docId, String operator) {
             return true;
         }
 
         @Override
-        public void markSuccess(String docId, int chunkCount, String operator) {
+        public void markSuccess(Long docId, int chunkCount, String operator) {
         }
 
         @Override
-        public void markFailed(String docId, String operator, String errorMessage) {
+        public void markFailed(Long docId, String operator, String errorMessage) {
         }
 
         @Override
-        public List<KnowledgeChunkRecord> listEnabledChunks(String docId) {
+        public boolean updateEnabled(Long docId, boolean enabled, String operator) {
+            return false;
+        }
+
+        @Override
+        public boolean delete(Long docId, String operator) {
+            return false;
+        }
+
+        @Override
+        public List<KnowledgeChunkRecord> listEnabledChunks(Long docId) {
             return chunksByDocument.getOrDefault(docId, List.of());
         }
     }

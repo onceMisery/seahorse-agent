@@ -1,0 +1,4 @@
+interface:
+  display_name: "Seahorse Memory System Audit"
+  short_description: "Audit memory alignment and review safety"
+  default_prompt: "Use $seahorse-memory-system-audit to audit Seahorse memory-system gaps and review-flow safety."

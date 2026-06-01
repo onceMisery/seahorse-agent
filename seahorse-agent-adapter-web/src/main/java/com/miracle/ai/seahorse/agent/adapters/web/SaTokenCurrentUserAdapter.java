@@ -42,7 +42,7 @@ public class SaTokenCurrentUserAdapter implements CurrentUserPort {
             return Optional.empty();
         }
         String loginId = StpUtil.getLoginIdAsString();
-        return userRepositoryPort.findById(loginId).map(this::toCurrentUser);
+        return userRepositoryPort.findById(Long.parseLong(loginId)).map(this::toCurrentUser);
     }
 
     private CurrentUser toCurrentUser(UserRecord record) {

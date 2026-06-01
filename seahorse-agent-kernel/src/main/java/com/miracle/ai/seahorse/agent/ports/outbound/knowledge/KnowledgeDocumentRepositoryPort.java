@@ -39,7 +39,7 @@ public interface KnowledgeDocumentRepositoryPort {
      * @param docId 文档 ID
      * @return 文档记录
      */
-    Optional<KnowledgeDocumentRecord> findById(String docId);
+    Optional<KnowledgeDocumentRecord> findById(Long docId);
 
     /**
      * 查询文档管理详情。
@@ -47,21 +47,21 @@ public interface KnowledgeDocumentRepositoryPort {
      * @param docId 文档 ID
      * @return 文档详情
      */
-    default Optional<KnowledgeDocumentDetail> findDetailById(String docId) {
+    default Optional<KnowledgeDocumentDetail> findDetailById(Long docId) {
         return Optional.empty();
     }
 
     /**
      * 分页查询文档。
      *
-     * @param kbId    知识库 ID
-     * @param current 当前页
-     * @param size    每页数量
-     * @param status  状态过滤
-     * @param keyword 关键字过滤
+     * @param kbId     知识库 ID
+     * @param current  当前页
+     * @param size     每页数量
+     * @param status   状态过滤
+     * @param keyword  关键词过滤
      * @return 分页结果
      */
-    default KnowledgeDocumentPage page(String kbId, long current, long size, String status, String keyword) {
+    default KnowledgeDocumentPage page(Long kbId, long current, long size, String status, String keyword) {
         return new KnowledgeDocumentPage(List.of(), 0, size, current, 0);
     }
 
@@ -73,7 +73,7 @@ public interface KnowledgeDocumentRepositoryPort {
      * @param size    每页数量
      * @return 日志分页
      */
-    default KnowledgeDocumentChunkLogPage chunkLogs(String docId, long current, long size) {
+    default KnowledgeDocumentChunkLogPage chunkLogs(Long docId, long current, long size) {
         return new KnowledgeDocumentChunkLogPage(List.of(), 0, size, current, 0);
     }
 
@@ -84,7 +84,7 @@ public interface KnowledgeDocumentRepositoryPort {
      * @param operator 操作人
      * @return 是否更新成功
      */
-    boolean markRunning(String docId, String operator);
+    boolean markRunning(Long docId, String operator);
 
     /**
      * 将文档置为成功。
@@ -93,7 +93,7 @@ public interface KnowledgeDocumentRepositoryPort {
      * @param chunkCount 分片数量
      * @param operator   操作人
      */
-    void markSuccess(String docId, int chunkCount, String operator);
+    void markSuccess(Long docId, int chunkCount, String operator);
 
     /**
      * 将文档置为失败。
@@ -102,7 +102,7 @@ public interface KnowledgeDocumentRepositoryPort {
      * @param operator     操作人
      * @param errorMessage 错误信息
      */
-    void markFailed(String docId, String operator, String errorMessage);
+    void markFailed(Long docId, String operator, String errorMessage);
 
     /**
      * 更新文档管理字段。
@@ -111,7 +111,7 @@ public interface KnowledgeDocumentRepositoryPort {
      * @param values 更新值
      * @return 是否更新成功
      */
-    default boolean update(String docId, KnowledgeDocumentUpdateValues values) {
+    default boolean update(Long docId, KnowledgeDocumentUpdateValues values) {
         return false;
     }
 
@@ -123,11 +123,11 @@ public interface KnowledgeDocumentRepositoryPort {
      * @param operator 操作人
      * @return 是否更新成功
      */
-    default boolean updateEnabled(String docId, boolean enabled, String operator) {
+    default boolean updateEnabled(Long docId, boolean enabled, String operator) {
         return false;
     }
 
-    default boolean replaceFileForRefresh(String docId, KnowledgeDocumentFileRef file, String operator) {
+    default boolean replaceFileForRefresh(Long docId, KnowledgeDocumentFileRef file, String operator) {
         return false;
     }
 
@@ -138,7 +138,7 @@ public interface KnowledgeDocumentRepositoryPort {
      * @param operator 操作人
      * @return 是否删除成功
      */
-    default boolean delete(String docId, String operator) {
+    default boolean delete(Long docId, String operator) {
         return false;
     }
 
@@ -148,7 +148,7 @@ public interface KnowledgeDocumentRepositoryPort {
      * @param docId 文档 ID
      * @return 分块列表
      */
-    default List<KnowledgeChunkRecord> listEnabledChunks(String docId) {
+    default List<KnowledgeChunkRecord> listEnabledChunks(Long docId) {
         return List.of();
     }
 }

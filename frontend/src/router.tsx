@@ -1,5 +1,7 @@
 import { Navigate, createBrowserRouter } from "react-router-dom";
 
+import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
+import { ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { LoginPage } from "@/pages/LoginPage";
 import { ChatPage } from "@/pages/ChatPage";
 import { MemoryCenterPage } from "@/pages/MemoryCenterPage";
@@ -21,54 +23,33 @@ import { ModelConfigPage } from "@/pages/admin/settings/ModelConfigPage";
 import { SampleQuestionPage } from "@/pages/admin/sample-questions/SampleQuestionPage";
 import { QueryTermMappingPage } from "@/pages/admin/query-term-mapping/QueryTermMappingPage";
 import { UserListPage } from "@/pages/admin/users/UserListPage";
-import { AiInfraConsolePage } from "@/pages/admin/ai-infra/AiInfraConsolePage";
 import { AgentConsolePage } from "@/pages/admin/agent-console/AgentConsolePage";
 import { AgentInspectorPage } from "@/pages/admin/agent-inspector/AgentInspectorPage";
-import { ADVANCED_ADMIN_FEATURES, isAdvancedAdminEnabled } from "@/config/productMode";
-import { useAuthStore } from "@/stores/authStore";
-
-// Agent 管理
 import { AgentListPage } from "@/pages/admin/agents/AgentListPage";
 import { AgentCreatePage } from "@/pages/admin/agents/AgentCreatePage";
 import { AgentDetailPage } from "@/pages/admin/agents/AgentDetailPage";
 import { AgentEditorPage } from "@/pages/admin/agents/AgentEditorPage";
-
-// 工具目录
 import { ToolCatalogPage } from "@/pages/admin/tools/ToolCatalogPage";
 import { ToolDetailPage } from "@/pages/admin/tools/ToolDetailPage";
 import { ToolInvocationAuditPage } from "@/pages/admin/tools/ToolInvocationAuditPage";
-
-// 审批中心
 import { ApprovalCenterPage } from "@/pages/admin/approvals/ApprovalCenterPage";
-
-// RAG 评测
 import { RagEvaluationPage } from "@/pages/admin/rag-evaluation/RagEvaluationPage";
 import { RetrievalDatasetDetailPage } from "@/pages/admin/rag-evaluation/RetrievalDatasetDetailPage";
 import { RetrievalStrategyTemplatePage } from "@/pages/admin/rag-evaluation/RetrievalStrategyTemplatePage";
 import { VersionQualityComparePage } from "@/pages/admin/rag-evaluation/VersionQualityComparePage";
-
-// 安全治理
 import { ResourceAclPage } from "@/pages/admin/security/ResourceAclPage";
 import { AccessDecisionPage } from "@/pages/admin/security/AccessDecisionPage";
 import { QuotaPolicyPage } from "@/pages/admin/security/QuotaPolicyPage";
-
-// 集成
 import { OpenApiConnectorPage } from "@/pages/admin/integrations/OpenApiConnectorPage";
 import { OpenApiConnectorDetailPage } from "@/pages/admin/integrations/OpenApiConnectorDetailPage";
 import { SecretPage } from "@/pages/admin/integrations/SecretPage";
-
-// 记忆治理
 import { MemoryGovernancePage } from "@/pages/admin/memory-governance/MemoryGovernancePage";
-
-// 审计与成本
 import { AuditEventPage } from "@/pages/admin/audit/AuditEventPage";
 import { CostAnalyticsPage } from "@/pages/admin/cost/CostAnalyticsPage";
-
-// 沙箱
 import { SandboxPage } from "@/pages/admin/sandbox/SandboxPage";
-
-// Agent 运行管理
 import { AgentRunListPage } from "@/pages/admin/agent-runs/AgentRunListPage";
+import { useAuthStore } from "@/stores/authStore";
+import { useFeatureStore } from "@/stores/featureStore";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -106,144 +87,70 @@ function HomeRedirect() {
   return <Navigate to={isAuthenticated ? "/chat" : "/login"} replace />;
 }
 
-const advancedAdminRoutes = [
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.INTENT_MANAGEMENT)
-    ? [
-        {
-          path: "intent-tree",
-          element: <IntentTreePage />
-        },
-        {
-          path: "intent-list",
-          element: <IntentListPage />
-        },
-        {
-          path: "intent-list/:id/edit",
-          element: <IntentEditPage />
-        }
-      ]
-    : []),
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.INGESTION_MANAGEMENT)
-    ? [
-        {
-          path: "ingestion",
-          element: <IngestionPage />
-        }
-      ]
-    : []),
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.AI_INFRA_CONSOLE)
-    ? [
-        {
-          path: "ai-infra",
-          element: <AgentConsolePage />
-        },
-        {
-          path: "agent-inspector",
-          element: <AgentInspectorPage />
-        },
-        {
-          path: "agent-inspector/:runId",
-          element: <AgentInspectorPage />
-        }
-      ]
-    : []),
-  // Agent 生命周期管理
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT)
-    ? [
-        { path: "agents", element: <AgentListPage /> },
-        { path: "agents/new", element: <AgentCreatePage /> },
-        { path: "agents/:agentId", element: <AgentDetailPage /> },
-        { path: "agents/:agentId/edit", element: <AgentEditorPage /> }
-      ]
-    : []),
-  // 工具目录
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT)
-    ? [
-        { path: "tools", element: <ToolCatalogPage /> },
-        { path: "tools/:toolId", element: <ToolDetailPage /> },
-        { path: "tool-invocations", element: <ToolInvocationAuditPage /> }
-      ]
-    : []),
-  // 审批中心
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT)
-    ? [
-        { path: "approvals", element: <ApprovalCenterPage /> }
-      ]
-    : []),
-  // Agent 运行管理
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT)
-    ? [
-        { path: "agent-runs", element: <AgentRunListPage /> }
-      ]
-    : []),
-  // RAG 评测
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION)
-    ? [
-        { path: "rag-evaluation", element: <RagEvaluationPage /> },
-        { path: "rag-evaluation/:kbId/:datasetId", element: <RetrievalDatasetDetailPage /> },
-        { path: "rag-strategies", element: <RetrievalStrategyTemplatePage /> },
-        { path: "rag-version-compare", element: <VersionQualityComparePage /> }
-      ]
-    : []),
-  // 安全治理
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.RESOURCE_ACL_MANAGEMENT)
-    ? [
-        { path: "security/resource-acl", element: <ResourceAclPage /> },
-        { path: "security/access-decisions", element: <AccessDecisionPage /> }
-      ]
-    : []),
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.QUOTA_MANAGEMENT)
-    ? [
-        { path: "security/quotas", element: <QuotaPolicyPage /> }
-      ]
-    : []),
-  // 密钥管理
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.SECRET_MANAGEMENT)
-    ? [
-        { path: "secrets", element: <SecretPage /> }
-      ]
-    : []),
-  // OpenAPI 连接器
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.CONNECTOR_MANAGEMENT)
-    ? [
-        { path: "integrations/connectors", element: <OpenApiConnectorPage /> },
-        { path: "integrations/connectors/:connectorId", element: <OpenApiConnectorDetailPage /> }
-      ]
-    : []),
-  // 记忆治理
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.MEMORY_GOVERNANCE)
-    ? [
-        { path: "memory-governance", element: <MemoryGovernancePage /> }
-      ]
-    : []),
-  // 审计日志
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.AUDIT_LOG)
-    ? [
-        { path: "audit", element: <AuditEventPage /> }
-      ]
-    : []),
-  // 成本分析
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.COST_ANALYTICS)
-    ? [
-        { path: "cost", element: <CostAnalyticsPage /> }
-      ]
-    : []),
-  // 沙箱
-  ...(isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.SANDBOX)
-    ? [
-        { path: "sandbox", element: <SandboxPage /> }
-      ]
-    : [])
-];
+function FeatureGuard({
+  feature,
+  featureName,
+  children
+}: {
+  feature: string;
+  featureName: string;
+  children: JSX.Element;
+}) {
+  const isLoading = useFeatureStore((state) => state.isLoading);
+  const capabilities = useFeatureStore((state) => state.capabilities);
+  const featureState = useFeatureStore((state) => state.getFeatureState(feature));
 
-const prototypeRoutes = isAdvancedAdminEnabled(ADVANCED_ADMIN_FEATURES.AI_INFRA_CONSOLE)
-  ? [
-      {
-        path: "/prototype/ai-infra",
-        element: <Navigate to="/admin/ai-infra" replace />
-      }
-    ]
-  : [];
+  if (isLoading && !capabilities) {
+    return <div className="p-6 text-sm text-slate-500">能力配置加载中...</div>;
+  }
+
+  if (!featureState.enabled) {
+    return <FeatureUnavailableState featureState={featureState} featureName={featureName} />;
+  }
+
+  return children;
+}
+
+function withFeature(feature: string, featureName: string, element: JSX.Element) {
+  return (
+    <FeatureGuard feature={feature} featureName={featureName}>
+      {element}
+    </FeatureGuard>
+  );
+}
+
+const advancedAdminRoutes = [
+  { path: "intent-tree", element: withFeature(ADVANCED_ADMIN_FEATURES.INTENT_MANAGEMENT, "意图管理", <IntentTreePage />) },
+  { path: "intent-list", element: withFeature(ADVANCED_ADMIN_FEATURES.INTENT_MANAGEMENT, "意图管理", <IntentListPage />) },
+  { path: "intent-list/:id/edit", element: withFeature(ADVANCED_ADMIN_FEATURES.INTENT_MANAGEMENT, "意图管理", <IntentEditPage />) },
+  { path: "ingestion", element: withFeature(ADVANCED_ADMIN_FEATURES.INGESTION_MANAGEMENT, "数据通道", <IngestionPage />) },
+  { path: "ai-infra", element: withFeature(ADVANCED_ADMIN_FEATURES.AI_INFRA_CONSOLE, "Agent 控制台", <AgentConsolePage />) },
+  { path: "agent-inspector", element: withFeature(ADVANCED_ADMIN_FEATURES.AI_INFRA_CONSOLE, "Agent 检视器", <AgentInspectorPage />) },
+  { path: "agent-inspector/:runId", element: withFeature(ADVANCED_ADMIN_FEATURES.AI_INFRA_CONSOLE, "Agent 检视器", <AgentInspectorPage />) },
+  { path: "agents", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "Agent 管理", <AgentListPage />) },
+  { path: "agents/new", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "Agent 管理", <AgentCreatePage />) },
+  { path: "agents/:agentId", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "Agent 管理", <AgentDetailPage />) },
+  { path: "agents/:agentId/edit", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "Agent 管理", <AgentEditorPage />) },
+  { path: "tools", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具目录", <ToolCatalogPage />) },
+  { path: "tools/:toolId", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具目录", <ToolDetailPage />) },
+  { path: "tool-invocations", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具调用审计", <ToolInvocationAuditPage />) },
+  { path: "approvals", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "审批中心", <ApprovalCenterPage />) },
+  { path: "agent-runs", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "Agent 运行管理", <AgentRunListPage />) },
+  { path: "rag-evaluation", element: withFeature(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION, "RAG 评测", <RagEvaluationPage />) },
+  { path: "rag-evaluation/:kbId/:datasetId", element: withFeature(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION, "RAG 评测", <RetrievalDatasetDetailPage />) },
+  { path: "rag-strategies", element: withFeature(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION, "策略模板", <RetrievalStrategyTemplatePage />) },
+  { path: "rag-version-compare", element: withFeature(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION, "版本质量对比", <VersionQualityComparePage />) },
+  { path: "security/resource-acl", element: withFeature(ADVANCED_ADMIN_FEATURES.RESOURCE_ACL_MANAGEMENT, "资源 ACL", <ResourceAclPage />) },
+  { path: "security/access-decisions", element: withFeature(ADVANCED_ADMIN_FEATURES.RESOURCE_ACL_MANAGEMENT, "访问决策", <AccessDecisionPage />) },
+  { path: "security/quotas", element: withFeature(ADVANCED_ADMIN_FEATURES.QUOTA_MANAGEMENT, "配额策略", <QuotaPolicyPage />) },
+  { path: "secrets", element: withFeature(ADVANCED_ADMIN_FEATURES.SECRET_MANAGEMENT, "密钥管理", <SecretPage />) },
+  { path: "integrations/connectors", element: withFeature(ADVANCED_ADMIN_FEATURES.CONNECTOR_MANAGEMENT, "OpenAPI 连接器", <OpenApiConnectorPage />) },
+  { path: "integrations/connectors/:connectorId", element: withFeature(ADVANCED_ADMIN_FEATURES.CONNECTOR_MANAGEMENT, "OpenAPI 连接器", <OpenApiConnectorDetailPage />) },
+  { path: "memory-governance", element: withFeature(ADVANCED_ADMIN_FEATURES.MEMORY_GOVERNANCE, "记忆治理", <MemoryGovernancePage />) },
+  { path: "audit", element: withFeature(ADVANCED_ADMIN_FEATURES.AUDIT_LOG, "审计日志", <AuditEventPage />) },
+  { path: "cost", element: withFeature(ADVANCED_ADMIN_FEATURES.COST_ANALYTICS, "成本分析", <CostAnalyticsPage />) },
+  { path: "sandbox", element: withFeature(ADVANCED_ADMIN_FEATURES.SANDBOX, "沙箱", <SandboxPage />) }
+];
 
 export const router = createBrowserRouter([
   {
@@ -282,7 +189,10 @@ export const router = createBrowserRouter([
       </RequireAuth>
     )
   },
-  ...prototypeRoutes,
+  {
+    path: "/prototype/ai-infra",
+    element: <Navigate to="/admin/ai-infra" replace />
+  },
   {
     path: "/admin",
     element: (
@@ -291,59 +201,20 @@ export const router = createBrowserRouter([
       </RequireAdmin>
     ),
     children: [
-      {
-        index: true,
-        element: <Navigate to="/admin/dashboard" replace />
-      },
-      {
-        path: "dashboard",
-        element: <DashboardPage />
-      },
-      {
-        path: "knowledge",
-        element: <KnowledgeListPage />
-      },
-      {
-        path: "knowledge/:kbId",
-        element: <KnowledgeDocumentsPage />
-      },
-      {
-        path: "knowledge/:kbId/docs/:docId",
-        element: <KnowledgeChunksPage />
-      },
+      { index: true, element: <Navigate to="/admin/dashboard" replace /> },
+      { path: "dashboard", element: <DashboardPage /> },
+      { path: "knowledge", element: <KnowledgeListPage /> },
+      { path: "knowledge/:kbId", element: <KnowledgeDocumentsPage /> },
+      { path: "knowledge/:kbId/docs/:docId", element: <KnowledgeChunksPage /> },
       ...advancedAdminRoutes,
-      {
-        path: "metadata-governance",
-        element: <MetadataGovernancePage />
-      },
-      {
-        path: "traces",
-        element: <RagTracePage />
-      },
-      {
-        path: "traces/:traceId",
-        element: <RagTraceDetailPage />
-      },
-      {
-        path: "settings",
-        element: <SystemSettingsPage />
-      },
-      {
-        path: "model-config",
-        element: <ModelConfigPage />
-      },
-      {
-        path: "sample-questions",
-        element: <SampleQuestionPage />
-      },
-      {
-        path: "mappings",
-        element: <QueryTermMappingPage />
-      },
-      {
-        path: "users",
-        element: <UserListPage />
-      }
+      { path: "metadata-governance", element: <MetadataGovernancePage /> },
+      { path: "traces", element: <RagTracePage /> },
+      { path: "traces/:traceId", element: <RagTraceDetailPage /> },
+      { path: "settings", element: <SystemSettingsPage /> },
+      { path: "model-config", element: <ModelConfigPage /> },
+      { path: "sample-questions", element: <SampleQuestionPage /> },
+      { path: "mappings", element: <QueryTermMappingPage /> },
+      { path: "users", element: <UserListPage /> }
     ]
   },
   {

@@ -85,7 +85,7 @@ public class SeahorseKeywordIndexMaintenanceJob {
     private void rebuildDocuments() {
         for (String docId : docIds) {
             try {
-                maintenancePort.rebuildDocument(docId);
+                maintenancePort.rebuildDocument(Long.parseLong(docId));
             } catch (RuntimeException ex) {
                 LOGGER.warn("Seahorse keyword index document rebuild failed, docId={}", docId, ex);
             }
@@ -95,7 +95,7 @@ public class SeahorseKeywordIndexMaintenanceJob {
     private void rebuildKnowledgeBases() {
         for (String kbId : kbIds) {
             try {
-                maintenancePort.rebuildKnowledgeBase(kbId, batchSize);
+                maintenancePort.rebuildKnowledgeBase(Long.parseLong(kbId), batchSize);
             } catch (RuntimeException ex) {
                 LOGGER.warn("Seahorse keyword index knowledge base rebuild failed, kbId={}", kbId, ex);
             }

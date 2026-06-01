@@ -47,7 +47,7 @@ public interface KnowledgeDocumentInboundPort {
      * @param docId    文档 ID
      * @param operator 操作人
      */
-    void startChunk(String docId, String operator);
+    void startChunk(Long docId, String operator);
 
     /**
      * 使用指定流水线执行文档入库。
@@ -56,7 +56,7 @@ public interface KnowledgeDocumentInboundPort {
      * @param pipeline 入库流水线
      * @param operator 操作人
      */
-    void executeChunk(String docId, PipelineDefinition pipeline, String operator);
+    void executeChunk(Long docId, PipelineDefinition pipeline, String operator);
 
     /**
      * 查询文档详情。
@@ -64,7 +64,7 @@ public interface KnowledgeDocumentInboundPort {
      * @param docId 文档 ID
      * @return 文档详情
      */
-    KnowledgeDocumentDetail queryById(String docId);
+    KnowledgeDocumentDetail queryById(Long docId);
 
     /**
      * 分页查询知识库文档。
@@ -73,7 +73,7 @@ public interface KnowledgeDocumentInboundPort {
      * @param command 分页命令
      * @return 分页结果
      */
-    KnowledgeDocumentPage page(String kbId, KnowledgeDocumentPageCommand command);
+    KnowledgeDocumentPage page(Long kbId, KnowledgeDocumentPageCommand command);
 
     /**
      * 搜索文档。
@@ -90,7 +90,7 @@ public interface KnowledgeDocumentInboundPort {
      * @param docId   文档 ID
      * @param command 更新命令
      */
-    void update(String docId, UpdateKnowledgeDocumentCommand command);
+    void update(Long docId, UpdateKnowledgeDocumentCommand command);
 
     /**
      * 启用或禁用文档。
@@ -99,7 +99,7 @@ public interface KnowledgeDocumentInboundPort {
      * @param enabled  是否启用
      * @param operator 操作人
      */
-    void enable(String docId, boolean enabled, String operator);
+    void enable(Long docId, boolean enabled, String operator);
 
     /**
      * 删除文档及关联分块、向量和文件。
@@ -107,7 +107,7 @@ public interface KnowledgeDocumentInboundPort {
      * @param docId    文档 ID
      * @param operator 操作人
      */
-    void delete(String docId, String operator);
+    void delete(Long docId, String operator);
 
     /**
      * 查询文档分块执行日志。
@@ -117,5 +117,5 @@ public interface KnowledgeDocumentInboundPort {
      * @param size    每页数量
      * @return 日志分页
      */
-    KnowledgeDocumentChunkLogPage chunkLogs(String docId, long current, long size);
+    KnowledgeDocumentChunkLogPage chunkLogs(Long docId, long current, long size);
 }

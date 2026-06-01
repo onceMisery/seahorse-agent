@@ -44,6 +44,8 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
             "/index.html",
             "/login",
             "/error",
+            "/features",
+            "/api/features",
             "/prototype/ai-infra");
     private static final Set<String> PUBLIC_PATH_PREFIXES = Set.of(
             "/auth/",
@@ -85,7 +87,7 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
                         try {
                             return super.preHandle(request, response, handler);
                         } catch (NotLoginException e) {
-                            writeError(response, HttpServletResponse.SC_UNAUTHORIZED, e.getMessage());
+                            writeError(response, HttpServletResponse.SC_UNAUTHORIZED, "登录已过期，请重新登录");
                             return false;
                         } catch (NotRoleException e) {
                             writeError(response, HttpServletResponse.SC_FORBIDDEN, "无管理员权限");
@@ -98,6 +100,8 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
                         "/",
                         "/index.html",
                         "/login",
+                        "/features",
+                        "/api/features",
                         "/auth/**",
                         "/error",
                         "/assets/**",

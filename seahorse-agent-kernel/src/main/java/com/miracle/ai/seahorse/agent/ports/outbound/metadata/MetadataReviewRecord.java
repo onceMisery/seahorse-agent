@@ -10,8 +10,8 @@ import java.util.Objects;
 public record MetadataReviewRecord(
         String id,
         String tenantId,
-        String knowledgeBaseId,
-        String documentId,
+        Long knowledgeBaseId,
+        Long documentId,
         String resultId,
         MetadataReviewStatus reviewStatus,
         int priority,
@@ -29,8 +29,8 @@ public record MetadataReviewRecord(
     public MetadataReviewRecord {
         id = Objects.requireNonNullElse(id, "");
         tenantId = Objects.requireNonNullElse(tenantId, "");
-        knowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, "");
-        documentId = Objects.requireNonNullElse(documentId, "");
+        knowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, 0L);
+        documentId = Objects.requireNonNullElse(documentId, 0L);
         resultId = Objects.requireNonNullElse(resultId, "");
         reviewStatus = Objects.requireNonNullElse(reviewStatus, MetadataReviewStatus.PENDING);
         priority = Math.max(0, priority);
@@ -47,8 +47,8 @@ public record MetadataReviewRecord(
 
     public MetadataReviewRecord(String id,
                                 String tenantId,
-                                String knowledgeBaseId,
-                                String documentId,
+                                Long knowledgeBaseId,
+                                Long documentId,
                                 String resultId,
                                 MetadataReviewStatus reviewStatus,
                                 int priority,

@@ -7,12 +7,12 @@ package com.miracle.ai.seahorse.agent.ports.outbound.metadata;
  */
 public interface MetadataIndexCompensationPort {
 
-    void rebuildDocument(String documentId);
+    void rebuildDocument(Long documentId);
 
     /**
      * 允许调用方显式携带租户和知识库上下文，兼容需要按 schema 重算向量元数据的实现。
      */
-    default void rebuildDocument(String tenantId, String knowledgeBaseId, String documentId) {
+    default void rebuildDocument(String tenantId, Long knowledgeBaseId, Long documentId) {
         rebuildDocument(documentId);
     }
 
@@ -37,7 +37,7 @@ public interface MetadataIndexCompensationPort {
     static MetadataIndexCompensationPort noop() {
         return new MetadataIndexCompensationPort() {
             @Override
-            public void rebuildDocument(String documentId) {
+            public void rebuildDocument(Long documentId) {
             }
         };
     }

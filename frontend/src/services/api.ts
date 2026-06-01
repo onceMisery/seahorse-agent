@@ -33,7 +33,14 @@ api.interceptors.response.use(
     if (payload && typeof payload === "object" && "code" in payload) {
       if (payload.code !== "0") {
         const message = payload.message || "请求失败";
-        const isAuthExpired = typeof message === "string" && message.includes("未登录");
+        const normalized = typeof message === "string" ? message.toLowerCase() : "";
+        const isAuthExpired =
+          normalized.includes("未登录") ||
+          normalized.includes("notlogin") ||
+          normalized.includes("not login") ||
+          normalized.includes("token") ||
+          normalized.includes("invalid") ||
+          normalized.includes("expired");
         if (isAuthExpired) {
           handleUnauthorizedSession(message);
         }

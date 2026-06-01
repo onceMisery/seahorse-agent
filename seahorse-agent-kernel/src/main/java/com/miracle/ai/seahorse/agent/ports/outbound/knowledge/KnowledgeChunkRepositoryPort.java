@@ -37,37 +37,37 @@ public interface KnowledgeChunkRepositoryPort {
      * @param docId  文档 ID
      * @param chunks 待持久化 chunk
      */
-    void replaceDocumentChunks(String kbId, String docId, List<VectorChunk> chunks);
+    void replaceDocumentChunks(Long kbId, Long docId, List<VectorChunk> chunks);
 
-    default Optional<KnowledgeDocumentChunkContext> findDocumentContext(String docId) {
+    default Optional<KnowledgeDocumentChunkContext> findDocumentContext(Long docId) {
         return Optional.empty();
     }
 
-    default KnowledgeChunkPage page(String docId, long current, long size, Boolean enabled) {
+    default KnowledgeChunkPage page(Long docId, long current, long size, Boolean enabled) {
         return new KnowledgeChunkPage(List.of(), 0, size, current, 0);
     }
 
-    default KnowledgeChunkRecord create(String docId, CreateKnowledgeChunkValues values) {
+    default KnowledgeChunkRecord create(Long docId, CreateKnowledgeChunkValues values) {
         throw new UnsupportedOperationException("create chunk is not supported");
     }
 
-    default Optional<KnowledgeChunkRecord> findChunk(String docId, String chunkId) {
+    default Optional<KnowledgeChunkRecord> findChunk(Long docId, Long chunkId) {
         return Optional.empty();
     }
 
-    default boolean update(String docId, String chunkId, UpdateKnowledgeChunkValues values) {
+    default boolean update(Long docId, Long chunkId, UpdateKnowledgeChunkValues values) {
         return false;
     }
 
-    default boolean delete(String docId, String chunkId) {
+    default boolean delete(Long docId, Long chunkId) {
         return false;
     }
 
-    default List<KnowledgeChunkRecord> findChunksByIds(String docId, List<String> chunkIds) {
+    default List<KnowledgeChunkRecord> findChunksByIds(Long docId, List<Long> chunkIds) {
         return List.of();
     }
 
-    default boolean updateEnabled(String docId, List<String> chunkIds, boolean enabled, String operator) {
+    default boolean updateEnabled(Long docId, List<Long> chunkIds, boolean enabled, String operator) {
         return false;
     }
 }

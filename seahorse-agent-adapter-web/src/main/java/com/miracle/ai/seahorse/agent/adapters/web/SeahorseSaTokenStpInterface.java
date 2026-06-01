@@ -42,7 +42,7 @@ public class SeahorseSaTokenStpInterface implements StpInterface {
         if (loginId == null) {
             return Collections.emptyList();
         }
-        return userRepositoryPort.findById(loginId.toString())
+        return userRepositoryPort.findById(Long.parseLong(loginId.toString()))
                 .filter(user -> user.role() != null && !user.role().isBlank())
                 .map(user -> List.of(user.role()))
                 .orElseGet(Collections::emptyList);

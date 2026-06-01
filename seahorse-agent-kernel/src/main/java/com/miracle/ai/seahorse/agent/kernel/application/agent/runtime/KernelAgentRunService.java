@@ -71,7 +71,7 @@ public class KernelAgentRunService implements AgentRunInboundPort {
                 definition == null ? safeCommand.agentId() : definition.agentId(),
                 versionId,
                 safeCommand.tenantId(),
-                currentUser.userId(),
+                String.valueOf(currentUser.userId()),
                 safeCommand.conversationId(),
                 safeCommand.triggerType(),
                 safeCommand.inputSummary(),

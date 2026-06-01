@@ -61,7 +61,7 @@ public class SeahorseAgentDefinitionController {
                 : advancedFeatureGate;
     }
 
-    @PostMapping("/agents")
+    @PostMapping({"/agents", "/api/agents"})
     public ApiResponse<Object> create(@RequestBody AgentDefinitionCreateRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         AgentDefinitionCreateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
@@ -77,7 +77,7 @@ public class SeahorseAgentDefinitionController {
                 safeRequest.riskLevel())));
     }
 
-    @GetMapping("/agents")
+    @GetMapping({"/agents", "/api/agents"})
     public ApiResponse<Object> page(@RequestParam(required = false) String tenantId,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,
                                     @RequestParam(required = false, defaultValue = DEFAULT_SIZE) long size,
@@ -87,14 +87,14 @@ public class SeahorseAgentDefinitionController {
                 port -> port.page(tenantId, current, size, keyword));
     }
 
-    @GetMapping("/agents/{agentId}")
+    @GetMapping({"/agents/{agentId}", "/api/agents/{agentId}"})
     public ApiResponse<Object> findById(@PathVariable String agentId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.findById(agentId)
                 .orElseThrow(() -> new IllegalArgumentException("Agent not found")));
     }
 
-    @PutMapping("/agents/{agentId}/draft")
+    @PutMapping({"/agents/{agentId}/draft", "/api/agents/{agentId}/draft"})
     public ApiResponse<Object> updateDraft(@PathVariable String agentId,
                                            @RequestBody AgentDefinitionUpdateDraftRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
@@ -108,7 +108,7 @@ public class SeahorseAgentDefinitionController {
                         safeRequest.riskLevel())));
     }
 
-    @PostMapping("/agents/{agentId}/publish")
+    @PostMapping({"/agents/{agentId}/publish", "/api/agents/{agentId}/publish"})
     public ApiResponse<Object> publish(@PathVariable String agentId,
                                        @RequestBody AgentVersionPublishRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
@@ -123,7 +123,7 @@ public class SeahorseAgentDefinitionController {
                         safeRequest.changeSummary())));
     }
 
-    @PostMapping("/agents/{agentId}/disable")
+    @PostMapping({"/agents/{agentId}/disable", "/api/agents/{agentId}/disable"})
     public ApiResponse<Object> disable(@PathVariable String agentId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.disable(agentId));

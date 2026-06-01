@@ -24,8 +24,8 @@ import java.util.Objects;
  */
 public record MetadataReviewReExtractRequest(
         String tenantId,
-        String knowledgeBaseId,
-        String documentId,
+        Long knowledgeBaseId,
+        Long documentId,
         String reviewItemId,
         String extractorVersion,
         String pipelineId,
@@ -36,8 +36,8 @@ public record MetadataReviewReExtractRequest(
 
     public MetadataReviewReExtractRequest {
         tenantId = Objects.requireNonNullElse(tenantId, "");
-        knowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, "");
-        documentId = Objects.requireNonNullElse(documentId, "");
+        knowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, 0L);
+        documentId = Objects.requireNonNullElse(documentId, 0L);
         reviewItemId = Objects.requireNonNullElse(reviewItemId, "");
         extractorVersion = Objects.requireNonNullElse(extractorVersion, "");
         pipelineId = Objects.requireNonNullElse(pipelineId, "");
@@ -47,8 +47,8 @@ public record MetadataReviewReExtractRequest(
     }
 
     public MetadataReviewReExtractRequest(String tenantId,
-                                          String knowledgeBaseId,
-                                          String documentId,
+                                          Long knowledgeBaseId,
+                                          Long documentId,
                                           String reviewItemId,
                                           String extractorVersion,
                                           String pipelineId,

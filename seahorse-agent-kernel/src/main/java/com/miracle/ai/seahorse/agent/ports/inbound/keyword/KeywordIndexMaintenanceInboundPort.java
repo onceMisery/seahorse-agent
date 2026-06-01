@@ -25,7 +25,7 @@ package com.miracle.ai.seahorse.agent.ports.inbound.keyword;
  */
 public interface KeywordIndexMaintenanceInboundPort {
 
-    KeywordIndexRebuildResult rebuildDocument(String docId);
+    KeywordIndexRebuildResult rebuildDocument(Long docId);
 
-    KeywordIndexRebuildResult rebuildKnowledgeBase(String kbId, int batchSize);
+    KeywordIndexRebuildResult rebuildKnowledgeBase(Long kbId, int batchSize);
 }

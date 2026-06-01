@@ -51,9 +51,9 @@ class VectorGlobalSearchFeatureTests {
     void shouldSearchEveryDistinctCollection() {
         RecordingVectorSearchPort vectorSearchPort = new RecordingVectorSearchPort();
         KnowledgeBaseQueryPort knowledgeBaseQueryPort = new StaticKnowledgeBaseQueryPort(List.of(
-                new KnowledgeBaseRef("kb-1", "A", "collection-a"),
-                new KnowledgeBaseRef("kb-2", "B", "collection-a"),
-                new KnowledgeBaseRef("kb-3", "C", "collection-c")));
+                new KnowledgeBaseRef(1L, "A", "collection-a"),
+                new KnowledgeBaseRef(2L, "B", "collection-a"),
+                new KnowledgeBaseRef(3L, "C", "collection-c")));
         VectorGlobalSearchFeature feature = new VectorGlobalSearchFeature(knowledgeBaseQueryPort, vectorSearchPort);
 
         List<RetrievedChunk> chunks = feature.search(SearchContext.builder()
@@ -95,7 +95,7 @@ class VectorGlobalSearchFeatureTests {
         }
 
         @Override
-        public List<KnowledgeChunkSummary> listChunksByDocId(String docId) {
+        public List<KnowledgeChunkSummary> listChunksByDocId(Long docId) {
             return List.of();
         }
     }

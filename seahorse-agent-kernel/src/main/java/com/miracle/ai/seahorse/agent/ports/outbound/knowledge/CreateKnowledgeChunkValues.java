@@ -20,5 +20,5 @@ package com.miracle.ai.seahorse.agent.ports.outbound.knowledge;
 /**
  * 创建 Chunk 持久化值对象。
  */
-public record CreateKnowledgeChunkValues(String chunkId, String content, Integer index, String operator) {
+public record CreateKnowledgeChunkValues(Long chunkId, String content, Integer index, String operator) {
 }

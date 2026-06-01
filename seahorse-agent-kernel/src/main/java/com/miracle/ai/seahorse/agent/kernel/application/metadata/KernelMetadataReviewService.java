@@ -186,7 +186,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         if (!safeCommand.llmPromptVersion().isBlank()) {
             decisionMetadata.put("llmPromptVersion", safeCommand.llmPromptVersion());
         }
-        decisionMetadata.put("documentId", current.documentId());
+        decisionMetadata.put("documentId", String.valueOf(current.documentId()));
         // RE_EXTRACT 只调度重抽取任务，不写 canonical metadata；新结果由回填流水线重新产出。
         MetadataReviewRecord updated = applyDecision(current, MetadataReviewStatus.RE_EXTRACTING, safeCommand,
                 decisionMetadata);
@@ -213,8 +213,8 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         snapshot.put("reviewComment", updated.reviewComment());
         quarantinePort.quarantine(new MetadataQuarantineItem(
                 updated.tenantId(),
-                updated.knowledgeBaseId(),
-                updated.documentId(),
+                String.valueOf(updated.knowledgeBaseId()),
+                String.valueOf(updated.documentId()),
                 updated.resultId(),
                 "REVIEW",
                 "REVIEW_QUARANTINED",
@@ -237,11 +237,11 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
                 correctedMetadata));
     }
 
-    private void writeCanonical(String documentId, Map<String, Object> metadata) {
-        if (documentId == null || documentId.isBlank() || metadata == null || metadata.isEmpty()) {
+    private void writeCanonical(Long documentId, Map<String, Object> metadata) {
+        if (documentId == null || metadata == null || metadata.isEmpty()) {
             return;
         }
-        canonicalWritePort.writeDocumentMetadata(documentId, metadata);
+        canonicalWritePort.writeDocumentMetadata(String.valueOf(documentId), metadata);
     }
 
     private Map<String, Object> ignoreFields(Map<String, Object> suggestedMetadata,
@@ -263,8 +263,8 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         if (record == null) {
             return;
         }
-        String documentId = record.documentId();
-        if (documentId == null || documentId.isBlank()) {
+        Long documentId = record.documentId();
+        if (documentId == null) {
             return;
         }
         try {
@@ -285,8 +285,8 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         try {
             quarantinePort.quarantine(new MetadataQuarantineItem(
                     record.tenantId(),
-                    record.knowledgeBaseId(),
-                    record.documentId(),
+                    String.valueOf(record.knowledgeBaseId()),
+                    String.valueOf(record.documentId()),
                     record.resultId(),
                     "INDEX",
                     "METADATA_INDEX_COMPENSATION_FAILED",
@@ -313,7 +313,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         try {
             Map<String, String> attributes = new LinkedHashMap<>();
             attributes.put("tenantId", record.tenantId());
-            attributes.put("knowledgeBaseId", record.knowledgeBaseId());
+            attributes.put("knowledgeBaseId", String.valueOf(record.knowledgeBaseId()));
             attributes.put("action", Objects.requireNonNullElse(action, ""));
             attributes.put("reviewStatus", record.reviewStatus().name());
             attributes.put("reasonCode", record.reasonCode());

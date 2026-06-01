@@ -50,7 +50,7 @@ class KernelAgentRunCostSummaryServiceTests {
         KernelAgentRunCostSummaryService service = new KernelAgentRunCostSummaryService(
                 runRepository,
                 costRepository,
-                currentUser("user-1", "user"));
+                currentUser(2L, "user"));
 
         CostUsageAggregate aggregate = service.getCostSummary("run-1");
 
@@ -67,7 +67,7 @@ class KernelAgentRunCostSummaryServiceTests {
         KernelAgentRunCostSummaryService service = new KernelAgentRunCostSummaryService(
                 new MemoryAgentRunRepository(run("user-1")),
                 new CapturingCostUsageRepository(),
-                currentUser("admin-1", "admin"));
+                currentUser(1L, "admin"));
 
         CostUsageAggregate aggregate = service.getCostSummary("run-1");
 
@@ -79,7 +79,7 @@ class KernelAgentRunCostSummaryServiceTests {
         KernelAgentRunCostSummaryService service = new KernelAgentRunCostSummaryService(
                 new MemoryAgentRunRepository(run("user-1")),
                 new CapturingCostUsageRepository(),
-                currentUser("user-2", "user"));
+                currentUser(3L, "user"));
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> service.getCostSummary("run-1"));
@@ -108,8 +108,8 @@ class KernelAgentRunCostSummaryServiceTests {
                 NOW.plusSeconds(30));
     }
 
-    private static CurrentUserPort currentUser(String userId, String role) {
-        return () -> Optional.of(new CurrentUser(userId, userId, role, null));
+    private static CurrentUserPort currentUser(Long userId, String role) {
+        return () -> Optional.of(new CurrentUser(userId, String.valueOf(userId), role, null));
     }
 
     private static final class MemoryAgentRunRepository implements AgentRunRepositoryPort {

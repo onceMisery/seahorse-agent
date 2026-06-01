@@ -91,34 +91,34 @@ export function listAgents(params: {
   owner?: string;
   riskLevel?: string;
 }) {
-  return api.get<PageResult<AgentDefinition>>("/agents", { params });
+  return api.get<PageResult<AgentDefinition>>("/api/agents", { params });
 }
 
 export function getAgent(agentId: string) {
-  return api.get<AgentDefinition>(`/agents/${encodeURIComponent(agentId)}`);
+  return api.get<AgentDefinition>(`/api/agents/${encodeURIComponent(agentId)}`);
 }
 
 export function createAgent(payload: AgentDefinitionDraft) {
-  return api.post<AgentDefinition, AgentDefinition>("/agents", payload);
+  return api.post<AgentDefinition, AgentDefinition>("/api/agents", payload);
 }
 
 export function updateAgentDraft(agentId: string, payload: AgentDefinitionDraft) {
   return api.put<AgentDefinition, AgentDefinition>(
-    `/agents/${encodeURIComponent(agentId)}/draft`,
+    `/api/agents/${encodeURIComponent(agentId)}/draft`,
     payload
   );
 }
 
 export function publishAgent(agentId: string, payload: AgentPublishPayload) {
   return api.post<Record<string, unknown>, Record<string, unknown>>(
-    `/agents/${encodeURIComponent(agentId)}/publish`,
+    `/api/agents/${encodeURIComponent(agentId)}/publish`,
     payload
   );
 }
 
 export function disableAgent(agentId: string, reason?: string) {
   return api.post<Record<string, unknown>, Record<string, unknown>>(
-    `/agents/${encodeURIComponent(agentId)}/disable`,
+    `/api/agents/${encodeURIComponent(agentId)}/disable`,
     { reason }
   );
 }

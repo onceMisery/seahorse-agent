@@ -62,10 +62,10 @@ class KernelMetadataReviewServiceTests {
 
         assertThat(approved.reviewStatus()).isEqualTo(MetadataReviewStatus.APPROVED);
         assertThat(compensationPort.tenantId).isEqualTo("tenant-1");
-        assertThat(compensationPort.knowledgeBaseId).isEqualTo("kb-1");
-        assertThat(canonicalWritePort.documentId).isEqualTo("doc-1");
+        assertThat(compensationPort.knowledgeBaseId).isEqualTo(1L);
+        assertThat(canonicalWritePort.documentId).isEqualTo("1");
         assertThat(canonicalWritePort.metadata).containsEntry("department", "hr");
-        assertThat(compensationPort.documentId).isEqualTo("doc-1");
+        assertThat(compensationPort.documentId).isEqualTo(1L);
     }
 
     @Test
@@ -90,7 +90,7 @@ class KernelMetadataReviewServiceTests {
                 .singleElement()
                 .satisfies(event -> assertThat(event.attributes())
                         .containsEntry("tenantId", "tenant-1")
-                        .containsEntry("knowledgeBaseId", "kb-1")
+                        .containsEntry("knowledgeBaseId", "1")
                         .containsEntry("action", "APPROVE")
                         .containsEntry("reviewStatus", "APPROVED")
                         .containsEntry("reasonCode", "LOW_CONFIDENCE")
@@ -117,8 +117,8 @@ class KernelMetadataReviewServiceTests {
         assertThat(corrected.reviewStatus()).isEqualTo(MetadataReviewStatus.CORRECTED);
         assertThat(canonicalWritePort.metadata).containsEntry("department", "legal");
         assertThat(compensationPort.tenantId).isEqualTo("tenant-1");
-        assertThat(compensationPort.knowledgeBaseId).isEqualTo("kb-1");
-        assertThat(compensationPort.documentId).isEqualTo("doc-1");
+        assertThat(compensationPort.knowledgeBaseId).isEqualTo(1L);
+        assertThat(compensationPort.documentId).isEqualTo(1L);
     }
 
     @Test
@@ -157,8 +157,8 @@ class KernelMetadataReviewServiceTests {
         assertThat(canonicalWritePort.metadata).containsEntry("department", "hr");
         assertThat(canonicalWritePort.metadata).doesNotContainKey("owner");
         assertThat(compensationPort.tenantId).isEqualTo("tenant-1");
-        assertThat(compensationPort.knowledgeBaseId).isEqualTo("kb-1");
-        assertThat(compensationPort.documentId).isEqualTo("doc-1");
+        assertThat(compensationPort.knowledgeBaseId).isEqualTo(1L);
+        assertThat(compensationPort.documentId).isEqualTo(1L);
     }
 
     @Test
@@ -178,14 +178,14 @@ class KernelMetadataReviewServiceTests {
 
         assertThat(reExtracting.reviewStatus()).isEqualTo(MetadataReviewStatus.RE_EXTRACTING);
         assertThat(canonicalWritePort.metadata).isEmpty();
-        assertThat(compensationPort.documentId).isEmpty();
+        assertThat(compensationPort.documentId).isNull();
         assertThat(reExtracting.correctedMetadata())
                 .containsEntry("reExtractJobId", "backfill-job-1")
                 .containsEntry("extractorVersion", "extractor-v2")
                 .containsEntry("pipelineId", "pipe-2")
                 .containsEntry("llmExtractorVersion", "llm-v2")
                 .containsEntry("llmPromptVersion", "prompt-v2")
-                .containsEntry("documentId", "doc-1");
+                .containsEntry("documentId", "1");
         assertThat(reExtractPort.request)
                 .extracting(MetadataReviewReExtractRequest::tenantId,
                         MetadataReviewReExtractRequest::knowledgeBaseId,
@@ -196,7 +196,7 @@ class KernelMetadataReviewServiceTests {
                         MetadataReviewReExtractRequest::llmExtractorVersion,
                         MetadataReviewReExtractRequest::llmPromptVersion,
                         MetadataReviewReExtractRequest::operator)
-                .containsExactly("tenant-1", "kb-1", "doc-1", "review-1", "extractor-v2", "pipe-2",
+                .containsExactly("tenant-1", 1L, 1L, "review-1", "extractor-v2", "pipe-2",
                         "llm-v2", "prompt-v2", "auditor");
     }
 
@@ -207,7 +207,7 @@ class KernelMetadataReviewServiceTests {
         CapturingCanonicalWritePort canonicalWritePort = new CapturingCanonicalWritePort();
         List<MetadataQuarantineItem> quarantines = new java.util.ArrayList<>();
         KernelMetadataReviewService service = new KernelMetadataReviewService(
-                repository, canonicalWritePort, quarantines::add, documentId -> {
+                repository, canonicalWritePort, quarantines::add, (tenantId, kbId, docId) -> {
                     throw new IllegalStateException("keyword rebuild failed");
                 });
 
@@ -239,7 +239,7 @@ class KernelMetadataReviewServiceTests {
         assertThat(audits).hasSize(1);
         assertThat(audits.get(0).updatedMetadata()).containsEntry("department", "legal");
         assertThat(canonicalWritePort.metadata).isEmpty();
-        assertThat(compensationPort.documentId).isEmpty();
+        assertThat(compensationPort.documentId).isNull();
     }
 
     private static MetadataReviewRecord review(String id,
@@ -248,8 +248,8 @@ class KernelMetadataReviewServiceTests {
         return new MetadataReviewRecord(
                 id,
                 "tenant-1",
-                "kb-1",
-                "doc-1",
+                1L,
+                "1",
                 "result-1",
                 status,
                 0,
@@ -268,8 +268,8 @@ class KernelMetadataReviewServiceTests {
                 id,
                 "review-1",
                 "tenant-1",
-                "kb-1",
-                "doc-1",
+                1L,
+                "1",
                 "result-1",
                 "PENDING",
                 "CORRECTED",
@@ -351,16 +351,16 @@ class KernelMetadataReviewServiceTests {
     private static final class CapturingIndexCompensationPort implements MetadataIndexCompensationPort {
 
         private String tenantId = "";
-        private String knowledgeBaseId = "";
-        private String documentId = "";
+        private Long knowledgeBaseId = 0L;
+        private Long documentId = null;
 
         @Override
-        public void rebuildDocument(String documentId) {
+        public void rebuildDocument(Long documentId) {
             this.documentId = documentId;
         }
 
         @Override
-        public void rebuildDocument(String tenantId, String knowledgeBaseId, String documentId) {
+        public void rebuildDocument(String tenantId, Long knowledgeBaseId, Long documentId) {
             this.tenantId = tenantId;
             this.knowledgeBaseId = knowledgeBaseId;
             this.documentId = documentId;

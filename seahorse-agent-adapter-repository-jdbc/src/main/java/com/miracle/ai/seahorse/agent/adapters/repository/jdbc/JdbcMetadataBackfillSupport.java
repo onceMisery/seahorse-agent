@@ -207,7 +207,7 @@ final class JdbcMetadataBackfillSupport {
         return new MetadataBackfillJobRecord(
                 rs.getString("id"),
                 rs.getString("tenant_id"),
-                rs.getString("kb_id"),
+                rs.getLong("kb_id"),
                 rs.getString("pipeline_id"),
                 enumValue(MetadataBackfillJobStatus.class, rs.getString("status"), MetadataBackfillJobStatus.PENDING),
                 Math.max(1L, rs.getLong("current_page")),

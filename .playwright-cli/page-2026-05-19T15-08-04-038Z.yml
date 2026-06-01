@@ -1,0 +1,82 @@
+- generic [ref=e2]:
+  - generic [ref=e50]:
+    - complementary [ref=e51]:
+      - generic [ref=e53]:
+        - img "Seahorse" [ref=e55]
+        - generic [ref=e56]:
+          - paragraph [ref=e57]: Seahorse Agent
+          - paragraph [ref=e58]: Powered by AI
+      - generic [ref=e59]:
+        - generic [ref=e62]:
+          - generic [ref=e63]:
+            - generic [ref=e64]: 快速开始
+            - generic [ref=e65]: 新内容
+          - button "新建对话 从空白开始" [ref=e66] [cursor=pointer]:
+            - img [ref=e68]
+            - generic [ref=e69]:
+              - generic [ref=e70]: 新建对话
+              - generic [ref=e71]: 从空白开始
+          - button "管理后台" [ref=e72] [cursor=pointer]:
+            - img [ref=e73]
+            - text: 管理后台
+        - generic [ref=e76]:
+          - generic [ref=e78]: 搜索对话
+          - generic [ref=e80]:
+            - img [ref=e81]
+            - textbox "搜索对话..." [ref=e84]
+      - generic [ref=e88]:
+        - paragraph [ref=e89]: 今天
+        - button "New Chat 会话操作" [ref=e90] [cursor=pointer]:
+          - generic [ref=e91]: New Chat
+          - button "会话操作" [ref=e92]:
+            - img [ref=e93]
+        - button "你好 会话操作" [ref=e97] [cursor=pointer]:
+          - generic [ref=e98]: 你好
+          - button "会话操作":
+            - img
+        - button "nihao 会话操作" [ref=e99] [cursor=pointer]:
+          - generic [ref=e100]: nihao
+          - button "会话操作":
+            - img
+        - button "你好 会话操作" [ref=e101] [cursor=pointer]:
+          - generic [ref=e102]: 你好
+          - button "会话操作":
+            - img
+      - generic [ref=e103]:
+        - img [ref=e104]
+        - generic [ref=e110]:
+          - button "海洋" [ref=e111] [cursor=pointer]
+          - button "皓白" [ref=e112] [cursor=pointer]
+          - button "星云" [ref=e113] [cursor=pointer]
+          - button "翡翠" [ref=e114] [cursor=pointer]
+          - button "琥珀" [ref=e115] [cursor=pointer]
+      - button "用户菜单" [ref=e117] [cursor=pointer]:
+        - img "admin" [ref=e119]
+        - generic [ref=e120]: admin
+        - img [ref=e121]
+    - generic [ref=e125]:
+      - banner [ref=e126]:
+        - generic [ref=e127]:
+          - paragraph [ref=e129]: New Chat
+          - link "打开 GitHub 仓库" [ref=e131] [cursor=pointer]:
+            - /url: https://github.com/onceMisery/seahorse-agent
+            - img [ref=e132]
+            - generic [ref=e135]: Star
+            - generic [ref=e136]: "2"
+      - main [ref=e137]:
+        - generic [ref=e138]:
+          - generic [ref=e142]:
+            - paragraph [ref=e147]: 你好
+            - paragraph [ref=e174]: test
+          - generic [ref=e152]:
+            - generic [ref=e156]:
+              - textbox "聊天输入框" [active] [ref=e158]:
+                - /placeholder: 问我任何关于研究、分析或创意的问题...
+              - generic [ref=e159]:
+                - generic [ref=e161]:
+                  - generic [ref=e162]: 深度思考
+                  - button [ref=e163] [cursor=pointer]
+                - button "发送消息" [disabled] [ref=e165]:
+                  - img [ref=e175]
+            - paragraph [ref=e169]: Enter 发送·Shift + Enter 换行
+  - region "Notifications alt+T"

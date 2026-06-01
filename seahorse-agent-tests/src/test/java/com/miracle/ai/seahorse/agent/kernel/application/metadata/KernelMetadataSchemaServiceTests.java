@@ -200,7 +200,7 @@ class KernelMetadataSchemaServiceTests {
         private final List<MetadataSchemaFieldRecord> deletedFields = new java.util.ArrayList<>();
 
         @Override
-        public void rebuildDocument(String documentId) {
+        public void rebuildDocument(Long documentId) {
         }
 
         @Override

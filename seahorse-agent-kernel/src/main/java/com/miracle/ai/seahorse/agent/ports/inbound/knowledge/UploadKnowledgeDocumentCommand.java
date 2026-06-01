@@ -28,7 +28,7 @@ import java.util.Objects;
  * @param options  处理参数
  */
 public record UploadKnowledgeDocumentCommand(
-        String kbId,
+        Long kbId,
         UploadFileContent file,
         String operator,
         UploadProcessOptions options
@@ -38,7 +38,6 @@ public record UploadKnowledgeDocumentCommand(
      * 构造不可变上传命令。
      */
     public UploadKnowledgeDocumentCommand {
-        kbId = Objects.requireNonNullElse(kbId, "");
         file = Objects.requireNonNull(file, "file must not be null");
         operator = Objects.requireNonNullElse(operator, "");
         options = Objects.requireNonNullElse(options, new UploadProcessOptions("pipeline", ""));

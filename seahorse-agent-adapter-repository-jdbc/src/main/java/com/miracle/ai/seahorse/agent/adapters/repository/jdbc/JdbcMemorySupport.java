@@ -35,8 +35,8 @@ final class JdbcMemorySupport {
     private JdbcMemorySupport() {
     }
 
-    static String nextId() {
-        return SnowflakeIds.nextIdString();
+    static long nextId() {
+        return SnowflakeIds.nextId();
     }
 
     static Instant instant(Timestamp timestamp) {

@@ -24,7 +24,7 @@ import java.time.Instant;
  */
 public class KnowledgeBaseRecord {
 
-    private String id;
+    private Long id;
     private String name;
     private String embeddingModel;
     private String collectionName;
@@ -33,11 +33,11 @@ public class KnowledgeBaseRecord {
     private Instant createTime;
     private Instant updateTime;
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 

@@ -24,8 +24,8 @@ import java.time.Instant;
  */
 public class KnowledgeDocumentChunkLogRecord {
 
-    private String id;
-    private String docId;
+    private Long id;
+    private Long docId;
     private String status;
     private String processMode;
     private String chunkStrategy;
@@ -43,19 +43,19 @@ public class KnowledgeDocumentChunkLogRecord {
     private Instant endTime;
     private Instant createTime;
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
-    public String getDocId() {
+    public Long getDocId() {
         return docId;
     }
 
-    public void setDocId(String docId) {
+    public void setDocId(Long docId) {
         this.docId = docId;
     }
 

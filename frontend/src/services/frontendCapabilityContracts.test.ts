@@ -10,6 +10,7 @@ vi.mock("@/services/api", () => ({
 }));
 
 import { api } from "@/services/api";
+import { backendEndpointManifest } from "@/services/backendEndpointManifest";
 import * as agentDefinitionService from "@/services/agentDefinitionService";
 import { createSecret } from "@/services/securityGovernanceService";
 import {
@@ -23,9 +24,28 @@ import {
 
 const mockedApi = vi.mocked(api);
 
+const backendEndpoints = new Set(
+  backendEndpointManifest.map((endpoint) => `${endpoint.method} ${endpoint.path}`)
+);
+
+function normalizePath(path: string) {
+  return path
+    .replace(/\$\{encodeURIComponent\([^}]+\)\}/g, "{}")
+    .replace(/\$\{[^}]+\}/g, "{}")
+    .replace(/\{[^}]+\}/g, "{}")
+    .replace(/\/(?:agent|run|version|kb|doc|item|approval|tool|policy|dataset)-[A-Za-z0-9_-]+/g, "/{}");
+}
+
 describe("frontend capability service contracts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("keeps critical frontend endpoints present in the backend manifest", () => {
+    expect(backendEndpoints).toContain("GET /api/features");
+    expect(backendEndpoints).toContain("GET /api/agents");
+    expect(backendEndpoints).toContain("POST /api/agents/{}/publish");
+    expect(backendEndpoints).toContain("GET /api/agent-runs/{}/snapshot");
   });
 
   it("publishes agents with the backend publish payload", async () => {
@@ -39,7 +59,7 @@ describe("frontend capability service contracts", () => {
     });
 
     expect(mockedApi.post).toHaveBeenCalledWith(
-      "/agents/agent-1/publish",
+      "/api/agents/agent-1/publish",
       {
         instructions: "be useful",
         toolSetJson: "[]",

@@ -23,7 +23,7 @@ import java.util.Objects;
  * 创建知识库文档记录命令。
  */
 public record CreateKnowledgeDocumentCommand(
-        String kbId,
+        Long kbId,
         String docName,
         KnowledgeDocumentFileRef file,
         KnowledgeDocumentProcessRef process,
@@ -34,7 +34,6 @@ public record CreateKnowledgeDocumentCommand(
      * 构造不可变命令。
      */
     public CreateKnowledgeDocumentCommand {
-        kbId = Objects.requireNonNullElse(kbId, "");
         docName = Objects.requireNonNullElse(docName, "");
         file = Objects.requireNonNullElse(file, new KnowledgeDocumentFileRef("", "", 0L));
         process = Objects.requireNonNullElse(process, new KnowledgeDocumentProcessRef("pending", "pipeline", ""));

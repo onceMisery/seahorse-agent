@@ -108,24 +108,25 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
             safeContext.setMetadataIssues(result.issues());
             String resultId = persist(identity, schema, safeContext, result);
             if (MetadataValidationDecision.QUARANTINE.equals(result.decision())) {
-                safeContext.setSkipIndexerWrite(true);
-                quarantinePort.quarantine(new MetadataQuarantineItem(identity.tenantId(), identity.kbId(),
-                        identity.docId(), safeContext.getTaskId(), NODE_TYPE, "METADATA_QUARANTINE",
-                        firstIssue(result.issues()), snapshot(safeContext)));
-                recordValidationEvent(identity, schema, safeContext, result, true, null, elapsedMillis(startedAt));
-                return NodeResult.terminate("metadata quarantined");
-            }
-            if (MetadataValidationDecision.REVIEW_REQUIRED.equals(result.decision())) {
-                reviewQueuePort.enqueue(new MetadataReviewItem(identity.tenantId(), identity.kbId(), identity.docId(),
-                        firstText(resultId, safeContext.getTaskId()), "METADATA_REVIEW_REQUIRED", firstIssue(result.issues()),
-                        result.acceptedMetadata(), reviewContext(safeContext, result)));
-                // 需要人工复核的元数据不能直接写入 canonical metadata 或继续进入索引链路。
-                safeContext.setSkipIndexerWrite(true);
-                recordValidationEvent(identity, schema, safeContext, result, true, null, elapsedMillis(startedAt));
-                return NodeResult.terminate("metadata review required");
-            }
-            mergeAcceptedMetadata(safeContext, result.acceptedMetadata());
-            canonicalWritePort.writeDocumentMetadata(identity.docId(), result.acceptedMetadata());
+                    safeContext.setSkipIndexerWrite(true);
+                    quarantinePort.quarantine(new MetadataQuarantineItem(identity.tenantId(), String.valueOf(identity.kbId()),
+                            String.valueOf(identity.docId()), safeContext.getTaskId(), NODE_TYPE, "METADATA_QUARANTINE",
+                            firstIssue(result.issues()), snapshot(safeContext)));
+                    recordValidationEvent(identity, schema, safeContext, result, true, null, elapsedMillis(startedAt));
+                    return NodeResult.terminate("metadata quarantined");
+                }
+                if (MetadataValidationDecision.REVIEW_REQUIRED.equals(result.decision())) {
+                    reviewQueuePort.enqueue(new MetadataReviewItem(identity.tenantId(), String.valueOf(identity.kbId()), 
+                            String.valueOf(identity.docId()),
+                            firstText(resultId, safeContext.getTaskId()), "METADATA_REVIEW_REQUIRED", firstIssue(result.issues()),
+                            result.acceptedMetadata(), reviewContext(safeContext, result)));
+                    // 需要人工复核的元数据不能直接写入 canonical metadata 或继续进入索引链路。
+                    safeContext.setSkipIndexerWrite(true);
+                    recordValidationEvent(identity, schema, safeContext, result, true, null, elapsedMillis(startedAt));
+                    return NodeResult.terminate("metadata review required");
+                }
+                mergeAcceptedMetadata(safeContext, result.acceptedMetadata());
+                canonicalWritePort.writeDocumentMetadata(String.valueOf(identity.docId()), result.acceptedMetadata());
             recordValidationEvent(identity, schema, safeContext, result, true, null, elapsedMillis(startedAt));
             return NodeResult.ok("metadata decision=" + result.decision());
         } catch (Exception ex) {
@@ -147,7 +148,7 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
         try {
             Map<String, String> attributes = new LinkedHashMap<>();
             attributes.put("tenantId", identity.tenantId());
-            attributes.put("knowledgeBaseId", identity.kbId());
+            attributes.put("knowledgeBaseId", String.valueOf(identity.kbId()));
             attributes.put("schemaVersion", Integer.toString(schema == null ? 0 : schema.schemaVersion()));
             attributes.put("extractorVersion", extractorVersion(context));
             attributes.put("decision", result == null ? "ERROR" : result.decision().name());
@@ -166,10 +167,12 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
     }
 
     private void recordValidationFailure(IngestionContext context, NodeConfig config, Exception ex, long durationMs) {
+        String kbIdStr = firstText(setting(config, KEY_KB_ID), metadataText(context, KEY_KB_ID));
+        String docIdStr = firstText(setting(config, KEY_DOC_ID), firstText(metadataText(context, KEY_DOC_ID), context.getTaskId()));
         ValidationIdentity identity = new ValidationIdentity(
                 firstText(setting(config, KEY_TENANT_ID), metadataText(context, KEY_TENANT_ID)),
-                firstText(setting(config, KEY_KB_ID), metadataText(context, KEY_KB_ID)),
-                firstText(setting(config, KEY_DOC_ID), firstText(metadataText(context, KEY_DOC_ID), context.getTaskId())));
+                hasText(kbIdStr) ? Long.parseLong(kbIdStr) : null,
+                hasText(docIdStr) ? Long.parseLong(docIdStr) : null);
         recordValidationEvent(identity, null, context, null, false, ex, durationMs);
     }
 
@@ -260,7 +263,8 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
                            MetadataSchema schema,
                            IngestionContext context,
                            MetadataValidationResult result) {
-        return resultRepositoryPort.saveAndReturnId(new MetadataExtractionRecord(identity.tenantId(), identity.kbId(), identity.docId(),
+        return resultRepositoryPort.saveAndReturnId(new MetadataExtractionRecord(identity.tenantId(), 
+                String.valueOf(identity.kbId()), String.valueOf(identity.docId()),
                 context.getTaskId(), schema.schemaVersion(), extractorVersion(context), result.decision(),
                 context.getNormalizedMetadata(), result.acceptedMetadata(), context.getMetadataFieldQualities(),
                 result.issues(), context.getMetadataCandidates()));
@@ -325,10 +329,12 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
     }
 
     private ValidationIdentity identity(IngestionContext context, NodeConfig config, MetadataSchema schema) {
+        String kbIdStr = firstText(schema.knowledgeBaseId(), firstText(setting(config, KEY_KB_ID), metadataText(context, KEY_KB_ID)));
+        String docIdStr = firstText(setting(config, KEY_DOC_ID), firstText(metadataText(context, KEY_DOC_ID), context.getTaskId()));
         return new ValidationIdentity(
                 firstText(schema.tenantId(), firstText(setting(config, KEY_TENANT_ID), metadataText(context, KEY_TENANT_ID))),
-                firstText(schema.knowledgeBaseId(), firstText(setting(config, KEY_KB_ID), metadataText(context, KEY_KB_ID))),
-                firstText(setting(config, KEY_DOC_ID), firstText(metadataText(context, KEY_DOC_ID), context.getTaskId())));
+                hasText(kbIdStr) ? Long.parseLong(kbIdStr) : null,
+                hasText(docIdStr) ? Long.parseLong(docIdStr) : null);
     }
 
     private String setting(NodeConfig config, String key) {
@@ -362,6 +368,6 @@ public class MetadataValidatorNodeFeature implements IngestionNodeFeature {
         return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
     }
 
-    private record ValidationIdentity(String tenantId, String kbId, String docId) {
+    private record ValidationIdentity(String tenantId, Long kbId, Long docId) {
     }
 }

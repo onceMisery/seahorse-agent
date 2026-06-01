@@ -50,7 +50,7 @@ class JdbcMetadataBackfillSupportTests {
         MetadataBackfillJobRecord created = new MetadataBackfillJobRecord(
                 "job-1",
                 "tenant-1",
-                "kb-1",
+                1L,
                 "pipeline-1",
                 MetadataBackfillJobStatus.PENDING,
                 1,
@@ -71,7 +71,7 @@ class JdbcMetadataBackfillSupportTests {
         support.save(new MetadataBackfillJobRecord(
                 "job-1",
                 "tenant-1",
-                "kb-1",
+                1L,
                 "pipeline-1",
                 MetadataBackfillJobStatus.RUNNING,
                 2,
@@ -88,8 +88,7 @@ class JdbcMetadataBackfillSupportTests {
                 createTime,
                 createTime.plusSeconds(60)));
 
-        // 校验持久化参数中包含拆分后的 JSON 处理结果，避免协作者只做了结构迁移没有保留原语义。
-        verify(jdbcTemplate).update(anyString(), eq("job-1"), eq("tenant-1"), eq("kb-1"), eq("pipeline-1"),
+        verify(jdbcTemplate).update(anyString(), eq("job-1"), eq("tenant-1"), eq(1L), eq("pipeline-1"),
                 eq("PENDING"), eq(1L), eq("{\"cursor\":\"doc-1\"}"), eq(20), eq(3), eq(2), eq(1), eq(0), eq(1),
                 eq(0), eq("[\"timeout\"]"), eq("tester"), any(), any());
         verify(jdbcTemplate).update(anyString(), eq("RUNNING"), eq(2L), eq("{\"cursor\":\"doc-20\"}"), eq(50),
@@ -102,7 +101,7 @@ class JdbcMetadataBackfillSupportTests {
         MetadataBackfillJobRecord runningJob = new MetadataBackfillJobRecord(
                 "job-2",
                 "tenant-1",
-                "kb-1",
+                1L,
                 "pipeline-1",
                 MetadataBackfillJobStatus.RUNNING,
                 2,
@@ -126,7 +125,7 @@ class JdbcMetadataBackfillSupportTests {
 
         Optional<MetadataBackfillJobRecord> found = support.findById("job-2");
         MetadataBackfillJobPage page = support.page(new MetadataBackfillJobQuery(
-                "tenant-1", "kb-1", MetadataBackfillJobStatus.RUNNING, 1, 10));
+                "tenant-1", 1L, MetadataBackfillJobStatus.RUNNING, 1, 10));
 
         assertThat(found).contains(runningJob);
         assertThat(page.total()).isEqualTo(1);

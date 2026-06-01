@@ -27,11 +27,9 @@ import java.util.Objects;
  * @param docName 文档名称
  * @param kbName  知识库名称
  */
-public record KnowledgeDocumentSummary(String id, String kbId, String docName, String kbName) {
+public record KnowledgeDocumentSummary(Long id, Long kbId, String docName, String kbName) {
 
     public KnowledgeDocumentSummary {
-        id = Objects.requireNonNullElse(id, "");
-        kbId = Objects.requireNonNullElse(kbId, "");
         docName = Objects.requireNonNullElse(docName, "");
         kbName = Objects.requireNonNullElse(kbName, "");
     }

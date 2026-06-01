@@ -67,7 +67,7 @@ public class SeahorseAgentRunController {
                 : advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults);
     }
 
-    @PostMapping("/agents/{agentId}/runs")
+    @PostMapping({"/agents/{agentId}/runs", "/api/agents/{agentId}/runs"})
     public ApiResponse<Object> startRun(@PathVariable String agentId,
                                         @RequestBody AgentRunStartRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
@@ -89,20 +89,20 @@ public class SeahorseAgentRunController {
         }
     }
 
-    @GetMapping("/agent-runs/{runId}")
+    @GetMapping({"/agent-runs/{runId}", "/api/agent-runs/{runId}"})
     public ApiResponse<Object> findRunById(@PathVariable String runId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         return ApiResponses.requireService(agentRunPortProvider, port -> port.findRunById(runId)
                 .orElseThrow(() -> new IllegalArgumentException("Agent run not found")));
     }
 
-    @GetMapping("/agent-runs/{runId}/steps")
+    @GetMapping({"/agent-runs/{runId}/steps", "/api/agent-runs/{runId}/steps"})
     public ApiResponse<Object> listSteps(@PathVariable String runId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         return ApiResponses.requireService(agentRunPortProvider, port -> port.listSteps(runId));
     }
 
-    @PostMapping("/agent-runs/{runId}/cancel")
+    @PostMapping({"/agent-runs/{runId}/cancel", "/api/agent-runs/{runId}/cancel"})
     public ApiResponse<Object> cancel(@PathVariable String runId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         return ApiResponses.requireService(agentRunPortProvider, port -> port.cancel(runId));

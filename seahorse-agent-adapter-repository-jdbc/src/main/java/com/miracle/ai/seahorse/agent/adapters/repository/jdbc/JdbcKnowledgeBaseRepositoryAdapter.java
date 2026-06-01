@@ -100,9 +100,9 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
     }
 
     @Override
-    public String create(CreateKnowledgeBaseValues values) {
+    public Long create(CreateKnowledgeBaseValues values) {
         CreateKnowledgeBaseValues safeValues = Objects.requireNonNull(values, "values must not be null");
-        String id = nextId();
+        Long id = nextId();
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update(SQL_INSERT,
                 id,
@@ -117,15 +117,15 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
     }
 
     @Override
-    public boolean nameExists(String normalizedName, String excludedKbId) {
+    public boolean nameExists(String normalizedName, Long excludedKbId) {
         Integer count = jdbcTemplate.queryForObject(SQL_COUNT_BY_NAME, Integer.class,
-                requireText(normalizedName, "normalizedName"), blankToNull(excludedKbId), blankToNull(excludedKbId));
+                requireText(normalizedName, "normalizedName"), excludedKbId, excludedKbId);
         return count != null && count > 0;
     }
 
     @Override
-    public Optional<KnowledgeBaseRecord> findById(String kbId) {
-        if (!hasText(kbId)) {
+    public Optional<KnowledgeBaseRecord> findById(Long kbId) {
+        if (kbId == null) {
             return Optional.empty();
         }
         return jdbcTemplate.query(SQL_FIND_BY_ID, this::toRecord, kbId).stream().findFirst();
@@ -143,36 +143,48 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
     }
 
     @Override
-    public boolean hasDocuments(String kbId) {
-        Integer count = jdbcTemplate.queryForObject(SQL_HAS_DOCUMENTS, Integer.class, requireText(kbId, "kbId"));
+    public boolean hasDocuments(Long kbId) {
+        if (kbId == null) {
+            return false;
+        }
+        Integer count = jdbcTemplate.queryForObject(SQL_HAS_DOCUMENTS, Integer.class, kbId);
         return count != null && count > 0;
     }
 
     @Override
-    public boolean hasVectorizedDocuments(String kbId) {
+    public boolean hasVectorizedDocuments(Long kbId) {
+        if (kbId == null) {
+            return false;
+        }
         Integer count = jdbcTemplate.queryForObject(SQL_HAS_VECTORIZED_DOCUMENTS,
-                Integer.class, requireText(kbId, "kbId"));
+                Integer.class, kbId);
         return count != null && count > 0;
     }
 
     @Override
-    public boolean update(String kbId, KnowledgeBaseUpdateValues values) {
+    public boolean update(Long kbId, KnowledgeBaseUpdateValues values) {
+        if (kbId == null) {
+            return false;
+        }
         KnowledgeBaseUpdateValues safeValues = Objects.requireNonNull(values, "values must not be null");
         int updated = jdbcTemplate.update(SQL_UPDATE,
                 blankToNull(safeValues.name()),
                 blankToNull(safeValues.embeddingModel()),
                 Objects.requireNonNullElse(safeValues.operator(), ""),
                 Timestamp.from(Instant.now()),
-                requireText(kbId, "kbId"));
+                kbId);
         return updated > 0;
     }
 
     @Override
-    public boolean delete(String kbId, String operator) {
+    public boolean delete(Long kbId, String operator) {
+        if (kbId == null) {
+            return false;
+        }
         int updated = jdbcTemplate.update(SQL_DELETE,
                 Objects.requireNonNullElse(operator, ""),
                 Timestamp.from(Instant.now()),
-                requireText(kbId, "kbId"));
+                kbId);
         return updated > 0;
     }
 
@@ -202,7 +214,7 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
 
     private KnowledgeBaseRecord toRecord(ResultSet resultSet, int rowNumber) throws SQLException {
         KnowledgeBaseRecord record = new KnowledgeBaseRecord();
-        record.setId(resultSet.getString("id"));
+        record.setId(resultSet.getLong("id"));
         record.setName(resultSet.getString("name"));
         record.setEmbeddingModel(resultSet.getString("embedding_model"));
         record.setCollectionName(resultSet.getString("collection_name"));
@@ -217,10 +229,10 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
         return timestamp == null ? null : timestamp.toInstant();
     }
 
-    private String nextId() {
+    private Long nextId() {
         long millis = System.currentTimeMillis();
         int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return Long.toString(millis, 36) + suffix;
+        return millis * 1_000_000 + suffix;
     }
 
     private String like(String value) {

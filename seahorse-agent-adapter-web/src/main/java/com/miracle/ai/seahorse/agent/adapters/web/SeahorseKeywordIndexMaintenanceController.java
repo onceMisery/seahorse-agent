@@ -46,13 +46,13 @@ public class SeahorseKeywordIndexMaintenanceController {
 
     @PostMapping("/knowledge-base/docs/{doc-id}/keyword-index/rebuild")
     public Map<String, Object> rebuildDocument(@PathVariable("doc-id") String docId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, maintenancePortProvider.getIfAvailable().rebuildDocument(docId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, maintenancePortProvider.getIfAvailable().rebuildDocument(Long.parseLong(docId)));
     }
 
     @PostMapping("/knowledge-base/{kb-id}/keyword-index/rebuild")
     public Map<String, Object> rebuildKnowledgeBase(@PathVariable("kb-id") String kbId,
                                                     @RequestParam(defaultValue = "50") int batchSize) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                maintenancePortProvider.getIfAvailable().rebuildKnowledgeBase(kbId, batchSize));
+                maintenancePortProvider.getIfAvailable().rebuildKnowledgeBase(Long.parseLong(kbId), batchSize));
     }
 }

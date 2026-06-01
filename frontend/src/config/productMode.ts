@@ -1,3 +1,5 @@
+import { useFeatureStore } from "@/stores/featureStore";
+
 export const PRODUCT_MODES = {
   CONSUMER_WEB: "consumer-web",
   ENTERPRISE_PLATFORM: "enterprise-platform"
@@ -6,41 +8,28 @@ export const PRODUCT_MODES = {
 export type ProductMode = (typeof PRODUCT_MODES)[keyof typeof PRODUCT_MODES];
 
 export const ADVANCED_ADMIN_FEATURES = {
-  // 原有三项
-  AI_INFRA_CONSOLE: "aiInfraConsole",
-  INTENT_MANAGEMENT: "intentManagement",
-  INGESTION_MANAGEMENT: "ingestionManagement",
-
-  // Agent 管理
-  AGENT_DEFINITION_MANAGEMENT: "agentDefinitionManagement",
-  AGENT_FACTORY_MANAGEMENT: "agentFactoryManagement",
-  AGENT_TOOL_BINDING_MANAGEMENT: "agentToolBindingManagement",
-  AGENT_RUN_MANAGEMENT: "agentRunManagement",
-  AGENT_EVALUATION: "agentEvaluation",
-
-  // 工具管理
-  TOOL_CATALOG_MANAGEMENT: "toolCatalogManagement",
-  PRODUCTION_GATE: "productionGate",
-  AGENT_ROLLOUT_MANAGEMENT: "agentRolloutManagement",
-
-  // 集成
-  CONNECTOR_MANAGEMENT: "connectorManagement",
-  SECRET_MANAGEMENT: "secretManagement",
-
-  // 安全治理
-  RESOURCE_ACL_MANAGEMENT: "resourceAclManagement",
-  QUOTA_MANAGEMENT: "quotaManagement",
-
-  // 治理
-  SANDBOX: "sandbox",
-  MCP_TOOL: "mcpTool",
-  MEMORY_GOVERNANCE: "memoryGovernance",
-  RAG_EVALUATION: "ragEvaluation",
-  METADATA_GOVERNANCE: "metadataGovernance",
-
-  // 可观测
-  AUDIT_LOG: "auditLog",
-  COST_ANALYTICS: "costAnalytics"
+  AI_INFRA_CONSOLE: "LOCAL_AGENT",
+  INTENT_MANAGEMENT: "INTENT_TREE_MANAGEMENT",
+  INGESTION_MANAGEMENT: "INGESTION_PIPELINE_MANAGEMENT",
+  AGENT_DEFINITION_MANAGEMENT: "AGENT_DEFINITION_MANAGEMENT",
+  AGENT_FACTORY_MANAGEMENT: "AGENT_FACTORY_MANAGEMENT",
+  AGENT_TOOL_BINDING_MANAGEMENT: "AGENT_TOOL_BINDING_MANAGEMENT",
+  AGENT_RUN_MANAGEMENT: "AGENT_RUN_MANAGEMENT",
+  AGENT_EVALUATION: "AGENT_EVALUATION",
+  TOOL_CATALOG_MANAGEMENT: "TOOL_CATALOG_MANAGEMENT",
+  PRODUCTION_GATE: "PRODUCTION_GATE",
+  AGENT_ROLLOUT_MANAGEMENT: "AGENT_ROLLOUT_MANAGEMENT",
+  CONNECTOR_MANAGEMENT: "CONNECTOR_MANAGEMENT",
+  SECRET_MANAGEMENT: "SECRET_MANAGEMENT",
+  RESOURCE_ACL_MANAGEMENT: "RESOURCE_ACL_MANAGEMENT",
+  QUOTA_MANAGEMENT: "QUOTA_MANAGEMENT",
+  SANDBOX: "SANDBOX",
+  MCP_TOOL: "MCP_TOOL",
+  MEMORY_GOVERNANCE: "MEMORY_GOVERNANCE",
+  RAG_EVALUATION: "RAG_EVALUATION",
+  METADATA_GOVERNANCE: "METADATA_GOVERNANCE",
+  AUDIT_LOG: "AUDIT_LOG",
+  COST_ANALYTICS: "COST_ANALYTICS"
 } as const;
 
 export type AdvancedAdminFeature =
@@ -60,24 +49,32 @@ function resolveProductMode(value: string | undefined): ProductMode {
 }
 
 const productMode = resolveProductMode(import.meta.env.VITE_SEAHORSE_PRODUCT_MODE);
-
 const explicitAdvancedAdmin = import.meta.env.VITE_SEAHORSE_ENABLE_ADVANCED_ADMIN === "true";
 
 export function isConsumerWebMode() {
   return productMode === PRODUCT_MODES.CONSUMER_WEB;
 }
 
-export function isAdvancedAdminEnabled(_feature: AdvancedAdminFeature) {
+export function isAdvancedAdminEnabled(feature: AdvancedAdminFeature) {
+  const capabilities = useFeatureStore.getState().capabilities;
+  if (capabilities) {
+    return Boolean(capabilities.features?.[feature]?.enabled);
+  }
   return !isConsumerWebMode() && explicitAdvancedAdmin;
 }
 
-/**
- * 获取高级功能的完整状态，支持"可用、未启用、无权限、接口缺失"四类状态表达。
- * 在后端尚未提供 /api/features 前，基于本地 env 与产品模式判断。
- */
 export function getAdvancedFeatureState(feature: AdvancedAdminFeature): FeatureState {
+  const capabilities = useFeatureStore.getState().capabilities;
+  if (capabilities) {
+    return capabilities.features?.[feature] ?? {
+      visible: false,
+      enabled: false,
+      reason: "后端未返回该功能能力"
+    };
+  }
+
   if (isConsumerWebMode()) {
-    return { visible: false, enabled: false, reason: "当前为消费者模式，此功能不可用" };
+    return { visible: false, enabled: false, reason: "当前为消费端模式，此功能不可用" };
   }
 
   if (!explicitAdvancedAdmin) {

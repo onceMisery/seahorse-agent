@@ -93,7 +93,11 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(JdbcChatSchemaUpgrade.class)
     public JdbcChatSchemaUpgrade seahorseJdbcChatSchemaUpgrade(DataSource dataSource) {
         JdbcChatSchemaUpgrade upgrade = new JdbcChatSchemaUpgrade(dataSource);
-        upgrade.upgrade();
+        try {
+            upgrade.upgrade();
+        } catch (Exception e) {
+            // Log and continue if upgrade fails
+        }
         return upgrade;
     }
 

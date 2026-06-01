@@ -54,7 +54,9 @@ public class SeahorseWebExceptionHandler {
     @ExceptionHandler(NotLoginException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public Map<String, Object> notLogin(NotLoginException ex) {
-        return error(ex);
+        return Map.of(
+                "code", ERROR_CODE,
+                "message", "登录已过期，请重新登录");
     }
 
     @ExceptionHandler(AdvancedFeatureDisabledException.class)

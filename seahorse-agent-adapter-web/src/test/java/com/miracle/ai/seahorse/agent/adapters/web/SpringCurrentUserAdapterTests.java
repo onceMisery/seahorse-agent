@@ -41,29 +41,29 @@ class SpringCurrentUserAdapterTests {
     @Test
     void currentUserShouldUseHeaderWhenQueryUserIdIsAlsoPresent() {
         UserRepositoryPort repository = mock(UserRepositoryPort.class);
-        when(repository.findById("attacker")).thenReturn(Optional.of(user("attacker")));
-        when(repository.findById("owner")).thenReturn(Optional.of(user("owner")));
+        when(repository.findById(1L)).thenReturn(Optional.of(user(1L)));
+        when(repository.findById(2L)).thenReturn(Optional.of(user(2L)));
         SpringCurrentUserAdapter adapter = new SpringCurrentUserAdapter(repository);
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-User-Id", "attacker");
-        request.addParameter("userId", "owner");
+        request.addHeader("X-User-Id", "1");
+        request.addParameter("userId", "2");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
 
         var currentUser = adapter.currentUser();
 
         assertThat(currentUser).isPresent();
-        assertThat(currentUser.orElseThrow().userId()).isEqualTo("attacker");
-        verify(repository).findById("attacker");
-        verify(repository, never()).findById("owner");
+        assertThat(currentUser.orElseThrow().userId()).isEqualTo("1");
+        verify(repository).findById(1L);
+        verify(repository, never()).findById(2L);
     }
 
     @Test
     void currentUserShouldIgnoreQueryUserIdWithoutHeader() {
         UserRepositoryPort repository = mock(UserRepositoryPort.class);
-        when(repository.findById("owner")).thenReturn(Optional.of(user("owner")));
+        when(repository.findById(1L)).thenReturn(Optional.of(user(1L)));
         SpringCurrentUserAdapter adapter = new SpringCurrentUserAdapter(repository);
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addParameter("userId", "owner");
+        request.addParameter("userId", "1");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
 
         var currentUser = adapter.currentUser();
@@ -72,7 +72,7 @@ class SpringCurrentUserAdapterTests {
         verifyNoInteractions(repository);
     }
 
-    private static UserRecord user(String id) {
-        return new UserRecord(id, id, "", "user", null, Instant.EPOCH, Instant.EPOCH);
+    private static UserRecord user(Long id) {
+        return new UserRecord(id, id.toString(), "", "user", null, Instant.EPOCH, Instant.EPOCH);
     }
 }

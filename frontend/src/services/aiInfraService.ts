@@ -86,7 +86,7 @@ function withPageDefaults<T extends { current?: number; size?: number }>(params:
 }
 
 export async function getAiInfraAgents(params: AgentPageParams): Promise<PageResult<ApiRecord>> {
-  return api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/agents", {
+  return api.get<PageResult<ApiRecord>, PageResult<ApiRecord>>("/api/agents", {
     params: withPageDefaults(params)
   });
 }

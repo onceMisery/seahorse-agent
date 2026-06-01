@@ -51,13 +51,16 @@ public class JdbcDocumentRefreshScheduleAdapter
     }
 
     @Override
-    public Optional<DocumentRefreshSchedule> findByDocumentId(String docId) {
+    public Optional<DocumentRefreshSchedule> findByDocumentId(Long docId) {
+        if (docId == null) {
+            return Optional.empty();
+        }
         List<DocumentRefreshSchedule> schedules = jdbcTemplate.query("""
                 SELECT id, doc_id, kb_id, cron_expr, enabled, next_run_time,
                        last_content_hash, last_etag, last_modified
                 FROM t_knowledge_document_schedule
                 WHERE doc_id = ?
-                """, SCHEDULE_MAPPER, docId);
+                """, SCHEDULE_MAPPER, docId.toString());
         return schedules.stream().findFirst();
     }
 
@@ -78,7 +81,7 @@ public class JdbcDocumentRefreshScheduleAdapter
     @Override
     public void upsert(DocumentRefreshSchedule schedule) {
         DocumentRefreshSchedule safeSchedule = Objects.requireNonNull(schedule, "schedule must not be null");
-        String id = hasText(safeSchedule.id()) ? safeSchedule.id() : nextId();
+        Long id = safeSchedule.id() != null ? safeSchedule.id() : Long.parseLong(nextId());
         Instant now = Instant.now();
         int updated = jdbcTemplate.update("""
                 UPDATE t_knowledge_document_schedule
@@ -201,9 +204,9 @@ public class JdbcDocumentRefreshScheduleAdapter
 
     private static DocumentRefreshSchedule mapSchedule(ResultSet resultSet) throws java.sql.SQLException {
         return new DocumentRefreshSchedule(
-                resultSet.getString("id"),
-                resultSet.getString("doc_id"),
-                resultSet.getString("kb_id"),
+                resultSet.getLong("id"),
+                resultSet.getLong("doc_id"),
+                resultSet.getLong("kb_id"),
                 resultSet.getString("cron_expr"),
                 resultSet.getInt("enabled") == 1,
                 instant(resultSet.getTimestamp("next_run_time")),

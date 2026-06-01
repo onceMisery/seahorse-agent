@@ -61,7 +61,7 @@ public class SeahorseKnowledgeChunkController {
                                     @RequestParam(required = false, defaultValue = "10") long size,
                                     @RequestParam(required = false) Boolean enabled) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                chunkPortProvider.getIfAvailable().page(docId, new KnowledgeChunkPageCommand(current, size, enabled)));
+                chunkPortProvider.getIfAvailable().page(Long.parseLong(docId), new KnowledgeChunkPageCommand(current, size, enabled)));
     }
 
     @PostMapping("/knowledge-base/docs/{doc-id}/chunks")
@@ -69,8 +69,8 @@ public class SeahorseKnowledgeChunkController {
                                       @RequestBody KnowledgeChunkCreateRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         KnowledgeChunkCreateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, chunkPortProvider.getIfAvailable().create(docId,
-                new CreateKnowledgeChunkCommand(safeRequest.chunkId(),
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, chunkPortProvider.getIfAvailable().create(Long.parseLong(docId),
+                new CreateKnowledgeChunkCommand(safeRequest.chunkId() != null ? Long.parseLong(safeRequest.chunkId()) : null,
                         safeRequest.content(), safeRequest.index(), operator(userId))));
     }
 
@@ -80,14 +80,14 @@ public class SeahorseKnowledgeChunkController {
                                       @RequestBody KnowledgeChunkUpdateRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         KnowledgeChunkUpdateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        chunkPortProvider.getIfAvailable().update(docId, chunkId, new UpdateKnowledgeChunkCommand(safeRequest.content(), operator(userId)));
+        chunkPortProvider.getIfAvailable().update(Long.parseLong(docId), Long.parseLong(chunkId), new UpdateKnowledgeChunkCommand(safeRequest.content(), operator(userId)));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
     @DeleteMapping("/knowledge-base/docs/{doc-id}/chunks/{chunk-id}")
     public Map<String, Object> delete(@PathVariable("doc-id") String docId,
                                       @PathVariable("chunk-id") String chunkId) {
-        chunkPortProvider.getIfAvailable().delete(docId, chunkId);
+        chunkPortProvider.getIfAvailable().delete(Long.parseLong(docId), Long.parseLong(chunkId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
@@ -96,7 +96,7 @@ public class SeahorseKnowledgeChunkController {
                                       @PathVariable("chunk-id") String chunkId,
                                       @RequestParam("value") boolean enabled,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        chunkPortProvider.getIfAvailable().enable(docId, chunkId, enabled, operator(userId));
+        chunkPortProvider.getIfAvailable().enable(Long.parseLong(docId), Long.parseLong(chunkId), enabled, operator(userId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 
@@ -106,7 +106,8 @@ public class SeahorseKnowledgeChunkController {
                                            @RequestBody(required = false) KnowledgeChunkBatchRequest request,
                                            @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         List<String> chunkIds = request == null ? List.of() : request.chunkIds();
-        chunkPortProvider.getIfAvailable().batchEnable(docId, chunkIds, enabled, operator(userId));
+        List<Long> chunkIdLongs = chunkIds.stream().map(Long::parseLong).toList();
+        chunkPortProvider.getIfAvailable().batchEnable(Long.parseLong(docId), chunkIdLongs, enabled, operator(userId));
         return Map.of(KEY_CODE, SUCCESS_CODE);
     }
 

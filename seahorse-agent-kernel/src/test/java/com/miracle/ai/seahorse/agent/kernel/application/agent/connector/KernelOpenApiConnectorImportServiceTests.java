@@ -403,7 +403,7 @@ class KernelOpenApiConnectorImportServiceTests {
     }
 
     private static CurrentUserPort adminUser() {
-        return () -> Optional.of(new CurrentUser("admin-1", "root", "admin", null));
+        return () -> Optional.of(new CurrentUser(1L, "root", "admin", null));
     }
 
     private static final class StubOpenApiSpecParser implements OpenApiSpecParserPort {

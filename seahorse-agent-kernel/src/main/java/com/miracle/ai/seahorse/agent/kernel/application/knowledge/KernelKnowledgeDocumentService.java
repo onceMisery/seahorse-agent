@@ -115,7 +115,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
     }
 
     @Override
-    public void startChunk(String docId, String operator) {
+    public void startChunk(Long docId, String operator) {
         KnowledgeDocumentRecord document = requireDocument(docId);
         boolean marked = documentRepositoryPort.markRunning(docId, operator);
         if (!marked) {
@@ -123,11 +123,11 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
         }
         KnowledgeDocumentChunkEvent event = new KnowledgeDocumentChunkEvent(
                 docId, document.kbId(), operator, document.process().pipelineId());
-        messageQueuePort.publishReliable(chunkTopic, docId, BIZ_DESC_CHUNK, event);
+        messageQueuePort.publishReliable(chunkTopic, String.valueOf(docId), BIZ_DESC_CHUNK, event);
     }
 
     @Override
-    public void executeChunk(String docId, PipelineDefinition pipeline, String operator) {
+    public void executeChunk(Long docId, PipelineDefinition pipeline, String operator) {
         KnowledgeDocumentRecord document = requireDocument(docId);
         try (InputStream inputStream = objectStoragePort.openStream(document.file().fileUrl())) {
             IngestionContext result = executePipeline(document, pipeline, inputStream.readAllBytes());
@@ -143,15 +143,15 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
     }
 
     @Override
-    public KnowledgeDocumentDetail queryById(String docId) {
+    public KnowledgeDocumentDetail queryById(Long docId) {
         return requireDocumentDetail(docId);
     }
 
     @Override
-    public KnowledgeDocumentPage page(String kbId, KnowledgeDocumentPageCommand command) {
+    public KnowledgeDocumentPage page(Long kbId, KnowledgeDocumentPageCommand command) {
         KnowledgeDocumentPageCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         return documentRepositoryPort.page(
-                requireText(kbId, "kbId"),
+                kbId,
                 safeCommand.current(),
                 safeCommand.size(),
                 safeCommand.status(),
@@ -168,7 +168,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
     }
 
     @Override
-    public void update(String docId, UpdateKnowledgeDocumentCommand command) {
+    public void update(Long docId, UpdateKnowledgeDocumentCommand command) {
         KnowledgeDocumentDetail current = requireEditableDocument(docId, "文档正在分块中，无法修改");
         UpdateKnowledgeDocumentCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         String docName = requireText(safeCommand.getDocName(), "docName");
@@ -180,7 +180,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
     }
 
     @Override
-    public void enable(String docId, boolean enabled, String operator) {
+    public void enable(Long docId, boolean enabled, String operator) {
         KnowledgeDocumentDetail current = requireEditableDocument(docId, "文档正在分块中，无法修改");
         if (Boolean.valueOf(enabled).equals(current.getEnabled())) {
             return;
@@ -188,8 +188,8 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
         if (enabled) {
             reindexEnabledChunks(current);
         } else {
-            vectorPorts.vectorIndexPort().deleteDocumentVectors(current.getCollectionName(), current.getId());
-            vectorPorts.keywordIndexPort().deleteDocumentChunks(current.getKbId(), current.getId());
+            vectorPorts.vectorIndexPort().deleteDocumentVectors(current.getCollectionName(), String.valueOf(current.getId()));
+            vectorPorts.keywordIndexPort().deleteDocumentChunks(String.valueOf(current.getKbId()), String.valueOf(current.getId()));
         }
         if (!documentRepositoryPort.updateEnabled(current.getId(), enabled, operator)) {
             throw new IllegalArgumentException("文档不存在：" + docId);
@@ -197,20 +197,20 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
     }
 
     @Override
-    public void delete(String docId, String operator) {
+    public void delete(Long docId, String operator) {
         KnowledgeDocumentDetail current = requireEditableDocument(docId, "文档正在分块中，无法删除");
         if (!documentRepositoryPort.delete(current.getId(), operator)) {
             throw new IllegalArgumentException("文档不存在：" + docId);
         }
-        vectorPorts.vectorIndexPort().deleteDocumentVectors(current.getCollectionName(), current.getId());
-        vectorPorts.keywordIndexPort().deleteDocumentChunks(current.getKbId(), current.getId());
+        vectorPorts.vectorIndexPort().deleteDocumentVectors(current.getCollectionName(), String.valueOf(current.getId()));
+        vectorPorts.keywordIndexPort().deleteDocumentChunks(String.valueOf(current.getKbId()), String.valueOf(current.getId()));
         if (hasText(current.getFileUrl())) {
             objectStoragePort.deleteByUrl(current.getFileUrl());
         }
     }
 
     @Override
-    public KnowledgeDocumentChunkLogPage chunkLogs(String docId, long current, long size) {
+    public KnowledgeDocumentChunkLogPage chunkLogs(Long docId, long current, long size) {
         requireDocumentDetail(docId);
         return documentRepositoryPort.chunkLogs(docId, current, size);
     }
@@ -220,7 +220,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
                                              byte[] fileBytes) {
         KnowledgeBaseRef knowledgeBase = requireKnowledgeBase(document.kbId());
         IngestionContext context = IngestionContext.builder()
-                .taskId(document.id())
+                .taskId(String.valueOf(document.id()))
                 .pipelineId(document.process().pipelineId())
                 .rawBytes(fileBytes)
                 .mimeType(document.file().fileType())
@@ -233,7 +233,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
         return ingestionEngine.execute(Objects.requireNonNull(pipeline, "pipeline must not be null"), context);
     }
 
-    private KnowledgeBaseRef requireKnowledgeBase(String kbId) {
+    private KnowledgeBaseRef requireKnowledgeBase(Long kbId) {
         List<KnowledgeBaseRef> refs = knowledgeBaseQueryPort.listSearchableKnowledgeBases();
         return refs.stream()
                 .filter(ref -> Objects.equals(ref.id(), kbId))
@@ -241,23 +241,23 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
                 .orElseThrow(() -> new IllegalArgumentException("知识库不存在或未配置向量集合：" + kbId));
     }
 
-    private KnowledgeDocumentRecord requireDocument(String docId) {
-        if (!hasText(docId)) {
+    private KnowledgeDocumentRecord requireDocument(Long docId) {
+        if (docId == null) {
             throw new IllegalArgumentException("文档 ID 不能为空");
         }
         return documentRepositoryPort.findById(docId)
                 .orElseThrow(() -> new IllegalArgumentException("文档不存在：" + docId));
     }
 
-    private KnowledgeDocumentDetail requireDocumentDetail(String docId) {
-        if (!hasText(docId)) {
+    private KnowledgeDocumentDetail requireDocumentDetail(Long docId) {
+        if (docId == null) {
             throw new IllegalArgumentException("文档 ID 不能为空");
         }
         return documentRepositoryPort.findDetailById(docId)
                 .orElseThrow(() -> new IllegalArgumentException("文档不存在：" + docId));
     }
 
-    private KnowledgeDocumentDetail requireEditableDocument(String docId, String runningMessage) {
+    private KnowledgeDocumentDetail requireEditableDocument(Long docId, String runningMessage) {
         KnowledgeDocumentDetail detail = requireDocumentDetail(docId);
         if (STATUS_RUNNING.equalsIgnoreCase(detail.getStatus())) {
             throw new IllegalStateException(runningMessage);
@@ -306,14 +306,14 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
             return;
         }
         List<VectorChunk> vectorChunks = chunks.stream().map(chunk -> toVectorChunk(document, chunk)).toList();
-        vectorPorts.vectorIndexPort().indexDocumentChunks(document.getCollectionName(), document.getId(), vectorChunks);
+        vectorPorts.vectorIndexPort().indexDocumentChunks(document.getCollectionName(), String.valueOf(document.getId()), vectorChunks);
         // 关键词索引复用同一批分片快照；具体是否使用 embedding 由 adapter 自行决定。
-        vectorPorts.keywordIndexPort().indexDocumentChunks(document.getKbId(), document.getId(), vectorChunks);
+        vectorPorts.keywordIndexPort().indexDocumentChunks(String.valueOf(document.getKbId()), String.valueOf(document.getId()), vectorChunks);
     }
 
     private VectorChunk toVectorChunk(KnowledgeDocumentDetail document, KnowledgeChunkRecord record) {
         VectorChunk chunk = new VectorChunk();
-        chunk.setChunkId(record.getId());
+        chunk.setChunkId(String.valueOf(record.getId()));
         chunk.setContent(record.getContent());
         chunk.setIndex(record.getChunkIndex());
         chunk.setEmbedding(toArray(vectorPorts.embeddingModelPort().embed(

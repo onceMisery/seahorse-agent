@@ -71,8 +71,8 @@ public class KernelKeywordIndexMaintenanceService implements KeywordIndexMainten
     }
 
     @Override
-    public KeywordIndexRebuildResult rebuildDocument(String docId) {
-        RebuildAccumulator accumulator = new RebuildAccumulator(SCOPE_DOCUMENT, requireText(docId, "docId"));
+    public KeywordIndexRebuildResult rebuildDocument(Long docId) {
+        RebuildAccumulator accumulator = new RebuildAccumulator(SCOPE_DOCUMENT, String.valueOf(docId));
         ObservationScope observationScope = startObservation(SCOPE_DOCUMENT);
         try {
             rebuildOneDocument(requireDocument(docId), accumulator);
@@ -85,15 +85,14 @@ public class KernelKeywordIndexMaintenanceService implements KeywordIndexMainten
     }
 
     @Override
-    public KeywordIndexRebuildResult rebuildKnowledgeBase(String kbId, int batchSize) {
-        String safeKbId = requireText(kbId, "kbId");
+    public KeywordIndexRebuildResult rebuildKnowledgeBase(Long kbId, int batchSize) {
         int safeBatchSize = normalizeBatchSize(batchSize);
-        RebuildAccumulator accumulator = new RebuildAccumulator(SCOPE_KNOWLEDGE_BASE, safeKbId);
+        RebuildAccumulator accumulator = new RebuildAccumulator(SCOPE_KNOWLEDGE_BASE, String.valueOf(kbId));
         ObservationScope observationScope = startObservation(SCOPE_KNOWLEDGE_BASE);
         try {
             long current = 1;
             while (true) {
-                KnowledgeDocumentPage page = documentRepositoryPort.page(safeKbId, current, safeBatchSize, null, null);
+                KnowledgeDocumentPage page = documentRepositoryPort.page(kbId, current, safeBatchSize, null, null);
                 if (page.records().isEmpty()) {
                     break;
                 }
@@ -114,14 +113,14 @@ public class KernelKeywordIndexMaintenanceService implements KeywordIndexMainten
     }
 
     private void rebuildOneDocument(KnowledgeDocumentDetail document, RebuildAccumulator accumulator) {
-        if (document == null || !hasText(document.getId()) || !hasText(document.getKbId())) {
+        if (document == null || document.getId() == null || document.getKbId() == null) {
             accumulator.skippedDocuments++;
             return;
         }
         accumulator.processedDocuments++;
         try {
             // 先删除再写入，避免历史残留 chunk 在搜索后端中继续可见。
-            keywordIndexPort.deleteDocumentChunks(document.getKbId(), document.getId());
+            keywordIndexPort.deleteDocumentChunks(String.valueOf(document.getKbId()), String.valueOf(document.getId()));
             accumulator.deletedDocuments++;
             if (Boolean.FALSE.equals(document.getEnabled())) {
                 accumulator.skippedDocuments++;
@@ -136,24 +135,26 @@ public class KernelKeywordIndexMaintenanceService implements KeywordIndexMainten
                     .filter(Objects::nonNull)
                     .map(chunk -> toVectorChunk(document, chunk))
                     .toList();
-            keywordIndexPort.indexDocumentChunks(document.getKbId(), document.getId(), vectorChunks);
+            keywordIndexPort.indexDocumentChunks(String.valueOf(document.getKbId()), String.valueOf(document.getId()), vectorChunks);
             accumulator.indexedDocuments++;
             accumulator.indexedChunks += vectorChunks.size();
         } catch (RuntimeException ex) {
             accumulator.failedDocuments++;
-            accumulator.failures.add(document.getId() + ": " + Objects.requireNonNullElse(ex.getMessage(), ""));
+            accumulator.failures.add(String.valueOf(document.getId()) + ": " + Objects.requireNonNullElse(ex.getMessage(), ""));
         }
     }
 
-    private KnowledgeDocumentDetail requireDocument(String docId) {
-        String safeDocId = requireText(docId, "docId");
-        return documentRepositoryPort.findDetailById(safeDocId)
-                .orElseThrow(() -> new IllegalArgumentException("文档不存在：" + safeDocId));
+    private KnowledgeDocumentDetail requireDocument(Long docId) {
+        if (docId == null) {
+            throw new IllegalArgumentException("docId must not be null");
+        }
+        return documentRepositoryPort.findDetailById(docId)
+                .orElseThrow(() -> new IllegalArgumentException("文档不存在：" + docId));
     }
 
     private VectorChunk toVectorChunk(KnowledgeDocumentDetail document, KnowledgeChunkRecord record) {
         VectorChunk chunk = new VectorChunk();
-        chunk.setChunkId(record.getId());
+        chunk.setChunkId(String.valueOf(record.getId()));
         chunk.setIndex(record.getChunkIndex());
         chunk.setContent(Objects.requireNonNullElse(record.getContent(), ""));
         chunk.setMetadata(systemMetadata(document, record));

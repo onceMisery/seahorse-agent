@@ -274,17 +274,17 @@ flowchart LR
 
 检索层由 `KernelMultiChannelRetrievalEngine` 负责多路检索编排：它从扩展注册表中加载已激活的 `SearchChannelFeature`，并行执行多个检索通道，合并各通道召回结果，再按顺序执行 `SearchResultPostProcessorFeature` 后处理链。当前默认通道包括 `IntentDirectedSearchFeature`（意图定向检索）和 `VectorGlobalSearchFeature`（全局向量检索）；召回结果进入 `RetrievalContext` 后再由 Prompt 端口构造成结构化消息，最终交给模型端口流式生成回答。
 
-### 4. 混合检索规划/扩展方向
+### 4. 混合检索当前状态与扩展方向
 
-当前代码已具备 `KernelMultiChannelRetrievalEngine` 多路检索编排、向量检索主链路、`SearchChannelFeature` 多通道扩展点、`SearchResultPostProcessorFeature` 后处理扩展点、`VectorSearchRequest.filters` 过滤字段和 `RerankModelPort` / OpenAI 兼容 rerank 模型端口；但 RRF、BM25、完整元数据过滤和 reranker 后处理器尚未作为完整链路落地。推荐后续按以下方向扩展：
+当前代码已具备 `KernelMultiChannelRetrievalEngine` 多路检索编排、向量检索主链路、`SearchChannelFeature` 多通道扩展点、`SearchResultPostProcessorFeature` 后处理扩展点、`VectorSearchRequest.filters` 过滤字段和 `RerankModelPort` / OpenAI 兼容 rerank 模型端口。旧版 README 中的 BM25、RRF、metadata filter 和 reranker 缺口已经被代码追上，当前状态以 [混合检索与重排详细设计](docs/zh/content/架构设计/混合检索与重排详细设计.md) 和 [未来规划审计与剩余设计](docs/zh/content/架构设计/未来规划审计与剩余设计.md) 为准。
 
 | 能力           | 当前状态                                                                                                               | 扩展方向                                                                                                                      |
 |--------------|--------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
 | 向量检索         | 已支持。`IntentDirectedSearchFeature` 与 `VectorGlobalSearchFeature` 通过 `VectorSearchPort` 调用 Milvus/pgvector/noop 适配器。 | 保持作为默认召回通道，并补齐 embedding 生成与检索请求之间的统一向量化策略。                                                                               |
-| BM25 / 关键词检索 | 规划中。当前未发现独立 BM25 检索通道。                                                                                             | 新增 `SearchChannelFeature` 实现，例如 `Bm25SearchFeature`，对接 PostgreSQL 全文索引、Lucene/OpenSearch/Elasticsearch 或轻量本地倒排索引。         |
-| RRF 结果融合     | 规划中。当前多通道结果会合并，但未实现 Reciprocal Rank Fusion。                                                                        | 新增 `SearchResultPostProcessorFeature`，按通道排名执行 `score = sum(1 / (k + rank_i))`，融合向量、BM25、意图定向等多路召回。                        |
-| 元数据过滤        | 部分基础能力。`VectorSearchRequest` 已有 `filters` 字段，向量数据会写入 metadata；当前 Milvus/pgvector 搜索实现尚未消费通用 filters。               | 在 `MilvusVectorAdapter` 与 `PgVectorAdapter` 中把 `filters` 转换为 Milvus filter 表达式或 PostgreSQL JSONB 条件，支持部门、文档类型、权限、时间范围等过滤。 |
-| Reranker     | 模型端口已支持。`OpenAiCompatibleModelAdapter` 实现 `/rerank`，但检索后处理链路中未发现默认 reranker processor。                             | 新增 `RerankPostProcessorFeature`，在 RRF 或初排后调用 `RerankModelPort`，按 relevance score 重排并截断 topK。                              |
+| BM25 / 关键词检索 | 已落地。`KeywordSearchChannelFeature` 通过关键词检索端口接入 Elasticsearch、Lucene Embedded 和轻量 JDBC/FTS 路径。                         | OpenSearch 可按同一端口契约作为新增 adapter 接入；生产侧继续调优字段 boost、分词和索引同步策略。                                                       |
+| RRF 结果融合     | 已落地。`RrfFusionPostProcessorFeature` 负责多通道候选去重和 Reciprocal Rank Fusion。                                      | 后续重点是权重策略、通道贡献指标和评测集闭环，而不是重新实现融合器。                                                                                     |
+| 元数据过滤        | 已落地强类型过滤、filter compiler 和 metadata guard 兜底。                                                                            | 保持 Milvus、PGVector、关键词后端的过滤下推语义一致，并补齐跨后端回归测试。                                                                              |
+| Reranker     | 已落地。`RerankPostProcessorFeature` 可调用 `RerankModelPort` 做二阶段排序。                                                         | 后续重点是 rerank 开关、成本预算、失败降级和评测指标。                                                                                               |
 
 目标形态：
 
@@ -305,7 +305,7 @@ flowchart LR
     TopK --> Prompt["RAG Prompt"]
 ```
 
-### 4. 前后端交互链路
+### 5. 前后端交互链路
 
 ```mermaid
 graph TB
@@ -379,30 +379,36 @@ npm run dev
 
 ## 未来规划
 
-以下内容来自近期架构收敛后的剩余事项，只记录仍需要继续推进的产品化和治理方向：
+以下内容只记录仍需要继续推进的产品化、治理和依赖边界事项。已被代码追上的旧规划不再重复列为未实现项；完整审计见 [未来规划审计与剩余设计](docs/zh/content/架构设计/未来规划审计与剩余设计.md)。
 
 | 方向 | 规划内容 |
 |------|----------|
-| Starter 依赖治理 | 继续推进 `seahorse-agent-spring-boot-starter-core` 作为轻量入口，`seahorse-agent-spring-boot-starter-all` 作为官方全量适配器聚合入口；后续将 bootstrap 迁移到 core starter + 显式适配器依赖，并逐步 optional 化旧聚合 starter 的重型 SDK。 |
-| 元数据治理 JDBC 拆分 | `JdbcMetadataGovernanceRepositoryAdapter` 已显著瘦身，但仍作为 14 个 metadata 端口的兼容门面。后续应先输出 schema、dictionary、extraction、review、quarantine、backfill、canonical write、quality report 的事务边界清单，再按子域拆成独立端口 Bean。 |
-| 端口准入规则 | 端口文件数不再作为机械合并依据。后续新增端口需说明外部能力边界、独立替换需求、事务生命周期或插件治理理由；不满足时优先使用领域服务、DTO、query object 或现有端口方法。 |
-| Agent 能力演进 | Phase A 基础 Agent Loop 已落地。后续重点是把检索、记忆、Web Search 等能力注册为标准工具，并补齐 Skill/Agent 注册中心、持久化状态机、Human-in-the-Loop、任务快照和输出自愈。 |
-| 检索与重排增强 | 检索通道、后处理链和 Lucene 适配器已具备可插拔基础。后续可继续增强 OpenSearch/Elasticsearch 生产检索、RRF 权重策略、业务指标和检索评测闭环。 |
+| Starter 依赖治理 | `starter-core` 目前仍是 `starter` 的别名，`bootstrap` 仍同时依赖 `starter-core` 和 `starter-all`。下一步需要让 core 成为真实轻量入口，让 all 只承担全量官方 adapter 聚合，并把 bootstrap 改成 core + 显式 adapter 依赖。 |
+| 元数据治理 JDBC 拆分 | `JdbcMetadataGovernanceRepositoryAdapter` 已抽出多个 support，但仍作为多个 metadata 端口的兼容门面。下一步按 schema、dictionary、extraction、review、quarantine、backfill、canonical write、quality report 等子域拆成独立 Bean。 |
+| 术语映射在线扩展 | `/admin/mappings`、`QueryTermMappingRepositoryPort` 和 JDBC 管理 adapter 已存在，但 `QueryTermExpansionPort` 仍没有生产实现，扩展词也还没有进入检索链路。下一步落地 JDBC online adapter 和 keyword channel 消费路径。 |
+| Agent 平台产品化 | Agent Loop、标准工具、审批、run store、factory、handoff、rollout、readiness、connector、sandbox、ACL 等能力已具备基础。后续重点是稳定工作流、版本治理、前端工作台体验和输出自愈。 |
+| 记忆系统长尾治理 | 四层记忆、混合召回、review、compaction、alias、GC 与观测已形成最小闭环。后续保留 LLM compaction adapter、Neo4j adapter、高级 topic-shift detection、物理删除策略等远期项。 |
 | 大类治理制度化 | 对超过 500 行且包含多个变更原因的类建立拆分触发器；超过 800 行且跨 3 个以上职责时列为 P1 候选，拆分时保持外部端口、Bean 名称和配置契约兼容。 |
+
+Agent 平台相关未来项已拆成四份专项详细设计：
+[OpenAPI Connector](docs/zh/content/架构设计/未实现功能详细设计/02-OpenAPI-Connector-设计.md)、
+[Sandbox Runtime](docs/zh/content/架构设计/未实现功能详细设计/03-Sandbox-Runtime-设计.md)、
+[Agent Factory UI](docs/zh/content/架构设计/未实现功能详细设计/04-Agent-Factory-UI-设计.md)、
+[Multi-Agent / A2A](docs/zh/content/架构设计/未实现功能详细设计/05-Multi-Agent-A2A-设计.md)。
 
 ### 记忆系统规划
 
-四层记忆架构已完成读路径闭环（Phase 1）、查询优化（Phase 3A/3B）和跨会话推理基础设施（Phase 4A/4B）。以下阶段仍待实施（详见 [智能体记忆系统架构设计](docs/zh/content/架构设计/智能体记忆系统架构设计.md)）：
+四层记忆架构的当前状态以 [Gemini memory alignment current-state design](docs/aegis/specs/2026-05-25-gemini-memory-alignment-current-state.md) 为准。旧版规划把 Phase 2/5 和旧向量端口都视为纯待办的表述已不再完整准确；`ScoredMemoryVectorPort`、`VectorSearchScoredMemoryVectorPort` 与 hybrid recall 管线已经存在，真实向量检索可通过 `seahorse-agent.memory.recall.vector-search-enabled=true` 接入。
 
-| 阶段 | 规划内容 | 状态 |
+以下只保留当前仍需继续设计或产品化的尾项：
+
+| 事项 | 规划内容 | 状态 |
 |------|----------|------|
-| Phase 2 | 规则版记忆写入闭环：实现对话摘要、明确事实、明确偏好的异步写入机制，通过 `StreamCallback` 装饰器在 `onComplete()` 后触发候选记忆提取，写入短期记忆并设置 importanceScore/confidenceLevel/sourceMessageIds/decayScore | ⏳ 待实施 |
-| Phase 5 | 衰减、质量评估与冲突治理：新增 `ShortTermMemoryMaintenancePort` 仓储能力，实现仿生衰减算法（`e^(-λt)` 时间衰减 + 访问衰减 + 重要性权重），独立质量评估器（准确性/时效性/相关性/完整性/一致性五维度），冲突检测与自动修复，写入 `t_memory_conflict_log` 和 `t_memory_quality_snapshot` | ⏳ 待实施 |
-| MemoryVectorPort 向量检索闭环 | 接入真实向量后端（Milvus），实现语义记忆的向量检索，当前 `MemoryVectorPort` 仅端口未接入 | ⏳ 待实施 |
-| 多级摘要策略 | L2 会话级摘要、L3 跨会话主题聚合摘要、L4 用户画像摘要，当前仅有 L1 即时摘要 | ⏳ 待实施 |
-| 关键事实提取器 | 从对话中自动提取用户偏好/属性/决策/问题/领域知识等结构化事实，当前规则版仅覆盖 PROFILE/PREFERENCE | ⏳ 待实施 |
-| 术语映射 JDBC 实现 | 实现 `JdbcQueryTermExpansionAdapter`，让 `QueryTermExpansionPort` 的术语映射真正生效，当前默认退化为 noop | ⏳ 待实施 |
-| Token 预算管理 | 智能分配和截断记忆 Token，按工作记忆 40%/短期 30%/长期 20%/语义 10% 比例分配 | ⏳ 待实施 |
+| 术语映射在线扩展 | 实现 `JdbcQueryTermExpansionAdapter`，并让扩展词进入 keyword retrieval，而不是只写 debug log。 | ⏳ 待实施，详见 [未来规划审计与剩余设计](docs/zh/content/架构设计/未来规划审计与剩余设计.md) |
+| Token 预算管理 | 对记忆上下文做更细的 token 预算、截断和层级配额，避免长期记忆、语义记忆挤占核心 prompt。 | ⏳ 待实施 |
+| 生产级 LLM compaction | 当前 compaction 服务和 summarizer port 已存在，后续可接入生产 LLM compaction adapter。 | 🔮 远期规划 |
+| 高级语义 topic-shift detection | 在 debounce/aggregation 基础上引入更精细的主题切换检测。 | 🔮 远期规划 |
+| 物理删除保留策略 | 在安全 tombstone 和派生索引清理之外，制定可审计的物理 hard-delete retention policy。 | 🔮 远期规划 |
 | 知识图谱集成 | 可选集成 Neo4j，增强语义记忆的关系推理能力 | 🔮 远期规划 |
 | 多模态记忆 | 支持图片、音频等多模态记忆存储与检索 | 🔮 远期规划 |
 | 记忆可解释性 | 提供记忆来源和推理路径的可解释性 | 🔮 远期规划 |
@@ -416,6 +422,7 @@ npm run dev
 - `docs/zh/content/后端系统/适配器模块/适配器模块.md`
 - `docs/zh/content/前端系统/前端系统.md`
 - `docs/zh/content/API 接口文档/API 接口文档.md`
+- `docs/zh/content/架构设计/未来规划审计与剩余设计.md`
 - `resources/docker/lightweight/README.md`
 
 ## License

@@ -46,15 +46,15 @@ class JdbcUserRepositoryAdapterTests {
 
     @Test
     void shouldFindPageCreateUpdateAndDeleteUsers() {
-        insertUser("1", "alice", "admin");
+        insertUser(1L, "alice", "admin");
 
         assertThat(adapter.findByUsername("alice")).isPresent();
         UserPage page = adapter.page(1, 10, "ali");
-        String id = adapter.create(new UserCreateValues("bob", "pw", "user", null));
+        Long id = adapter.create(new UserCreateValues("bob", "pw", "user", null));
         boolean updated = adapter.update(id, new UserUpdateValues("bobby", null, null, null));
         boolean deleted = adapter.delete(id);
 
-        assertThat(id).hasSizeLessThanOrEqualTo(20);
+        assertThat(id).isNotNull();
         assertThat(page.total()).isEqualTo(1);
         assertThat(adapter.usernameExists("alice", null)).isTrue();
         assertThat(updated).isTrue();
@@ -62,7 +62,7 @@ class JdbcUserRepositoryAdapterTests {
         assertThat(adapter.findById(id)).isEmpty();
     }
 
-    private void insertUser(String id, String username, String role) {
+    private void insertUser(Long id, String username, String role) {
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
                 INSERT INTO t_user (id, username, password, avatar, role, create_time, update_time, deleted)
@@ -74,7 +74,7 @@ class JdbcUserRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_user");
         jdbcTemplate.execute("""
                 CREATE TABLE t_user (
-                    id VARCHAR(20) PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     username VARCHAR(128) NOT NULL,
                     password VARCHAR(128) NOT NULL,
                     avatar VARCHAR(512),

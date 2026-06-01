@@ -102,10 +102,10 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
             if (!safeContext.isSkipIndexerWrite()) {
                 List<VectorChunk> indexedChunks = chunksWithSystemMetadata(safeContext, request, chunks);
                 chunkRepositoryPort.replaceDocumentChunks(request.kbId(), request.docId(), indexedChunks);
-                vectorIndexPort.indexDocumentChunks(request.collectionName(), request.docId(),
+                vectorIndexPort.indexDocumentChunks(request.collectionName(), String.valueOf(request.docId()),
                         vectorIndexChunks(safeContext, request, indexedChunks));
                 // 关键词索引保留完整治理后 Chunk；向量索引使用过滤副本，二者共享同一份系统字段快照。
-                keywordIndexPort.indexDocumentChunks(request.kbId(), request.docId(), indexedChunks);
+                keywordIndexPort.indexDocumentChunks(String.valueOf(request.kbId()), String.valueOf(request.docId()), indexedChunks);
             }
             return NodeResult.ok("已准备 " + chunks.size() + " 个分块索引");
         } catch (Exception ex) {
@@ -212,12 +212,12 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
     private IndexerRequest resolveRequest(IngestionContext context, NodeConfig config) {
         JsonNode settings = config == null ? null : config.getSettings();
         String collectionName = firstText(setting(settings, KEY_COLLECTION_NAME), metadata(context, KEY_COLLECTION_NAME));
-        String kbId = firstText(setting(settings, KEY_KB_ID), metadata(context, KEY_KB_ID));
-        String docId = firstText(setting(settings, KEY_DOC_ID), context.getTaskId());
+        String kbIdStr = firstText(setting(settings, KEY_KB_ID), metadata(context, KEY_KB_ID));
+        String docIdStr = firstText(setting(settings, KEY_DOC_ID), context.getTaskId());
         return new IndexerRequest(
                 requireText(collectionName, "collectionName"),
-                requireText(kbId, "kbId"),
-                requireText(docId, "docId"));
+                Long.parseLong(requireText(kbIdStr, "kbId")),
+                Long.parseLong(requireText(docIdStr, "docId")));
     }
 
     private void validateEmbeddings(List<VectorChunk> chunks) {
@@ -234,7 +234,7 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
         if (embedding == null || embedding.length == 0) {
             throw new IllegalArgumentException("向量结果缺失");
         }
-        if (!hasText(safeChunk.getChunkId())) {
+        if (safeChunk.getChunkId() == null) {
             throw new IllegalArgumentException("chunkId 不能为空");
         }
         return embedding;
@@ -277,6 +277,6 @@ public class IndexerNodeFeature implements IngestionNodeFeature {
         return value != null && !value.isBlank();
     }
 
-    private record IndexerRequest(String collectionName, String kbId, String docId) {
+    private record IndexerRequest(String collectionName, Long kbId, Long docId) {
     }
 }

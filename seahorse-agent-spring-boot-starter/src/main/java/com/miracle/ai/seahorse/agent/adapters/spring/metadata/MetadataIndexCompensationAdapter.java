@@ -77,13 +77,13 @@ public class MetadataIndexCompensationAdapter implements MetadataIndexCompensati
     }
 
     @Override
-    public void rebuildDocument(String documentId) {
-        rebuildDocument("", "", documentId);
+    public void rebuildDocument(Long documentId) {
+        rebuildDocument("", null, documentId);
     }
 
     @Override
-    public void rebuildDocument(String tenantId, String knowledgeBaseId, String documentId) {
-        String safeDocumentId = requireText(documentId, "documentId");
+    public void rebuildDocument(String tenantId, Long knowledgeBaseId, Long documentId) {
+        Long safeDocumentId = Objects.requireNonNull(documentId, "documentId must not be null");
         keywordMaintenancePort.rebuildDocument(safeDocumentId);
         rebuildVectorIndex(tenantId, knowledgeBaseId, requireDocument(safeDocumentId));
     }
@@ -113,9 +113,9 @@ public class MetadataIndexCompensationAdapter implements MetadataIndexCompensati
                 metadata));
     }
 
-    private void rebuildVectorIndex(String tenantId, String knowledgeBaseId, KnowledgeDocumentDetail document) {
+    private void rebuildVectorIndex(String tenantId, Long knowledgeBaseId, KnowledgeDocumentDetail document) {
         String collectionName = requireText(document.getCollectionName(), "collectionName");
-        vectorPorts.vectorIndexPort().deleteDocumentVectors(collectionName, document.getId());
+        vectorPorts.vectorIndexPort().deleteDocumentVectors(collectionName, String.valueOf(document.getId()));
         if (Boolean.FALSE.equals(document.getEnabled())) {
             return;
         }
@@ -124,8 +124,8 @@ public class MetadataIndexCompensationAdapter implements MetadataIndexCompensati
             return;
         }
         String effectiveTenantId = defaultText(tenantId, tenantIdFromChunks(chunks));
-        String effectiveKnowledgeBaseId = defaultText(knowledgeBaseId, document.getKbId());
-        MetadataSchema schema = loadSchema(effectiveTenantId, effectiveKnowledgeBaseId);
+        Long effectiveKnowledgeBaseId = knowledgeBaseId != null ? knowledgeBaseId : document.getKbId();
+        MetadataSchema schema = loadSchema(effectiveTenantId, String.valueOf(effectiveKnowledgeBaseId));
         List<VectorChunk> vectorChunks = chunks.stream()
                 .filter(Objects::nonNull)
                 .map(chunk -> toVectorChunk(effectiveTenantId, document, schema, chunk))
@@ -133,10 +133,10 @@ public class MetadataIndexCompensationAdapter implements MetadataIndexCompensati
         if (vectorChunks.isEmpty()) {
             return;
         }
-        vectorPorts.vectorIndexPort().indexDocumentChunks(collectionName, document.getId(), vectorChunks);
+        vectorPorts.vectorIndexPort().indexDocumentChunks(collectionName, String.valueOf(document.getId()), vectorChunks);
     }
 
-    private KnowledgeDocumentDetail requireDocument(String documentId) {
+    private KnowledgeDocumentDetail requireDocument(Long documentId) {
         return documentRepositoryPort.findDetailById(documentId)
                 .orElseThrow(() -> new IllegalArgumentException("document not found: " + documentId));
     }
@@ -155,7 +155,7 @@ public class MetadataIndexCompensationAdapter implements MetadataIndexCompensati
                                       KnowledgeChunkRecord record) {
         Map<String, Object> sourceMetadata = systemMetadata(tenantId, document, record);
         return VectorChunk.builder()
-                .chunkId(record.getId())
+                .chunkId(String.valueOf(record.getId()))
                 .index(record.getChunkIndex())
                 .content(Objects.requireNonNullElse(record.getContent(), ""))
                 .embedding(toArray(vectorPorts.embeddingModelPort().embed(

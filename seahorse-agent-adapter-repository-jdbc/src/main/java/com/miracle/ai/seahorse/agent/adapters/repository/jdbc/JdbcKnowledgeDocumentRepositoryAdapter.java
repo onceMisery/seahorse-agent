@@ -175,11 +175,11 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     @Override
     public KnowledgeDocumentRecord createPendingDocument(CreateKnowledgeDocumentCommand command) {
         CreateKnowledgeDocumentCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
-        String documentId = SnowflakeIds.nextIdString();
+        Long documentId = SnowflakeIds.nextId();
         KnowledgeDocumentProcessRef process = normalizeProcess(safeCommand.process());
         jdbcTemplate.update(SQL_INSERT_DOCUMENT,
                 documentId,
-                requireText(safeCommand.kbId(), "kbId"),
+                safeCommand.kbId(),
                 requireText(safeCommand.docName(), "docName"),
                 ENABLED_VALUE,
                 safeCommand.file().fileUrl(),
@@ -195,8 +195,8 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     }
 
     @Override
-    public Optional<KnowledgeDocumentRecord> findById(String docId) {
-        if (docId == null || docId.isBlank()) {
+    public Optional<KnowledgeDocumentRecord> findById(Long docId) {
+        if (docId == null) {
             return Optional.empty();
         }
         return jdbcTemplate.query(SQL_FIND_BY_ID, this::toDocumentRecord, docId)
@@ -205,8 +205,8 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     }
 
     @Override
-    public Optional<KnowledgeDocumentDetail> findDetailById(String docId) {
-        if (docId == null || docId.isBlank()) {
+    public Optional<KnowledgeDocumentDetail> findDetailById(Long docId) {
+        if (docId == null) {
             return Optional.empty();
         }
         return jdbcTemplate.query(SQL_FIND_DETAIL_BY_ID, this::toDocumentDetail, docId)
@@ -215,13 +215,12 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     }
 
     @Override
-    public KnowledgeDocumentPage page(String kbId, long current, long size, String status, String keyword) {
-        String safeKbId = requireText(kbId, "kbId");
+    public KnowledgeDocumentPage page(Long kbId, long current, long size, String status, String keyword) {
         long safeCurrent = current <= 0 ? 1 : current;
         long safeSize = clampSize(size);
         QueryParts queryParts = buildPageQuery(status, keyword);
         List<Object> countArgs = new ArrayList<>();
-        countArgs.add(safeKbId);
+        countArgs.add(kbId);
         countArgs.addAll(queryParts.args());
         Long total = jdbcTemplate.queryForObject(SQL_COUNT_PAGE_BASE + queryParts.where(), Long.class,
                 countArgs.toArray());
@@ -238,21 +237,20 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     }
 
     @Override
-    public KnowledgeDocumentChunkLogPage chunkLogs(String docId, long current, long size) {
-        String safeDocId = requireText(docId, "docId");
+    public KnowledgeDocumentChunkLogPage chunkLogs(Long docId, long current, long size) {
         long safeCurrent = current <= 0 ? 1 : current;
         long safeSize = clampSize(size);
-        Long total = jdbcTemplate.queryForObject(SQL_COUNT_LOGS, Long.class, safeDocId);
+        Long total = jdbcTemplate.queryForObject(SQL_COUNT_LOGS, Long.class, docId);
         List<KnowledgeDocumentChunkLogRecord> records = jdbcTemplate.query(SQL_PAGE_LOGS, this::toChunkLogRecord,
-                safeDocId, safeSize, (safeCurrent - 1) * safeSize);
+                docId, safeSize, (safeCurrent - 1) * safeSize);
         long safeTotal = total == null ? 0 : total;
         long pages = safeTotal == 0 ? 0 : (safeTotal + safeSize - 1) / safeSize;
         return new KnowledgeDocumentChunkLogPage(records, safeTotal, safeSize, safeCurrent, pages);
     }
 
     @Override
-    public boolean markRunning(String docId, String operator) {
-        if (docId == null || docId.isBlank()) {
+    public boolean markRunning(Long docId, String operator) {
+        if (docId == null) {
             return false;
         }
         int updated = jdbcTemplate.update(SQL_MARK_RUNNING, STATUS_RUNNING,
@@ -261,46 +259,44 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     }
 
     @Override
-    public void markSuccess(String docId, int chunkCount, String operator) {
+    public void markSuccess(Long docId, int chunkCount, String operator) {
         jdbcTemplate.update(SQL_MARK_SUCCESS, STATUS_SUCCESS, Math.max(chunkCount, 0),
-                Objects.requireNonNullElse(operator, ""), requireText(docId, "docId"));
+                Objects.requireNonNullElse(operator, ""), docId);
     }
 
     @Override
-    public void markFailed(String docId, String operator, String errorMessage) {
+    public void markFailed(Long docId, String operator, String errorMessage) {
         jdbcTemplate.update(SQL_MARK_FAILED, STATUS_FAILED,
-                Objects.requireNonNullElse(operator, ""), requireText(docId, "docId"));
+                Objects.requireNonNullElse(operator, ""), docId);
     }
 
     @Override
-    public boolean update(String docId, KnowledgeDocumentUpdateValues values) {
+    public boolean update(Long docId, KnowledgeDocumentUpdateValues values) {
         KnowledgeDocumentUpdateValues safeValues = Objects.requireNonNull(values, "values must not be null");
         UpdateSql updateSql = buildUpdateSql(safeValues);
         if (updateSql.args().isEmpty()) {
             return true;
         }
-        updateSql.args().add(requireText(docId, "docId"));
+        updateSql.args().add(docId);
         return jdbcTemplate.update(updateSql.sql(), updateSql.args().toArray()) > 0;
     }
 
     @Override
-    public boolean updateEnabled(String docId, boolean enabled, String operator) {
-        String safeDocId = requireText(docId, "docId");
+    public boolean updateEnabled(Long docId, boolean enabled, String operator) {
         int enabledValue = enabled ? 1 : 0;
         String safeOperator = Objects.requireNonNullElse(operator, "");
-        int updated = jdbcTemplate.update(SQL_UPDATE_ENABLED_DOCUMENT, enabledValue, safeOperator, safeDocId);
+        int updated = jdbcTemplate.update(SQL_UPDATE_ENABLED_DOCUMENT, enabledValue, safeOperator, docId);
         if (updated > 0) {
-            jdbcTemplate.update(SQL_UPDATE_ENABLED_CHUNKS, enabledValue, safeOperator, safeDocId);
+            jdbcTemplate.update(SQL_UPDATE_ENABLED_CHUNKS, enabledValue, safeOperator, docId);
         }
         return updated > 0;
     }
 
     @Override
-    public boolean replaceFileForRefresh(String docId, KnowledgeDocumentFileRef file, String operator) {
-        String safeDocId = requireText(docId, "docId");
+    public boolean replaceFileForRefresh(Long docId, KnowledgeDocumentFileRef file, String operator) {
         KnowledgeDocumentFileRef safeFile = Objects.requireNonNull(file, "file must not be null");
         String safeOperator = Objects.requireNonNullElse(operator, "");
-        String docName = hasText(safeFile.fileUrl()) ? safeFile.fileUrl() : safeDocId;
+        String docName = hasText(safeFile.fileUrl()) ? safeFile.fileUrl() : String.valueOf(docId);
         int slashIndex = docName.lastIndexOf('/');
         if (slashIndex >= 0 && slashIndex < docName.length() - 1) {
             docName = docName.substring(slashIndex + 1);
@@ -311,24 +307,23 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
                 safeFile.fileType(),
                 safeFile.fileSize(),
                 safeOperator,
-                safeDocId) > 0;
+                docId) > 0;
     }
 
     @Override
-    public boolean delete(String docId, String operator) {
-        String safeDocId = requireText(docId, "docId");
+    public boolean delete(Long docId, String operator) {
         String safeOperator = Objects.requireNonNullElse(operator, "");
-        int updated = jdbcTemplate.update(SQL_DELETE_DOCUMENT, safeOperator, safeDocId);
+        int updated = jdbcTemplate.update(SQL_DELETE_DOCUMENT, safeOperator, docId);
         if (updated > 0) {
-            jdbcTemplate.update(SQL_DELETE_CHUNKS, safeOperator, safeDocId);
-            jdbcTemplate.update(SQL_DELETE_LOGS, safeDocId);
+            jdbcTemplate.update(SQL_DELETE_CHUNKS, safeOperator, docId);
+            jdbcTemplate.update(SQL_DELETE_LOGS, docId);
         }
         return updated > 0;
     }
 
     @Override
-    public List<KnowledgeChunkRecord> listEnabledChunks(String docId) {
-        if (docId == null || docId.isBlank()) {
+    public List<KnowledgeChunkRecord> listEnabledChunks(Long docId) {
+        if (docId == null) {
             return List.of();
         }
         return jdbcTemplate.query(listDocumentChunksSql(), this::toChunkRecord, docId);
@@ -344,8 +339,8 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
                 resultSet.getString("process_mode"),
                 resultSet.getString("pipeline_id"));
         return new KnowledgeDocumentRecord(
-                resultSet.getString("id"),
-                resultSet.getString("kb_id"),
+                resultSet.getObject("id", Long.class),
+                resultSet.getObject("kb_id", Long.class),
                 resultSet.getString("doc_name"),
                 file,
                 process);
@@ -353,8 +348,8 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
 
     private KnowledgeDocumentDetail toDocumentDetail(ResultSet resultSet, int rowNumber) throws SQLException {
         KnowledgeDocumentDetail detail = new KnowledgeDocumentDetail();
-        detail.setId(resultSet.getString("id"));
-        detail.setKbId(resultSet.getString("kb_id"));
+        detail.setId(resultSet.getObject("id", Long.class));
+        detail.setKbId(resultSet.getObject("kb_id", Long.class));
         detail.setKbName(resultSet.getString("kb_name"));
         detail.setCollectionName(resultSet.getString("collection_name"));
         detail.setEmbeddingModel(resultSet.getString("embedding_model"));
@@ -383,8 +378,8 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
 
     private KnowledgeDocumentChunkLogRecord toChunkLogRecord(ResultSet resultSet, int rowNumber) throws SQLException {
         KnowledgeDocumentChunkLogRecord record = new KnowledgeDocumentChunkLogRecord();
-        record.setId(resultSet.getString("id"));
-        record.setDocId(resultSet.getString("doc_id"));
+        record.setId(resultSet.getObject("id", Long.class));
+        record.setDocId(resultSet.getObject("doc_id", Long.class));
         record.setStatus(resultSet.getString("status"));
         record.setProcessMode(resultSet.getString("process_mode"));
         record.setChunkStrategy(resultSet.getString("chunk_strategy"));
@@ -406,9 +401,9 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
 
     private KnowledgeChunkRecord toChunkRecord(ResultSet resultSet, int rowNumber) throws SQLException {
         KnowledgeChunkRecord record = new KnowledgeChunkRecord();
-        record.setId(resultSet.getString("id"));
-        record.setKbId(resultSet.getString("kb_id"));
-        record.setDocId(resultSet.getString("doc_id"));
+        record.setId(resultSet.getObject("id", Long.class));
+        record.setKbId(resultSet.getObject("kb_id", Long.class));
+        record.setDocId(resultSet.getObject("doc_id", Long.class));
         record.setChunkIndex(resultSet.getObject("chunk_index", Integer.class));
         record.setContent(resultSet.getString("content"));
         record.setContentHash(resultSet.getString("content_hash"));

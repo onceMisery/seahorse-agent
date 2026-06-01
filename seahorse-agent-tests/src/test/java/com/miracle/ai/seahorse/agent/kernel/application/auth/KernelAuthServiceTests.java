@@ -75,10 +75,10 @@ class KernelAuthServiceTests {
     }
 
     private static class SingleUserRepository implements UserRepositoryPort {
-        private final UserRecord user = new UserRecord("1", "alice", "secret", "admin", null, null, null);
+        private final UserRecord user = new UserRecord(1L, "alice", "secret", "admin", null, null, null);
 
         @Override
-        public Optional<UserRecord> findById(String id) {
+        public Optional<UserRecord> findById(Long id) {
             return Optional.of(user);
         }
 
@@ -88,7 +88,7 @@ class KernelAuthServiceTests {
         }
 
         @Override
-        public boolean usernameExists(String username, String excludedId) {
+        public boolean usernameExists(String username, Long excludedId) {
             return false;
         }
 
@@ -98,17 +98,17 @@ class KernelAuthServiceTests {
         }
 
         @Override
-        public String create(UserCreateValues values) {
-            return "1";
+        public Long create(UserCreateValues values) {
+            return 1L;
         }
 
         @Override
-        public boolean update(String id, UserUpdateValues values) {
+        public boolean update(Long id, UserUpdateValues values) {
             return true;
         }
 
         @Override
-        public boolean delete(String id) {
+        public boolean delete(Long id) {
             return true;
         }
     }

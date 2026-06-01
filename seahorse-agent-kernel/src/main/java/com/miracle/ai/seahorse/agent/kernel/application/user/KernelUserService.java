@@ -62,7 +62,7 @@ public class KernelUserService implements UserInboundPort {
     }
 
     @Override
-    public String create(UserCreateCommand command) {
+    public Long create(UserCreateCommand command) {
         currentUserPort.requireRole(ADMIN_ROLE);
         UserCreateCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         String username = requireText(safeCommand.username(), "用户名不能为空");
@@ -77,8 +77,11 @@ public class KernelUserService implements UserInboundPort {
     }
 
     @Override
-    public void update(String id, UserUpdateCommand command) {
+    public void update(Long id, UserUpdateCommand command) {
         currentUserPort.requireRole(ADMIN_ROLE);
+        if (id == null) {
+            throw new IllegalArgumentException("用户 ID 不能为空");
+        }
         UserUpdateCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         UserRecord record = loadById(id);
         ensureNotDefaultAdmin(record);
@@ -90,8 +93,11 @@ public class KernelUserService implements UserInboundPort {
     }
 
     @Override
-    public void delete(String id) {
+    public void delete(Long id) {
         currentUserPort.requireRole(ADMIN_ROLE);
+        if (id == null) {
+            throw new IllegalArgumentException("用户 ID 不能为空");
+        }
         UserRecord record = loadById(id);
         ensureNotDefaultAdmin(record);
         if (!userRepositoryPort.delete(id)) {
@@ -113,8 +119,11 @@ public class KernelUserService implements UserInboundPort {
         userRepositoryPort.update(record.id(), new UserUpdateValues(null, passwordHasherPort.encode(next), null, null));
     }
 
-    private UserRecord loadById(String id) {
-        return userRepositoryPort.findById(requireText(id, "用户 ID 不能为空"))
+    private UserRecord loadById(Long id) {
+        if (id == null) {
+            throw new IllegalArgumentException("用户 ID 不能为空");
+        }
+        return userRepositoryPort.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
     }
 
@@ -138,7 +147,7 @@ public class KernelUserService implements UserInboundPort {
         return username;
     }
 
-    private void ensureUsernameAvailable(String username, String excludedId) {
+    private void ensureUsernameAvailable(String username, Long excludedId) {
         if (userRepositoryPort.usernameExists(username, excludedId)) {
             throw new IllegalArgumentException("用户名已存在");
         }

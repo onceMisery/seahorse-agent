@@ -36,7 +36,7 @@ import java.util.Objects;
 public record ApprovalRequestDecision(String approvalId,
                                       ApprovalRequestStatus fromStatus,
                                       ApprovalRequestStatus toStatus,
-                                      String decidedBy,
+                                      Long decidedBy,
                                       Instant decidedAt,
                                       String decisionComment,
                                       String argumentsPreviewJson) {
@@ -45,7 +45,7 @@ public record ApprovalRequestDecision(String approvalId,
         approvalId = requireText(approvalId, "approvalId 不能为空");
         fromStatus = Objects.requireNonNull(fromStatus, "fromStatus 不能为空");
         toStatus = Objects.requireNonNull(toStatus, "toStatus 不能为空");
-        decidedBy = requireText(decidedBy, "decidedBy 不能为空");
+        decidedBy = Objects.requireNonNull(decidedBy, "decidedBy 不能为空");
         decidedAt = Objects.requireNonNull(decidedAt, "decidedAt 不能为空");
         decisionComment = trimToNull(decisionComment);
         argumentsPreviewJson = trimToNull(argumentsPreviewJson);

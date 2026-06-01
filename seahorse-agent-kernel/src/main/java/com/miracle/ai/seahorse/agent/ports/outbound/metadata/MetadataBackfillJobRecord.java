@@ -28,7 +28,7 @@ import java.util.Objects;
 public record MetadataBackfillJobRecord(
         String jobId,
         String tenantId,
-        String knowledgeBaseId,
+        Long knowledgeBaseId,
         String pipelineId,
         MetadataBackfillJobStatus status,
         long currentPage,
@@ -49,7 +49,7 @@ public record MetadataBackfillJobRecord(
     public MetadataBackfillJobRecord {
         jobId = Objects.requireNonNullElse(jobId, "");
         tenantId = Objects.requireNonNullElse(tenantId, "");
-        knowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, "");
+        knowledgeBaseId = Objects.requireNonNullElse(knowledgeBaseId, 0L);
         pipelineId = Objects.requireNonNullElse(pipelineId, "");
         status = Objects.requireNonNullElse(status, MetadataBackfillJobStatus.PENDING);
         currentPage = Math.max(1L, currentPage);

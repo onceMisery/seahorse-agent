@@ -76,16 +76,70 @@ class AdvancedFeatureGateTests {
                 "enterprise-platform",
                 false,
                 false,
-                false,
-                false,
-                false,
-                false,
                 true,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
                 false,
                 false,
                 false);
 
         assertThat(gate.isEnabled(AdvancedFeature.MCP_TOOL)).isTrue();
         assertThat(gate.isEnabled(AdvancedFeature.SANDBOX)).isFalse();
+    }
+
+    @Test
+    void governanceConfigurationShouldMapEveryAdvancedFeatureFlag() {
+        SeahorseWebGovernanceConfiguration configuration = new SeahorseWebGovernanceConfiguration(false);
+
+        AdvancedFeatureGate gate = configuration.seahorseAdvancedFeatureGate(
+                "enterprise-platform",
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true);
+
+        for (AdvancedFeature feature : AdvancedFeature.values()) {
+            assertThat(gate.isEnabled(feature)).as(feature.name()).isTrue();
+        }
     }
 }

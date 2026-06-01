@@ -26,7 +26,7 @@ import java.util.Optional;
  */
 public interface DocumentRefreshSchedulePort {
 
-    Optional<DocumentRefreshSchedule> findByDocumentId(String docId);
+    Optional<DocumentRefreshSchedule> findByDocumentId(Long docId);
 
     List<DocumentRefreshSchedule> findDueSchedules(Instant now, int limit);
 
@@ -34,7 +34,7 @@ public interface DocumentRefreshSchedulePort {
 
     void updateState(DocumentRefreshScheduleUpdate update);
 
-    default void disableByDocumentId(String docId, String reason) {
+    default void disableByDocumentId(Long docId, String reason) {
         findByDocumentId(docId).ifPresent(schedule -> updateState(new DocumentRefreshScheduleUpdate(
                 schedule.id(), "failed", reason, Instant.now(), null,
                 schedule.lastContentHash(), schedule.lastEtag(), schedule.lastModified())));
@@ -43,7 +43,7 @@ public interface DocumentRefreshSchedulePort {
     static DocumentRefreshSchedulePort noop() {
         return new DocumentRefreshSchedulePort() {
             @Override
-            public Optional<DocumentRefreshSchedule> findByDocumentId(String docId) {
+            public Optional<DocumentRefreshSchedule> findByDocumentId(Long docId) {
                 return Optional.empty();
             }
 

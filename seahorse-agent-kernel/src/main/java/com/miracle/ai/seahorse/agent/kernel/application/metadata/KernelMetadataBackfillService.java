@@ -144,7 +144,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     @Override
     public MetadataBackfillJobRecord createJob(MetadataBackfillCommand command) {
         MetadataBackfillCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
-        String kbId = requireText(safeCommand.knowledgeBaseId(), "knowledgeBaseId");
+        Long kbId = Long.parseLong(Objects.requireNonNull(safeCommand.knowledgeBaseId(), "knowledgeBaseId must not be null"));
         int batchSize = normalizeBatchSize(safeCommand.batchSize());
         Instant now = Instant.now();
         MetadataBackfillJobRecord job = new MetadataBackfillJobRecord(
@@ -259,9 +259,9 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     @Override
     public String requestReExtract(MetadataReviewReExtractRequest request) {
         MetadataReviewReExtractRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        requireText(safeRequest.documentId(), "documentId");
+        Objects.requireNonNull(safeRequest.documentId(), "documentId must not be null");
         Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("documentIds", List.of(safeRequest.documentId()));
+        metadata.put("documentIds", List.of(String.valueOf(safeRequest.documentId())));
         metadata.put("sourceReviewItemId", safeRequest.reviewItemId());
         metadata.put("extractorVersion", requireText(safeRequest.extractorVersion(), "extractorVersion"));
         if (hasText(safeRequest.llmExtractorVersion())) {
@@ -275,7 +275,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         metadata.put("reExtract", true);
         MetadataBackfillJobRecord job = createJob(new MetadataBackfillCommand(
                 safeRequest.tenantId(),
-                safeRequest.knowledgeBaseId(),
+                String.valueOf(safeRequest.knowledgeBaseId()),
                 safeRequest.pipelineId(),
                 MAX_BATCH_SIZE,
                 defaultText(safeRequest.operator(), DEFAULT_OPERATOR),
@@ -289,7 +289,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                 job.knowledgeBaseId(), job.currentPage(), job.batchSize(), null, null);
         if (page.records().isEmpty()) {
             MetadataBackfillJobRecord completed = accumulator.toRecord(MetadataBackfillJobStatus.COMPLETED,
-                    job.currentPage(), checkpoint(job.currentPage(), "", job.checkpoint()));
+                    job.currentPage(), checkpoint(job.currentPage(), null, job.checkpoint()));
             jobRepositoryPort.save(completed);
             return completed;
         }
@@ -310,7 +310,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
             accumulator.apply(document, outcome);
             // 每处理一个文档就推进断点，降低批量回填中断后的重复扫描范围。
             jobRepositoryPort.save(accumulator.toRecord(MetadataBackfillJobStatus.RUNNING, job.currentPage(),
-                    checkpoint(job.currentPage(), document == null ? "" : document.getId(), job.checkpoint())));
+                    checkpoint(job.currentPage(), document == null ? null : document.getId(), job.checkpoint())));
         }
         long nextPage = job.currentPage() + 1;
         boolean completed = page.pages() > 0
@@ -320,7 +320,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
                 ? MetadataBackfillJobStatus.COMPLETED
                 : MetadataBackfillJobStatus.PENDING;
         MetadataBackfillJobRecord result = accumulator.toRecord(nextStatus, completed ? job.currentPage() : nextPage,
-                checkpoint(completed ? job.currentPage() : nextPage, "", job.checkpoint()));
+                checkpoint(completed ? job.currentPage() : nextPage, null, job.checkpoint()));
         jobRepositoryPort.save(result);
         return result;
     }
@@ -331,8 +331,8 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
             return List.of();
         }
         Map<String, Object> checkpoint = Objects.requireNonNullElse(job.checkpoint(), Map.of());
-        String lastDocumentId = textValue(checkpoint.get("lastDocumentId"), "");
-        if (!hasText(lastDocumentId) || longValue(checkpoint.get("currentPage"), job.currentPage()) != job.currentPage()) {
+        Long lastDocumentId = longValue(checkpoint.get("lastDocumentId"), 0L);
+        if (lastDocumentId == 0L || longValue(checkpoint.get("currentPage"), job.currentPage()) != job.currentPage()) {
             return targetDocuments(job, records);
         }
         for (int index = 0; index < records.size(); index++) {
@@ -349,7 +349,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
 
     private List<KnowledgeDocumentDetail> targetDocuments(MetadataBackfillJobRecord job,
                                                           List<KnowledgeDocumentDetail> records) {
-        Set<String> targetDocumentIds = targetDocumentIds(job.checkpoint());
+        Set<Long> targetDocumentIds = targetDocumentIds(job.checkpoint());
         if (targetDocumentIds.isEmpty()) {
             return records;
         }
@@ -360,7 +360,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     }
 
     private DocumentOutcome processDocument(MetadataBackfillJobRecord job, KnowledgeDocumentDetail document) {
-        if (document == null || !hasText(document.getId())) {
+        if (document == null || document.getId() == null) {
             return DocumentOutcome.skipped("document missing");
         }
         if (Boolean.FALSE.equals(document.getEnabled())) {
@@ -450,8 +450,8 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         try {
             quarantinePort.quarantine(new MetadataQuarantineItem(
                     job.tenantId(),
-                    job.knowledgeBaseId(),
-                    document.getId(),
+                    String.valueOf(job.knowledgeBaseId()),
+                    String.valueOf(document.getId()),
                     job.jobId(),
                     stage,
                     "BACKFILL_DOCUMENT_FAILED",
@@ -490,7 +490,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         copyCheckpointMetadata(job.checkpoint(), metadata, KEY_SCHEMA_TRIGGER_ACTION);
         copyCheckpointMetadata(job.checkpoint(), metadata, KEY_SCHEMA_TRIGGER_FIELD_KEY);
         return IngestionContext.builder()
-                .taskId(document.getId())
+                .taskId(String.valueOf(document.getId()))
                 .pipelineId(defaultText(job.pipelineId(), document.getPipelineId()))
                 .rawBytes(fileBytes)
                 .mimeType(document.getFileType())
@@ -571,7 +571,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     }
 
     private Map<String, Object> initialCheckpoint(Map<String, Object> metadata) {
-        Map<String, Object> checkpoint = checkpoint(1L, "", metadata);
+        Map<String, Object> checkpoint = checkpoint(1L, null, metadata);
         checkpoint.put("schemaVersion", intValue(metadata.get("schemaVersion"), 1));
         checkpoint.put("extractorVersion", textValue(metadata.get("extractorVersion"), ""));
         copyCheckpointOption(metadata, checkpoint, "llmExtractorVersion");
@@ -592,14 +592,14 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         return checkpoint;
     }
 
-    private Map<String, Object> checkpoint(long currentPage, String lastDocumentId) {
+    private Map<String, Object> checkpoint(long currentPage, Long lastDocumentId) {
         return checkpoint(currentPage, lastDocumentId, Map.of());
     }
 
-    private Map<String, Object> checkpoint(long currentPage, String lastDocumentId, Map<String, Object> previous) {
+    private Map<String, Object> checkpoint(long currentPage, Long lastDocumentId, Map<String, Object> previous) {
         Map<String, Object> checkpoint = new LinkedHashMap<>();
         checkpoint.put("currentPage", currentPage);
-        checkpoint.put("lastDocumentId", Objects.requireNonNullElse(lastDocumentId, ""));
+        checkpoint.put("lastDocumentId", Objects.requireNonNullElse(lastDocumentId, 0L));
         copyCheckpointOption(previous, checkpoint, "schemaVersion");
         copyCheckpointOption(previous, checkpoint, "extractorVersion");
         copyCheckpointOption(previous, checkpoint, "llmExtractorVersion");
@@ -623,12 +623,12 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         }
     }
 
-    private Set<String> targetDocumentIds(Map<String, Object> checkpoint) {
+    private Set<Long> targetDocumentIds(Map<String, Object> checkpoint) {
         if (checkpoint == null || !checkpoint.containsKey("documentIds")) {
             return Set.of();
         }
         Object value = checkpoint.get("documentIds");
-        Set<String> ids = new LinkedHashSet<>();
+        Set<Long> ids = new LinkedHashSet<>();
         if (value instanceof Iterable<?> iterable) {
             for (Object item : iterable) {
                 addDocumentId(ids, item);
@@ -642,10 +642,14 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
         return Set.copyOf(ids);
     }
 
-    private void addDocumentId(Set<String> ids, Object value) {
+    private void addDocumentId(Set<Long> ids, Object value) {
         String text = textValue(value, "");
         if (hasText(text)) {
-            ids.add(text.trim());
+            try {
+                ids.add(Long.parseLong(text.trim()));
+            } catch (NumberFormatException e) {
+                // ignore invalid ids
+            }
         }
     }
 
@@ -757,7 +761,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
     private Map<String, String> lowCardinalityBackfillAttributes(MetadataBackfillJobRecord job) {
         Map<String, String> attributes = new LinkedHashMap<>();
         attributes.put("tenantId", job.tenantId());
-        attributes.put("knowledgeBaseId", job.knowledgeBaseId());
+        attributes.put("knowledgeBaseId", String.valueOf(job.knowledgeBaseId()));
         attributes.put("status", job.status().name());
         putCheckpointAttribute(attributes, job, "schemaVersion");
         putCheckpointAttribute(attributes, job, "extractorVersion");
@@ -867,7 +871,7 @@ public class KernelMetadataBackfillService implements MetadataBackfillInboundPor
             }
             if (!outcome.success()) {
                 failedDocuments++;
-                String docId = document == null ? "" : Objects.requireNonNullElse(document.getId(), "");
+                String docId = document == null ? "" : String.valueOf(Objects.requireNonNullElse(document.getId(), 0L));
                 failures.add(docId + ": " + outcome.message());
                 return;
             }

@@ -91,7 +91,7 @@ class ConnectorAdminOnlyTests {
     }
 
     private static CurrentUserPort normalUser() {
-        return () -> Optional.of(new CurrentUser("user-1", "alice", "user", null));
+        return () -> Optional.of(new CurrentUser(1L, "alice", "user", null));
     }
 
     private static final class StubOpenApiSpecParser implements OpenApiSpecParserPort {

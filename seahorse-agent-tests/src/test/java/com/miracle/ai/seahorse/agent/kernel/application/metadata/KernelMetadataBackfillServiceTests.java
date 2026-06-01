@@ -71,17 +71,17 @@ class KernelMetadataBackfillServiceTests {
     @Test
     void shouldRunPagedBackfillAndUpdateCheckpoint() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
-        documents.add(document("doc-2", true, "pipe-1"));
-        documents.add(document("doc-3", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
+        documents.add(document(2L, true, "pipe-1"));
+        documents.add(document(3L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         KernelMetadataBackfillService service = service(documents, jobs, Map.of(
-                "doc-1", MetadataValidationDecision.ACCEPT,
-                "doc-2", MetadataValidationDecision.REVIEW_REQUIRED,
-                "doc-3", MetadataValidationDecision.QUARANTINE));
+                "1", MetadataValidationDecision.ACCEPT,
+                "2", MetadataValidationDecision.REVIEW_REQUIRED,
+                "3", MetadataValidationDecision.QUARANTINE));
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 2, "admin", Map.of()));
+                "tenant-1", "1", "pipe-1", 2, "admin", Map.of()));
         MetadataBackfillRunResult firstBatch = service.runNextBatch(job.jobId());
 
         assertThat(firstBatch.status()).isEqualTo(MetadataBackfillJobStatus.PENDING);
@@ -89,7 +89,7 @@ class KernelMetadataBackfillServiceTests {
         assertThat(firstBatch.processedDocuments()).isEqualTo(2);
         assertThat(firstBatch.reviewDocuments()).isEqualTo(1);
         assertThat(firstBatch.checkpoint()).containsEntry("currentPage", 2L);
-        assertThat(documents.successDocuments).containsExactly("doc-1", "doc-2");
+        assertThat(documents.successDocuments).containsExactly(1L, 2L);
 
         MetadataBackfillRunResult secondBatch = service.runNextBatch(job.jobId());
 
@@ -104,14 +104,14 @@ class KernelMetadataBackfillServiceTests {
     @Test
     void shouldKeepProcessingWhenOneDocumentFails() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
-        documents.add(document("doc-2", true, "pipe-1"));
-        documents.add(document("doc-3", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
+        documents.add(document(2L, true, "pipe-1"));
+        documents.add(document(3L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
-        KernelMetadataBackfillService service = serviceWithFailure(documents, jobs, "doc-2");
+        KernelMetadataBackfillService service = serviceWithFailure(documents, jobs, "2");
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+                "tenant-1", "1", "pipe-1", 10, "admin", Map.of()));
         MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
 
         assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
@@ -119,8 +119,8 @@ class KernelMetadataBackfillServiceTests {
         assertThat(result.succeededDocuments()).isEqualTo(2);
         assertThat(result.failedDocuments()).isEqualTo(1);
         assertThat(result.failures()).singleElement().asString().contains("doc-2").contains("boom");
-        assertThat(documents.failedDocuments).containsExactly("doc-2");
-        assertThat(documents.successDocuments).containsExactly("doc-1", "doc-3");
+        assertThat(documents.failedDocuments).containsExactly(2L);
+        assertThat(documents.successDocuments).containsExactly(1L, 3L);
     }
 
     @Test
@@ -135,7 +135,7 @@ class KernelMetadataBackfillServiceTests {
                 jobs);
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+                "tenant-1", "1", "pipe-1", 10, "admin", Map.of()));
         MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
 
         assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.FAILED);
@@ -148,14 +148,14 @@ class KernelMetadataBackfillServiceTests {
     @Test
     void shouldQuarantineFailedDocumentDuringBackfill() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         List<MetadataQuarantineItem> quarantines = new ArrayList<>();
         KernelMetadataBackfillService service = serviceWithFailure(
-                documents, jobs, "doc-1", quarantines::add);
+                documents, jobs, "1", quarantines::add);
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+                "tenant-1", "1", "pipe-1", 10, "admin", Map.of()));
         MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
 
         assertThat(result.failedDocuments()).isEqualTo(1);
@@ -172,13 +172,13 @@ class KernelMetadataBackfillServiceTests {
     @Test
     void shouldPauseBackfillWhenMetadataSchemaMissing() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         List<MetadataQuarantineItem> quarantines = new ArrayList<>();
         KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
         when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
             IngestionContext context = invocation.getArgument(1);
-            context.setError(new MetadataSchemaMissingException("tenant-1", "kb-1"));
+            context.setError(new MetadataSchemaMissingException("tenant-1", 1L));
             return context;
         });
         KernelMetadataBackfillService service = new KernelMetadataBackfillService(
@@ -192,26 +192,26 @@ class KernelMetadataBackfillServiceTests {
                 null);
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+                "tenant-1", "1", "pipe-1", 10, "admin", Map.of()));
         MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
 
         assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.PAUSED);
         assertThat(result.processedDocuments()).isZero();
         assertThat(result.failures()).singleElement().asString().contains("metadata schema missing");
         assertThat(result.checkpoint()).containsEntry("pauseReason", "SCHEMA_MISSING");
-        assertThat(documents.failedDocuments).containsExactly("doc-1");
+        assertThat(documents.failedDocuments).containsExactly(1L);
         assertThat(quarantines).isEmpty();
     }
 
     @Test
     void shouldHonorPauseAndResume() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         KernelMetadataBackfillService service = service(documents, jobs, Map.of());
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+                "tenant-1", "1", "pipe-1", 10, "admin", Map.of()));
         service.pause(job.jobId(), "ops");
 
         MetadataBackfillRunResult paused = service.runNextBatch(job.jobId());
@@ -223,13 +223,13 @@ class KernelMetadataBackfillServiceTests {
 
         assertThat(resumed.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
         assertThat(resumed.succeededDocuments()).isEqualTo(1);
-        assertThat(documents.runningDocuments).containsExactly("doc-1");
+        assertThat(documents.runningDocuments).containsExactly(1L);
     }
 
     @Test
     void shouldRecordBackfillLifecycleAndBatchObservationEvents() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         RecordingObservationPort observationPort = new RecordingObservationPort();
         KernelMetadataBackfillService service = new KernelMetadataBackfillService(
@@ -243,13 +243,13 @@ class KernelMetadataBackfillServiceTests {
                 observationPort);
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin",
+                "tenant-1", "1", "pipe-1", 10, "admin",
                 Map.of("schemaVersion", 3, "extractorVersion", "extractor-v2", "reExtract", true)));
         service.pause(job.jobId(), "ops");
         service.resume(job.jobId(), "ops");
         MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
         MetadataBackfillJobRecord cancelledJob = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+                "tenant-1", "1", "pipe-1", 10, "admin", Map.of()));
         service.cancel(cancelledJob.jobId(), "ops");
 
         assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
@@ -292,7 +292,7 @@ class KernelMetadataBackfillServiceTests {
     @Test
     void shouldPreserveSchemaCompensationMetadataInCheckpointAndObservation() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         RecordingObservationPort observationPort = new RecordingObservationPort();
         KernelMetadataBackfillService service = new KernelMetadataBackfillService(
@@ -306,7 +306,7 @@ class KernelMetadataBackfillServiceTests {
                 observationPort);
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "", 10, "schema-ops",
+                "tenant-1", "1", "", 10, "schema-ops",
                 Map.of(
                         "schemaVersion", 6,
                         "schemaCompensation", true,
@@ -342,9 +342,9 @@ class KernelMetadataBackfillServiceTests {
         KernelMetadataBackfillService service = service(documents, jobs, Map.of());
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin", Map.of()));
+                "tenant-1", "1", "pipe-1", 10, "admin", Map.of()));
         MetadataBackfillJobPage page = service.pageJobs(new MetadataBackfillJobQuery(
-                "tenant-1", "kb-1", MetadataBackfillJobStatus.PENDING, 1, 10));
+                "tenant-1", 1L, MetadataBackfillJobStatus.PENDING, 1, 10));
 
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.records()).extracting(MetadataBackfillJobRecord::jobId).containsExactly(job.jobId());
@@ -355,13 +355,13 @@ class KernelMetadataBackfillServiceTests {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         jobs.overview = new MetadataBackfillOperationsOverview(
-                "tenant-1", "kb-1",
+                "tenant-1", 1L,
                 2, 8, 6, 1, 1, 2, 1,
                 3, 1, 2, 1, 1, 2,
                 List.of(), List.of(), List.of(), null, null, Instant.EPOCH);
         KernelMetadataBackfillService service = service(documents, jobs, Map.of());
 
-        MetadataBackfillOperationsOverview overview = service.overview("tenant-1", "kb-1");
+        MetadataBackfillOperationsOverview overview = service.overview("tenant-1", 1L);
 
         assertThat(overview.totalJobs()).isEqualTo(2);
         assertThat(overview.pendingReviewItems()).isEqualTo(3);
@@ -375,17 +375,17 @@ class KernelMetadataBackfillServiceTests {
         KernelMetadataBackfillService service = service(documents, jobs, Map.of());
         Instant now = Instant.parse("2026-05-15T00:00:00Z");
         jobs.create(new MetadataBackfillJobRecord(
-                "job-reextract", "tenant-1", "kb-1", "pipe-1", MetadataBackfillJobStatus.PAUSED,
+                "job-reextract", "tenant-1", 1L, "pipe-1", MetadataBackfillJobStatus.PAUSED,
                 1, 50, 1, 0, 1, 0, 0, 0,
-                Map.of("documentIds", List.of("doc-9"), "pauseReason", "SCHEMA_MISSING", "reExtract", true),
-                List.of("doc-9: metadata schema missing"), "auditor", now, now));
+                Map.of("documentIds", List.of("9"), "pauseReason", "SCHEMA_MISSING", "reExtract", true),
+                List.of("9: metadata schema missing"), "auditor", now, now));
         jobs.create(new MetadataBackfillJobRecord(
-                "job-normal", "tenant-1", "kb-1", "pipe-1", MetadataBackfillJobStatus.COMPLETED,
+                "job-normal", "tenant-1", 1L, "pipe-1", MetadataBackfillJobStatus.COMPLETED,
                 1, 50, 1, 1, 0, 0, 0, 0, Map.of("currentPage", 1),
                 List.of(), "admin", now, now));
 
         MetadataBackfillJobPage page = service.pageJobs(new MetadataBackfillJobQuery(
-                "tenant-1", "kb-1", null, "pipe-1", "auditor", "doc-9",
+                "tenant-1", 1L, null, "pipe-1", "auditor", "9",
                 "SCHEMA_MISSING", "schema", true, true, 1, 10));
 
         assertThat(page.records()).extracting(MetadataBackfillJobRecord::jobId).containsExactly("job-reextract");
@@ -394,15 +394,15 @@ class KernelMetadataBackfillServiceTests {
     @Test
     void shouldSkipAcceptedDocumentWithSameSchemaAndExtractorVersion() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
-        documents.add(document("doc-2", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
+        documents.add(document(2L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         InMemoryExtractionResultRepository results = new InMemoryExtractionResultRepository();
-        results.accept("tenant-1", "kb-1", "doc-1", 3, "extractor-v2");
+        results.accept("tenant-1", 1L, "1", 3, "extractor-v2");
         KernelMetadataBackfillService service = service(documents, jobs, results, Map.of());
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin",
+                "tenant-1", "1", "pipe-1", 10, "admin",
                 Map.of("schemaVersion", 3, "extractorVersion", "extractor-v2")));
         MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
 
@@ -410,33 +410,33 @@ class KernelMetadataBackfillServiceTests {
         assertThat(result.processedDocuments()).isEqualTo(2);
         assertThat(result.skippedDocuments()).isEqualTo(1);
         assertThat(result.succeededDocuments()).isEqualTo(1);
-        assertThat(documents.runningDocuments).containsExactly("doc-2");
+        assertThat(documents.runningDocuments).containsExactly(2L);
     }
 
     @Test
     void shouldRerunAcceptedDocumentWhenOverwriteApprovedEnabled() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         InMemoryExtractionResultRepository results = new InMemoryExtractionResultRepository();
-        results.accept("tenant-1", "kb-1", "doc-1", 3, "extractor-v2");
+        results.accept("tenant-1", 1L, "1", 3, "extractor-v2");
         KernelMetadataBackfillService service = service(documents, jobs, results, Map.of());
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin",
+                "tenant-1", "1", "pipe-1", 10, "admin",
                 Map.of("schemaVersion", 3, "extractorVersion", "extractor-v2", "overwriteApproved", true)));
         MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
 
         assertThat(result.skippedDocuments()).isZero();
         assertThat(result.succeededDocuments()).isEqualTo(1);
         assertThat(result.checkpoint()).containsEntry("overwriteApproved", true);
-        assertThat(documents.runningDocuments).containsExactly("doc-1");
+        assertThat(documents.runningDocuments).containsExactly(1L);
     }
 
     @Test
     void shouldPropagateLlmExtractionVersionsToBackfillContext() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         List<Map<String, Object>> contextMetadata = new ArrayList<>();
         KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
@@ -459,7 +459,7 @@ class KernelMetadataBackfillServiceTests {
                 null);
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin",
+                "tenant-1", "1", "pipe-1", 10, "admin",
                 Map.of(
                         "extractorVersion", "extractor-v2",
                         "llmExtractorVersion", "llm-v3",
@@ -481,8 +481,8 @@ class KernelMetadataBackfillServiceTests {
     @Test
     void shouldCreateSingleDocumentBackfillJobForReviewReExtract() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
-        documents.add(document("doc-2", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
+        documents.add(document(2L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         List<Map<String, Object>> contextMetadata = new ArrayList<>();
         KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
@@ -505,7 +505,7 @@ class KernelMetadataBackfillServiceTests {
                 null);
 
         String jobId = service.requestReExtract(new MetadataReviewReExtractRequest(
-                "tenant-1", "kb-1", "doc-2", "review-1", "extractor-v2", "pipe-1",
+                "tenant-1", 1L, 2L, "review-1", "extractor-v2", "pipe-1",
                 "llm-v2", "prompt-v2", "auditor"));
         MetadataBackfillJobRecord created = jobs.findById(jobId).orElseThrow();
         MetadataBackfillRunResult result = service.runNextBatch(jobId);
@@ -521,7 +521,7 @@ class KernelMetadataBackfillServiceTests {
         assertThat(created.checkpoint().get("documentIds")).isEqualTo(List.of("doc-2"));
         assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
         assertThat(result.processedDocuments()).isEqualTo(1);
-        assertThat(documents.runningDocuments).containsExactly("doc-2");
+        assertThat(documents.runningDocuments).containsExactly(2L);
         assertThat(contextMetadata).hasSize(1);
         assertThat(contextMetadata.get(0))
                 .containsEntry("sourceReviewItemId", "review-1")
@@ -534,18 +534,17 @@ class KernelMetadataBackfillServiceTests {
     @Test
     void shouldResumeCurrentPageAfterCheckpointDocument() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
-        documents.add(document("doc-2", true, "pipe-1"));
-        documents.add(document("doc-3", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
+        documents.add(document(2L, true, "pipe-1"));
+        documents.add(document(3L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         KernelMetadataBackfillService service = service(documents, jobs, Map.of());
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 3, "admin", Map.of()));
+                "tenant-1", "1", "pipe-1", 3, "admin", Map.of()));
         Map<String, Object> checkpoint = new LinkedHashMap<>(job.checkpoint());
         checkpoint.put("currentPage", 1L);
-        checkpoint.put("lastDocumentId", "doc-2");
-        // 模拟进程在同一页处理完 doc-2 后中断，恢复时应从 doc-3 继续，而不是重跑 doc-1/doc-2。
+        checkpoint.put("lastDocumentId", "2");
         jobs.save(new MetadataBackfillJobRecord(
                 job.jobId(), job.tenantId(), job.knowledgeBaseId(), job.pipelineId(),
                 MetadataBackfillJobStatus.RUNNING, 1L, job.batchSize(), 2, 2,
@@ -557,38 +556,38 @@ class KernelMetadataBackfillServiceTests {
         assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
         assertThat(result.processedDocuments()).isEqualTo(3);
         assertThat(result.succeededDocuments()).isEqualTo(3);
-        assertThat(documents.runningDocuments).containsExactly("doc-3");
+        assertThat(documents.runningDocuments).containsExactly(3L);
     }
 
     @Test
     void shouldRerunDocumentWhenSchemaVersionChanges() {
         InMemoryDocumentRepository documents = new InMemoryDocumentRepository();
-        documents.add(document("doc-1", true, "pipe-1"));
+        documents.add(document(1L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         InMemoryExtractionResultRepository results = new InMemoryExtractionResultRepository();
-        results.accept("tenant-1", "kb-1", "doc-1", 3, "extractor-v2");
+        results.accept("tenant-1", 1L, "1", 3, "extractor-v2");
         KernelMetadataBackfillService service = service(documents, jobs, results, Map.of());
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
-                "tenant-1", "kb-1", "pipe-1", 10, "admin",
+                "tenant-1", "1", "pipe-1", 10, "admin",
                 Map.of("schemaVersion", 4, "extractorVersion", "extractor-v2")));
         MetadataBackfillRunResult result = service.runNextBatch(job.jobId());
 
         assertThat(result.skippedDocuments()).isZero();
         assertThat(result.succeededDocuments()).isEqualTo(1);
-        assertThat(documents.runningDocuments).containsExactly("doc-1");
+        assertThat(documents.runningDocuments).containsExactly(1L);
     }
 
     private static KernelMetadataBackfillService service(InMemoryDocumentRepository documents,
-                                                         InMemoryBackfillJobRepository jobs,
-                                                         Map<String, MetadataValidationDecision> decisions) {
+                                                        InMemoryBackfillJobRepository jobs,
+                                                        Map<String, MetadataValidationDecision> decisions) {
         return service(documents, jobs, MetadataExtractionResultRepositoryPort.noop(), decisions);
     }
 
     private static KernelMetadataBackfillService service(InMemoryDocumentRepository documents,
-                                                         InMemoryBackfillJobRepository jobs,
-                                                         MetadataExtractionResultRepositoryPort results,
-                                                         Map<String, MetadataValidationDecision> decisions) {
+                                                        InMemoryBackfillJobRepository jobs,
+                                                        MetadataExtractionResultRepositoryPort results,
+                                                        Map<String, MetadataValidationDecision> decisions) {
         KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
         when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
             IngestionContext context = invocation.getArgument(1);
@@ -609,15 +608,15 @@ class KernelMetadataBackfillServiceTests {
     }
 
     private static KernelMetadataBackfillService serviceWithFailure(InMemoryDocumentRepository documents,
-                                                                    InMemoryBackfillJobRepository jobs,
-                                                                    String failedDocId) {
+                                                                  InMemoryBackfillJobRepository jobs,
+                                                                  String failedDocId) {
         return serviceWithFailure(documents, jobs, failedDocId, MetadataQuarantinePort.noop());
     }
 
     private static KernelMetadataBackfillService serviceWithFailure(InMemoryDocumentRepository documents,
-                                                                    InMemoryBackfillJobRepository jobs,
-                                                                    String failedDocId,
-                                                                    MetadataQuarantinePort quarantinePort) {
+                                                                  InMemoryBackfillJobRepository jobs,
+                                                                  String failedDocId,
+                                                                  MetadataQuarantinePort quarantinePort) {
         KernelIngestionEngine engine = mock(KernelIngestionEngine.class);
         when(engine.execute(any(PipelineDefinition.class), any(IngestionContext.class))).thenAnswer(invocation -> {
             IngestionContext context = invocation.getArgument(1);
@@ -660,10 +659,10 @@ class KernelMetadataBackfillServiceTests {
                 .build());
     }
 
-    private static KnowledgeDocumentDetail document(String docId, boolean enabled, String pipelineId) {
+    private static KnowledgeDocumentDetail document(Long docId, boolean enabled, String pipelineId) {
         KnowledgeDocumentDetail detail = new KnowledgeDocumentDetail();
         detail.setId(docId);
-        detail.setKbId("kb-1");
+        detail.setKbId(1L);
         detail.setDocName(docId + ".txt");
         detail.setCollectionName("collection-1");
         detail.setEnabled(enabled);
@@ -693,8 +692,7 @@ class KernelMetadataBackfillServiceTests {
         public MetadataBackfillJobPage page(MetadataBackfillJobQuery query) {
             List<MetadataBackfillJobRecord> matched = records.values().stream()
                     .filter(record -> query.tenantId().isBlank() || query.tenantId().equals(record.tenantId()))
-                    .filter(record -> query.knowledgeBaseId().isBlank()
-                            || query.knowledgeBaseId().equals(record.knowledgeBaseId()))
+                    .filter(record -> query.knowledgeBaseId() == null || query.knowledgeBaseId().equals(record.knowledgeBaseId()))
                     .filter(record -> query.status() == null || query.status().equals(record.status()))
                     .filter(record -> query.pipelineId().isBlank() || query.pipelineId().equals(record.pipelineId()))
                     .filter(record -> query.operator().isBlank() || query.operator().equals(record.operator()))
@@ -748,7 +746,7 @@ class KernelMetadataBackfillServiceTests {
 
         private final List<MetadataExtractionRecord> records = new ArrayList<>();
 
-        void accept(String tenantId, String kbId, String docId, int schemaVersion, String extractorVersion) {
+        void accept(String tenantId, Long kbId, String docId, int schemaVersion, String extractorVersion) {
             records.add(new MetadataExtractionRecord(tenantId, kbId, docId, docId, schemaVersion,
                     extractorVersion, MetadataValidationDecision.ACCEPT, Map.of(), Map.of(), List.of(), List.of()));
         }
@@ -759,7 +757,7 @@ class KernelMetadataBackfillServiceTests {
         }
 
         @Override
-        public boolean hasAcceptedResult(String tenantId, String knowledgeBaseId, String documentId,
+        public boolean hasAcceptedResult(String tenantId, Long knowledgeBaseId, String documentId,
                                          int schemaVersion, String extractorVersion) {
             return records.stream().anyMatch(record -> tenantId.equals(record.tenantId())
                     && knowledgeBaseId.equals(record.knowledgeBaseId())
@@ -796,17 +794,17 @@ class KernelMetadataBackfillServiceTests {
 
     private static final class InMemoryDocumentRepository implements KnowledgeDocumentRepositoryPort {
 
-        private final Map<String, KnowledgeDocumentDetail> documents = new LinkedHashMap<>();
-        private final List<String> runningDocuments = new ArrayList<>();
-        private final List<String> successDocuments = new ArrayList<>();
-        private final List<String> failedDocuments = new ArrayList<>();
+        private final Map<Long, KnowledgeDocumentDetail> documents = new LinkedHashMap<>();
+        private final List<Long> runningDocuments = new ArrayList<>();
+        private final List<Long> successDocuments = new ArrayList<>();
+        private final List<Long> failedDocuments = new ArrayList<>();
 
         void add(KnowledgeDocumentDetail document) {
             documents.put(document.getId(), document);
         }
 
         @Override
-        public KnowledgeDocumentPage page(String kbId, long current, long size, String status, String keyword) {
+        public KnowledgeDocumentPage page(Long kbId, long current, long size, String status, String keyword) {
             List<KnowledgeDocumentDetail> matched = documents.values().stream()
                     .filter(document -> kbId.equals(document.getKbId()))
                     .toList();
@@ -817,18 +815,18 @@ class KernelMetadataBackfillServiceTests {
         }
 
         @Override
-        public boolean markRunning(String docId, String operator) {
+        public boolean markRunning(Long docId, String operator) {
             runningDocuments.add(docId);
             return true;
         }
 
         @Override
-        public void markSuccess(String docId, int chunkCount, String operator) {
+        public void markSuccess(Long docId, int chunkCount, String operator) {
             successDocuments.add(docId);
         }
 
         @Override
-        public void markFailed(String docId, String operator, String errorMessage) {
+        public void markFailed(Long docId, String operator, String errorMessage) {
             failedDocuments.add(docId);
         }
 
@@ -838,7 +836,7 @@ class KernelMetadataBackfillServiceTests {
         }
 
         @Override
-        public Optional<KnowledgeDocumentRecord> findById(String docId) {
+        public Optional<KnowledgeDocumentRecord> findById(Long docId) {
             return Optional.empty();
         }
     }
@@ -846,21 +844,21 @@ class KernelMetadataBackfillServiceTests {
     private static final class FailingPageDocumentRepository implements KnowledgeDocumentRepositoryPort {
 
         @Override
-        public KnowledgeDocumentPage page(String kbId, long current, long size, String status, String keyword) {
+        public KnowledgeDocumentPage page(Long kbId, long current, long size, String status, String keyword) {
             throw new IllegalStateException("page unavailable");
         }
 
         @Override
-        public boolean markRunning(String docId, String operator) {
+        public boolean markRunning(Long docId, String operator) {
             return false;
         }
 
         @Override
-        public void markSuccess(String docId, int chunkCount, String operator) {
+        public void markSuccess(Long docId, int chunkCount, String operator) {
         }
 
         @Override
-        public void markFailed(String docId, String operator, String errorMessage) {
+        public void markFailed(Long docId, String operator, String errorMessage) {
         }
 
         @Override
@@ -869,7 +867,7 @@ class KernelMetadataBackfillServiceTests {
         }
 
         @Override
-        public Optional<KnowledgeDocumentRecord> findById(String docId) {
+        public Optional<KnowledgeDocumentRecord> findById(Long docId) {
             return Optional.empty();
         }
     }
