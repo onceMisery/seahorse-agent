@@ -50,8 +50,8 @@ public class SeahorseFeatureController {
 
     private String disabledReason(AdvancedFeature feature) {
         if (advancedFeatureGate.productMode() == ProductMode.CONSUMER_WEB) {
-            return "当前为消费端模式，" + feature.name() + " 不可用";
+            return "Current mode is consumer web, " + feature.name() + " is not available";
         }
-        return feature.name() + " 未在后端配置中启用";
+        return feature.name() + " is not enabled in backend configuration";
     }
 }

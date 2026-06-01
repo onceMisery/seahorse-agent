@@ -23,11 +23,11 @@ CREATE TABLE t_user (
 COMMENT ON TABLE t_user IS '绯荤粺鐢ㄦ埛琛?;
 COMMENT ON COLUMN t_user.id IS '涓婚敭ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_user.username IS '鐢ㄦ埛鍚嶏紝鍞竴';
-COMMENT ON COLUMN t_user.password IS '瀵嗙爜';
-COMMENT ON COLUMN t_user.role IS '瑙掕壊锛歛dmin/user';
-COMMENT ON COLUMN t_user.avatar IS '鐢ㄦ埛澶村儚';
-COMMENT ON COLUMN t_user.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_user.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_user.password IS '密码';
+COMMENT ON COLUMN t_user.role IS '角色：admin/user';
+COMMENT ON COLUMN t_user.avatar IS '用户头像';
+COMMENT ON COLUMN t_user.create_time IS '创建时间';
+COMMENT ON COLUMN t_user.update_time IS '更新时间';
 COMMENT ON COLUMN t_user.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 CREATE TABLE t_conversation (
@@ -42,14 +42,14 @@ CREATE TABLE t_conversation (
     CONSTRAINT uk_conversation_user UNIQUE (conversation_id, user_id)
 );
 CREATE INDEX idx_user_time ON t_conversation (user_id, last_time);
-COMMENT ON TABLE t_conversation IS '浼氳瘽鍒楄〃';
+COMMENT ON TABLE t_conversation IS '会话列表';
 COMMENT ON COLUMN t_conversation.id IS '涓婚敭ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_conversation.conversation_id IS '浼氳瘽ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_conversation.user_id IS '鐢ㄦ埛ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_conversation.title IS '浼氳瘽鍚嶇О';
+COMMENT ON COLUMN t_conversation.title IS '会话名称';
 COMMENT ON COLUMN t_conversation.last_time IS '鏈€杩戞秷鎭椂闂?;
-COMMENT ON COLUMN t_conversation.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_conversation.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_conversation.create_time IS '创建时间';
+COMMENT ON COLUMN t_conversation.update_time IS '更新时间';
 COMMENT ON COLUMN t_conversation.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 CREATE TABLE t_conversation_summary (
@@ -69,8 +69,8 @@ COMMENT ON COLUMN t_conversation_summary.conversation_id IS '浼氳瘽ID - 闆�
 COMMENT ON COLUMN t_conversation_summary.user_id IS '鐢ㄦ埛ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_conversation_summary.last_message_id IS '鎽樿鏈€鍚庢秷鎭疘D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_conversation_summary.content IS '浼氳瘽鎽樿鍐呭';
-COMMENT ON COLUMN t_conversation_summary.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_conversation_summary.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_conversation_summary.create_time IS '创建时间';
+COMMENT ON COLUMN t_conversation_summary.update_time IS '更新时间';
 COMMENT ON COLUMN t_conversation_summary.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 CREATE TABLE t_message (
@@ -92,12 +92,12 @@ COMMENT ON TABLE t_message IS '浼氳瘽娑堟伅璁板綍琛?;
 COMMENT ON COLUMN t_message.id IS '涓婚敭ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_message.conversation_id IS '浼氳瘽ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_message.user_id IS '鐢ㄦ埛ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_message.role IS '瑙掕壊锛歶ser/assistant';
+COMMENT ON COLUMN t_message.role IS '角色：user/assistant';
 COMMENT ON COLUMN t_message.content IS '娑堟伅鍐呭';
 COMMENT ON COLUMN t_message.thinking_content IS '娣卞害鎬濊€冨唴瀹?;
 COMMENT ON COLUMN t_message.thinking_duration IS '娣卞害鎬濊€冭€楁椂锛堢锛?;
-COMMENT ON COLUMN t_message.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_message.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_message.create_time IS '创建时间';
+COMMENT ON COLUMN t_message.update_time IS '更新时间';
 COMMENT ON COLUMN t_message.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 CREATE TABLE sa_conversation_attachment (
@@ -141,11 +141,11 @@ COMMENT ON COLUMN t_message_feedback.id IS '涓婚敭ID - 闆姳绠楁硶鐢�
 COMMENT ON COLUMN t_message_feedback.message_id IS '娑堟伅ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_message_feedback.conversation_id IS '浼氳瘽ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_message_feedback.user_id IS '鐢ㄦ埛ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_message_feedback.vote IS '鎶曠エ 1锛氳禐 -1锛氳俯';
+COMMENT ON COLUMN t_message_feedback.vote IS '投票 1：赞 -1：踩';
 COMMENT ON COLUMN t_message_feedback.reason IS '鍙嶉鍘熷洜';
 COMMENT ON COLUMN t_message_feedback.comment IS '鍙嶉璇勮';
-COMMENT ON COLUMN t_message_feedback.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_message_feedback.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_message_feedback.create_time IS '创建时间';
+COMMENT ON COLUMN t_message_feedback.update_time IS '更新时间';
 COMMENT ON COLUMN t_message_feedback.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 CREATE TABLE t_sample_question (
@@ -163,8 +163,8 @@ COMMENT ON COLUMN t_sample_question.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4
 COMMENT ON COLUMN t_sample_question.title IS '灞曠ず鏍囬';
 COMMENT ON COLUMN t_sample_question.description IS '鎻忚堪鎴栨彁绀?;
 COMMENT ON COLUMN t_sample_question.question IS '绀轰緥闂鍐呭';
-COMMENT ON COLUMN t_sample_question.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_sample_question.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_sample_question.create_time IS '创建时间';
+COMMENT ON COLUMN t_sample_question.update_time IS '更新时间';
 COMMENT ON COLUMN t_sample_question.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 -- ============================================
@@ -184,15 +184,15 @@ CREATE TABLE t_knowledge_base (
     CONSTRAINT uk_collection_name UNIQUE (collection_name)
 );
 CREATE INDEX idx_kb_name ON t_knowledge_base (name);
-COMMENT ON TABLE t_knowledge_base IS '鐭ヨ瘑搴撹〃';
+COMMENT ON TABLE t_knowledge_base IS '知识库表';
 COMMENT ON COLUMN t_knowledge_base.id IS '涓婚敭ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_base.name IS '鐭ヨ瘑搴撳悕绉?;
-COMMENT ON COLUMN t_knowledge_base.embedding_model IS '宓屽叆妯″瀷鏍囪瘑';
-COMMENT ON COLUMN t_knowledge_base.collection_name IS 'Collection鍚嶇О';
+COMMENT ON COLUMN t_knowledge_base.embedding_model IS '嵌入模型标识';
+COMMENT ON COLUMN t_knowledge_base.collection_name IS 'Collection名称';
 COMMENT ON COLUMN t_knowledge_base.created_by IS '鍒涘缓浜?;
 COMMENT ON COLUMN t_knowledge_base.updated_by IS '淇敼浜?;
-COMMENT ON COLUMN t_knowledge_base.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_knowledge_base.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_knowledge_base.create_time IS '创建时间';
+COMMENT ON COLUMN t_knowledge_base.update_time IS '更新时间';
 COMMENT ON COLUMN t_knowledge_base.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 CREATE TABLE t_knowledge_document (
@@ -220,28 +220,28 @@ CREATE TABLE t_knowledge_document (
     deleted          SMALLINT      NOT NULL DEFAULT 0
 );
 CREATE INDEX idx_kb_id ON t_knowledge_document (kb_id);
-COMMENT ON TABLE t_knowledge_document IS '鐭ヨ瘑搴撴枃妗ｈ〃';
+COMMENT ON TABLE t_knowledge_document IS '知识库文档表';
 COMMENT ON COLUMN t_knowledge_document.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_document.kb_id IS '鐭ヨ瘑搴揑D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_knowledge_document.doc_name IS '鏂囨。鍚嶇О';
+COMMENT ON COLUMN t_knowledge_document.doc_name IS '文档名称';
 COMMENT ON COLUMN t_knowledge_document.enabled IS '鏄惁鍚敤 1锛氬惎鐢?0锛氱鐢?;
-COMMENT ON COLUMN t_knowledge_document.chunk_count IS '鍒嗗潡鏁伴噺';
+COMMENT ON COLUMN t_knowledge_document.chunk_count IS '分块数量';
 COMMENT ON COLUMN t_knowledge_document.file_url IS '鏂囦欢瀛樺偍璺緞';
-COMMENT ON COLUMN t_knowledge_document.file_type IS '鏂囦欢绫诲瀷';
-COMMENT ON COLUMN t_knowledge_document.file_size IS '鏂囦欢澶у皬锛堝瓧鑺傦級';
-COMMENT ON COLUMN t_knowledge_document.process_mode IS '澶勭悊妯″紡锛歝hunk/pipeline';
+COMMENT ON COLUMN t_knowledge_document.file_type IS '文件类型';
+COMMENT ON COLUMN t_knowledge_document.file_size IS '文件大小（字节）';
+COMMENT ON COLUMN t_knowledge_document.process_mode IS '处理模式：chunk/pipeline';
 COMMENT ON COLUMN t_knowledge_document.status IS '鐘舵€侊細pending/running/success/failed';
-COMMENT ON COLUMN t_knowledge_document.source_type IS '鏉ユ簮绫诲瀷锛歠ile/url';
-COMMENT ON COLUMN t_knowledge_document.source_location IS '鏉ユ簮鍦板潃';
+COMMENT ON COLUMN t_knowledge_document.source_type IS '来源类型：file/url';
+COMMENT ON COLUMN t_knowledge_document.source_location IS '来源地址';
 COMMENT ON COLUMN t_knowledge_document.schedule_enabled IS '鏄惁鍚敤瀹氭椂鍒锋柊';
 COMMENT ON COLUMN t_knowledge_document.schedule_cron IS '瀹氭椂琛ㄨ揪寮?;
-COMMENT ON COLUMN t_knowledge_document.chunk_strategy IS '鍒嗗潡绛栫暐';
-COMMENT ON COLUMN t_knowledge_document.chunk_config IS '鍒嗗潡閰嶇疆JSON';
+COMMENT ON COLUMN t_knowledge_document.chunk_strategy IS '分块策略';
+COMMENT ON COLUMN t_knowledge_document.chunk_config IS '分块配置JSON';
 COMMENT ON COLUMN t_knowledge_document.pipeline_id IS 'Pipeline ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_document.created_by IS '鍒涘缓浜?;
 COMMENT ON COLUMN t_knowledge_document.updated_by IS '淇敼浜?;
-COMMENT ON COLUMN t_knowledge_document.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_knowledge_document.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_knowledge_document.create_time IS '创建时间';
+COMMENT ON COLUMN t_knowledge_document.update_time IS '更新时间';
 COMMENT ON COLUMN t_knowledge_document.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 CREATE TABLE t_knowledge_chunk (
@@ -262,11 +262,11 @@ CREATE TABLE t_knowledge_chunk (
 );
 CREATE INDEX idx_doc_id ON t_knowledge_chunk (doc_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_kb_doc ON t_knowledge_chunk (kb_id, doc_id);
-COMMENT ON TABLE t_knowledge_chunk IS '鐭ヨ瘑搴撴枃妗ｅ垎鍧楄〃';
+COMMENT ON TABLE t_knowledge_chunk IS '知识库文档分块表';
 COMMENT ON COLUMN t_knowledge_chunk.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_chunk.kb_id IS '鐭ヨ瘑搴揑D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_chunk.doc_id IS '鏂囨。ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_knowledge_chunk.chunk_index IS '鍒嗗潡搴忓彿';
+COMMENT ON COLUMN t_knowledge_chunk.chunk_index IS '分块序号';
 COMMENT ON COLUMN t_knowledge_chunk.content IS '鍒嗗潡鍐呭';
 COMMENT ON COLUMN t_knowledge_chunk.content_hash IS '鍐呭鍝堝笇';
 COMMENT ON COLUMN t_knowledge_chunk.char_count IS '瀛楃鏁?;
@@ -274,8 +274,8 @@ COMMENT ON COLUMN t_knowledge_chunk.token_count IS 'Token鏁?;
 COMMENT ON COLUMN t_knowledge_chunk.enabled IS '鏄惁鍚敤';
 COMMENT ON COLUMN t_knowledge_chunk.created_by IS '鍒涘缓浜?;
 COMMENT ON COLUMN t_knowledge_chunk.updated_by IS '淇敼浜?;
-COMMENT ON COLUMN t_knowledge_chunk.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_knowledge_chunk.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_knowledge_chunk.create_time IS '创建时间';
+COMMENT ON COLUMN t_knowledge_chunk.update_time IS '更新时间';
 COMMENT ON COLUMN t_knowledge_chunk.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 CREATE TABLE t_knowledge_document_chunk_log (
@@ -298,24 +298,24 @@ CREATE TABLE t_knowledge_document_chunk_log (
     update_time        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_doc_id_log ON t_knowledge_document_chunk_log (doc_id);
-COMMENT ON TABLE t_knowledge_document_chunk_log IS '鐭ヨ瘑搴撴枃妗ｅ垎鍧楁棩蹇楄〃';
+COMMENT ON TABLE t_knowledge_document_chunk_log IS '知识库文档分块日志表';
 COMMENT ON COLUMN t_knowledge_document_chunk_log.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_document_chunk_log.doc_id IS '鏂囨。ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_document_chunk_log.status IS '鐘舵€?;
-COMMENT ON COLUMN t_knowledge_document_chunk_log.process_mode IS '澶勭悊妯″紡';
-COMMENT ON COLUMN t_knowledge_document_chunk_log.chunk_strategy IS '鍒嗗潡绛栫暐';
+COMMENT ON COLUMN t_knowledge_document_chunk_log.process_mode IS '处理模式';
+COMMENT ON COLUMN t_knowledge_document_chunk_log.chunk_strategy IS '分块策略';
 COMMENT ON COLUMN t_knowledge_document_chunk_log.pipeline_id IS 'Pipeline ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_document_chunk_log.extract_duration IS '鎻愬彇鑰楁椂锛堟绉掞級';
 COMMENT ON COLUMN t_knowledge_document_chunk_log.chunk_duration IS '鍒嗗潡鑰楁椂锛堟绉掞級';
 COMMENT ON COLUMN t_knowledge_document_chunk_log.embed_duration IS '鍚戦噺鍖栬€楁椂锛堟绉掞級';
 COMMENT ON COLUMN t_knowledge_document_chunk_log.persist_duration IS 'DB鎸佷箙鍖栬€楁椂锛堟绉掞級';
 COMMENT ON COLUMN t_knowledge_document_chunk_log.total_duration IS '鎬昏€楁椂锛堟绉掞級';
-COMMENT ON COLUMN t_knowledge_document_chunk_log.chunk_count IS '鍒嗗潡鏁伴噺';
+COMMENT ON COLUMN t_knowledge_document_chunk_log.chunk_count IS '分块数量';
 COMMENT ON COLUMN t_knowledge_document_chunk_log.error_message IS '閿欒淇℃伅';
 COMMENT ON COLUMN t_knowledge_document_chunk_log.start_time IS '寮€濮嬫椂闂?;
-COMMENT ON COLUMN t_knowledge_document_chunk_log.end_time IS '缁撴潫鏃堕棿';
-COMMENT ON COLUMN t_knowledge_document_chunk_log.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_knowledge_document_chunk_log.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_knowledge_document_chunk_log.end_time IS '结束时间';
+COMMENT ON COLUMN t_knowledge_document_chunk_log.create_time IS '创建时间';
+COMMENT ON COLUMN t_knowledge_document_chunk_log.update_time IS '更新时间';
 
 CREATE TABLE t_knowledge_document_schedule (
     id                BIGINT       NOT NULL PRIMARY KEY,
@@ -339,7 +339,7 @@ CREATE TABLE t_knowledge_document_schedule (
 );
 CREATE INDEX idx_next_run ON t_knowledge_document_schedule (next_run_time);
 CREATE INDEX idx_lock_until ON t_knowledge_document_schedule (lock_until);
-COMMENT ON TABLE t_knowledge_document_schedule IS '鐭ヨ瘑搴撴枃妗ｅ畾鏃跺埛鏂颁换鍔¤〃';
+COMMENT ON TABLE t_knowledge_document_schedule IS '知识库文档定时刷新任务表';
 COMMENT ON COLUMN t_knowledge_document_schedule.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_document_schedule.doc_id IS '鏂囨。ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_document_schedule.kb_id IS '鐭ヨ瘑搴揑D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
@@ -355,8 +355,8 @@ COMMENT ON COLUMN t_knowledge_document_schedule.last_modified IS '涓婃淇�
 COMMENT ON COLUMN t_knowledge_document_schedule.last_content_hash IS '涓婃鍐呭鍝堝笇';
 COMMENT ON COLUMN t_knowledge_document_schedule.lock_owner IS '閿佹寔鏈夎€?;
 COMMENT ON COLUMN t_knowledge_document_schedule.lock_until IS '閿佽繃鏈熸椂闂?;
-COMMENT ON COLUMN t_knowledge_document_schedule.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_knowledge_document_schedule.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_knowledge_document_schedule.create_time IS '创建时间';
+COMMENT ON COLUMN t_knowledge_document_schedule.update_time IS '更新时间';
 
 CREATE TABLE t_knowledge_document_schedule_exec (
     id            BIGINT       NOT NULL PRIMARY KEY,
@@ -383,16 +383,16 @@ COMMENT ON COLUMN t_knowledge_document_schedule_exec.schedule_id IS '璋冨害ID
 COMMENT ON COLUMN t_knowledge_document_schedule_exec.doc_id IS '鏂囨。ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_document_schedule_exec.kb_id IS '鐭ヨ瘑搴揑D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_document_schedule_exec.status IS '鐘舵€?;
-COMMENT ON COLUMN t_knowledge_document_schedule_exec.message IS '娑堟伅';
+COMMENT ON COLUMN t_knowledge_document_schedule_exec.message IS '消息';
 COMMENT ON COLUMN t_knowledge_document_schedule_exec.start_time IS '寮€濮嬫椂闂?;
-COMMENT ON COLUMN t_knowledge_document_schedule_exec.end_time IS '缁撴潫鏃堕棿';
+COMMENT ON COLUMN t_knowledge_document_schedule_exec.end_time IS '结束时间';
 COMMENT ON COLUMN t_knowledge_document_schedule_exec.file_name IS '鏂囦欢鍚?;
-COMMENT ON COLUMN t_knowledge_document_schedule_exec.file_size IS '鏂囦欢澶у皬';
+COMMENT ON COLUMN t_knowledge_document_schedule_exec.file_size IS '文件大小';
 COMMENT ON COLUMN t_knowledge_document_schedule_exec.content_hash IS '鍐呭鍝堝笇';
 COMMENT ON COLUMN t_knowledge_document_schedule_exec.etag IS 'ETag';
 COMMENT ON COLUMN t_knowledge_document_schedule_exec.last_modified IS '鏈€鍚庝慨鏀规椂闂?;
-COMMENT ON COLUMN t_knowledge_document_schedule_exec.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_knowledge_document_schedule_exec.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_knowledge_document_schedule_exec.create_time IS '创建时间';
+COMMENT ON COLUMN t_knowledge_document_schedule_exec.update_time IS '更新时间';
 
 -- ============================================
 -- RAG Intent & Query Tables
@@ -426,14 +426,14 @@ COMMENT ON TABLE t_intent_node IS '鎰忓浘鏍戣妭鐐归厤缃〃';
 COMMENT ON COLUMN t_intent_node.id IS '鑷涓婚敭 - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_intent_node.kb_id IS '鐭ヨ瘑搴揑D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_intent_node.intent_code IS '涓氬姟鍞竴鏍囪瘑';
-COMMENT ON COLUMN t_intent_node.name IS '灞曠ず鍚嶇О';
-COMMENT ON COLUMN t_intent_node.level IS '灞傜骇 0锛欴OMAIN 1锛欳ATEGORY 2锛歍OPIC';
+COMMENT ON COLUMN t_intent_node.name IS '展示名称';
+COMMENT ON COLUMN t_intent_node.level IS '层级 0：DOMAIN 1：CATEGORY 2：TOPIC';
 COMMENT ON COLUMN t_intent_node.parent_code IS '鐖惰妭鐐规爣璇?;
 COMMENT ON COLUMN t_intent_node.description IS '璇箟鎻忚堪';
 COMMENT ON COLUMN t_intent_node.examples IS '绀轰緥闂';
-COMMENT ON COLUMN t_intent_node.collection_name IS '鍏宠仈鐨凜ollection鍚嶇О';
+COMMENT ON COLUMN t_intent_node.collection_name IS '关联的Collection名称';
 COMMENT ON COLUMN t_intent_node.top_k IS '鐭ヨ瘑搴撴绱opK';
-COMMENT ON COLUMN t_intent_node.mcp_tool_id IS 'MCP宸ュ叿ID';
+COMMENT ON COLUMN t_intent_node.mcp_tool_id IS 'MCP工具ID';
 COMMENT ON COLUMN t_intent_node.kind IS '绫诲瀷 0锛歊AG鐭ヨ瘑搴撶被 1锛歋YSTEM绯荤粺浜や簰绫?;
 COMMENT ON COLUMN t_intent_node.prompt_snippet IS '鎻愮ず璇嶇墖娈?;
 COMMENT ON COLUMN t_intent_node.prompt_template IS '鎻愮ず璇嶆ā鏉?;
@@ -442,7 +442,7 @@ COMMENT ON COLUMN t_intent_node.sort_order IS '鎺掑簭瀛楁';
 COMMENT ON COLUMN t_intent_node.enabled IS '鏄惁鍚敤 1锛氬惎鐢?0锛氱鐢?;
 COMMENT ON COLUMN t_intent_node.create_by IS '鍒涘缓浜?;
 COMMENT ON COLUMN t_intent_node.update_by IS '淇敼浜?;
-COMMENT ON COLUMN t_intent_node.create_time IS '鍒涘缓鏃堕棿';
+COMMENT ON COLUMN t_intent_node.create_time IS '创建时间';
 COMMENT ON COLUMN t_intent_node.update_time IS '淇敼鏃堕棿';
 COMMENT ON COLUMN t_intent_node.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
@@ -465,16 +465,16 @@ CREATE INDEX idx_domain ON t_query_term_mapping (domain);
 CREATE INDEX idx_source ON t_query_term_mapping (source_term);
 COMMENT ON TABLE t_query_term_mapping IS '鍏抽敭璇嶅綊涓€鍖栨槧灏勮〃';
 COMMENT ON COLUMN t_query_term_mapping.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_query_term_mapping.domain IS '棰嗗煙';
-COMMENT ON COLUMN t_query_term_mapping.source_term IS '婧愯瘝';
+COMMENT ON COLUMN t_query_term_mapping.domain IS '领域';
+COMMENT ON COLUMN t_query_term_mapping.source_term IS '源词';
 COMMENT ON COLUMN t_query_term_mapping.target_term IS '鐩爣璇?;
 COMMENT ON COLUMN t_query_term_mapping.match_type IS '鍖归厤绫诲瀷 1锛氱簿纭?2锛氭ā绯?;
 COMMENT ON COLUMN t_query_term_mapping.priority IS '浼樺厛绾?;
 COMMENT ON COLUMN t_query_term_mapping.enabled IS '鏄惁鍚敤';
-COMMENT ON COLUMN t_query_term_mapping.remark IS '澶囨敞';
+COMMENT ON COLUMN t_query_term_mapping.remark IS '备注';
 COMMENT ON COLUMN t_query_term_mapping.create_by IS '鍒涘缓浜?;
 COMMENT ON COLUMN t_query_term_mapping.update_by IS '淇敼浜?;
-COMMENT ON COLUMN t_query_term_mapping.create_time IS '鍒涘缓鏃堕棿';
+COMMENT ON COLUMN t_query_term_mapping.create_time IS '创建时间';
 COMMENT ON COLUMN t_query_term_mapping.update_time IS '淇敼鏃堕棿';
 COMMENT ON COLUMN t_query_term_mapping.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
@@ -502,19 +502,19 @@ CREATE INDEX idx_user_id_trace ON t_rag_trace_run (user_id);
 COMMENT ON TABLE t_rag_trace_run IS 'Trace 杩愯璁板綍琛?;
 COMMENT ON COLUMN t_rag_trace_run.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_rag_trace_run.trace_id IS '鍏ㄥ眬閾捐矾ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_rag_trace_run.trace_name IS '閾捐矾鍚嶇О';
-COMMENT ON COLUMN t_rag_trace_run.entry_method IS '鍏ュ彛鏂规硶';
+COMMENT ON COLUMN t_rag_trace_run.trace_name IS '链路名称';
+COMMENT ON COLUMN t_rag_trace_run.entry_method IS '入口方法';
 COMMENT ON COLUMN t_rag_trace_run.conversation_id IS '浼氳瘽ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_rag_trace_run.task_id IS '浠诲姟ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_rag_trace_run.user_id IS '鐢ㄦ埛ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_rag_trace_run.status IS 'RUNNING/SUCCESS/ERROR';
 COMMENT ON COLUMN t_rag_trace_run.error_message IS '閿欒淇℃伅';
 COMMENT ON COLUMN t_rag_trace_run.start_time IS '寮€濮嬫椂闂?;
-COMMENT ON COLUMN t_rag_trace_run.end_time IS '缁撴潫鏃堕棿';
+COMMENT ON COLUMN t_rag_trace_run.end_time IS '结束时间';
 COMMENT ON COLUMN t_rag_trace_run.duration_ms IS '鑰楁椂姣';
 COMMENT ON COLUMN t_rag_trace_run.extra_data IS '鎵╁睍瀛楁(JSON)';
-COMMENT ON COLUMN t_rag_trace_run.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_rag_trace_run.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_rag_trace_run.create_time IS '创建时间';
+COMMENT ON COLUMN t_rag_trace_run.update_time IS '更新时间';
 COMMENT ON COLUMN t_rag_trace_run.deleted IS '鏄惁鍒犻櫎';
 
 CREATE TABLE t_rag_trace_node (
@@ -543,19 +543,19 @@ COMMENT ON COLUMN t_rag_trace_node.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4�
 COMMENT ON COLUMN t_rag_trace_node.trace_id IS '鎵€灞為摼璺疘D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_rag_trace_node.node_id IS '鑺傜偣ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_rag_trace_node.parent_node_id IS '鐖惰妭鐐笽D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_rag_trace_node.depth IS '鑺傜偣娣卞害';
-COMMENT ON COLUMN t_rag_trace_node.node_type IS '鑺傜偣绫诲瀷';
-COMMENT ON COLUMN t_rag_trace_node.node_name IS '鑺傜偣鍚嶇О';
-COMMENT ON COLUMN t_rag_trace_node.class_name IS '绫诲悕';
+COMMENT ON COLUMN t_rag_trace_node.depth IS '节点深度';
+COMMENT ON COLUMN t_rag_trace_node.node_type IS '节点类型';
+COMMENT ON COLUMN t_rag_trace_node.node_name IS '节点名称';
+COMMENT ON COLUMN t_rag_trace_node.class_name IS '类名';
 COMMENT ON COLUMN t_rag_trace_node.method_name IS '鏂规硶鍚?;
 COMMENT ON COLUMN t_rag_trace_node.status IS 'RUNNING/SUCCESS/ERROR';
 COMMENT ON COLUMN t_rag_trace_node.error_message IS '閿欒淇℃伅';
 COMMENT ON COLUMN t_rag_trace_node.start_time IS '寮€濮嬫椂闂?;
-COMMENT ON COLUMN t_rag_trace_node.end_time IS '缁撴潫鏃堕棿';
+COMMENT ON COLUMN t_rag_trace_node.end_time IS '结束时间';
 COMMENT ON COLUMN t_rag_trace_node.duration_ms IS '鑰楁椂姣';
 COMMENT ON COLUMN t_rag_trace_node.extra_data IS '鎵╁睍瀛楁(JSON)';
-COMMENT ON COLUMN t_rag_trace_node.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_rag_trace_node.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_rag_trace_node.create_time IS '创建时间';
+COMMENT ON COLUMN t_rag_trace_node.update_time IS '更新时间';
 COMMENT ON COLUMN t_rag_trace_node.deleted IS '鏄惁鍒犻櫎';
 
 -- ============================================
@@ -573,13 +573,13 @@ CREATE TABLE t_ingestion_pipeline (
     deleted     SMALLINT    NOT NULL DEFAULT 0,
     CONSTRAINT uk_ingestion_pipeline_name UNIQUE (name, deleted)
 );
-COMMENT ON TABLE t_ingestion_pipeline IS '鎽勫彇娴佹按绾胯〃';
+COMMENT ON TABLE t_ingestion_pipeline IS '摄取流水线表';
 COMMENT ON COLUMN t_ingestion_pipeline.name IS '娴佹按绾垮悕绉?;
 COMMENT ON COLUMN t_ingestion_pipeline.description IS '娴佹按绾挎弿杩?;
 COMMENT ON COLUMN t_ingestion_pipeline.created_by IS '鍒涘缓浜?;
 COMMENT ON COLUMN t_ingestion_pipeline.updated_by IS '鏇存柊浜?;
-COMMENT ON COLUMN t_ingestion_pipeline.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_ingestion_pipeline.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_ingestion_pipeline.create_time IS '创建时间';
+COMMENT ON COLUMN t_ingestion_pipeline.update_time IS '更新时间';
 COMMENT ON COLUMN t_ingestion_pipeline.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 CREATE TABLE t_ingestion_pipeline_node (
@@ -598,18 +598,18 @@ CREATE TABLE t_ingestion_pipeline_node (
     CONSTRAINT uk_ingestion_pipeline_node UNIQUE (pipeline_id, node_id, deleted)
 );
 CREATE INDEX idx_ingestion_pipeline_node_pipeline ON t_ingestion_pipeline_node (pipeline_id);
-COMMENT ON TABLE t_ingestion_pipeline_node IS '鎽勫彇娴佹按绾胯妭鐐硅〃';
+COMMENT ON TABLE t_ingestion_pipeline_node IS '摄取流水线节点表';
 COMMENT ON COLUMN t_ingestion_pipeline_node.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_ingestion_pipeline_node.pipeline_id IS '娴佹按绾縄D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_ingestion_pipeline_node.node_id IS '鑺傜偣鏍囪瘑(鍚屼竴娴佹按绾垮唴鍞竴) - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_ingestion_pipeline_node.node_type IS '鑺傜偣绫诲瀷';
+COMMENT ON COLUMN t_ingestion_pipeline_node.node_type IS '节点类型';
 COMMENT ON COLUMN t_ingestion_pipeline_node.next_node_id IS '涓嬩竴涓妭鐐笽D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_ingestion_pipeline_node.settings_json IS '鑺傜偣閰嶇疆JSON';
-COMMENT ON COLUMN t_ingestion_pipeline_node.condition_json IS '鏉′欢JSON';
+COMMENT ON COLUMN t_ingestion_pipeline_node.settings_json IS '节点配置JSON';
+COMMENT ON COLUMN t_ingestion_pipeline_node.condition_json IS '条件JSON';
 COMMENT ON COLUMN t_ingestion_pipeline_node.created_by IS '鍒涘缓浜?;
 COMMENT ON COLUMN t_ingestion_pipeline_node.updated_by IS '鏇存柊浜?;
-COMMENT ON COLUMN t_ingestion_pipeline_node.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_ingestion_pipeline_node.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_ingestion_pipeline_node.create_time IS '创建时间';
+COMMENT ON COLUMN t_ingestion_pipeline_node.update_time IS '更新时间';
 COMMENT ON COLUMN t_ingestion_pipeline_node.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 CREATE TABLE t_ingestion_task (
@@ -636,20 +636,20 @@ CREATE INDEX idx_ingestion_task_status ON t_ingestion_task (status);
 COMMENT ON TABLE t_ingestion_task IS '鎽勫彇浠诲姟琛?;
 COMMENT ON COLUMN t_ingestion_task.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_ingestion_task.pipeline_id IS '娴佹按绾縄D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_ingestion_task.source_type IS '鏉ユ簮绫诲瀷';
-COMMENT ON COLUMN t_ingestion_task.source_location IS '鏉ユ簮鍦板潃鎴朥RL';
+COMMENT ON COLUMN t_ingestion_task.source_type IS '来源类型';
+COMMENT ON COLUMN t_ingestion_task.source_location IS '来源地址或URL';
 COMMENT ON COLUMN t_ingestion_task.source_file_name IS '鍘熷鏂囦欢鍚?;
 COMMENT ON COLUMN t_ingestion_task.status IS '浠诲姟鐘舵€?;
-COMMENT ON COLUMN t_ingestion_task.chunk_count IS '鍒嗗潡鏁伴噺';
+COMMENT ON COLUMN t_ingestion_task.chunk_count IS '分块数量';
 COMMENT ON COLUMN t_ingestion_task.error_message IS '閿欒淇℃伅';
-COMMENT ON COLUMN t_ingestion_task.logs_json IS '鑺傜偣鏃ュ織JSON';
-COMMENT ON COLUMN t_ingestion_task.metadata_json IS '鎵╁睍鍏冩暟鎹甁SON';
+COMMENT ON COLUMN t_ingestion_task.logs_json IS '节点日志JSON';
+COMMENT ON COLUMN t_ingestion_task.metadata_json IS '扩展元数据JSON';
 COMMENT ON COLUMN t_ingestion_task.started_at IS '寮€濮嬫椂闂?;
-COMMENT ON COLUMN t_ingestion_task.completed_at IS '瀹屾垚鏃堕棿';
+COMMENT ON COLUMN t_ingestion_task.completed_at IS '完成时间';
 COMMENT ON COLUMN t_ingestion_task.created_by IS '鍒涘缓浜?;
 COMMENT ON COLUMN t_ingestion_task.updated_by IS '鏇存柊浜?;
-COMMENT ON COLUMN t_ingestion_task.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_ingestion_task.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_ingestion_task.create_time IS '创建时间';
+COMMENT ON COLUMN t_ingestion_task.update_time IS '更新时间';
 COMMENT ON COLUMN t_ingestion_task.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 CREATE TABLE t_ingestion_task_node (
@@ -676,15 +676,15 @@ COMMENT ON COLUMN t_ingestion_task_node.id IS 'ID - 闆姳绠楁硶鐢熸垚�
 COMMENT ON COLUMN t_ingestion_task_node.task_id IS '浠诲姟ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_ingestion_task_node.pipeline_id IS '娴佹按绾縄D - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_ingestion_task_node.node_id IS '鑺傜偣鏍囪瘑 - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
-COMMENT ON COLUMN t_ingestion_task_node.node_type IS '鑺傜偣绫诲瀷';
-COMMENT ON COLUMN t_ingestion_task_node.node_order IS '鑺傜偣椤哄簭';
+COMMENT ON COLUMN t_ingestion_task_node.node_type IS '节点类型';
+COMMENT ON COLUMN t_ingestion_task_node.node_order IS '节点顺序';
 COMMENT ON COLUMN t_ingestion_task_node.status IS '鑺傜偣鐘舵€?;
 COMMENT ON COLUMN t_ingestion_task_node.duration_ms IS '鎵ц鑰楁椂(姣)';
-COMMENT ON COLUMN t_ingestion_task_node.message IS '鑺傜偣娑堟伅';
+COMMENT ON COLUMN t_ingestion_task_node.message IS '节点消息';
 COMMENT ON COLUMN t_ingestion_task_node.error_message IS '閿欒淇℃伅';
-COMMENT ON COLUMN t_ingestion_task_node.output_json IS '鑺傜偣杈撳嚭JSON(鍏ㄩ噺)';
-COMMENT ON COLUMN t_ingestion_task_node.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_ingestion_task_node.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_ingestion_task_node.output_json IS '节点输出JSON(全量)';
+COMMENT ON COLUMN t_ingestion_task_node.create_time IS '创建时间';
+COMMENT ON COLUMN t_ingestion_task_node.update_time IS '更新时间';
 COMMENT ON COLUMN t_ingestion_task_node.deleted IS '鏄惁鍒犻櫎 0锛氭甯?1锛氬垹闄?;
 
 -- ============================================
@@ -700,11 +700,11 @@ CREATE TABLE t_knowledge_vector (
 
 CREATE INDEX idx_kv_metadata ON t_knowledge_vector USING gin(metadata);
 CREATE INDEX idx_kv_embedding ON t_knowledge_vector USING hnsw (embedding vector_cosine_ops);
-COMMENT ON TABLE t_knowledge_vector IS '鐭ヨ瘑搴撳悜閲忓瓨鍌ㄨ〃';
+COMMENT ON TABLE t_knowledge_vector IS '知识库向量存储表';
 COMMENT ON COLUMN t_knowledge_vector.id IS '鍒嗗潡ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_knowledge_vector.content IS '鍒嗗潡鏂囨湰鍐呭';
 COMMENT ON COLUMN t_knowledge_vector.metadata IS '鍏冩暟鎹?;
-COMMENT ON COLUMN t_knowledge_vector.embedding IS '鍚戦噺';
+COMMENT ON COLUMN t_knowledge_vector.embedding IS '向量';
 
 -- ============================================
 -- Memory & Messaging Tables
@@ -725,7 +725,7 @@ CREATE TABLE t_outbox_event (
     deleted SMALLINT DEFAULT 0
 );
 CREATE INDEX idx_outbox_status_retry ON t_outbox_event (status, next_retry_time, create_time);
-COMMENT ON TABLE t_outbox_event IS '鍙戜欢绠变簨浠惰〃';
+COMMENT ON TABLE t_outbox_event IS '发件箱事件表';
 COMMENT ON COLUMN t_outbox_event.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 
 CREATE TABLE t_short_term_memory (
@@ -868,7 +868,7 @@ CREATE TABLE t_memory_outbox (
 );
 CREATE INDEX idx_memory_outbox_status
 ON t_memory_outbox (status, next_retry_time, create_time);
-COMMENT ON TABLE t_memory_outbox IS '璁板繂杈撳嚭绠辫〃';
+COMMENT ON TABLE t_memory_outbox IS '记忆输出箱表';
 COMMENT ON COLUMN t_memory_outbox.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_memory_outbox.user_id IS '鐢ㄦ埛ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_memory_outbox.target_id IS '鐩爣ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
@@ -1103,7 +1103,7 @@ CREATE UNIQUE INDEX uk_memory_keyword_memory
 ON t_memory_keyword_index (user_id, tenant_id, memory_id);
 CREATE INDEX idx_memory_keyword_lookup
 ON t_memory_keyword_index (user_id, tenant_id, status, update_time);
-COMMENT ON TABLE t_memory_keyword_index IS '璁板繂鍏抽敭璇嶇储寮曡〃';
+COMMENT ON TABLE t_memory_keyword_index IS '记忆关键词索引表';
 COMMENT ON COLUMN t_memory_keyword_index.id IS 'ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_memory_keyword_index.user_id IS '鐢ㄦ埛ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
 COMMENT ON COLUMN t_memory_keyword_index.memory_id IS '璁板繂ID - 闆姳绠楁硶鐢熸垚鐨?4浣嶆暣鏁?;
@@ -2091,8 +2091,8 @@ ON t_metadata_field_schema (tenant_id, kb_id, field_key)
 WHERE deleted = 0;
 
 COMMENT ON TABLE t_metadata_field_schema IS '妫€绱㈠厓鏁版嵁瀛楁 Schema 琛?;
-COMMENT ON COLUMN t_metadata_field_schema.id IS '涓婚敭 ID';
-COMMENT ON COLUMN t_metadata_field_schema.tenant_id IS '绉熸埛 ID';
+COMMENT ON COLUMN t_metadata_field_schema.id IS '主键 ID';
+COMMENT ON COLUMN t_metadata_field_schema.tenant_id IS '租户 ID';
 COMMENT ON COLUMN t_metadata_field_schema.kb_id IS '鐭ヨ瘑搴?ID锛岀┖鍊艰〃绀虹鎴风骇閫氱敤瀛楁';
 COMMENT ON COLUMN t_metadata_field_schema.field_key IS '涓氬姟鍏冩暟鎹瓧娈甸€昏緫鍚?;
 COMMENT ON COLUMN t_metadata_field_schema.display_name IS '瀛楁灞曠ず鍚嶇О';
@@ -2103,14 +2103,14 @@ COMMENT ON COLUMN t_metadata_field_schema.filterable IS '鏄惁鍏佽浣�
 COMMENT ON COLUMN t_metadata_field_schema.sortable IS '鏄惁鍏佽鎺掑簭';
 COMMENT ON COLUMN t_metadata_field_schema.facetable IS '鏄惁鍏佽鑱氬悎绛涢€?;
 COMMENT ON COLUMN t_metadata_field_schema.indexed IS '鏄惁宸插缓绔嬫垨瑕佹眰寤虹珛绱㈠紩';
-COMMENT ON COLUMN t_metadata_field_schema.index_policy IS '绱㈠紩绛栫暐锛歂ONE/JSON_GIN/EXPRESSION_INDEX/SEARCH_KEYWORD/SEARCH_TEXT/MILVUS_JSON/MILVUS_SCALAR';
+COMMENT ON COLUMN t_metadata_field_schema.index_policy IS '索引策略：NONE/JSON_GIN/EXPRESSION_INDEX/SEARCH_KEYWORD/SEARCH_TEXT/MILVUS_JSON/MILVUS_SCALAR';
 COMMENT ON COLUMN t_metadata_field_schema.min_confidence IS '瀛楁鑷姩閫氳繃鎵€闇€鏈€浣庣疆淇″害';
 COMMENT ON COLUMN t_metadata_field_schema.trusted_sources IS '鍙俊鎶藉彇鏉ユ簮闆嗗悎 JSON';
 COMMENT ON COLUMN t_metadata_field_schema.extraction_hints IS '鎶藉彇鎻愮ず JSON锛屽 sourceKeys銆乺uleRegex銆乸athRegex銆乨ictionaryCode';
 COMMENT ON COLUMN t_metadata_field_schema.backend_mapping IS '鍚庣瀛楁鏄犲皠閰嶇疆 JSON';
 COMMENT ON COLUMN t_metadata_field_schema.schema_version IS 'Schema 鐗堟湰鍙?;
-COMMENT ON COLUMN t_metadata_field_schema.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_metadata_field_schema.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_metadata_field_schema.create_time IS '创建时间';
+COMMENT ON COLUMN t_metadata_field_schema.update_time IS '更新时间';
 COMMENT ON COLUMN t_metadata_field_schema.deleted IS '鏄惁鍒犻櫎锛? 琛ㄧず姝ｅ父锛? 琛ㄧず鍒犻櫎';
 
 COMMENT ON COLUMN t_metadata_field_schema.last_sync_backend IS '鏈€杩戜竴娆?Schema 绱㈠紩鍚屾鍚庣';
@@ -2141,16 +2141,16 @@ CREATE INDEX IF NOT EXISTS idx_metadata_schema_usage_request
 ON t_metadata_schema_usage_log (request_id);
 
 COMMENT ON TABLE t_metadata_schema_usage_log IS '妫€绱?Metadata Schema 浣跨敤鎯呭喌浜嬩欢琛?;
-COMMENT ON COLUMN t_metadata_schema_usage_log.id IS '浜嬩欢琛?ID';
-COMMENT ON COLUMN t_metadata_schema_usage_log.request_id IS '鍚屼竴娆¤繃婊ょ紪璇戞垨鎷掔粷璇锋眰鐨勮仛鍚?ID';
-COMMENT ON COLUMN t_metadata_schema_usage_log.tenant_id IS '绉熸埛 ID';
-COMMENT ON COLUMN t_metadata_schema_usage_log.kb_id IS '鐭ヨ瘑搴?ID';
-COMMENT ON COLUMN t_metadata_schema_usage_log.schema_version IS '杩囨护缂栬瘧鏃朵娇鐢ㄧ殑 Schema 鐗堟湰';
+COMMENT ON COLUMN t_metadata_schema_usage_log.id IS '事件�?ID';
+COMMENT ON COLUMN t_metadata_schema_usage_log.request_id IS '同一次过滤编译或拒绝请求的聚�?ID';
+COMMENT ON COLUMN t_metadata_schema_usage_log.tenant_id IS '租户 ID';
+COMMENT ON COLUMN t_metadata_schema_usage_log.kb_id IS '知识�?ID';
+COMMENT ON COLUMN t_metadata_schema_usage_log.schema_version IS '过滤编译时使用的 Schema 版本';
 COMMENT ON COLUMN t_metadata_schema_usage_log.field_key IS '鍙備笌杩囨护鐨勫瓧娈甸€昏緫鍚?;
-COMMENT ON COLUMN t_metadata_schema_usage_log.event_type IS '浜嬩欢绫诲瀷锛欳OMPILED/REJECTED';
+COMMENT ON COLUMN t_metadata_schema_usage_log.event_type IS '事件类型：COMPILED/REJECTED';
 COMMENT ON COLUMN t_metadata_schema_usage_log.guard_only IS '鏄惁鍙兘璧?guard 鍚庡鐞嗭紝0 琛ㄧず鍚︼紝1 琛ㄧず鏄?;
-COMMENT ON COLUMN t_metadata_schema_usage_log.reject_reason IS '杩囨护缂栬瘧鎷掔粷鍘熷洜缂栫爜';
-COMMENT ON COLUMN t_metadata_schema_usage_log.create_time IS '浜嬩欢鍐欏叆鏃堕棿';
+COMMENT ON COLUMN t_metadata_schema_usage_log.reject_reason IS '过滤编译拒绝原因编码';
+COMMENT ON COLUMN t_metadata_schema_usage_log.create_time IS '事件写入时间';
 
 CREATE TABLE IF NOT EXISTS t_metadata_extraction_job (
     pk_id BIGSERIAL PRIMARY KEY,
@@ -2178,24 +2178,24 @@ CREATE INDEX IF NOT EXISTS idx_metadata_extraction_job_scope
 ON t_metadata_extraction_job (tenant_id, kb_id, status, update_time);
 
 COMMENT ON TABLE t_metadata_extraction_job IS '鍏冩暟鎹娊鍙栦笌鍘嗗彶鍥炲～浠诲姟琛?;
-COMMENT ON COLUMN t_metadata_extraction_job.id IS '鍥炲～浠诲姟 ID';
-COMMENT ON COLUMN t_metadata_extraction_job.tenant_id IS '绉熸埛 ID';
-COMMENT ON COLUMN t_metadata_extraction_job.kb_id IS '鐭ヨ瘑搴?ID';
+COMMENT ON COLUMN t_metadata_extraction_job.id IS '回填任务 ID';
+COMMENT ON COLUMN t_metadata_extraction_job.tenant_id IS '租户 ID';
+COMMENT ON COLUMN t_metadata_extraction_job.kb_id IS '知识�?ID';
 COMMENT ON COLUMN t_metadata_extraction_job.pipeline_id IS '鍥炲～浣跨敤鐨勫叆搴撴祦姘寸嚎 ID锛屼负绌烘椂浣跨敤鏂囨。鑷韩娴佹按绾?;
 COMMENT ON COLUMN t_metadata_extraction_job.status IS '浠诲姟鐘舵€侊細PENDING/RUNNING/PAUSED/CANCELLED/COMPLETED/FAILED';
 COMMENT ON COLUMN t_metadata_extraction_job.current_page IS '褰撳墠鍒嗛〉娓告爣锛屼粠 1 寮€濮?;
 COMMENT ON COLUMN t_metadata_extraction_job.checkpoint_json IS '鏂偣缁窇娓告爣 JSON锛岃褰曞綋鍓嶉〉鍜屾渶鍚庡鐞嗘枃妗?ID';
 COMMENT ON COLUMN t_metadata_extraction_job.batch_size IS '姣忔壒鎵弿鐨勬枃妗ｆ暟閲?;
 COMMENT ON COLUMN t_metadata_extraction_job.processed_count IS '宸叉壂鎻忓鐞嗙殑鏂囨。鏁伴噺';
-COMMENT ON COLUMN t_metadata_extraction_job.success_count IS '鍥炲～娴佹按绾挎墽琛屾垚鍔熺殑鏂囨。鏁伴噺';
-COMMENT ON COLUMN t_metadata_extraction_job.failed_count IS '鍥炲～娴佹按绾挎墽琛屽け璐ョ殑鏂囨。鏁伴噺';
+COMMENT ON COLUMN t_metadata_extraction_job.success_count IS '回填流水线执行成功的文档数量';
+COMMENT ON COLUMN t_metadata_extraction_job.failed_count IS '回填流水线执行失败的文档数量';
 COMMENT ON COLUMN t_metadata_extraction_job.skipped_count IS '鍥犵鐢ㄣ€佽繍琛屼腑鎴栫己灏戝繀瑕佷俊鎭€岃烦杩囩殑鏂囨。鏁伴噺';
 COMMENT ON COLUMN t_metadata_extraction_job.review_count IS '杩涘叆浜哄伐澶嶆牳鐨勬枃妗ｆ暟閲?;
 COMMENT ON COLUMN t_metadata_extraction_job.quarantine_count IS '杩涘叆闅旂鍖虹殑鏂囨。鏁伴噺';
 COMMENT ON COLUMN t_metadata_extraction_job.failure_summary IS '澶辫触鏂囨。鎽樿 JSON';
 COMMENT ON COLUMN t_metadata_extraction_job.operator IS '鏈€杩戜竴娆℃搷浣滀汉';
-COMMENT ON COLUMN t_metadata_extraction_job.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_metadata_extraction_job.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_metadata_extraction_job.create_time IS '创建时间';
+COMMENT ON COLUMN t_metadata_extraction_job.update_time IS '更新时间';
 
 CREATE TABLE IF NOT EXISTS t_metadata_extraction_result (
     pk_id BIGSERIAL PRIMARY KEY,
@@ -2219,23 +2219,23 @@ CREATE TABLE IF NOT EXISTS t_metadata_extraction_result (
 );
 
 COMMENT ON TABLE t_metadata_extraction_result IS '鏂囨。鍏冩暟鎹娊鍙栫粨鏋滆〃';
-COMMENT ON COLUMN t_metadata_extraction_result.id IS '鎶藉彇缁撴灉 ID';
-COMMENT ON COLUMN t_metadata_extraction_result.tenant_id IS '绉熸埛 ID';
-COMMENT ON COLUMN t_metadata_extraction_result.kb_id IS '鐭ヨ瘑搴?ID';
-COMMENT ON COLUMN t_metadata_extraction_result.doc_id IS '鏂囨。 ID';
-COMMENT ON COLUMN t_metadata_extraction_result.job_id IS '鏉ユ簮鎶藉彇浠诲姟 ID';
-COMMENT ON COLUMN t_metadata_extraction_result.schema_version IS '鎶藉彇缁撴灉瀵瑰簲鐨?Metadata Schema 鐗堟湰';
-COMMENT ON COLUMN t_metadata_extraction_result.extractor_version IS '鎶藉彇缁撴灉瀵瑰簲鐨勬娊鍙栧櫒鐗堟湰';
+COMMENT ON COLUMN t_metadata_extraction_result.id IS '抽取结果 ID';
+COMMENT ON COLUMN t_metadata_extraction_result.tenant_id IS '租户 ID';
+COMMENT ON COLUMN t_metadata_extraction_result.kb_id IS '知识�?ID';
+COMMENT ON COLUMN t_metadata_extraction_result.doc_id IS '文档 ID';
+COMMENT ON COLUMN t_metadata_extraction_result.job_id IS '来源抽取任务 ID';
+COMMENT ON COLUMN t_metadata_extraction_result.schema_version IS '抽取结果对应�?Metadata Schema 版本';
+COMMENT ON COLUMN t_metadata_extraction_result.extractor_version IS '抽取结果对应的抽取器版本';
 COMMENT ON COLUMN t_metadata_extraction_result.status IS '缁撴灉鐘舵€侊細ACCEPT/ACCEPTED/REVIEW_REQUIRED/RE_EXTRACTING/QUARANTINE/QUARANTINED/REJECTED';
-COMMENT ON COLUMN t_metadata_extraction_result.normalized_metadata IS '鏍囧噯鍖栧悗鐨勫厓鏁版嵁 JSON';
+COMMENT ON COLUMN t_metadata_extraction_result.normalized_metadata IS '标准化后的元数据 JSON';
 COMMENT ON COLUMN t_metadata_extraction_result.raw_candidates IS '鍘熷瀛楁鍊欓€夊€笺€佹潵婧愩€佽瘉鎹拰缃俊搴?JSON';
 COMMENT ON COLUMN t_metadata_extraction_result.field_quality IS '瀛楁绾ц川閲忎俊鎭?JSON';
 COMMENT ON COLUMN t_metadata_extraction_result.validation_issues IS '鏍￠獙闂 JSON';
 COMMENT ON COLUMN t_metadata_extraction_result.approved_metadata IS '浜哄伐瀹℃牳鍚庣‘璁ゆ垨鑷姩閫氳繃鐨勫厓鏁版嵁 JSON';
-COMMENT ON COLUMN t_metadata_extraction_result.approved_by IS '瀹℃牳浜?ID';
-COMMENT ON COLUMN t_metadata_extraction_result.approved_time IS '瀹℃牳鏃堕棿';
-COMMENT ON COLUMN t_metadata_extraction_result.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_metadata_extraction_result.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_metadata_extraction_result.approved_by IS '审核�?ID';
+COMMENT ON COLUMN t_metadata_extraction_result.approved_time IS '审核时间';
+COMMENT ON COLUMN t_metadata_extraction_result.create_time IS '创建时间';
+COMMENT ON COLUMN t_metadata_extraction_result.update_time IS '更新时间';
 
 CREATE TABLE IF NOT EXISTS t_metadata_review_item (
     pk_id BIGSERIAL PRIMARY KEY,
@@ -2261,11 +2261,11 @@ ALTER TABLE t_metadata_review_item
 ADD COLUMN IF NOT EXISTS review_context JSONB;
 
 COMMENT ON TABLE t_metadata_review_item IS '鍏冩暟鎹汉宸ュ鏍搁」琛?;
-COMMENT ON COLUMN t_metadata_review_item.id IS '澶嶆牳椤?ID';
-COMMENT ON COLUMN t_metadata_review_item.tenant_id IS '绉熸埛 ID';
-COMMENT ON COLUMN t_metadata_review_item.kb_id IS '鐭ヨ瘑搴?ID';
-COMMENT ON COLUMN t_metadata_review_item.doc_id IS '鏂囨。 ID';
-COMMENT ON COLUMN t_metadata_review_item.result_id IS '鍏宠仈鐨勬娊鍙栫粨鏋?ID';
+COMMENT ON COLUMN t_metadata_review_item.id IS '复核�?ID';
+COMMENT ON COLUMN t_metadata_review_item.tenant_id IS '租户 ID';
+COMMENT ON COLUMN t_metadata_review_item.kb_id IS '知识�?ID';
+COMMENT ON COLUMN t_metadata_review_item.doc_id IS '文档 ID';
+COMMENT ON COLUMN t_metadata_review_item.result_id IS '关联的抽取结�?ID';
 COMMENT ON COLUMN t_metadata_review_item.review_status IS '澶嶆牳鐘舵€侊細PENDING/APPROVED/CORRECTED/RE_EXTRACTING/REJECTED/QUARANTINED';
 COMMENT ON COLUMN t_metadata_review_item.priority IS '澶嶆牳浼樺厛绾э紝鏁板€艰秺澶т紭鍏堢骇瓒婇珮';
 COMMENT ON COLUMN t_metadata_review_item.reason_code IS '杩涘叆澶嶆牳鐨勫師鍥犵紪鐮?;
@@ -2273,10 +2273,10 @@ COMMENT ON COLUMN t_metadata_review_item.reason_message IS '杩涘叆澶嶆牳�
 COMMENT ON COLUMN t_metadata_review_item.suggested_metadata IS '绯荤粺寤鸿鐨勬爣鍑嗗寲鍏冩暟鎹?JSON';
 COMMENT ON COLUMN t_metadata_review_item.review_context IS '澶嶆牳涓婁笅鏂?JSON锛屽寘鍚棶棰樸€佸瓧娈佃川閲忋€佸€欓€夎瘉鎹拰琚嫆缁濆瓧娈?;
 COMMENT ON COLUMN t_metadata_review_item.corrected_metadata IS '浜哄伐淇鍚庣殑鍏冩暟鎹?JSON';
-COMMENT ON COLUMN t_metadata_review_item.reviewer_id IS '澶嶆牳浜?ID';
-COMMENT ON COLUMN t_metadata_review_item.review_comment IS '澶嶆牳澶囨敞';
-COMMENT ON COLUMN t_metadata_review_item.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_metadata_review_item.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_metadata_review_item.reviewer_id IS '复核�?ID';
+COMMENT ON COLUMN t_metadata_review_item.review_comment IS '复核备注';
+COMMENT ON COLUMN t_metadata_review_item.create_time IS '创建时间';
+COMMENT ON COLUMN t_metadata_review_item.update_time IS '更新时间';
 
 CREATE INDEX IF NOT EXISTS idx_metadata_review_status
 ON t_metadata_review_item (tenant_id, kb_id, review_status, priority, update_time);
@@ -2311,14 +2311,14 @@ ADD COLUMN IF NOT EXISTS updated_metadata JSONB;
 COMMENT ON TABLE t_metadata_review_audit IS '鍏冩暟鎹汉宸ュ鏍稿喅绛栧璁¤〃';
 COMMENT ON COLUMN t_metadata_review_audit.id IS '瀹¤璁板綍 ID';
 COMMENT ON COLUMN t_metadata_review_audit.review_item_id IS '鍏宠仈鐨勫鏍搁」 ID';
-COMMENT ON COLUMN t_metadata_review_audit.tenant_id IS '绉熸埛 ID';
-COMMENT ON COLUMN t_metadata_review_audit.kb_id IS '鐭ヨ瘑搴?ID';
-COMMENT ON COLUMN t_metadata_review_audit.doc_id IS '鏂囨。 ID';
-COMMENT ON COLUMN t_metadata_review_audit.result_id IS '鍏宠仈鐨勬娊鍙栫粨鏋?ID';
+COMMENT ON COLUMN t_metadata_review_audit.tenant_id IS '租户 ID';
+COMMENT ON COLUMN t_metadata_review_audit.kb_id IS '知识�?ID';
+COMMENT ON COLUMN t_metadata_review_audit.doc_id IS '文档 ID';
+COMMENT ON COLUMN t_metadata_review_audit.result_id IS '关联的抽取结�?ID';
 COMMENT ON COLUMN t_metadata_review_audit.from_status IS '鍐崇瓥鍓嶅鏍哥姸鎬?;
 COMMENT ON COLUMN t_metadata_review_audit.to_status IS '鍐崇瓥鍚庡鏍哥姸鎬?;
-COMMENT ON COLUMN t_metadata_review_audit.reviewer_id IS '澶嶆牳浜?ID';
-COMMENT ON COLUMN t_metadata_review_audit.review_comment IS '澶嶆牳澶囨敞';
+COMMENT ON COLUMN t_metadata_review_audit.reviewer_id IS '复核�?ID';
+COMMENT ON COLUMN t_metadata_review_audit.review_comment IS '复核备注';
 COMMENT ON COLUMN t_metadata_review_audit.previous_metadata IS '澶嶆牳鍐崇瓥鍓嶇殑寤鸿鎴栧凡淇鍏冩暟鎹揩鐓?JSON';
 COMMENT ON COLUMN t_metadata_review_audit.updated_metadata IS '澶嶆牳鍐崇瓥鍚庣殑閲囩撼銆佷慨姝ｆ垨璋冨害鍏冩暟鎹揩鐓?JSON';
 COMMENT ON COLUMN t_metadata_review_audit.decision_metadata IS '鏈鍐崇瓥閲囩撼鎴栦慨姝ｇ殑鍏冩暟鎹?JSON';
@@ -2352,10 +2352,10 @@ CREATE TABLE IF NOT EXISTS t_metadata_quarantine_item (
 
 COMMENT ON TABLE t_metadata_quarantine_item IS '鍏冩暟鎹娊鍙栭殧绂婚」琛?;
 COMMENT ON COLUMN t_metadata_quarantine_item.id IS '闅旂椤?ID';
-COMMENT ON COLUMN t_metadata_quarantine_item.tenant_id IS '绉熸埛 ID';
-COMMENT ON COLUMN t_metadata_quarantine_item.kb_id IS '鐭ヨ瘑搴?ID';
-COMMENT ON COLUMN t_metadata_quarantine_item.doc_id IS '鏂囨。 ID';
-COMMENT ON COLUMN t_metadata_quarantine_item.job_id IS '鏉ユ簮鎶藉彇浠诲姟 ID';
+COMMENT ON COLUMN t_metadata_quarantine_item.tenant_id IS '租户 ID';
+COMMENT ON COLUMN t_metadata_quarantine_item.kb_id IS '知识�?ID';
+COMMENT ON COLUMN t_metadata_quarantine_item.doc_id IS '文档 ID';
+COMMENT ON COLUMN t_metadata_quarantine_item.job_id IS '来源抽取任务 ID';
 COMMENT ON COLUMN t_metadata_quarantine_item.stage IS '澶辫触闃舵锛欶ETCH/PARSE/EXTRACT/NORMALIZE/VALIDATE/INDEX';
 COMMENT ON COLUMN t_metadata_quarantine_item.reason_code IS '闅旂鍘熷洜缂栫爜';
 COMMENT ON COLUMN t_metadata_quarantine_item.reason_message IS '闅旂鍘熷洜璇存槑';
@@ -2363,10 +2363,10 @@ COMMENT ON COLUMN t_metadata_quarantine_item.source_snapshot IS '闅旂鏃剁
 COMMENT ON COLUMN t_metadata_quarantine_item.retry_count IS '宸查噸璇曟鏁?;
 COMMENT ON COLUMN t_metadata_quarantine_item.next_retry_time IS '涓嬩竴娆″厑璁搁噸璇曟椂闂?;
 COMMENT ON COLUMN t_metadata_quarantine_item.resolved IS '鏄惁宸插鐞嗭紝0 琛ㄧず鏈鐞嗭紝1 琛ㄧず宸插鐞?;
-COMMENT ON COLUMN t_metadata_quarantine_item.resolved_by IS '澶勭悊浜?ID';
-COMMENT ON COLUMN t_metadata_quarantine_item.resolved_time IS '澶勭悊鏃堕棿';
-COMMENT ON COLUMN t_metadata_quarantine_item.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_metadata_quarantine_item.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_metadata_quarantine_item.resolved_by IS '处理�?ID';
+COMMENT ON COLUMN t_metadata_quarantine_item.resolved_time IS '处理时间';
+COMMENT ON COLUMN t_metadata_quarantine_item.create_time IS '创建时间';
+COMMENT ON COLUMN t_metadata_quarantine_item.update_time IS '更新时间';
 
 CREATE INDEX IF NOT EXISTS idx_metadata_quarantine_status
 ON t_metadata_quarantine_item (tenant_id, kb_id, resolved, next_retry_time);
@@ -2391,15 +2391,15 @@ CREATE INDEX IF NOT EXISTS idx_metadata_dictionary_lookup
 ON t_metadata_dictionary_item (tenant_id, dict_code, raw_value, enabled);
 
 COMMENT ON TABLE t_metadata_dictionary_item IS '鍏冩暟鎹爣鍑嗗寲瀛楀吀椤硅〃';
-COMMENT ON COLUMN t_metadata_dictionary_item.id IS '瀛楀吀椤?ID';
-COMMENT ON COLUMN t_metadata_dictionary_item.tenant_id IS '绉熸埛 ID';
+COMMENT ON COLUMN t_metadata_dictionary_item.id IS '字典�?ID';
+COMMENT ON COLUMN t_metadata_dictionary_item.tenant_id IS '租户 ID';
 COMMENT ON COLUMN t_metadata_dictionary_item.dict_code IS '瀛楀吀缂栫爜锛屽 department銆乻ecurity_level';
 COMMENT ON COLUMN t_metadata_dictionary_item.raw_value IS '鍘熷鍊兼垨鍒悕';
 COMMENT ON COLUMN t_metadata_dictionary_item.canonical_value IS '鏍囧噯鍊?;
-COMMENT ON COLUMN t_metadata_dictionary_item.display_name IS '灞曠ず鍚嶇О';
+COMMENT ON COLUMN t_metadata_dictionary_item.display_name IS '展示名称';
 COMMENT ON COLUMN t_metadata_dictionary_item.enabled IS '鏄惁鍚敤锛? 琛ㄧず绂佺敤锛? 琛ㄧず鍚敤';
-COMMENT ON COLUMN t_metadata_dictionary_item.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_metadata_dictionary_item.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_metadata_dictionary_item.create_time IS '创建时间';
+COMMENT ON COLUMN t_metadata_dictionary_item.update_time IS '更新时间';
 
 -- Source merged from: seahorse-agent-adapter-repository-jdbc\src\main\resources\META-INF\seahorse-agent\sql\retrieval-governance-postgresql.sql
 CREATE TABLE IF NOT EXISTS t_retrieval_strategy_template (
@@ -2425,16 +2425,16 @@ CREATE INDEX IF NOT EXISTS idx_retrieval_strategy_template_scope
 ON t_retrieval_strategy_template (kb_id, enabled, deleted, sort_order);
 
 COMMENT ON TABLE t_retrieval_strategy_template IS '鐭ヨ瘑搴撴绱㈢瓥鐣ユā鏉胯鐩栭厤缃〃';
-COMMENT ON COLUMN t_retrieval_strategy_template.id IS '妯℃澘閰嶇疆 ID';
+COMMENT ON COLUMN t_retrieval_strategy_template.id IS '模板配置 ID';
 COMMENT ON COLUMN t_retrieval_strategy_template.kb_id IS '鐭ヨ瘑搴?ID锛岀┖鍊艰〃绀哄叏灞€妯℃澘瑕嗙洊';
 COMMENT ON COLUMN t_retrieval_strategy_template.template_key IS '妯℃澘鍞竴閿紝鍚屽悕妯℃澘浼氳鐩栧唴缃垨鍏ㄥ眬妯℃澘';
-COMMENT ON COLUMN t_retrieval_strategy_template.display_name IS '妯℃澘灞曠ず鍚嶇О';
-COMMENT ON COLUMN t_retrieval_strategy_template.description IS '妯℃澘閫傜敤鍦烘櫙璇存槑';
+COMMENT ON COLUMN t_retrieval_strategy_template.display_name IS '模板展示名称';
+COMMENT ON COLUMN t_retrieval_strategy_template.description IS '模板适用场景说明';
 COMMENT ON COLUMN t_retrieval_strategy_template.options_json IS '寮虹被鍨嬫绱㈠弬鏁?JSON锛屽搴?RetrievalOptions';
-COMMENT ON COLUMN t_retrieval_strategy_template.sort_order IS '妯℃澘灞曠ず鎺掑簭锛屾暟鍊艰秺灏忚秺闈犲墠';
+COMMENT ON COLUMN t_retrieval_strategy_template.sort_order IS '模板展示排序，数值越小越靠前';
 COMMENT ON COLUMN t_retrieval_strategy_template.enabled IS '鏄惁鍚敤锛? 琛ㄧず绂佺敤锛? 琛ㄧず鍚敤';
-COMMENT ON COLUMN t_retrieval_strategy_template.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_retrieval_strategy_template.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_retrieval_strategy_template.create_time IS '创建时间';
+COMMENT ON COLUMN t_retrieval_strategy_template.update_time IS '更新时间';
 COMMENT ON COLUMN t_retrieval_strategy_template.deleted IS '鏄惁鍒犻櫎锛? 琛ㄧず姝ｅ父锛? 琛ㄧず鍒犻櫎';
 
 CREATE TABLE IF NOT EXISTS t_retrieval_evaluation_dataset (
@@ -2454,14 +2454,14 @@ CREATE INDEX IF NOT EXISTS idx_retrieval_evaluation_dataset_kb
 ON t_retrieval_evaluation_dataset (kb_id, enabled, deleted, update_time);
 
 COMMENT ON TABLE t_retrieval_evaluation_dataset IS '妫€绱㈣川閲忚瘎娴嬮泦琛?;
-COMMENT ON COLUMN t_retrieval_evaluation_dataset.id IS '璇勬祴闆?ID';
-COMMENT ON COLUMN t_retrieval_evaluation_dataset.kb_id IS '鐭ヨ瘑搴?ID';
+COMMENT ON COLUMN t_retrieval_evaluation_dataset.id IS '评测�?ID';
+COMMENT ON COLUMN t_retrieval_evaluation_dataset.kb_id IS '知识�?ID';
 COMMENT ON COLUMN t_retrieval_evaluation_dataset.dataset_name IS '璇勬祴闆嗗悕绉?;
 COMMENT ON COLUMN t_retrieval_evaluation_dataset.description IS '璇勬祴闆嗚鏄?;
 COMMENT ON COLUMN t_retrieval_evaluation_dataset.cases_json IS '寮虹被鍨嬫绱㈣瘎娴嬫牱鏈?JSON锛屽搴?RetrievalEvaluationCase 鍒楄〃';
 COMMENT ON COLUMN t_retrieval_evaluation_dataset.enabled IS '鏄惁鍚敤锛? 琛ㄧず绂佺敤锛? 琛ㄧず鍚敤';
-COMMENT ON COLUMN t_retrieval_evaluation_dataset.create_time IS '鍒涘缓鏃堕棿';
-COMMENT ON COLUMN t_retrieval_evaluation_dataset.update_time IS '鏇存柊鏃堕棿';
+COMMENT ON COLUMN t_retrieval_evaluation_dataset.create_time IS '创建时间';
+COMMENT ON COLUMN t_retrieval_evaluation_dataset.update_time IS '更新时间';
 COMMENT ON COLUMN t_retrieval_evaluation_dataset.deleted IS '鏄惁鍒犻櫎锛? 琛ㄧず姝ｅ父锛? 琛ㄧず鍒犻櫎';
 
 CREATE TABLE IF NOT EXISTS t_retrieval_evaluation_run (
@@ -2488,20 +2488,20 @@ ON t_retrieval_evaluation_run (kb_id, dataset_id, create_time);
 
 COMMENT ON TABLE t_retrieval_evaluation_run IS '妫€绱㈣川閲忚瘎娴嬭繍琛屽巻鍙茶〃';
 COMMENT ON COLUMN t_retrieval_evaluation_run.id IS '璇勬祴杩愯 ID';
-COMMENT ON COLUMN t_retrieval_evaluation_run.kb_id IS '鐭ヨ瘑搴?ID';
-COMMENT ON COLUMN t_retrieval_evaluation_run.dataset_id IS '璇勬祴闆?ID';
+COMMENT ON COLUMN t_retrieval_evaluation_run.kb_id IS '知识�?ID';
+COMMENT ON COLUMN t_retrieval_evaluation_run.dataset_id IS '评测�?ID';
 COMMENT ON COLUMN t_retrieval_evaluation_run.strategy_name IS '妫€绱㈢瓥鐣ュ悕绉?;
 COMMENT ON COLUMN t_retrieval_evaluation_run.top_k IS '鏈璇勬祴浣跨敤鐨?TopK';
-COMMENT ON COLUMN t_retrieval_evaluation_run.case_count IS '璇勬祴鏍锋湰鎬绘暟';
+COMMENT ON COLUMN t_retrieval_evaluation_run.case_count IS '评测样本总数';
 COMMENT ON COLUMN t_retrieval_evaluation_run.evaluable_case_count IS '鍙绠楀彫鍥炴寚鏍囩殑鏍锋湰鏁?;
 COMMENT ON COLUMN t_retrieval_evaluation_run.recall_at_k IS 'Recall@K 姹囨€绘寚鏍?;
 COMMENT ON COLUMN t_retrieval_evaluation_run.mrr IS 'MRR 姹囨€绘寚鏍?;
 COMMENT ON COLUMN t_retrieval_evaluation_run.ndcg_at_k IS 'nDCG@K 姹囨€绘寚鏍?;
-COMMENT ON COLUMN t_retrieval_evaluation_run.empty_recall_rate IS '绌哄彫鍥炵巼';
+COMMENT ON COLUMN t_retrieval_evaluation_run.empty_recall_rate IS '空召回率';
 COMMENT ON COLUMN t_retrieval_evaluation_run.avg_latency_ms IS '骞冲潎妫€绱㈣€楁椂姣';
 COMMENT ON COLUMN t_retrieval_evaluation_run.p95_latency_ms IS 'P95 妫€绱㈣€楁椂姣';
 COMMENT ON COLUMN t_retrieval_evaluation_run.report_json IS '瀹屾暣寮虹被鍨嬭瘎娴嬫姤鍛?JSON锛屽搴?RetrievalEvaluationReport';
-COMMENT ON COLUMN t_retrieval_evaluation_run.create_time IS '鍒涘缓鏃堕棿';
+COMMENT ON COLUMN t_retrieval_evaluation_run.create_time IS '创建时间';
 
 CREATE TABLE IF NOT EXISTS t_retrieval_evaluation_comparison (
     pk_id BIGSERIAL PRIMARY KEY,
@@ -2521,14 +2521,14 @@ ON t_retrieval_evaluation_comparison (kb_id, dataset_id, create_time);
 
 COMMENT ON TABLE t_retrieval_evaluation_comparison IS '妫€绱㈣川閲忚瘎娴嬪姣斿巻鍙茶〃';
 COMMENT ON COLUMN t_retrieval_evaluation_comparison.id IS '瀵规瘮鎵规 ID';
-COMMENT ON COLUMN t_retrieval_evaluation_comparison.kb_id IS '鐭ヨ瘑搴?ID';
-COMMENT ON COLUMN t_retrieval_evaluation_comparison.dataset_id IS '璇勬祴闆?ID';
-COMMENT ON COLUMN t_retrieval_evaluation_comparison.baseline_strategy_name IS '鍩虹嚎绛栫暐鍚嶇О';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.kb_id IS '知识�?ID';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.dataset_id IS '评测�?ID';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.baseline_strategy_name IS '基线策略名称';
 COMMENT ON COLUMN t_retrieval_evaluation_comparison.winner_strategy_name IS '鏈瀵规瘮鑳滃嚭绛栫暐鍚嶇О';
 COMMENT ON COLUMN t_retrieval_evaluation_comparison.strategy_count IS '鏈鍙備笌瀵规瘮鐨勭瓥鐣ユ暟閲?;
 COMMENT ON COLUMN t_retrieval_evaluation_comparison.case_count IS '鏈瀵规瘮澶嶇敤鐨勮瘎娴嬫牱鏈暟閲?;
 COMMENT ON COLUMN t_retrieval_evaluation_comparison.report_json IS '瀹屾暣澶氱瓥鐣ュ姣旀姤鍛?JSON锛屽搴?RetrievalEvaluationComparisonReport';
-COMMENT ON COLUMN t_retrieval_evaluation_comparison.create_time IS '鍒涘缓鏃堕棿';
+COMMENT ON COLUMN t_retrieval_evaluation_comparison.create_time IS '创建时间';
 -- ============================================
 -- AI Model Config
 -- ============================================
