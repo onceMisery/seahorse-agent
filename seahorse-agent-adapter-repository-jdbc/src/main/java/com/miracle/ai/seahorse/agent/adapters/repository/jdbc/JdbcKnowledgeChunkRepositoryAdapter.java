@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeChunkValues;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRecord;
@@ -41,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 基于 JDBC 的知识库 Chunk 写入适配器。
@@ -408,9 +408,7 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     }
 
     private Long nextId() {
-        long millis = System.currentTimeMillis();
-        int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return millis * 1_000_000 + suffix;
+        return SnowflakeIds.nextId();
     }
 
     private String placeholders(int size) {

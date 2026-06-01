@@ -17,6 +17,10 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import static com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemorySupport.hasText;
+import static com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemorySupport.toLongId;
+import static com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemorySupport.toLongIdOrNull;
+
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNode;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceNodeFinish;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTracePage;
@@ -34,6 +38,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 基于 RAG Trace 表的 JDBC adapter。

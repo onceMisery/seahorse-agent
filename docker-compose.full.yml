@@ -17,10 +17,6 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./resources/database/seahorse_init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-      - ./seahorse-agent-adapter-repository-jdbc/src/main/resources/META-INF/seahorse-agent/sql/agent-registry-run-store-postgresql.sql:/docker-entrypoint-initdb.d/02-agent-registry-run-store.sql:ro
-      - ./seahorse-agent-adapter-repository-jdbc/src/main/resources/META-INF/seahorse-agent/sql/eval-dataset-postgresql.sql:/docker-entrypoint-initdb.d/03-eval-dataset.sql:ro
-      - ./seahorse-agent-adapter-repository-jdbc/src/main/resources/META-INF/seahorse-agent/sql/metadata-governance-postgresql.sql:/docker-entrypoint-initdb.d/04-metadata-governance.sql:ro
-      - ./seahorse-agent-adapter-repository-jdbc/src/main/resources/META-INF/seahorse-agent/sql/retrieval-governance-postgresql.sql:/docker-entrypoint-initdb.d/05-retrieval-governance.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-seahorse} -d ${POSTGRES_DB:-seahorse}"]
       interval: 5s
@@ -328,9 +324,12 @@ services:
       # 观测 → Micrometer
       SEAHORSE_AGENT_ADAPTERS_OBSERVATION_TYPE: micrometer
       # 搜索 → Elasticsearch
-      SEAHORSE_AGENT_ADAPTERS_SEARCH_TYPE: elasticsearch
-      SEAHORSE_AGENT_ADAPTERS_SEARCH_ELASTICSEARCH_HOST: elasticsearch
-      SEAHORSE_AGENT_ADAPTERS_SEARCH_ELASTICSEARCH_PORT: "9200"
+      SEAHORSE_AGENT_ADAPTERS_KEYWORD_SEARCH_TYPE: elasticsearch
+      SEAHORSE_AGENT_ADAPTERS_KEYWORD_SEARCH_ELASTICSEARCH_BASE_URL: http://elasticsearch:9200
+      SEAHORSE_AGENT_ADAPTERS_KEYWORD_SEARCH_ELASTICSEARCH_INDEX_NAME: seahorse_keyword_chunk
+      SEAHORSE_AGENT_ADAPTERS_KEYWORD_INDEX_TYPE: elasticsearch
+      SEAHORSE_AGENT_ADAPTERS_KEYWORD_INDEX_ELASTICSEARCH_BASE_URL: http://elasticsearch:9200
+      SEAHORSE_AGENT_ADAPTERS_KEYWORD_INDEX_ELASTICSEARCH_INDEX_NAME: seahorse_keyword_chunk
       # 仓储
       SEAHORSE_AGENT_ADAPTERS_REPOSITORY_TYPE: jdbc
       # Agent runtime

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEvent.OutboxEventDelivery;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
@@ -30,7 +31,6 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 基于 {@code t_outbox_event} 的 JDBC Outbox 仓储 adapter。
@@ -113,7 +113,7 @@ public class JdbcOutboxEventRepositoryAdapter implements OutboxEventRepositoryPo
         int updated = jdbcTemplate.update(SQL_MARK_SENDING,
                 OutboxEventStatus.SENDING,
                 Timestamp.from(Instant.now()),
-                eventId,
+                toLongId(eventId),
                 OutboxEventStatus.NEW,
                 OutboxEventStatus.FAILED);
         return updated > 0;
@@ -124,7 +124,7 @@ public class JdbcOutboxEventRepositoryAdapter implements OutboxEventRepositoryPo
         if (!hasText(eventId)) {
             return;
         }
-        jdbcTemplate.update(SQL_MARK_SENT, OutboxEventStatus.SENT, Timestamp.from(Instant.now()), eventId);
+        jdbcTemplate.update(SQL_MARK_SENT, OutboxEventStatus.SENT, Timestamp.from(Instant.now()), toLongId(eventId));
     }
 
     @Override
@@ -139,7 +139,7 @@ public class JdbcOutboxEventRepositoryAdapter implements OutboxEventRepositoryPo
                 Timestamp.from(safeNextRetryTime),
                 lastError,
                 Timestamp.from(Instant.now()),
-                eventId);
+                toLongId(eventId));
     }
 
     private OutboxEvent mapEvent(ResultSet resultSet, int rowNum) throws SQLException {
@@ -172,13 +172,19 @@ public class JdbcOutboxEventRepositoryAdapter implements OutboxEventRepositoryPo
         return Timestamp.from(delivery.nextRetryTime());
     }
 
-    private String resolveId(String id) {
+    private long resolveId(String id) {
         if (hasText(id)) {
-            return id;
+            return toLongId(id);
         }
-        long millis = System.currentTimeMillis();
-        int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return Long.toString(millis, 36) + suffix;
+        return SnowflakeIds.nextId();
+    }
+
+    private long toLongId(String id) {
+        try {
+            return Long.parseLong(id.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("outbox event id must be numeric: " + id, ex);
+        }
     }
 
     private boolean hasText(String value) {

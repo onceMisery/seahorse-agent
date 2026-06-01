@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeBaseValues;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBasePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRecord;
@@ -32,7 +33,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 基于 JDBC 的知识库管理仓储 adapter。
@@ -230,9 +230,7 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
     }
 
     private Long nextId() {
-        long millis = System.currentTimeMillis();
-        int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return millis * 1_000_000 + suffix;
+        return SnowflakeIds.nextId();
     }
 
     private String like(String value) {

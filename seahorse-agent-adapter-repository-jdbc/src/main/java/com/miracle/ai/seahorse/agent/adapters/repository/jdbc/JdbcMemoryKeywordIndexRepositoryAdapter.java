@@ -79,7 +79,7 @@ public class JdbcMemoryKeywordIndexRepositoryAdapter implements MemoryKeywordInd
                      source_update_time, status, create_time, update_time, deleted)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, 0)
                 """,
-                "mem-kw-" + JdbcMemorySupport.nextId(),
+                JdbcMemorySupport.nextId(),
                 document.userId(),
                 tenantId,
                 document.memoryId(),

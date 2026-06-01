@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingPayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRecord;
@@ -32,7 +33,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 基于旧 {@code t_query_term_mapping} 表的 JDBC 术语映射 adapter。
@@ -85,7 +85,7 @@ public class JdbcQueryTermMappingRepositoryAdapter implements QueryTermMappingRe
         if (!hasText(id)) {
             return Optional.empty();
         }
-        return jdbcTemplate.query(SQL_FIND, this::mapRecord, id).stream().findFirst();
+        return jdbcTemplate.query(SQL_FIND, this::mapRecord, toLongId(id)).stream().findFirst();
     }
 
     @Override
@@ -94,7 +94,7 @@ public class JdbcQueryTermMappingRepositoryAdapter implements QueryTermMappingRe
         String id = nextId();
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update(SQL_INSERT,
-                id,
+                toLongId(id),
                 safePayload.sourceTerm(),
                 safePayload.targetTerm(),
                 safePayload.matchType() == null ? 1 : safePayload.matchType(),
@@ -114,7 +114,7 @@ public class JdbcQueryTermMappingRepositoryAdapter implements QueryTermMappingRe
         }
         List<Object> args = new ArrayList<>();
         String setClause = buildUpdateSetClause(safePayload, args);
-        args.add(id);
+        args.add(toLongId(id));
         int updated = jdbcTemplate.update("""
                 UPDATE t_query_term_mapping
                 SET %s
@@ -132,7 +132,7 @@ public class JdbcQueryTermMappingRepositoryAdapter implements QueryTermMappingRe
                 UPDATE t_query_term_mapping
                 SET deleted = 1, update_time = ?
                 WHERE id = ? AND deleted = 0
-                """, Timestamp.from(Instant.now()), id);
+                """, Timestamp.from(Instant.now()), toLongId(id));
         return updated > 0;
     }
 
@@ -195,9 +195,15 @@ public class JdbcQueryTermMappingRepositoryAdapter implements QueryTermMappingRe
     }
 
     private String nextId() {
-        long millis = System.currentTimeMillis();
-        int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return Long.toString(millis, 36) + suffix;
+        return SnowflakeIds.nextIdString();
+    }
+
+    private long toLongId(String id) {
+        try {
+            return Long.parseLong(id.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("query term mapping id must be numeric: " + id, ex);
+        }
     }
 
     private boolean hasText(String value) {

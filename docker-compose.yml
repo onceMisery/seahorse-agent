@@ -10,11 +10,7 @@ services:
       POSTGRES_PASSWORD: seahorse
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./resources/database/seahorse_init_optimized.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-      - ./seahorse-agent-adapter-repository-jdbc/src/main/resources/META-INF/seahorse-agent/sql/agent-registry-run-store-postgresql.sql:/docker-entrypoint-initdb.d/02-agent-registry-run-store.sql:ro
-      - ./seahorse-agent-adapter-repository-jdbc/src/main/resources/META-INF/seahorse-agent/sql/eval-dataset-postgresql.sql:/docker-entrypoint-initdb.d/03-eval-dataset.sql:ro
-      - ./seahorse-agent-adapter-repository-jdbc/src/main/resources/META-INF/seahorse-agent/sql/metadata-governance-postgresql.sql:/docker-entrypoint-initdb.d/04-metadata-governance.sql:ro
-      - ./seahorse-agent-adapter-repository-jdbc/src/main/resources/META-INF/seahorse-agent/sql/retrieval-governance-postgresql.sql:/docker-entrypoint-initdb.d/05-retrieval-governance.sql:ro
+      - ./resources/database/seahorse_init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U seahorse -d seahorse"]
       interval: 5s

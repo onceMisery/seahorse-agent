@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentNodePayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentNodeTree;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryPort;
@@ -33,7 +34,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 /**
@@ -86,7 +86,7 @@ public class JdbcIntentTreeRepositoryAdapter implements IntentTreeRepositoryPort
         if (!hasText(id)) {
             return Optional.empty();
         }
-        return jdbcTemplate.query(SQL_FIND, this::mapNode, id).stream().findFirst();
+        return jdbcTemplate.query(SQL_FIND, this::mapNode, toLongId(id)).stream().findFirst();
     }
 
     @Override
@@ -104,8 +104,8 @@ public class JdbcIntentTreeRepositoryAdapter implements IntentTreeRepositoryPort
         String id = nextId();
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update(SQL_INSERT,
-                id,
-                trimToNull(safePayload.getKbId()),
+                toLongId(id),
+                toNullableLong(safePayload.getKbId()),
                 safePayload.getIntentCode(),
                 safePayload.getName(),
                 safePayload.getLevel(),
@@ -121,8 +121,8 @@ public class JdbcIntentTreeRepositoryAdapter implements IntentTreeRepositoryPort
                 safePayload.getParamPromptTemplate(),
                 safePayload.getSortOrder() == null ? 0 : safePayload.getSortOrder(),
                 safePayload.getEnabled() == null ? 1 : safePayload.getEnabled(),
-                operator,
-                operator,
+                toNullableLong(operator),
+                toNullableLong(operator),
                 now,
                 now);
         return id;
@@ -136,7 +136,7 @@ public class JdbcIntentTreeRepositoryAdapter implements IntentTreeRepositoryPort
         }
         List<Object> args = new ArrayList<>();
         String setClause = buildUpdateSetClause(safePayload, operator, args);
-        args.add(id);
+        args.add(toLongId(id));
         int updated = jdbcTemplate.update("""
                 UPDATE t_intent_node
                 SET %s
@@ -147,7 +147,7 @@ public class JdbcIntentTreeRepositoryAdapter implements IntentTreeRepositoryPort
 
     @Override
     public boolean deleteByIds(List<String> ids) {
-        List<String> safeIds = normalizeIds(ids);
+        List<Long> safeIds = normalizeIds(ids);
         if (safeIds.isEmpty()) {
             return false;
         }
@@ -164,13 +164,13 @@ public class JdbcIntentTreeRepositoryAdapter implements IntentTreeRepositoryPort
 
     @Override
     public boolean updateEnabled(List<String> ids, int enabled, String operator) {
-        List<String> safeIds = normalizeIds(ids);
+        List<Long> safeIds = normalizeIds(ids);
         if (safeIds.isEmpty()) {
             return false;
         }
         List<Object> args = new ArrayList<>();
         args.add(enabled);
-        args.add(operator);
+        args.add(toNullableLong(operator));
         args.add(Timestamp.from(Instant.now()));
         args.addAll(safeIds);
         int updated = jdbcTemplate.update("""
@@ -201,7 +201,7 @@ public class JdbcIntentTreeRepositoryAdapter implements IntentTreeRepositoryPort
             args.add(toExamplesJson(payload));
         }
         fragments.add("update_by = ?");
-        args.add(operator);
+        args.add(toNullableLong(operator));
         fragments.add("update_time = ?");
         args.add(Timestamp.from(Instant.now()));
         return String.join(", ", fragments);
@@ -227,7 +227,8 @@ public class JdbcIntentTreeRepositoryAdapter implements IntentTreeRepositoryPort
                 FROM t_knowledge_base
                 WHERE id = ? AND deleted = 0
                 LIMIT 1
-                """, (resultSet, rowNum) -> resultSet.getString("collection_name"), payload.getKbId());
+                """, (resultSet, rowNum) -> resultSet.getString("collection_name"),
+                toNullableLong(payload.getKbId()));
         return names.isEmpty() ? null : names.get(0);
     }
 
@@ -273,11 +274,11 @@ public class JdbcIntentTreeRepositoryAdapter implements IntentTreeRepositoryPort
         return topK;
     }
 
-    private List<String> normalizeIds(List<String> ids) {
+    private List<Long> normalizeIds(List<String> ids) {
         if (ids == null || ids.isEmpty()) {
             return List.of();
         }
-        return ids.stream().filter(this::hasText).map(String::trim).distinct().toList();
+        return ids.stream().filter(this::hasText).map(this::toLongId).distinct().toList();
     }
 
     private String placeholders(int count) {
@@ -295,9 +296,22 @@ public class JdbcIntentTreeRepositoryAdapter implements IntentTreeRepositoryPort
     }
 
     private String nextId() {
-        long millis = System.currentTimeMillis();
-        int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return Long.toString(millis, 36) + suffix;
+        return SnowflakeIds.nextIdString();
+    }
+
+    private Long toNullableLong(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        return toLongId(value);
+    }
+
+    private long toLongId(String value) {
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("intent node id must be numeric: " + value, ex);
+        }
     }
 
     private boolean hasText(String value) {

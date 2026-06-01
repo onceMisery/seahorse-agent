@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
@@ -32,7 +33,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 基于旧 {@code t_sample_question} 表的 JDBC 示例问题 adapter。
@@ -98,7 +98,7 @@ public class JdbcSampleQuestionRepositoryAdapter implements SampleQuestionReposi
         if (!hasText(id)) {
             return Optional.empty();
         }
-        List<SampleQuestionRecord> records = jdbcTemplate.query(SQL_FIND_BY_ID, this::mapRecord, id);
+        List<SampleQuestionRecord> records = jdbcTemplate.query(SQL_FIND_BY_ID, this::mapRecord, toLongId(id));
         return records.stream().findFirst();
     }
 
@@ -106,7 +106,7 @@ public class JdbcSampleQuestionRepositoryAdapter implements SampleQuestionReposi
     public String create(String title, String description, String question) {
         String id = nextId();
         Timestamp now = Timestamp.from(Instant.now());
-        jdbcTemplate.update(SQL_INSERT, id, title, description, question, now, now);
+        jdbcTemplate.update(SQL_INSERT, toLongId(id), title, description, question, now, now);
         return id;
     }
 
@@ -118,7 +118,7 @@ public class JdbcSampleQuestionRepositoryAdapter implements SampleQuestionReposi
         }
         List<Object> args = new ArrayList<>();
         String setClause = buildUpdateSetClause(safeValues, args);
-        args.add(id);
+        args.add(toLongId(id));
         int updated = jdbcTemplate.update("""
                 UPDATE t_sample_question
                 SET %s
@@ -136,7 +136,7 @@ public class JdbcSampleQuestionRepositoryAdapter implements SampleQuestionReposi
                 UPDATE t_sample_question
                 SET deleted = 1, update_time = ?
                 WHERE id = ? AND deleted = 0
-                """, Timestamp.from(Instant.now()), id);
+                """, Timestamp.from(Instant.now()), toLongId(id));
         return updated > 0;
     }
 
@@ -193,9 +193,15 @@ public class JdbcSampleQuestionRepositoryAdapter implements SampleQuestionReposi
     }
 
     private String nextId() {
-        long millis = System.currentTimeMillis();
-        int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return Long.toString(millis, 36) + suffix;
+        return SnowflakeIds.nextIdString();
+    }
+
+    private long toLongId(String id) {
+        try {
+            return Long.parseLong(id.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("sample question id must be numeric: " + id, ex);
+        }
     }
 
     private boolean hasText(String value) {

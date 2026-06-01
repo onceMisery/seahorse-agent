@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidate;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidatePage;
@@ -33,7 +34,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 /**
@@ -154,7 +154,7 @@ public class JdbcMessageFeedbackRepositoryAdapter
     private String requireAssistantConversation(MessageFeedbackSubmission feedback) {
         List<String> conversations = jdbcTemplate.query(SQL_FIND_CONVERSATION,
                 (resultSet, rowNum) -> resultSet.getString("conversation_id"),
-                feedback.messageId(), feedback.userId(), ROLE_ASSISTANT);
+                toLongId(feedback.messageId()), toLongId(feedback.userId()), ROLE_ASSISTANT);
         if (conversations.isEmpty() || !hasText(conversations.get(0))) {
             throw new IllegalArgumentException("assistant message not found");
         }
@@ -164,7 +164,7 @@ public class JdbcMessageFeedbackRepositoryAdapter
     private String findFeedbackId(MessageFeedbackSubmission feedback) {
         List<String> ids = jdbcTemplate.query(SQL_FIND_FEEDBACK_ID,
                 (resultSet, rowNum) -> resultSet.getString("id"),
-                feedback.messageId(), feedback.userId());
+                toLongId(feedback.messageId()), toLongId(feedback.userId()));
         if (ids.isEmpty()) {
             return null;
         }
@@ -175,9 +175,9 @@ public class JdbcMessageFeedbackRepositoryAdapter
         Timestamp now = Timestamp.from(feedback.submitTime());
         jdbcTemplate.update(SQL_INSERT_FEEDBACK,
                 nextId(),
-                feedback.messageId(),
-                conversationId,
-                feedback.userId(),
+                toLongId(feedback.messageId()),
+                toLongId(conversationId),
+                toLongId(feedback.userId()),
                 feedback.vote(),
                 feedback.reason(),
                 feedback.comment(),
@@ -191,14 +191,14 @@ public class JdbcMessageFeedbackRepositoryAdapter
                 feedback.reason(),
                 feedback.comment(),
                 Timestamp.from(feedback.submitTime()),
-                feedbackId);
+                toLongId(feedbackId));
     }
 
     private Object[] buildVoteArgs(String userId, List<String> ids) {
         Object[] args = new Object[ids.size() + 1];
-        args[0] = userId;
+        args[0] = toLongId(userId);
         for (int index = 0; index < ids.size(); index++) {
-            args[index + 1] = ids.get(index);
+            args[index + 1] = toLongId(ids.get(index));
         }
         return args;
     }
@@ -210,11 +210,11 @@ public class JdbcMessageFeedbackRepositoryAdapter
         StringBuilder where = new StringBuilder(SQL_CANDIDATE_BASE);
         if (hasText(query.userId())) {
             where.append(" AND f.user_id = ?");
-            args.add(query.userId());
+            args.add(toLongId(query.userId()));
         }
         if (hasText(query.runId())) {
             where.append(" AND m.agent_run_id = ?");
-            args.add(query.runId());
+            args.add(toLongId(query.runId()));
         }
         if (hasText(query.reason())) {
             where.append(" AND f.reason = ?");
@@ -246,10 +246,16 @@ public class JdbcMessageFeedbackRepositoryAdapter
                 createdAt == null ? null : createdAt.toInstant());
     }
 
-    private String nextId() {
-        long millis = System.currentTimeMillis();
-        int suffix = ThreadLocalRandom.current().nextInt(100_000, 1_000_000);
-        return Long.toString(millis, 36) + suffix;
+    private long nextId() {
+        return SnowflakeIds.nextId();
+    }
+
+    private long toLongId(String id) {
+        try {
+            return Long.parseLong(id.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("feedback id must be numeric: " + id, ex);
+        }
     }
 
     private boolean hasText(String value) {

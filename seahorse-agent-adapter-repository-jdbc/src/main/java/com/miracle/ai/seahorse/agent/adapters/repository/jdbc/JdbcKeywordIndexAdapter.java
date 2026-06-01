@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import static com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemorySupport.toLongId;
+
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -125,7 +127,7 @@ public class JdbcKeywordIndexAdapter implements KeywordIndexPort {
                 .filter(Objects::nonNull)
                 .map(VectorChunk::getChunkId)
                 .filter(chunkId -> chunkId != null && !chunkId.isBlank())
-                .map(this::toLongId)
+                .map(JdbcMemorySupport::toLongId)
                 .toList();
     }
 

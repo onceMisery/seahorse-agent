@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import static com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemorySupport.toLongId;
+
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
