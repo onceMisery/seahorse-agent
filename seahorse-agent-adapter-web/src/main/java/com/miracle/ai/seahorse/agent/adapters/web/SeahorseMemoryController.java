@@ -48,12 +48,12 @@ public class SeahorseMemoryController {
     }
 
     @GetMapping("/memories")
-    public ApiResponse<Object> list(@RequestParam String userId,
+    public ApiResponse<Object> list(@RequestParam(required = false) String userId,
                                     @RequestParam(defaultValue = "short_term") String layer,
                                     @RequestParam(required = false) String conversationId,
                                     @RequestParam(defaultValue = "20") int limit) {
         return ApiResponses.requireServiceOrError(managementPortProvider,
-                port -> port.listMemories(userId, layer, conversationId, limit));
+                port -> port.listMemories(userIdOrDefault(userId), layer, conversationId, limit));
     }
 
     @GetMapping("/memories/{layer}/{memoryId}")
@@ -69,43 +69,43 @@ public class SeahorseMemoryController {
     }
 
     @GetMapping("/memories/quality-snapshots")
-    public ApiResponse<Object> qualitySnapshots(@RequestParam String userId,
+    public ApiResponse<Object> qualitySnapshots(@RequestParam(required = false) String userId,
                                                 @RequestParam(defaultValue = "20") int limit) {
         return ApiResponses.requireServiceOrError(managementPortProvider,
-                port -> port.listQualitySnapshots(userId, limit));
+                port -> port.listQualitySnapshots(userIdOrDefault(userId), limit));
     }
 
     @GetMapping("/memories/conflicts")
-    public ApiResponse<Object> conflicts(@RequestParam String userId,
+    public ApiResponse<Object> conflicts(@RequestParam(required = false) String userId,
                                          @RequestParam(required = false) String status,
                                          @RequestParam(defaultValue = "20") int limit) {
         return ApiResponses.requireServiceOrError(managementPortProvider,
-                port -> port.listConflicts(userId, status, limit));
+                port -> port.listConflicts(userIdOrDefault(userId), status, limit));
     }
 
     @GetMapping("/memories/profile-facts")
-    public ApiResponse<Object> profileFacts(@RequestParam String userId,
+    public ApiResponse<Object> profileFacts(@RequestParam(required = false) String userId,
                                             @RequestParam(defaultValue = "default") String tenantId,
                                             @RequestParam(defaultValue = "20") int limit) {
         return ApiResponses.requireServiceOrError(managementPortProvider,
-                port -> port.listProfileFacts(userId, tenantId, limit));
+                port -> port.listProfileFacts(userIdOrDefault(userId), tenantId, limit));
     }
 
     @GetMapping("/memories/corrections")
-    public ApiResponse<Object> correctionRules(@RequestParam String userId,
+    public ApiResponse<Object> correctionRules(@RequestParam(required = false) String userId,
                                                @RequestParam(defaultValue = "default") String tenantId,
                                                @RequestParam(defaultValue = "20") int limit) {
         return ApiResponses.requireServiceOrError(managementPortProvider,
-                port -> port.listCorrectionRules(userId, tenantId, limit));
+                port -> port.listCorrectionRules(userIdOrDefault(userId), tenantId, limit));
     }
 
     @GetMapping("/memories/operations")
-    public ApiResponse<Object> operations(@RequestParam String userId,
+    public ApiResponse<Object> operations(@RequestParam(required = false) String userId,
                                           @RequestParam(defaultValue = "default") String tenantId,
                                           @RequestParam(required = false) String status,
                                           @RequestParam(defaultValue = "20") int limit) {
         return ApiResponses.requireServiceOrError(managementPortProvider,
-                port -> port.listOperations(userId, tenantId, status, limit));
+                port -> port.listOperations(userIdOrDefault(userId), tenantId, status, limit));
     }
 
     @GetMapping("/memories/outbox")
@@ -114,17 +114,17 @@ public class SeahorseMemoryController {
     }
 
     @GetMapping("/memories/health")
-    public ApiResponse<Object> health(@RequestParam String userId,
+    public ApiResponse<Object> health(@RequestParam(required = false) String userId,
                                       @RequestParam(defaultValue = "default") String tenantId) {
         return ApiResponses.requireServiceOrError(managementPortProvider,
-                port -> port.memoryHealth(userId, tenantId));
+                port -> port.memoryHealth(userIdOrDefault(userId), tenantId));
     }
 
     @GetMapping("/memories/readiness")
-    public ApiResponse<Object> readiness(@RequestParam String userId,
+    public ApiResponse<Object> readiness(@RequestParam(required = false) String userId,
                                          @RequestParam(defaultValue = "default") String tenantId) {
         return ApiResponses.requireServiceOrError(managementPortProvider,
-                port -> port.memoryReadiness(userId, tenantId));
+                port -> port.memoryReadiness(userIdOrDefault(userId), tenantId));
     }
 
     @GetMapping("/memories/policy-config")
@@ -147,11 +147,11 @@ public class SeahorseMemoryController {
     }
 
     @PostMapping("/memories/governance/run")
-    public ApiResponse<Object> runGovernance(@RequestParam String userId,
+    public ApiResponse<Object> runGovernance(@RequestParam(required = false) String userId,
                                              @RequestParam(defaultValue = "manual") String reason,
                                              @RequestParam(defaultValue = "true") boolean assessQuality) {
         return ApiResponses.requireServiceOrError(governancePortProvider,
-                port -> port.runGovernance(userId, reason, assessQuality));
+                port -> port.runGovernance(userIdOrDefault(userId), reason, assessQuality));
     }
 
     @PostMapping("/memories/governance/decay")
@@ -160,8 +160,12 @@ public class SeahorseMemoryController {
     }
 
     @PostMapping("/memories/governance/quality")
-    public ApiResponse<Object> assessQuality(@RequestParam String userId) {
-        return ApiResponses.requireServiceOrError(governancePortProvider, port -> port.assessQuality(userId));
+    public ApiResponse<Object> assessQuality(@RequestParam(required = false) String userId) {
+        return ApiResponses.requireServiceOrError(governancePortProvider, port -> port.assessQuality(userIdOrDefault(userId)));
+    }
+
+    private String userIdOrDefault(String userId) {
+        return userId == null || userId.isBlank() ? DEFAULT_OPERATOR : userId.trim();
     }
 
     private String operator(String userId) {
