@@ -45,6 +45,7 @@ public record MemoryEngineOptions(int shortTermLimit,
     public static final int DEFAULT_LONG_TERM_LIMIT = 3;
     public static final int DEFAULT_SEMANTIC_LIMIT = 10;
     public static final int DEFAULT_MAX_REFINER_BATCH_OPERATIONS = 8;
+    public static final int DEFAULT_MAX_REFINEMENT_DEPTH = 2;
     public static final double DEFAULT_MAX_REFINER_DELETE_RATIO = 0.7D;
     public static final int DEFAULT_REFINER_READ_MASK_PER_LAYER_LIMIT = 3;
     public static final int DEFAULT_REFINER_TARGET_ZONE_TURN_COUNT = 3;
@@ -52,7 +53,6 @@ public record MemoryEngineOptions(int shortTermLimit,
     public static final int DEFAULT_REFINER_FEEDBACK_EXAMPLE_LIMIT = 3;
     public static final double DEFAULT_REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD = 0.85D;
     public static final double DEFAULT_REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD = 0.90D;
-    public static final int DEFAULT_MAX_REFINEMENT_DEPTH = 2;
 
     public MemoryEngineOptions {
         shortTermLimit = positive(shortTermLimit, DEFAULT_SHORT_TERM_LIMIT);

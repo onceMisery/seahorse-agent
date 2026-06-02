@@ -2,6 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes ai-shimmer-slide {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.ai-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--theme-bg-elevated) 0%,
+    var(--theme-bg-surface) 42%,
+    rgba(255, 255, 255, 0.42) 50%,
+    var(--theme-bg-surface) 58%,
+    var(--theme-bg-elevated) 100%
+  );
+  background-size: 200% 100%;
+  animation: ai-shimmer-slide 1.35s ease-in-out infinite;
+}
+
+.dark .ai-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(15, 23, 42, 0.7) 0%,
+    rgba(30, 41, 59, 0.84) 42%,
+    rgba(148, 163, 184, 0.18) 50%,
+    rgba(30, 41, 59, 0.84) 58%,
+    rgba(15, 23, 42, 0.7) 100%
+  );
+  background-size: 200% 100%;
+}
+
 :root {
   color-scheme: light;
   --background: 0 0% 100%;

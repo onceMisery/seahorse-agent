@@ -1,11 +1,12 @@
 import * as React from "react";
-import { Check, Copy, Download, FileText, Maximize2, Minimize2 } from "lucide-react";
+import { Check, Copy, Download, Edit3, FileText, Maximize2, Minimize2, Save } from "lucide-react";
 import { toast } from "sonner";
 
+import { CodeEditor } from "@/components/ai-elements/renderer/CodeEditor";
 import { InspectorEmptyState } from "@/components/chat/workbench/InspectorEmptyState";
 import { A2UILiteRenderer } from "@/components/a2ui-lite/A2UILiteRenderer";
 import type { A2UILiteAction, A2UILiteSurface } from "@/components/a2ui-lite/a2uiTypes";
-import { downloadAgentArtifact } from "@/services/agentArtifactService";
+import { downloadAgentArtifact, updateAgentArtifact } from "@/services/agentArtifactService";
 import { AGENT_ARTIFACT_SCAN_STATUS, type AgentArtifact, type ArtifactBlock } from "@/types";
 
 interface ArtifactInspectorTabProps {
@@ -47,6 +48,10 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
   const [selectedId, setSelectedId] = React.useState<string>("");
   const [copied, setCopied] = React.useState(false);
   const [fullscreen, setFullscreen] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [editedContentById, setEditedContentById] = React.useState<Record<string, string>>({});
+  const [a2uiParseError, setA2uiParseError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (allItems.length > 0 && (!selectedId || !allItems.some((i) => i.id === selectedId))) {
@@ -54,37 +59,35 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
     }
   }, [allItems, selectedId]);
 
-  if (allItems.length === 0) return <InspectorEmptyState />;
-
-  const active = allItems.find((i) => i.id === selectedId) ?? allItems[0];
-  const isClean = !active.server || active.server.scanStatus === AGENT_ARTIFACT_SCAN_STATUS.CLEAN;
+  const active = allItems.find((i) => i.id === selectedId) ?? allItems[0] ?? null;
+  const activeCode = active ? editedContentById[active.id] ?? active.code ?? "" : "";
+  const isClean = !active?.server || active.server.scanStatus === AGENT_ARTIFACT_SCAN_STATUS.CLEAN;
 
   const a2uiSurface = React.useMemo<A2UILiteSurface | null>(() => {
+    if (!active) return null;
     if (active.server?.mimeType === "application/vnd.seahorse.a2ui+json") {
       try {
-        const parsed = JSON.parse(active.code ?? active.server.previewText ?? "");
+        const parsed = JSON.parse(activeCode || (active.server.previewText ?? ""));
         if (parsed?.version === "seahorse-a2ui-lite/v1") return parsed as A2UILiteSurface;
       } catch {
         return null;
       }
     }
-    if (active.language === "json" && active.code) {
+    if (active.language === "json" && activeCode) {
       try {
-        const parsed = JSON.parse(active.code);
+        const parsed = JSON.parse(activeCode);
         if (parsed?.version === "seahorse-a2ui-lite/v1") return parsed as A2UILiteSurface;
       } catch {
         return null;
       }
     }
     return null;
-  }, [active]);
-
-  const [a2uiParseError, setA2uiParseError] = React.useState<string | null>(null);
+  }, [active, activeCode]);
 
   React.useEffect(() => {
-    if (active.language === "json" && active.code && !a2uiSurface) {
+    if (active?.language === "json" && activeCode && !a2uiSurface) {
       try {
-        JSON.parse(active.code);
+        JSON.parse(activeCode);
         setA2uiParseError(null);
       } catch (err) {
         setA2uiParseError((err as Error).message);
@@ -92,12 +95,14 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
     } else {
       setA2uiParseError(null);
     }
-  }, [active, a2uiSurface]);
+  }, [active, activeCode, a2uiSurface]);
+
+  if (allItems.length === 0 || !active) return <InspectorEmptyState />;
 
   const handleCopy = async () => {
-    if (!active?.code) return;
+    if (!activeCode) return;
     try {
-      await navigator.clipboard.writeText(active.code);
+      await navigator.clipboard.writeText(activeCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -106,10 +111,10 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
   };
 
   const handleDownload = async () => {
-    if (!isClean) return;
+    if (!active || !isClean) return;
     if (active.server) {
       try {
-        const blob = await downloadAgentArtifact(active.server.artifactId);
+        const blob = (await downloadAgentArtifact(active.server.artifactId)) as unknown as Blob;
         const href = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = href;
@@ -123,14 +128,37 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
       }
       return;
     }
-    if (!active.code) return;
-    const blob = new Blob([active.code], { type: "text/plain;charset=utf-8" });
+    if (!activeCode) return;
+    const blob = new Blob([activeCode], { type: "text/plain;charset=utf-8" });
     const href = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = href;
     link.download = `${active.title || "artifact"}.txt`;
     link.click();
     URL.revokeObjectURL(href);
+  };
+
+  const handleSave = async () => {
+    if (!active) return;
+    if (!active.server) {
+      setEditing(false);
+      toast.success("Saved locally");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await updateAgentArtifact(active.server.artifactId, activeCode);
+      setEditedContentById((current) => ({
+        ...current,
+        [active.id]: updated.previewText ?? activeCode
+      }));
+      setEditing(false);
+      toast.success("Artifact saved");
+    } catch {
+      toast.error("Save failed");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const containerClass = fullscreen
@@ -218,6 +246,28 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
               </button>
               <button
                 type="button"
+                onClick={() => setEditing((current) => !current)}
+                aria-label={editing ? "Preview content" : "Edit content"}
+                className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/10"
+              >
+                <Edit3
+                  className="h-3.5 w-3.5"
+                  style={{ color: editing ? "var(--sh-workbench-accent)" : "var(--theme-text-muted)" }}
+                />
+              </button>
+              {editing && (
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  aria-label="Save content"
+                  className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Save className="h-3.5 w-3.5" style={{ color: "var(--sh-workbench-accent)" }} />
+                </button>
+              )}
+              <button
+                type="button"
                 onClick={handleDownload}
                 disabled={!isClean}
                 aria-label="下载"
@@ -240,7 +290,17 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
           </div>
 
           <div className="flex-1 overflow-auto">
-            {a2uiSurface ? (
+            {editing ? (
+              <div className="p-4">
+                <CodeEditor
+                  value={activeCode}
+                  onChange={(next) => setEditedContentById((current) => ({ ...current, [active.id]: next }))}
+                  language={active.language ?? "text"}
+                  minHeight="360px"
+                  maxHeight="70vh"
+                />
+              </div>
+            ) : a2uiSurface ? (
               <A2UILiteRenderer
                 surface={a2uiSurface}
                 onAction={(_action: A2UILiteAction) => undefined}
@@ -259,7 +319,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
                   className="text-xs font-mono whitespace-pre-wrap break-words leading-relaxed"
                   style={{ color: "var(--theme-text-primary)" }}
                 >
-                  {active.code ?? "(无内容)"}
+                  {activeCode || "(No content)"}
                 </pre>
               </div>
             )}

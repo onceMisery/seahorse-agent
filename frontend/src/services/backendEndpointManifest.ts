@@ -109,6 +109,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/agent-runs/{}/workflow"
+  },
+  {
+    "method": "GET",
     "path": "/agent-runs/{}/steps"
   },
   {
@@ -182,6 +186,14 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/api/agent-runs/{}/snapshot"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent-runs/{}/workflow"
+  },
+  {
+    "method": "GET",
+    "path": "/api/workflows/{}/visualization"
   },
   {
     "method": "GET",
@@ -1070,6 +1082,10 @@ export const backendEndpointManifest = [
   {
     "method": "PUT",
     "path": "/admin/ai-config/{}"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/agent-artifacts/{}"
   },
   {
     "method": "PUT",

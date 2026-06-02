@@ -1,5 +1,5 @@
 import { api } from "@/services/api";
-import type { AgentRunCostSummary, AgentRunSnapshot, StreamEventEnvelope } from "@/types";
+import type { AgentRunCostSummary, AgentRunSnapshot, AgentRunWorkflow, StreamEventEnvelope } from "@/types";
 import {
   createAgentRun,
   getAgentRun,
@@ -13,6 +13,7 @@ import {
   cancelAgentHandoff,
   getAgentRunArtifacts,
   getAgentArtifact,
+  updateAgentArtifact,
   downloadAgentArtifact
 } from "@/services/agentArtifactService";
 
@@ -30,6 +31,7 @@ export {
   cancelAgentHandoff,
   getAgentRunArtifacts,
   getAgentArtifact,
+  updateAgentArtifact,
   downloadAgentArtifact
 };
 
@@ -44,6 +46,12 @@ export async function getAgentRunSnapshot(runId: string) {
 export async function getAgentRunCostSummary(runId: string) {
   return api.get<AgentRunCostSummary, AgentRunCostSummary>(
     `${AGENT_RUNS_API_BASE}/${encodeURIComponent(runId)}/cost-summary`
+  );
+}
+
+export async function getAgentRunWorkflow(runId: string) {
+  return api.get<AgentRunWorkflow, AgentRunWorkflow>(
+    `${AGENT_RUNS_API_BASE}/${encodeURIComponent(runId)}/workflow`
   );
 }
 

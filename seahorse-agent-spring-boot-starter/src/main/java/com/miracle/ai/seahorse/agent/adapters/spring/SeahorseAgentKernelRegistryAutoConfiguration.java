@@ -19,10 +19,12 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.artifact.KernelAgentArtifactQueryService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.artifact.KernelAgentArtifactUpdateService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentCheckpointQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunLeaseService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunSnapshotService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunWorkflowService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.approval.KernelApprovalManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.audit.KernelAuditLedgerService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.connector.KernelOpenApiConnectorImportService;
@@ -53,6 +55,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCat
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolInvocationAuditQueryService;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentFactoryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentHandoffInboundPort;
@@ -61,6 +64,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunCostSummaryInbo
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkflowInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
@@ -128,6 +132,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditRedactionPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditWriteFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.sandbox.SandboxNetworkPolicy;
@@ -192,6 +197,19 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({AgentArtifactRepositoryPort.class, ObjectStoragePort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(AgentArtifactUpdateInboundPort.class)
+    public KernelAgentArtifactUpdateService seahorseAgentArtifactUpdateInboundPort(
+            AgentArtifactRepositoryPort agentArtifactRepositoryPort,
+            ObjectStoragePort objectStoragePort,
+            CurrentUserPort currentUserPort) {
+        return new KernelAgentArtifactUpdateService(
+                agentArtifactRepositoryPort,
+                objectStoragePort,
+                currentUserPort);
+    }
+
+    @Bean
     @ConditionalOnBean({AgentRunRepositoryPort.class, CurrentUserPort.class})
     @ConditionalOnMissingBean(AgentRunSnapshotInboundPort.class)
     public KernelAgentRunSnapshotService seahorseAgentRunSnapshotInboundPort(
@@ -208,6 +226,15 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 approvalRequestQueryPort.getIfAvailable(),
                 agentArtifactRepositoryPort.getIfAvailable(),
                 currentUserPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({AgentRunRepositoryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(AgentRunWorkflowInboundPort.class)
+    public KernelAgentRunWorkflowService seahorseAgentRunWorkflowInboundPort(
+            AgentRunRepositoryPort agentRunRepositoryPort,
+            CurrentUserPort currentUserPort) {
+        return new KernelAgentRunWorkflowService(agentRunRepositoryPort, currentUserPort);
     }
 
     @Bean

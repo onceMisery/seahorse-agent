@@ -23,6 +23,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactS
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.io.InputStreamResource;
@@ -31,6 +33,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.InputStream;
@@ -41,11 +45,14 @@ import java.util.List;
 public class SeahorseAgentArtifactController {
 
     private final ObjectProvider<AgentArtifactQueryInboundPort> artifactQueryPortProvider;
+    private final ObjectProvider<AgentArtifactUpdateInboundPort> artifactUpdatePortProvider;
     private final ObjectProvider<ObjectStoragePort> objectStoragePortProvider;
 
     public SeahorseAgentArtifactController(ObjectProvider<AgentArtifactQueryInboundPort> artifactQueryPortProvider,
+                                           ObjectProvider<AgentArtifactUpdateInboundPort> artifactUpdatePortProvider,
                                            ObjectProvider<ObjectStoragePort> objectStoragePortProvider) {
         this.artifactQueryPortProvider = artifactQueryPortProvider;
+        this.artifactUpdatePortProvider = artifactUpdatePortProvider;
         this.objectStoragePortProvider = objectStoragePortProvider;
     }
 
@@ -61,6 +68,18 @@ public class SeahorseAgentArtifactController {
                 port -> port.listByRunId(runId).stream()
                         .map(AgentArtifactResponse::from)
                         .toList());
+    }
+
+    @PutMapping("/api/agent-artifacts/{artifactId}")
+    public ApiResponse<AgentArtifactResponse> updateContent(@PathVariable String artifactId,
+                                                            @RequestBody AgentArtifactUpdateRequest request) {
+        AgentArtifactUpdateRequest safeRequest = request == null
+                ? new AgentArtifactUpdateRequest("")
+                : request;
+        return ApiResponses.requireService(artifactUpdatePortProvider,
+                port -> AgentArtifactResponse.from(port.updateContent(
+                        artifactId,
+                        new AgentArtifactUpdateCommand(safeRequest.content()))));
     }
 
     @GetMapping("/api/agent-artifacts/{artifactId}/download")
@@ -97,6 +116,9 @@ public class SeahorseAgentArtifactController {
 
     private String contentDisposition(AgentArtifactDownloadDecision decision) {
         return decision.disposition().headerValue() + "; filename=\"" + decision.filename() + "\"";
+    }
+
+    public record AgentArtifactUpdateRequest(String content) {
     }
 
     public record AgentArtifactResponse(String artifactId,

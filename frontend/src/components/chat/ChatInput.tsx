@@ -1,10 +1,11 @@
 import * as React from "react";
-import { Gauge, Lightbulb, Loader2, Paperclip, Send, Square, X } from "lucide-react";
+import { Eye, Gauge, Lightbulb, Loader2, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { PromptEnhancerButton } from "@/components/chat/prompt/PromptEnhancerButton";
 import { PromptEnhancerDialog } from "@/components/chat/prompt/PromptEnhancerDialog";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 
+import { MarkdownRenderer } from "@/components/ai-elements/renderer/MarkdownRenderer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -82,6 +83,22 @@ type AttachmentChip = ConversationAttachment & {
   errorMessage?: string;
 };
 
+type SpeechRecognitionConstructor = new () => {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechWindow = Window & {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+};
+
 function quotaTone(status?: QuotaSummaryStatus | string | null) {
   if (status === QUOTA_EXCEEDED_STATUS) return { color: "#ef4444", label: "Limit reached" };
   if (status === "NEAR_LIMIT") return { color: "#f59e0b", label: "Running low" };
@@ -142,9 +159,13 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
   const [uploadingCount, setUploadingCount] = React.useState(0);
   const [pendingConversationId, setPendingConversationId] = React.useState<string | null>(null);
   const [enhancerOpen, setEnhancerOpen] = React.useState(false);
+  const [isDraggingFiles, setIsDraggingFiles] = React.useState(false);
+  const [previewOpen, setPreviewOpen] = React.useState(false);
+  const [listening, setListening] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const isComposingRef = React.useRef(false);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const speechRecognitionRef = React.useRef<InstanceType<SpeechRecognitionConstructor> | null>(null);
   const {
     currentSessionId,
     sendMessage,
@@ -296,6 +317,44 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
     }
   };
 
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDraggingFiles(false);
+    handleUploadFiles(event.dataTransfer.files);
+  };
+
+  const startVoiceInput = () => {
+    const SpeechRecognition = (window as SpeechWindow).SpeechRecognition ?? (window as SpeechWindow).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Voice input is not supported by this browser");
+      return;
+    }
+    if (listening) {
+      speechRecognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = navigator.language || "zh-CN";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim();
+      if (transcript) {
+        setValue((current) => (current ? `${current} ${transcript}` : transcript));
+      }
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => {
+      setListening(false);
+      toast.error("Voice input failed");
+    };
+    speechRecognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  };
+
   const handleDeleteAttachment = async (attachment: AttachmentChip) => {
     if (attachment.uploadState === "failed") {
       setAttachments((current) => current.filter((item) => item.attachmentId !== attachment.attachmentId));
@@ -356,13 +415,28 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
           style={{ background: "linear-gradient(to right, var(--theme-accent-alpha-20), var(--theme-accent-alpha-10))" }}
         />
         <div
+          onDrop={handleDrop}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsDraggingFiles(true);
+          }}
+          onDragLeave={() => setIsDraggingFiles(false)}
           className={cn(
             "relative glass rounded-3xl glow-border p-2 transition-all duration-200",
-            isFocused && "shadow-lg"
+            isFocused && "shadow-lg",
+            isDraggingFiles && "ring-2"
           )}
-          style={isFocused ? { boxShadow: "var(--theme-shadow-glow)" } : undefined}
+          style={isFocused || isDraggingFiles ? { boxShadow: "var(--theme-shadow-glow)" } : undefined}
         >
           <div className="flex flex-col gap-2 p-3">
+            {isDraggingFiles ? (
+              <div
+                className="rounded-2xl border border-dashed px-4 py-3 text-center text-sm"
+                style={{ borderColor: "var(--theme-accent)", color: "var(--theme-accent)" }}
+              >
+                Drop files to attach
+              </div>
+            ) : null}
             {attachments.length > 0 || uploadingCount > 0 ? (
               <div className="flex flex-wrap gap-2 px-1">
                 {attachments.map((attachment) => {
@@ -407,32 +481,48 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
               </div>
             ) : null}
             <div className="relative">
-              <Textarea
-                ref={textareaRef}
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                placeholder={deepThinkingEnabled ? "Ask for deeper analysis..." : "Ask about research, analysis, writing, or uploaded files..."}
-                className="max-h-40 min-h-[44px] w-full resize-none border-0 bg-transparent px-2 pb-2 pr-2 pt-2 text-[15px] shadow-none focus-visible:ring-0"
-                style={{ color: "var(--theme-text-primary)" }}
-                rows={1}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-                onCompositionStart={() => {
-                  isComposingRef.current = true;
-                }}
-                onCompositionEnd={() => {
-                  isComposingRef.current = false;
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    const nativeEvent = event.nativeEvent as KeyboardEvent;
-                    if (nativeEvent.isComposing || isComposingRef.current || nativeEvent.keyCode === 229) return;
-                    event.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                aria-label="Chat input"
-              />
+              {previewOpen ? (
+                <div
+                  className="min-h-[92px] rounded-2xl px-3 py-2 text-sm"
+                  style={{
+                    backgroundColor: "var(--theme-bg-surface)",
+                    color: "var(--theme-text-primary)"
+                  }}
+                >
+                  {value.trim() ? (
+                    <MarkdownRenderer content={value} />
+                  ) : (
+                    <span style={{ color: "var(--theme-text-muted)" }}>Markdown preview</span>
+                  )}
+                </div>
+              ) : (
+                <Textarea
+                  ref={textareaRef}
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  placeholder={deepThinkingEnabled ? "Ask for deeper analysis..." : "Ask about research, analysis, writing, or uploaded files..."}
+                  className="max-h-40 min-h-[44px] w-full resize-none border-0 bg-transparent px-2 pb-2 pr-2 pt-2 text-[15px] shadow-none focus-visible:ring-0"
+                  style={{ color: "var(--theme-text-primary)" }}
+                  rows={1}
+                  onFocus={() => setIsFocused(true)}
+                  onBlur={() => setIsFocused(false)}
+                  onCompositionStart={() => {
+                    isComposingRef.current = true;
+                  }}
+                  onCompositionEnd={() => {
+                    isComposingRef.current = false;
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      const nativeEvent = event.nativeEvent as KeyboardEvent;
+                      if (nativeEvent.isComposing || isComposingRef.current || nativeEvent.keyCode === 229) return;
+                      event.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
+                  aria-label="Chat input"
+                />
+              )}
             </div>
             <div
               className="mt-2 flex items-center justify-between pt-4"
@@ -500,6 +590,34 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   }}
                 >
                   <Paperclip className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={startVoiceInput}
+                  disabled={isStreaming}
+                  aria-label="Voice input"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    backgroundColor: "var(--theme-bg-elevated)",
+                    border: "1px solid var(--theme-accent-alpha-10)",
+                    color: listening ? "var(--theme-accent)" : "var(--theme-text-secondary)"
+                  }}
+                >
+                  <Mic className={cn("h-4 w-4", listening && "animate-pulse")} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewOpen((current) => !current)}
+                  aria-pressed={previewOpen}
+                  aria-label="Toggle Markdown preview"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors"
+                  style={{
+                    backgroundColor: "var(--theme-bg-elevated)",
+                    border: "1px solid var(--theme-accent-alpha-10)",
+                    color: previewOpen ? "var(--theme-accent)" : "var(--theme-text-secondary)"
+                  }}
+                >
+                  <Eye className="h-4 w-4" />
                 </button>
                 {hasContent && (
                   <PromptEnhancerButton

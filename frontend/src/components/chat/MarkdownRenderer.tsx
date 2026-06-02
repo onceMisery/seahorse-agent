@@ -4,11 +4,9 @@
 import * as React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check, Copy, ImageIcon } from "lucide-react";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { ImageIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { CodeBlock } from "@/components/ai-elements/renderer/CodeBlock";
 import { CitationBadge } from "@/components/chat/CitationBadge";
 import { cn } from "@/lib/utils";
 import type { AgentSource } from "@/types";
@@ -46,34 +44,7 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
             );
           }
 
-          return (
-            <div className="my-3 overflow-hidden rounded-md" style={{ border: "1px solid var(--theme-glass-border)", backgroundColor: "var(--theme-bg-elevated)" }}>
-              <div className="flex items-center justify-between px-3 py-1.5" style={{ borderBottom: "1px solid var(--theme-glass-border)", backgroundColor: "var(--theme-bg-surface)" }}>
-                <span className="font-mono text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--theme-text-muted)" }}>
-                  {language}
-                </span>
-                <CopyButton value={value} />
-              </div>
-              <div className="overflow-x-auto">
-                <SyntaxHighlighter
-                  language={language}
-                  style={oneDark}
-                  PreTag="div"
-                  customStyle={{
-                    margin: 0,
-                    padding: "0.75rem 1rem",
-                    background: "transparent",
-                    fontSize: "13px",
-                    lineHeight: "1.5"
-                  }}
-                  showLineNumbers={false}
-                  wrapLines={true}
-                >
-                  {value}
-                </SyntaxHighlighter>
-              </div>
-            </div>
-          );
+          return <CodeBlock code={value} language={language} editable />;
         },
         img({ src, alt, ...props }) {
           const [hasError, setHasError] = React.useState(false);
@@ -218,35 +189,4 @@ function renderWithCitations(children: React.ReactNode, sources?: AgentSource[])
     }
     return <React.Fragment key={`frag-${idx}`}>{segments}</React.Fragment>;
   });
-}
-
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = React.useState(false);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
-  };
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={handleCopy}
-      aria-label="复制代码"
-      className="h-7 w-7 transition-colors"
-      style={{ color: "var(--theme-text-muted)" }}
-    >
-      {copied ? (
-        <Check className="h-3.5 w-3.5 text-green-400" />
-      ) : (
-        <Copy className="h-3.5 w-3.5" />
-      )}
-    </Button>
-  );
 }

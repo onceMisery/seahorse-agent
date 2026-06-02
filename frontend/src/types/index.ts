@@ -202,6 +202,46 @@ export interface AgentRunSnapshot {
   canRetry?: boolean;
 }
 
+export interface AgentRunWorkflowPosition {
+  x: number;
+  y: number;
+}
+
+export interface AgentRunWorkflowNodeData {
+  label: string;
+  status?: string;
+  description?: string | null;
+  durationMs?: number | null;
+  stepType?: string | null;
+  stepNo?: number | null;
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+}
+
+export interface AgentRunWorkflowNode {
+  id: string;
+  type: "workflowStep";
+  position: AgentRunWorkflowPosition;
+  data: AgentRunWorkflowNodeData;
+}
+
+export interface AgentRunWorkflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  type?: string | null;
+  animated?: boolean;
+  label?: string | null;
+}
+
+export interface AgentRunWorkflow {
+  runId: string;
+  currentStepId?: string | null;
+  nodes: AgentRunWorkflowNode[];
+  edges: AgentRunWorkflowEdge[];
+}
+
 export interface AgentRunCostSummary {
   tenantId: string;
   agentId?: string | null;

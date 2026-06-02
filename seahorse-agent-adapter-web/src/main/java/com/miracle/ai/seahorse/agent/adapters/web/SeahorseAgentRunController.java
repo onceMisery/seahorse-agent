@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInb
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkflowInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import jakarta.servlet.http.HttpServletRequest;
@@ -45,6 +46,7 @@ public class SeahorseAgentRunController {
     private final ObjectProvider<AgentRunResumeInboundPort> agentRunResumePortProvider;
     private final ObjectProvider<AgentCheckpointQueryInboundPort> checkpointQueryPortProvider;
     private final ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider;
+    private final ObjectProvider<AgentRunWorkflowInboundPort> workflowPortProvider;
     private final ObjectProvider<AgentRunCostSummaryInboundPort> costSummaryPortProvider;
     private final ObjectProvider<AgentRunEventBufferPort> eventBufferPortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
@@ -54,6 +56,7 @@ public class SeahorseAgentRunController {
                                        ObjectProvider<AgentRunResumeInboundPort> agentRunResumePortProvider,
                                        ObjectProvider<AgentCheckpointQueryInboundPort> checkpointQueryPortProvider,
                                        ObjectProvider<AgentRunSnapshotInboundPort> snapshotPortProvider,
+                                       ObjectProvider<AgentRunWorkflowInboundPort> workflowPortProvider,
                                        ObjectProvider<AgentRunCostSummaryInboundPort> costSummaryPortProvider,
                                        ObjectProvider<AgentRunEventBufferPort> eventBufferPortProvider,
                                        ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
@@ -61,6 +64,7 @@ public class SeahorseAgentRunController {
         this.agentRunResumePortProvider = agentRunResumePortProvider;
         this.checkpointQueryPortProvider = checkpointQueryPortProvider;
         this.snapshotPortProvider = snapshotPortProvider;
+        this.workflowPortProvider = workflowPortProvider;
         this.costSummaryPortProvider = costSummaryPortProvider;
         this.eventBufferPortProvider = eventBufferPortProvider;
         this.advancedFeatureGate = advancedFeatureGateProvider == null
@@ -150,6 +154,16 @@ public class SeahorseAgentRunController {
     public ApiResponse<Object> snapshot(@PathVariable String runId, HttpServletRequest request) {
         requireApiOrRunManagement(request);
         return ApiResponses.requireService(snapshotPortProvider, port -> port.getSnapshot(runId));
+    }
+
+    @GetMapping({
+            "/agent-runs/{runId}/workflow",
+            "/api/agent-runs/{runId}/workflow",
+            "/api/workflows/{runId}/visualization"
+    })
+    public ApiResponse<Object> workflow(@PathVariable String runId, HttpServletRequest request) {
+        requireApiOrRunManagement(request);
+        return ApiResponses.requireService(workflowPortProvider, port -> port.getWorkflow(runId));
     }
 
     @GetMapping({"/agent-runs/{runId}/cost-summary", "/api/agent-runs/{runId}/cost-summary"})

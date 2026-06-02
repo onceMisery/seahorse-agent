@@ -250,6 +250,7 @@ class SeahorseAgentControllerTests {
                         provider(AgentRunSnapshotInboundPort.class, snapshotPort),
                         null,
                         null,
+                        null,
                         provider(AdvancedFeatureGate.class, AdvancedFeatureGate.allEnabledForTests()))).build();
 
         mvc.perform(post("/agents/agent-1/runs")
@@ -334,6 +335,7 @@ class SeahorseAgentControllerTests {
                                 provider(AgentRunSnapshotInboundPort.class, snapshotPort),
                                 null,
                                 null,
+                                null,
                                 provider(AdvancedFeatureGate.class, AdvancedFeatureGate.consumerWebDefaults())))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
@@ -372,6 +374,7 @@ class SeahorseAgentControllerTests {
                                 null,
                                 null,
                                 null,
+                                null,
                                 null))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
@@ -399,6 +402,7 @@ class SeahorseAgentControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseAgentRunController(
                                 provider(AgentRunInboundPort.class, port),
+                                null,
                                 null,
                                 null,
                                 null,

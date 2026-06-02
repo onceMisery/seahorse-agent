@@ -112,6 +112,13 @@ export function getAgentArtifact(artifactId: string) {
   return api.get<AgentArtifactItem>(`/api/agent-artifacts/${encodeURIComponent(artifactId)}`);
 }
 
+export function updateAgentArtifact(artifactId: string, content: string) {
+  return api.put<AgentArtifactItem, AgentArtifactItem>(
+    `/api/agent-artifacts/${encodeURIComponent(artifactId)}`,
+    { content }
+  );
+}
+
 export function downloadAgentArtifact(artifactId: string) {
   return api.get(`/api/agent-artifacts/${encodeURIComponent(artifactId)}/download`, {
     responseType: "blob"
