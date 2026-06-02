@@ -212,12 +212,12 @@ public class SeahorseRagSettingsController {
             this.url = url;
         }
 
-        public String getApiKey() {
-            return apiKey;
-        }
-
         public void setApiKey(String apiKey) {
             this.apiKey = apiKey;
+        }
+
+        public boolean isApiKeyConfigured() {
+            return apiKey != null && !apiKey.isBlank();
         }
 
         public Map<String, String> getEndpoints() {

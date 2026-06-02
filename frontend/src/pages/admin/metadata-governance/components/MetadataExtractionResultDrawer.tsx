@@ -4,20 +4,20 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { api } from "@/services/api";
-import { getErrorMessage } from "@/utils/error";
-
-type ExtractionResult = Record<string, unknown>;
+import {
+  listMetadataExtractionResults,
+  type MetadataExtractionResult
+} from "@/services/metadataGovernanceService";
 
 export function MetadataExtractionResultDrawer() {
-  const [results, setResults] = useState<ExtractionResult[]>([]);
+  const [results, setResults] = useState<MetadataExtractionResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedResult, setSelectedResult] = useState<ExtractionResult | null>(null);
+  const [selectedResult, setSelectedResult] = useState<MetadataExtractionResult | null>(null);
 
   const fetchResults = async () => {
     setLoading(true);
     try {
-      const result = await api.get<{ records?: ExtractionResult[] } | ExtractionResult[]>("/metadata-extraction/results");
+      const result = await listMetadataExtractionResults();
       const data = Array.isArray(result) ? result : (result as any)?.records ?? [];
       setResults(data);
     } catch {

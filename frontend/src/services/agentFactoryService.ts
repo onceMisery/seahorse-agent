@@ -38,12 +38,6 @@ export function listAgentTemplates() {
   return api.get<AgentTemplate[], AgentTemplate[]>("/api/agent-templates");
 }
 
-export function getAgentTemplate(templateId: string) {
-  return api.get<AgentTemplate>(
-    `/api/agent-templates/${encodeURIComponent(templateId)}`
-  );
-}
-
 export function createAgentFromTemplate(payload: CreateFromTemplatePayload) {
   return api.post<Record<string, unknown>, Record<string, unknown>>(
     "/api/agents/from-template",

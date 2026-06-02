@@ -50,25 +50,25 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
 
     @Test
     void shouldQueryPageUpdateEnableDeleteAndListLogs() {
-        KnowledgeDocumentDetail detail = adapter.findDetailById("doc-1").orElseThrow();
-        KnowledgeDocumentPage page = adapter.page("kb-1", 1, 10, "success", "Guide");
-        KnowledgeDocumentChunkLogPage logs = adapter.chunkLogs("doc-1", 1, 10);
+        KnowledgeDocumentDetail detail = adapter.findDetailById(1L).orElseThrow();
+        KnowledgeDocumentPage page = adapter.page(1L, 1, 10, "success", "Guide");
+        KnowledgeDocumentChunkLogPage logs = adapter.chunkLogs(1L, 1, 10);
         KnowledgeDocumentUpdateValues values = new KnowledgeDocumentUpdateValues();
         values.setDocName("Updated Guide");
         values.setProcessMode("pipeline");
         values.setPipelineId("pipeline-1");
         values.setOperator("tester");
 
-        boolean updated = adapter.update("doc-1", values);
-        String updatedDocName = adapter.findDetailById("doc-1").orElseThrow().getDocName();
-        boolean disabled = adapter.updateEnabled("doc-1", false, "tester");
+        boolean updated = adapter.update(1L, values);
+        String updatedDocName = adapter.findDetailById(1L).orElseThrow().getDocName();
+        boolean disabled = adapter.updateEnabled(1L, false, "tester");
         int disabledChunks = jdbcTemplate.queryForObject(
-                "SELECT COUNT(1) FROM t_knowledge_chunk WHERE doc_id = 'doc-1' AND enabled = 0",
+                "SELECT COUNT(1) FROM t_knowledge_chunk WHERE doc_id = 1 AND enabled = 0",
                 Integer.class);
-        boolean deleted = adapter.delete("doc-1", "tester");
+        boolean deleted = adapter.delete(1L, "tester");
 
         assertThat(detail.getCollectionName()).isEqualTo("collection-a");
-        assertThat(page.records()).extracting(KnowledgeDocumentDetail::getId).containsExactly("doc-1");
+        assertThat(page.records()).extracting(KnowledgeDocumentDetail::getId).containsExactly(1L);
         assertThat(logs.records()).hasSize(1);
         assertThat(logs.records().get(0).getOtherDuration()).isEqualTo(30L);
         assertThat(updated).isTrue();
@@ -76,8 +76,8 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
         assertThat(disabled).isTrue();
         assertThat(disabledChunks).isEqualTo(2);
         assertThat(deleted).isTrue();
-        assertThat(adapter.findDetailById("doc-1")).isEmpty();
-        assertThat(adapter.listEnabledChunks("doc-1")).isEmpty();
+        assertThat(adapter.findDetailById(1L)).isEmpty();
+        assertThat(adapter.listEnabledChunks(1L)).isEmpty();
     }
 
     @Test
@@ -86,13 +86,13 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
         jdbcTemplate.update("""
                 UPDATE t_knowledge_chunk
                 SET metadata_json = '{"department":"研发","acl_subjects":["user-1"]}'
-                WHERE id = 'chunk-0'
+                WHERE id = 10
                 """);
 
-        List<KnowledgeChunkRecord> records = adapter.listEnabledChunks("doc-1");
+        List<KnowledgeChunkRecord> records = adapter.listEnabledChunks(1L);
 
         KnowledgeChunkRecord chunk = records.stream()
-                .filter(record -> "chunk-0".equals(record.getId()))
+                .filter(record -> Long.valueOf(10L).equals(record.getId()))
                 .findFirst()
                 .orElseThrow();
         assertThat(chunk.getMetadata()).containsEntry("department", "研发");
@@ -194,7 +194,7 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_base
                 (id, name, embedding_model, collection_name, deleted)
-                VALUES ('kb-1', 'Knowledge Base', 'embedding-a', 'collection-a', 0)
+                VALUES (1, 'Knowledge Base', 'embedding-a', 'collection-a', 0)
                 """);
         jdbcTemplate.update("""
                 INSERT INTO t_ingestion_pipeline(id, name, deleted)
@@ -207,7 +207,7 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                  chunk_strategy, process_mode, chunk_config, pipeline_id, status,
                  created_by, updated_by, create_time, update_time, deleted)
                 VALUES
-                ('doc-1', 'kb-1', 'Guide', 'file', null, 0, null, 1, 2,
+                (1, 1, 'Guide', 'file', null, 0, null, 1, 2,
                  'local://guide.pdf', 'pdf', 12, null, 'pipeline', null, 'pipeline-1',
                  'success', 'tester', 'tester', ?, ?, 0)
                 """, now, now);
@@ -215,14 +215,14 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                 INSERT INTO t_knowledge_chunk
                 (id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
                  token_count, enabled, created_by, updated_by, create_time, update_time, deleted)
-                VALUES ('chunk-0', 'kb-1', 'doc-1', 0, 'first', 'hash-0',
+                VALUES (10, 1, 1, 0, 'first', 'hash-0',
                         5, 5, 1, 'tester', 'tester', ?, ?, 0)
                 """, now, now);
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_chunk
                 (id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
                  token_count, enabled, created_by, updated_by, create_time, update_time, deleted)
-                VALUES ('chunk-1', 'kb-1', 'doc-1', 1, 'second', 'hash-1',
+                VALUES (11, 1, 1, 1, 'second', 'hash-1',
                         6, 6, 1, 'tester', 'tester', ?, ?, 0)
                 """, now, now);
         jdbcTemplate.update("""
@@ -231,7 +231,7 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                  extract_duration, chunk_duration, embed_duration, persist_duration,
                  total_duration, chunk_count, error_message, start_time, end_time,
                  create_time, update_time)
-                VALUES ('log-1', 'doc-1', 'success', 'pipeline', null, 'pipeline-1',
+                VALUES (100, 1, 'success', 'pipeline', null, 'pipeline-1',
                         0, 50, 0, 20, 100, 2, null, ?, ?, ?, ?)
                 """, now, now, now, now);
     }

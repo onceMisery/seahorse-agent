@@ -51,62 +51,62 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
 
     @Test
     void shouldCreatePageUpdateEnableAndDeleteChunk() {
-        insertChunk("chunk-0", 0, "已有内容", 1);
+        insertChunk(10L, 0, "已有内容", 1);
 
-        KnowledgeDocumentChunkContext context = adapter.findDocumentContext("doc-1").orElseThrow();
-        KnowledgeChunkRecord created = adapter.create("doc-1",
-                new CreateKnowledgeChunkValues("chunk-2", "新增内容", null, "tester"));
+        KnowledgeDocumentChunkContext context = adapter.findDocumentContext(1L).orElseThrow();
+        KnowledgeChunkRecord created = adapter.create(1L,
+                new CreateKnowledgeChunkValues(12L, "新增内容", null, "tester"));
 
-        boolean updated = adapter.update("doc-1", "chunk-2",
+        boolean updated = adapter.update(1L, 12L,
                 new UpdateKnowledgeChunkValues("更新内容", "tester"));
-        boolean disabled = adapter.updateEnabled("doc-1", List.of("chunk-2"), false, "tester");
-        KnowledgeChunkPage page = adapter.page("doc-1", 1, 10, false);
-        boolean deleted = adapter.delete("doc-1", "chunk-2");
+        boolean disabled = adapter.updateEnabled(1L, List.of(12L), false, "tester");
+        KnowledgeChunkPage page = adapter.page(1L, 1, 10, false);
+        boolean deleted = adapter.delete(1L, 12L);
 
         assertThat(context.collectionName()).isEqualTo("collection-a");
         assertThat(created.getChunkIndex()).isEqualTo(1);
         assertThat(updated).isTrue();
         assertThat(disabled).isTrue();
-        assertThat(page.records()).extracting(KnowledgeChunkRecord::getId).contains("chunk-2");
+        assertThat(page.records()).extracting(KnowledgeChunkRecord::getId).contains(12L);
         assertThat(deleted).isTrue();
-        assertThat(adapter.findChunk("doc-1", "chunk-2")).isEmpty();
+        assertThat(adapter.findChunk(1L, 12L)).isEmpty();
     }
 
     @Test
     void shouldFindChunksByIdsInChunkOrder() {
-        insertChunk("chunk-1", 1, "第二段", 1);
-        insertChunk("chunk-0", 0, "第一段", 1);
+        insertChunk(11L, 1, "第二段", 1);
+        insertChunk(10L, 0, "第一段", 1);
 
-        List<KnowledgeChunkRecord> chunks = adapter.findChunksByIds("doc-1", List.of("chunk-1", "chunk-0"));
+        List<KnowledgeChunkRecord> chunks = adapter.findChunksByIds(1L, List.of(11L, 10L));
 
-        assertThat(chunks).extracting(KnowledgeChunkRecord::getId).containsExactly("chunk-0", "chunk-1");
+        assertThat(chunks).extracting(KnowledgeChunkRecord::getId).containsExactly(10L, 11L);
     }
 
     @Test
     void shouldWriteChunkMetadataJsonWhenColumnExists() {
-        adapter.replaceDocumentChunks("kb-1", "doc-1", List.of(
+        adapter.replaceDocumentChunks(1L, 1L, List.of(
                 VectorChunk.builder()
-                        .chunkId("chunk-meta")
+                        .chunkId("20")
                         .index(0)
                         .content("带元数据的分块")
                         .metadata(Map.of("department", "FIN", "securityLevel", "internal"))
                         .build()));
 
         String metadataJson = jdbcTemplate.queryForObject(
-                "SELECT metadata_json FROM t_knowledge_chunk WHERE id = 'chunk-meta'", String.class);
+                "SELECT metadata_json FROM t_knowledge_chunk WHERE id = 20", String.class);
 
         assertThat(metadataJson)
                 .contains("\"department\":\"FIN\"")
                 .contains("\"securityLevel\":\"internal\"");
     }
 
-    private void insertChunk(String id, int index, String content, int enabled) {
+    private void insertChunk(Long id, int index, String content, int enabled) {
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_chunk
                 (id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
                  token_count, enabled, created_by, updated_by, create_time, update_time, deleted)
-                VALUES (?, 'kb-1', 'doc-1', ?, ?, ?, ?, ?, ?, 'tester', 'tester', ?, ?, 0)
+                VALUES (?, 1, 1, ?, ?, ?, ?, ?, ?, 'tester', 'tester', ?, ?, 0)
                 """, id, index, content, id + "-hash", content.length(), content.length(), enabled, now, now);
     }
 
@@ -116,7 +116,7 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_knowledge_base");
         jdbcTemplate.execute("""
                 CREATE TABLE t_knowledge_base (
-                    id VARCHAR(32) PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     name VARCHAR(128),
                     embedding_model VARCHAR(128),
                     collection_name VARCHAR(128),
@@ -125,8 +125,8 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_knowledge_document (
-                    id VARCHAR(32) PRIMARY KEY,
-                    kb_id VARCHAR(32),
+                    id BIGINT PRIMARY KEY,
+                    kb_id BIGINT,
                     doc_name VARCHAR(128),
                     status VARCHAR(32),
                     enabled INTEGER,
@@ -136,9 +136,9 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_knowledge_chunk (
-                    id VARCHAR(32) PRIMARY KEY,
-                    kb_id VARCHAR(32),
-                    doc_id VARCHAR(32),
+                    id BIGINT PRIMARY KEY,
+                    kb_id BIGINT,
+                    doc_id BIGINT,
                     chunk_index INTEGER,
                     content VARCHAR(512),
                     content_hash VARCHAR(128),
@@ -156,12 +156,12 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_base
                 (id, name, embedding_model, collection_name, deleted)
-                VALUES ('kb-1', '知识库', 'embed-a', 'collection-a', 0)
+                VALUES (1, '知识库', 'embed-a', 'collection-a', 0)
                 """);
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_document
                 (id, kb_id, doc_name, status, enabled, chunk_count, deleted)
-                VALUES ('doc-1', 'kb-1', '文档', 'success', 1, 0, 0)
+                VALUES (1, 1, '文档', 'success', 1, 0, 0)
                 """);
     }
 }

@@ -17,6 +17,7 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRetrievalRepositoryAu
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRegistryRepositoryAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentStorageAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentVectorAdapterAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentSreAdapterHealthAutoConfiguration
 
 # Layer 2: Outbox relay (after MQ + Ops)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentOutboxRelayAutoConfiguration

@@ -125,7 +125,7 @@ class JdbcMetadataBackfillSupportTests {
 
         Optional<MetadataBackfillJobRecord> found = support.findById("job-2");
         MetadataBackfillJobPage page = support.page(new MetadataBackfillJobQuery(
-                "tenant-1", 1L, MetadataBackfillJobStatus.RUNNING, 1, 10));
+                "tenant-1", "1", MetadataBackfillJobStatus.RUNNING, 1, 10));
 
         assertThat(found).contains(runningJob);
         assertThat(page.total()).isEqualTo(1);

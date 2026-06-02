@@ -88,7 +88,7 @@ class KernelChatAgentRunStoreTests {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         KernelAgentRunService runService = new KernelAgentRunService(
                 new EmptyAgentDefinitionRepository(), runRepository,
-                () -> Optional.of(new CurrentUser("user-1", "alice", "user", null)), FIXED_CLOCK);
+                () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
         AgentToolCall toolCall = AgentToolCall.of("call-1", "weather", Map.of("city", "Shanghai"));
         ScriptedModel model = new ScriptedModel(List.of(
                 Turn.toolCalls("need weather", List.of(toolCall)),
@@ -140,7 +140,7 @@ class KernelChatAgentRunStoreTests {
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();
         KernelAgentRunService runService = new KernelAgentRunService(
                 new EmptyAgentDefinitionRepository(), runRepository,
-                () -> Optional.of(new CurrentUser("user-1", "alice", "user", null)), FIXED_CLOCK);
+                () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
         AgentToolCall toolCall = AgentToolCall.of("call-1", "memory-forget", Map.of("memoryId", "mem-1"));
         ScriptedModel model = new ScriptedModel(List.of(Turn.toolCalls("need approval", List.of(toolCall))));
         InMemoryToolRegistry toolRegistry = new InMemoryToolRegistry();
@@ -196,7 +196,7 @@ class KernelChatAgentRunStoreTests {
                 """));
         KernelAgentRunService runService = new KernelAgentRunService(
                 definitionRepository, runRepository,
-                () -> Optional.of(new CurrentUser("user-1", "alice", "user", null)), FIXED_CLOCK);
+                () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
         ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("ops answer")));
         KernelAgentLoop agentLoop = new KernelAgentLoop(
                 model,
@@ -243,7 +243,7 @@ class KernelChatAgentRunStoreTests {
                 """));
         KernelAgentRunService runService = new KernelAgentRunService(
                 definitionRepository, runRepository,
-                () -> Optional.of(new CurrentUser("user-1", "alice", "user", null)), FIXED_CLOCK);
+                () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
         ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("should-not-run")));
         KernelAgentLoop agentLoop = new KernelAgentLoop(
                 model,
@@ -279,7 +279,7 @@ class KernelChatAgentRunStoreTests {
             MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
             KernelAgentRunService runService = new KernelAgentRunService(
                     new EmptyAgentDefinitionRepository(), runRepository,
-                    () -> Optional.of(new CurrentUser("user-1", "alice", "user", null)), FIXED_CLOCK);
+                    () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
             ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("research answer")));
             InMemoryToolRegistry toolRegistry = new InMemoryToolRegistry();
             toolRegistry.register(new ToolDescriptor(WebSearchToolPortAdapter.TOOL_ID, "Web Search", "Search", "{}"),

@@ -71,10 +71,10 @@ class KernelApprovalManagementServiceTests {
     @Test
     void shouldListPendingApprovalsByRunForOwningUser() {
         MemoryApprovalRepository repository = new MemoryApprovalRepository(List.of(
-                approval("approval-1", "run-1", "user-1", ApprovalRequestStatus.PENDING),
-                approval("approval-2", "run-1", "user-2", ApprovalRequestStatus.PENDING),
-                approval("approval-3", "run-2", "user-1", ApprovalRequestStatus.PENDING),
-                approval("approval-4", "run-1", "user-1", ApprovalRequestStatus.APPROVED)));
+                approval("approval-1", "run-1", "2", ApprovalRequestStatus.PENDING),
+                approval("approval-2", "run-1", "3", ApprovalRequestStatus.PENDING),
+                approval("approval-3", "run-2", "2", ApprovalRequestStatus.PENDING),
+                approval("approval-4", "run-1", "2", ApprovalRequestStatus.APPROVED)));
         ApprovalManagementInboundPort service = new KernelApprovalManagementService(
                 repository,
                 repository,
@@ -103,7 +103,7 @@ class KernelApprovalManagementServiceTests {
                 new ApprovalDecisionCommand("Looks safe"));
 
         assertEquals(ApprovalRequestStatus.APPROVED, decided.status());
-        assertEquals("admin-1", decided.decidedBy());
+        assertEquals("1", decided.decidedBy());
         assertEquals(NOW, decided.decidedAt());
         assertEquals("Looks safe", decided.decisionComment());
         assertEquals(ApprovalRequestStatus.PENDING, repository.lastDecision.fromStatus());
@@ -113,7 +113,7 @@ class KernelApprovalManagementServiceTests {
     @Test
     void shouldApprovePendingApprovalWithOwningUser() {
         MemoryApprovalRepository repository = new MemoryApprovalRepository(
-                List.of(approval("approval-1", "run-1", "user-1", ApprovalRequestStatus.PENDING)));
+                List.of(approval("approval-1", "run-1", "2", ApprovalRequestStatus.PENDING)));
         ApprovalManagementInboundPort service = new KernelApprovalManagementService(
                 repository,
                 repository,
@@ -125,7 +125,7 @@ class KernelApprovalManagementServiceTests {
                 new ApprovalDecisionCommand("Confirmed from chat"));
 
         assertEquals(ApprovalRequestStatus.APPROVED, decided.status());
-        assertEquals("user-1", decided.decidedBy());
+        assertEquals("2", decided.decidedBy());
         assertEquals(NOW, decided.decidedAt());
         assertEquals("Confirmed from chat", decided.decisionComment());
         assertEquals(ApprovalRequestStatus.APPROVED, repository.lastDecision.toStatus());
@@ -134,7 +134,7 @@ class KernelApprovalManagementServiceTests {
     @Test
     void shouldRejectDecisionWhenUserDoesNotOwnApproval() {
         MemoryApprovalRepository repository = new MemoryApprovalRepository(
-                List.of(approval("approval-1", "run-1", "user-2", ApprovalRequestStatus.PENDING)));
+                List.of(approval("approval-1", "run-1", "3", ApprovalRequestStatus.PENDING)));
         ApprovalManagementInboundPort service = new KernelApprovalManagementService(
                 repository,
                 repository,
@@ -162,7 +162,7 @@ class KernelApprovalManagementServiceTests {
                 new ApprovalDecisionCommand("Risk too high"));
 
         assertEquals(ApprovalRequestStatus.REJECTED, decided.status());
-        assertEquals("admin-1", decided.decidedBy());
+        assertEquals("1", decided.decidedBy());
         assertEquals(NOW, decided.decidedAt());
         assertEquals("Risk too high", decided.decisionComment());
         assertEquals(ApprovalRequestStatus.REJECTED, repository.lastDecision.toStatus());
@@ -220,7 +220,7 @@ class KernelApprovalManagementServiceTests {
     }
 
     private static ApprovalRequest approval(String approvalId, ApprovalRequestStatus status) {
-        return approval(approvalId, "run-1", "user-1", status);
+        return approval(approvalId, "run-1", "2", status);
     }
 
     private static ApprovalRequest approval(String approvalId,
@@ -309,7 +309,7 @@ class KernelApprovalManagementServiceTests {
                     decision.toStatus(),
                     current.requestedAt(),
                     current.expiresAt(),
-                    decision.decidedBy(),
+                    String.valueOf(decision.decidedBy()),
                     decision.decidedAt(),
                     decision.decisionComment());
             approvalsById.put(decision.approvalId(), decided);

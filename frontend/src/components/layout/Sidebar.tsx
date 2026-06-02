@@ -459,7 +459,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <DropdownMenuContent align="start" side="top" sideOffset={8} className="w-48">
               <DropdownMenuItem asChild>
                 <a
-                  href="https://github.com/onceMisery/seahorse-agent"
+                  href="https://github.com/miracle-ai/seahorse-agent"
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center"

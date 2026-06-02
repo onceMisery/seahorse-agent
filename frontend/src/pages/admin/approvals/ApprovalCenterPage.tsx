@@ -18,7 +18,7 @@ import { getErrorMessage } from "@/utils/error";
 const PAGE_SIZE = 10;
 
 export function ApprovalCenterPage() {
-  const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT);
+  const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT);
 
   const [pageData, setPageData] = useState<PageResult<ApprovalItem> | null>(null);
   const [loading, setLoading] = useState(true);

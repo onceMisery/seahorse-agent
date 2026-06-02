@@ -144,7 +144,7 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
                 "approval-1",
                 ApprovalRequestStatus.PENDING,
                 ApprovalRequestStatus.APPROVED,
-                "admin-1",
+                1L,
                 DECIDED_AT,
                 "Looks safe",
                 null));
@@ -152,7 +152,7 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
                 "approval-1",
                 ApprovalRequestStatus.PENDING,
                 ApprovalRequestStatus.REJECTED,
-                "admin-2",
+                2L,
                 DECIDED_AT.plusSeconds(1),
                 "Too late",
                 null));
@@ -177,7 +177,7 @@ class JdbcToolApprovalRequestRepositoryAdapterTests {
                 "approval-1",
                 ApprovalRequestStatus.PENDING,
                 ApprovalRequestStatus.MODIFIED,
-                "admin-1",
+                1L,
                 DECIDED_AT,
                 "Reduced scope",
                 "{\"argumentKeys\":[\"input\"],\"modified\":true}"));

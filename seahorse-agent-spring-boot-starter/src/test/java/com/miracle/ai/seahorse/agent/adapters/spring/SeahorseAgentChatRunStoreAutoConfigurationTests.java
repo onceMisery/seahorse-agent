@@ -465,7 +465,7 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
 
         @Bean
         CurrentUserPort currentUserPort() {
-            return () -> Optional.of(new CurrentUser("user-1", "alice", "user", null));
+            return () -> Optional.of(new CurrentUser(1L, "alice", "user", null));
         }
 
         @Bean
@@ -527,7 +527,7 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
 
         @Bean
         CurrentUserPort currentUserPort() {
-            return () -> Optional.of(new CurrentUser("user-1", "alice", "user", null));
+            return () -> Optional.of(new CurrentUser(1L, "alice", "user", null));
         }
 
         @Bean
@@ -678,7 +678,7 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
 
         @Bean
         CurrentUserPort currentUserPort() {
-            return () -> Optional.of(new CurrentUser("user-1", "alice", "user", null));
+            return () -> Optional.of(new CurrentUser(1L, "alice", "user", null));
         }
 
         @Bean

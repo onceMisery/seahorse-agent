@@ -220,9 +220,9 @@ class SeahorseWebApiContractTests {
         when(authPort.login(any())).thenReturn(new LoginResult("1", "admin", "token-1", "avatar.png"));
 
         UserInboundPort userPort = mock(UserInboundPort.class);
-        when(userPort.currentUser()).thenReturn(new CurrentUser("1", "admin", "admin", "avatar.png"));
+        when(userPort.currentUser()).thenReturn(new CurrentUser(1L, "admin", "admin", "avatar.png"));
         when(userPort.page(anyLong(), anyLong(), any())).thenReturn(new UserPage(List.of(), 0, 10, 1, 0));
-        when(userPort.create(any())).thenReturn("2");
+        when(userPort.create(any())).thenReturn(2L);
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseAuthController(provider(AuthInboundPort.class, authPort)),
@@ -654,7 +654,10 @@ class SeahorseWebApiContractTests {
 
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("seahorse-agent.adapters.vector.collection-name", "native_collection")
-                .withProperty("seahorse-agent.plugins.memory.history-keep-turns", "8");
+                .withProperty("seahorse-agent.plugins.memory.history-keep-turns", "8")
+                .withProperty("seahorse-agent.adapters.ai.providers.openai.url", "https://api.openai.com/v1")
+                .withProperty("seahorse-agent.adapters.ai.providers.openai.api-key", "sk-secret-value")
+                .withProperty("seahorse-agent.adapters.ai.providers.openai.endpoints.chat", "/chat/completions");
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseIntentTreeController(provider(IntentTreeInboundPort.class, intentPort)),
@@ -717,7 +720,10 @@ class SeahorseWebApiContractTests {
 
         mvc.perform(get("/rag/settings"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.rag.defaultConfig.collectionName").value("native_collection"));
+                .andExpect(jsonPath("$.data.rag.defaultConfig.collectionName").value("native_collection"))
+                .andExpect(jsonPath("$.data.ai.providers.openai.url").value("https://api.openai.com/v1"))
+                .andExpect(jsonPath("$.data.ai.providers.openai.apiKey").doesNotExist())
+                .andExpect(jsonPath("$.data.ai.providers.openai.apiKeyConfigured").value(true));
     }
 
     @Test
@@ -833,7 +839,7 @@ class SeahorseWebApiContractTests {
         when(backfillPort.pageJobs(any(MetadataBackfillJobQuery.class)))
                 .thenReturn(new MetadataBackfillJobPage(
                         List.of(metadataBackfillJob(MetadataBackfillJobStatus.PENDING)), 1, 10, 1, 1));
-        when(backfillPort.overview("tenant-1", 1L))
+        when(backfillPort.overview("tenant-1", "1"))
                 .thenReturn(metadataBackfillOverview());
         when(backfillPort.runNextBatch("job-1"))
                 .thenReturn(new MetadataBackfillRunResult(
@@ -895,7 +901,7 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.pendingSchemaCompensationJobs").value(1))
                 .andExpect(jsonPath("$.data.statusCounts[0].key").value("PENDING"))
                 .andExpect(jsonPath("$.data.latestReExtractJob.jobId").value("job-1"));
-        verify(backfillPort).overview("tenant-1", 1L);
+        verify(backfillPort).overview("tenant-1", "1");
 
         mvc.perform(get("/metadata-backfill/jobs/job-1"))
                 .andExpect(status().isOk())
@@ -920,10 +926,10 @@ class SeahorseWebApiContractTests {
     @Test
     void shouldKeepMetadataQualityReportContract() throws Exception {
         MetadataQualityInboundPort qualityPort = mock(MetadataQualityInboundPort.class);
-        when(qualityPort.report("tenant-1", 1L, 3, 2, "extractor-v2", "prompt-v3"))
+        when(qualityPort.report("tenant-1", "1", 3, 2, "extractor-v2", "prompt-v3"))
                 .thenReturn(metadataQualityReport());
         when(qualityPort.compare(
-                "tenant-1", 1L, 3,
+                "tenant-1", "1", 3,
                 1, "extractor-v1", "prompt-v1",
                 2, "extractor-v2", "prompt-v3"))
                 .thenReturn(metadataQualityComparisonReport());
@@ -979,7 +985,7 @@ class SeahorseWebApiContractTests {
     @Test
     void shouldKeepMetadataSchemaUsageReportContract() throws Exception {
         MetadataSchemaUsageInboundPort usagePort = mock(MetadataSchemaUsageInboundPort.class);
-        when(usagePort.report("tenant-1", 1L, 2)).thenReturn(metadataSchemaUsageReport());
+        when(usagePort.report("tenant-1", "1", 2)).thenReturn(metadataSchemaUsageReport());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseMetadataSchemaUsageController(usagePort)).build();
@@ -1035,7 +1041,7 @@ class SeahorseWebApiContractTests {
                         com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationCommand.class);
         verify(evaluationPort).evaluate(captor.capture());
         assertThat(captor.getValue().cases().get(0).filter().system().tenantId()).isEqualTo("tenant-1");
-        assertThat(captor.getValue().cases().get(0).filter().system().knowledgeBaseIds()).containsExactly(1L);
+        assertThat(captor.getValue().cases().get(0).filter().system().knowledgeBaseIds()).containsExactly("1");
         assertThat(captor.getValue().cases().get(0).filter().system().aclSubjectIds()).containsExactly("dept-a");
     }
 
@@ -1876,7 +1882,7 @@ class SeahorseWebApiContractTests {
     private static MetadataBackfillOperationsOverview metadataBackfillOverview() {
         return new MetadataBackfillOperationsOverview(
                 "tenant-1",
-                1L,
+                "1",
                 2,
                 8,
                 6,
@@ -1903,7 +1909,7 @@ class SeahorseWebApiContractTests {
     private static MetadataQualityReport metadataQualityReport() {
         return new MetadataQualityReport(
                 "tenant-1",
-                1L,
+                "1",
                 2,
                 "extractor-v2",
                 "prompt-v3",
@@ -1927,7 +1933,7 @@ class SeahorseWebApiContractTests {
 
     private static MetadataQualityComparisonReport metadataQualityComparisonReport() {
         MetadataQualityReport baseline = new MetadataQualityReport(
-                "tenant-1", 1L, 1, "extractor-v1", "prompt-v1",
+                "tenant-1", "1", 1, "extractor-v1", "prompt-v1",
                 4, 2, 0.65D, 0.3D, 0.7D, 0.1D, 2, 1, 1,
                 List.of(new MetadataFieldCoverage("department", "部门", true,
                         2, 4, 0.5D, 1, 0.5D, 1, 0, 0D)),
@@ -1937,7 +1943,7 @@ class SeahorseWebApiContractTests {
         MetadataQualityReport candidate = metadataQualityReport();
         return new MetadataQualityComparisonReport(
                 "tenant-1",
-                1L,
+                "1",
                 baseline,
                 candidate,
                 new MetadataQualityComparisonDelta(0, 1, 0.1D, -0.05D, 0.1D, 0.1D, 0, 0, 0),
@@ -1948,7 +1954,7 @@ class SeahorseWebApiContractTests {
     private static MetadataSchemaUsageReport metadataSchemaUsageReport() {
         return new MetadataSchemaUsageReport(
                 "tenant-1",
-                1L,
+                "1",
                 2,
                 4L,
                 1L,
@@ -1964,7 +1970,7 @@ class SeahorseWebApiContractTests {
     private static VersionQualityComparisonReport versionQualityComparisonReport() {
         return new VersionQualityComparisonReport(
                 "tenant-1",
-                1L,
+                "1",
                 metadataQualityComparisonReport(),
                 new RetrievalEvaluationComparisonReport(
                         "baseline",
@@ -1986,8 +1992,8 @@ class SeahorseWebApiContractTests {
         return new MetadataReviewRecord(
                 id,
                 "tenant-1",
-                "kb-1",
-                "doc-1",
+                1L,
+                1L,
                 "result-1",
                 status,
                 10,

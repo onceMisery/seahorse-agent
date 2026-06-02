@@ -52,9 +52,9 @@ class JdbcMetadataBackfillJobAdapterTests {
 
     @Test
     void shouldPageBackfillJobsByKnowledgeBaseAndStatus() {
-        adapter.create(job("job-1", "tenant-1", "kb-1", MetadataBackfillJobStatus.PENDING));
-        adapter.create(job("job-2", "tenant-1", "kb-1", MetadataBackfillJobStatus.COMPLETED));
-        adapter.create(job("job-3", "tenant-2", "kb-2", MetadataBackfillJobStatus.PENDING));
+        adapter.create(job("job-1", "tenant-1", 1L, MetadataBackfillJobStatus.PENDING));
+        adapter.create(job("job-2", "tenant-1", 1L, MetadataBackfillJobStatus.COMPLETED));
+        adapter.create(job("job-3", "tenant-2", 2L, MetadataBackfillJobStatus.PENDING));
 
         MetadataBackfillJobPage pendingPage = adapter.page(new MetadataBackfillJobQuery(
                 "tenant-1", "kb-1", MetadataBackfillJobStatus.PENDING, 1, 10));
@@ -65,12 +65,12 @@ class JdbcMetadataBackfillJobAdapterTests {
         assertThat(pendingPage.records()).extracting(MetadataBackfillJobRecord::jobId).containsExactly("job-1");
         assertThat(allPage.total()).isEqualTo(2);
         assertThat(allPage.records()).extracting(MetadataBackfillJobRecord::knowledgeBaseId)
-                .containsOnly("kb-1");
+                .containsOnly(1L);
     }
 
     @Test
     void shouldFilterBackfillJobsByGovernanceDetails() {
-        adapter.create(job("job-1", "tenant-1", "kb-1", MetadataBackfillJobStatus.PAUSED,
+        adapter.create(job("job-1", "tenant-1", 1L, MetadataBackfillJobStatus.PAUSED,
                 Map.of(
                         "currentPage", 2,
                         "documentIds", List.of("doc-1"),
@@ -78,7 +78,7 @@ class JdbcMetadataBackfillJobAdapterTests {
                         "reExtract", true),
                 List.of("doc-1: metadata schema missing"),
                 "auditor"));
-        adapter.create(job("job-2", "tenant-1", "kb-1", MetadataBackfillJobStatus.COMPLETED,
+        adapter.create(job("job-2", "tenant-1", 1L, MetadataBackfillJobStatus.COMPLETED,
                 Map.of("currentPage", 1), List.of(), "admin"));
 
         MetadataBackfillJobPage page = adapter.page(new MetadataBackfillJobQuery(
@@ -92,7 +92,7 @@ class JdbcMetadataBackfillJobAdapterTests {
     @Test
     void shouldBuildBackfillOperationsOverview() {
         adapter.create(new MetadataBackfillJobRecord(
-                "job-1", "tenant-1", "kb-1", "pipe-1", MetadataBackfillJobStatus.PENDING,
+                "job-1", "tenant-1", 1L, "pipe-1", MetadataBackfillJobStatus.PENDING,
                 1, 50, 5, 4, 1, 0, 2, 1,
                 Map.of(
                         "currentPage", 1,
@@ -104,7 +104,7 @@ class JdbcMetadataBackfillJobAdapterTests {
                 Instant.parse("2026-05-13T10:00:00Z"),
                 Instant.parse("2026-05-13T10:10:00Z")));
         adapter.create(new MetadataBackfillJobRecord(
-                "job-2", "tenant-1", "kb-1", "pipe-1", MetadataBackfillJobStatus.PAUSED,
+                "job-2", "tenant-1", 1L, "pipe-1", MetadataBackfillJobStatus.PAUSED,
                 1, 50, 3, 2, 0, 1, 1, 0,
                 Map.of(
                         "currentPage", 1,
@@ -115,7 +115,7 @@ class JdbcMetadataBackfillJobAdapterTests {
                 Instant.parse("2026-05-13T10:20:00Z"),
                 Instant.parse("2026-05-13T10:30:00Z")));
         adapter.create(new MetadataBackfillJobRecord(
-                "job-3", "tenant-1", "kb-1", "pipe-1", MetadataBackfillJobStatus.COMPLETED,
+                "job-3", "tenant-1", 1L, "pipe-1", MetadataBackfillJobStatus.COMPLETED,
                 1, 50, 8, 8, 0, 0, 0, 0,
                 Map.of(
                         "currentPage", 1,
@@ -125,7 +125,7 @@ class JdbcMetadataBackfillJobAdapterTests {
                 "ops",
                 Instant.parse("2026-05-13T10:40:00Z"),
                 Instant.parse("2026-05-13T10:50:00Z")));
-        adapter.create(job("job-4", "tenant-2", "kb-2", MetadataBackfillJobStatus.PENDING));
+        adapter.create(job("job-4", "tenant-2", 2L, MetadataBackfillJobStatus.PENDING));
 
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_review_item(id, tenant_id, kb_id, review_status)
@@ -219,14 +219,14 @@ class JdbcMetadataBackfillJobAdapterTests {
 
     private MetadataBackfillJobRecord job(String jobId,
                                           String tenantId,
-                                          String knowledgeBaseId,
+                                          Long knowledgeBaseId,
                                           MetadataBackfillJobStatus status) {
         return job(jobId, tenantId, knowledgeBaseId, status, Map.of("currentPage", 1), List.of(), "admin");
     }
 
     private MetadataBackfillJobRecord job(String jobId,
                                           String tenantId,
-                                          String knowledgeBaseId,
+                                          Long knowledgeBaseId,
                                           MetadataBackfillJobStatus status,
                                           Map<String, Object> checkpoint,
                                           List<String> failures,

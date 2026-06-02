@@ -97,11 +97,11 @@ class KernelToolInvocationAuditQueryServiceTests {
     }
 
     private static CurrentUserPort adminUser() {
-        return () -> Optional.of(new CurrentUser("admin-1", "root", "admin", null));
+        return () -> Optional.of(new CurrentUser(1L, "root", "admin", null));
     }
 
     private static CurrentUserPort user() {
-        return () -> Optional.of(new CurrentUser("user-1", "alice", "user", null));
+        return () -> Optional.of(new CurrentUser(2L, "alice", "user", null));
     }
 
     private static final class MemoryToolInvocationAuditQueryPort implements ToolInvocationAuditQueryPort {

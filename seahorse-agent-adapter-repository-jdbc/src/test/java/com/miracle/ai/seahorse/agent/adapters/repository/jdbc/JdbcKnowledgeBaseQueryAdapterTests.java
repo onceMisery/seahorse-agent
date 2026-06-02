@@ -57,7 +57,7 @@ class JdbcKnowledgeBaseQueryAdapterTests {
     void listSearchableKnowledgeBasesShouldReturnEnabledCollections() {
         assertThat(adapter.listSearchableKnowledgeBases())
                 .extracting("id", "collectionName")
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("kb-1", "collection-a"));
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(1L, "collection-a"));
     }
 
     @Test
@@ -65,16 +65,16 @@ class JdbcKnowledgeBaseQueryAdapterTests {
         List<KnowledgeDocumentSummary> documents = adapter.searchDocuments("guide", 50);
 
         assertThat(documents).hasSize(20);
-        assertThat(documents.get(0).id()).isEqualTo("doc-24");
+        assertThat(documents.get(0).id()).isEqualTo(24L);
         assertThat(documents.get(0).kbName()).isEqualTo("产品知识库");
-        assertThat(documents.get(19).id()).isEqualTo("doc-5");
+        assertThat(documents.get(19).id()).isEqualTo(5L);
     }
 
     @Test
     void listChunksByDocIdShouldOrderByChunkIndexAndMapEnabledFlag() {
-        List<KnowledgeChunkSummary> chunks = adapter.listChunksByDocId("doc-1");
+        List<KnowledgeChunkSummary> chunks = adapter.listChunksByDocId(1L);
 
-        assertThat(chunks).extracting(KnowledgeChunkSummary::id).containsExactly("chunk-0", "chunk-1");
+        assertThat(chunks).extracting(KnowledgeChunkSummary::id).containsExactly(10L, 11L);
         assertThat(chunks.get(0).enabled()).isTrue();
         assertThat(chunks.get(1).enabled()).isFalse();
     }
@@ -83,14 +83,14 @@ class JdbcKnowledgeBaseQueryAdapterTests {
     void replaceDocumentChunksShouldDeleteOldRowsInsertNewRowsAndUpdateDocumentCount() {
         JdbcKnowledgeChunkRepositoryAdapter chunkRepository = new JdbcKnowledgeChunkRepositoryAdapter(dataSource());
 
-        chunkRepository.replaceDocumentChunks("kb-1", "doc-1", List.of(
-                VectorChunk.builder().chunkId("new-0").index(0).content("新的第一段").build(),
-                VectorChunk.builder().chunkId("new-1").index(1).content("新的第二段").build()));
+        chunkRepository.replaceDocumentChunks(1L, 1L, List.of(
+                VectorChunk.builder().chunkId("20").index(0).content("新的第一段").build(),
+                VectorChunk.builder().chunkId("21").index(1).content("新的第二段").build()));
 
-        List<KnowledgeChunkSummary> chunks = adapter.listChunksByDocId("doc-1");
+        List<KnowledgeChunkSummary> chunks = adapter.listChunksByDocId(1L);
         Integer chunkCount = new JdbcTemplate(dataSource())
-                .queryForObject("SELECT chunk_count FROM t_knowledge_document WHERE id = ?", Integer.class, "doc-1");
-        assertThat(chunks).extracting(KnowledgeChunkSummary::id).containsExactly("new-0", "new-1");
+                .queryForObject("SELECT chunk_count FROM t_knowledge_document WHERE id = ?", Integer.class, 1L);
+        assertThat(chunks).extracting(KnowledgeChunkSummary::id).containsExactly(20L, 21L);
         assertThat(chunks).allMatch(KnowledgeChunkSummary::enabled);
         assertThat(chunkCount).isEqualTo(2);
     }
@@ -102,13 +102,13 @@ class JdbcKnowledgeBaseQueryAdapterTests {
 
         KnowledgeDocumentRecord document = documentRepository.createPendingDocument(
                 new CreateKnowledgeDocumentCommand(
-                        "kb-1",
+                        1L,
                         "policy.pdf",
                         new KnowledgeDocumentFileRef("local://policy.pdf", "pdf", 12L),
                         new KnowledgeDocumentProcessRef("ignored", "pipeline", "pipeline-1"),
                         "tester"));
 
-        assertThat(document.id()).isNotBlank();
+        assertThat(document.id()).isNotNull();
         assertThat(document.process().status()).isEqualTo("pending");
         assertThat(documentRepository.markRunning(document.id(), "tester")).isTrue();
         assertThat(documentRepository.markRunning(document.id(), "tester")).isFalse();
@@ -214,11 +214,11 @@ class JdbcKnowledgeBaseQueryAdapterTests {
     private void seedRows(JdbcTemplate jdbcTemplate) {
         LocalDateTime baseTime = LocalDateTime.of(2026, 5, 10, 10, 0);
         jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time) VALUES (?, ?, ?, ?, ?)",
-                "kb-1", "产品知识库", "collection-a", 0, baseTime);
+                1L, "产品知识库", "collection-a", 0, baseTime);
         jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time) VALUES (?, ?, ?, ?, ?)",
-                "kb-2", "空集合", "", 0, baseTime.minusMinutes(1));
+                2L, "空集合", "", 0, baseTime.minusMinutes(1));
         jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time) VALUES (?, ?, ?, ?, ?)",
-                "kb-deleted", "已删除", "collection-deleted", 1, baseTime.minusMinutes(2));
+                3L, "已删除", "collection-deleted", 1, baseTime.minusMinutes(2));
         for (int index = 0; index < 25; index++) {
             jdbcTemplate.update(
                     """
@@ -228,7 +228,7 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                                 deleted, create_time, update_time
                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
-                    "doc-" + index, "kb-1", "guide-" + index, "file", 1, 0, "", "pdf",
+                    Long.valueOf(index), 1L, "guide-" + index, "file", 1, 0, "", "pdf",
                     0L, "pipeline", null, "pending", "tester", "tester", 0,
                     baseTime.plusMinutes(index), baseTime.plusMinutes(index));
         }
@@ -240,18 +240,18 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                             deleted, create_time, update_time
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                "doc-deleted", "kb-1", "guide-deleted", "file", 1, 0, "", "pdf",
+                100L, 1L, "guide-deleted", "file", 1, 0, "", "pdf",
                 0L, "pipeline", null, "pending", "tester", "tester", 1,
                 baseTime.plusDays(1), baseTime.plusDays(1));
         jdbcTemplate.update(
                 "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                "chunk-1", "kb-1", "doc-1", 1, "第二段", "", 3, 0, 0);
+                11L, 1L, 1L, 1, "第二段", "", 3, 0, 0);
         jdbcTemplate.update(
                 "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                "chunk-0", "kb-1", "doc-1", 0, "第一段", "", 3, 1, 0);
+                10L, 1L, 1L, 0, "第一段", "", 3, 1, 0);
         jdbcTemplate.update(
                 "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                "chunk-deleted", "kb-1", "doc-1", 2, "已删除", "", 3, 1, 1);
+                12L, 1L, 1L, 2, "已删除", "", 3, 1, 1);
         jdbcTemplate.update("INSERT INTO t_ingestion_pipeline(id, name, description, deleted) VALUES (?, ?, ?, ?)",
                 "pipeline-1", "默认入库流水线", "默认", 0);
         jdbcTemplate.update("""

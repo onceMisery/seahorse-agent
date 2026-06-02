@@ -207,7 +207,7 @@ class KernelMetadataReviewServiceTests {
         CapturingCanonicalWritePort canonicalWritePort = new CapturingCanonicalWritePort();
         List<MetadataQuarantineItem> quarantines = new java.util.ArrayList<>();
         KernelMetadataReviewService service = new KernelMetadataReviewService(
-                repository, canonicalWritePort, quarantines::add, (tenantId, kbId, docId) -> {
+                repository, canonicalWritePort, quarantines::add, docId -> {
                     throw new IllegalStateException("keyword rebuild failed");
                 });
 
@@ -249,7 +249,7 @@ class KernelMetadataReviewServiceTests {
                 id,
                 "tenant-1",
                 1L,
-                "1",
+                1L,
                 "result-1",
                 status,
                 0,
@@ -268,7 +268,7 @@ class KernelMetadataReviewServiceTests {
                 id,
                 "review-1",
                 "tenant-1",
-                1L,
+                "1",
                 "1",
                 "result-1",
                 "PENDING",

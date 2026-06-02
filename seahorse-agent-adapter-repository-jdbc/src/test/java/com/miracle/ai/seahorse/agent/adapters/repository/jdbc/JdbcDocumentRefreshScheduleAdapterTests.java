@@ -49,17 +49,17 @@ class JdbcDocumentRefreshScheduleAdapterTests {
     void shouldUpsertFindDueAndWriteExecutionState() {
         Instant now = Instant.parse("2026-05-10T00:00:00Z");
         adapter.upsert(new DocumentRefreshSchedule(
-                null, "1", "kb-1", "0 0/5 * * * ?", true,
+                null, 1L, 1L, "0 0/5 * * * ?", true,
                 now.minusSeconds(1), null, null, null));
 
         DocumentRefreshSchedule stored = adapter.findByDocumentId(1L).orElseThrow();
         assertThat(adapter.findDueSchedules(now, 10)).extracting(DocumentRefreshSchedule::docId)
-                .containsExactly("1");
+                .containsExactly(1L);
 
         String execId = adapter.start(new DocumentRefreshExecutionStart(
-                stored.id(), "1", "kb-1", now));
+                String.valueOf(stored.id()), "1", "1", now));
         adapter.finish(new DocumentRefreshExecutionFinish(
-                execId, stored.id(), "1", "kb-1", "success", "OK",
+                execId, String.valueOf(stored.id()), "1", "1", "success", "OK",
                 now, now.plusSeconds(2), "remote.txt", 12L, "hash-1", null, null));
         adapter.updateState(new DocumentRefreshScheduleUpdate(
                 stored.id(), "success", null, now, now.plusSeconds(300), "hash-1", null, null));
@@ -68,7 +68,7 @@ class JdbcDocumentRefreshScheduleAdapterTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT status FROM t_knowledge_document_schedule_exec WHERE id = ?",
                 String.class, execId)).isEqualTo("success");
-        assertThat(adapter.findByDocumentId("doc-1").orElseThrow().lastContentHash()).isEqualTo("hash-1");
+        assertThat(adapter.findByDocumentId(1L).orElseThrow().lastContentHash()).isEqualTo("hash-1");
     }
 
     private void createSchema() {

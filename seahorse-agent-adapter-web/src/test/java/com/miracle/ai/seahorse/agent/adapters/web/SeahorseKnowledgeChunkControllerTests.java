@@ -47,35 +47,35 @@ class SeahorseKnowledgeChunkControllerTests {
     @Test
     void shouldPageChunks() throws Exception {
         KnowledgeChunkInboundPort port = mock(KnowledgeChunkInboundPort.class);
-        when(port.page(eq("doc-1"), any())).thenReturn(
+        when(port.page(eq(1L), any())).thenReturn(
                 new com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkPage(
                         java.util.List.of(), 0L, 10L, 1L, 1L));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeChunkController(provider(KnowledgeChunkInboundPort.class, port))).build();
 
-        mvc.perform(get("/knowledge-base/docs/doc-1/chunks")
+        mvc.perform(get("/knowledge-base/docs/1/chunks")
                         .param("current", "1")
                         .param("size", "10")
                         .param("enabled", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).page(eq("doc-1"), any());
+        verify(port).page(eq(1L), any());
     }
 
     @Test
     void shouldCreateChunk() throws Exception {
         KnowledgeChunkInboundPort port = mock(KnowledgeChunkInboundPort.class);
-        when(port.create(eq("doc-1"), any())).thenReturn(
+        when(port.create(eq(1L), any())).thenReturn(
                 mock(com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRecord.class));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeChunkController(provider(KnowledgeChunkInboundPort.class, port))).build();
 
-        mvc.perform(post("/knowledge-base/docs/doc-1/chunks")
+        mvc.perform(post("/knowledge-base/docs/1/chunks")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "chunkId": "chunk-1",
+                                  "chunkId": "10",
                                   "content": "test content",
                                   "index": 0
                                 }
@@ -84,7 +84,7 @@ class SeahorseKnowledgeChunkControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).create(eq("doc-1"), any());
+        verify(port).create(eq(1L), any());
     }
 
     @Test
@@ -93,7 +93,7 @@ class SeahorseKnowledgeChunkControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeChunkController(provider(KnowledgeChunkInboundPort.class, port))).build();
 
-        mvc.perform(put("/knowledge-base/docs/doc-1/chunks/chunk-1")
+        mvc.perform(put("/knowledge-base/docs/1/chunks/10")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -104,7 +104,7 @@ class SeahorseKnowledgeChunkControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).update(eq("doc-1"), eq("chunk-1"), any());
+        verify(port).update(eq(1L), eq(10L), any());
     }
 
     @Test
@@ -113,11 +113,11 @@ class SeahorseKnowledgeChunkControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeChunkController(provider(KnowledgeChunkInboundPort.class, port))).build();
 
-        mvc.perform(delete("/knowledge-base/docs/doc-1/chunks/chunk-1"))
+        mvc.perform(delete("/knowledge-base/docs/1/chunks/10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).delete("doc-1", "chunk-1");
+        verify(port).delete(1L, 10L);
     }
 
     @Test
@@ -126,13 +126,13 @@ class SeahorseKnowledgeChunkControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeChunkController(provider(KnowledgeChunkInboundPort.class, port))).build();
 
-        mvc.perform(patch("/knowledge-base/docs/doc-1/chunks/chunk-1/enable")
+        mvc.perform(patch("/knowledge-base/docs/1/chunks/10/enable")
                         .param("value", "true")
                         .header("X-User-Id", "admin-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).enable("doc-1", "chunk-1", true, "admin-1");
+        verify(port).enable(1L, 10L, true, "admin-1");
     }
 
     @Test
@@ -141,21 +141,21 @@ class SeahorseKnowledgeChunkControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeChunkController(provider(KnowledgeChunkInboundPort.class, port))).build();
 
-        mvc.perform(patch("/knowledge-base/docs/doc-1/chunks/batch-enable")
+        mvc.perform(patch("/knowledge-base/docs/1/chunks/batch-enable")
                         .param("value", "false")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "chunkIds": ["chunk-1", "chunk-2"]
+                                  "chunkIds": ["10", "20"]
                                 }
                                 """)
                         .header("X-User-Id", "admin-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
-        verify(port).batchEnable(eq("doc-1"), captor.capture(), eq(false), eq("admin-1"));
-        assertThat(captor.getValue()).containsExactly("chunk-1", "chunk-2");
+        ArgumentCaptor<List<Long>> captor = ArgumentCaptor.forClass(List.class);
+        verify(port).batchEnable(eq(1L), captor.capture(), eq(false), eq("admin-1"));
+        assertThat(captor.getValue()).containsExactly(10L, 20L);
     }
 
     private static <T> ObjectProvider<T> provider(Class<T> type, T instance) {

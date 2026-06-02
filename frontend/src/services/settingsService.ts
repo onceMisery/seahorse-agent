@@ -36,7 +36,7 @@ export interface SystemSettings {
       string,
       {
         url: string;
-        apiKey?: string | null;
+        apiKeyConfigured?: boolean | null;
         endpoints: Record<string, string>;
       }
     >;

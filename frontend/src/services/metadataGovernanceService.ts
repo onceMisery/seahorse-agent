@@ -60,6 +60,9 @@ export interface MetadataQualityReport {
   fieldCoverage?: Array<{ fieldKey?: string; coverage?: number; missingCount?: number }>;
 }
 
+export type MetadataDictionaryItem = Record<string, unknown>;
+export type MetadataExtractionResult = Record<string, unknown>;
+
 export function listMetadataSchemaFields(tenantId: string, kbId: string) {
   return api.get<MetadataSchemaField[]>(`/knowledge-base/${kbId}/metadata-schema/fields`, {
     params: { tenantId }
@@ -89,12 +92,12 @@ export function quarantineMetadataReviewItem(itemId: string) {
 }
 
 export function pageMetadataQuarantineItems(params: {
-  tenantId: string;
+  tenantId?: string;
   kbId?: string;
   resolved?: boolean;
   current?: number;
   size?: number;
-}) {
+} = {}) {
   return api.get<PageResult<MetadataQuarantineItem>>("/metadata-quarantine/items", { params });
 }
 
@@ -110,6 +113,20 @@ export function getMetadataQualityReport(tenantId: string, kbId: string) {
   return api.get<MetadataQualityReport>(`/knowledge-base/${kbId}/metadata-quality/report`, {
     params: { tenantId, topN: 5 }
   });
+}
+
+// ── 字典项 ──
+
+export function listMetadataDictionaryItems() {
+  return api.get<PageResult<MetadataDictionaryItem> | MetadataDictionaryItem[]>("/metadata-dictionaries/items");
+}
+
+export function createMetadataDictionaryItem(payload: { key: string; value?: string }) {
+  return api.post<MetadataDictionaryItem, MetadataDictionaryItem>("/metadata-dictionaries/items", payload);
+}
+
+export function deleteMetadataDictionaryItem(itemId: string) {
+  return api.delete(`/metadata-dictionaries/items/${encodeURIComponent(itemId)}`);
 }
 
 // ── Schema 字段 CRUD ──
@@ -148,8 +165,8 @@ export function listMetadataExtractionResults(params: {
   documentId?: string;
   current?: number;
   size?: number;
-}) {
-  return api.get<PageResult<Record<string, unknown>>>("/metadata-extraction/results", { params });
+} = {}) {
+  return api.get<PageResult<MetadataExtractionResult> | MetadataExtractionResult[]>("/metadata-extraction/results", { params });
 }
 
 export function getMetadataExtractionResult(resultId: string) {

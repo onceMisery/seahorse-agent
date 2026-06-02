@@ -40,6 +40,8 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
+import { ADVANCED_ADMIN_FEATURES, getAdvancedFeatureState, type FeatureState } from "@/config/productMode";
 import { cn } from "@/lib/utils";
 import {
   approveAiInfraApproval,
@@ -68,6 +70,7 @@ import { getErrorMessage } from "@/utils/error";
 
 type ConsoleTab = "overview" | "approvals" | "feedback" | "agents" | "tools" | "operations";
 type StatusTone = "neutral" | "success" | "warning" | "danger" | "info";
+type FeatureKey = keyof typeof ADVANCED_ADMIN_FEATURES;
 
 type MetricCard = {
   title: string;
@@ -102,12 +105,12 @@ const DEFAULT_TENANT_ID = "tenant-default";
 const DEFAULT_OPERATOR = "admin";
 const ALL_APPROVAL_STATUSES = "ALL";
 
-const tabs: Array<{ value: ConsoleTab; label: string; icon: ComponentType<{ className?: string }> }> = [
-  { value: "overview", label: "Overview", icon: SquareActivity },
-  { value: "approvals", label: "Approvals", icon: ShieldCheck },
-  { value: "feedback", label: "Feedback", icon: MessageSquareWarning },
-  { value: "agents", label: "Agents", icon: Boxes },
-  { value: "tools", label: "Tools", icon: TerminalSquare },
+const tabs: Array<{ value: ConsoleTab; label: string; icon: ComponentType<{ className?: string }>; feature?: FeatureKey }> = [
+  { value: "overview", label: "Overview", icon: SquareActivity, feature: "AI_INFRA_CONSOLE" },
+  { value: "approvals", label: "Approvals", icon: ShieldCheck, feature: "AGENT_RUN_MANAGEMENT" },
+  { value: "feedback", label: "Feedback", icon: MessageSquareWarning, feature: "AGENT_EVALUATION" },
+  { value: "agents", label: "Agents", icon: Boxes, feature: "AGENT_DEFINITION_MANAGEMENT" },
+  { value: "tools", label: "Tools", icon: TerminalSquare, feature: "TOOL_CATALOG_MANAGEMENT" },
   { value: "operations", label: "Operations", icon: GitBranch }
 ];
 
@@ -211,13 +214,13 @@ function pageRecords(page: PageResult<ApiRecord> | null) {
 
 function statusTone(status: string): StatusTone {
   const normalized = status.toUpperCase();
-  if (["PASS", "READY", "ACTIVE", "APPROVED", "SUCCEEDED", "HEALTHY", "PUBLISHED", "ENABLED"].includes(normalized)) {
+  if (["PASS", "READY", "ACTIVE", "APPROVED", "SUCCEEDED", "HEALTHY", "PUBLISHED", "ENABLED", "GREEN", "UP"].includes(normalized)) {
     return "success";
   }
   if (["PENDING", "WARN", "WARNING", "CANARY", "RUNNING", "WAITING_APPROVAL", "DRAFT"].includes(normalized)) {
     return "warning";
   }
-  if (["FAIL", "FAILED", "REJECTED", "DENIED", "DISABLED", "PAUSED", "CANCELLED"].includes(normalized)) {
+  if (["FAIL", "FAILED", "REJECTED", "DENIED", "DISABLED", "PAUSED", "CANCELLED", "RED", "DOWN"].includes(normalized)) {
     return "danger";
   }
   if (["REGRESSED"].includes(normalized)) return "danger";
@@ -264,6 +267,21 @@ function EmptyState({ loading, label }: { loading: boolean; label: string }) {
   return (
     <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
       {loading ? "Loading..." : label}
+    </div>
+  );
+}
+
+function InlineFeatureUnavailableState({
+  featureState,
+  featureName
+}: {
+  featureState: FeatureState;
+  featureName: string;
+}) {
+  return (
+    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+      <p className="font-medium text-slate-700">{featureName}未启用</p>
+      <p className="mt-1">{featureState.reason || "此功能当前不可用，请联系管理员开启。"}</p>
     </div>
   );
 }
@@ -317,8 +335,62 @@ function JsonPreview({ value }: { value: unknown }) {
   );
 }
 
+function SreHealthItems({ sreHealth, loading }: { sreHealth: ApiRecord | null; loading: boolean }) {
+  const healthItems = asRecordArray(sreHealth?.items);
+  if (!healthItems.length) {
+    return (
+      <div className="space-y-3">
+        <EmptyState loading={loading} label="No runtime health contributors reported" />
+        <JsonPreview value={sreHealth ?? { status: "UNKNOWN", items: [] }} />
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-sm text-slate-600">
+          Overall: <StatusBadge value={sreHealth?.status ?? sreHealth?.overallStatus ?? "UNKNOWN"} />
+        </div>
+        <span className="font-mono text-xs text-slate-500">
+          {formatTime(sreHealth?.checkedAt)}
+        </span>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Contributor</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Message</TableHead>
+            <TableHead>Evidence</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {healthItems.map((item, index) => (
+            <TableRow key={`${asString(item.contributorName, "contributor")}-${index}`}>
+              <TableCell className="font-mono text-xs">{asString(item.contributorName)}</TableCell>
+              <TableCell><StatusBadge value={item.status} /></TableCell>
+              <TableCell className="max-w-[260px] text-xs text-slate-600">{asString(item.message)}</TableCell>
+              <TableCell className="max-w-[220px] truncate font-mono text-xs text-slate-500">
+                {asString(item.evidenceRef)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 export function AiInfraConsolePage() {
   const requestSeq = useRef(0);
+  const pageFeatureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AI_INFRA_CONSOLE);
+  const approvalFeatureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT);
+  const feedbackFeatureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_EVALUATION);
+  const agentFeatureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT);
+  const toolFeatureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT);
+  const readinessFeatureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.ENTERPRISE_PILOT_READINESS);
+  const rolloutFeatureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_ROLLOUT_MANAGEMENT);
+  const costFeatureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.COST_ANALYTICS);
   const [activeTab, setActiveTab] = useState<ConsoleTab>("overview");
   const [tenantId, setTenantId] = useState(DEFAULT_TENANT_ID);
   const [agentKeyword, setAgentKeyword] = useState("");
@@ -360,6 +432,18 @@ export function AiInfraConsolePage() {
     modelId: "",
     baselinePassRate: ""
   });
+  const tabFeatureStates: Partial<Record<ConsoleTab, FeatureState>> = {
+    overview: pageFeatureState,
+    approvals: approvalFeatureState,
+    feedback: feedbackFeatureState,
+    agents: agentFeatureState,
+    tools: toolFeatureState
+  };
+  const isTabEnabled = (tab: ConsoleTab) => tabFeatureStates[tab]?.enabled ?? true;
+  const emptyPage = useMemo<PageResult<ApiRecord>>(
+    () => ({ records: [], total: 0, size: PAGE_SIZE, current: 1, pages: 0 }),
+    []
+  );
 
   const loadConsole = useCallback(async () => {
     const requestId = ++requestSeq.current;
@@ -368,19 +452,27 @@ export function AiInfraConsolePage() {
       const status = approvalStatus === ALL_APPROVAL_STATUSES ? "" : approvalStatus;
       const safeTenantId = tenantId.trim();
       const [agentPage, approvalPage, toolPage, health, cost, candidatePage] = await Promise.all([
-        getAiInfraAgents({ tenantId: safeTenantId || undefined, keyword: agentKeyword.trim() || undefined, size: PAGE_SIZE }),
-        getAiInfraApprovals({ tenantId: safeTenantId || undefined, status, size: PAGE_SIZE }),
-        getAiInfraTools({ keyword: toolKeyword.trim() || undefined, size: PAGE_SIZE }),
-        getAiInfraSreHealth(),
-        safeTenantId
+        agentFeatureState.enabled
+          ? getAiInfraAgents({ tenantId: safeTenantId || undefined, keyword: agentKeyword.trim() || undefined, size: PAGE_SIZE })
+          : Promise.resolve(emptyPage),
+        approvalFeatureState.enabled
+          ? getAiInfraApprovals({ tenantId: safeTenantId || undefined, status, size: PAGE_SIZE })
+          : Promise.resolve(emptyPage),
+        toolFeatureState.enabled
+          ? getAiInfraTools({ keyword: toolKeyword.trim() || undefined, size: PAGE_SIZE })
+          : Promise.resolve(emptyPage),
+        pageFeatureState.enabled ? getAiInfraSreHealth() : Promise.resolve({ status: "DISABLED" }),
+        costFeatureState.enabled && safeTenantId
           ? getAiInfraCostUsageAggregate({ tenantId: safeTenantId })
           : Promise.resolve({ tenantId: "", totalTokens: 0, totalCalls: 0, totalCost: 0 }),
-        getFeedbackEvaluationCandidates({
-          userId: feedbackUserId.trim() || undefined,
-          runId: feedbackRunId.trim() || undefined,
-          reason: feedbackReason.trim() || undefined,
-          size: PAGE_SIZE
-        })
+        feedbackFeatureState.enabled
+          ? getFeedbackEvaluationCandidates({
+              userId: feedbackUserId.trim() || undefined,
+              runId: feedbackRunId.trim() || undefined,
+              reason: feedbackReason.trim() || undefined,
+              size: PAGE_SIZE
+            })
+          : Promise.resolve(emptyPage)
       ]);
       if (requestSeq.current !== requestId) return;
       setAgents(agentPage);
@@ -397,11 +489,39 @@ export function AiInfraConsolePage() {
         setLoading(false);
       }
     }
-  }, [agentKeyword, approvalStatus, feedbackReason, feedbackRunId, feedbackUserId, tenantId, toolKeyword]);
+  }, [
+    agentFeatureState.enabled,
+    agentKeyword,
+    approvalFeatureState.enabled,
+    approvalStatus,
+    costFeatureState.enabled,
+    emptyPage,
+    feedbackFeatureState.enabled,
+    feedbackReason,
+    feedbackRunId,
+    feedbackUserId,
+    pageFeatureState.enabled,
+    tenantId,
+    toolFeatureState.enabled,
+    toolKeyword
+  ]);
 
   useEffect(() => {
     loadConsole();
   }, [loadConsole]);
+
+  useEffect(() => {
+    if (!isTabEnabled(activeTab)) {
+      setActiveTab("overview");
+    }
+  }, [
+    activeTab,
+    agentFeatureState.enabled,
+    approvalFeatureState.enabled,
+    feedbackFeatureState.enabled,
+    pageFeatureState.enabled,
+    toolFeatureState.enabled
+  ]);
 
   const metrics = useMemo<MetricCard[]>(() => {
     const pendingApprovals = pageRecords(approvals).filter((item) => asString(item.status) === "PENDING").length;
@@ -465,6 +585,10 @@ export function AiInfraConsolePage() {
   };
 
   const runApprovalAction = async (approvalId: string, action: "approve" | "reject") => {
+    if (!approvalFeatureState.enabled) {
+      toast.error("审批中心未启用");
+      return;
+    }
     setActionLoading(`${action}:${approvalId}`);
     try {
       if (action === "approve") {
@@ -483,6 +607,10 @@ export function AiInfraConsolePage() {
   };
 
   const runEvalCandidateAction = async (candidateId: string, action: "accept" | "reject") => {
+    if (!feedbackFeatureState.enabled) {
+      toast.error("评估反馈未启用");
+      return;
+    }
     setActionLoading(`${action}:${candidateId}`);
     try {
       if (action === "accept") {
@@ -501,6 +629,10 @@ export function AiInfraConsolePage() {
   };
 
   const runReadinessAction = async (action: "generate" | "latest") => {
+    if (!readinessFeatureState.enabled) {
+      toast.error("企业试点就绪度未启用");
+      return;
+    }
     if (!readinessForm.tenantId || !readinessForm.agentId || !readinessForm.versionId) {
       toast.error("tenantId, agentId and versionId are required");
       return;
@@ -521,6 +653,10 @@ export function AiInfraConsolePage() {
   };
 
   const runEvalRegressionAction = async () => {
+    if (!feedbackFeatureState.enabled) {
+      toast.error("评估反馈未启用");
+      return;
+    }
     const datasetId = evalRegressionForm.datasetId.trim();
     if (!datasetId) {
       toast.error("datasetId is required");
@@ -551,6 +687,10 @@ export function AiInfraConsolePage() {
   };
 
   const runRolloutAction = async (action: "create" | "latest" | "pause" | "promote" | "rollback") => {
+    if (!rolloutFeatureState.enabled) {
+      toast.error("Agent 发布管理未启用");
+      return;
+    }
     if (!rolloutForm.tenantId || !rolloutForm.agentId) {
       toast.error("tenantId and agentId are required");
       return;
@@ -593,6 +733,10 @@ export function AiInfraConsolePage() {
     }
   };
 
+  if (!pageFeatureState.enabled) {
+    return <FeatureUnavailableState featureState={pageFeatureState} featureName="AI Infra Console" />;
+  }
+
   return (
     <div className="admin-page ai-infra-page">
       <div className="admin-page-header">
@@ -626,14 +770,19 @@ export function AiInfraConsolePage() {
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.value;
+          const enabled = isTabEnabled(tab.value);
           return (
             <button
               key={tab.value}
               type="button"
-              onClick={() => setActiveTab(tab.value)}
+              onClick={() => {
+                if (enabled) setActiveTab(tab.value);
+              }}
+              disabled={!enabled}
               className={cn(
                 "inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-medium transition",
-                active ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-950"
+                active ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-950",
+                !enabled && "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-slate-600"
               )}
             >
               <Icon className="h-4 w-4" />
@@ -646,55 +795,64 @@ export function AiInfraConsolePage() {
       {activeTab === "overview" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
           <DataPanel title="Latest approvals" description="Current HITL approval queue from the approval API">
-            <ApprovalTable
-              records={pageRecords(approvals).slice(0, 5)}
-              loading={loading}
-              actionLoading={actionLoading}
-              onAction={runApprovalAction}
-            />
+            {approvalFeatureState.enabled ? (
+              <ApprovalTable
+                records={pageRecords(approvals).slice(0, 5)}
+                loading={loading}
+                actionLoading={actionLoading}
+                onAction={runApprovalAction}
+              />
+            ) : (
+              <InlineFeatureUnavailableState featureState={approvalFeatureState} featureName="审批中心" />
+            )}
           </DataPanel>
-          <DataPanel title="Operations evidence" description="Raw aggregate fields for troubleshooting">
-            <JsonPreview value={{ sreHealth, costUsage, feedbackCandidates }} />
+          <DataPanel title="Runtime health" description="Backend-reported SRE health contributors and evidence references.">
+            <SreHealthItems sreHealth={sreHealth} loading={loading} />
           </DataPanel>
         </div>
       ) : null}
 
       {activeTab === "approvals" ? (
-        <DataPanel
-          title="Approval Inbox"
-          description="Query pending approval requests and call approve or reject APIs."
-          actions={
-            <>
-              <Select value={approvalStatus} onValueChange={(value) => setApprovalStatus(value as typeof ALL_APPROVAL_STATUSES | ApprovalStatus)}>
-                <SelectTrigger className="w-[170px] bg-white">
-                  <SelectValue placeholder="Approval status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {approvalStatuses.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" onClick={loadConsole}>
-                <Search className="mr-2 h-4 w-4" />
-                Query
-              </Button>
-            </>
-          }
-        >
-          <div className="mb-4">
-            <Field label="Decision comment">
-              <Textarea value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} />
-            </Field>
-          </div>
-          <ApprovalTable records={pageRecords(approvals)} loading={loading} actionLoading={actionLoading} onAction={runApprovalAction} />
-        </DataPanel>
+        approvalFeatureState.enabled ? (
+          <DataPanel
+            title="Approval Inbox"
+            description="Query pending approval requests and call approve or reject APIs."
+            actions={
+              <>
+                <Select value={approvalStatus} onValueChange={(value) => setApprovalStatus(value as typeof ALL_APPROVAL_STATUSES | ApprovalStatus)}>
+                  <SelectTrigger className="w-[170px] bg-white">
+                    <SelectValue placeholder="Approval status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {approvalStatuses.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" onClick={loadConsole}>
+                  <Search className="mr-2 h-4 w-4" />
+                  Query
+                </Button>
+              </>
+            }
+          >
+            <div className="mb-4">
+              <Field label="Decision comment">
+                <Textarea value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} />
+              </Field>
+            </div>
+            <ApprovalTable records={pageRecords(approvals)} loading={loading} actionLoading={actionLoading} onAction={runApprovalAction} />
+          </DataPanel>
+        ) : (
+          <InlineFeatureUnavailableState featureState={approvalFeatureState} featureName="审批中心" />
+        )
       ) : null}
 
       {activeTab === "feedback" ? (
-        <DataPanel
+        feedbackFeatureState.enabled ? (
+          <DataPanel
           title="Feedback Evaluation Candidates"
           description="Disliked assistant messages that can be sampled for quality review."
           actions={
@@ -730,11 +888,15 @@ export function AiInfraConsolePage() {
             actionLoading={actionLoading}
             onAction={runEvalCandidateAction}
           />
-        </DataPanel>
+          </DataPanel>
+        ) : (
+          <InlineFeatureUnavailableState featureState={feedbackFeatureState} featureName="评估反馈" />
+        )
       ) : null}
 
       {activeTab === "agents" ? (
-        <DataPanel
+        agentFeatureState.enabled ? (
+          <DataPanel
           title="Agent Catalog"
           description="Read agent definition records and published versions."
           actions={
@@ -765,11 +927,15 @@ export function AiInfraConsolePage() {
               { key: "createdAt", label: "Created", time: true }
             ]}
           />
-        </DataPanel>
+          </DataPanel>
+        ) : (
+          <InlineFeatureUnavailableState featureState={agentFeatureState} featureName="Agent 定义管理" />
+        )
       ) : null}
 
       {activeTab === "tools" ? (
-        <DataPanel
+        toolFeatureState.enabled ? (
+          <DataPanel
           title="Tool Catalog"
           description="Read tool catalog records and check risk/approval policy fields."
           actions={
@@ -800,7 +966,10 @@ export function AiInfraConsolePage() {
               { key: "enabled", label: "Enabled", status: true }
             ]}
           />
-        </DataPanel>
+          </DataPanel>
+        ) : (
+          <InlineFeatureUnavailableState featureState={toolFeatureState} featureName="工具目录" />
+        )
       ) : null}
 
       {activeTab === "operations" ? (

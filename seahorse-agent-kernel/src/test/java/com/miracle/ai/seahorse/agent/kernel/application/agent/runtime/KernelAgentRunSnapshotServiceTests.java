@@ -285,7 +285,7 @@ class KernelAgentRunSnapshotServiceTests {
     }
 
     private static CurrentUserPort currentUser(String userId, String role) {
-        return () -> Optional.of(new CurrentUser(userId, userId, role, null));
+        return () -> Optional.of(new CurrentUser(Long.valueOf(userId), userId, role, null));
     }
 
     private static final class MemoryAgentRunRepository implements AgentRunRepositoryPort {

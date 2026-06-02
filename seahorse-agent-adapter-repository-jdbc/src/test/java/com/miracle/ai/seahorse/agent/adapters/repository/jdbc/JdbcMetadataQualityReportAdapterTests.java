@@ -264,10 +264,10 @@ class JdbcMetadataQualityReportAdapterTests {
                           '{}', '[]', '[]', '[]', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """);
 
-        assertThat(adapter.hasAcceptedResult("tenant-1", "kb-1", "doc-1", 1, "extractor-v1")).isTrue();
-        assertThat(adapter.hasAcceptedResult("tenant-1", "kb-1", "doc-1", 2, "extractor-v1")).isFalse();
-        assertThat(adapter.hasAcceptedResult("tenant-1", "kb-1", "doc-1", 1, "extractor-v2")).isFalse();
-        assertThat(adapter.hasAcceptedResult("tenant-1", "kb-1", "doc-2", 1, "extractor-v1")).isFalse();
+        assertThat(adapter.hasAcceptedResult("tenant-1", 1L, 1L, 1, "extractor-v1")).isTrue();
+        assertThat(adapter.hasAcceptedResult("tenant-1", 1L, 1L, 2, "extractor-v1")).isFalse();
+        assertThat(adapter.hasAcceptedResult("tenant-1", 1L, 1L, 1, "extractor-v2")).isFalse();
+        assertThat(adapter.hasAcceptedResult("tenant-1", 1L, 2L, 1, "extractor-v1")).isFalse();
     }
 
     private MetadataFieldCoverage coverage(MetadataQualityReport report, String fieldKey) {

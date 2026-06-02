@@ -109,7 +109,7 @@ export function ModelConfigPage() {
         updates.map((update) => updateAiModelConfig(update.key, update.value))
       );
 
-      toast.success("配置已保存并实时生效");
+      toast.success("配置已保存。运行时模型适配器仍以部署环境配置为准。");
       setEditing(false);
       await loadConfigs();
     } catch (error) {
@@ -141,7 +141,7 @@ export function ModelConfigPage() {
       <div className="admin-page-header">
         <div>
           <h1 className="admin-page-title">大模型配置</h1>
-          <p className="admin-page-subtitle">配置 AI 模型服务提供商和模型，实时生效</p>
+          <p className="admin-page-subtitle">维护数据库中的模型配置；当前运行时适配器以部署环境配置为准</p>
         </div>
         <div className="flex gap-2">
           {!editing ? (
@@ -168,7 +168,7 @@ export function ModelConfigPage() {
         <CardHeader>
           <CardTitle>模型服务配置</CardTitle>
           <CardDescription>
-            配置 OpenAI 兼容的 API 服务地址和密钥
+            保存 OpenAI 兼容的 API 服务地址和密钥；是否立即用于运行时取决于后端适配器配置
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -279,10 +279,13 @@ export function ModelConfigPage() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-green-800">
           <p>
-            <strong>✅ 实时生效：</strong>配置保存后立即生效，无需重启后端服务。
+            <strong>运行时来源：</strong>当前 AI adapter 从 `seahorse-agent.adapters.ai.*` 部署环境配置读取模型服务。
           </p>
           <p>
-            <strong>🔒 安全存储：</strong>API 密钥使用 AES 加密存储在数据库中，前端显示时自动脱敏。
+            <strong>保存影响：</strong>本页保存数据库配置，用于后台治理和后续运行时刷新能力；如需改变当前模型调用，请同步调整部署环境并按部署要求重启或刷新服务。
+          </p>
+          <p>
+            <strong>🔒 安全存储：</strong>加密配置前端显示时自动脱敏；运行时配置页面只展示密钥是否已配置。
           </p>
           <p>
             <strong>👤 权限控制：</strong>仅管理员可以编辑配置，所有变更记录操作人和时间。

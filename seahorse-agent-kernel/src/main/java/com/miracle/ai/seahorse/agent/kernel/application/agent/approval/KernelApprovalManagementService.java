@@ -78,7 +78,7 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
                 ApprovalRequestQuery.DEFAULT_CURRENT,
                 RUN_PENDING_APPROVAL_PAGE_SIZE));
         return page.records().stream()
-                .filter(approval -> isAdmin(currentUser) || currentUser.userId().equals(approval.userId()))
+                .filter(approval -> isAdmin(currentUser) || currentUserId(currentUser).equals(approval.userId()))
                 .toList();
     }
 
@@ -113,7 +113,7 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
         String safeApprovalId = requireText(approvalId, "approvalId 不能为空");
         ApprovalRequest current = queryPort.findById(safeApprovalId)
                 .orElseThrow(() -> new IllegalArgumentException(APPROVAL_NOT_FOUND));
-        if (!isAdmin(currentUser) && !currentUser.userId().equals(current.userId())) {
+        if (!isAdmin(currentUser) && !currentUserId(currentUser).equals(current.userId())) {
             throw new IllegalStateException(ACCESS_DENIED);
         }
         if (current.status() != ApprovalRequestStatus.PENDING) {
@@ -138,6 +138,14 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
 
     private boolean isAdmin(CurrentUser currentUser) {
         return currentUser != null && currentUser.hasRole(ADMIN_ROLE);
+    }
+
+    private String currentUserId(CurrentUser currentUser) {
+        Long userId = currentUser == null ? null : currentUser.userId();
+        if (userId == null) {
+            throw new IllegalStateException(ACCESS_DENIED);
+        }
+        return String.valueOf(userId);
     }
 
     private String decisionComment(ApprovalDecisionCommand command) {
