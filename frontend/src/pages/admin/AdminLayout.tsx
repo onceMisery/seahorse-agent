@@ -171,7 +171,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         path: "/admin/approvals",
-        feature: "AGENT_DEFINITION_MANAGEMENT",
+        feature: "AGENT_RUN_MANAGEMENT",
         label: "审批中心",
         icon: FileCheck
       },
@@ -406,7 +406,6 @@ export function AdminLayout() {
     newPassword: "",
     confirmPassword: ""
   });
-  const [starCount, setStarCount] = useState<number | null>(null);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ ingestion: true, intent: true });
   const [kbQuery, setKbQuery] = useState("");
   const [kbOptions, setKbOptions] = useState<KnowledgeBase[]>([]);
@@ -424,25 +423,6 @@ export function AdminLayout() {
     await logout();
     navigate("/login");
   };
-
-  useEffect(() => {
-    let active = true;
-    fetch("https://api.github.com/repos/onceMisery/seahorse-agent")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!active) return;
-        const count = typeof data?.stargazers_count === "number" ? data.stargazers_count : null;
-        setStarCount(count);
-      })
-      .catch(() => {
-        if (active) {
-          setStarCount(null);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!searchFocused) return;
@@ -548,13 +528,6 @@ export function AdminLayout() {
   const avatarUrl = user?.avatar?.trim();
   const showAvatar = Boolean(avatarUrl);
   const roleLabel = user?.role === "admin" ? "管理员" : "成员";
-  const starLabel = useMemo(() => {
-    if (starCount === null) return "--";
-    if (starCount < 1000) return String(starCount);
-    const rounded = Math.round((starCount / 1000) * 10) / 10;
-    const text = String(rounded).replace(/\.0$/, "");
-    return `${text}k`;
-  }, [starCount]);
   const ingestionAdminEnabled = getFeatureState(ADVANCED_ADMIN_FEATURES.INGESTION_MANAGEMENT).enabled;
   const intentAdminEnabled = getFeatureState(ADVANCED_ADMIN_FEATURES.INTENT_MANAGEMENT).enabled;
   const isIngestionActive = ingestionAdminEnabled && location.pathname.startsWith("/admin/ingestion");
@@ -931,10 +904,7 @@ export function AdminLayout() {
                 aria-label="打开 GitHub 仓库"
               >
                 <Github className="h-4 w-4" />
-                <span className="font-medium">Star</span>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                  {starLabel}
-                </span>
+                <span className="font-medium">GitHub</span>
               </a>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

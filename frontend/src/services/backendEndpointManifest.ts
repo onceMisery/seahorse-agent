@@ -1,7 +1,11 @@
 export const backendEndpointManifest = [
   {
     "method": "DELETE",
-    "path": "/{}"
+    "path": "/admin/ai-config/{}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/conversations/{}"
   },
   {
     "method": "DELETE",
@@ -69,7 +73,23 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/{}"
+    "path": "/admin/ai-config"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/ai-config/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/dashboard/overview"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/dashboard/performance"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/dashboard/trends"
   },
   {
     "method": "GET",
@@ -181,6 +201,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/agents/{}/eval-summaries"
+  },
+  {
+    "method": "GET",
     "path": "/api/agents/{}/production-gate/latest"
   },
   {
@@ -241,7 +265,15 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/conversations"
+  },
+  {
+    "method": "GET",
     "path": "/api/conversations/{}/attachments"
+  },
+  {
+    "method": "GET",
+    "path": "/api/conversations/{}/messages"
   },
   {
     "method": "GET",
@@ -549,14 +581,6 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/overview"
-  },
-  {
-    "method": "GET",
-    "path": "/performance"
-  },
-  {
-    "method": "GET",
     "path": "/rag/sample-questions"
   },
   {
@@ -589,10 +613,6 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/trends"
-  },
-  {
-    "method": "GET",
     "path": "/user/me"
   },
   {
@@ -610,6 +630,10 @@ export const backendEndpointManifest = [
   {
     "method": "PATCH",
     "path": "/knowledge-base/docs/{}/enable"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/ai-config"
   },
   {
     "method": "POST",
@@ -741,6 +765,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/conversations"
+  },
+  {
+    "method": "POST",
     "path": "/api/conversations/{}/attachments"
   },
   {
@@ -822,6 +850,10 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/auth/logout"
+  },
+  {
+    "method": "POST",
+    "path": "/conversations"
   },
   {
     "method": "POST",
@@ -1037,7 +1069,7 @@ export const backendEndpointManifest = [
   },
   {
     "method": "PUT",
-    "path": "/{}"
+    "path": "/admin/ai-config/{}"
   },
   {
     "method": "PUT",
@@ -1054,6 +1086,10 @@ export const backendEndpointManifest = [
   {
     "method": "PUT",
     "path": "/api/connectors/{}/operations/{}/credential-binding"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/conversations/{}"
   },
   {
     "method": "PUT",

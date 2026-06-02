@@ -654,7 +654,10 @@ class SeahorseWebApiContractTests {
 
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("seahorse-agent.adapters.vector.collection-name", "native_collection")
-                .withProperty("seahorse-agent.plugins.memory.history-keep-turns", "8");
+                .withProperty("seahorse-agent.plugins.memory.history-keep-turns", "8")
+                .withProperty("seahorse-agent.adapters.ai.providers.openai.url", "https://api.openai.com/v1")
+                .withProperty("seahorse-agent.adapters.ai.providers.openai.api-key", "sk-secret-value")
+                .withProperty("seahorse-agent.adapters.ai.providers.openai.endpoints.chat", "/chat/completions");
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseIntentTreeController(provider(IntentTreeInboundPort.class, intentPort)),
@@ -717,7 +720,10 @@ class SeahorseWebApiContractTests {
 
         mvc.perform(get("/rag/settings"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.rag.defaultConfig.collectionName").value("native_collection"));
+                .andExpect(jsonPath("$.data.rag.defaultConfig.collectionName").value("native_collection"))
+                .andExpect(jsonPath("$.data.ai.providers.openai.url").value("https://api.openai.com/v1"))
+                .andExpect(jsonPath("$.data.ai.providers.openai.apiKey").doesNotExist())
+                .andExpect(jsonPath("$.data.ai.providers.openai.apiKeyConfigured").value(true));
     }
 
     @Test

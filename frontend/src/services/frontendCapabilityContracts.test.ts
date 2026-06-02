@@ -46,6 +46,11 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("GET /api/agents");
     expect(backendEndpoints).toContain("POST /api/agents/{}/publish");
     expect(backendEndpoints).toContain("GET /api/agent-runs/{}/snapshot");
+    expect(backendEndpoints).toContain("GET /admin/ai-config");
+    expect(backendEndpoints).toContain("POST /admin/ai-config");
+    expect(backendEndpoints).toContain("GET /admin/dashboard/overview");
+    expect(backendEndpoints).toContain("GET /admin/dashboard/performance");
+    expect(backendEndpoints).toContain("GET /admin/dashboard/trends");
   });
 
   it("publishes agents with the backend publish payload", async () => {

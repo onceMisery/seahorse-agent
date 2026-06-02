@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-02-frontend-backend-gap-remediation",
+  "taskIntentRef": "docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/aegis/plans/2026-06-02-frontend-backend-gap-remediation-plan.md",
+    "frontend/src/router.tsx",
+    "frontend/src/pages/admin/AdminLayout.tsx",
+    "seahorse-agent-adapter-web/src/main/java/com/miracle/ai/seahorse/agent/adapters/web/AdvancedFeature.java"
+  ],
+  "scopeStatus": "Within plan remediation scope; P2 adoption remains non-exhaustive by design.",
+  "compatStatus": "Existing public admin routes and backend legacy/API aliases remain intact.",
+  "retirementStatus": "Retired wrong approval feature ownership, direct frontend GitHub API dependency, unused missing template detail endpoint, metadata component direct API ownership, and frontend-only SRE inference.",
+  "newRiskSignals": [
+    "Backend SRE adapter contributors are configuration/bean-presence status providers, not live network probes.",
+    "Authenticated browser checks with real backend data were not completed."
+  ],
+  "decision": "continue"
+}

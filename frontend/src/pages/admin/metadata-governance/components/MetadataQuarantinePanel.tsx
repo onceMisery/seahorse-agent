@@ -4,19 +4,22 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { api } from "@/services/api";
+import {
+  pageMetadataQuarantineItems,
+  resolveMetadataQuarantineItem,
+  retryMetadataQuarantineItem,
+  type MetadataQuarantineItem
+} from "@/services/metadataGovernanceService";
 import { getErrorMessage } from "@/utils/error";
 
-type QuarantineItem = Record<string, unknown>;
-
 export function MetadataQuarantinePanel() {
-  const [items, setItems] = useState<QuarantineItem[]>([]);
+  const [items, setItems] = useState<MetadataQuarantineItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const result = await api.get<{ records?: QuarantineItem[] } | QuarantineItem[]>("/metadata-quarantine/items");
+      const result = await pageMetadataQuarantineItems();
       const data = Array.isArray(result) ? result : (result as any)?.records ?? [];
       setItems(data);
     } catch {
@@ -30,7 +33,11 @@ export function MetadataQuarantinePanel() {
 
   const handleAction = async (itemId: string, action: "resolve" | "retry") => {
     try {
-      await api.post(`/metadata-quarantine/items/${encodeURIComponent(itemId)}/${action}`);
+      if (action === "resolve") {
+        await resolveMetadataQuarantineItem(itemId);
+      } else {
+        await retryMetadataQuarantineItem(itemId);
+      }
       toast.success(`${action === "resolve" ? "已解决" : "已重试"}`);
       fetchItems();
     } catch (error) {

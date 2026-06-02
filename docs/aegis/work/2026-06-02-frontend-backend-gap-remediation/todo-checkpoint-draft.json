@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-02-frontend-backend-gap-remediation",
+  "currentTodo": "Report verified completion with residual authenticated browser and full-deployment boundaries.",
+  "completedTodos": [
+    "Created isolated worktree on codex/frontend-backend-gap-remediation.",
+    "Fixed approval center route/menu/page feature ownership to AGENT_RUN_MANAGEMENT.",
+    "Removed direct frontend GitHub API star fetches and unused getAgentTemplate service method.",
+    "Routed metadata governance components through metadataGovernanceService.",
+    "Added AI Infra tab/data-source feature mapping and guarded disabled child features.",
+    "Fixed backend endpoint extraction and regenerated backendEndpointManifest.ts.",
+    "Aligned model configuration UI and /rag/settings API key redaction behavior.",
+    "Added knowledge refresh and keyword-index rebuild operations.",
+    "Added frontend SRE item rendering and backend SRE adapter contributors.",
+    "Repaired stale String/Long test fixtures across affected backend tests.",
+    "Verified frontend contracts, frontend full test suite, frontend build, backend test-source compile, backend production compile, and lightweight browser render."
+  ],
+  "activeSlice": "Completion audit and reporting.",
+  "evidenceRefs": [
+    "frontend-remediation-contracts: 7/7 passed.",
+    "frontend-capability-contracts: 8/8 passed.",
+    "frontend-full-tests: 12 files / 28 tests passed.",
+    "frontend-build: vite build passed.",
+    "backend-tests-reactor-compile: seahorse-agent-tests -am test-compile passed.",
+    "backend-starter-production-compile: starter -am production compile passed.",
+    "browser-render: local /admin/ai-infra rendered admin shell with normal Chinese navigation and AI Infra/SRE text."
+  ],
+  "blockedOn": null,
+  "nextStep": "Give final report to the user in Chinese.",
+  "updatedAt": "2026-06-02"
+}

@@ -28,7 +28,11 @@ import {
   startDocumentChunk,
   uploadDocument,
   getChunkStrategies,
-  getChunkLogsPage
+  getChunkLogsPage,
+  refreshDocument,
+  refreshDueDocuments,
+  rebuildDocumentKeywordIndex,
+  rebuildKbKeywordIndex
 } from "@/services/knowledgeService";
 import { getIngestionPipelines, type IngestionPipeline } from "@/services/ingestionService";
 import { getSystemSettings } from "@/services/settingsService";
@@ -54,6 +58,12 @@ const PROCESS_MODE_OPTIONS = [
 ];
 
 const NO_CHUNK_VALUE = -1;
+
+type KnowledgeOperationTarget =
+  | { type: "refresh-due" }
+  | { type: "rebuild-kb-index" }
+  | { type: "refresh-document"; doc: KnowledgeDocument }
+  | { type: "rebuild-document-index"; doc: KnowledgeDocument };
 
 const parseChunkConfig = (raw?: string | null): Record<string, unknown> => {
   if (!raw) return {};
@@ -137,6 +147,8 @@ export function KnowledgeDocumentsPage() {
   const [logTarget, setLogTarget] = useState<KnowledgeDocument | null>(null);
   const [logData, setLogData] = useState<PageResult<KnowledgeDocumentChunkLog> | null>(null);
   const [logLoading, setLogLoading] = useState(false);
+  const [knowledgeOperationTarget, setKnowledgeOperationTarget] = useState<KnowledgeOperationTarget | null>(null);
+  const [knowledgeOperationRunning, setKnowledgeOperationRunning] = useState(false);
 
   const documents = pageData?.records || [];
 
@@ -342,6 +354,77 @@ export function KnowledgeDocumentsPage() {
     loadChunkLogs(String(doc.id));
   };
 
+  const getKnowledgeOperationCopy = (target: KnowledgeOperationTarget | null) => {
+    if (!target) {
+      return {
+        title: "",
+        description: "",
+        confirmLabel: "确认",
+        successMessage: "操作成功",
+        errorMessage: "操作失败"
+      };
+    }
+    if (target.type === "refresh-due") {
+      return {
+        title: "刷新到期文档？",
+        description: "系统将拉取已到期的远程文档，并按原配置更新文档内容。",
+        confirmLabel: "开始刷新",
+        successMessage: "已开始刷新到期文档",
+        errorMessage: "刷新到期文档失败"
+      };
+    }
+    if (target.type === "rebuild-kb-index") {
+      return {
+        title: "重建当前知识库关键词索引？",
+        description: "系统将为当前知识库重新生成关键词索引。文档较多时可能需要一些时间。",
+        confirmLabel: "重建索引",
+        successMessage: "已开始重建知识库关键词索引",
+        errorMessage: "重建知识库关键词索引失败"
+      };
+    }
+    if (target.type === "refresh-document") {
+      return {
+        title: "刷新文档？",
+        description: `文档 [${target.doc.docName}] 将按来源重新拉取并更新内容。`,
+        confirmLabel: "刷新文档",
+        successMessage: "已开始刷新文档",
+        errorMessage: "刷新文档失败"
+      };
+    }
+    return {
+      title: "重建文档关键词索引？",
+      description: `文档 [${target.doc.docName}] 将重新生成关键词索引。`,
+      confirmLabel: "重建索引",
+      successMessage: "已开始重建文档关键词索引",
+      errorMessage: "重建文档关键词索引失败"
+    };
+  };
+
+  const handleConfirmKnowledgeOperation = async () => {
+    if (!knowledgeOperationTarget || !kbId) return;
+    const copy = getKnowledgeOperationCopy(knowledgeOperationTarget);
+    setKnowledgeOperationRunning(true);
+    try {
+      if (knowledgeOperationTarget.type === "refresh-due") {
+        await refreshDueDocuments();
+      } else if (knowledgeOperationTarget.type === "rebuild-kb-index") {
+        await rebuildKbKeywordIndex(kbId);
+      } else if (knowledgeOperationTarget.type === "refresh-document") {
+        await refreshDocument(String(knowledgeOperationTarget.doc.id));
+      } else {
+        await rebuildDocumentKeywordIndex(String(knowledgeOperationTarget.doc.id));
+      }
+      toast.success(copy.successMessage);
+      setKnowledgeOperationTarget(null);
+      await loadDocuments(current, statusFilter, keyword);
+    } catch (error) {
+      toast.error(getErrorMessage(error, copy.errorMessage));
+      console.error(error);
+    } finally {
+      setKnowledgeOperationRunning(false);
+    }
+  };
+
   const formatDuration = (ms?: number | null) => {
     if (!ms && ms !== 0) return "-";
     if (ms < 1000) return `${ms}ms`;
@@ -401,6 +484,8 @@ export function KnowledgeDocumentsPage() {
     }
   };
 
+  const knowledgeOperationCopy = getKnowledgeOperationCopy(knowledgeOperationTarget);
+
   return (
     <div className="admin-page">
       <div className="admin-page-header">
@@ -413,6 +498,21 @@ export function KnowledgeDocumentsPage() {
         <div className="admin-page-actions">
           <Button variant="outline" onClick={() => navigate("/admin/knowledge")}>
             返回知识库
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setKnowledgeOperationTarget({ type: "refresh-due" })}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            刷新到期文档
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setKnowledgeOperationTarget({ type: "rebuild-kb-index" })}
+            disabled={!kbId}
+          >
+            <FileBarChart className="mr-2 h-4 w-4" />
+            重建关键词索引
           </Button>
           <Button className="admin-primary-gradient" onClick={() => setUploadOpen(true)}>
             <FileUp className="mr-2 h-4 w-4" />
@@ -482,7 +582,7 @@ export function KnowledgeDocumentsPage() {
                   <TableHead className="w-[90px]">类型</TableHead>
                   <TableHead className="w-[90px]">大小</TableHead>
                   <TableHead className="w-[170px]">更新时间</TableHead>
-                  <TableHead className="w-[160px] text-left">操作</TableHead>
+                  <TableHead className="w-[220px] text-left">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -582,6 +682,22 @@ export function KnowledgeDocumentsPage() {
                         <Button
                           size="icon"
                           variant="ghost"
+                          onClick={() => setKnowledgeOperationTarget({ type: "refresh-document", doc })}
+                          title="刷新文档"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setKnowledgeOperationTarget({ type: "rebuild-document-index", doc })}
+                          title="重建文档关键词索引"
+                        >
+                          <FileBarChart className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
                           className="text-destructive hover:text-destructive"
                           onClick={() => setDeleteTarget(doc)}
                           title="删除"
@@ -670,6 +786,24 @@ export function KnowledgeDocumentsPage() {
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction onClick={handleChunk}>
               {chunkTarget?.chunkCount ? "确认" : "开始"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(knowledgeOperationTarget)}
+        onOpenChange={(open) => (!open && !knowledgeOperationRunning ? setKnowledgeOperationTarget(null) : null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{knowledgeOperationCopy.title}</AlertDialogTitle>
+            <AlertDialogDescription>{knowledgeOperationCopy.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={knowledgeOperationRunning}>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmKnowledgeOperation} disabled={knowledgeOperationRunning}>
+              {knowledgeOperationRunning ? "处理中..." : knowledgeOperationCopy.confirmLabel}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

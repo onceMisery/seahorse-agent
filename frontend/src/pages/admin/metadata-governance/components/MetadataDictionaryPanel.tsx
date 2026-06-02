@@ -12,13 +12,16 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
-import { api } from "@/services/api";
+import {
+  createMetadataDictionaryItem,
+  deleteMetadataDictionaryItem,
+  listMetadataDictionaryItems,
+  type MetadataDictionaryItem
+} from "@/services/metadataGovernanceService";
 import { getErrorMessage } from "@/utils/error";
 
-type DictItem = Record<string, unknown>;
-
 export function MetadataDictionaryPanel() {
-  const [items, setItems] = useState<DictItem[]>([]);
+  const [items, setItems] = useState<MetadataDictionaryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newKey, setNewKey] = useState("");
@@ -27,7 +30,7 @@ export function MetadataDictionaryPanel() {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const result = await api.get<{ records?: DictItem[] } | DictItem[]>("/metadata-dictionaries/items");
+      const result = await listMetadataDictionaryItems();
       const data = Array.isArray(result) ? result : (result as any)?.records ?? [];
       setItems(data);
     } catch {
@@ -42,7 +45,7 @@ export function MetadataDictionaryPanel() {
   const handleCreate = async () => {
     if (!newKey.trim()) return;
     try {
-      await api.post("/metadata-dictionaries/items", { key: newKey, value: newValue });
+      await createMetadataDictionaryItem({ key: newKey, value: newValue });
       toast.success("字典项已创建");
       setShowCreate(false);
       setNewKey("");
@@ -56,7 +59,7 @@ export function MetadataDictionaryPanel() {
   const handleDelete = async (id: string) => {
     if (!window.confirm("确认删除此字典项？")) return;
     try {
-      await api.delete(`/metadata-dictionaries/items/${encodeURIComponent(id)}`);
+      await deleteMetadataDictionaryItem(id);
       toast.success("已删除");
       fetchItems();
     } catch (error) {

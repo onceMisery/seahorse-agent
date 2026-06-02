@@ -141,7 +141,7 @@ const advancedAdminRoutes = [
   { path: "tools", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具目录", <ToolCatalogPage />) },
   { path: "tools/:toolId", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具目录", <ToolDetailPage />) },
   { path: "tool-invocations", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具调用审计", <ToolInvocationAuditPage />) },
-  { path: "approvals", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "审批中心", <ApprovalCenterPage />) },
+  { path: "approvals", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "审批中心", <ApprovalCenterPage />) },
   { path: "agent-runs", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "Agent 运行管理", <AgentRunListPage />) },
   { path: "rag-evaluation", element: withFeature(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION, "RAG 评测", <RagEvaluationPage />) },
   { path: "rag-evaluation/:kbId/:datasetId", element: withFeature(ADVANCED_ADMIN_FEATURES.RAG_EVALUATION, "RAG 评测", <RetrievalDatasetDetailPage />) },

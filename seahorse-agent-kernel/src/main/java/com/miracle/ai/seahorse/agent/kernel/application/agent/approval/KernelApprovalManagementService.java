@@ -141,7 +141,11 @@ public class KernelApprovalManagementService implements ApprovalManagementInboun
     }
 
     private String currentUserId(CurrentUser currentUser) {
-        return currentUser == null || currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        Long userId = currentUser == null ? null : currentUser.userId();
+        if (userId == null) {
+            throw new IllegalStateException(ACCESS_DENIED);
+        }
+        return String.valueOf(userId);
     }
 
     private String decisionComment(ApprovalDecisionCommand command) {

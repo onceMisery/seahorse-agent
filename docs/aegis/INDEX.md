@@ -248,3 +248,10 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-05-26 | artifact | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/impact-statement-draft.json | C Web AI Infra Implementation impact statement draft |
 | 2026-05-26 | artifact | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/todo-checkpoint-draft.json | C Web AI Infra Implementation todo checkpoint draft |
 | 2026-05-26 | artifact | docs/aegis/work/2026-05-26-cweb-ai-infra-implementation/drift-check-draft.json | C Web AI Infra Implementation drift check draft |
+| 2026-06-02 | artifact | docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/gate-input-pack.json | 2026-06-02-frontend-backend-gap-remediation gate input pack |
+| 2026-06-02 | work | docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/proof-bundle.md | 2026-06-02-frontend-backend-gap-remediation proof bundle |
+| 2026-06-02 | plan | docs/aegis/plans/2026-06-02-frontend-backend-gap-remediation-plan.md | Frontend backend gap remediation plan |
+| 2026-06-02 | work | docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/10-intent.md | Frontend backend gap remediation intent |
+| 2026-06-02 | work | docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/20-checkpoint.md | Frontend backend gap remediation checkpoint |
+| 2026-06-02 | work | docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/90-evidence.md | Frontend backend gap remediation evidence |
+| 2026-06-02 | work | docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/99-reflection.md | Frontend backend gap remediation reflection |

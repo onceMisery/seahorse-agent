@@ -398,7 +398,7 @@ class KernelMetadataBackfillServiceTests {
         documents.add(document(2L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         InMemoryExtractionResultRepository results = new InMemoryExtractionResultRepository();
-        results.accept("tenant-1", "1", 1L, 3, "extractor-v2");
+        results.accept("tenant-1", 1L, 1L, 3, "extractor-v2");
         KernelMetadataBackfillService service = service(documents, jobs, results, Map.of());
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
@@ -419,7 +419,7 @@ class KernelMetadataBackfillServiceTests {
         documents.add(document(1L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         InMemoryExtractionResultRepository results = new InMemoryExtractionResultRepository();
-        results.accept("tenant-1", "1", 1L, 3, "extractor-v2");
+        results.accept("tenant-1", 1L, 1L, 3, "extractor-v2");
         KernelMetadataBackfillService service = service(documents, jobs, results, Map.of());
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
@@ -565,7 +565,7 @@ class KernelMetadataBackfillServiceTests {
         documents.add(document(1L, true, "pipe-1"));
         InMemoryBackfillJobRepository jobs = new InMemoryBackfillJobRepository();
         InMemoryExtractionResultRepository results = new InMemoryExtractionResultRepository();
-        results.accept("tenant-1", "1", 1L, 3, "extractor-v2");
+        results.accept("tenant-1", 1L, 1L, 3, "extractor-v2");
         KernelMetadataBackfillService service = service(documents, jobs, results, Map.of());
 
         MetadataBackfillJobRecord job = service.createJob(new MetadataBackfillCommand(
@@ -746,8 +746,9 @@ class KernelMetadataBackfillServiceTests {
 
         private final List<MetadataExtractionRecord> records = new ArrayList<>();
 
-        void accept(String tenantId, String kbId, Long docId, int schemaVersion, String extractorVersion) {
-            records.add(new MetadataExtractionRecord(tenantId, kbId, String.valueOf(docId), String.valueOf(docId), schemaVersion,
+        void accept(String tenantId, Long kbId, Long docId, int schemaVersion, String extractorVersion) {
+            records.add(new MetadataExtractionRecord(tenantId, String.valueOf(kbId), String.valueOf(docId),
+                    String.valueOf(docId), schemaVersion,
                     extractorVersion, MetadataValidationDecision.ACCEPT, Map.of(), Map.of(), List.of(), List.of()));
         }
 
@@ -758,7 +759,7 @@ class KernelMetadataBackfillServiceTests {
 
         @Override
         public boolean hasAcceptedResult(String tenantId, Long knowledgeBaseId, Long documentId,
-                                          int schemaVersion, String extractorVersion) {
+                                         int schemaVersion, String extractorVersion) {
             return records.stream().anyMatch(record -> tenantId.equals(record.tenantId())
                     && String.valueOf(knowledgeBaseId).equals(record.knowledgeBaseId())
                     && String.valueOf(documentId).equals(record.documentId())

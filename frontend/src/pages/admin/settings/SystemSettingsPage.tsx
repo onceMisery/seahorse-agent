@@ -67,7 +67,7 @@ export function SystemSettingsPage() {
       <div className="admin-page-header">
         <div>
           <h1 className="admin-page-title">系统配置</h1>
-          <p className="admin-page-subtitle">只读展示当前 application 配置</p>
+          <p className="admin-page-subtitle">只读展示当前运行时配置，来源为部署环境与 application 配置</p>
         </div>
       </div>
 
@@ -124,37 +124,43 @@ export function SystemSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>模型服务提供方</CardTitle>
-          <CardDescription>接入地址与端点配置</CardDescription>
+          <CardDescription>接入地址与端点配置，密钥只显示配置状态</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table className="min-w-[760px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[140px]">提供方</TableHead>
-                <TableHead className="w-[240px]">地址</TableHead>
-                <TableHead className="w-[200px]">密钥</TableHead>
-                <TableHead>端点</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {providers.map(([name, provider]) => (
-                <TableRow key={name}>
-                  <TableCell className="font-medium">{name}</TableCell>
-                  <TableCell>{provider.url}</TableCell>
-                  <TableCell>{provider.apiKey ? provider.apiKey : "-"}</TableCell>
-                  <TableCell>
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                      {Object.entries(provider.endpoints).map(([key, value]) => (
-                        <div key={key}>
-                          {key}: {value}
-                        </div>
-                      ))}
-                    </div>
-                  </TableCell>
+          {providers.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+              未配置模型服务提供方。请在 `.env.full.example` 或部署环境中配置 `seahorse-agent.adapters.ai`。
+            </div>
+          ) : (
+            <Table className="min-w-[760px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[140px]">提供方</TableHead>
+                  <TableHead className="w-[240px]">地址</TableHead>
+                  <TableHead className="w-[200px]">密钥状态</TableHead>
+                  <TableHead>端点</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {providers.map(([name, provider]) => (
+                  <TableRow key={name}>
+                    <TableCell className="font-medium">{name}</TableCell>
+                    <TableCell>{provider.url}</TableCell>
+                    <TableCell>{provider.apiKeyConfigured ? "已配置" : "未配置"}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        {Object.entries(provider.endpoints || {}).map(([key, value]) => (
+                          <div key={key}>
+                            {key}: {value}
+                          </div>
+                        ))}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
