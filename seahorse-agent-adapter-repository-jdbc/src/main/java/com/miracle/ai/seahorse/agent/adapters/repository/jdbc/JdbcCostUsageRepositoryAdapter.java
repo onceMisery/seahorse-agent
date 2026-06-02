@@ -71,9 +71,6 @@ public class JdbcCostUsageRepositoryAdapter implements CostUsageRepositoryPort {
     @Override
     public CostUsageAggregate aggregate(CostUsageQuery query) {
         CostUsageQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
-        if (!hasText(safeQuery.tenantId())) {
-            throw new IllegalArgumentException("tenantId must not be blank");
-        }
         QueryParts where = where(safeQuery);
         return jdbcTemplate.queryForObject("""
                         SELECT
@@ -91,8 +88,7 @@ public class JdbcCostUsageRepositoryAdapter implements CostUsageRepositoryPort {
     private QueryParts where(CostUsageQuery query) {
         List<String> clauses = new ArrayList<>();
         List<Object> params = new ArrayList<>();
-        clauses.add("tenant_id = ?");
-        params.add(query.tenantId().trim());
+        addTextFilter(clauses, params, "tenant_id", query.tenantId());
         addTextFilter(clauses, params, "agent_id", query.agentId());
         addTextFilter(clauses, params, "run_id", query.runId());
         if (query.from() != null) {
@@ -103,7 +99,9 @@ public class JdbcCostUsageRepositoryAdapter implements CostUsageRepositoryPort {
             clauses.add("created_at <= ?");
             params.add(toTimestamp(query.to()));
         }
-        return new QueryParts("WHERE " + String.join(" AND ", clauses), params);
+        return clauses.isEmpty()
+                ? new QueryParts("", params)
+                : new QueryParts("WHERE " + String.join(" AND ", clauses), params);
     }
 
     private void addTextFilter(List<String> clauses, List<Object> params, String column, String value) {

@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInb
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunResumeInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -96,6 +97,25 @@ public class SeahorseAgentRunController {
                 .orElseThrow(() -> new IllegalArgumentException("Agent run not found")));
     }
 
+    @GetMapping({"/agent-runs", "/api/agent-runs"})
+    public ApiResponse<Object> listRuns(@RequestParam(required = false) String agentId,
+                                        @RequestParam(required = false) String runId,
+                                        @RequestParam(required = false) String status,
+                                        @RequestParam(required = false) String from,
+                                        @RequestParam(required = false) String to,
+                                        @RequestParam(defaultValue = "1") long current,
+                                        @RequestParam(defaultValue = "15") long size) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
+        return ApiResponses.requireService(agentRunPortProvider, port -> port.page(new AgentRunQuery(
+                agentId,
+                runId,
+                status,
+                parseInstant(from),
+                parseInstant(to),
+                current,
+                size)));
+    }
+
     @GetMapping({"/agent-runs/{runId}/steps", "/api/agent-runs/{runId}/steps"})
     public ApiResponse<Object> listSteps(@PathVariable String runId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
@@ -154,5 +174,12 @@ public class SeahorseAgentRunController {
         if (uri == null || !uri.startsWith("/api/")) {
             advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         }
+    }
+
+    private java.time.Instant parseInstant(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return java.time.Instant.parse(value.trim());
     }
 }

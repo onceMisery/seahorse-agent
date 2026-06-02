@@ -27,6 +27,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
@@ -109,6 +111,22 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     public Optional<AgentRun> findRunById(String runId) {
         currentUserPort.requireCurrentUser();
         return runRepository.findRunById(requireText(runId, "runId must not be blank"));
+    }
+
+    @Override
+    public AgentRunPage page(AgentRunQuery query) {
+        currentUserPort.requireCurrentUser();
+        AgentRunQuery safeQuery = query == null
+                ? new AgentRunQuery(null, null, null, null, null, 1L, 15L)
+                : query;
+        return runRepository.page(new AgentRunQuery(
+                safeQuery.agentId(),
+                safeQuery.runId(),
+                normalizeStatus(safeQuery.status()),
+                safeQuery.from(),
+                safeQuery.to(),
+                safeQuery.current(),
+                safeQuery.size()));
     }
 
     @Override
@@ -202,5 +220,20 @@ public class KernelAgentRunService implements AgentRunInboundPort {
             return null;
         }
         return value.trim();
+    }
+
+    private String normalizeStatus(String status) {
+        String trimmed = trimToNull(status);
+        if (trimmed == null) {
+            return null;
+        }
+        return switch (trimmed.toUpperCase()) {
+            case "ACTIVE" -> AgentRunStatus.RUNNING.name();
+            case "COMPLETED" -> AgentRunStatus.SUCCEEDED.name();
+            case "WAITING" -> AgentRunStatus.WAITING_APPROVAL.name();
+            case "ERROR" -> AgentRunStatus.FAILED.name();
+            case "PAUSED", "SUSPENDED" -> AgentRunStatus.RETRYING.name();
+            default -> trimmed.toUpperCase();
+        };
     }
 }

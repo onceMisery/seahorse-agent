@@ -21,20 +21,12 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 class JdbcDockerInitScriptMountTests {
 
-    private static final List<String> REQUIRED_SQL_SCRIPTS = List.of(
-            "agent-registry-run-store-postgresql.sql",
-            "eval-dataset-postgresql.sql",
-            "metadata-governance-postgresql.sql",
-            "retrieval-governance-postgresql.sql");
-
     @Test
-    void shouldMountAllJdbcSqlResourcesInDockerComposeFiles() throws Exception {
+    void shouldMountOnlyConsolidatedInitSqlInDockerComposeFiles() throws Exception {
         assertComposeMountsSqlResources(Path.of("..", "docker-compose.yml"));
         assertComposeMountsSqlResources(Path.of("..", "docker-compose.full.yml"));
     }
@@ -42,10 +34,9 @@ class JdbcDockerInitScriptMountTests {
     private void assertComposeMountsSqlResources(Path composePath) throws Exception {
         String compose = Files.readString(composePath);
         assertThat(compose).contains("resources/database/seahorse_init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro");
-        for (String script : REQUIRED_SQL_SCRIPTS) {
-            assertThat(compose)
-                    .as(composePath + " should mount " + script)
-                    .contains(script + ":/docker-entrypoint-initdb.d/");
-        }
+        assertThat(compose).doesNotContain("agent-registry-run-store-postgresql.sql:/docker-entrypoint-initdb.d/");
+        assertThat(compose).doesNotContain("eval-dataset-postgresql.sql:/docker-entrypoint-initdb.d/");
+        assertThat(compose).doesNotContain("metadata-governance-postgresql.sql:/docker-entrypoint-initdb.d/");
+        assertThat(compose).doesNotContain("retrieval-governance-postgresql.sql:/docker-entrypoint-initdb.d/");
     }
 }

@@ -21,10 +21,10 @@ export interface ContextPackItem {
 
 // ── API 调用 ──
 
-export function getContextPack(packId: string) {
-  return api.get<ContextPack>(`/api/context-packs/${encodeURIComponent(packId)}`);
+export function getContextPack(packId: string): Promise<ContextPack> {
+  return api.get<ContextPack>(`/api/context-packs/${encodeURIComponent(packId)}`) as unknown as Promise<ContextPack>;
 }
 
-export function listContextPackItems(packId: string) {
-  return api.get<ContextPackItem[]>(`/api/context-packs/${encodeURIComponent(packId)}/items`);
+export function listContextPackItems(packId: string): Promise<ContextPackItem[]> {
+  return api.get<ContextPackItem[]>(`/api/context-packs/${encodeURIComponent(packId)}/items`) as unknown as Promise<ContextPackItem[]>;
 }

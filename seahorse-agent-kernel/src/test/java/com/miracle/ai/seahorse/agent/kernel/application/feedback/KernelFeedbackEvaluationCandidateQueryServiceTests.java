@@ -37,7 +37,7 @@ class KernelFeedbackEvaluationCandidateQueryServiceTests {
         CapturingCandidateQueryPort queryPort = new CapturingCandidateQueryPort();
         KernelFeedbackEvaluationCandidateQueryService service = new KernelFeedbackEvaluationCandidateQueryService(
                 queryPort,
-                currentUser("admin-1", "admin"));
+                currentUser(1L, "admin"));
 
         FeedbackEvaluationCandidatePage page = service.page(new FeedbackEvaluationCandidateQuery(
                 "user-1",
@@ -55,7 +55,7 @@ class KernelFeedbackEvaluationCandidateQueryServiceTests {
     void shouldRejectNonAdminFeedbackEvaluationCandidateQuery() {
         KernelFeedbackEvaluationCandidateQueryService service = new KernelFeedbackEvaluationCandidateQueryService(
                 new CapturingCandidateQueryPort(),
-                currentUser("user-1", "user"));
+                currentUser(2L, "user"));
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> service.page(new FeedbackEvaluationCandidateQuery(null, null, null, 1L, 20L)));
@@ -63,8 +63,8 @@ class KernelFeedbackEvaluationCandidateQueryServiceTests {
         assertEquals("权限不足", error.getMessage());
     }
 
-    private static CurrentUserPort currentUser(String userId, String role) {
-        return () -> Optional.of(new CurrentUser(userId, userId, role, null));
+    private static CurrentUserPort currentUser(Long userId, String role) {
+        return () -> Optional.of(new CurrentUser(userId, String.valueOf(userId), role, null));
     }
 
     private static final class CapturingCandidateQueryPort implements FeedbackEvaluationCandidateQueryPort {

@@ -51,12 +51,12 @@ class SeahorseKnowledgeDocumentControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeDocumentController(provider(KnowledgeDocumentInboundPort.class, port))).build();
 
-        mvc.perform(post("/knowledge-base/docs/doc-1/chunk")
+        mvc.perform(post("/knowledge-base/docs/1/chunk")
                         .header("X-User-Id", "admin-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).startChunk("doc-1", "admin-1");
+        verify(port).startChunk(1L, "admin-1");
     }
 
     @Test
@@ -65,43 +65,43 @@ class SeahorseKnowledgeDocumentControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeDocumentController(provider(KnowledgeDocumentInboundPort.class, port))).build();
 
-        mvc.perform(delete("/knowledge-base/docs/doc-1")
+        mvc.perform(delete("/knowledge-base/docs/1")
                         .header("X-User-Id", "admin-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).delete("doc-1", "admin-1");
+        verify(port).delete(1L, "admin-1");
     }
 
     @Test
     void shouldQueryDocumentById() throws Exception {
         KnowledgeDocumentInboundPort port = mock(KnowledgeDocumentInboundPort.class);
-        when(port.queryById("doc-1")).thenReturn(mock(KnowledgeDocumentDetail.class));
+        when(port.queryById(1L)).thenReturn(mock(KnowledgeDocumentDetail.class));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeDocumentController(provider(KnowledgeDocumentInboundPort.class, port))).build();
 
-        mvc.perform(get("/knowledge-base/docs/doc-1"))
+        mvc.perform(get("/knowledge-base/docs/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).queryById("doc-1");
+        verify(port).queryById(1L);
     }
 
     @Test
     void shouldPageDocuments() throws Exception {
         KnowledgeDocumentInboundPort port = mock(KnowledgeDocumentInboundPort.class);
-        when(port.page(eq("kb-1"), any())).thenReturn(
+        when(port.page(eq(1L), any())).thenReturn(
                 new KnowledgeDocumentPage(java.util.List.of(), 0L, 10L, 0L, 1L));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeDocumentController(provider(KnowledgeDocumentInboundPort.class, port))).build();
 
-        mvc.perform(get("/knowledge-base/kb-1/docs")
+        mvc.perform(get("/knowledge-base/1/docs")
                         .param("current", "1")
                         .param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).page(eq("kb-1"), any());
+        verify(port).page(eq(1L), any());
     }
 
     @Test
@@ -126,30 +126,30 @@ class SeahorseKnowledgeDocumentControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeDocumentController(provider(KnowledgeDocumentInboundPort.class, port))).build();
 
-        mvc.perform(patch("/knowledge-base/docs/doc-1/enable")
+        mvc.perform(patch("/knowledge-base/docs/1/enable")
                         .param("value", "true")
                         .header("X-User-Id", "admin-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).enable("doc-1", true, "admin-1");
+        verify(port).enable(1L, true, "admin-1");
     }
 
     @Test
     void shouldQueryChunkLogs() throws Exception {
         KnowledgeDocumentInboundPort port = mock(KnowledgeDocumentInboundPort.class);
-        when(port.chunkLogs("doc-1", 1L, 10L)).thenReturn(
+        when(port.chunkLogs(1L, 1L, 10L)).thenReturn(
                 new KnowledgeDocumentChunkLogPage(java.util.List.of(), 0L, 10L, 0L, 1L));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeDocumentController(provider(KnowledgeDocumentInboundPort.class, port))).build();
 
-        mvc.perform(get("/knowledge-base/docs/doc-1/chunk-logs")
+        mvc.perform(get("/knowledge-base/docs/1/chunk-logs")
                         .param("current", "1")
                         .param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).chunkLogs("doc-1", 1L, 10L);
+        verify(port).chunkLogs(1L, 1L, 10L);
     }
 
     private static <T> ObjectProvider<T> provider(Class<T> type, T instance) {

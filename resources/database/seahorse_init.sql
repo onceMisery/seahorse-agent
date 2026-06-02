@@ -407,10 +407,10 @@ CREATE INDEX idx_ingestion_task_node_status ON t_ingestion_task_node (status);
 -- ============================================
 
 CREATE TABLE t_knowledge_vector (
-    id          BIGINT PRIMARY KEY,
-    content     TEXT,
-    metadata    JSONB,
-    embedding   vector(1536)
+    id          VARCHAR(128) PRIMARY KEY,
+    content     TEXT NOT NULL,
+    metadata    JSONB NOT NULL,
+    embedding   vector(1024) NOT NULL
 );
 
 CREATE INDEX idx_kv_metadata ON t_knowledge_vector USING gin(metadata);
@@ -856,6 +856,26 @@ CREATE TABLE t_long_term_memory_vector (
 CREATE INDEX idx_ltm_vector_user ON t_long_term_memory_vector (user_id);
 CREATE INDEX idx_ltm_vector_lifecycle ON t_long_term_memory_vector (user_id, tenant_id, status, update_time);
 CREATE INDEX idx_ltm_vector_hnsw ON t_long_term_memory_vector USING hnsw (embedding vector_cosine_ops);
+
+CREATE TABLE IF NOT EXISTS t_agent_extension_status (
+    id BIGSERIAL PRIMARY KEY,
+    extension_name VARCHAR(128) NOT NULL,
+    port_type VARCHAR(256) NOT NULL,
+    feature_type VARCHAR(64) NOT NULL,
+    version VARCHAR(64),
+    enabled BOOLEAN NOT NULL,
+    healthy BOOLEAN NOT NULL,
+    capabilities_json TEXT,
+    message TEXT,
+    last_error TEXT,
+    details_json TEXT,
+    updated_by VARCHAR(128),
+    update_time TIMESTAMP,
+    deleted SMALLINT DEFAULT 0,
+    CONSTRAINT uk_agent_extension_status UNIQUE (extension_name, port_type)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_extension_status_port
+    ON t_agent_extension_status(port_type, deleted);
 
 -- ============================================
 -- Advanced Platform Tables

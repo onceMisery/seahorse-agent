@@ -333,7 +333,7 @@ class SeahorseAgentRegistryAutoConfigurationTests {
 
         @Bean
         CurrentUserPort currentUserPort() {
-            return () -> Optional.of(new CurrentUser("admin-1", "admin", "admin", null));
+            return () -> Optional.of(new CurrentUser(1L, "admin", "admin", null));
         }
 
         @Bean

@@ -70,7 +70,7 @@ class KernelAgentRunServiceTests {
 
         assertEquals(AgentRunStatus.RUNNING, run.status());
         assertEquals("version-1", run.versionId());
-        assertEquals("user-1", run.userId());
+        assertEquals("1", run.userId());
         assertEquals("summarized input", run.inputSummary());
         assertTrue(runRepository.runs.containsKey(run.runId()));
     }
@@ -92,7 +92,7 @@ class KernelAgentRunServiceTests {
 
         assertEquals("legacy-react-agent", run.agentId());
         assertEquals(AgentRunStatus.RUNNING, run.status());
-        assertEquals("user-1", run.userId());
+        assertEquals("1", run.userId());
         assertEquals("conversation-1", run.conversationId());
         assertTrue(runRepository.runs.containsKey(run.runId()));
     }
@@ -323,7 +323,7 @@ class KernelAgentRunServiceTests {
     }
 
     private static CurrentUserPort currentUser() {
-        return () -> Optional.of(new CurrentUser("user-1", "alice", "user", null));
+        return () -> Optional.of(new CurrentUser(1L, "alice", "user", null));
     }
 
     private static class MemoryAgentDefinitionRepository implements AgentDefinitionRepositoryPort {

@@ -77,7 +77,7 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
                 .orElseThrow(() -> new IllegalArgumentException("Agent run not found"));
         requireReadable(run, currentUser);
         return artifactRepository.listByRunId(safeRunId).stream()
-                .filter(artifact -> isAdmin(currentUser) || currentUser.userId().equals(artifact.userId()))
+                .filter(artifact -> isAdmin(currentUser) || currentUserId(currentUser).equals(artifact.userId()))
                 .toList();
     }
 
@@ -98,14 +98,14 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
     }
 
     private AgentArtifact requireReadable(AgentArtifact artifact, CurrentUser currentUser) {
-        if (isAdmin(currentUser) || currentUser.userId().equals(artifact.userId())) {
+        if (isAdmin(currentUser) || currentUserId(currentUser).equals(artifact.userId())) {
             return artifact;
         }
         throw new IllegalStateException(ACCESS_DENIED);
     }
 
     private AgentRun requireReadable(AgentRun run, CurrentUser currentUser) {
-        if (isAdmin(currentUser) || currentUser.userId().equals(run.userId())) {
+        if (isAdmin(currentUser) || currentUserId(currentUser).equals(run.userId())) {
             return run;
         }
         throw new IllegalStateException(ACCESS_DENIED);
@@ -128,6 +128,10 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
 
     private boolean isAdmin(CurrentUser currentUser) {
         return currentUser != null && currentUser.hasRole(ADMIN_ROLE);
+    }
+
+    private String currentUserId(CurrentUser currentUser) {
+        return currentUser == null || currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
     }
 
     private String requireText(String value, String message) {

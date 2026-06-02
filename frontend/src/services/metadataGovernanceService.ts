@@ -63,7 +63,7 @@ export interface MetadataQualityReport {
 export function listMetadataSchemaFields(tenantId: string, kbId: string) {
   return api.get<MetadataSchemaField[]>(`/knowledge-base/${kbId}/metadata-schema/fields`, {
     params: { tenantId }
-  });
+  }) as unknown as Promise<MetadataSchemaField[]>;
 }
 
 export function pageMetadataReviewItems(params: {
@@ -73,7 +73,7 @@ export function pageMetadataReviewItems(params: {
   current?: number;
   size?: number;
 }) {
-  return api.get<PageResult<MetadataReviewItem>>("/metadata-review/items", { params });
+  return api.get<PageResult<MetadataReviewItem>>("/metadata-review/items", { params }) as unknown as Promise<PageResult<MetadataReviewItem>>;
 }
 
 export function approveMetadataReviewItem(itemId: string) {
@@ -95,7 +95,7 @@ export function pageMetadataQuarantineItems(params: {
   current?: number;
   size?: number;
 }) {
-  return api.get<PageResult<MetadataQuarantineItem>>("/metadata-quarantine/items", { params });
+  return api.get<PageResult<MetadataQuarantineItem>>("/metadata-quarantine/items", { params }) as unknown as Promise<PageResult<MetadataQuarantineItem>>;
 }
 
 export function resolveMetadataQuarantineItem(itemId: string) {
@@ -109,7 +109,7 @@ export function retryMetadataQuarantineItem(itemId: string) {
 export function getMetadataQualityReport(tenantId: string, kbId: string) {
   return api.get<MetadataQualityReport>(`/knowledge-base/${kbId}/metadata-quality/report`, {
     params: { tenantId, topN: 5 }
-  });
+  }) as unknown as Promise<MetadataQualityReport>;
 }
 
 // ── Schema 字段 CRUD ──
@@ -137,7 +137,7 @@ export function getMetadataSchemaFieldCapabilities(tenantId: string, kbId: strin
   return api.get<Record<string, unknown>[]>(
     `/knowledge-base/${encodeURIComponent(kbId)}/metadata-schema/field-capabilities`,
     { params: { tenantId } }
-  );
+  ) as unknown as Promise<Record<string, unknown>[]>;
 }
 
 // ── 抽取结果 ──
@@ -149,23 +149,23 @@ export function listMetadataExtractionResults(params: {
   current?: number;
   size?: number;
 }) {
-  return api.get<PageResult<Record<string, unknown>>>("/metadata-extraction/results", { params });
+  return api.get<PageResult<Record<string, unknown>>>("/metadata-extraction/results", { params }) as unknown as Promise<PageResult<Record<string, unknown>>>;
 }
 
 export function getMetadataExtractionResult(resultId: string) {
-  return api.get<Record<string, unknown>>(`/metadata-extraction/results/${encodeURIComponent(resultId)}`);
+  return api.get<Record<string, unknown>>(`/metadata-extraction/results/${encodeURIComponent(resultId)}`) as unknown as Promise<Record<string, unknown>>;
 }
 
 // ── Review 补全 ──
 
 export function getMetadataReviewItemDetail(itemId: string) {
-  return api.get<MetadataReviewItem>(`/metadata-review/items/${encodeURIComponent(itemId)}`);
+  return api.get<MetadataReviewItem>(`/metadata-review/items/${encodeURIComponent(itemId)}`) as unknown as Promise<MetadataReviewItem>;
 }
 
 export function getMetadataReviewAudits(itemId: string) {
   return api.get<Record<string, unknown>[]>(
     `/metadata-review/items/${encodeURIComponent(itemId)}/audits`
-  );
+  ) as unknown as Promise<Record<string, unknown>[]>;
 }
 
 export function correctMetadataReviewItem(itemId: string, payload: Record<string, unknown>) {
@@ -194,7 +194,7 @@ export function listMetadataBackfillJobs(tenantId: string, kbId: string, params?
   return api.get<PageResult<Record<string, unknown>>>(
     `/knowledge-base/${encodeURIComponent(kbId)}/metadata-backfill/jobs`,
     { params: { tenantId, ...params } }
-  );
+  ) as unknown as Promise<PageResult<Record<string, unknown>>>;
 }
 
 export function createMetadataBackfillJob(tenantId: string, kbId: string, payload: Record<string, unknown>) {
@@ -209,7 +209,7 @@ export function getMetadataBackfillOverview(tenantId: string, kbId: string) {
   return api.get<Record<string, unknown>>(
     `/knowledge-base/${encodeURIComponent(kbId)}/metadata-backfill/overview`,
     { params: { tenantId } }
-  );
+  ) as unknown as Promise<Record<string, unknown>>;
 }
 
 export function runNextMetadataBackfillJob(jobId: string) {
@@ -245,5 +245,5 @@ export function compareMetadataQuality(tenantId: string, kbId: string, params: {
   return api.get<Record<string, unknown>>(
     `/knowledge-base/${encodeURIComponent(kbId)}/metadata-quality/compare`,
     { params: { tenantId, ...params } }
-  );
+  ) as unknown as Promise<Record<string, unknown>>;
 }

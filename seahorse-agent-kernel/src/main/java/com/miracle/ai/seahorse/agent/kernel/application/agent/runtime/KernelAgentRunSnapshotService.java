@@ -205,7 +205,7 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
         }
         return contextPackRepository.findById(contextPackId.orElseThrow())
                 .filter(pack -> packBelongsToRun(pack, run))
-                .filter(pack -> isAdmin(currentUser) || currentUser.userId().equals(pack.userId()))
+                .filter(pack -> isAdmin(currentUser) || currentUserId(currentUser).equals(pack.userId()))
                 .map(pack -> contextPackRepository.listItems(pack.contextPackId()).stream()
                         .map(this::toSnapshotSource)
                         .toList())
@@ -224,13 +224,13 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
                 ApprovalRequestQuery.DEFAULT_CURRENT,
                 PENDING_APPROVAL_PAGE_SIZE));
         return page.records().stream()
-                .filter(approval -> isAdmin(currentUser) || currentUser.userId().equals(approval.userId()))
+                .filter(approval -> isAdmin(currentUser) || currentUserId(currentUser).equals(approval.userId()))
                 .toList();
     }
 
     private List<AgentArtifact> artifacts(String runId, CurrentUser currentUser) {
         return artifactRepository.listByRunId(runId).stream()
-                .filter(artifact -> isAdmin(currentUser) || currentUser.userId().equals(artifact.userId()))
+                .filter(artifact -> isAdmin(currentUser) || currentUserId(currentUser).equals(artifact.userId()))
                 .toList();
     }
 
@@ -306,7 +306,7 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
     }
 
     private AgentRun requireReadable(AgentRun run, CurrentUser currentUser) {
-        if (isAdmin(currentUser) || run.userId().equals(currentUser.userId())) {
+        if (isAdmin(currentUser) || run.userId().equals(currentUserId(currentUser))) {
             return run;
         }
         throw new IllegalStateException(ACCESS_DENIED);
@@ -314,6 +314,10 @@ public class KernelAgentRunSnapshotService implements AgentRunSnapshotInboundPor
 
     private boolean isAdmin(CurrentUser currentUser) {
         return currentUser != null && currentUser.hasRole(ADMIN_ROLE);
+    }
+
+    private String currentUserId(CurrentUser currentUser) {
+        return currentUser == null || currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
     }
 
     private String firstText(String... values) {

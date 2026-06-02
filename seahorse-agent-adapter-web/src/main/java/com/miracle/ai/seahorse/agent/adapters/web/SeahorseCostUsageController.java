@@ -64,7 +64,7 @@ public class SeahorseCostUsageController {
     }
 
     @GetMapping("/api/cost-usage:aggregate")
-    public ApiResponse<Object> aggregate(@RequestParam String tenantId,
+    public ApiResponse<Object> aggregate(@RequestParam(required = false) String tenantId,
                                          @RequestParam(required = false) String agentId,
                                          @RequestParam(required = false) String runId,
                                          @RequestParam(required = false)

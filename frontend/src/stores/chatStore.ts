@@ -5,17 +5,9 @@ import { toast } from "sonner";
 
 import {
   AGENT_STREAM_EVENTS,
-  type AgentArtifact,
   type AgentApproval,
-  type AgentRunSnapshot,
-  type AgentSource,
-  type AgentTimelineItem,
-  type ArtifactBlock,
-  type CompletionPayload,
   type Message,
-  type MessageDeltaPayload,
-  type StreamEventEnvelope,
-  type StreamMetaPayload,
+  type Role,
   type TaskTemplateId
 } from "@/types";
 import {
@@ -25,32 +17,28 @@ import {
   deleteSession as deleteSessionRequest,
   renameSession as renameSessionRequest
 } from "@/services/sessionService";
-import { listPendingApprovalRequests } from "@/services/approvalService";
-import { getAgentRunCostSummary, getAgentRunSnapshot } from "@/services/agentRunService";
-import { stopTask, submitFeedback } from "@/services/chatService";
+import { getAgentRunSnapshot } from "@/services/agentRunService";
+import { submitFeedback } from "@/services/chatService";
 import { buildQuery } from "@/utils/helpers";
 import { createStreamResponse, type StreamHandlers } from "@/hooks/useStreamResponse";
-import { handleUnauthorizedSession } from "@/utils/authSession";
 import { storage } from "@/utils/storage";
-import { useArtifactStore } from "@/stores/artifactStore";
+import type {
+  ConversationMessageVO,
+  ConversationVO
+} from "@/services/sessionService";
 import type { ChatState } from "@/stores/chatStoreTypes";
-import { mapVoteToFeedback, upsertSession } from "@/stores/chatSessionUtils";
+import { upsertSession } from "@/stores/chatSessionUtils";
 import {
   API_BASE_URL,
   computeThinkingDuration,
-  extractArtifactsFromBlocks,
   normalizeAgentStreamEvent
 } from "@/stores/chatStreamUtils";
 import { RenderBuffer } from "@/lib/stream/renderBuffer";
-import { parseStreamingText } from "@/lib/parser/streamingParser";
 
-const EMPTY_ASSISTANT_MESSAGE = "本次对话没有返回有效内容，请稍后重试。";
 const CONTROLLED_WEB_AGENT_CHAT_MODE = "agent";
 const CONTROLLED_WEB_AGENT_TEMPLATE_IDS = new Set<TaskTemplateId>([
   "deep-research",
-  "web-summary",
-  "agent-summary",
-  "web-search"
+  "web-summary"
 ]);
 const MAX_ATTACHMENT_COUNT = 20;
 
@@ -75,9 +63,9 @@ export const useChatStore = create<ChatState>()(
 
     fetchSessions: async () => {
       try {
-        const sessions = await listSessions();
+        const sessions = await listSessions() as unknown as ConversationVO[];
         set((state) => {
-          state.sessions = sessions.map((s) => ({ id: s.conversationId, title: s.title, updatedAt: s.lastTime }));
+          state.sessions = sessions.map((s) => ({ id: s.conversationId, title: s.title, lastTime: s.lastTime }));
         });
       } catch (error) {
         console.error("Failed to load sessions:", error);
@@ -171,16 +159,16 @@ export const useChatStore = create<ChatState>()(
           s.isCreatingNew = false;
           s.isLoading = true;
         });
-        const messages = await listMessages(sessionId);
+        const messages = await listMessages(sessionId) as unknown as ConversationMessageVO[];
         set((s) => {
           s.messages = messages.map((m) => ({
             id: String(m.id),
-            role: m.role,
+            role: m.role as Role,
             content: m.content,
             status: "done" as const,
             thinking: m.thinkingContent || undefined,
             thinkingDuration: m.thinkingDuration || undefined,
-            feedback: m.vote !== null ? { score: m.vote > 0 ? 1 : -1 } : null,
+            feedback: m.vote !== null ? (m.vote > 0 ? "like" as const : "dislike" as const) : null,
             createdAt: m.createTime || new Date().toISOString(),
             agentRunId: m.agentRunId || undefined
           }));
@@ -197,12 +185,10 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
-    sendMessage: async (options) => {
-      const { message, attachmentIds = [] } = options || {};
-      const trimmed = message?.trim() || "";
-      if (!trimmed) {
-        if (attachmentIds.length === 0) return;
-      }
+    sendMessage: async (content, options) => {
+      const { attachmentIds = [] } = options || {};
+      const trimmed = content?.trim() || "";
+      if (!trimmed && attachmentIds.length === 0) return;
 
       if (attachmentIds.length > MAX_ATTACHMENT_COUNT) {
         toast.error(`最多支持${MAX_ATTACHMENT_COUNT}个附件`);
@@ -247,12 +233,12 @@ export const useChatStore = create<ChatState>()(
         s.cancelRequested = false;
       });
 
-      const conversationId = options.conversationIdOverride || get().currentSessionId;
+      const conversationId = options?.conversationIdOverride || get().currentSessionId;
       const query = buildQuery({
         question: trimmed,
         conversationId: conversationId || undefined,
         deepThinking: deepThinkingEnabled ? true : undefined,
-        chatMode: chatModeForTaskTemplate(selectedTaskTemplateId),
+        chatMode: chatModeForTaskTemplate(selectedTaskTemplateId as TaskTemplateId | undefined),
         taskTemplateId: selectedTaskTemplateId || undefined,
         attachmentIds: attachmentIdsFiltered
       });
@@ -274,12 +260,11 @@ export const useChatStore = create<ChatState>()(
       });
 
       const markDone = () => {
-        buffer.flush();
+        buffer.flushImmediate();
         set((state) => {
           const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
           if (msg) {
             msg.status = "done";
-            msg.isStreaming = false;
             msg.isThinking = false;
             msg.thinkingDuration = computeThinkingDuration(msg.thinkingStartAt);
           }
@@ -287,7 +272,7 @@ export const useChatStore = create<ChatState>()(
       };
 
       const markError = (errorText: string) => {
-        buffer.flush();
+        buffer.flushImmediate();
         set((state) => {
           const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
           if (msg) {
@@ -304,7 +289,7 @@ export const useChatStore = create<ChatState>()(
           }
         },
         onMessage: (payload) => {
-          buffer.append(payload?.delta || "");
+          buffer.push(payload?.delta || "");
         },
         onThinking: (payload) => {
           const thought = payload?.delta || "";
@@ -347,7 +332,7 @@ export const useChatStore = create<ChatState>()(
           s.streamAbort = null;
           s.streamTaskId = null;
         });
-        await get().loadSessions();
+        await get().fetchSessions();
       }
     },
 
@@ -355,11 +340,11 @@ export const useChatStore = create<ChatState>()(
       set((s) => { s.cancelRequested = true; });
       const abort = get().streamAbort;
       if (abort) {
-        abort.abort();
+        abort();
       }
     },
 
-    setDeepThinking: (enabled) => {
+    setDeepThinkingEnabled: (enabled) => {
       set((s) => { s.deepThinkingEnabled = enabled; });
     },
 
@@ -367,13 +352,14 @@ export const useChatStore = create<ChatState>()(
       set((s) => { s.selectedTaskTemplateId = taskTemplateId; });
     },
 
-    submitFeedback: async (messageId, score) => {
+    submitFeedback: async (messageId, feedback, options) => {
       try {
-        await submitFeedback(messageId, score);
+        const vote = feedback === "like" ? 1 : feedback === "dislike" ? -1 : 0;
+        await submitFeedback(messageId, vote, options?.reason, options?.comment);
         set((state) => {
           const msg = state.messages.find((m) => m.id === messageId);
           if (msg) {
-            msg.feedback = { score };
+            msg.feedback = feedback;
           }
         });
       } catch (error) {
@@ -382,7 +368,7 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
-    updateSessionTitle: async (sessionId, title) => {
+    renameSession: async (sessionId, title) => {
       try {
         await renameSessionRequest(sessionId, title);
         set((state) => {
@@ -392,9 +378,60 @@ export const useChatStore = create<ChatState>()(
           }
         });
       } catch (error) {
-        console.error("Failed to update session title:", error);
-        toast.error("更新会话标题失败");
+        console.error("Failed to rename session:", error);
+        toast.error("重命名会话失败");
+        throw error;
       }
+    },
+
+    updateSessionTitle: (sessionId, title) => {
+      get().renameSession(sessionId, title).catch(() => null);
+    },
+
+    refreshRunSnapshot: async (messageId, runId) => {
+      try {
+        const snapshot = await getAgentRunSnapshot(runId);
+        set((state) => {
+          const msg = state.messages.find((m) => m.id === messageId);
+          if (msg && snapshot.messageSnapshot) {
+            if (snapshot.messageSnapshot.content) {
+              msg.content = snapshot.messageSnapshot.content;
+              msg.rawText = snapshot.messageSnapshot.content;
+            }
+            if (snapshot.messageSnapshot.thinking) {
+              msg.thinking = snapshot.messageSnapshot.thinking;
+            }
+            msg.status = "done";
+          }
+        });
+      } catch (error) {
+        console.error("Failed to refresh run snapshot:", error);
+      }
+    },
+
+    appendStreamContent: (delta) => {
+      set((state) => {
+        const msg = state.messages.find(
+          (m) => m.id === state.streamingMessageId
+        );
+        if (msg) {
+          msg.rawText = (msg.rawText ?? "") + delta;
+          msg.content = msg.rawText;
+        }
+      });
+    },
+
+    appendThinkingContent: (delta) => {
+      set((state) => {
+        const msg = state.messages.find(
+          (m) => m.id === state.streamingMessageId
+        );
+        if (msg) {
+          msg.thinking = (msg.thinking || "") + delta;
+          msg.isThinking = true;
+          if (!msg.thinkingStartAt) msg.thinkingStartAt = Date.now();
+        }
+      });
     }
   }))
 );

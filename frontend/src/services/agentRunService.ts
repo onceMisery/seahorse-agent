@@ -75,11 +75,12 @@ export async function listAgentRuns(params: {
   current?: number;
   size?: number;
 }) {
-  return api.get<{
+  type PageResult = {
     records: Record<string, unknown>[];
     total: number;
     size: number;
     current: number;
     pages: number;
-  }>("/api/agent-runs", { params });
+  };
+  return api.get<PageResult, PageResult>("/api/agent-runs", { params });
 }

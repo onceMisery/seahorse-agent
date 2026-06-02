@@ -46,7 +46,7 @@ class SeahorseUserControllerTests {
     @Test
     void shouldGetCurrentUser() throws Exception {
         UserInboundPort port = mock(UserInboundPort.class);
-        when(port.currentUser()).thenReturn(new CurrentUser("user-1", "admin", "ADMIN", "avatar.png"));
+        when(port.currentUser()).thenReturn(new CurrentUser(1L, "admin", "ADMIN", "avatar.png"));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseUserController(provider(UserInboundPort.class, port))).build();
 
@@ -77,7 +77,7 @@ class SeahorseUserControllerTests {
     @Test
     void shouldCreateUser() throws Exception {
         UserInboundPort port = mock(UserInboundPort.class);
-        when(port.create(any())).thenReturn("user-1");
+        when(port.create(any())).thenReturn(1L);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseUserController(provider(UserInboundPort.class, port))).build();
 
@@ -93,7 +93,7 @@ class SeahorseUserControllerTests {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
-                .andExpect(jsonPath("$.data").value("user-1"));
+                .andExpect(jsonPath("$.data").value(1));
 
         verify(port).create(any());
     }
@@ -104,7 +104,7 @@ class SeahorseUserControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseUserController(provider(UserInboundPort.class, port))).build();
 
-        mvc.perform(put("/users/user-1")
+        mvc.perform(put("/users/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -117,7 +117,7 @@ class SeahorseUserControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).update(eq("user-1"), any());
+        verify(port).update(eq(1L), any());
     }
 
     @Test
@@ -126,11 +126,11 @@ class SeahorseUserControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseUserController(provider(UserInboundPort.class, port))).build();
 
-        mvc.perform(delete("/users/user-1"))
+        mvc.perform(delete("/users/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).delete("user-1");
+        verify(port).delete(1L);
     }
 
     @Test

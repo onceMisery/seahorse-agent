@@ -251,23 +251,22 @@ class JdbcMetadataQualityReportAdapterTests {
 
     @Test
     void shouldCheckAcceptedResultBySchemaAndExtractorVersion() {
-        insertExtraction("accepted-1", "doc-1",
-                Map.of("department", "Finance"),
-                List.of(quality("department", 0.93D)),
-                Instant.parse("2026-05-13T10:00:00Z"));
         jdbcTemplate.update("""
                 INSERT INTO t_metadata_extraction_result(
                     id, tenant_id, kb_id, doc_id, job_id, schema_version, extractor_version, status,
                     normalized_metadata, raw_candidates, field_quality, validation_issues, approved_metadata,
                     create_time, update_time
-                ) VALUES ('review-1', 'tenant-1', 'kb-1', 'doc-2', 'job-1', 1, 'extractor-v1', 'REVIEW_REQUIRED',
+                ) VALUES ('accepted-1', 'tenant-1', '1', '1', 'job-1', 1, 'extractor-v1', 'ACCEPT',
+                          '{"department":"Finance"}', '[]', '[{"fieldKey":"department","confidence":0.93}]',
+                          '[]', '{"department":"Finance"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                         ('review-1', 'tenant-1', '1', '2', 'job-1', 1, 'extractor-v1', 'REVIEW_REQUIRED',
                           '{}', '[]', '[]', '[]', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """);
 
-        assertThat(adapter.hasAcceptedResult("tenant-1", "kb-1", "doc-1", 1, "extractor-v1")).isTrue();
-        assertThat(adapter.hasAcceptedResult("tenant-1", "kb-1", "doc-1", 2, "extractor-v1")).isFalse();
-        assertThat(adapter.hasAcceptedResult("tenant-1", "kb-1", "doc-1", 1, "extractor-v2")).isFalse();
-        assertThat(adapter.hasAcceptedResult("tenant-1", "kb-1", "doc-2", 1, "extractor-v1")).isFalse();
+        assertThat(adapter.hasAcceptedResult("tenant-1", 1L, 1L, 1, "extractor-v1")).isTrue();
+        assertThat(adapter.hasAcceptedResult("tenant-1", 1L, 1L, 2, "extractor-v1")).isFalse();
+        assertThat(adapter.hasAcceptedResult("tenant-1", 1L, 1L, 1, "extractor-v2")).isFalse();
+        assertThat(adapter.hasAcceptedResult("tenant-1", 1L, 2L, 1, "extractor-v1")).isFalse();
     }
 
     private MetadataFieldCoverage coverage(MetadataQualityReport report, String fieldKey) {

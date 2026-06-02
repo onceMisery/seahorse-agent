@@ -89,8 +89,8 @@ export function AgentRollbackDialog({ open, onOpenChange, agentId, tenantId, ver
                 <SelectValue placeholder="请选择要回滚到的版本" />
               </SelectTrigger>
               <SelectContent>
-                {publishedVersions.map((v) => (
-                  <SelectItem key={v.versionId} value={v.versionId || ""}>
+                {publishedVersions.filter((v) => !!v.versionId).map((v) => (
+                  <SelectItem key={v.versionId} value={v.versionId!}>
                     v{v.versionNumber} - {v.summary || v.status}
                   </SelectItem>
                 ))}

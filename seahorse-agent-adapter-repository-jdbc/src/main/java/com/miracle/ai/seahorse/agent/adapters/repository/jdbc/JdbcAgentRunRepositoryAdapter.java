@@ -23,6 +23,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTrigger
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -31,12 +33,18 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
 
+    private static final String RUN_COLUMNS = """
+            run_id, agent_id, version_id, tenant_id, user_id, conversation_id, trigger_type, input_summary,
+            status, trace_id, token_input, token_output, cost_total, error_code, error_message, started_at,
+            finished_at
+            """;
     private static final String SQL_INSERT_RUN = """
             INSERT INTO sa_agent_run
             (run_id, agent_id, version_id, tenant_id, user_id, conversation_id, trigger_type, input_summary,
@@ -64,12 +72,10 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
             WHERE run_id = ?
             """;
     private static final String SQL_FIND_RUN = """
-            SELECT run_id, agent_id, version_id, tenant_id, user_id, conversation_id, trigger_type, input_summary,
-                   status, trace_id, token_input, token_output, cost_total, error_code, error_message, started_at,
-                   finished_at
+            SELECT %s
             FROM sa_agent_run
             WHERE run_id = ?
-            """;
+            """.formatted(RUN_COLUMNS);
     private static final String SQL_INSERT_STEP = """
             INSERT INTO sa_agent_step
             (step_id, run_id, step_no, step_type, status, input_json, output_json,
@@ -145,6 +151,32 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
     }
 
     @Override
+    public AgentRunPage page(AgentRunQuery query) {
+        AgentRunQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
+        QueryParts parts = buildQueryParts(safeQuery);
+        long total = count(parts);
+        if (total == 0L) {
+            return new AgentRunPage(List.of(), 0L, safeQuery.size(), safeQuery.current(), 0L);
+        }
+
+        long offset = (safeQuery.current() - 1L) * safeQuery.size();
+        List<Object> parameters = new ArrayList<>(parts.parameters());
+        parameters.add(safeQuery.size());
+        parameters.add(offset);
+        List<AgentRun> records = jdbcTemplate.query("""
+                        SELECT %s
+                        FROM sa_agent_run
+                        %s
+                        ORDER BY started_at DESC, run_id DESC
+                        LIMIT ? OFFSET ?
+                        """.formatted(RUN_COLUMNS, parts.whereSql()),
+                this::mapRun,
+                parameters.toArray());
+        long pages = (total + safeQuery.size() - 1L) / safeQuery.size();
+        return new AgentRunPage(records, total, safeQuery.size(), safeQuery.current(), pages);
+    }
+
+    @Override
     public void appendStep(AgentStep step) {
         AgentStep safeStep = Objects.requireNonNull(step, "step must not be null");
         jdbcTemplate.update(SQL_INSERT_STEP,
@@ -215,5 +247,61 @@ public class JdbcAgentRunRepositoryAdapter implements AgentRunRepositoryPort {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private long count(QueryParts parts) {
+        Long count = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(1)
+                        FROM sa_agent_run
+                        %s
+                        """.formatted(parts.whereSql()),
+                Long.class,
+                parts.parameters().toArray());
+        return count == null ? 0L : count;
+    }
+
+    private QueryParts buildQueryParts(AgentRunQuery query) {
+        List<String> conditions = new ArrayList<>();
+        List<Object> parameters = new ArrayList<>();
+        addEqualCondition(conditions, parameters, "agent_id", query.agentId());
+        addLikeCondition(conditions, parameters, "run_id", query.runId());
+        addEqualCondition(conditions, parameters, "status", query.status());
+        if (query.from() != null) {
+            conditions.add("started_at >= ?");
+            parameters.add(toTimestamp(query.from()));
+        }
+        if (query.to() != null) {
+            conditions.add("started_at <= ?");
+            parameters.add(toTimestamp(query.to()));
+        }
+        String whereSql = conditions.isEmpty() ? "" : "WHERE " + String.join(" AND ", conditions);
+        return new QueryParts(whereSql, parameters);
+    }
+
+    private void addEqualCondition(List<String> conditions, List<Object> parameters, String column, String value) {
+        if (!hasText(value)) {
+            return;
+        }
+        conditions.add(column + " = ?");
+        parameters.add(value.trim());
+    }
+
+    private void addLikeCondition(List<String> conditions, List<Object> parameters, String column, String value) {
+        if (!hasText(value)) {
+            return;
+        }
+        conditions.add(column + " LIKE ? ESCAPE '!'");
+        parameters.add("%" + escapeLike(value.trim()) + "%");
+    }
+
+    private String escapeLike(String value) {
+        return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    }
+
+    private record QueryParts(String whereSql, List<Object> parameters) {
+
+        private QueryParts {
+            parameters = List.copyOf(parameters);
+        }
     }
 }

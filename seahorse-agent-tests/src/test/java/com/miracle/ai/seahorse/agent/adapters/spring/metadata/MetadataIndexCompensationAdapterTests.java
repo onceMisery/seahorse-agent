@@ -189,7 +189,7 @@ class MetadataIndexCompensationAdapterTests {
         return new MetadataSchemaFieldRecord(
                 "field-" + schemaVersion,
                 "tenant-1",
-                1L,
+                "1",
                 fieldKey,
                 fieldKey,
                 MetadataValueType.STRING,

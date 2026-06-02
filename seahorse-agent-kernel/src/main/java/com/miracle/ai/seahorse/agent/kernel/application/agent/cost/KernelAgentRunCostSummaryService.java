@@ -62,7 +62,7 @@ public class KernelAgentRunCostSummaryService implements AgentRunCostSummaryInbo
     }
 
     private void requireReadable(AgentRun run, CurrentUser currentUser) {
-        if (isAdmin(currentUser) || run.userId().equals(currentUser.userId())) {
+        if (isAdmin(currentUser) || run.userId().equals(currentUserId(currentUser))) {
             return;
         }
         throw new IllegalStateException(ACCESS_DENIED);
@@ -70,6 +70,10 @@ public class KernelAgentRunCostSummaryService implements AgentRunCostSummaryInbo
 
     private boolean isAdmin(CurrentUser currentUser) {
         return currentUser != null && currentUser.hasRole(ADMIN_ROLE);
+    }
+
+    private String currentUserId(CurrentUser currentUser) {
+        return currentUser == null || currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
     }
 
     private String requireText(String value, String message) {

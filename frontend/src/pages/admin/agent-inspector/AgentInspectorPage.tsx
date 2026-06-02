@@ -121,15 +121,15 @@ export function AgentInspectorPage() {
                 {costSummary.totalCost.toLocaleString("zh-CN", { minimumFractionDigits: 4 })}
               </span>
             ) : null}
-            {snapshot?.status ? (
+            {snapshot?.run?.status ? (
               <span className="ml-3 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700">
-                {snapshot.status}
+                {snapshot.run.status}
               </span>
             ) : null}
           </div>
           <AgentRunActions
             runId={activeRunId}
-            status={snapshot?.status}
+            status={snapshot?.run?.status}
             onActionComplete={() => setActiveRunId((prev) => prev)}
           />
         </div>

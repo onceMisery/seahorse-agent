@@ -309,7 +309,7 @@ class KernelApprovalManagementServiceTests {
                     decision.toStatus(),
                     current.requestedAt(),
                     current.expiresAt(),
-                    decision.decidedBy(),
+                    String.valueOf(decision.decidedBy()),
                     decision.decidedAt(),
                     decision.decisionComment());
             approvalsById.put(decision.approvalId(), decided);

@@ -241,6 +241,7 @@ export interface Message {
   thinkingDuration?: number;
   isDeepThinking?: boolean;
   isThinking?: boolean;
+  thinkingStartAt?: number;
   createdAt?: string;
   feedback?: FeedbackValue;
   status?: MessageStatus;

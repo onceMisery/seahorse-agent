@@ -19,7 +19,7 @@ type RunRecord = Record<string, unknown>;
 const PAGE_SIZE = 15;
 
 const STATUS_OPTIONS = [
-  { value: "", label: "全部状态" },
+  { value: "ALL", label: "全部状态" },
   { value: "RUNNING", label: "运行中" },
   { value: "COMPLETED", label: "已完成" },
   { value: "FAILED", label: "失败" },
@@ -62,7 +62,7 @@ export function AgentRunListPage() {
 
   // Filters
   const [agentIdFilter, setAgentIdFilter] = useState(searchParams.get("agentId") ?? "");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [runIdSearch, setRunIdSearch] = useState("");
 
   const fetchRuns = useCallback(async () => {
@@ -70,7 +70,7 @@ export function AgentRunListPage() {
     try {
       const result = await listAgentRuns({
         agentId: agentIdFilter || undefined,
-        status: statusFilter || undefined,
+        status: (statusFilter && statusFilter !== "ALL") ? statusFilter : undefined,
         runId: runIdSearch || undefined,
         current: page,
         size: PAGE_SIZE

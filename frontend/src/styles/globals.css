@@ -659,6 +659,25 @@ select:focus:not(:focus-visible),
 
   .admin-layout .admin-sidebar {
     @apply flex w-64 flex-col bg-gradient-to-b from-[#1a1f2e] to-[#252d3d] text-white/70 transition-[width] duration-200;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .admin-layout .admin-sidebar::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .admin-layout .admin-sidebar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .admin-layout .admin-sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+  }
+
+  .admin-layout .admin-sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
   }
 
   .admin-layout .admin-sidebar--collapsed {

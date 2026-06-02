@@ -225,16 +225,16 @@ class SeahorseIngestionAndIntentControllerTests {
     @Test
     void shouldRebuildDocumentKeywordIndex() throws Exception {
         KeywordIndexMaintenanceInboundPort port = mock(KeywordIndexMaintenanceInboundPort.class);
-        when(port.rebuildDocument("doc-1")).thenReturn(
+        when(port.rebuildDocument(1L)).thenReturn(
                 mock(com.miracle.ai.seahorse.agent.ports.inbound.keyword.KeywordIndexRebuildResult.class));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKeywordIndexMaintenanceController(provider(KeywordIndexMaintenanceInboundPort.class, port))).build();
 
-        mvc.perform(post("/knowledge-base/docs/doc-1/keyword-index/rebuild"))
+        mvc.perform(post("/knowledge-base/docs/1/keyword-index/rebuild"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).rebuildDocument("doc-1");
+        verify(port).rebuildDocument(1L);
     }
 
     private static <T> ObjectProvider<T> provider(Class<T> type, T instance) {

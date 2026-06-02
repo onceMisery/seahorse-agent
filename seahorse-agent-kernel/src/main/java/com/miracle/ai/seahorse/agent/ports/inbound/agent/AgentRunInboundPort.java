@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +36,13 @@ public interface AgentRunInboundPort {
      * 按 runId 查询运行记录。
      */
     Optional<AgentRun> findRunById(String runId);
+
+    default AgentRunPage page(AgentRunQuery query) {
+        AgentRunQuery safeQuery = query == null
+                ? new AgentRunQuery(null, null, null, null, null, 1L, 15L)
+                : query;
+        return new AgentRunPage(List.of(), 0L, safeQuery.size(), safeQuery.current(), 0L);
+    }
 
     /**
      * 查询 run 内已记录的执行步骤。

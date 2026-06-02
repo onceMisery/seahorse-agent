@@ -55,16 +55,16 @@ class JdbcKnowledgeBaseRepositoryAdapterTests {
 
     @Test
     void shouldCreateQueryUpdateAndDeleteKnowledgeBase() {
-        String id = adapter.create(new CreateKnowledgeBaseValues("研发知识库", "embed-a", "kb_rnd", "tester"));
+        Long id = adapter.create(new CreateKnowledgeBaseValues("Research KB", "embed-a", "kb_rnd", "tester"));
 
-        boolean exists = adapter.nameExists("研发知识库", null);
-        boolean updated = adapter.update(id, new KnowledgeBaseUpdateValues("研发知识库2", "embed-b", "tester"));
+        boolean exists = adapter.nameExists("ResearchKB", null);
+        boolean updated = adapter.update(id, new KnowledgeBaseUpdateValues("Research KB Updated", "embed-b", "tester"));
         KnowledgeBaseRecord updatedRecord = adapter.findById(id).orElseThrow();
         boolean deleted = adapter.delete(id, "tester");
 
         assertThat(exists).isTrue();
         assertThat(updated).isTrue();
-        assertThat(updatedRecord.getName()).isEqualTo("研发知识库2");
+        assertThat(updatedRecord.getName()).isEqualTo("Research KB Updated");
         assertThat(updatedRecord.getEmbeddingModel()).isEqualTo("embed-b");
         assertThat(deleted).isTrue();
         assertThat(adapter.findById(id)).isEmpty();
@@ -89,24 +89,24 @@ class JdbcKnowledgeBaseRepositoryAdapterTests {
 
     @Test
     void shouldPageKnowledgeBasesWithDocumentCount() {
-        insertKnowledgeBase("kb-1", "Alpha", "col-a", 3);
-        insertKnowledgeBase("kb-2", "Beta", "col-b", 2);
+        insertKnowledgeBase(1L, "Alpha", "col-a", 3);
+        insertKnowledgeBase(2L, "Beta", "col-b", 2);
         insertDeletedKnowledgeBase();
-        insertDocument("doc-1", "kb-1", 2);
-        insertDocument("doc-2", "kb-1", 0);
-        insertDocument("doc-3", "kb-2", 0);
+        insertDocument(1L, 1L, 2);
+        insertDocument(2L, 1L, 0);
+        insertDocument(3L, 2L, 0);
 
         KnowledgeBasePage page = adapter.page(1, 10, "a");
 
         assertThat(page.total()).isEqualTo(2);
-        assertThat(page.records()).extracting(KnowledgeBaseRecord::getId).containsExactly("kb-2", "kb-1");
+        assertThat(page.records()).extracting(KnowledgeBaseRecord::getId).containsExactly(2L, 1L);
         assertThat(page.records().get(1).getDocumentCount()).isEqualTo(2);
-        assertThat(adapter.hasDocuments("kb-1")).isTrue();
-        assertThat(adapter.hasVectorizedDocuments("kb-1")).isTrue();
-        assertThat(adapter.hasVectorizedDocuments("kb-2")).isFalse();
+        assertThat(adapter.hasDocuments(1L)).isTrue();
+        assertThat(adapter.hasVectorizedDocuments(1L)).isTrue();
+        assertThat(adapter.hasVectorizedDocuments(2L)).isFalse();
     }
 
-    private void insertKnowledgeBase(String id, String name, String collectionName, int secondsAgo) {
+    private void insertKnowledgeBase(Long id, String name, String collectionName, int secondsAgo) {
         Timestamp updateTime = Timestamp.from(Instant.now().minusSeconds(secondsAgo));
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_base
@@ -122,16 +122,16 @@ class JdbcKnowledgeBaseRepositoryAdapterTests {
                 INSERT INTO t_knowledge_base
                 (id, name, embedding_model, collection_name, created_by, updated_by,
                  create_time, update_time, deleted)
-                VALUES ('kb-3', 'Gamma', 'embed', 'col-c', 'tester', 'tester', ?, ?, 1)
+                VALUES (3, 'Gamma', 'embed', 'col-c', 'tester', 'tester', ?, ?, 1)
                 """, now, now);
     }
 
-    private void insertDocument(String id, String kbId, int chunkCount) {
+    private void insertDocument(Long id, Long kbId, int chunkCount) {
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_document
                 (id, kb_id, doc_name, chunk_count, deleted)
                 VALUES (?, ?, ?, ?, 0)
-                """, id, kbId, id, chunkCount);
+                """, id, kbId, "doc-" + id, chunkCount);
     }
 
     private void createSchema() {
@@ -139,7 +139,7 @@ class JdbcKnowledgeBaseRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_knowledge_base");
         jdbcTemplate.execute("""
                 CREATE TABLE t_knowledge_base (
-                    id VARCHAR(32) PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     name VARCHAR(128) NOT NULL,
                     embedding_model VARCHAR(128),
                     collection_name VARCHAR(128) NOT NULL,
@@ -152,8 +152,8 @@ class JdbcKnowledgeBaseRepositoryAdapterTests {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_knowledge_document (
-                    id VARCHAR(32) PRIMARY KEY,
-                    kb_id VARCHAR(32) NOT NULL,
+                    id BIGINT PRIMARY KEY,
+                    kb_id BIGINT NOT NULL,
                     doc_name VARCHAR(128),
                     chunk_count INTEGER DEFAULT 0,
                     deleted SMALLINT DEFAULT 0

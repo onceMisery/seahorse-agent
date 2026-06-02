@@ -40,6 +40,13 @@ public interface AgentRunRepositoryPort {
      */
     Optional<AgentRun> findRunById(String runId);
 
+    default AgentRunPage page(AgentRunQuery query) {
+        AgentRunQuery safeQuery = query == null
+                ? new AgentRunQuery(null, null, null, null, null, 1L, 15L)
+                : query;
+        return new AgentRunPage(List.of(), 0L, safeQuery.size(), safeQuery.current(), 0L);
+    }
+
     /**
      * 追加执行步骤；调用方负责生成 run 内递增 stepNo。
      */

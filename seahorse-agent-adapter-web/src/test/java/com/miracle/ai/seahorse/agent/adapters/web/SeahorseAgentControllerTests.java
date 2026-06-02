@@ -105,6 +105,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.credential.SecretCreateComman
 import com.miracle.ai.seahorse.agent.ports.inbound.credential.SecretManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ConnectorQuery;
@@ -232,6 +234,7 @@ class SeahorseAgentControllerTests {
         AgentRunSnapshotInboundPort snapshotPort = mock(AgentRunSnapshotInboundPort.class);
         AgentRun run = run(AgentRunStatus.RUNNING);
         when(port.startRun(any())).thenReturn(run);
+        when(port.page(any())).thenReturn(new AgentRunPage(List.of(run), 1L, 15L, 1L, 1L));
         when(port.findRunById("run-1")).thenReturn(Optional.of(run));
         when(port.listSteps("run-1")).thenReturn(List.of(step()));
         when(port.cancel("run-1")).thenReturn(run(AgentRunStatus.CANCELLED));
@@ -265,6 +268,24 @@ class SeahorseAgentControllerTests {
         verify(port).startRun(startCaptor.capture());
         assertThat(startCaptor.getValue().agentId()).isEqualTo("agent-1");
         assertThat(startCaptor.getValue().triggerType()).isEqualTo(AgentRunTriggerType.CHAT);
+
+        mvc.perform(get("/api/agent-runs")
+                        .param("agentId", "agent-1")
+                        .param("status", "RUNNING")
+                        .param("runId", "run")
+                        .param("current", "1")
+                        .param("size", "15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].runId").value("run-1"))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.size").value(15))
+                .andExpect(jsonPath("$.data.current").value(1))
+                .andExpect(jsonPath("$.data.pages").value(1));
+        ArgumentCaptor<AgentRunQuery> pageCaptor = ArgumentCaptor.forClass(AgentRunQuery.class);
+        verify(port).page(pageCaptor.capture());
+        assertThat(pageCaptor.getValue().agentId()).isEqualTo("agent-1");
+        assertThat(pageCaptor.getValue().status()).isEqualTo("RUNNING");
+        assertThat(pageCaptor.getValue().runId()).isEqualTo("run");
 
         mvc.perform(get("/agent-runs/run-1"))
                 .andExpect(status().isOk())

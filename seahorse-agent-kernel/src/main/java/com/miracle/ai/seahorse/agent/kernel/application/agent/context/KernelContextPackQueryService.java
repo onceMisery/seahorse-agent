@@ -64,7 +64,7 @@ public class KernelContextPackQueryService implements ContextPackQueryInboundPor
     }
 
     private ContextPack requireReadable(ContextPack pack, CurrentUser currentUser) {
-        if (currentUser.hasRole(ADMIN_ROLE) || pack.userId().equals(currentUser.userId())) {
+        if (currentUser.hasRole(ADMIN_ROLE) || pack.userId().equals(currentUserId(currentUser))) {
             return pack;
         }
         throw new IllegalStateException(CONTEXT_PACK_FORBIDDEN_MESSAGE);
@@ -75,5 +75,9 @@ public class KernelContextPackQueryService implements ContextPackQueryInboundPor
             throw new IllegalArgumentException(message);
         }
         return value.trim();
+    }
+
+    private String currentUserId(CurrentUser currentUser) {
+        return currentUser == null || currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
     }
 }

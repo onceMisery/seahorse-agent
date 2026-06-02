@@ -2337,7 +2337,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
 
         @Bean
         CurrentUserPort currentUserPort() {
-            return () -> java.util.Optional.of(new CurrentUser("1", "admin", "admin", null));
+            return () -> java.util.Optional.of(new CurrentUser(1L, "admin", "admin", null));
         }
     }
 }

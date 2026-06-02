@@ -23,6 +23,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTrigger
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -53,6 +55,40 @@ class JdbcAgentRunRepositoryAdapterTests {
         assertThat(found.status()).isEqualTo(AgentRunStatus.SUCCEEDED);
         assertThat(found.finishedAt()).isEqualTo(startedAt.plusSeconds(30));
         assertThat(found.costTotal()).isEqualByComparingTo("0.010000");
+    }
+
+    @Test
+    void shouldPageRunsWithFiltersInRecentOrder() {
+        DriverManagerDataSource dataSource = dataSource("agent-run-page");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        createRunSchema(jdbcTemplate);
+        JdbcAgentRunRepositoryAdapter adapter = new JdbcAgentRunRepositoryAdapter(dataSource);
+        Instant startedAt = Instant.parse("2026-05-23T00:00:00Z");
+        adapter.createRun(new AgentRun("run-older", "agent-1", "version-1", "tenant-a", "user-1",
+                null, AgentRunTriggerType.API, "older", AgentRunStatus.RUNNING, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt, null));
+        adapter.createRun(new AgentRun("run-newer", "agent-1", "version-1", "tenant-a", "user-1",
+                null, AgentRunTriggerType.API, "newer", AgentRunStatus.RUNNING, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt.plusSeconds(60), null));
+        adapter.createRun(new AgentRun("run-failed", "agent-1", "version-1", "tenant-a", "user-1",
+                null, AgentRunTriggerType.API, "failed", AgentRunStatus.FAILED, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt.plusSeconds(120), null));
+        adapter.createRun(new AgentRun("run-other-agent", "agent-2", "version-1", "tenant-a", "user-1",
+                null, AgentRunTriggerType.API, "other", AgentRunStatus.RUNNING, null,
+                0L, 0L, BigDecimal.ZERO, null, null, startedAt.plusSeconds(180), null));
+
+        AgentRunPage page = adapter.page(new AgentRunQuery(
+                "agent-1",
+                "run-",
+                "RUNNING",
+                null,
+                null,
+                1L,
+                10L));
+
+        assertThat(page.total()).isEqualTo(2L);
+        assertThat(page.pages()).isEqualTo(1L);
+        assertThat(page.records()).extracting(AgentRun::runId).containsExactly("run-newer", "run-older");
     }
 
     @Test

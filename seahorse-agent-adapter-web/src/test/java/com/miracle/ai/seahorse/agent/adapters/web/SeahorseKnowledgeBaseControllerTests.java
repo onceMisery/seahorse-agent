@@ -48,7 +48,7 @@ class SeahorseKnowledgeBaseControllerTests {
     @Test
     void shouldCreateKnowledgeBase() throws Exception {
         KnowledgeBaseInboundPort port = mock(KnowledgeBaseInboundPort.class);
-        when(port.create(any())).thenReturn("kb-1");
+        when(port.create(any())).thenReturn(1L);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeBaseController(provider(KnowledgeBaseInboundPort.class, port))).build();
 
@@ -64,7 +64,7 @@ class SeahorseKnowledgeBaseControllerTests {
                         .header("X-User-Id", "admin-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
-                .andExpect(jsonPath("$.data").value("kb-1"));
+                .andExpect(jsonPath("$.data").value(1));
 
         ArgumentCaptor<CreateKnowledgeBaseCommand> captor =
                 ArgumentCaptor.forClass(CreateKnowledgeBaseCommand.class);
@@ -78,7 +78,7 @@ class SeahorseKnowledgeBaseControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeBaseController(provider(KnowledgeBaseInboundPort.class, port))).build();
 
-        mvc.perform(put("/knowledge-base/kb-1")
+        mvc.perform(put("/knowledge-base/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -90,7 +90,7 @@ class SeahorseKnowledgeBaseControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).update(eq("kb-1"), any(UpdateKnowledgeBaseCommand.class));
+        verify(port).update(eq(1L), any(UpdateKnowledgeBaseCommand.class));
     }
 
     @Test
@@ -99,27 +99,27 @@ class SeahorseKnowledgeBaseControllerTests {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeBaseController(provider(KnowledgeBaseInboundPort.class, port))).build();
 
-        mvc.perform(delete("/knowledge-base/kb-1")
+        mvc.perform(delete("/knowledge-base/1")
                         .header("X-User-Id", "admin-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).delete("kb-1", "admin-1");
+        verify(port).delete(1L, "admin-1");
     }
 
     @Test
     void shouldQueryKnowledgeBaseById() throws Exception {
         KnowledgeBaseInboundPort port = mock(KnowledgeBaseInboundPort.class);
-        when(port.queryById("kb-1")).thenReturn(
+        when(port.queryById(1L)).thenReturn(
                 mock(com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRecord.class));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseKnowledgeBaseController(provider(KnowledgeBaseInboundPort.class, port))).build();
 
-        mvc.perform(get("/knowledge-base/kb-1"))
+        mvc.perform(get("/knowledge-base/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
-        verify(port).queryById("kb-1");
+        verify(port).queryById(1L);
     }
 
     @Test
