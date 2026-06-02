@@ -85,19 +85,26 @@ public final class MemoryTrackWriteService {
     /**
      * 写入 occupation correction：correction ledger + profile fact + lifecycle obsolete。
      *
-     * <p>本路径用于显式纠错场景（例："不对，我是医生，不是工程师"）。失败被静默 swallow，
-     * 与原 facade 行为一致 — 当前 ingestion 流程仍会标记本次写入"已尝试"。
+     * <p>本路径用于显式纠错场景（例："不对，我是医生，不是工程师"）。
      *
-     * @return 与 facade 完全一致的 operation 列表（{@link #OPERATION_CORRECTION_UPSERT} 与
-     *     {@link #OPERATION_PROFILE_UPSERT}）。
+     * <p><b>失败策略</b>：
+     * <ul>
+     *     <li>第 1 步（correctionLedgerPort.upsert）失败 → 抛出 {@link MemoryTrackWriteException}。</li>
+     *     <li>第 2 步（profileMemoryPort.upsert）失败 → 抛出 {@link MemoryTrackWriteException}。</li>
+     *     <li>第 3 步（markObsolete）失败 → 静默记录，不影响整体成功判定。</li>
+     * </ul>
+     *
+     * @return 包含每步成功/失败状态的 {@link MemoryTrackWriteResult}。
+     * @throws MemoryTrackWriteException 当第 1 步或第 2 步失败时。
      */
-    public List<String> writeOccupationCorrection(String userId,
-                                                  String tenantId,
-                                                  String messageId,
-                                                  String incorrectValue,
-                                                  String correctValue) {
+    public MemoryTrackWriteResult writeOccupationCorrection(String userId,
+                                                            String tenantId,
+                                                            String messageId,
+                                                            String incorrectValue,
+                                                            String correctValue) {
         String generationId = "identity.occupation:" + SnowflakeIds.nextIdString();
         List<String> sourceIds = isBlank(messageId) ? List.of() : List.of(messageId);
+        // Step 1: Correction Ledger upsert
         try {
             correctionLedgerPort.upsert(new CorrectionCommand(
                     userId,
@@ -110,6 +117,12 @@ public final class MemoryTrackWriteService {
                     "用户纠正职业画像：" + incorrectValue + " -> " + correctValue,
                     sourceIds,
                     generationId));
+        } catch (RuntimeException ex) {
+            throw new MemoryTrackWriteException("correction_upsert",
+                    "Correction Ledger upsert failed for userId=" + userId, ex);
+        }
+        // Step 2: Profile fact upsert
+        try {
             profileMemoryPort.upsert(new ProfileFactUpdate(
                     userId,
                     tenantId,
@@ -119,11 +132,18 @@ public final class MemoryTrackWriteService {
                     OCCUPATION_REASON_EXPLICIT_CORRECTION,
                     sourceIds,
                     generationId));
-            markProfileSlotFragmentsObsolete(userId, tenantId, identityOccupationSlotKey, generationId);
         } catch (RuntimeException ex) {
-            LOG.warn("写入Profile纠错失败: userId={}", userId, ex);
+            throw new MemoryTrackWriteException("profile_upsert",
+                    "Profile upsert failed for userId=" + userId, ex);
         }
-        return List.of(OPERATION_CORRECTION_UPSERT, OPERATION_PROFILE_UPSERT);
+        // Step 3: Mark obsolete (best-effort)
+        boolean obsoleteMarked = markProfileSlotFragmentsObsoleteWithStatus(
+                userId, tenantId, identityOccupationSlotKey, generationId);
+        return new MemoryTrackWriteResult(
+                true,
+                true,
+                obsoleteMarked,
+                List.of(OPERATION_CORRECTION_UPSERT, OPERATION_PROFILE_UPSERT));
     }
 
     /**
@@ -131,7 +151,14 @@ public final class MemoryTrackWriteService {
      *
      * <p>入参 {@code value} 已由 facade 完成 slot 特定规整；空 slotKey / 空 value 直接返回 false。
      *
-     * @return true 表示 profile port 写入成功；false 表示 slotKey/value 缺失或写入异常。
+     * <p><b>失败策略</b>：
+     * <ul>
+     *     <li>Profile upsert 失败 → 抛出 {@link MemoryTrackWriteException}。</li>
+     *     <li>markObsolete 失败 → 静默记录（尽力而为）。</li>
+     * </ul>
+     *
+     * @return true 表示 profile port 写入成功；false 表示 slotKey/value 缺失。
+     * @throws MemoryTrackWriteException 当 profile upsert 失败时。
      */
     public boolean writeProfileFact(String userId,
                                     String tenantId,
@@ -153,12 +180,12 @@ public final class MemoryTrackWriteService {
                     OCCUPATION_REASON_EXPLICIT_MEMORY,
                     isBlank(messageId) ? List.of() : List.of(messageId),
                     generationId));
-            markProfileSlotFragmentsObsolete(userId, tenantId, slotKey, generationId);
-            return true;
         } catch (RuntimeException ex) {
-            LOG.warn("写入Profile KV失败: userId={}, slot={}", userId, slotKey, ex);
-            return false;
+            throw new MemoryTrackWriteException("profile_upsert",
+                    "Profile upsert failed for userId=" + userId + ", slot=" + slotKey, ex);
         }
+        markProfileSlotFragmentsObsolete(userId, tenantId, slotKey, generationId);
+        return true;
     }
 
     /**
@@ -169,6 +196,16 @@ public final class MemoryTrackWriteService {
                                                  String tenantId,
                                                  String profileSlot,
                                                  String activeGenerationId) {
+        markProfileSlotFragmentsObsoleteWithStatus(userId, tenantId, profileSlot, activeGenerationId);
+    }
+
+    /**
+     * 同 {@link #markProfileSlotFragmentsObsolete}，但返回是否成功。
+     */
+    private boolean markProfileSlotFragmentsObsoleteWithStatus(String userId,
+                                                               String tenantId,
+                                                               String profileSlot,
+                                                               String activeGenerationId) {
         try {
             memoryLifecyclePort.markObsoleteByProfileSlot(
                     userId,
@@ -176,8 +213,10 @@ public final class MemoryTrackWriteService {
                     profileSlot,
                     activeGenerationId,
                     OCCUPATION_LIFECYCLE_REASON);
+            return true;
         } catch (RuntimeException ex) {
             LOG.warn("Profile slot 旧片段失效失败: userId={}, slot={}", userId, profileSlot, ex);
+            return false;
         }
     }
 
