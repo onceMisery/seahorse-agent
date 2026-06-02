@@ -225,14 +225,13 @@ class MemoryWorkflowRoutingTests {
     @Test
     void shouldExposeDeterministicIngestionWorkflowForCompatibleEngineWrites() {
         RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
-                new StubShortTermMemoryPort(),
-                new StubLongTermMemoryPort(),
-                new StubSemanticMemoryPort(),
-                new ObjectMapper(),
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                CorrectionLedgerPort.noop());
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
+                        new StubShortTermMemoryPort(),
+                        new StubLongTermMemoryPort(),
+                        new StubSemanticMemoryPort(),
+                        new ObjectMapper())
+                .profileMemoryPort(profilePort)
+                .build();
         MemoryIngestionWorkflowPort workflow = engine;
 
         var result = workflow.ingest(new MemoryIngestionCommand(MemoryWriteRequest.builder()

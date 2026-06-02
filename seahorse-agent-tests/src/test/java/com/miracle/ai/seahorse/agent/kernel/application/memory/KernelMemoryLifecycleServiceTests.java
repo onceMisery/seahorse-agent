@@ -89,20 +89,13 @@ class KernelMemoryLifecycleServiceTests {
 
     private DefaultMemoryEnginePort engine(RecordingShortTermMemoryPort shortTermPort,
                                            RecordingLifecyclePort lifecyclePort) {
-        return new DefaultMemoryEnginePort(
-                shortTermPort,
-                new RecordingLongTermMemoryPort(),
-                new RecordingSemanticMemoryPort(),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                MemoryOperationLogPort.noop(),
-                MemoryVectorPort.noop(),
-                MemoryOutboxPort.noop(),
-                MemoryBusinessDocumentRetrieverPort.noop(),
-                lifecyclePort);
+        return DefaultMemoryEnginePort.builder(
+                        shortTermPort,
+                        new RecordingLongTermMemoryPort(),
+                        new RecordingSemanticMemoryPort(),
+                        OBJECT_MAPPER)
+                .memoryLifecyclePort(lifecyclePort)
+                .build();
     }
 
     private record ObsoleteCommand(String userId,

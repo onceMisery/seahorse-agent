@@ -38,7 +38,8 @@ public record MemoryEngineOptions(int shortTermLimit,
                                   int refinerStickyAnchorLimit,
                                   int refinerFeedbackExampleLimit,
                                   double refinerStickyAnchorImportanceThreshold,
-                                  double refinerStickyAnchorConfidenceThreshold) {
+                                  double refinerStickyAnchorConfidenceThreshold,
+                                  int maxRefinementDepth) {
 
     public static final int DEFAULT_SHORT_TERM_LIMIT = 5;
     public static final int DEFAULT_LONG_TERM_LIMIT = 3;
@@ -51,6 +52,7 @@ public record MemoryEngineOptions(int shortTermLimit,
     public static final int DEFAULT_REFINER_FEEDBACK_EXAMPLE_LIMIT = 3;
     public static final double DEFAULT_REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD = 0.85D;
     public static final double DEFAULT_REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD = 0.90D;
+    public static final int DEFAULT_MAX_REFINEMENT_DEPTH = 2;
 
     public MemoryEngineOptions {
         shortTermLimit = positive(shortTermLimit, DEFAULT_SHORT_TERM_LIMIT);
@@ -69,6 +71,7 @@ public record MemoryEngineOptions(int shortTermLimit,
                 DEFAULT_REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD);
         refinerStickyAnchorConfidenceThreshold = ratio(refinerStickyAnchorConfidenceThreshold,
                 DEFAULT_REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD);
+        maxRefinementDepth = positive(maxRefinementDepth, DEFAULT_MAX_REFINEMENT_DEPTH);
     }
 
     public MemoryEngineOptions(int shortTermLimit,
@@ -96,7 +99,8 @@ public record MemoryEngineOptions(int shortTermLimit,
                 DEFAULT_REFINER_STICKY_ANCHOR_LIMIT,
                 DEFAULT_REFINER_FEEDBACK_EXAMPLE_LIMIT,
                 DEFAULT_REFINER_STICKY_ANCHOR_IMPORTANCE_THRESHOLD,
-                DEFAULT_REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD);
+                DEFAULT_REFINER_STICKY_ANCHOR_CONFIDENCE_THRESHOLD,
+                DEFAULT_MAX_REFINEMENT_DEPTH);
     }
 
     public MemoryEngineOptions(int shortTermLimit,

@@ -706,6 +706,7 @@ public class MemoryProperties {
         private int feedbackExampleLimit = 3;
         private double stickyAnchorImportanceThreshold = 0.85d;
         private double stickyAnchorConfidenceThreshold = 0.90d;
+        private int maxRefinementDepth = 2;
 
         public boolean isFailOpen() {
             return failOpen;
@@ -777,6 +778,14 @@ public class MemoryProperties {
 
         public void setStickyAnchorConfidenceThreshold(double stickyAnchorConfidenceThreshold) {
             this.stickyAnchorConfidenceThreshold = stickyAnchorConfidenceThreshold;
+        }
+
+        public int getMaxRefinementDepth() {
+            return maxRefinementDepth;
+        }
+
+        public void setMaxRefinementDepth(int maxRefinementDepth) {
+            this.maxRefinementDepth = maxRefinementDepth;
         }
     }
 

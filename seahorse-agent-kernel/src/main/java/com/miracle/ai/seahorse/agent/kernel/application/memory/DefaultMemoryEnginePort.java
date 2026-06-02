@@ -161,6 +161,190 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     private final MemoryOperationGateway operationGateway;
     private final MemoryRefinerFeedbackLookup refinerFeedbackLookup;
     private final MemoryReviewApplyClassificationBuilder reviewApplyClassificationBuilder;
+    private final MemoryRefinementDepthGuard refinementDepthGuard;
+
+    public static Builder builder(ShortTermMemoryPort shortTermPort,
+                                  LongTermMemoryPort longTermPort,
+                                  SemanticMemoryPort semanticPort,
+                                  ObjectMapper objectMapper) {
+        return new Builder(shortTermPort, longTermPort, semanticPort, objectMapper);
+    }
+
+    public static DefaultMemoryEnginePort builder(ShortTermMemoryPort shortTermPort,
+                                                  LongTermMemoryPort longTermPort,
+                                                  SemanticMemoryPort semanticPort,
+                                                  ObjectMapper objectMapper,
+                                                  MemoryEngineOptions options) {
+        return builder(shortTermPort, longTermPort, semanticPort, objectMapper)
+                .options(options)
+                .build();
+    }
+
+    public static DefaultMemoryEnginePort builder(ShortTermMemoryPort shortTermPort,
+                                                  LongTermMemoryPort longTermPort,
+                                                  SemanticMemoryPort semanticPort,
+                                                  ObjectMapper objectMapper,
+                                                  MemoryEngineOptions options,
+                                                  ProfileMemoryPort profileMemoryPort,
+                                                  CorrectionLedgerPort correctionLedgerPort) {
+        return builder(shortTermPort, longTermPort, semanticPort, objectMapper)
+                .options(options)
+                .profileMemoryPort(profileMemoryPort)
+                .correctionLedgerPort(correctionLedgerPort)
+                .build();
+    }
+
+    public static DefaultMemoryEnginePort builder(ShortTermMemoryPort shortTermPort,
+                                                  LongTermMemoryPort longTermPort,
+                                                  SemanticMemoryPort semanticPort,
+                                                  ObjectMapper objectMapper,
+                                                  MemoryEngineOptions options,
+                                                  ProfileMemoryPort profileMemoryPort,
+                                                  CorrectionLedgerPort correctionLedgerPort,
+                                                  MemoryRouterPort memoryRouterPort,
+                                                  MemoryOperationLogPort memoryOperationLogPort) {
+        return builder(shortTermPort, longTermPort, semanticPort, objectMapper)
+                .options(options)
+                .profileMemoryPort(profileMemoryPort)
+                .correctionLedgerPort(correctionLedgerPort)
+                .memoryRouterPort(memoryRouterPort)
+                .memoryOperationLogPort(memoryOperationLogPort)
+                .build();
+    }
+
+    public static DefaultMemoryEnginePort builder(ShortTermMemoryPort shortTermPort,
+                                                  LongTermMemoryPort longTermPort,
+                                                  SemanticMemoryPort semanticPort,
+                                                  ObjectMapper objectMapper,
+                                                  MemoryEngineOptions options,
+                                                  ProfileMemoryPort profileMemoryPort,
+                                                  CorrectionLedgerPort correctionLedgerPort,
+                                                  MemoryRouterPort memoryRouterPort,
+                                                  MemoryOperationLogPort memoryOperationLogPort,
+                                                  MemoryVectorPort memoryVectorPort,
+                                                  MemoryOutboxPort memoryOutboxPort,
+                                                  MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort) {
+        return builder(shortTermPort, longTermPort, semanticPort, objectMapper)
+                .options(options)
+                .profileMemoryPort(profileMemoryPort)
+                .correctionLedgerPort(correctionLedgerPort)
+                .memoryRouterPort(memoryRouterPort)
+                .memoryOperationLogPort(memoryOperationLogPort)
+                .memoryVectorPort(memoryVectorPort)
+                .memoryOutboxPort(memoryOutboxPort)
+                .businessDocumentRetrieverPort(businessDocumentRetrieverPort)
+                .build();
+    }
+
+    public static DefaultMemoryEnginePort builder(ShortTermMemoryPort shortTermPort,
+                                                  LongTermMemoryPort longTermPort,
+                                                  SemanticMemoryPort semanticPort,
+                                                  ObjectMapper objectMapper,
+                                                  MemoryEngineOptions options,
+                                                  ProfileMemoryPort profileMemoryPort,
+                                                  CorrectionLedgerPort correctionLedgerPort,
+                                                  MemoryRouterPort memoryRouterPort,
+                                                  MemoryOperationLogPort memoryOperationLogPort,
+                                                  MemoryVectorPort memoryVectorPort,
+                                                  MemoryOutboxPort memoryOutboxPort,
+                                                  MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                                  MemoryLifecyclePort memoryLifecyclePort,
+                                                  MemoryPolicyConfigPort memoryPolicyConfigPort,
+                                                  MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
+                                                  MemoryRefinerPort memoryRefinerPort) {
+        return builder(shortTermPort, longTermPort, semanticPort, objectMapper)
+                .options(options)
+                .profileMemoryPort(profileMemoryPort)
+                .correctionLedgerPort(correctionLedgerPort)
+                .memoryRouterPort(memoryRouterPort)
+                .memoryOperationLogPort(memoryOperationLogPort)
+                .memoryVectorPort(memoryVectorPort)
+                .memoryOutboxPort(memoryOutboxPort)
+                .businessDocumentRetrieverPort(businessDocumentRetrieverPort)
+                .memoryLifecyclePort(memoryLifecyclePort)
+                .memoryPolicyConfigPort(memoryPolicyConfigPort)
+                .memoryRetrievalPipelinePort(memoryRetrievalPipelinePort)
+                .memoryRefinerPort(memoryRefinerPort)
+                .build();
+    }
+
+    public static DefaultMemoryEnginePort builder(ShortTermMemoryPort shortTermPort,
+                                                  LongTermMemoryPort longTermPort,
+                                                  SemanticMemoryPort semanticPort,
+                                                  ObjectMapper objectMapper,
+                                                  MemoryEngineOptions options,
+                                                  ProfileMemoryPort profileMemoryPort,
+                                                  CorrectionLedgerPort correctionLedgerPort,
+                                                  MemoryRouterPort memoryRouterPort,
+                                                  MemoryOperationLogPort memoryOperationLogPort,
+                                                  MemoryVectorPort memoryVectorPort,
+                                                  MemoryOutboxPort memoryOutboxPort,
+                                                  MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                                  MemoryLifecyclePort memoryLifecyclePort,
+                                                  MemoryPolicyConfigPort memoryPolicyConfigPort,
+                                                  MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
+                                                  MemoryRefinerPort memoryRefinerPort,
+                                                  MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                                  MemoryAliasPort memoryAliasPort,
+                                                  MemoryReviewPolicyPort memoryReviewPolicyPort) {
+        return builder(shortTermPort, longTermPort, semanticPort, objectMapper)
+                .options(options)
+                .profileMemoryPort(profileMemoryPort)
+                .correctionLedgerPort(correctionLedgerPort)
+                .memoryRouterPort(memoryRouterPort)
+                .memoryOperationLogPort(memoryOperationLogPort)
+                .memoryVectorPort(memoryVectorPort)
+                .memoryOutboxPort(memoryOutboxPort)
+                .businessDocumentRetrieverPort(businessDocumentRetrieverPort)
+                .memoryLifecyclePort(memoryLifecyclePort)
+                .memoryPolicyConfigPort(memoryPolicyConfigPort)
+                .memoryRetrievalPipelinePort(memoryRetrievalPipelinePort)
+                .memoryRefinerPort(memoryRefinerPort)
+                .memoryReviewCandidatePort(memoryReviewCandidatePort)
+                .memoryAliasPort(memoryAliasPort)
+                .memoryReviewPolicyPort(memoryReviewPolicyPort)
+                .build();
+    }
+
+    public static DefaultMemoryEnginePort builder(ShortTermMemoryPort shortTermPort,
+                                                  LongTermMemoryPort longTermPort,
+                                                  SemanticMemoryPort semanticPort,
+                                                  ObjectMapper objectMapper,
+                                                  MemoryEngineOptions options,
+                                                  ProfileMemoryPort profileMemoryPort,
+                                                  CorrectionLedgerPort correctionLedgerPort,
+                                                  MemoryRouterPort memoryRouterPort,
+                                                  MemoryOperationLogPort memoryOperationLogPort,
+                                                  MemoryVectorPort memoryVectorPort,
+                                                  MemoryOutboxPort memoryOutboxPort,
+                                                  MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort,
+                                                  MemoryLifecyclePort memoryLifecyclePort,
+                                                  MemoryPolicyConfigPort memoryPolicyConfigPort,
+                                                  MemoryRetrievalPipelinePort memoryRetrievalPipelinePort,
+                                                  MemoryRefinerPort memoryRefinerPort,
+                                                  MemoryReviewCandidatePort memoryReviewCandidatePort,
+                                                  MemoryAliasPort memoryAliasPort,
+                                                  MemoryReviewPolicyPort memoryReviewPolicyPort,
+                                                  MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort) {
+        return builder(shortTermPort, longTermPort, semanticPort, objectMapper)
+                .options(options)
+                .profileMemoryPort(profileMemoryPort)
+                .correctionLedgerPort(correctionLedgerPort)
+                .memoryRouterPort(memoryRouterPort)
+                .memoryOperationLogPort(memoryOperationLogPort)
+                .memoryVectorPort(memoryVectorPort)
+                .memoryOutboxPort(memoryOutboxPort)
+                .businessDocumentRetrieverPort(businessDocumentRetrieverPort)
+                .memoryLifecyclePort(memoryLifecyclePort)
+                .memoryPolicyConfigPort(memoryPolicyConfigPort)
+                .memoryRetrievalPipelinePort(memoryRetrievalPipelinePort)
+                .memoryRefinerPort(memoryRefinerPort)
+                .memoryReviewCandidatePort(memoryReviewCandidatePort)
+                .memoryAliasPort(memoryAliasPort)
+                .memoryReviewPolicyPort(memoryReviewPolicyPort)
+                .memoryReviewFeedbackRepositoryPort(memoryReviewFeedbackRepositoryPort)
+                .build();
+    }
 
     public DefaultMemoryEnginePort(ShortTermMemoryPort shortTermPort,
                                    LongTermMemoryPort longTermPort,
@@ -543,6 +727,164 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 TARGET_KIND_PROFILE_SLOT,
                 TARGET_KEY_IDENTITY_OCCUPATION);
         this.reviewApplyClassificationBuilder = new MemoryReviewApplyClassificationBuilder();
+        this.refinementDepthGuard = new MemoryRefinementDepthGuard(this.options.maxRefinementDepth());
+    }
+
+    public static final class Builder {
+
+        private final ShortTermMemoryPort shortTermPort;
+        private final LongTermMemoryPort longTermPort;
+        private final SemanticMemoryPort semanticPort;
+        private final ObjectMapper objectMapper;
+        private MemoryEngineOptions options = MemoryEngineOptions.defaults();
+        private ProfileMemoryPort profileMemoryPort = ProfileMemoryPort.noop();
+        private CorrectionLedgerPort correctionLedgerPort = CorrectionLedgerPort.noop();
+        private MemoryRouterPort memoryRouterPort = new DefaultMemoryRouter();
+        private MemoryOperationLogPort memoryOperationLogPort = MemoryOperationLogPort.noop();
+        private MemoryVectorPort memoryVectorPort = MemoryVectorPort.noop();
+        private MemoryOutboxPort memoryOutboxPort = MemoryOutboxPort.noop();
+        private MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort =
+                MemoryBusinessDocumentRetrieverPort.noop();
+        private MemoryLifecyclePort memoryLifecyclePort = MemoryLifecyclePort.noop();
+        private MemoryPolicyConfigPort memoryPolicyConfigPort = MemoryPolicyConfigPort.defaults();
+        private MemoryRetrievalPipelinePort memoryRetrievalPipelinePort;
+        private MemoryRefinerPort memoryRefinerPort = MemoryRefinerPort.noop();
+        private MemoryReviewCandidatePort memoryReviewCandidatePort = MemoryReviewCandidatePort.noop();
+        private MemoryAliasPort memoryAliasPort = MemoryAliasPort.noop();
+        private MemoryReviewPolicyPort memoryReviewPolicyPort = MemoryReviewPolicyPort.defaults();
+        private MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort =
+                MemoryReviewFeedbackRepositoryPort.empty();
+        private MemoryCaptureRules captureRules = MemoryCaptureRules.defaults();
+
+        private Builder(ShortTermMemoryPort shortTermPort,
+                        LongTermMemoryPort longTermPort,
+                        SemanticMemoryPort semanticPort,
+                        ObjectMapper objectMapper) {
+            this.shortTermPort = shortTermPort;
+            this.longTermPort = longTermPort;
+            this.semanticPort = semanticPort;
+            this.objectMapper = objectMapper;
+        }
+
+        public Builder options(MemoryEngineOptions options) {
+            this.options = Objects.requireNonNullElseGet(options, MemoryEngineOptions::defaults);
+            return this;
+        }
+
+        public Builder profileMemoryPort(ProfileMemoryPort profileMemoryPort) {
+            this.profileMemoryPort = Objects.requireNonNullElseGet(profileMemoryPort, ProfileMemoryPort::noop);
+            return this;
+        }
+
+        public Builder correctionLedgerPort(CorrectionLedgerPort correctionLedgerPort) {
+            this.correctionLedgerPort = Objects.requireNonNullElseGet(correctionLedgerPort, CorrectionLedgerPort::noop);
+            return this;
+        }
+
+        public Builder memoryRouterPort(MemoryRouterPort memoryRouterPort) {
+            this.memoryRouterPort = Objects.requireNonNullElseGet(memoryRouterPort, DefaultMemoryRouter::new);
+            return this;
+        }
+
+        public Builder memoryOperationLogPort(MemoryOperationLogPort memoryOperationLogPort) {
+            this.memoryOperationLogPort = Objects.requireNonNullElseGet(memoryOperationLogPort,
+                    MemoryOperationLogPort::noop);
+            return this;
+        }
+
+        public Builder memoryVectorPort(MemoryVectorPort memoryVectorPort) {
+            this.memoryVectorPort = Objects.requireNonNullElseGet(memoryVectorPort, MemoryVectorPort::noop);
+            return this;
+        }
+
+        public Builder memoryOutboxPort(MemoryOutboxPort memoryOutboxPort) {
+            this.memoryOutboxPort = Objects.requireNonNullElseGet(memoryOutboxPort, MemoryOutboxPort::noop);
+            return this;
+        }
+
+        public Builder businessDocumentRetrieverPort(
+                MemoryBusinessDocumentRetrieverPort businessDocumentRetrieverPort) {
+            this.businessDocumentRetrieverPort = Objects.requireNonNullElseGet(
+                    businessDocumentRetrieverPort,
+                    MemoryBusinessDocumentRetrieverPort::noop);
+            return this;
+        }
+
+        public Builder memoryLifecyclePort(MemoryLifecyclePort memoryLifecyclePort) {
+            this.memoryLifecyclePort = Objects.requireNonNullElseGet(memoryLifecyclePort, MemoryLifecyclePort::noop);
+            return this;
+        }
+
+        public Builder memoryPolicyConfigPort(MemoryPolicyConfigPort memoryPolicyConfigPort) {
+            this.memoryPolicyConfigPort = Objects.requireNonNullElseGet(memoryPolicyConfigPort,
+                    MemoryPolicyConfigPort::defaults);
+            return this;
+        }
+
+        public Builder memoryRetrievalPipelinePort(MemoryRetrievalPipelinePort memoryRetrievalPipelinePort) {
+            this.memoryRetrievalPipelinePort = memoryRetrievalPipelinePort;
+            return this;
+        }
+
+        public Builder memoryRefinerPort(MemoryRefinerPort memoryRefinerPort) {
+            this.memoryRefinerPort = Objects.requireNonNullElseGet(memoryRefinerPort, MemoryRefinerPort::noop);
+            return this;
+        }
+
+        public Builder memoryReviewCandidatePort(MemoryReviewCandidatePort memoryReviewCandidatePort) {
+            this.memoryReviewCandidatePort = Objects.requireNonNullElseGet(memoryReviewCandidatePort,
+                    MemoryReviewCandidatePort::noop);
+            return this;
+        }
+
+        public Builder memoryAliasPort(MemoryAliasPort memoryAliasPort) {
+            this.memoryAliasPort = Objects.requireNonNullElseGet(memoryAliasPort, MemoryAliasPort::noop);
+            return this;
+        }
+
+        public Builder memoryReviewPolicyPort(MemoryReviewPolicyPort memoryReviewPolicyPort) {
+            this.memoryReviewPolicyPort = Objects.requireNonNullElseGet(memoryReviewPolicyPort,
+                    MemoryReviewPolicyPort::defaults);
+            return this;
+        }
+
+        public Builder memoryReviewFeedbackRepositoryPort(
+                MemoryReviewFeedbackRepositoryPort memoryReviewFeedbackRepositoryPort) {
+            this.memoryReviewFeedbackRepositoryPort = Objects.requireNonNullElseGet(
+                    memoryReviewFeedbackRepositoryPort,
+                    MemoryReviewFeedbackRepositoryPort::empty);
+            return this;
+        }
+
+        public Builder captureRules(MemoryCaptureRules captureRules) {
+            this.captureRules = Objects.requireNonNullElseGet(captureRules, MemoryCaptureRules::defaults);
+            return this;
+        }
+
+        public DefaultMemoryEnginePort build() {
+            return new DefaultMemoryEnginePort(
+                    shortTermPort,
+                    longTermPort,
+                    semanticPort,
+                    objectMapper,
+                    options,
+                    profileMemoryPort,
+                    correctionLedgerPort,
+                    memoryRouterPort,
+                    memoryOperationLogPort,
+                    memoryVectorPort,
+                    memoryOutboxPort,
+                    businessDocumentRetrieverPort,
+                    memoryLifecyclePort,
+                    memoryPolicyConfigPort,
+                    memoryRetrievalPipelinePort,
+                    memoryRefinerPort,
+                    memoryReviewCandidatePort,
+                    memoryAliasPort,
+                    memoryReviewPolicyPort,
+                    memoryReviewFeedbackRepositoryPort,
+                    captureRules);
+        }
     }
 
     @Override
@@ -880,6 +1222,10 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
         }
         try {
             List<MemoryRefinementMemory> existingMemories = refinementInputBuilder.existingMemories(request.userId());
+            if (refinementDepthGuard.exceedsMaxDepth(existingMemories)) {
+                return baseline;
+            }
+            int currentDepth = refinementDepthGuard.currentMaxDepth(existingMemories);
             MemoryRefinementContextParser.Zones contextZones = refinementContextParser.parse(sanitizedContent);
             List<MemoryReviewFeedbackSample> feedbackExamples =
                     refinerFeedbackLookup.recentResolved(tenantId, request.userId(), baseline);
@@ -900,7 +1246,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     contextZones.targetZone(),
                     refinementInputBuilder.stickyAnchors(existingMemories),
                     feedbackExamples));
-            return applyRefinementResult(result, baseline, contextZones);
+            return applyRefinementResult(result, baseline, contextZones, currentDepth);
         } catch (RuntimeException ex) {
             if (!options.refinerFailOpen()) {
                 return new MemoryClassificationResult(
@@ -927,7 +1273,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
 
     private MemoryClassificationResult applyRefinementResult(MemoryRefinementResult result,
                                                              MemoryClassificationResult baseline,
-                                                             MemoryRefinementContextParser.Zones contextZones) {
+                                                             MemoryRefinementContextParser.Zones contextZones,
+                                                             int currentDepth) {
         if (result == null || !result.refined() || result.operations().isEmpty()) {
             return withRefinerDelta(
                     baseline,
@@ -947,7 +1294,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                     "unsupported_refined_operation",
                     Map.of("status", "unsupported"));
         }
-        List<MemoryClassificationResult> classifications = supportedRefinedClassifications(result, contextZones);
+        List<MemoryClassificationResult> classifications = supportedRefinedClassifications(result, contextZones, currentDepth);
         if (classifications.isEmpty()) {
             return withRefinerDelta(
                     baseline,
@@ -988,7 +1335,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     }
 
     private List<MemoryClassificationResult> supportedRefinedClassifications(MemoryRefinementResult result,
-                                                                             MemoryRefinementContextParser.Zones contextZones) {
+                                                                             MemoryRefinementContextParser.Zones contextZones,
+                                                                             int currentDepth) {
         List<MemoryClassificationResult> classifications = new ArrayList<>();
         List<RefinedMemoryOperation> operations = result == null ? List.of() : result.operations();
         int supportedIndex = 0;
@@ -1000,7 +1348,8 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
             }
             Map<String, Object> batchMetadata = Map.of(
                     METADATA_REFINER_OPERATION_INDEX, supportedIndex,
-                    METADATA_REFINER_OPERATION_COUNT, supportedCount);
+                    METADATA_REFINER_OPERATION_COUNT, supportedCount,
+                    MemoryRefinementDepthGuard.METADATA_REFINEMENT_DEPTH, currentDepth + 1);
             MemoryClassificationResult classification = operation.action() == MemoryIngestionAction.ADD
                     ? refinedAddClassification(operation, result, batchMetadata, contextZones.targetSourceMessageIds())
                     : refinedReviewClassification(operation, result, batchMetadata, contextZones.targetSourceMessageIds());
@@ -1275,12 +1624,13 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
     }
 
     private List<String> captureCorrection(MemoryWriteRequest request, String tenantId, OccupationCorrection correction) {
-        return trackWriteService.writeOccupationCorrection(
+        MemoryTrackWriteResult result = trackWriteService.writeOccupationCorrection(
                 request.userId(),
                 tenantId,
                 request.messageId(),
                 correction.incorrectValue(),
                 correction.correctValue());
+        return result.operations();
     }
 
     private boolean captureProfileFact(MemoryWriteRequest request,

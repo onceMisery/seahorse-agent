@@ -94,8 +94,8 @@ class DefaultMemoryEnginePortTests {
         StubSemanticMemoryPort semanticPort = new StubSemanticMemoryPort(List.of(
                 record("sem-1", "PROFILE", "用户使用 Java 开发", 0.9D)));
 
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
-                shortTermPort, longTermPort, semanticPort, OBJECT_MAPPER);
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
+                shortTermPort, longTermPort, semanticPort, OBJECT_MAPPER).build();
 
         MemoryLoadRequest request = MemoryLoadRequest.builder()
                 .userId(USER_ID)
@@ -115,11 +115,11 @@ class DefaultMemoryEnginePortTests {
 
     @Test
     void shouldReturnEmptyContextWhenUserIdIsBlank() {
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 new StubShortTermMemoryPort(List.of()),
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         MemoryLoadRequest request = MemoryLoadRequest.builder()
                 .userId("")
@@ -133,11 +133,11 @@ class DefaultMemoryEnginePortTests {
 
     @Test
     void shouldReturnEmptyContextWhenRequestIsNull() {
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 new StubShortTermMemoryPort(List.of()),
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         MemoryContext context = engine.loadMemory(null);
 
@@ -169,12 +169,10 @@ class DefaultMemoryEnginePortTests {
         StubSemanticMemoryPort semanticPort = new StubSemanticMemoryPort(List.of(
                 record("sem-1", "PROFILE", "E", 0.9D),
                 record("sem-2", "PROFILE", "F", 0.9D)));
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
-                shortTermPort,
-                longTermPort,
-                semanticPort,
-                OBJECT_MAPPER,
-                new MemoryEngineOptions(1, 1, 1, true));
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
+                        shortTermPort, longTermPort, semanticPort, OBJECT_MAPPER)
+                .options(new MemoryEngineOptions(1, 1, 1, true))
+                .build();
 
         MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
                 .userId(USER_ID)
@@ -195,11 +193,11 @@ class DefaultMemoryEnginePortTests {
                 record("ltm-1", "PROFILE", "内容A重复", 0.7D),
                 record("ltm-2", "PREFERENCE", "内容B", 0.6D)));
 
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 new StubShortTermMemoryPort(List.of()),
                 longTermPort,
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
                 .userId(USER_ID).build());
@@ -217,11 +215,11 @@ class DefaultMemoryEnginePortTests {
                 semanticRecord("sem-new", "PROFILE", "我是学生", 0.8D,
                         Instant.parse("2026-05-20T00:00:00Z"), "profile:occupation")));
 
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 new StubShortTermMemoryPort(List.of()),
                 new StubLongTermMemoryPort(List.of()),
                 semanticPort,
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
                 .userId(USER_ID)
@@ -243,8 +241,8 @@ class DefaultMemoryEnginePortTests {
             }
         };
 
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
-                shortTermPort, failingPort, new StubSemanticMemoryPort(List.of()), OBJECT_MAPPER);
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
+                shortTermPort, failingPort, new StubSemanticMemoryPort(List.of()), OBJECT_MAPPER).build();
 
         MemoryContext context = engine.loadMemory(MemoryLoadRequest.builder()
                 .userId(USER_ID).build());
@@ -256,11 +254,11 @@ class DefaultMemoryEnginePortTests {
     @Test
     void shouldWriteExplicitUserMemoryToShortTermLayer() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -291,25 +289,13 @@ class DefaultMemoryEnginePortTests {
                         "Kubernetes",
                         "TECHNOLOGY",
                         0.99D)));
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                ProfileMemoryPort.noop(),
-                CorrectionLedgerPort.noop(),
-                new DefaultMemoryRouter(),
-                MemoryOperationLogPort.noop(),
-                MemoryVectorPort.noop(),
-                MemoryOutboxPort.noop(),
-                MemoryBusinessDocumentRetrieverPort.noop(),
-                MemoryLifecyclePort.noop(),
-                MemoryPolicyConfigPort.defaults(),
-                (MemoryRetrievalPipelinePort) null,
-                MemoryRefinerPort.noop(),
-                MemoryReviewCandidatePort.noop(),
-                aliasPort);
+                OBJECT_MAPPER)
+                .memoryAliasPort(aliasPort)
+                .build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -330,11 +316,11 @@ class DefaultMemoryEnginePortTests {
     @Test
     void shouldWriteProfileMemoryWithWhitespaceAndTrimSocialTail() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -354,14 +340,13 @@ class DefaultMemoryEnginePortTests {
     void shouldWriteProfileFactWhenProfileMemoryCaptured() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER,
-                MemoryEngineOptions.defaults(),
-                profilePort,
-                CorrectionLedgerPort.noop());
+                OBJECT_MAPPER)
+                .profileMemoryPort(profilePort)
+                .build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -384,7 +369,7 @@ class DefaultMemoryEnginePortTests {
     void shouldWriteProfileFactsForNameTechStackAndResponseStyle() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -425,7 +410,7 @@ class DefaultMemoryEnginePortTests {
     void shouldWriteChineseProfileFactsForNameTechStackAndResponseStyle() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -472,7 +457,7 @@ class DefaultMemoryEnginePortTests {
                         Instant.parse("2026-05-19T00:00:00Z"), "identity.occupation")));
         RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
         RecordingCorrectionLedgerPort correctionPort = new RecordingCorrectionLedgerPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 semanticPort,
@@ -525,7 +510,7 @@ class DefaultMemoryEnginePortTests {
                 "explicit_user_correction",
                 List.of("msg-correction"),
                 "identity.occupation:test"));
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -548,11 +533,11 @@ class DefaultMemoryEnginePortTests {
     @Test
     void shouldWritePreferenceMemoryWithWhitespace() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -570,11 +555,11 @@ class DefaultMemoryEnginePortTests {
     @Test
     void shouldWriteHighValuePersonalFactMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -592,11 +577,11 @@ class DefaultMemoryEnginePortTests {
     @Test
     void shouldScoreExplicitImportantMemoryHigherThanPlainPreference() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -616,11 +601,11 @@ class DefaultMemoryEnginePortTests {
     @Test
     void shouldSkipNoisyQuestionWhenWritingMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -635,11 +620,11 @@ class DefaultMemoryEnginePortTests {
     @Test
     void shouldSkipLowValuePersonalExpressionWhenWritingMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -654,11 +639,11 @@ class DefaultMemoryEnginePortTests {
     @Test
     void shouldSkipSensitiveExplicitMemoryWhenWritingMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         engine.writeMemory(MemoryWriteRequest.builder()
                 .userId(USER_ID)
@@ -675,7 +660,7 @@ class DefaultMemoryEnginePortTests {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -711,7 +696,7 @@ class DefaultMemoryEnginePortTests {
         RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
         RecordingCorrectionLedgerPort correctionPort = new RecordingCorrectionLedgerPort();
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -744,7 +729,7 @@ class DefaultMemoryEnginePortTests {
     void shouldIgnoreLowValueChatAndRecordDecision() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -775,7 +760,7 @@ class DefaultMemoryEnginePortTests {
     void shouldRecordAddOperationForExplicitPreferenceMemory() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -1324,7 +1309,7 @@ class DefaultMemoryEnginePortTests {
                         Instant.now())));
         RecordingMemoryRefinerPort refinerPort = new RecordingMemoryRefinerPort(MemoryRefinementResult.empty(
                 "no_refined_delta"));
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 longTermPort,
                 new StubSemanticMemoryPort(List.of()),
@@ -1374,7 +1359,7 @@ class DefaultMemoryEnginePortTests {
                         MemoryReviewStatus.APPLIED,
                         "PROFILE_SLOT",
                         "preferences.response_style")));
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 new StubShortTermMemoryPort(List.of()),
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -1485,8 +1470,9 @@ class DefaultMemoryEnginePortTests {
                 1,
                 2,
                 0.90D,
-                0.90D);
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+                0.90D,
+                2);
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 longTermPort,
                 semanticPort,
@@ -1882,7 +1868,7 @@ class DefaultMemoryEnginePortTests {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingProfileMemoryPort profileMemoryPort = new RecordingProfileMemoryPort();
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -1940,7 +1926,7 @@ class DefaultMemoryEnginePortTests {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         StubSemanticMemoryPort semanticPort = new StubSemanticMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 semanticPort,
@@ -1991,7 +1977,7 @@ class DefaultMemoryEnginePortTests {
     void shouldRejectReviewDirectiveWorkingLayerWithoutShortTermFallback() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -2043,7 +2029,7 @@ class DefaultMemoryEnginePortTests {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(existing));
         RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -2107,7 +2093,7 @@ class DefaultMemoryEnginePortTests {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of(existing));
         RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -2156,7 +2142,7 @@ class DefaultMemoryEnginePortTests {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -2204,7 +2190,7 @@ class DefaultMemoryEnginePortTests {
     void shouldEnqueueOutboxWhenVectorIndexingFailsWithoutRollingBackMemoryWrite() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -2237,7 +2223,7 @@ class DefaultMemoryEnginePortTests {
     void shouldEnqueueDerivedIndexOutboxTasksWhenConfigured() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
         RecordingMemoryOutboxPort outboxPort = new RecordingMemoryOutboxPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -2287,7 +2273,7 @@ class DefaultMemoryEnginePortTests {
                 List.of("msg-correction"),
                 "identity.occupation:new"));
         RecordingMemoryVectorPort vectorPort = new RecordingMemoryVectorPort(List.of("stm-old-profile", "stm-project"));
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -2323,7 +2309,7 @@ class DefaultMemoryEnginePortTests {
                         .content("报销规则：超过 5000 元需要审批")
                         .metadataJson("{\"docId\":\"policy-1\",\"generationId\":\"doc:v2\"}")
                         .build()));
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 new StubShortTermMemoryPort(List.of()),
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -2354,7 +2340,7 @@ class DefaultMemoryEnginePortTests {
         RecordingProfileMemoryPort profilePort = new RecordingProfileMemoryPort();
         RecordingCorrectionLedgerPort correctionPort = new RecordingCorrectionLedgerPort();
         RecordingMemoryOperationLogPort operationLogPort = new RecordingMemoryOperationLogPort();
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 new StubShortTermMemoryPort(List.of()),
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -2388,7 +2374,7 @@ class DefaultMemoryEnginePortTests {
     @Test
     void shouldSkipMemoryCaptureWhenDisabled() {
         StubShortTermMemoryPort shortTermPort = new StubShortTermMemoryPort(List.of());
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -2414,8 +2400,8 @@ class DefaultMemoryEnginePortTests {
                 record("ltm-1", "PROFILE", "C", 0.8D)));
         StubSemanticMemoryPort semanticPort = new StubSemanticMemoryPort(List.of());
 
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
-                shortTermPort, longTermPort, semanticPort, OBJECT_MAPPER);
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
+                shortTermPort, longTermPort, semanticPort, OBJECT_MAPPER).build();
 
         MemoryQualityReport report = engine.assessMemoryQuality(USER_ID);
 
@@ -2427,11 +2413,11 @@ class DefaultMemoryEnginePortTests {
 
     @Test
     void shouldRetrieveAllMemoriesAcrossLayers() {
-        DefaultMemoryEnginePort engine = new DefaultMemoryEnginePort(
+        DefaultMemoryEnginePort engine = DefaultMemoryEnginePort.builder(
                 new StubShortTermMemoryPort(List.of(record("stm-1", "SUMMARY", "A", 0.5D))),
                 new StubLongTermMemoryPort(List.of(record("ltm-1", "PROFILE", "B", 0.8D))),
                 new StubSemanticMemoryPort(List.of(record("sem-1", "PROFILE", "C", 0.9D))),
-                OBJECT_MAPPER);
+                OBJECT_MAPPER).build();
 
         List<MemoryItem> all = engine.retrieveMemories(MemoryLoadRequest.builder()
                 .userId(USER_ID).build());
@@ -2485,7 +2471,7 @@ class DefaultMemoryEnginePortTests {
                                                       MemoryRefinerPort refinerPort,
                                                       boolean enabled,
                                                       MemoryOperationLogPort operationLogPort) {
-        return new DefaultMemoryEnginePort(
+        return DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),
@@ -2521,7 +2507,7 @@ class DefaultMemoryEnginePortTests {
                                                                MemoryReviewCandidatePort reviewCandidatePort,
                                                                MemoryOperationLogPort operationLogPort,
                                                                MemoryReviewPolicyPort reviewPolicyPort) {
-        return new DefaultMemoryEnginePort(
+        return DefaultMemoryEnginePort.builder(
                 shortTermPort,
                 new StubLongTermMemoryPort(List.of()),
                 new StubSemanticMemoryPort(List.of()),

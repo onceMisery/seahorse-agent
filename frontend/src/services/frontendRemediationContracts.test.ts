@@ -40,6 +40,17 @@ describe("frontend remediation contracts", () => {
     expect(source).toContain("getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.COST_ANALYTICS)");
   });
 
+  it("guards AI Infra operations panels before disabled backend APIs can be triggered", () => {
+    const source = readSource("pages/admin/ai-infra/AiInfraConsolePage.tsx");
+
+    expect(source).toContain("Pilot readiness unavailable");
+    expect(source).toContain("Eval regression unavailable");
+    expect(source).toContain("Rollout unavailable");
+    expect(source).toContain('disabled={!readinessFeatureState.enabled || actionLoading === "readiness:generate"}');
+    expect(source).toContain('disabled={!feedbackFeatureState.enabled || actionLoading === "eval:regression"}');
+    expect(source).toContain('disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:create"}');
+  });
+
   it("does not expose the missing single agent template endpoint", () => {
     expect("getAgentTemplate" in agentFactoryService).toBe(false);
     expect(readSource("services/agentFactoryService.ts")).not.toContain("/api/agent-templates/${");

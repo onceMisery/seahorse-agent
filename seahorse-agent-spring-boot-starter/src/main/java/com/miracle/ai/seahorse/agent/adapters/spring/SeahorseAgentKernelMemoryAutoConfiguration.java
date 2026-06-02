@@ -262,29 +262,33 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
                 refiner.getStickyAnchorLimit(),
                 refiner.getFeedbackExampleLimit(),
                 refiner.getStickyAnchorImportanceThreshold(),
-                refiner.getStickyAnchorConfidenceThreshold());
-        DefaultMemoryEnginePort delegate = new DefaultMemoryEnginePort(
-                shortTermMemoryPort,
-                longTermMemoryPort,
-                semanticMemoryPort,
-                objectMapper,
-                options,
-                profileMemoryPort.getIfAvailable(ProfileMemoryPort::noop),
-                correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop),
-                memoryRouterPort.getIfAvailable(DefaultMemoryRouter::new),
-                memoryOperationLogPort.getIfAvailable(MemoryOperationLogPort::noop),
-                memoryVectorPort.getIfAvailable(MemoryVectorPort::noop),
-                memoryOutboxPort.getIfAvailable(MemoryOutboxPort::noop),
-                businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop),
-                memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop),
-                memoryPolicyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults),
-                memoryRetrievalPipelinePort.getIfAvailable(),
-                configuredRefinerPort == null ? MemoryRefinerPort.noop() : configuredRefinerPort,
-                memoryReviewCandidatePort.getIfAvailable(MemoryReviewCandidatePort::noop),
-                memoryAliasPort.getIfAvailable(MemoryAliasPort::noop),
-                memoryReviewPolicyPort.getIfAvailable(MemoryReviewPolicyPort::defaults),
-                memoryReviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty),
-                captureRuleProperties == null ? MemoryCaptureRules.defaults() : captureRuleProperties.toRules());
+                refiner.getStickyAnchorConfidenceThreshold(),
+                refiner.getMaxRefinementDepth());
+        DefaultMemoryEnginePort delegate = DefaultMemoryEnginePort.builder(
+                        shortTermMemoryPort,
+                        longTermMemoryPort,
+                        semanticMemoryPort,
+                        objectMapper)
+                .options(options)
+                .profileMemoryPort(profileMemoryPort.getIfAvailable(ProfileMemoryPort::noop))
+                .correctionLedgerPort(correctionLedgerPort.getIfAvailable(CorrectionLedgerPort::noop))
+                .memoryRouterPort(memoryRouterPort.getIfAvailable(DefaultMemoryRouter::new))
+                .memoryOperationLogPort(memoryOperationLogPort.getIfAvailable(MemoryOperationLogPort::noop))
+                .memoryVectorPort(memoryVectorPort.getIfAvailable(MemoryVectorPort::noop))
+                .memoryOutboxPort(memoryOutboxPort.getIfAvailable(MemoryOutboxPort::noop))
+                .businessDocumentRetrieverPort(
+                        businessDocumentRetrieverPort.getIfAvailable(MemoryBusinessDocumentRetrieverPort::noop))
+                .memoryLifecyclePort(memoryLifecyclePort.getIfAvailable(MemoryLifecyclePort::noop))
+                .memoryPolicyConfigPort(memoryPolicyConfigPort.getIfAvailable(MemoryPolicyConfigPort::defaults))
+                .memoryRetrievalPipelinePort(memoryRetrievalPipelinePort.getIfAvailable())
+                .memoryRefinerPort(configuredRefinerPort == null ? MemoryRefinerPort.noop() : configuredRefinerPort)
+                .memoryReviewCandidatePort(memoryReviewCandidatePort.getIfAvailable(MemoryReviewCandidatePort::noop))
+                .memoryAliasPort(memoryAliasPort.getIfAvailable(MemoryAliasPort::noop))
+                .memoryReviewPolicyPort(memoryReviewPolicyPort.getIfAvailable(MemoryReviewPolicyPort::defaults))
+                .memoryReviewFeedbackRepositoryPort(
+                        memoryReviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty))
+                .captureRules(captureRuleProperties == null ? MemoryCaptureRules.defaults() : captureRuleProperties.toRules())
+                .build();
         return new UserMemoryPrivacyAwareMemoryEnginePort(
                 delegate,
                 userMemoryPrivacySettingPort.getIfAvailable(UserMemoryPrivacySettingPort::defaults));

@@ -381,6 +381,21 @@ function SreHealthItems({ sreHealth, loading }: { sreHealth: ApiRecord | null; l
   );
 }
 
+function OperationFeatureNotice({
+  featureState,
+  label
+}: {
+  featureState: FeatureState;
+  label: string;
+}) {
+  if (featureState.enabled) return null;
+  return (
+    <div className="mb-4">
+      <InlineFeatureUnavailableState featureState={featureState} featureName={label} />
+    </div>
+  );
+}
+
 export function AiInfraConsolePage() {
   const requestSeq = useRef(0);
   const pageFeatureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AI_INFRA_CONSOLE);
@@ -975,6 +990,7 @@ export function AiInfraConsolePage() {
       {activeTab === "operations" ? (
         <div className="grid gap-4 xl:grid-cols-2">
           <DataPanel title="Pilot readiness" description="Generate or read latest readiness report.">
+            <OperationFeatureNotice featureState={readinessFeatureState} label="Pilot readiness unavailable" />
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="tenantId">
                 <Input value={readinessForm.tenantId} onChange={(event) => updateReadinessForm("tenantId", event.target.value)} />
@@ -990,11 +1006,11 @@ export function AiInfraConsolePage() {
               </Field>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button onClick={() => runReadinessAction("generate")} disabled={actionLoading === "readiness:generate"}>
+              <Button onClick={() => runReadinessAction("generate")} disabled={!readinessFeatureState.enabled || actionLoading === "readiness:generate"}>
                 <BadgeCheck className="mr-2 h-4 w-4" />
                 Generate
               </Button>
-              <Button variant="outline" onClick={() => runReadinessAction("latest")} disabled={actionLoading === "readiness:latest"}>
+              <Button variant="outline" onClick={() => runReadinessAction("latest")} disabled={!readinessFeatureState.enabled || actionLoading === "readiness:latest"}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Latest
               </Button>
@@ -1005,6 +1021,7 @@ export function AiInfraConsolePage() {
           </DataPanel>
 
           <DataPanel title="Eval regression" description="Run an eval dataset against the current model and compare it with a baseline.">
+            <OperationFeatureNotice featureState={feedbackFeatureState} label="Eval regression unavailable" />
             <div className="grid gap-3 md:grid-cols-3">
               <Field label="datasetId">
                 <Input
@@ -1028,7 +1045,7 @@ export function AiInfraConsolePage() {
               </Field>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button onClick={runEvalRegressionAction} disabled={actionLoading === "eval:regression"}>
+              <Button onClick={runEvalRegressionAction} disabled={!feedbackFeatureState.enabled || actionLoading === "eval:regression"}>
                 <Gauge className="mr-2 h-4 w-4" />
                 Run regression
               </Button>
@@ -1039,6 +1056,7 @@ export function AiInfraConsolePage() {
           </DataPanel>
 
           <DataPanel title="Rollout" description="Use canary, latest, pause, promote and rollback APIs.">
+            <OperationFeatureNotice featureState={rolloutFeatureState} label="Rollout unavailable" />
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="tenantId">
                 <Input value={rolloutForm.tenantId} onChange={(event) => updateRolloutForm("tenantId", event.target.value)} />
@@ -1066,23 +1084,23 @@ export function AiInfraConsolePage() {
               </Field>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button onClick={() => runRolloutAction("create")} disabled={actionLoading === "rollout:create"}>
+              <Button onClick={() => runRolloutAction("create")} disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:create"}>
                 <PlayCircle className="mr-2 h-4 w-4" />
                 Canary
               </Button>
-              <Button variant="outline" onClick={() => runRolloutAction("latest")} disabled={actionLoading === "rollout:latest"}>
+              <Button variant="outline" onClick={() => runRolloutAction("latest")} disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:latest"}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Latest
               </Button>
-              <Button variant="outline" onClick={() => runRolloutAction("pause")} disabled={actionLoading === "rollout:pause"}>
+              <Button variant="outline" onClick={() => runRolloutAction("pause")} disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:pause"}>
                 <PauseCircle className="mr-2 h-4 w-4" />
                 Pause
               </Button>
-              <Button variant="outline" onClick={() => runRolloutAction("promote")} disabled={actionLoading === "rollout:promote"}>
+              <Button variant="outline" onClick={() => runRolloutAction("promote")} disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:promote"}>
                 <CheckCircle2 className="mr-2 h-4 w-4" />
                 Promote
               </Button>
-              <Button variant="outline" onClick={() => runRolloutAction("rollback")} disabled={actionLoading === "rollout:rollback"}>
+              <Button variant="outline" onClick={() => runRolloutAction("rollback")} disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:rollback"}>
                 <RotateCcw className="mr-2 h-4 w-4" />
                 Rollback
               </Button>
