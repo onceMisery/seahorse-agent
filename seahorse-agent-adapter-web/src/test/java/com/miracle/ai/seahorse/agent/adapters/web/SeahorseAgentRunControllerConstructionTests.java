@@ -33,7 +33,7 @@ class SeahorseAgentRunControllerConstructionTests {
 
         assertThat(constructors).hasSize(1);
         assertThat(constructors[0].isAnnotationPresent(Autowired.class)).isTrue();
-        assertThat(constructors[0].getParameterCount()).isEqualTo(7);
+        assertThat(constructors[0].getParameterCount()).isEqualTo(8);
         assertThat(constructors[0].getParameterTypes())
                 .allSatisfy(parameterType -> assertThat(parameterType).isEqualTo(ObjectProvider.class));
     }

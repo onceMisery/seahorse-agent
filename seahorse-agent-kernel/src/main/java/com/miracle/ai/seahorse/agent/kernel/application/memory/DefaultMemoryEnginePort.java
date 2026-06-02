@@ -1280,7 +1280,7 @@ public class DefaultMemoryEnginePort implements MemoryEnginePort, MemoryIngestio
                 tenantId,
                 request.messageId(),
                 correction.incorrectValue(),
-                correction.correctValue());
+                correction.correctValue()).operations();
     }
 
     private boolean captureProfileFact(MemoryWriteRequest request,

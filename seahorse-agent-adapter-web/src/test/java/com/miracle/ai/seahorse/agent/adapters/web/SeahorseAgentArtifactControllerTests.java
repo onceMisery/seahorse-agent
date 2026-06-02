@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactS
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactDownloadDecision;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactQueryInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -58,6 +59,7 @@ class SeahorseAgentArtifactControllerTests {
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseAgentArtifactController(
                 provider(AgentArtifactQueryInboundPort.class, port),
+                provider(AgentArtifactUpdateInboundPort.class, null),
                 provider(ObjectStoragePort.class, null))).build();
 
         mvc.perform(get("/api/agent-artifacts/artifact-1"))
@@ -93,6 +95,7 @@ class SeahorseAgentArtifactControllerTests {
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new SeahorseAgentArtifactController(
                 provider(AgentArtifactQueryInboundPort.class, port),
+                provider(AgentArtifactUpdateInboundPort.class, null),
                 provider(ObjectStoragePort.class, storagePort))).build();
 
         mvc.perform(get("/api/agent-artifacts/artifact-html/download"))

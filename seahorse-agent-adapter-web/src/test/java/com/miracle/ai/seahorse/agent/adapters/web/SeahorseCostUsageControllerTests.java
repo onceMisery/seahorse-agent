@@ -128,6 +128,7 @@ class SeahorseCostUsageControllerTests {
                 null,
                 null,
                 null,
+                null,
                 provider(AgentRunCostSummaryInboundPort.class, port),
                 null,
                 provider(AdvancedFeatureGate.class, AdvancedFeatureGate.consumerWebDefaults()))).build();
