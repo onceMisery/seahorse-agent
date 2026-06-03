@@ -521,6 +521,25 @@ export function KnowledgeDocumentsPage() {
         </div>
       </div>
 
+      {kb && (
+        <div className="mb-4 flex flex-wrap items-center gap-6 rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <div>
+            <div className="text-xs text-muted-foreground">Collection</div>
+            <div className="text-sm font-medium">{kb.collectionName || "-"}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Embedding 模型</div>
+            <div className="text-sm font-medium">{kb.embeddingModel || "-"}</div>
+          </div>
+          {kb.documentCount != null && (
+            <div>
+              <div className="text-xs text-muted-foreground">文档数</div>
+              <div className="text-sm font-medium">{kb.documentCount}</div>
+            </div>
+          )}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
