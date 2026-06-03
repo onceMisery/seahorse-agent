@@ -68,6 +68,7 @@ public class SeahorseWebGovernanceConfiguration implements WebMvcConfigurer, Fil
             boolean ingestionPipelineManagementEnabled,
             @Value("${seahorse-agent.advanced.tool-catalog-management-enabled:false}")
             boolean toolCatalogManagementEnabled,
+            @Value("${seahorse-agent.advanced.skill-management-enabled:false}") boolean skillManagementEnabled,
             @Value("${seahorse-agent.advanced.agent-definition-management-enabled:false}")
             boolean agentDefinitionManagementEnabled,
             @Value("${seahorse-agent.advanced.agent-factory-management-enabled:false}")
@@ -103,6 +104,7 @@ public class SeahorseWebGovernanceConfiguration implements WebMvcConfigurer, Fil
                 ingestionTaskManagementEnabled,
                 ingestionPipelineManagementEnabled,
                 toolCatalogManagementEnabled,
+                skillManagementEnabled,
                 agentDefinitionManagementEnabled,
                 agentFactoryManagementEnabled,
                 agentToolBindingManagementEnabled,

@@ -99,6 +99,7 @@ class AdvancedFeatureGateTests {
                 false,
                 false,
                 false,
+                false,
                 false);
 
         assertThat(gate.isEnabled(AdvancedFeature.MCP_TOOL)).isTrue();
@@ -111,6 +112,7 @@ class AdvancedFeatureGateTests {
 
         AdvancedFeatureGate gate = configuration.seahorseAdvancedFeatureGate(
                 "enterprise-platform",
+                true,
                 true,
                 true,
                 true,

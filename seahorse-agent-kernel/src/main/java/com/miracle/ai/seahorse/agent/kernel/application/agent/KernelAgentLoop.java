@@ -38,6 +38,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidation
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
@@ -113,6 +115,12 @@ public class KernelAgentLoop {
     private static final String ARTIFACT_TITLE_FIELD = "title";
     private static final String ARTIFACT_TYPE_FIELD = "artifactType";
     private static final String MARKDOWN_ARTIFACT_TYPE = "MARKDOWN";
+    private static final String LOAD_SKILL_TOOL_ID = "load_skill";
+    private static final ToolDescriptor LOAD_SKILL_DESCRIPTOR = new ToolDescriptor(
+            LOAD_SKILL_TOOL_ID,
+            "Load Skill",
+            "Load the full instructions for a skill selected in the current Agent version snapshot.",
+            "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}");
     private static final ToolRiskLevel DEFAULT_TOOL_RISK_LEVEL = ToolRiskLevel.HIGH;
     private static final String TRACE_CLASS_NAME =
             "com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop";
@@ -303,7 +311,7 @@ public class KernelAgentLoop {
         Objects.requireNonNull(request, "AgentLoopRequest must not be null");
         AgentRunControl runControl = Objects.requireNonNullElseGet(control, AgentRunControl::direct);
         List<ChatMessage> messages = new ArrayList<>(request.history());
-        installRuntimeContext(messages, request.contextPack(), request.memoryContext());
+        installRuntimeContext(messages, request.contextPack(), request.memoryContext(), request.skillRuntimeContext());
         messages.add(ChatMessage.user(request.question()));
 
         List<AgentStep> steps = new ArrayList<>();
@@ -435,7 +443,7 @@ public class KernelAgentLoop {
                 .messages(List.copyOf(messages))
                 .modelId(request.modelId())
                 .samplingOptions(request.samplingOptions())
-                .tools(exposedTools(request.allowedToolIds()))
+                .tools(exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks()))
                 .toolChoice("auto")
                 .build(), callback, toolCalls -> {
                     if (callback.completed()) {
@@ -463,12 +471,11 @@ public class KernelAgentLoop {
                 Objects.requireNonNullElse(collectedCalls.get(), List.of()));
     }
 
-    private List<ToolDescriptor> exposedTools(List<String> allowedToolIds) {
-        if (allowedToolIds == null || allowedToolIds.isEmpty()) {
-            return List.of();
-        }
+    private List<ToolDescriptor> exposedTools(List<String> allowedToolIds, List<SkillRuntimeBlock> skillRuntimeBlocks) {
+        List<ToolDescriptor> result = new ArrayList<>();
         List<ToolDescriptor> all = toolRegistry.listTools();
-        Set<String> allowed = new HashSet<>(allowedToolIds);
+        List<String> safeAllowedToolIds = allowedToolIds == null ? List.of() : allowedToolIds;
+        Set<String> allowed = new HashSet<>(safeAllowedToolIds);
         Map<String, ToolDescriptor> descriptorsById = all.stream()
                 .filter(tool -> allowed.contains(tool.toolId()))
                 .collect(java.util.stream.Collectors.toMap(
@@ -476,16 +483,26 @@ public class KernelAgentLoop {
                         tool -> tool,
                         (left, right) -> left,
                         LinkedHashMap::new));
-        return allowedToolIds.stream()
+        result.addAll(safeAllowedToolIds.stream()
                 .map(descriptorsById::get)
                 .filter(Objects::nonNull)
-                .toList();
+                .toList());
+        if (hasLoadableSkills(skillRuntimeBlocks)) {
+            result.add(LOAD_SKILL_DESCRIPTOR);
+        }
+        return List.copyOf(result);
     }
 
     private void installRuntimeContext(List<ChatMessage> messages,
                                        ContextPack contextPack,
-                                       MemoryContext memoryContext) {
+                                       MemoryContext memoryContext,
+                                       String skillRuntimeContext) {
         String contextText = contextWeaver.weave(contextPack, memoryContext, ContextBudget.defaults());
+        if (skillRuntimeContext != null && !skillRuntimeContext.isBlank()) {
+            contextText = contextText.isBlank()
+                    ? skillRuntimeContext.trim()
+                    : contextText + System.lineSeparator() + System.lineSeparator() + skillRuntimeContext.trim();
+        }
         if (contextText.isBlank()) {
             return;
         }
@@ -612,6 +629,9 @@ public class KernelAgentLoop {
         if (hasRawArguments(toolCall)) {
             return AgentObservation.failed(toolCall.id(), "arguments is not valid JSON");
         }
+        if (LOAD_SKILL_TOOL_ID.equals(toolCall.toolId())) {
+            return loadSkillObservation(toolCall, request);
+        }
         try {
             ToolInvocationResult result = toolGateway.invoke(toolInvocationRequest(toolCall, allowedToolIds, request));
             return result.success()
@@ -623,6 +643,40 @@ public class KernelAgentLoop {
         } catch (Exception ex) {
             return AgentObservation.failed(toolCall.id(),
                     truncateObservationText(Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getName())));
+        }
+    }
+
+    private boolean hasLoadableSkills(List<SkillRuntimeBlock> skills) {
+        return skills != null && skills.stream().anyMatch(skill -> skill != null && !skill.content().isBlank());
+    }
+
+    private AgentObservation loadSkillObservation(AgentToolCall toolCall, AgentLoopRequest request) {
+        String requestedName = Objects.toString(toolCall.arguments().get("name"), "").trim();
+        if (requestedName.isBlank()) {
+            return AgentObservation.failed(toolCall.id(), "skill name is required");
+        }
+        List<SkillRuntimeBlock> skills = request == null ? List.of() : request.skillRuntimeBlocks();
+        return skills.stream()
+                .filter(skill -> skill.name().equals(requestedName))
+                .findFirst()
+                .map(skill -> AgentObservation.ok(toolCall.id(), loadSkillPayload(skill)))
+                .orElseGet(() -> AgentObservation.failed(toolCall.id(), "skill is not selected in this Agent version"));
+    }
+
+    private String loadSkillPayload(SkillRuntimeBlock skill) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("name", skill.name());
+        payload.put("revisionId", skill.revisionId());
+        payload.put("contentHash", skill.contentHash());
+        payload.put("description", skill.description());
+        payload.put("category", skill.category().name());
+        payload.put("injectMode", SkillInjectMode.METADATA_AND_BODY.name());
+        payload.put("content", skill.content());
+        try {
+            return OBJECT_MAPPER.writeValueAsString(payload);
+        } catch (Exception ex) {
+            return "{\"name\":\"" + escapeJson(skill.name()) + "\",\"content\":\""
+                    + escapeJson(skill.content()) + "\"}";
         }
     }
 
@@ -822,7 +876,8 @@ public class KernelAgentLoop {
                                  Throwable error) {
         runStepRecorder.recordModelTurn(
                 request.runId(),
-                AgentRunStepRecorder.modelTurnInput(messages, exposedTools(request.allowedToolIds())),
+                AgentRunStepRecorder.modelTurnInput(messages,
+                        exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks())),
                 turn == null ? null : modelTurnOutputJson(turn),
                 error);
     }

@@ -33,6 +33,7 @@ import { AgentDetailPage } from "@/pages/admin/agents/AgentDetailPage";
 import { AgentEditorPage } from "@/pages/admin/agents/AgentEditorPage";
 import { AgentRolloutPage } from "@/pages/admin/agents/AgentRolloutPage";
 import { AgentEvalPage } from "@/pages/admin/agents/AgentEvalPage";
+import { SkillManagementPage } from "@/pages/admin/skills/SkillManagementPage";
 import { ToolCatalogPage } from "@/pages/admin/tools/ToolCatalogPage";
 import { ToolDetailPage } from "@/pages/admin/tools/ToolDetailPage";
 import { ToolInvocationAuditPage } from "@/pages/admin/tools/ToolInvocationAuditPage";
@@ -58,33 +59,21 @@ import { useFeatureStore } from "@/stores/featureStore";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-  return children;
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
 function RequireAdmin({ children }: { children: JSX.Element }) {
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (user?.role !== "admin") {
-    return <Navigate to="/chat" replace />;
-  }
-
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user?.role !== "admin") return <Navigate to="/chat" replace />;
   return children;
 }
 
 function RedirectIfAuth({ children }: { children: JSX.Element }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  if (isAuthenticated) {
-    return <Navigate to="/chat" replace />;
-  }
-  return children;
+  return isAuthenticated ? <Navigate to="/chat" replace /> : children;
 }
 
 function HomeRedirect() {
@@ -138,6 +127,7 @@ const advancedAdminRoutes = [
   { path: "agents/:agentId/edit", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "Agent 管理", <AgentEditorPage />) },
   { path: "agents/:agentId/rollout", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_ROLLOUT_MANAGEMENT, "灰度发布", <AgentRolloutPage />) },
   { path: "agents/:agentId/eval", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_EVALUATION, "Agent 评测", <AgentEvalPage />) },
+  { path: "skills", element: withFeature(ADVANCED_ADMIN_FEATURES.SKILL_MANAGEMENT, "Skill 管理", <SkillManagementPage />) },
   { path: "tools", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具目录", <ToolCatalogPage />) },
   { path: "tools/:toolId", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具目录", <ToolDetailPage />) },
   { path: "tool-invocations", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具调用审计", <ToolInvocationAuditPage />) },
@@ -161,10 +151,7 @@ const advancedAdminRoutes = [
 ];
 
 export const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <HomeRedirect />
-  },
+  { path: "/", element: <HomeRedirect /> },
   {
     path: "/login",
     element: (
@@ -197,10 +184,7 @@ export const router = createBrowserRouter([
       </RequireAuth>
     )
   },
-  {
-    path: "/prototype/ai-infra",
-    element: <Navigate to="/admin/ai-infra" replace />
-  },
+  { path: "/prototype/ai-infra", element: <Navigate to="/admin/ai-infra" replace /> },
   {
     path: "/admin",
     element: (
@@ -227,8 +211,5 @@ export const router = createBrowserRouter([
       { path: "users", element: <UserListPage /> }
     ]
   },
-  {
-    path: "*",
-    element: <NotFoundPage />
-  }
+  { path: "*", element: <NotFoundPage /> }
 ]);

@@ -1,45 +1,50 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  BookOpen,
+  Brain,
   ChevronDown,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
   ClipboardList,
-  Database,
   Cpu,
+  Database,
+  DollarSign,
+  FileCheck,
+  FileText,
+  FlaskConical,
+  FolderKanban,
   GitBranch,
   Github,
+  KeyRound,
   Layers,
   LayoutDashboard,
   Lightbulb,
+  Lock,
   LogOut,
   Menu,
   MessageSquare,
-  KeyRound,
+  Package,
+  Plug,
+  Plus,
+  Scale,
   ScanSearch,
   Search,
   Settings,
   ShieldCheck,
+  TerminalSquare,
   Upload,
   Users,
-  FolderKanban,
   Workflow,
-  Wrench,
-  FileCheck,
-  FlaskConical,
-  Lock,
-  Scale,
-  Plug,
-  BookOpen,
-  Brain,
-  FileText,
-  DollarSign,
-  TerminalSquare,
-  Plus
+  Wrench
 } from "lucide-react";
-import { useAuthStore } from "@/stores/authStore";
+import { toast } from "sonner";
+
+import { Avatar } from "@/components/common/Avatar";
+import { SeahorseLogo } from "@/components/common/SeahorseLogo";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,20 +52,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import { changePassword } from "@/services/userService";
 import {
   getKnowledgeBases,
   searchKnowledgeDocuments,
   type KnowledgeBase,
   type KnowledgeDocumentSearchItem
 } from "@/services/knowledgeService";
-import { Avatar } from "@/components/common/Avatar";
-import { SeahorseLogo } from "@/components/common/SeahorseLogo";
-import { ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
+import { changePassword } from "@/services/userService";
+import { useAuthStore } from "@/stores/authStore";
 import { useFeatureStore } from "@/stores/featureStore";
 
 type MenuChild = {
@@ -75,7 +77,6 @@ type MenuItem = {
   path: string;
   label: string;
   icon: any;
-  search?: string;
   children?: MenuChild[];
   feature?: keyof typeof ADVANCED_ADMIN_FEATURES;
 };
@@ -88,45 +89,16 @@ type MenuGroup = {
 const menuGroups: MenuGroup[] = [
   {
     title: "总览",
-    items: [
-      {
-        path: "/admin/dashboard",
-        label: "仪表盘",
-        icon: LayoutDashboard
-      }
-    ]
+    items: [{ path: "/admin/dashboard", label: "仪表盘", icon: LayoutDashboard }]
   },
   {
     title: "知识与 RAG",
     items: [
-      {
-        path: "/admin/knowledge",
-        label: "知识库管理",
-        icon: Database
-      },
-      {
-        path: "/admin/rag-evaluation",
-        feature: "RAG_EVALUATION",
-        label: "RAG 评测",
-        icon: FlaskConical
-      },
-      {
-        path: "/admin/rag-strategies",
-        feature: "RAG_EVALUATION",
-        label: "RAG 策略模板",
-        icon: FlaskConical
-      },
-      {
-        path: "/admin/rag-version-compare",
-        feature: "RAG_EVALUATION",
-        label: "RAG 版本对比",
-        icon: FlaskConical
-      },
-      {
-        path: "/admin/traces",
-        label: "链路追踪",
-        icon: Workflow
-      }
+      { path: "/admin/knowledge", label: "知识库管理", icon: Database },
+      { path: "/admin/rag-evaluation", feature: "RAG_EVALUATION", label: "RAG 评测", icon: FlaskConical },
+      { path: "/admin/rag-strategies", feature: "RAG_EVALUATION", label: "RAG 策略模板", icon: FlaskConical },
+      { path: "/admin/rag-version-compare", feature: "RAG_EVALUATION", label: "RAG 版本对比", icon: FlaskConical },
+      { path: "/admin/traces", label: "链路追踪", icon: Workflow }
     ]
   },
   {
@@ -139,139 +111,44 @@ const menuGroups: MenuGroup[] = [
         label: "Agent 管理",
         icon: Cpu,
         children: [
-          {
-            path: "/admin/agents",
-            label: "Agent 列表",
-            icon: Layers
-          },
-          {
-            path: "/admin/agents/new",
-            label: "创建 Agent",
-            icon: Plus
-          }
+          { path: "/admin/agents", label: "Agent 列表", icon: Layers },
+          { path: "/admin/agents/new", label: "创建 Agent", icon: Plus }
         ]
       },
-      {
-        path: "/admin/agent-runs",
-        feature: "AGENT_RUN_MANAGEMENT",
-        label: "Agent 运行",
-        icon: Workflow
-      },
-      {
-        path: "/admin/agent-inspector",
-        feature: "AI_INFRA_CONSOLE",
-        label: "Agent 检视器",
-        icon: ScanSearch
-      },
-      {
-        path: "/admin/ai-infra",
-        feature: "AI_INFRA_CONSOLE",
-        label: "Agent 控制台",
-        icon: Cpu
-      },
-      {
-        path: "/admin/approvals",
-        feature: "AGENT_RUN_MANAGEMENT",
-        label: "审批中心",
-        icon: FileCheck
-      },
-      {
-        path: "/admin/tools",
-        feature: "TOOL_CATALOG_MANAGEMENT",
-        label: "工具目录",
-        icon: Wrench
-      },
-      {
-        path: "/admin/tool-invocations",
-        feature: "TOOL_CATALOG_MANAGEMENT",
-        label: "工具调用审计",
-        icon: ClipboardList
-      }
+      { path: "/admin/skills", feature: "SKILL_MANAGEMENT", label: "Skill 管理", icon: BookOpen },
+      { path: "/admin/agent-runs", feature: "AGENT_RUN_MANAGEMENT", label: "Agent 运行", icon: Workflow },
+      { path: "/admin/agent-inspector", feature: "AI_INFRA_CONSOLE", label: "Agent 检视器", icon: ScanSearch },
+      { path: "/admin/ai-infra", feature: "AI_INFRA_CONSOLE", label: "Agent 控制台", icon: Cpu },
+      { path: "/admin/approvals", feature: "AGENT_RUN_MANAGEMENT", label: "审批中心", icon: FileCheck },
+      { path: "/admin/tools", feature: "TOOL_CATALOG_MANAGEMENT", label: "工具目录", icon: Wrench },
+      { path: "/admin/tool-invocations", feature: "TOOL_CATALOG_MANAGEMENT", label: "工具调用审计", icon: ClipboardList }
     ]
   },
   {
     title: "集成",
     items: [
-      {
-        path: "/admin/integrations/connectors",
-        feature: "CONNECTOR_MANAGEMENT",
-        label: "OpenAPI 连接器",
-        icon: Plug
-      },
-      {
-        path: "/admin/plugins",
-        feature: "MCP_TOOL",
-        label: "插件管理",
-        icon: Layers
-      },
-      {
-        path: "/admin/secrets",
-        feature: "SECRET_MANAGEMENT",
-        label: "密钥管理",
-        icon: KeyRound
-      }
+      { path: "/admin/integrations/connectors", feature: "CONNECTOR_MANAGEMENT", label: "OpenAPI 连接器", icon: Plug },
+      { path: "/admin/plugins", feature: "MCP_TOOL", label: "插件管理", icon: Package },
+      { path: "/admin/secrets", feature: "SECRET_MANAGEMENT", label: "密钥管理", icon: KeyRound }
     ]
   },
   {
     title: "安全治理",
     items: [
-      {
-        path: "/admin/security/resource-acl",
-        feature: "RESOURCE_ACL_MANAGEMENT",
-        label: "资源 ACL",
-        icon: Lock
-      },
-      {
-        path: "/admin/security/access-decisions",
-        feature: "RESOURCE_ACL_MANAGEMENT",
-        label: "访问决策",
-        icon: Scale
-      },
-      {
-        path: "/admin/security/quotas",
-        feature: "QUOTA_MANAGEMENT",
-        label: "配额策略",
-        icon: ShieldCheck
-      },
-      {
-        path: "/admin/users",
-        label: "用户管理",
-        icon: Users
-      }
+      { path: "/admin/security/resource-acl", feature: "RESOURCE_ACL_MANAGEMENT", label: "资源 ACL", icon: Lock },
+      { path: "/admin/security/access-decisions", feature: "RESOURCE_ACL_MANAGEMENT", label: "访问决策", icon: Scale },
+      { path: "/admin/security/quotas", feature: "QUOTA_MANAGEMENT", label: "配额策略", icon: ShieldCheck },
+      { path: "/admin/users", label: "用户管理", icon: Users }
     ]
   },
   {
     title: "治理与可观测",
     items: [
-      {
-        path: "/admin/memory-governance",
-        feature: "MEMORY_GOVERNANCE",
-        label: "记忆治理",
-        icon: Brain
-      },
-      {
-        path: "/admin/metadata-governance",
-        label: "元数据治理",
-        icon: ShieldCheck
-      },
-      {
-        path: "/admin/audit",
-        feature: "AUDIT_LOG",
-        label: "审计日志",
-        icon: FileText
-      },
-      {
-        path: "/admin/cost",
-        feature: "COST_ANALYTICS",
-        label: "成本分析",
-        icon: DollarSign
-      },
-      {
-        path: "/admin/sandbox",
-        feature: "SANDBOX",
-        label: "沙箱",
-        icon: TerminalSquare
-      }
+      { path: "/admin/memory-governance", feature: "MEMORY_GOVERNANCE", label: "记忆治理", icon: Brain },
+      { path: "/admin/metadata-governance", feature: "METADATA_GOVERNANCE", label: "元数据治理", icon: ShieldCheck },
+      { path: "/admin/audit", feature: "AUDIT_LOG", label: "审计日志", icon: FileText },
+      { path: "/admin/cost", feature: "COST_ANALYTICS", label: "成本分析", icon: DollarSign },
+      { path: "/admin/sandbox", feature: "SANDBOX", label: "沙箱", icon: TerminalSquare }
     ]
   },
   {
@@ -284,16 +161,8 @@ const menuGroups: MenuGroup[] = [
         label: "意图管理",
         icon: Layers,
         children: [
-          {
-            path: "/admin/intent-tree",
-            label: "意图树配置",
-            icon: GitBranch
-          },
-          {
-            path: "/admin/intent-list",
-            label: "意图列表",
-            icon: ClipboardList
-          }
+          { path: "/admin/intent-tree", label: "意图树配置", icon: GitBranch },
+          { path: "/admin/intent-list", label: "意图列表", icon: ClipboardList }
         ]
       },
       {
@@ -303,40 +172,14 @@ const menuGroups: MenuGroup[] = [
         label: "数据通道",
         icon: Upload,
         children: [
-          {
-            path: "/admin/ingestion",
-            label: "流水线管理",
-            icon: FolderKanban,
-            search: "?tab=pipelines"
-          },
-          {
-            path: "/admin/ingestion",
-            label: "流水线任务",
-            icon: ClipboardList,
-            search: "?tab=tasks"
-          }
+          { path: "/admin/ingestion", label: "流水线管理", icon: FolderKanban, search: "?tab=pipelines" },
+          { path: "/admin/ingestion", label: "流水线任务", icon: ClipboardList, search: "?tab=tasks" }
         ]
       },
-      {
-        path: "/admin/mappings",
-        label: "关键词映射",
-        icon: KeyRound
-      },
-      {
-        path: "/admin/sample-questions",
-        label: "示例问题",
-        icon: Lightbulb
-      },
-      {
-        path: "/admin/model-config",
-        label: "模型配置",
-        icon: Cpu
-      },
-      {
-        path: "/admin/settings",
-        label: "系统设置",
-        icon: Settings
-      }
+      { path: "/admin/mappings", label: "关键词映射", icon: KeyRound },
+      { path: "/admin/sample-questions", label: "示例问题", icon: Lightbulb },
+      { path: "/admin/model-config", label: "模型配置", icon: Cpu },
+      { path: "/admin/settings", label: "系统设置", icon: Settings }
     ]
   }
 ];
@@ -350,13 +193,15 @@ const breadcrumbMap: Record<string, string> = {
   traces: "链路追踪",
   "ai-infra": "AI Infra 控制台",
   "agent-inspector": "Agent 检视器",
-  "agents": "Agent 管理",
-  "new": "创建 Agent",
-  "rollout": "灰度发布",
-  "eval": "Agent 评测",
+  agents: "Agent 管理",
+  skills: "Skill 管理",
+  new: "创建 Agent",
+  rollout: "灰度发布",
+  eval: "Agent 评测",
   tools: "工具目录",
   "tool-invocations": "工具调用审计",
   approvals: "审批中心",
+  "agent-runs": "Agent 运行",
   "rag-evaluation": "RAG 评测",
   "rag-strategies": "策略模板",
   "rag-version-compare": "版本质量对比",
@@ -380,7 +225,7 @@ const breadcrumbMap: Record<string, string> = {
   edit: "编辑"
 };
 
-function menuItemEnabled(item: MenuItem, featureState: (feature: string) => { visible: boolean; enabled: boolean }) {
+function itemVisible(item: MenuItem, featureState: (feature: string) => { visible: boolean; enabled: boolean }) {
   if (!item.feature) return true;
   return featureState(ADVANCED_ADMIN_FEATURES[item.feature]).visible;
 }
@@ -389,7 +234,7 @@ function visibleMenuGroups(featureState: (feature: string) => { visible: boolean
   return menuGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => menuItemEnabled(item, featureState))
+      items: group.items.filter((item) => itemVisible(item, featureState))
     }))
     .filter((group) => group.items.length > 0);
 }
@@ -401,12 +246,8 @@ export function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: ""
-  });
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ ingestion: true, intent: true });
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ "agent-group": true, ingestion: true, intent: true });
   const [kbQuery, setKbQuery] = useState("");
   const [kbOptions, setKbOptions] = useState<KnowledgeBase[]>([]);
   const [docOptions, setDocOptions] = useState<KnowledgeDocumentSearchItem[]>([]);
@@ -414,15 +255,10 @@ export function AdminLayout() {
   const [searchFocused, setSearchFocused] = useState(false);
   const blurTimeoutRef = useRef<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const isDashboardRoute = location.pathname.startsWith("/admin/dashboard");
   const getFeatureState = useFeatureStore((state) => state.getFeatureState);
   const capabilities = useFeatureStore((state) => state.capabilities);
   const visibleGroups = useMemo(() => visibleMenuGroups(getFeatureState), [getFeatureState, capabilities]);
-
-  const handleLogout = async () => {
-    await logout();
-    navigate("/login");
-  };
+  const isDashboardRoute = location.pathname.startsWith("/admin/dashboard");
 
   useEffect(() => {
     if (!searchFocused) return;
@@ -437,10 +273,7 @@ export function AdminLayout() {
     let active = true;
     const handle = window.setTimeout(() => {
       setSearchLoading(true);
-      Promise.all([
-        getKnowledgeBases(1, 6, keyword),
-        searchKnowledgeDocuments(keyword, 6)
-      ])
+      Promise.all([getKnowledgeBases(1, 6, keyword), searchKnowledgeDocuments(keyword, 6)])
         .then(([kbData, docData]) => {
           if (!active) return;
           setKbOptions(kbData || []);
@@ -453,9 +286,7 @@ export function AdminLayout() {
           }
         })
         .finally(() => {
-          if (active) {
-            setSearchLoading(false);
-          }
+          if (active) setSearchLoading(false);
         });
     }, 200);
 
@@ -467,81 +298,23 @@ export function AdminLayout() {
 
   const breadcrumbs = useMemo(() => {
     const segments = location.pathname.split("/").filter(Boolean);
-    const items: { label: string; to?: string }[] = [
-      { label: "首页", to: "/admin/dashboard" }
-    ];
-
+    const items: { label: string; to?: string }[] = [{ label: "首页", to: "/admin/dashboard" }];
     if (segments[0] !== "admin") return items;
     const section = segments[1];
     if (section) {
-      if (section === "intent-tree" || section === "intent-list") {
-        items.push({
-          label: "意图管理",
-          to: "/admin/intent-tree"
-        });
-        if (section === "intent-list" && segments.includes("edit")) {
-          items.push({
-            label: breadcrumbMap[section] || section,
-            to: "/admin/intent-list"
-          });
-          items.push({
-            label: "编辑节点"
-          });
-        } else {
-          items.push({
-            label: breadcrumbMap[section] || section
-          });
-        }
-      } else {
-        items.push({
-          label: breadcrumbMap[section] || section,
-          to: `/admin/${section}`
-        });
-      }
+      items.push({ label: breadcrumbMap[section] || section, to: `/admin/${section}` });
     }
-
-    if (section === "ingestion") {
-      const searchParams = new URLSearchParams(location.search);
-      const tab = searchParams.get("tab");
-      if (tab === "tasks") {
-        items.push({ label: "流水线任务" });
-      } else if (tab === "pipelines") {
-        items.push({ label: "流水线管理" });
-      }
-    }
-
-    if (section === "knowledge" && segments.length > 2) {
-      items.push({ label: "文档管理" });
-    }
-
-    if (section === "knowledge" && segments.includes("docs")) {
-      items.push({ label: "切片管理" });
-    }
-
-    if (section === "traces" && segments.length > 2) {
-      items.push({ label: "链路详情" });
-    }
-
+    if (section === "knowledge" && segments.length > 2) items.push({ label: "文档管理" });
+    if (section === "knowledge" && segments.includes("docs")) items.push({ label: "切片管理" });
+    if (section === "traces" && segments.length > 2) items.push({ label: "链路详情" });
+    if (section === "agents" && segments.includes("edit")) items.push({ label: "编辑" });
     return items;
-  }, [location.pathname, location.search]);
+  }, [location.pathname]);
 
-  const avatarUrl = user?.avatar?.trim();
-  const showAvatar = Boolean(avatarUrl);
-  const roleLabel = user?.role === "admin" ? "管理员" : "成员";
-  const ingestionAdminEnabled = getFeatureState(ADVANCED_ADMIN_FEATURES.INGESTION_MANAGEMENT).enabled;
-  const intentAdminEnabled = getFeatureState(ADVANCED_ADMIN_FEATURES.INTENT_MANAGEMENT).enabled;
-  const isIngestionActive = ingestionAdminEnabled && location.pathname.startsWith("/admin/ingestion");
-  const isIntentActive =
-    intentAdminEnabled &&
-    (location.pathname.startsWith("/admin/intent-tree") || location.pathname.startsWith("/admin/intent-list"));
-
-  useEffect(() => {
-    setOpenGroups((prev) => ({
-      ...prev,
-      ingestion: prev.ingestion || isIngestionActive,
-      intent: prev.intent || isIntentActive
-    }));
-  }, [isIngestionActive, isIntentActive]);
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
+  };
 
   const handlePasswordSubmit = async () => {
     if (!passwordForm.currentPassword || !passwordForm.newPassword) {
@@ -587,38 +360,25 @@ export function AdminLayout() {
   };
 
   const handleSearchFocus = () => {
-    if (blurTimeoutRef.current) {
-      window.clearTimeout(blurTimeoutRef.current);
-      blurTimeoutRef.current = null;
-    }
+    if (blurTimeoutRef.current) window.clearTimeout(blurTimeoutRef.current);
+    blurTimeoutRef.current = null;
     setSearchFocused(true);
   };
 
   const handleSearchBlur = () => {
-    if (blurTimeoutRef.current) {
-      window.clearTimeout(blurTimeoutRef.current);
-    }
-    blurTimeoutRef.current = window.setTimeout(() => {
-      setSearchFocused(false);
-    }, 150);
+    if (blurTimeoutRef.current) window.clearTimeout(blurTimeoutRef.current);
+    blurTimeoutRef.current = window.setTimeout(() => setSearchFocused(false), 150);
   };
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       const keyword = kbQuery.trim();
-      if (kbOptions.length > 0) {
-        handleSearchSelect(kbOptions[0]);
-        return;
-      }
-      if (docOptions.length > 0) {
-        handleDocumentSelect(docOptions[0]);
-        return;
-      }
+      if (kbOptions.length > 0) return handleSearchSelect(kbOptions[0]);
+      if (docOptions.length > 0) return handleDocumentSelect(docOptions[0]);
       if (keyword) {
         searchInputRef.current?.blur();
         navigate(`/admin/knowledge?name=${encodeURIComponent(keyword)}`);
         setSearchFocused(false);
-        return;
       }
     }
     if (event.key === "Escape") {
@@ -628,17 +388,29 @@ export function AdminLayout() {
   };
 
   const isLeafActive = (path: string, search?: string) => {
-    if (location.pathname !== path && !location.pathname.startsWith(`${path}/`)) {
-      return false;
-    }
-    if (search) {
-      return location.search === search;
-    }
-    return true;
+    if (location.pathname !== path && !location.pathname.startsWith(`${path}/`)) return false;
+    return search ? location.search === search : true;
   };
 
-  const hasQuery = kbQuery.trim().length > 0;
-  const showSuggest = searchFocused && hasQuery;
+  const renderLink = (path: string, label: string, Icon: any, search?: string) => {
+    const isActive = isLeafActive(path, search);
+    return (
+      <Link
+        key={`${path}${search || ""}`}
+        to={`${path}${search || ""}`}
+        title={collapsed ? label : undefined}
+        className={cn("admin-sidebar__item", isActive && "admin-sidebar__item--active", collapsed && "justify-center")}
+      >
+        <span className={cn("admin-sidebar__item-indicator", isActive && "is-active")} />
+        <Icon className="admin-sidebar__item-icon" />
+        {collapsed ? <span className="sr-only">{label}</span> : <span>{label}</span>}
+      </Link>
+    );
+  };
+
+  const avatarUrl = user?.avatar?.trim();
+  const roleLabel = user?.role === "admin" ? "管理员" : "成员";
+  const showSuggest = searchFocused && kbQuery.trim().length > 0;
 
   return (
     <div className="admin-layout flex h-screen">
@@ -649,7 +421,7 @@ export function AdminLayout() {
             {!collapsed && (
               <div className="min-w-0">
                 <h1 className="admin-sidebar__title">Seahorse Agent 管理后台</h1>
-                <p className="admin-sidebar__subtitle">知识管理台</p>
+                <p className="admin-sidebar__subtitle">知识与 Agent 平台</p>
               </div>
             )}
           </div>
@@ -658,118 +430,39 @@ export function AdminLayout() {
         <nav className="flex-1 space-y-4 px-2 pb-4">
           {visibleGroups.map((group) => (
             <div key={group.title} className="space-y-2">
-              {!collapsed && (
-                <p className="admin-sidebar__group-title">{group.title}</p>
-              )}
+              {!collapsed && <p className="admin-sidebar__group-title">{group.title}</p>}
               <div className="space-y-1">
                 {group.items.flatMap((item) => {
-                  if (!item.children || item.children.length === 0) {
-                    const Icon = item.icon;
-                    const isActive = isLeafActive(item.path, item.search);
-                    return (
-                      <Link
-                        key={item.path}
-                        to={item.path}
-                        title={collapsed ? item.label : undefined}
+                  if (!item.children?.length) {
+                    return renderLink(item.path, item.label, item.icon);
+                  }
+
+                  const groupId = item.id as string;
+                  const isGroupActive = item.children.some((child) => isLeafActive(child.path, child.search));
+                  const isOpen = openGroups[groupId];
+                  if (collapsed) {
+                    return item.children.map((child) => renderLink(child.path, child.label, child.icon, child.search));
+                  }
+
+                  const Icon = item.icon;
+                  return (
+                    <div key={item.label} className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setOpenGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }))}
                         className={cn(
-                          "admin-sidebar__item",
-                          isActive && "admin-sidebar__item--active",
-                          collapsed && "justify-center"
+                          "admin-sidebar__item admin-sidebar__item--group w-full text-white/60",
+                          isGroupActive && "admin-sidebar__item--group-active text-white"
                         )}
                       >
-                        <span
-                          className={cn(
-                            "admin-sidebar__item-indicator",
-                            isActive && "is-active"
-                          )}
-                        />
+                        <span className={cn("admin-sidebar__item-indicator", isGroupActive && "is-group-active")} />
                         <Icon className="admin-sidebar__item-icon" />
-                        {collapsed ? <span className="sr-only">{item.label}</span> : <span>{item.label}</span>}
-                      </Link>
-                    );
-                  }
-
-                  const isGroupActive = item.children.some((child) => isLeafActive(child.path, child.search));
-                  const groupId = item.id as string;
-                  const isOpen = openGroups[groupId];
-
-                  if (collapsed) {
-                    return item.children.map((child) => {
-                      const ChildIcon = child.icon;
-                      const isActive = isLeafActive(child.path, child.search);
-                      return (
-                        <Link
-                          key={child.label}
-                          to={`${child.path}${child.search || ""}`}
-                          title={child.label}
-                          className={cn(
-                            "admin-sidebar__item",
-                            isActive && "admin-sidebar__item--active",
-                            "justify-center"
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "admin-sidebar__item-indicator",
-                              isActive && "is-active"
-                            )}
-                          />
-                          <ChildIcon className="admin-sidebar__item-icon" />
-                          <span className="sr-only">{child.label}</span>
-                        </Link>
-                      );
-                    });
-                  }
-
-                      return (
-                        <div key={item.label} className="space-y-1">
-                          <button
-                            type="button"
-                            onClick={() => setOpenGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }))}
-                            className={cn(
-                              "admin-sidebar__item admin-sidebar__item--group w-full text-white/60",
-                              isGroupActive && "admin-sidebar__item--group-active text-white"
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "admin-sidebar__item-indicator",
-                                isGroupActive && "is-group-active"
-                              )}
-                            />
-                        <item.icon className="admin-sidebar__item-icon" />
                         <span className="flex-1 text-left">{item.label}</span>
-                        {isOpen ? (
-                          <ChevronDown className="h-4 w-4 text-white/60" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-white/60" />
-                        )}
+                        {isOpen ? <ChevronDown className="h-4 w-4 text-white/60" /> : <ChevronRight className="h-4 w-4 text-white/60" />}
                       </button>
                       {isOpen ? (
                         <div className="ml-6 space-y-1">
-                          {item.children.map((child) => {
-                            const ChildIcon = child.icon;
-                            const isActive = isLeafActive(child.path, child.search);
-                            return (
-                              <Link
-                                key={child.label}
-                                to={`${child.path}${child.search || ""}`}
-                                className={cn(
-                                  "admin-sidebar__item text-[13px]",
-                                  isActive && "admin-sidebar__item--active"
-                                )}
-                              >
-                                <span
-                                  className={cn(
-                                    "admin-sidebar__item-indicator",
-                                    isActive && "is-active"
-                                  )}
-                                />
-                                <ChildIcon className="admin-sidebar__item-icon" />
-                                <span>{child.label}</span>
-                              </Link>
-                            );
-                          })}
+                          {item.children.map((child) => renderLink(child.path, child.label, child.icon, child.search))}
                         </div>
                       ) : null}
                     </div>
@@ -781,33 +474,18 @@ export function AdminLayout() {
         </nav>
 
         <div className="admin-sidebar__footer space-y-2">
-          <button
-            type="button"
-            className="admin-sidebar__collapse"
-            onClick={() => setCollapsed((prev) => !prev)}
-          >
+          <button type="button" className="admin-sidebar__collapse" onClick={() => setCollapsed((prev) => !prev)}>
             {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
             {!collapsed && <span>收起侧边栏</span>}
           </button>
         </div>
       </aside>
 
-      <div
-        className={cn(
-          "admin-main flex min-h-screen flex-1 flex-col overflow-auto",
-          isDashboardRoute && "dashboard-scroll-shell"
-        )}
-      >
+      <div className={cn("admin-main flex min-h-screen flex-1 flex-col overflow-auto", isDashboardRoute && "dashboard-scroll-shell")}>
         <header className="admin-topbar">
           <div className="admin-topbar-inner">
             <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="lg:hidden"
-                onClick={() => setCollapsed((prev) => !prev)}
-                aria-label="切换侧边栏"
-              >
+              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setCollapsed((prev) => !prev)} aria-label="切换侧边栏">
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="admin-topbar-search">
@@ -815,9 +493,7 @@ export function AdminLayout() {
                 <Input
                   ref={searchInputRef}
                   value={kbQuery}
-                  onChange={(event) => {
-                    setKbQuery(event.target.value);
-                  }}
+                  onChange={(event) => setKbQuery(event.target.value)}
                   onFocus={handleSearchFocus}
                   onBlur={handleSearchBlur}
                   onKeyDown={handleSearchKeyDown}
@@ -831,10 +507,7 @@ export function AdminLayout() {
                 />
                 <span className="admin-topbar-kbd">Ctrl K</span>
                 {showSuggest ? (
-                  <div
-                    className="admin-topbar-suggest"
-                    onMouseDown={(event) => event.preventDefault()}
-                  >
+                  <div className="admin-topbar-suggest" onMouseDown={(event) => event.preventDefault()}>
                     {searchLoading && kbOptions.length === 0 && docOptions.length === 0 ? (
                       <div className="admin-topbar-suggest-item text-slate-400">搜索中...</div>
                     ) : null}
@@ -842,19 +515,9 @@ export function AdminLayout() {
                       <div className="admin-topbar-suggest-section">
                         <div className="admin-topbar-suggest-group">知识库</div>
                         {kbOptions.map((kb) => (
-                          <button
-                            key={kb.id}
-                            type="button"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              handleSearchSelect(kb);
-                            }}
-                            className="admin-topbar-suggest-item"
-                          >
+                          <button key={kb.id} type="button" onMouseDown={(event) => { event.preventDefault(); handleSearchSelect(kb); }} className="admin-topbar-suggest-item">
                             <span className="font-medium text-slate-900">{kb.name}</span>
-                            <span className="text-xs text-slate-400">
-                              {kb.collectionName || "未设置 Collection"}
-                            </span>
+                            <span className="text-xs text-slate-400">{kb.collectionName || "未设置 Collection"}</span>
                           </button>
                         ))}
                       </div>
@@ -863,19 +526,9 @@ export function AdminLayout() {
                       <div className="admin-topbar-suggest-section">
                         <div className="admin-topbar-suggest-group">文档</div>
                         {docOptions.map((doc) => (
-                          <button
-                            key={doc.id}
-                            type="button"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              handleDocumentSelect(doc);
-                            }}
-                            className="admin-topbar-suggest-item"
-                          >
+                          <button key={doc.id} type="button" onMouseDown={(event) => { event.preventDefault(); handleDocumentSelect(doc); }} className="admin-topbar-suggest-item">
                             <span className="font-medium text-slate-900">{doc.docName}</span>
-                            <span className="text-xs text-slate-400">
-                              {doc.kbName || `知识库 ${doc.kbId}`}
-                            </span>
+                            <span className="text-xs text-slate-400">{doc.kbName || `知识库 ${doc.kbId}`}</span>
                           </button>
                         ))}
                       </div>
@@ -888,11 +541,7 @@ export function AdminLayout() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                className="hidden items-center gap-2 sm:inline-flex"
-                onClick={() => navigate("/chat")}
-              >
+              <Button variant="outline" className="hidden items-center gap-2 sm:inline-flex" onClick={() => navigate("/chat")}>
                 <MessageSquare className="h-4 w-4" />
                 返回聊天
               </Button>
@@ -908,24 +557,14 @@ export function AdminLayout() {
               </a>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-600 shadow-sm"
-                    aria-label="用户菜单"
-                  >
-                    <Avatar
-                      name={user?.username || "管理员"}
-                      src={showAvatar ? avatarUrl : undefined}
-                      className="h-8 w-8 border-slate-200 bg-indigo-50 text-xs font-semibold text-indigo-600"
-                    />
+                  <button type="button" className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-600 shadow-sm" aria-label="用户菜单">
+                    <Avatar name={user?.username || "管理员"} src={avatarUrl || undefined} className="h-8 w-8 border-slate-200 bg-indigo-50 text-xs font-semibold text-indigo-600" />
                     <span className="hidden sm:inline">{user?.username || "管理员"}</span>
                     <ChevronDown className="h-4 w-4 text-slate-400" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" sideOffset={8} className="w-44">
-                  <div className="px-3 py-2 text-xs text-slate-500">
-                    {user?.username || "管理员"} · {roleLabel}
-                  </div>
+                  <div className="px-3 py-2 text-xs text-slate-500">{user?.username || "管理员"} / {roleLabel}</div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setPasswordOpen(true)}>
                     <KeyRound className="mr-2 h-4 w-4" />
@@ -947,11 +586,7 @@ export function AdminLayout() {
               const isLast = index === breadcrumbs.length - 1;
               return (
                 <span key={`${item.label}-${index}`} className="flex items-center gap-2">
-                  {item.to && !isLast ? (
-                    <Link to={item.to}>{item.label}</Link>
-                  ) : (
-                    <span className={isLast ? "text-slate-700" : undefined}>{item.label}</span>
-                  )}
+                  {item.to && !isLast ? <Link to={item.to}>{item.label}</Link> : <span className={isLast ? "text-slate-700" : undefined}>{item.label}</span>}
                   {!isLast && <span>/</span>}
                 </span>
               );
@@ -965,55 +600,30 @@ export function AdminLayout() {
         open={passwordOpen}
         onOpenChange={(open) => {
           setPasswordOpen(open);
-          if (!open) {
-            setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
-          }
+          if (!open) setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
         }}
       >
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle>修改密码</DialogTitle>
-            <DialogDescription>请输入当前密码与新密码</DialogDescription>
+            <DialogDescription>请输入当前密码与新密码。</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">当前密码</label>
-              <Input
-                type="password"
-                value={passwordForm.currentPassword}
-                onChange={(event) => setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))}
-                placeholder="请输入当前密码"
-                name="current-password"
-                autoComplete="current-password"
-              />
+              <Input type="password" value={passwordForm.currentPassword} onChange={(event) => setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))} placeholder="请输入当前密码" name="current-password" autoComplete="current-password" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">新密码</label>
-              <Input
-                type="password"
-                value={passwordForm.newPassword}
-                onChange={(event) => setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))}
-                placeholder="请输入新密码"
-                name="new-password"
-                autoComplete="new-password"
-              />
+              <Input type="password" value={passwordForm.newPassword} onChange={(event) => setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))} placeholder="请输入新密码" name="new-password" autoComplete="new-password" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">确认新密码</label>
-              <Input
-                type="password"
-                value={passwordForm.confirmPassword}
-                onChange={(event) => setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
-                placeholder="再次输入新密码"
-                name="confirm-new-password"
-                autoComplete="new-password"
-              />
+              <Input type="password" value={passwordForm.confirmPassword} onChange={(event) => setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))} placeholder="再次输入新密码" name="confirm-new-password" autoComplete="new-password" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPasswordOpen(false)}>
-              取消
-            </Button>
+            <Button variant="outline" onClick={() => setPasswordOpen(false)}>取消</Button>
             <Button onClick={handlePasswordSubmit} disabled={passwordSubmitting}>
               {passwordSubmitting ? "保存中..." : "保存"}
             </Button>

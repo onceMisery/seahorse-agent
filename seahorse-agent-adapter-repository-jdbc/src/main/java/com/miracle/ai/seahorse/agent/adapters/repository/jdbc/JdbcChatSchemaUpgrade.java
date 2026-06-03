@@ -44,11 +44,82 @@ public class JdbcChatSchemaUpgrade {
         widenColumns("t_conversation_summary", List.of("id", "conversation_id", "user_id", "last_message_id"));
         widenColumns("t_message", List.of("id", "conversation_id", "user_id"));
         ensureMessageRunLinkage();
+        ensureAgentSkillTables();
         widenColumns("t_message_feedback", List.of("id", "message_id", "conversation_id", "user_id"));
         widenColumns("t_rag_trace_run", List.of("id", "trace_id", "conversation_id", "task_id", "user_id"));
         widenColumns("t_rag_trace_node", List.of("id", "trace_id", "node_id", "parent_node_id", "node_type"));
         widenColumns("t_short_term_memory", List.of("id", "user_id", "conversation_id"));
         ensureLayeredMemoryLifecycleColumns();
+    }
+
+    private void ensureAgentSkillTables() {
+        if (tableExists("sa_agent_version")) {
+            addColumnIfMissing("sa_agent_version", "skill_set_json", "TEXT NOT NULL DEFAULT '{}'");
+        }
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_agent_skill (
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    skill_name VARCHAR(128) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    category VARCHAR(32) NOT NULL,
+                    source VARCHAR(32) NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    enabled SMALLINT NOT NULL DEFAULT 1,
+                    latest_revision_id VARCHAR(128),
+                    description TEXT NOT NULL,
+                    tags_json TEXT NOT NULL DEFAULT '[]',
+                    allowed_tools_json TEXT NOT NULL DEFAULT '[]',
+                    created_by VARCHAR(64),
+                    updated_by VARCHAR(64),
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL,
+                    deleted SMALLINT NOT NULL DEFAULT 0,
+                    UNIQUE(tenant_id, skill_name)
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sa_agent_skill_tenant_status
+                ON sa_agent_skill (tenant_id, status, enabled)
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_agent_skill_revision (
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    revision_id VARCHAR(128) NOT NULL UNIQUE,
+                    skill_name VARCHAR(128) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    revision_no BIGINT NOT NULL,
+                    content_hash VARCHAR(128) NOT NULL,
+                    content TEXT NOT NULL,
+                    frontmatter_json TEXT NOT NULL,
+                    scan_decision VARCHAR(32) NOT NULL,
+                    scan_result_json TEXT NOT NULL,
+                    created_by VARCHAR(64),
+                    created_at TIMESTAMP NOT NULL,
+                    deleted SMALLINT NOT NULL DEFAULT 0,
+                    UNIQUE(tenant_id, skill_name, revision_no)
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sa_agent_skill_revision_skill
+                ON sa_agent_skill_revision (tenant_id, skill_name, revision_no)
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_agent_skill_binding (
+                    pk_id BIGSERIAL PRIMARY KEY,
+                    agent_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    skill_name VARCHAR(128) NOT NULL,
+                    revision_id VARCHAR(128) NOT NULL,
+                    inject_mode VARCHAR(32) NOT NULL DEFAULT 'METADATA_AND_BODY',
+                    created_by VARCHAR(64),
+                    created_at TIMESTAMP NOT NULL,
+                    deleted SMALLINT NOT NULL DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sa_agent_skill_binding_agent
+                ON sa_agent_skill_binding (tenant_id, agent_id, deleted)
+                """);
     }
 
     private void ensureConversationAttachmentTable() {

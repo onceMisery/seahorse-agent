@@ -70,14 +70,16 @@ class JdbcAgentDefinitionRepositoryAdapterTests {
         AgentVersion latest = adapter.latestVersion("agent-1").orElseThrow();
         assertThat(latest.versionId()).isEqualTo("agent-1-v2");
         assertThat(latest.versionNo()).isEqualTo(2L);
+        assertThat(latest.skillSetJson()).isEqualTo("{\"skills\":[]}");
         AgentVersion first = adapter.findVersion("agent-1", "agent-1-v1").orElseThrow();
         assertThat(first.versionNo()).isEqualTo(1L);
+        assertThat(first.skillSetJson()).isEqualTo("{\"skills\":[]}");
         assertThat(adapter.findVersion("agent-1", "missing")).isEmpty();
     }
 
     private AgentVersion version(String versionId, String agentId, long versionNo, Instant publishedAt) {
         return new AgentVersion(versionId, agentId, versionNo, "instructions", "{}", "{}", "{}",
-                "{}", "admin-1", publishedAt, "release");
+                "{}", "{\"skills\":[]}", "admin-1", publishedAt, "release");
     }
 
     private DriverManagerDataSource dataSource(String name) {
@@ -120,6 +122,7 @@ class JdbcAgentDefinitionRepositoryAdapterTests {
                     model_config_json CLOB NOT NULL,
                     memory_config_json CLOB NOT NULL,
                     guardrail_config_json CLOB NOT NULL,
+                    skill_set_json CLOB NOT NULL,
                     published_by VARCHAR(64) NOT NULL,
                     published_at TIMESTAMP NOT NULL,
                     change_summary VARCHAR(500) NOT NULL,

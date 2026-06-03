@@ -49,6 +49,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.rollout.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.DefaultSandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sandbox.KernelSandboxRuntimeService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.sre.KernelSreHealthQueryService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.KernelAgentSkillBindingService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.KernelAgentSkillManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.task.KernelTaskTemplateQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolCatalogManagementService;
@@ -66,6 +68,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPor
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunSnapshotInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunWorkflowInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentToolBindingManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.skill.AgentSkillBindingInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.skill.AgentSkillManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ApprovalManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AccessDecisionQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AuditQueryInboundPort;
@@ -95,6 +99,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepos
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRolloutRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentVersionActivationRepositoryPort;
@@ -358,6 +363,40 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 clockProvider.getIfAvailable(Clock::systemUTC),
                 toolCatalogRepositoryPort.getIfAvailable(),
                 toolProviderExposurePolicyPort);
+    }
+
+    @Bean
+    @ConditionalOnBean({AgentSkillRepositoryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(AgentSkillManagementInboundPort.class)
+    public KernelAgentSkillManagementService seahorseAgentSkillManagementInboundPort(
+            AgentSkillRepositoryPort agentSkillRepositoryPort,
+            CurrentUserPort currentUserPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelAgentSkillManagementService(
+                agentSkillRepositoryPort,
+                currentUserPort,
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnBean({AgentSkillRepositoryPort.class, CurrentUserPort.class})
+    @ConditionalOnMissingBean(AgentSkillBindingInboundPort.class)
+    public KernelAgentSkillBindingService seahorseAgentSkillBindingInboundPort(
+            AgentSkillRepositoryPort agentSkillRepositoryPort,
+            CurrentUserPort currentUserPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelAgentSkillBindingService(
+                agentSkillRepositoryPort,
+                currentUserPort,
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnBean(KernelAgentSkillManagementService.class)
+    @ConditionalOnMissingBean
+    public BuiltInAgentSkillRegistrar seahorseBuiltInAgentSkillRegistrar(
+            KernelAgentSkillManagementService skillManagementService) {
+        return new BuiltInAgentSkillRegistrar(skillManagementService);
     }
 
     @Bean

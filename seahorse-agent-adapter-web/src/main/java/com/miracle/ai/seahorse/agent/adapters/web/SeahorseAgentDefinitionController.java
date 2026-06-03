@@ -120,6 +120,7 @@ public class SeahorseAgentDefinitionController {
                         safeRequest.modelConfigJson(),
                         safeRequest.memoryConfigJson(),
                         safeRequest.guardrailConfigJson(),
+                        safeRequest.skillSetJson(),
                         safeRequest.changeSummary())));
     }
 

@@ -30,6 +30,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillCategory;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
@@ -132,6 +135,72 @@ class KernelAgentLoopToolGatewayTests {
         assertEquals("delete-memory", request.toolId());
         assertEquals(List.of("weather"), request.allowedToolIds());
         assertEquals("TOOL_NOT_BOUND", result.steps().get(0).observations().get(0).error());
+    }
+
+    @Test
+    void shouldLoadSelectedSkillWithoutCallingExternalToolGateway() {
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill", Map.of("name", "research"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need full skill", List.of(loadSkill)),
+                Turn.finalAnswer("used the research skill")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.failed("should-not-call"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("write research plan")
+                .allowedToolIds(List.of())
+                .skillRuntimeBlocks(List.of(new SkillRuntimeBlock(
+                        "research",
+                        "rev-1",
+                        "hash-1",
+                        "Research workflow",
+                        AgentSkillCategory.PUBLIC,
+                        SkillInjectMode.METADATA_ONLY,
+                        List.of("web_search"),
+                        "Use sources carefully.")))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .build());
+
+        assertEquals("used the research skill", result.finalAnswer());
+        assertTrue(gateway.requests.isEmpty());
+        assertTrue(model.requests.get(0).getTools().stream().anyMatch(tool -> "load_skill".equals(tool.toolId())));
+        assertTrue(result.steps().get(0).observations().get(0).content().contains("Use sources carefully."));
+    }
+
+    @Test
+    void shouldRejectLoadingSkillOutsideCurrentVersionSnapshot() {
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill", Map.of("name", "missing"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("try missing skill", List.of(loadSkill)),
+                Turn.finalAnswer("could not load")));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                new RecordingToolGateway(),
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("load missing")
+                .allowedToolIds(List.of())
+                .skillRuntimeBlocks(List.of(new SkillRuntimeBlock(
+                        "research",
+                        "rev-1",
+                        "hash-1",
+                        "Research workflow",
+                        AgentSkillCategory.PUBLIC,
+                        SkillInjectMode.METADATA_ONLY,
+                        List.of(),
+                        "Use sources carefully.")))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .build());
+
+        assertEquals("could not load", result.finalAnswer());
+        assertFalse(result.steps().get(0).observations().get(0).success());
+        assertEquals("skill is not selected in this Agent version", result.steps().get(0).observations().get(0).error());
     }
 
     @Test
@@ -353,6 +422,7 @@ class KernelAgentLoopToolGatewayTests {
 
     private static final class ScriptedModel implements StreamingChatModelPort {
         private final List<Turn> turns;
+        private final List<ChatRequest> requests = new ArrayList<>();
         private int index;
 
         private ScriptedModel(List<Turn> turns) {
@@ -369,6 +439,7 @@ class KernelAgentLoopToolGatewayTests {
                 ChatRequest request,
                 StreamCallback callback,
                 ToolCallCollector toolCallCollector) {
+            requests.add(request);
             Turn turn = turns.get(index++);
             if (!turn.toolCalls().isEmpty()) {
                 assertFalse(request.getTools().isEmpty());
