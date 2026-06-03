@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import type { PageResult } from "@/services/metadataGovernanceService";
 import {
   listMemoryReviewItems,
   approveMemoryReviewItem,
+  exportFeedbackSamples,
   modifyMemoryReviewItem,
   rejectMemoryReviewItem,
   type MemoryReviewItem
@@ -32,6 +33,7 @@ export function MemoryReviewQueue() {
   const [comment, setComment] = useState("");
   const [modifiedContent, setModifiedContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const items = pageData?.records || [];
 
@@ -97,6 +99,27 @@ export function MemoryReviewQueue() {
     }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const data = await exportFeedbackSamples({
+        status: statusFilter !== "all" ? statusFilter : undefined
+      });
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `feedback-samples-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("导出成功");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "导出失败"));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <>
       <div className="flex items-center gap-2 mb-4">
@@ -111,6 +134,10 @@ export function MemoryReviewQueue() {
         </Select>
         <Button variant="outline" size="sm" onClick={loadItems}>
           <RefreshCw className="w-4 h-4 mr-1" />刷新
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+          <Download className="w-4 h-4 mr-1" />
+          {exporting ? "导出中..." : "导出样本"}
         </Button>
       </div>
 

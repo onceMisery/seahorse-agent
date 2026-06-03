@@ -210,6 +210,17 @@ export function getMemoryReviewFeedbackSamples(itemId: string) {
   );
 }
 
+export function exportFeedbackSamples(params?: {
+  tenantId?: string;
+  userId?: string;
+  status?: string;
+  targetKind?: string;
+  targetKey?: string;
+  limit?: number;
+}) {
+  return api.get<unknown[]>("/memory-review/feedback-samples/export", { params });
+}
+
 export function approveMemoryReviewItem(itemId: string, comment?: string) {
   return api.post<Record<string, unknown>, Record<string, unknown>>(
     `/memory-review/items/${encodeURIComponent(itemId)}/approve`,
