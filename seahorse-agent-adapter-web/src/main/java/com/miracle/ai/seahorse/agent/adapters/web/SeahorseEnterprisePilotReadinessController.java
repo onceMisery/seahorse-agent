@@ -78,7 +78,7 @@ public class SeahorseEnterprisePilotReadinessController {
         advancedFeatureGate.requireEnabled(AdvancedFeature.ENTERPRISE_PILOT_READINESS);
         return ApiResponses.requireService(readinessPortProvider,
                 port -> port.latest(tenantId, agentId, versionId)
-                        .orElseThrow(() -> new IllegalArgumentException("Enterprise pilot readiness report not found")));
+                        .orElseThrow(() -> new ResourceNotFoundException("Enterprise pilot readiness report not found")));
     }
 
     public record EnterprisePilotReadinessGenerateRequest(String tenantId,

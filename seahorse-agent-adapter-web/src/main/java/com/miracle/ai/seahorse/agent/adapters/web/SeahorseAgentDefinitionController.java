@@ -91,7 +91,7 @@ public class SeahorseAgentDefinitionController {
     public ApiResponse<Object> findById(@PathVariable String agentId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.findById(agentId)
-                .orElseThrow(() -> new IllegalArgumentException("Agent not found")));
+                .orElseThrow(() -> new ResourceNotFoundException("Agent not found")));
     }
 
     @PutMapping({"/agents/{agentId}/draft", "/api/agents/{agentId}/draft"})

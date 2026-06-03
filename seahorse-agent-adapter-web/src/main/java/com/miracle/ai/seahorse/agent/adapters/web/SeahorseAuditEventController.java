@@ -70,6 +70,6 @@ public class SeahorseAuditEventController {
     @GetMapping("/api/audit-events/{auditId}")
     public ApiResponse<Object> findById(@PathVariable String auditId) {
         return ApiResponses.requireService(auditQueryPortProvider, port -> port.findById(auditId)
-                .orElseThrow(() -> new IllegalArgumentException("Audit event not found")));
+                .orElseThrow(() -> new ResourceNotFoundException("Audit event not found")));
     }
 }

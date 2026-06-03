@@ -60,6 +60,6 @@ public class SeahorseProductionGateController {
     public ApiResponse<Object> latest(@PathVariable String agentId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.PRODUCTION_GATE);
         return ApiResponses.requireService(productionGatePortProvider, port -> port.latest(agentId)
-                .orElseThrow(() -> new IllegalArgumentException("Production gate report not found")));
+                .orElseThrow(() -> new ResourceNotFoundException("Production gate report not found")));
     }
 }

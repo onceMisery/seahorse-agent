@@ -87,7 +87,7 @@ public class SeahorseUserMemoryController {
             @RequestHeader(value = WebUserIdResolver.HEADER_USER_ID, required = false) String headerUserId) {
         String resolvedUserId = WebUserIdResolver.resolve(userId, headerUserId);
         MemoryRecord record = managementPort().findMemory(USER_MEMORY_LAYER, memoryId)
-                .orElseThrow(() -> new IllegalArgumentException("memory not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("memory not found"));
         if (!belongsTo(record, resolvedUserId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "memory does not belong to current user");
         }

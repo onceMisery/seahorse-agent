@@ -98,7 +98,7 @@ public class SeahorseAgentRunController {
     public ApiResponse<Object> findRunById(@PathVariable String runId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         return ApiResponses.requireService(agentRunPortProvider, port -> port.findRunById(runId)
-                .orElseThrow(() -> new IllegalArgumentException("Agent run not found")));
+                .orElseThrow(() -> new ResourceNotFoundException("Agent run not found")));
     }
 
     @GetMapping({"/agent-runs", "/api/agent-runs"})

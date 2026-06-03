@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.skill.AgentSkillBindingInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.skill.AgentSkillManagementInboundPort;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -46,6 +47,7 @@ public class SeahorseSkillController {
     private final ObjectProvider<AgentSkillBindingInboundPort> bindingPortProvider;
     private final AdvancedFeatureGate advancedFeatureGate;
 
+    @Autowired
     public SeahorseSkillController(ObjectProvider<AgentSkillManagementInboundPort> managementPortProvider,
                                    ObjectProvider<AgentSkillBindingInboundPort> bindingPortProvider,
                                    ObjectProvider<AdvancedFeatureGate> advancedFeatureGateProvider) {
@@ -78,7 +80,7 @@ public class SeahorseSkillController {
                                       @RequestParam(required = false) String tenantId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.SKILL_MANAGEMENT);
         return ApiResponses.requireService(managementPortProvider, port -> port.find(tenantId, name)
-                .orElseThrow(() -> new IllegalArgumentException("Skill not found")));
+                .orElseThrow(() -> new ResourceNotFoundException("Skill not found")));
     }
 
     @PostMapping("/api/skills/custom")

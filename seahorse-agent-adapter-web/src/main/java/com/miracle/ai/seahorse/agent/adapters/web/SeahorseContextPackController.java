@@ -35,7 +35,7 @@ public class SeahorseContextPackController {
     @GetMapping("/api/context-packs/{contextPackId}")
     public ApiResponse<Object> findById(@PathVariable String contextPackId) {
         return ApiResponses.requireService(contextPackQueryPortProvider, port -> port.findById(contextPackId)
-                .orElseThrow(() -> new IllegalArgumentException("Context pack not found")));
+                .orElseThrow(() -> new ResourceNotFoundException("Context pack not found")));
     }
 
     @GetMapping("/api/context-packs/{contextPackId}/items")

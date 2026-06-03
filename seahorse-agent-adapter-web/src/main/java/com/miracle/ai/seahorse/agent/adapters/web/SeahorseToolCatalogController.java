@@ -76,7 +76,7 @@ public class SeahorseToolCatalogController {
     public ApiResponse<Object> findById(@PathVariable String toolId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.TOOL_CATALOG_MANAGEMENT);
         return ApiResponses.requireService(toolCatalogPortProvider,
-                port -> port.findById(toolId).orElseThrow(() -> new IllegalArgumentException("Tool not found")));
+                port -> port.findById(toolId).orElseThrow(() -> new ResourceNotFoundException("Tool not found")));
     }
 
     @PostMapping("/api/tools/{toolId}/enable")

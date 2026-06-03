@@ -44,6 +44,12 @@ public class SeahorseWebExceptionHandler {
         return error(ex);
     }
 
+    @ExceptionHandler(ResourceNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> notFound(ResourceNotFoundException ex) {
+        return error(ex);
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, Object> conflict(IllegalStateException ex) {

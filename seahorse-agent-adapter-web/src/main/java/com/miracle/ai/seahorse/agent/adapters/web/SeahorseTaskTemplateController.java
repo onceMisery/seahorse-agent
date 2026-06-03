@@ -46,6 +46,6 @@ public class SeahorseTaskTemplateController {
         TaskTemplateId stableTemplateId = TaskTemplateId.fromValue(templateId);
         return ApiResponses.requireService(taskTemplateQueryPortProvider,
                 port -> port.findById(stableTemplateId)
-                        .orElseThrow(() -> new IllegalArgumentException("Task template not found")));
+                        .orElseThrow(() -> new ResourceNotFoundException("Task template not found")));
     }
 }

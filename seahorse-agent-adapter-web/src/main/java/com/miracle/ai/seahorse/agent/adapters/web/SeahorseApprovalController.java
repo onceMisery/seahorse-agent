@@ -79,7 +79,7 @@ public class SeahorseApprovalController {
     public ApiResponse<Object> findById(@PathVariable String approvalId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         return ApiResponses.requireService(approvalPortProvider, port -> port.findById(approvalId)
-                .orElseThrow(() -> new IllegalArgumentException("Approval not found")));
+                .orElseThrow(() -> new ResourceNotFoundException("Approval not found")));
     }
 
     @PostMapping("/api/approvals/{approvalId}/approve")

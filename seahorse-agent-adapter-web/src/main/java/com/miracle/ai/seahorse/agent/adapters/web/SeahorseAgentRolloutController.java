@@ -78,7 +78,7 @@ public class SeahorseAgentRolloutController {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_ROLLOUT_MANAGEMENT);
         return ApiResponses.requireService(rolloutPortProvider,
                 port -> port.latest(tenantId, agentId, versionId)
-                        .orElseThrow(() -> new IllegalArgumentException("Agent rollout not found")));
+                        .orElseThrow(() -> new ResourceNotFoundException("Agent rollout not found")));
     }
 
     @PostMapping("/api/agents/{agentId}/rollouts/{rolloutId}/pause")

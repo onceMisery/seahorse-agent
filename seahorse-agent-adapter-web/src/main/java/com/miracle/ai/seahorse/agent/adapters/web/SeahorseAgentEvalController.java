@@ -102,7 +102,7 @@ public class SeahorseAgentEvalController {
                         agentId,
                         versionId,
                         evalType)
-                .orElseThrow(() -> new IllegalArgumentException("Agent eval summary not found")));
+                .orElseThrow(() -> new ResourceNotFoundException("Agent eval summary not found")));
     }
 
     @GetMapping("/api/agents/{agentId}/versions/{versionId}/eval-summaries")
