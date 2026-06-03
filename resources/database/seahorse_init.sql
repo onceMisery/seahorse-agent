@@ -664,7 +664,7 @@ CREATE TABLE t_memory_aggregation_buffer (
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX uk_memory_aggregation_session
-ON t_memory_aggregation_buffer (tenant_id, session_id);
+ON t_memory_aggregation_buffer (tenant_id, user_id, session_id);
 CREATE INDEX idx_memory_aggregation_scan
 ON t_memory_aggregation_buffer (last_activity_at, update_time);
 

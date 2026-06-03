@@ -123,7 +123,8 @@ class MemoryTurnCaptureStageTests {
         }
 
         @Override
-        public MemoryIngestionResult flushReady(String sessionId,
+        public MemoryIngestionResult flushReady(String userId,
+                                                String sessionId,
                                                 String tenantId,
                                                 MemoryFlushTrigger trigger,
                                                 Instant now) {

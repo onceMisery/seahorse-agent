@@ -21,7 +21,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult
 
 public interface MemoryAggregationInboundPort {
 
-    MemoryIngestionResult flushSessionClosed(String sessionId, String tenantId);
+    MemoryIngestionResult flushSessionClosed(String userId, String sessionId, String tenantId);
 
-    MemoryIngestionResult flushManually(String sessionId, String tenantId);
+    MemoryIngestionResult flushManually(String userId, String sessionId, String tenantId);
 }

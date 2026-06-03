@@ -355,7 +355,7 @@ public class JdbcChatSchemaUpgrade {
                 """);
         jdbcTemplate.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS uk_memory_aggregation_session
-                ON t_memory_aggregation_buffer (tenant_id, session_id)
+                ON t_memory_aggregation_buffer (tenant_id, user_id, session_id)
                 """);
         jdbcTemplate.execute("""
                 CREATE INDEX IF NOT EXISTS idx_memory_aggregation_scan

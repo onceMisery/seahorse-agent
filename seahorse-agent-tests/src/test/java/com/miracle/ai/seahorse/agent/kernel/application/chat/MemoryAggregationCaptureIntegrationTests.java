@@ -268,6 +268,7 @@ class MemoryAggregationCaptureIntegrationTests {
 
         @Override
         public MemoryIngestionResult flushReady(
+                String userId,
                 String sessionId,
                 String tenantId,
                 MemoryFlushTrigger trigger,

@@ -233,6 +233,10 @@
   --theme-accent-alpha-40: rgba(168, 85, 247, 0.4);
   --theme-accent-alpha-60: rgba(168, 85, 247, 0.6);
 
+  --theme-text-primary: #e2e8f0;
+  --theme-text-secondary: #94a3b8;
+  --theme-text-muted: #64748b;
+
   --theme-glass-bg: rgba(34, 0, 68, 0.4);
   --theme-glass-bg-hover: rgba(34, 0, 68, 0.6);
   --theme-glass-border: rgba(168, 85, 247, 0.1);
@@ -269,6 +273,10 @@
   --theme-accent-alpha-40: rgba(16, 185, 129, 0.4);
   --theme-accent-alpha-60: rgba(16, 185, 129, 0.6);
 
+  --theme-text-primary: #e2e8f0;
+  --theme-text-secondary: #94a3b8;
+  --theme-text-muted: #64748b;
+
   --theme-glass-bg: rgba(0, 51, 32, 0.4);
   --theme-glass-bg-hover: rgba(0, 51, 32, 0.6);
   --theme-glass-border: rgba(16, 185, 129, 0.1);
@@ -304,6 +312,10 @@
   --theme-accent-alpha-30: rgba(245, 158, 11, 0.3);
   --theme-accent-alpha-40: rgba(245, 158, 11, 0.4);
   --theme-accent-alpha-60: rgba(245, 158, 11, 0.6);
+
+  --theme-text-primary: #e2e8f0;
+  --theme-text-secondary: #94a3b8;
+  --theme-text-muted: #64748b;
 
   --theme-glass-bg: rgba(51, 32, 0, 0.4);
   --theme-glass-bg-hover: rgba(51, 32, 0, 0.6);
@@ -401,6 +413,18 @@
 
 .dark {
   color-scheme: light;
+
+  /* 暗色模式下文字颜色必须覆盖为浅色，否则在深色背景上不可见 */
+  --theme-text-primary: #e2e8f0;
+  --theme-text-secondary: #94a3b8;
+  --theme-text-muted: #64748b;
+
+  /* 暗色模式背景覆盖（marine 默认主题在暗色下需使用深色值） */
+  --theme-bg-base: #0a1628;
+  --theme-bg-elevated: var(--sh-workbench-panel);
+  --theme-bg-surface: var(--sh-workbench-panel-subtle);
+  --theme-bg-gradient-1: #1e3a5f;
+  --theme-bg-gradient-2: #0a1628;
 }
 
 * {

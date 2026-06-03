@@ -45,9 +45,10 @@ class KernelMemoryAggregationControlServiceTests {
         RecordingAggregationService delegate = new RecordingAggregationService();
         MemoryAggregationInboundPort service = service(delegate);
 
-        MemoryIngestionResult result = service.flushSessionClosed("session-1", " ");
+        MemoryIngestionResult result = service.flushSessionClosed("user-1", "session-1", " ");
 
         assertThat(result.status()).isEqualTo(MemoryIngestionStatus.ACCEPTED);
+        assertThat(delegate.userId).isEqualTo("user-1");
         assertThat(delegate.sessionId).isEqualTo("session-1");
         assertThat(delegate.tenantId).isEqualTo("default");
         assertThat(delegate.trigger).isEqualTo(MemoryFlushTrigger.SESSION_CLOSED);
@@ -59,9 +60,10 @@ class KernelMemoryAggregationControlServiceTests {
         RecordingAggregationService delegate = new RecordingAggregationService();
         MemoryAggregationInboundPort service = service(delegate);
 
-        MemoryIngestionResult result = service.flushManually("session-2", "tenant-1");
+        MemoryIngestionResult result = service.flushManually("user-1", "session-2", "tenant-1");
 
         assertThat(result.status()).isEqualTo(MemoryIngestionStatus.ACCEPTED);
+        assertThat(delegate.userId).isEqualTo("user-1");
         assertThat(delegate.sessionId).isEqualTo("session-2");
         assertThat(delegate.tenantId).isEqualTo("tenant-1");
         assertThat(delegate.trigger).isEqualTo(MemoryFlushTrigger.MANUAL);
@@ -73,7 +75,7 @@ class KernelMemoryAggregationControlServiceTests {
         RecordingAggregationService delegate = new RecordingAggregationService();
         MemoryAggregationInboundPort service = service(delegate);
 
-        assertThatThrownBy(() -> service.flushManually(" ", "tenant-1"))
+        assertThatThrownBy(() -> service.flushManually("user-1", " ", "tenant-1"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("sessionId");
         assertThat(delegate.trigger).isNull();
@@ -87,6 +89,7 @@ class KernelMemoryAggregationControlServiceTests {
 
     private static final class RecordingAggregationService implements MemoryAggregationServicePort {
 
+        private String userId;
         private String sessionId;
         private String tenantId;
         private MemoryFlushTrigger trigger;
@@ -107,10 +110,12 @@ class KernelMemoryAggregationControlServiceTests {
         }
 
         @Override
-        public MemoryIngestionResult flushReady(String sessionId,
+        public MemoryIngestionResult flushReady(String userId,
+                                                String sessionId,
                                                 String tenantId,
                                                 MemoryFlushTrigger trigger,
                                                 Instant now) {
+            this.userId = userId;
             this.sessionId = sessionId;
             this.tenantId = tenantId;
             this.trigger = trigger;
@@ -119,7 +124,7 @@ class KernelMemoryAggregationControlServiceTests {
         }
 
         @Override
-        public Optional<MemoryBufferState> state(String sessionId, String tenantId) {
+        public Optional<MemoryBufferState> state(String userId, String sessionId, String tenantId) {
             return Optional.empty();
         }
     }

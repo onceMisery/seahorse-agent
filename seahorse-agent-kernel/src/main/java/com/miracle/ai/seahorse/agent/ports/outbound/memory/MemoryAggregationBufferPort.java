@@ -25,12 +25,13 @@ public interface MemoryAggregationBufferPort {
 
     MemoryBufferState appendTurn(MemoryTurnEvent event);
 
-    Optional<MemoryBufferSnapshot> flushReady(String sessionId,
+    Optional<MemoryBufferSnapshot> flushReady(String userId,
+                                              String sessionId,
                                               String tenantId,
                                               MemoryFlushTrigger trigger,
                                               Instant now);
 
-    Optional<MemoryBufferState> state(String sessionId, String tenantId);
+    Optional<MemoryBufferState> state(String userId, String sessionId, String tenantId);
 
     default List<MemoryBufferState> listStates(int limit) {
         return List.of();
@@ -56,7 +57,8 @@ public interface MemoryAggregationBufferPort {
             }
 
             @Override
-            public Optional<MemoryBufferSnapshot> flushReady(String sessionId,
+            public Optional<MemoryBufferSnapshot> flushReady(String userId,
+                                                             String sessionId,
                                                              String tenantId,
                                                              MemoryFlushTrigger trigger,
                                                              Instant now) {
@@ -64,7 +66,7 @@ public interface MemoryAggregationBufferPort {
             }
 
             @Override
-            public Optional<MemoryBufferState> state(String sessionId, String tenantId) {
+            public Optional<MemoryBufferState> state(String userId, String sessionId, String tenantId) {
                 return Optional.empty();
             }
         };

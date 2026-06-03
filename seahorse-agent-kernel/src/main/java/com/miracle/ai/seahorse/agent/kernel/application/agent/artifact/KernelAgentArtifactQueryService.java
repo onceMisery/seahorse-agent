@@ -36,7 +36,7 @@ import java.util.Optional;
 public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboundPort {
 
     private static final String ADMIN_ROLE = "admin";
-    private static final String ACCESS_DENIED = "Access denied";
+    private static final String ACCESS_DENIED = "权限不足";
     private static final String DOWNLOAD_BLOCKED = "Artifact is not available for download";
     private static final Map<String, String> FILE_EXTENSIONS = Map.ofEntries(
             Map.entry("text/html", ".html"),

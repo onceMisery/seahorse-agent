@@ -255,3 +255,4 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-06-02 | work | docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/20-checkpoint.md | Frontend backend gap remediation checkpoint |
 | 2026-06-02 | work | docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/90-evidence.md | Frontend backend gap remediation evidence |
 | 2026-06-02 | work | docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/99-reflection.md | Frontend backend gap remediation reflection |
+| 2026-06-03 | plan | docs/aegis/plans/2026-06-03-agent-skills-full-stack-implementation-plan.md | Agent skills full stack implementation plan |

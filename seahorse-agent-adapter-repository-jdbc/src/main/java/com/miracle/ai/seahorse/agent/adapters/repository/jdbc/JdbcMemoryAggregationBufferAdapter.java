@@ -59,7 +59,7 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
     public MemoryBufferState appendTurn(MemoryTurnEvent event) {
         MemoryTurnEvent safeEvent = Objects.requireNonNull(event, "event must not be null");
         for (int attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
-            Optional<StoredBuffer> existing = findBuffer(safeEvent.sessionId(), safeEvent.tenantId());
+            Optional<StoredBuffer> existing = findBuffer(safeEvent.userId(), safeEvent.sessionId(), safeEvent.tenantId());
             if (existing.isPresent()) {
                 StoredBuffer current = existing.get();
                 StoredBuffer updated = current.append(safeEvent);
@@ -80,14 +80,15 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
     }
 
     @Override
-    public Optional<MemoryBufferSnapshot> flushReady(String sessionId,
+    public Optional<MemoryBufferSnapshot> flushReady(String userId,
+                                                     String sessionId,
                                                      String tenantId,
                                                      MemoryFlushTrigger trigger,
                                                      Instant now) {
         MemoryFlushTrigger safeTrigger = Objects.requireNonNullElse(trigger, MemoryFlushTrigger.MANUAL);
         Instant safeNow = Objects.requireNonNullElseGet(now, Instant::now);
         for (int attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
-            Optional<StoredBuffer> existing = findBuffer(sessionId, tenantId);
+            Optional<StoredBuffer> existing = findBuffer(userId, sessionId, tenantId);
             if (existing.isEmpty()) {
                 return Optional.empty();
             }
@@ -98,8 +99,9 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
             beforeFlushDeleteAttempt(buffer.tenantId(), buffer.sessionId(), buffer.version(), safeTrigger);
             int deleted = jdbcTemplate.update("""
                     DELETE FROM t_memory_aggregation_buffer
-                    WHERE tenant_id = ? AND session_id = ? AND version = ?
-                    """, buffer.tenantId(), buffer.sessionId(), buffer.version());
+                    WHERE tenant_id = ? AND user_id = ? AND session_id = ? AND version = ?
+                    """, buffer.tenantId(), JdbcMemorySupport.toLongId(buffer.userId()),
+                    buffer.sessionId(), buffer.version());
             if (deleted == 1) {
                 return Optional.of(buffer.snapshot(safeTrigger));
             }
@@ -114,8 +116,8 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
     }
 
     @Override
-    public Optional<MemoryBufferState> state(String sessionId, String tenantId) {
-        return findBuffer(sessionId, tenantId).map(buffer -> buffer.state(policy));
+    public Optional<MemoryBufferState> state(String userId, String sessionId, String tenantId) {
+        return findBuffer(userId, sessionId, tenantId).map(buffer -> buffer.state(policy));
     }
 
     @Override
@@ -131,12 +133,13 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                 .toList();
     }
 
-    private Optional<StoredBuffer> findBuffer(String sessionId, String tenantId) {
+    private Optional<StoredBuffer> findBuffer(String userId, String sessionId, String tenantId) {
         return jdbcTemplate.query("""
                 SELECT *
                 FROM t_memory_aggregation_buffer
-                WHERE tenant_id = ? AND session_id = ?
-                """, this::mapBuffer, safeTenantId(tenantId), normalize(sessionId, ""))
+                WHERE tenant_id = ? AND user_id = ? AND session_id = ?
+                """, this::mapBuffer, safeTenantId(tenantId), JdbcMemorySupport.toLongId(userId),
+                normalize(sessionId, ""))
                 .stream()
                 .findFirst();
     }
@@ -176,7 +179,7 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                     last_activity_at = ?,
                     version = ?,
                     update_time = ?
-                WHERE tenant_id = ? AND session_id = ? AND version = ?
+                WHERE tenant_id = ? AND user_id = ? AND session_id = ? AND version = ?
                 """,
                 JdbcMemorySupport.toLongId(buffer.userId()),
                 JdbcMemorySupport.toLongId(buffer.conversationId()),
@@ -188,6 +191,7 @@ public class JdbcMemoryAggregationBufferAdapter implements MemoryAggregationBuff
                 buffer.version(),
                 JdbcMemorySupport.timestamp(Instant.now()),
                 buffer.tenantId(),
+                JdbcMemorySupport.toLongId(buffer.userId()),
                 buffer.sessionId(),
                 expectedVersion);
         return updated == 1;

@@ -67,16 +67,16 @@ class JdbcMemoryAggregationBufferAdapterTests {
         assertThat(state.totalTokens()).isEqualTo(50);
         assertThat(state.forceFlushRequired()).isFalse();
 
-        assertThat(adapter.flushReady("session-1", "tenant-1", MemoryFlushTrigger.IDLE_TIMEOUT,
+        assertThat(adapter.flushReady("1", "session-1", "tenant-1", MemoryFlushTrigger.IDLE_TIMEOUT,
                 firstAt.plusSeconds(20))).isEmpty();
 
-        var snapshot = adapter.flushReady("session-1", "tenant-1", MemoryFlushTrigger.IDLE_TIMEOUT,
+        var snapshot = adapter.flushReady("1", "session-1", "tenant-1", MemoryFlushTrigger.IDLE_TIMEOUT,
                 firstAt.plusSeconds(50));
 
         assertThat(snapshot).hasValueSatisfying(value -> {
             assertThat(value.tenantId()).isEqualTo("tenant-1");
-            assertThat(value.userId()).isEqualTo("user-1");
-            assertThat(value.conversationId()).isEqualTo("conv-1");
+            assertThat(value.userId()).isEqualTo("1");
+            assertThat(value.conversationId()).isEqualTo("101");
             assertThat(value.sessionId()).isEqualTo("session-1");
             assertThat(value.trigger()).isEqualTo(MemoryFlushTrigger.IDLE_TIMEOUT);
             assertThat(value.turns()).extracting(MemoryTurnEvent::userText)
@@ -85,7 +85,7 @@ class JdbcMemoryAggregationBufferAdapterTests {
             assertThat(value.from()).isEqualTo(firstAt);
             assertThat(value.to()).isEqualTo(firstAt.plusSeconds(5));
         });
-        assertThat(adapter.state("session-1", "tenant-1")).isEmpty();
+        assertThat(adapter.state("1", "session-1", "tenant-1")).isEmpty();
     }
 
     @Test
@@ -97,7 +97,7 @@ class JdbcMemoryAggregationBufferAdapterTests {
 
         assertThat(state.forceFlushRequired()).isTrue();
         assertThat(state.forceFlushTrigger()).isEqualTo(MemoryFlushTrigger.FORCE_TOKENS);
-        assertThat(adapter.flushReady("session-1", "tenant-1", MemoryFlushTrigger.FORCE_TOKENS,
+        assertThat(adapter.flushReady("1", "session-1", "tenant-1", MemoryFlushTrigger.FORCE_TOKENS,
                 completedAt.plusSeconds(1))).hasValueSatisfying(snapshot ->
                 assertThat(snapshot.turns()).hasSize(2));
     }
@@ -122,6 +122,28 @@ class JdbcMemoryAggregationBufferAdapterTests {
 
         assertThat(insertedVersion).isEqualTo(1L);
         assertThat(updatedVersion).isEqualTo(2L);
+    }
+
+    @Test
+    void shouldIsolateBuffersByUserWhenSessionIdMatches() {
+        Instant completedAt = Instant.parse("2026-05-22T09:45:00Z");
+
+        adapter.appendTurn(turnFor("1", "101", "session-1", "user-1-msg-1", "first", completedAt));
+        adapter.appendTurn(turnFor("2", "202", "session-1", "user-2-msg-1", "other", completedAt.plusSeconds(1)));
+        adapter.appendTurn(turnFor("1", "101", "session-1", "user-1-msg-2", "second", completedAt.plusSeconds(2)));
+
+        assertThat(adapter.state("1", "session-1", "tenant-1"))
+                .hasValueSatisfying(state -> {
+                    assertThat(state.userId()).isEqualTo("1");
+                    assertThat(state.conversationId()).isEqualTo("101");
+                    assertThat(state.turnCount()).isEqualTo(2);
+                });
+        assertThat(adapter.state("2", "session-1", "tenant-1"))
+                .hasValueSatisfying(state -> {
+                    assertThat(state.userId()).isEqualTo("2");
+                    assertThat(state.conversationId()).isEqualTo("202");
+                    assertThat(state.turnCount()).isEqualTo(1);
+                });
     }
 
     @Test
@@ -155,9 +177,9 @@ class JdbcMemoryAggregationBufferAdapterTests {
         }
         executor.shutdownNow();
 
-        assertThat(adapter.state("session-1", "tenant-1"))
+        assertThat(adapter.state("1", "session-1", "tenant-1"))
                 .hasValueSatisfying(state -> assertThat(state.turnCount()).isEqualTo(appendCount + 1));
-        assertThat(adapter.flushReady("session-1", "tenant-1", MemoryFlushTrigger.MANUAL, completedAt.plusSeconds(1)))
+        assertThat(adapter.flushReady("1", "session-1", "tenant-1", MemoryFlushTrigger.MANUAL, completedAt.plusSeconds(1)))
                 .hasValueSatisfying(snapshot -> assertThat(snapshot.turns())
                         .extracting(MemoryTurnEvent::userMessageId)
                         .contains("seed", "concurrent-0", "concurrent-23")
@@ -177,10 +199,10 @@ class JdbcMemoryAggregationBufferAdapterTests {
             }
         };
 
-        assertThat(adapter.flushReady("session-1", "tenant-1", MemoryFlushTrigger.IDLE_TIMEOUT,
+        assertThat(adapter.flushReady("1", "session-1", "tenant-1", MemoryFlushTrigger.IDLE_TIMEOUT,
                 firstAt.plusSeconds(50))).isEmpty();
 
-        assertThat(adapter.state("session-1", "tenant-1"))
+        assertThat(adapter.state("1", "session-1", "tenant-1"))
                 .hasValueSatisfying(state -> {
                     assertThat(state.turnCount()).isEqualTo(2);
                     assertThat(state.lastActivityAt()).isEqualTo(firstAt.plusSeconds(45));
@@ -202,12 +224,12 @@ class JdbcMemoryAggregationBufferAdapterTests {
             }
         };
 
-        assertThat(adapter.flushReady("session-1", "tenant-1", MemoryFlushTrigger.FORCE_TURNS,
+        assertThat(adapter.flushReady("1", "session-1", "tenant-1", MemoryFlushTrigger.FORCE_TURNS,
                 firstAt.plusSeconds(3)))
                 .hasValueSatisfying(snapshot -> assertThat(snapshot.turns())
                         .extracting(MemoryTurnEvent::userMessageId)
                         .containsExactly("msg-1", "msg-2", "msg-3", "msg-4"));
-        assertThat(adapter.state("session-1", "tenant-1")).isEmpty();
+        assertThat(adapter.state("1", "session-1", "tenant-1")).isEmpty();
     }
 
     @Test
@@ -215,8 +237,8 @@ class JdbcMemoryAggregationBufferAdapterTests {
         adapter.appendTurn(turn("msg-1", "older", "ok", 1, Instant.parse("2026-05-22T08:00:00Z")));
         adapter.appendTurn(new MemoryTurnEvent(
                 "tenant-1",
-                "user-1",
-                "conv-2",
+                "1",
+                "202",
                 "session-2",
                 "msg-2",
                 "assistant-2",
@@ -234,11 +256,31 @@ class JdbcMemoryAggregationBufferAdapterTests {
                                  String assistantText,
                                  int tokens,
                                  Instant completedAt) {
+        return turnFor("1", "101", "session-1", messageId, userText, assistantText, tokens, completedAt);
+    }
+
+    private MemoryTurnEvent turnFor(String userId,
+                                    String conversationId,
+                                    String sessionId,
+                                    String messageId,
+                                    String userText,
+                                    Instant completedAt) {
+        return turnFor(userId, conversationId, sessionId, messageId, userText, "ok", 1, completedAt);
+    }
+
+    private MemoryTurnEvent turnFor(String userId,
+                                    String conversationId,
+                                    String sessionId,
+                                    String messageId,
+                                    String userText,
+                                    String assistantText,
+                                    int tokens,
+                                    Instant completedAt) {
         return new MemoryTurnEvent(
                 "tenant-1",
-                "user-1",
-                "conv-1",
-                "session-1",
+                userId,
+                conversationId,
+                sessionId,
                 messageId,
                 "assistant-" + messageId,
                 userText,

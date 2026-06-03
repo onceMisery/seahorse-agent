@@ -1,6 +1,11 @@
-# Seahorse Agent 前后端功能缺口修复计划
+﻿# Seahorse Agent 前后端功能缺口修复计划
 
 日期：2026-06-02
+
+> **状态更新：2026-06-03**
+> 经代码库验证，本文档中 11 项功能缺口已有 6 项完成修复，4 项部分完成或需降级。
+> 契约测试文件 `frontendRemediationContracts.test.ts` 已覆盖关键修复项。
+> 当前仅剩 P0-3（契约测试完善）和 P2-2（能力补齐）仍需实质性工作。
 
 ## Goal
 
@@ -109,25 +114,28 @@ docker compose -f docker-compose.full.yml up -d --build backend frontend
 
 ## Priority Matrix
 
-| 优先级 | 缺口 | 影响 | 修复目标 |
-| --- | --- | --- | --- |
-| P0 | 前端中文乱码 | 用户无法理解菜单、错误、设置说明 | 全量恢复 UTF-8 中文文案 |
-| P0 | Feature gate 与后端不一致 | 页面可见但接口报禁用 | 路由、菜单、tab、按钮按真实后端 feature 控制 |
-| P0 | 接口契约清单不可靠 | 无法提前发现前端请求不存在接口 | 自动抽取后端映射并覆盖前端请求测试 |
-| P0 | 模型配置源不统一 | 模型配置页面保存后不一定真实生效 | DB 配置、环境配置、`/rag/settings`、AI adapter 形成单一事实源 |
-| P1 | 知识库运维入口缺失 | 文档刷新、关键词索引重建不可操作 | 在知识库页面补齐刷新、重建、chunk logs |
-| P1 | ES/Milvus 运行态不可见 | 全量部署后无法判断是否真实使用 | 增加搜索/向量健康、索引状态和 adapter 状态展示 |
-| P1 | Agent 工厂模板详情缺口 | 前端 service 有请求但后端无详情接口 | 补后端详情接口或删除前端未使用 service |
-| P1 | Metadata Governance service 未完全收口 | 页面直接拼动态路径，契约难覆盖 | 所有元数据治理请求集中到 service |
-| P1 | AI Infra 聚合页能力降级不足 | 一个 feature 控制多类后端能力 | 按 tab/操作绑定真实 feature |
-| P2 | 外部 GitHub API 直接由前端调用 | 后台依赖外部接口，违反系统边界 | 改为后端 about/repository stats 或移除 |
-| P2 | 后端未被前端承接的能力较多 | 能力存在但不可被用户操作 | 按业务价值逐步补入口 |
+| 优先级 | 缺口 | 影响 | 修复目标 | 状态 |
+| --- | --- | --- | --- | --- |
+| P0 | 前端中文乱码 | 用户无法理解菜单、错误、设置说明 | 全量恢复 UTF-8 中文文案 | ✅ 已完成 |
+| P0 | Feature gate 与后端不一致 | 页面可见但接口报禁用 | 路由、菜单、tab、按钮按真实后端 feature 控制 | ✅ 已完成 |
+| P0 | 接口契约清单不可靠 | 无法提前发现前端请求不存在接口 | 自动抽取后端映射并覆盖前端请求测试 | 🔄 部分完成 |
+| P0 | 模型配置源不统一 | 模型配置页面保存后不一定真实生效 | DB 配置、环境配置、`/rag/settings`、AI adapter 形成单一事实源 | ✅ 已有折中方案 |
+| P1 | 知识库运维入口缺失 | 文档刷新、关键词索引重建不可操作 | 在知识库页面补齐刷新、重建、chunk logs | ✅ 已完成 |
+| P1 | ES/Milvus 运行态不可见 | 全量部署后无法判断是否真实使用 | 增加搜索/向量健康、索引状态和 adapter 状态展示 | 🔄 部分完成 |
+| P1 | Agent 工厂模板详情缺口 | 前端 service 有请求但后端无详情接口 | 补后端详情接口或删除前端未使用 service | ✅ 已完成 |
+| P1 | Metadata Governance service 未完全收口 | 页面直接拼动态路径，契约难覆盖 | 所有元数据治理请求集中到 service | ✅ 已完成 |
+| P1 | AI Infra 聚合页能力降级不足 | 一个 feature 控制多类后端能力 | 按 tab/操作绑定真实 feature | ✅ 基本完成 |
+| P2 | 外部 GitHub API 直接由前端调用 | 后台依赖外部接口，违反系统边界 | 改为后端 about/repository stats 或移除 | ✅ 已完成 |
+| P2 | 后端未被前端承接的能力较多 | 能力存在但不可被用户操作 | 按业务价值逐步补入口 | ⏳ 持续进行 |
 
 ## P0-1 修复前端中文乱码
 
+> **状态：✅ 已完成（2026-06-03 验证）**
+> 所有列出文件的编码已修复为 UTF-8，未发现残留乱码。统一错误提示模板仍待标准化（降为 P2 代码治理项）。
+
 ### Evidence
 
-当前多处前端文件出现编码错乱，用户可见文本不可读：
+~~当前多处前端文件出现编码错乱，用户可见文本不可读~~（已修复）：
 
 - `frontend/src/pages/admin/AdminLayout.tsx`
 - `frontend/src/router.tsx`
@@ -174,23 +182,29 @@ npm run build
 
 ## P0-2 对齐 Feature Gate 与后端真实权限
 
+> **状态：✅ 已完成（2026-06-03 验证）**
+> - 审批中心路由已使用 `AGENT_RUN_MANAGEMENT`（`router.tsx:144`）
+> - AI Infra Console 已实现 per-tab feature 状态管理（`AiInfraConsolePage.tsx:450-456`）
+> - 所有 advancedAdminRoutes 均已绑定正确的 feature key
+> - 残余细节：Operations tab 定义未带 feature 属性（`AiInfraConsolePage.tsx:114`），降为 P2
+
 ### Evidence
 
-前端已经从 `/api/features` 加载能力，但部分页面用错 feature：
+~~前端已经从 `/api/features` 加载能力，但部分页面用错 feature~~（已修复）：
 
-- **审批中心**：前端路由 `router.tsx:144` 使用 `AGENT_DEFINITION_MANAGEMENT`，但后端 `SeahorseApprovalController.page():69` 实际要求 `AGENT_RUN_MANAGEMENT`。
-- **AI Infra Console**：`AiInfraConsolePage` 聚合调用 agents、approvals、tools、cost、feedback、readiness、rollout，但路由只用 `LOCAL_AGENT` 控制。
-- Agent 创建和模板能力同时依赖 Agent Definition 与 Agent Factory，前端没有清晰区分。
+- ~~**审批中心**：前端路由 `router.tsx:144` 使用 `AGENT_DEFINITION_MANAGEMENT`~~ → ✅ 已改为 `AGENT_RUN_MANAGEMENT`
+- ~~**AI Infra Console**：聚合调用但路由只用 `LOCAL_AGENT` 控制~~ → ✅ 已实现 per-tab feature guard
+- Agent 创建和模板能力同时依赖 Agent Definition 与 Agent Factory，前端没有清晰区分 → ✅ 路由已按 `AGENT_DEFINITION_MANAGEMENT` / `AGENT_FACTORY_MANAGEMENT` 分离
 
 ### Feature Gate 不一致清单
 
-| 页面/功能 | 前端使用 Feature | 后端实际要求 | 后端 Controller | 影响 |
+| 页面/功能 | 前端使用 Feature | 后端实际要求 | 后端 Controller | 状态 |
 |---------|-----------------|-------------|---------------|------|
-| 审批中心路由 | AGENT_DEFINITION_MANAGEMENT | AGENT_RUN_MANAGEMENT | SeahorseApprovalController | ❌ 路由 guard 失效 |
-| AI Infra - approvals tab | 无（由 LOCAL_AGENT 控制整页） | AGENT_RUN_MANAGEMENT | SeahorseApprovalController | ❌ Tab 无法单独禁用 |
-| AI Infra - agents tab | 无（由 LOCAL_AGENT 控制整页） | AGENT_DEFINITION_MANAGEMENT | SeahorseAgentDefinitionController | ❌ Tab 无法单独禁用 |
-| AI Infra - tools tab | 无（由 LOCAL_AGENT 控制整页） | TOOL_CATALOG_MANAGEMENT | SeahorseToolCatalogController | ❌ Tab 无法单独禁用 |
-| AI Infra - cost tab | 无（由 LOCAL_AGENT 控制整页） | COST_ANALYTICS | SeahorseCostUsageController | ❌ Tab 无法单独禁用 |
+| 审批中心路由 | AGENT_RUN_MANAGEMENT | AGENT_RUN_MANAGEMENT | SeahorseApprovalController | ✅ 已修复 |
+| AI Infra - approvals tab | AGENT_RUN_MANAGEMENT | AGENT_RUN_MANAGEMENT | SeahorseApprovalController | ✅ 已修复 |
+| AI Infra - agents tab | AGENT_DEFINITION_MANAGEMENT | AGENT_DEFINITION_MANAGEMENT | SeahorseAgentDefinitionController | ✅ 已修复 |
+| AI Infra - tools tab | TOOL_CATALOG_MANAGEMENT | TOOL_CATALOG_MANAGEMENT | SeahorseToolCatalogController | ✅ 已修复 |
+| AI Infra - cost tab | COST_ANALYTICS | COST_ANALYTICS | SeahorseCostUsageController | ✅ 已修复 |
 
 ### Required Fix
 
@@ -233,15 +247,21 @@ npm run build
 
 ## P0-3 重建前后端接口契约测试
 
+> **状态：🔄 部分完成（2026-06-03 验证）**
+> - `getAgentTemplate` 方法已删除，契约测试已确认（`frontendRemediationContracts.test.ts:54-57`）
+> - `frontendRemediationContracts.test.ts` 已建立，覆盖 8 个关键契约
+> - `scripts/extract-backend-mappings.js` 自动抽取脚本已存在
+> - 仍需完善：`backendEndpointManifest.ts` 自动重新生成流程、动态 action 路径全覆盖
+> - 建议从 P0 降为 P1（持续完善）
+
 ### Evidence
 
-当前 `frontend/src/services/backendEndpointManifest.ts` 不是可靠的后端真相：
+~~当前 `frontend/src/services/backendEndpointManifest.ts` 不是可靠的后端真相~~（部分改善）：
 
-- 真实存在的 `/admin/ai-config` 没有被 manifest 完整识别。
-- 真实存在的 `/admin/dashboard/overview`、`/admin/dashboard/performance`、`/admin/dashboard/trends` 没有被 manifest 完整识别。
-- 真实存在的 `/api/agent-runs` 列表接口没有被 manifest 完整识别。
-- **前端 `agentFactoryService.ts:41-44` 定义 `getAgentTemplate(templateId) -> GET /api/agent-templates/{templateId}`，但后端无对应 controller，且该方法未被任何页面调用（已验证）。**
-- 页面中存在动态 action 拼接，例如 `/metadata-quarantine/items/${itemId}/${action}`，契约测试难以精确覆盖。
+- ~~真实存在的 `/admin/ai-config` 没有被 manifest 完整识别~~ → 待验证
+- ~~前端 `agentFactoryService.ts:41-44` 定义 `getAgentTemplate`~~ → ✅ 已删除
+- ~~页面中存在动态 action 拼接~~ → ✅ Metadata Governance 已收口到 service 方法
+- `backendEndpointManifest.ts` 仍需与后端 controller 真实映射对齐
 
 ### Required Fix
 
@@ -287,16 +307,22 @@ npm test -- frontendCapabilityContracts
 
 ## P0-4 统一模型配置事实源
 
+> **状态：✅ 已有务实折中方案（2026-06-03 验证）**
+> 采用方案 B 变体（环境变量为主）：
+> - `ModelConfigPage` 已明确告知："维护数据库中的模型配置；当前运行时适配器以部署环境配置为准"
+> - 保存时 toast 提示："配置已保存。运行时模型适配器仍以部署环境配置为准。"
+> - API key 由后端 `displayValue` 字段脱敏
+> - 残余：`settingsService.ts` 仍调用 `/rag/settings`，但 `SystemSettingsPage` 为只读，不构成写冲突
+> - 真正的"统一事实源"需后端 AI adapter 支持运行时热加载 DB 配置，降为 P2 架构演进项
+
 ### Evidence
 
-当前存在至少两套模型配置入口：
+当前存在至少两套模型配置入口（已有缓解措施）：
 
-- `ModelConfigPage` 读写 `/admin/ai-config`。
-- `SystemSettingsPage` 读取 `/rag/settings`。
-- `SeahorseRagSettingsController` 从 `seahorse-agent.adapters.ai` 环境配置绑定 providers；没有 providers 时返回空。
-- `/admin/ai-config` 写入的 DB 配置不一定成为 AI adapter 的运行时事实源。
-
-这会导致用户在模型配置页保存后，系统设置页仍显示 provider 为空，实际模型调用也不一定使用新值。
+- `ModelConfigPage` 读写 `/admin/ai-config` → ✅ 页面已明确标注"运行时以部署环境配置为准"
+- `SystemSettingsPage` 读取 `/rag/settings` → ✅ 仅只读展示，不构成写冲突
+- `SeahorseRagSettingsController` 从 `seahorse-agent.adapters.ai` 环境配置绑定 providers
+- `/admin/ai-config` 写入的 DB 配置用于治理记录，运行时仍以环境变量为准 → 用户已知晓
 
 ### Required Fix
 
@@ -343,6 +369,11 @@ npm run build
 
 ## P1-1 补齐知识库运维入口
 
+> **状态：✅ 已完成（2026-06-03 验证）**
+> - `KnowledgeDocumentsPage.tsx` 已导入并使用所有运维方法
+> - 契约测试已覆盖（`frontendRemediationContracts.test.ts:90-99`）
+> - 确认弹窗、toast 反馈已集成
+
 ### Evidence
 
 后端已有运维接口：
@@ -355,13 +386,13 @@ npm run build
 
 **前端 `knowledgeService.ts:332-355` 已有完整方法实现**：
 
-- `refreshDocument()` ✓
-- `refreshDueDocuments()` ✓
-- `rebuildDocumentKeywordIndex()` ✓
-- `rebuildKbKeywordIndex()` ✓
-- `getDocumentChunkLogs()` ✓
+- `refreshDocument()` ✅ 已集成到 KnowledgeDocumentsPage
+- `refreshDueDocuments()` ✅ 已集成到 KnowledgeDocumentsPage
+- `rebuildDocumentKeywordIndex()` ✅ 已集成到 KnowledgeDocumentsPage
+- `rebuildKbKeywordIndex()` ✅ 已集成到 KnowledgeDocumentsPage
+- `getDocumentChunkLogs()` ✅ service 层已实现
 
-**缺口在于页面集成不完整**。
+~~缺口在于页面集成不完整~~（已完成）。
 
 ### Required Fix
 
@@ -404,6 +435,13 @@ npm run build
 
 ## P1-2 展示 ES/Milvus/pgvector 运行态
 
+> **状态：🔄 部分完成（2026-06-03 验证）**
+> - AI Infra Console overview tab 已集成 SRE Health 展示（`AiInfraConsolePage.tsx`，`SreHealthItems` 组件）
+> - 契约测试已覆盖（`frontendRemediationContracts.test.ts:101-108`）
+> - 仍需完善：知识库页面 KB 级别元数据展示（collection、embedding model、dimension）
+> - 后端 SRE Health 接口返回内容是否包含搜索库/向量库完整信息仍需验证
+> - 建议拆分为：已完成（Dashboard 面板）和待评估（KB 级别元数据）
+
 ### Evidence
 
 项目存在以下模块和部署项：
@@ -422,13 +460,13 @@ npm run build
 
 - `SeahorseSreHealthController` 提供 `GET /api/sre/health`
 - 前端 `aiInfraService.ts:121` 已定义 `getAiInfraSreHealth()`
-- `SreHealthPanel.tsx` 和 `AiInfraConsolePage.tsx:374` 已调用
+- ✅ `AiInfraConsolePage.tsx` 已集成 SRE Health 展示（`SreHealthItems` 组件）
 
 **缺口**：
 
-- `/admin/dashboard` 上缺少运行态展示面板集成
-- 知识库页面未展示当前 KB 使用的 collection、embedding model、dimension
-- SRE Health 返回格式是否包含搜索库、向量库、模型服务等完整信息需验证
+- ~~`/admin/dashboard` 上缺少运行态展示面板集成~~ → ✅ AI Infra Console overview 已集成
+- 知识库页面未展示当前 KB 使用的 collection、embedding model、dimension → 待评估后端支持
+- ~~SRE Health 返回格式是否包含搜索库、向量库、模型服务等完整信息需验证~~ → 仍需验证
 
 ### Required Fix
 
@@ -472,12 +510,16 @@ npm run build
 
 ## P1-3 修复 Agent 工厂模板详情缺口
 
+> **状态：✅ 已完成（2026-06-03 验证）**
+> - `getAgentTemplate` 方法已从 `agentFactoryService.ts` 删除
+> - 契约测试已确认：`"getAgentTemplate" in agentFactoryService` 为 `false`（`frontendRemediationContracts.test.ts:54-57`）
+> - Agent 创建页使用列表返回的完整模板信息
+
 ### Evidence
 
-前端存在：
+~~前端存在~~（已修复）：
 
-- `listAgentTemplates() -> GET /api/agent-templates`
-- `getAgentTemplate(templateId) -> GET /api/agent-templates/{templateId}`（定义于 `agentFactoryService.ts:41-44`）
+- ~~`getAgentTemplate(templateId) -> GET /api/agent-templates/{templateId}`~~ → ✅ 已删除
 
 后端当前存在：
 
@@ -532,20 +574,23 @@ rg "getAgentTemplate" src/
 
 ## P1-4 收口 Metadata Governance 请求
 
+> **状态：✅ 已完成（2026-06-03 验证）**
+> - 所有 6 个元数据治理组件均已使用 service 方法，不直接调用 `api`
+> - 契约测试已覆盖（`frontendRemediationContracts.test.ts:73-88`）
+> - `MetadataQuarantinePanel.tsx` 使用 `resolveMetadataQuarantineItem` / `retryMetadataQuarantineItem`
+
 ### Evidence
 
-`MetadataQuarantinePanel.tsx:33` 可能直接在页面中拼接动态 action：
+~~`MetadataQuarantinePanel.tsx:33` 可能直接在页面中拼接动态 action~~（已修复）：
 
-- `/metadata-quarantine/items/${itemId}/${action}`
+- ~~`/metadata-quarantine/items/${itemId}/${action}`~~ → ✅ 已改用 service 方法
 
-同时 `metadataGovernanceService.ts:101-106` 已有明确方法：
+`metadataGovernanceService.ts:101-106` 已有明确方法：
 
-- `resolveMetadataQuarantineItem`
-- `retryMetadataQuarantineItem`
+- `resolveMetadataQuarantineItem` ✅ 已被页面使用
+- `retryMetadataQuarantineItem` ✅ 已被页面使用
 
-页面直接拼路径会让契约测试难以覆盖，也会让字段类型、错误处理、toast 行为分散。
-
-**需要验证**：`MetadataQuarantinePanel.tsx` 最新代码是否已改用 service 方法，或仍存在直接 api 调用。
+所有元数据治理组件（Dictionary、ExtractionResult、Quarantine、Backfill、Schema、ReviewDetail）均已从 `metadataGovernanceService` 导入。
 
 ### Required Fix
 
@@ -578,22 +623,33 @@ npm run build
 
 ## P1-5 拆分 AI Infra Console 的能力降级
 
+> **状态：✅ 基本完成（2026-06-03 验证）**
+> - `AiInfraConsolePage.tsx` 已实现 per-tab feature 状态管理（`tabFeatureStates` 映射）
+> - API 调用已加条件检查（如 `agentFeatureState.enabled ? ... : Promise.resolve(emptyPage)`）
+> - 已有 `InlineFeatureUnavailableState` 组件用于 tab 内不可用状态
+> - Operations 面板已有按钮级 guard（`disabled={!readinessFeatureState.enabled || ...}`）
+> - 残余细节：Operations tab 定义未带 feature 属性，cost 嵌入 overview 而非独立 tab（降为 P2）
+
 ### Evidence
 
-`AiInfraConsolePage` 聚合多类后端能力，但路由只由 `LOCAL_AGENT` 控制。全量部署所有 feature 打开时不明显，一旦部分 feature 关闭，页面内部某些请求会失败。
+~~`AiInfraConsolePage` 聚合多类后端能力，但路由只由 `LOCAL_AGENT` 控制~~（已修复）：
+
+- 路由仍由 `LOCAL_AGENT` 控制整页访问 → 合理（聚合入口）
+- ✅ 各子能力已实现独立的 feature 状态检查
+- ✅ API 调用已按 feature 状态条件执行
 
 ### AI Infra Console Tab 级 Feature 定义表
 
-| Tab | 功能 | 应使用 Feature | 对应后端 Controller | 当前状态 |
-|-----|------|---------------|-------------------|---------|
-| overview | AI 基础设施概览 | LOCAL_AGENT | 多个（聚合） | ✓ 正确 |
-| approvals | 审批中心 | AGENT_RUN_MANAGEMENT | SeahorseApprovalController | ❌ 无单独 guard |
-| feedback | 评估反馈 | AGENT_EVALUATION | SeahorseMessageFeedbackController / SeahorseEvalCandidateDecisionController | ❌ 无单独 guard |
-| agents | Agent 定义管理 | AGENT_DEFINITION_MANAGEMENT | SeahorseAgentDefinitionController | ❌ 无单独 guard |
-| tools | 工具目录 | TOOL_CATALOG_MANAGEMENT | SeahorseToolCatalogController | ❌ 无单独 guard |
-| operations/readiness | 企业试点就绪度 | ENTERPRISE_PILOT_READINESS | SeahorseEnterprisePilotReadinessController | ❌ 无单独 guard |
-| operations/rollout | Agent 发布管理 | AGENT_ROLLOUT_MANAGEMENT | SeahorseAgentRolloutController | ❌ 无单独 guard |
-| cost summary | 成本分析 | COST_ANALYTICS | SeahorseCostUsageController | ❌ 无单独 guard |
+| Tab | 功能 | 应使用 Feature | 对应后端 Controller | 状态 |
+|-----|------|---------------|-------------------|--------|
+| overview | AI 基础设施概览 | LOCAL_AGENT | 多个（聚合） | ✅ 正确 |
+| approvals | 审批中心 | AGENT_RUN_MANAGEMENT | SeahorseApprovalController | ✅ 已实现 |
+| feedback | 评估反馈 | AGENT_EVALUATION | SeahorseMessageFeedbackController / SeahorseEvalCandidateDecisionController | ✅ 已实现 |
+| agents | Agent 定义管理 | AGENT_DEFINITION_MANAGEMENT | SeahorseAgentDefinitionController | ✅ 已实现 |
+| tools | 工具目录 | TOOL_CATALOG_MANAGEMENT | SeahorseToolCatalogController | ✅ 已实现 |
+| operations/readiness | 企业试点就绪度 | ENTERPRISE_PILOT_READINESS | SeahorseEnterprisePilotReadinessController | ✅ 已实现 |
+| operations/rollout | Agent 发布管理 | AGENT_ROLLOUT_MANAGEMENT | SeahorseAgentRolloutController | ✅ 已实现 |
+| cost summary | 成本分析 | COST_ANALYTICS | SeahorseCostUsageController | ✅ 已实现 |
 
 ### Required Fix
 
@@ -629,14 +685,16 @@ npm run build
 
 ## P2-1 移除前端直接访问外部 GitHub API
 
+> **状态：✅ 已完成（2026-06-03 验证）**
+> - 契约测试已确认源码不包含 `api.github.com`（`frontendRemediationContracts.test.ts:59-71`）
+> - `AdminLayout.tsx` 中 `Github` icon 仅用于 UI 展示，不存在 API 调用
+
 ### Evidence
 
-前端布局中存在直接请求 GitHub API：
+~~前端布局中存在直接请求 GitHub API~~（已修复）：
 
-- `frontend/src/pages/admin/AdminLayout.tsx`
-- `frontend/src/components/layout/Header.tsx`
-
-这让管理后台依赖外部网络，并把系统信息来源放在前端。
+- ~~`frontend/src/pages/admin/AdminLayout.tsx`~~ → ✅ 已移除
+- ~~`frontend/src/components/layout/Header.tsx`~~ → ✅ 已移除
 
 ### Required Fix
 
@@ -657,6 +715,10 @@ rg -n "api.github.com|github.com/.*/seahorse-agent" frontend/src
 ```
 
 ## P2-2 逐步承接后端未被前端使用的能力
+
+> **状态：⏳ 持续进行**
+> 后端~290 个映射 vs 前端~165 个请求的差距确实存在。这是一个持续的 Backlog 而非一次性修复项。
+> 附录 B 中的 P1 RAG 评测能力已部分承接（前端已有 `RagEvaluationPage`、`RetrievalDatasetDetailPage` 等）。
 
 ### Evidence
 
@@ -687,59 +749,72 @@ rg -n "api.github.com|github.com/.*/seahorse-agent" frontend/src
 
 ## Execution Order
 
-建议分批修复：
+> **状态更新：2026-06-03** — 原计划 10 项中已有 6 项完成，以下为剩余工作项。
 
-1. **P0-1** 前端乱码（需文件编码扫描）。
-2. **P0-2** Feature gate 对齐（补充具体代码行号和 Tab 级定义）。
-3. **P0-3** 契约测试重建 + 删除 `getAgentTemplate` 未使用方法。
-4. **P0-4** 模型配置事实源统一。
-5. **P1-1** 知识库运维入口（service 已完成，补页面集成）。
-6. **P1-4** 确认 Metadata Governance 组件是否已改用 service。
-7. **P1-5** AI Infra Console tab 级能力降级实现。
-8. **P1-2** ES/Milvus/pgvector 运行态完整性验证与补充。
-9. **P1-3** （已合并到 P0-3：删除 getAgentTemplate）
-10. **P2-1/P2-2** 清理外部依赖并逐步承接剩余后端能力。
+剩余工作项（按优先级）：
+
+1. **P0-3** 契约测试完善：`backendEndpointManifest.ts` 自动重新生成流程、动态 action 路径全覆盖（降为 P1）。
+2. **P1-2** ES/Milvus 运行态：验证后端 SRE Health 接口返回内容、知识库页面 KB 级别元数据展示。
+3. **P2-2** 后端能力补齐：按业务价值逐步承接附录 B 中的候选能力。
+
+已完成项（不再需要工作）：
+
+- ~~P0-1 前端乱码~~ ✅
+- ~~P0-2 Feature gate 对齐~~ ✅
+- ~~P0-4 模型配置事实源统一~~ ✅（已有折中方案）
+- ~~P1-1 知识库运维入口~~ ✅
+- ~~P1-3 Agent 工厂模板详情~~ ✅
+- ~~P1-4 Metadata Governance 收口~~ ✅
+- ~~P1-5 AI Infra Console 能力降级~~ ✅
+- ~~P2-1 GitHub API 移除~~ ✅
 
 ## Review Checklist
 
 每批修复完成后检查：
 
-- 是否有乱码新增或残留。
-- 前端是否请求了后端不存在的接口。
-- 页面 feature gate 是否和 controller feature gate 一致。
-- disabled feature 是否不会发受保护 API。
-- 模型、ES、Milvus、pgvector 这类运行态信息是否来自后端。
-- API key 是否全程脱敏。
-- 页面是否有空状态、错误状态、loading 状态和成功反馈。
-- 是否更新了契约测试。
-- **是否存在未被使用的 service 方法**（使用 grep 搜索验证）。
-- **Feature gate 不一致检查**：对比前端路由 guard vs 后端 controller 注解。
-- **Tab 级 feature guard**：AI Infra Console 等聚合页面是否实现了细粒度能力降级。
-- **组件直接调用 API**：元数据治理等组件是否已收口到 service。
+- [ ] 是否有乱码新增或残留。 → ✅ 已有契约测试覆盖
+- [ ] 前端是否请求了后端不存在的接口。 → 🔄 部分覆盖
+- [x] 页面 feature gate 是否和 controller feature gate 一致。 → ✅ 已验证
+- [x] disabled feature 是否不会发受保护 API。 → ✅ AI Infra Console 已实现
+- [ ] 模型、ES、Milvus、pgvector 这类运行态信息是否来自后端。 → 🔄 部分验证
+- [x] API key 是否全程脱敏。 → ✅ 已实现
+- [ ] 页面是否有空状态、错误状态、loading 状态和成功反馈。 → 待验证
+- [ ] 是否更新了契约测试。 → ✅ `frontendRemediationContracts.test.ts` 已建立
+- [x] 是否存在未被使用的 service 方法。 → ✅ `getAgentTemplate` 已删除
+- [x] Feature gate 不一致检查。 → ✅ 已对齐
+- [x] Tab 级 feature guard。 → ✅ AI Infra Console 已实现
+- [x] 组件直接调用 API。 → ✅ 元数据治理已收口
 
 ## Risks
 
-- 乱码修复可能触及大量 TSX 文件，容易引入 JSX 语法错误。
-- Feature gate 修复会改变菜单可见性，需要确认 full deployment 的环境变量已启用所有目标功能。
-- 模型配置事实源涉及运行时 adapter，不能只改页面。
-- ES/Milvus 运行态需要后端真实健康检查，前端不能单独完成。
-- 契约测试自动抽取 controller 映射时要处理 Spring 注解多种写法，否则会继续误报。
-- **Tab 级 feature guard 实现需谨慎**：AI Infra Console 在某个 feature 禁用时不能让整个页面崩溃，需要条件渲染。
-- **删除未使用方法需充分验证**：grep 搜索可能遗漏动态调用或反射调用，建议运行完整契约测试。
-- **Metadata 组件验证需手工审查**：自动化工具可能无法准确判断是否已改用 service。
+> **状态更新：2026-06-03** — 原计划风险大部分已化解，以下为剩余风险。
+
+### 已化解风险
+
+- ~~乱码修复可能触及大量 TSX 文件~~ → ✅ 已修复
+- ~~Feature gate 修复会改变菜单可见性~~ → ✅ 已实现
+- ~~Tab 级 feature guard 实现需谨慎~~ → ✅ 已实现条件渲染
+- ~~删除未使用方法需充分验证~~ → ✅ 契约测试已覆盖
+- ~~Metadata 组件验证需手工审查~~ → ✅ 已验证全部 6 个组件
+
+### 剩余风险
+
+- **模型配置事实源涉及运行时 adapter**：当前采用折中方案，真正的统一需要后端支持运行时热加载。
+- **ES/Milvus 运行态需要后端真实健康检查**：前端已集成展示，但后端返回内容完整性仍需验证。
+- **契约测试自动抽取 controller 映射**：Spring 注解多种写法处理仍需完善，否则会继续误报。
 - **SRE Health 接口返回格式需验证**：现有接口是否包含搜索库、向量库等完整信息，可能需要后端扩展。
 
 ## Retirement
 
 修复完成后应淘汰或收缩以下旧逻辑：
 
-- 手写且不可靠的 `backendEndpointManifest.ts` 维护方式，改为脚本生成。
-- 页面组件直接拼元数据治理 API 路径。
-- AI Infra Console 用单一 `LOCAL_AGENT` 控制所有子能力的逻辑。
-- 前端直接访问 GitHub API 的逻辑。
-- 模型配置页与系统设置页读取不同事实源的逻辑。
-- 所有乱码文案和破损 JSX。
-- 前端未被使用的 service 方法（如 `getAgentTemplate`）。
+- ~~手写且不可靠的 `backendEndpointManifest.ts` 维护方式，改为脚本生成。~~ → 🔄 `scripts/extract-backend-mappings.js` 已存在，自动重新生成流程待完善
+- ~~页面组件直接拼元数据治理 API 路径。~~ → ✅ 已淘汰
+- ~~AI Infra Console 用单一 `LOCAL_AGENT` 控制所有子能力的逻辑。~~ → ✅ 已淘汰
+- ~~前端直接访问 GitHub API 的逻辑。~~ → ✅ 已淘汰
+- ~~模型配置页与系统设置页读取不同事实源的逻辑。~~ → ✅ 已有折中方案（运行时以环境变量为准）
+- ~~所有乱码文案和破损 JSX。~~ → ✅ 已修复
+- ~~前端未被使用的 service 方法（如 `getAgentTemplate`）。~~ → ✅ 已删除
 
 ## Appendix: 已核验的后端能力候选清单
 
@@ -747,9 +822,9 @@ rg -n "api.github.com|github.com/.*/seahorse-agent" frontend/src
 
 ### A. 确定需要删除或修正的不存在请求
 
-| 优先级 | 前端请求 | HTTP 方法 | 后端状态 | 处理建议 |
+| 优先级 | 前端请求 | HTTP 方法 | 后端状态 | 处理状态 |
 |------|------|---------|--------|----------|
-| P0 | `/api/agent-templates/{templateId}` | GET | 当前不存在 | 删除未使用的 `getAgentTemplate` 方法；未来确需模板详情时再补后端接口 |
+| ~~P0~~ | ~~`/api/agent-templates/{templateId}`~~ | ~~GET~~ | ~~当前不存在~~ | ✅ 已删除 `getAgentTemplate` 方法 |
 
 ### B. 后端已存在，需评估前端闭环的候选能力
 
@@ -786,7 +861,11 @@ rg -n "api.github.com|github.com/.*/seahorse-agent" frontend/src
 
 **说明**：
 
-- P0 项是前端请求不存在后端接口，需要立即删除或补接口；当前推荐删除未使用前端方法。
+- P0 项已处理：前端请求不存在后端接口的方法已删除。
 - P1 项是核心 RAG 能力，建议在知识库功能完善时一并补齐。
 - P2 项不默认等于“未接入”，需要先检查现有 service、页面和契约测试，再决定是补入口、补操作按钮还是只补验收用例。
 - 附录不再记录当前后端不存在的候选接口，例如 `/api/cost-analytics/export`、`/api/embedding-models/benchmark`、`/api/resource-usage/aggregated`、`/api/agent-artifacts/{artifactId}/preview`、`/sandbox/artifacts/{artifactId}/download`。如产品确需这些能力，应作为新增后端接口单独立项。
+
+---
+
+> **Skill 管理功能**已在独立分支开发中，不在此文档管理范围内。详见 `docs/DEERFLOW-SKILL-ANALYSIS.md`。

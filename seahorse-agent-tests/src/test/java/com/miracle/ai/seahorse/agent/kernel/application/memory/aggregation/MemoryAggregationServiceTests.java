@@ -94,7 +94,7 @@ class MemoryAggregationServiceTests {
         Assertions.assertTrue(content.contains("assistant: Understood"));
         Assertions.assertTrue(content.contains("[source_spans]"));
         Assertions.assertTrue(content.contains("span_2: task-2 -> task-2-assistant"));
-        Assertions.assertTrue(service.state("conversation-1", "default").isEmpty());
+        Assertions.assertTrue(service.state("user-1", "conversation-1", "default").isEmpty());
     }
 
     @Test
@@ -104,9 +104,9 @@ class MemoryAggregationServiceTests {
 
         service.appendTurn(turn("task-1", "Remember I use PostgreSQL", "Saved", 7));
         MemoryIngestionResult early = service.flushReady(
-                "conversation-1", "default", MemoryFlushTrigger.IDLE_TIMEOUT, BASE_TIME.plusMillis(999));
+                "user-1", "conversation-1", "default", MemoryFlushTrigger.IDLE_TIMEOUT, BASE_TIME.plusMillis(999));
         MemoryIngestionResult ready = service.flushReady(
-                "conversation-1", "default", MemoryFlushTrigger.IDLE_TIMEOUT, BASE_TIME.plusMillis(1_000));
+                "user-1", "conversation-1", "default", MemoryFlushTrigger.IDLE_TIMEOUT, BASE_TIME.plusMillis(1_000));
 
         Assertions.assertEquals(MemoryIngestionStatus.IGNORED, early.status());
         Assertions.assertEquals(MemoryIngestionStatus.ACCEPTED, ready.status());
@@ -140,7 +140,7 @@ class MemoryAggregationServiceTests {
         String flushedContent = workflow.commands.get(0).writeRequest().message().getContent();
         Assertions.assertTrue(flushedContent.contains("user: Remember I use Java"));
         Assertions.assertFalse(flushedContent.contains("user: New topic: help me plan a vacation"));
-        assertThat(service.state("conversation-1", "default"))
+        assertThat(service.state("user-1", "conversation-1", "default"))
                 .hasValueSatisfying(state -> Assertions.assertEquals(1, state.turnCount()));
     }
 

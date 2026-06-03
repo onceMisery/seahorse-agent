@@ -77,8 +77,8 @@ public class RedisMemoryAggregationBufferPort implements MemoryAggregationBuffer
     @Override
     public MemoryBufferState appendTurn(MemoryTurnEvent event) {
         MemoryTurnEvent safeEvent = Objects.requireNonNull(event, "event must not be null");
-        String bufferKey = bufferKey(safeEvent.sessionId(), safeEvent.tenantId());
-        String lockKey = lockKey(safeEvent.sessionId(), safeEvent.tenantId());
+        String bufferKey = bufferKey(safeEvent.userId(), safeEvent.sessionId(), safeEvent.tenantId());
+        String lockKey = lockKey(safeEvent.userId(), safeEvent.sessionId(), safeEvent.tenantId());
         return withLock(lockKey, () -> {
             BufferDocument document = readDocument(bufferKey)
                     .orElseGet(() -> BufferDocument.initial(safeEvent));
@@ -89,12 +89,13 @@ public class RedisMemoryAggregationBufferPort implements MemoryAggregationBuffer
     }
 
     @Override
-    public Optional<MemoryBufferSnapshot> flushReady(String sessionId,
+    public Optional<MemoryBufferSnapshot> flushReady(String userId,
+                                                     String sessionId,
                                                      String tenantId,
                                                      MemoryFlushTrigger trigger,
                                                      Instant now) {
-        String bufferKey = bufferKey(sessionId, tenantId);
-        String lockKey = lockKey(sessionId, tenantId);
+        String bufferKey = bufferKey(userId, sessionId, tenantId);
+        String lockKey = lockKey(userId, sessionId, tenantId);
         MemoryFlushTrigger safeTrigger = Objects.requireNonNullElse(trigger, MemoryFlushTrigger.MANUAL);
         Instant safeNow = Objects.requireNonNullElseGet(now, Instant::now);
         return withLock(lockKey, () -> {
@@ -112,8 +113,8 @@ public class RedisMemoryAggregationBufferPort implements MemoryAggregationBuffer
     }
 
     @Override
-    public Optional<MemoryBufferState> state(String sessionId, String tenantId) {
-        return readDocument(bufferKey(sessionId, tenantId))
+    public Optional<MemoryBufferState> state(String userId, String sessionId, String tenantId) {
+        return readDocument(bufferKey(userId, sessionId, tenantId))
                 .map(document -> document.toState(policy));
     }
 
@@ -195,12 +196,14 @@ public class RedisMemoryAggregationBufferPort implements MemoryAggregationBuffer
         }
     }
 
-    private static String bufferKey(String sessionId, String tenantId) {
-        return BUFFER_KEY_PREFIX + normalize(tenantId, DEFAULT_TENANT_ID) + ":" + normalize(sessionId, "");
+    private static String bufferKey(String userId, String sessionId, String tenantId) {
+        return BUFFER_KEY_PREFIX + normalize(tenantId, DEFAULT_TENANT_ID) + ":"
+                + normalize(userId, "") + ":" + normalize(sessionId, "");
     }
 
-    private static String lockKey(String sessionId, String tenantId) {
-        return LOCK_KEY_PREFIX + normalize(tenantId, DEFAULT_TENANT_ID) + ":" + normalize(sessionId, "");
+    private static String lockKey(String userId, String sessionId, String tenantId) {
+        return LOCK_KEY_PREFIX + normalize(tenantId, DEFAULT_TENANT_ID) + ":"
+                + normalize(userId, "") + ":" + normalize(sessionId, "");
     }
 
     private static String normalize(String value, String fallback) {

@@ -24,7 +24,8 @@ public interface MemoryAggregationServicePort {
 
     MemoryAggregationAppendResult appendTurn(MemoryTurnEvent event);
 
-    MemoryIngestionResult flushReady(String sessionId,
+    MemoryIngestionResult flushReady(String userId,
+                                     String sessionId,
                                      String tenantId,
                                      MemoryFlushTrigger trigger,
                                      Instant now);
@@ -33,7 +34,7 @@ public interface MemoryAggregationServicePort {
         return 0;
     }
 
-    default Optional<MemoryBufferState> state(String sessionId, String tenantId) {
+    default Optional<MemoryBufferState> state(String userId, String sessionId, String tenantId) {
         return Optional.empty();
     }
 
@@ -55,7 +56,8 @@ public interface MemoryAggregationServicePort {
             }
 
             @Override
-            public MemoryIngestionResult flushReady(String sessionId,
+            public MemoryIngestionResult flushReady(String userId,
+                                                    String sessionId,
                                                     String tenantId,
                                                     MemoryFlushTrigger trigger,
                                                     Instant now) {

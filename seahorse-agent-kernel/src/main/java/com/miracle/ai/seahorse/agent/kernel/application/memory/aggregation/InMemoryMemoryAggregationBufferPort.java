@@ -47,18 +47,19 @@ public class InMemoryMemoryAggregationBufferPort implements MemoryAggregationBuf
     @Override
     public synchronized MemoryBufferState appendTurn(MemoryTurnEvent event) {
         MemoryTurnEvent safeEvent = Objects.requireNonNull(event, "event must not be null");
-        String key = key(safeEvent.sessionId(), safeEvent.tenantId());
+        String key = key(safeEvent.userId(), safeEvent.sessionId(), safeEvent.tenantId());
         MutableBuffer buffer = buffers.computeIfAbsent(key, ignored -> new MutableBuffer(safeEvent));
         buffer.append(safeEvent);
         return buffer.state(policy);
     }
 
     @Override
-    public synchronized Optional<MemoryBufferSnapshot> flushReady(String sessionId,
+    public synchronized Optional<MemoryBufferSnapshot> flushReady(String userId,
+                                                                  String sessionId,
                                                                   String tenantId,
                                                                   MemoryFlushTrigger trigger,
                                                                   Instant now) {
-        String key = key(sessionId, tenantId);
+        String key = key(userId, sessionId, tenantId);
         MutableBuffer buffer = buffers.get(key);
         if (buffer == null || buffer.turns.isEmpty()) {
             return Optional.empty();
@@ -73,8 +74,8 @@ public class InMemoryMemoryAggregationBufferPort implements MemoryAggregationBuf
     }
 
     @Override
-    public synchronized Optional<MemoryBufferState> state(String sessionId, String tenantId) {
-        MutableBuffer buffer = buffers.get(key(sessionId, tenantId));
+    public synchronized Optional<MemoryBufferState> state(String userId, String sessionId, String tenantId) {
+        MutableBuffer buffer = buffers.get(key(userId, sessionId, tenantId));
         return buffer == null ? Optional.empty() : Optional.of(buffer.state(policy));
     }
 
@@ -97,9 +98,9 @@ public class InMemoryMemoryAggregationBufferPort implements MemoryAggregationBuf
         };
     }
 
-    private String key(String sessionId, String tenantId) {
+    private String key(String userId, String sessionId, String tenantId) {
         String safeTenant = normalize(tenantId, DEFAULT_TENANT_ID);
-        return safeTenant + ":" + normalize(sessionId, "");
+        return safeTenant + ":" + normalize(userId, "") + ":" + normalize(sessionId, "");
     }
 
     private static String normalize(String value, String fallback) {

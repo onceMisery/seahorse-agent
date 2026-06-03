@@ -63,10 +63,10 @@ class RedisMemoryAggregationBufferPortTests {
         assertThat(afterSecond.turnCount()).isEqualTo(2);
         assertThat(afterSecond.totalTokens()).isEqualTo(30);
         assertThat(afterSecond.lastActivityAt()).isEqualTo(BASE_TIME.plusSeconds(5));
-        assertThat(port.state("conv-1", "default"))
+        assertThat(port.state("user-1", "conv-1", "default"))
                 .hasValueSatisfying(state -> assertThat(state.turnCount()).isEqualTo(2));
         assertThat(fake.lockNames).contains(
-                "seahorse:agent:memory:aggregation:lock:default:conv-1");
+                "seahorse:agent:memory:aggregation:lock:default:user-1:conv-1");
     }
 
     @Test
@@ -79,13 +79,13 @@ class RedisMemoryAggregationBufferPortTests {
         port.appendTurn(turn("conv-1", "u2", "a2", 7, BASE_TIME.plusSeconds(1)));
 
         Optional<MemoryBufferSnapshot> snapshot = port.flushReady(
-                "conv-1", "default", MemoryFlushTrigger.FORCE_TURNS, BASE_TIME.plusSeconds(2));
+                "user-1", "conv-1", "default", MemoryFlushTrigger.FORCE_TURNS, BASE_TIME.plusSeconds(2));
 
         assertThat(snapshot).isPresent();
         assertThat(snapshot.get().turns()).hasSize(2);
         assertThat(snapshot.get().totalTokens()).isEqualTo(12);
         assertThat(snapshot.get().trigger()).isEqualTo(MemoryFlushTrigger.FORCE_TURNS);
-        assertThat(port.state("conv-1", "default")).isEmpty();
+        assertThat(port.state("user-1", "conv-1", "default")).isEmpty();
     }
 
     @Test
@@ -97,9 +97,9 @@ class RedisMemoryAggregationBufferPortTests {
         port.appendTurn(turn("conv-1", "u1", "a1", 5, BASE_TIME));
 
         Optional<MemoryBufferSnapshot> early = port.flushReady(
-                "conv-1", "default", MemoryFlushTrigger.IDLE_TIMEOUT, BASE_TIME.plusSeconds(10));
+                "user-1", "conv-1", "default", MemoryFlushTrigger.IDLE_TIMEOUT, BASE_TIME.plusSeconds(10));
         Optional<MemoryBufferSnapshot> ready = port.flushReady(
-                "conv-1", "default", MemoryFlushTrigger.IDLE_TIMEOUT, BASE_TIME.plusSeconds(35));
+                "user-1", "conv-1", "default", MemoryFlushTrigger.IDLE_TIMEOUT, BASE_TIME.plusSeconds(35));
 
         assertThat(early).isEmpty();
         assertThat(ready).isPresent();
@@ -124,12 +124,12 @@ class RedisMemoryAggregationBufferPortTests {
     @Test
     void shouldDiscardCorruptDocumentInsteadOfFailing() {
         FakeRedis fake = new FakeRedis();
-        String bufferKey = "seahorse:agent:memory:aggregation:buffer:default:conv-corrupt";
+        String bufferKey = "seahorse:agent:memory:aggregation:buffer:default:user-1:conv-corrupt";
         fake.store.put(bufferKey, "this-is-not-json");
         RedisMemoryAggregationBufferPort port = new RedisMemoryAggregationBufferPort(
                 fake.client, policy(10, 30_000L));
 
-        Optional<MemoryBufferState> state = port.state("conv-corrupt", "default");
+        Optional<MemoryBufferState> state = port.state("user-1", "conv-corrupt", "default");
 
         assertThat(state).isEmpty();
         assertThat(fake.store).doesNotContainKey(bufferKey);

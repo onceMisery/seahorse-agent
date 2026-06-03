@@ -46,17 +46,18 @@ public class KernelMemoryAggregationControlService implements MemoryAggregationI
     }
 
     @Override
-    public MemoryIngestionResult flushSessionClosed(String sessionId, String tenantId) {
-        return flush(sessionId, tenantId, MemoryFlushTrigger.SESSION_CLOSED);
+    public MemoryIngestionResult flushSessionClosed(String userId, String sessionId, String tenantId) {
+        return flush(userId, sessionId, tenantId, MemoryFlushTrigger.SESSION_CLOSED);
     }
 
     @Override
-    public MemoryIngestionResult flushManually(String sessionId, String tenantId) {
-        return flush(sessionId, tenantId, MemoryFlushTrigger.MANUAL);
+    public MemoryIngestionResult flushManually(String userId, String sessionId, String tenantId) {
+        return flush(userId, sessionId, tenantId, MemoryFlushTrigger.MANUAL);
     }
 
-    private MemoryIngestionResult flush(String sessionId, String tenantId, MemoryFlushTrigger trigger) {
+    private MemoryIngestionResult flush(String userId, String sessionId, String tenantId, MemoryFlushTrigger trigger) {
         return aggregationServicePort.flushReady(
+                Objects.requireNonNullElse(userId, ""),
                 requireText(sessionId, "sessionId"),
                 normalizeTenantId(tenantId),
                 trigger,

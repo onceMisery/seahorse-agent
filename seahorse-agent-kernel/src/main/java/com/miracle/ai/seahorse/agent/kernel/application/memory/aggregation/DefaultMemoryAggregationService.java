@@ -186,7 +186,7 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
             MemoryFlushTrigger trigger = Objects.requireNonNullElse(
                     state.forceFlushTrigger(), MemoryFlushTrigger.FORCE_TURNS);
             Optional<MemoryBufferSnapshot> snapshot = bufferPort.flushReady(
-                    state.sessionId(), state.tenantId(), trigger, Instant.now(clock));
+                    state.userId(), state.sessionId(), state.tenantId(), trigger, Instant.now(clock));
             if (snapshot.isPresent()) {
                 MemoryIngestionResult result = submit(snapshot.get());
                 recordTrace(TRACE_EVENT_FLUSH_READY, result.status() == MemoryIngestionStatus.ACCEPTED
@@ -208,12 +208,12 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
         if (event == null || !policy.topicShiftFlushEnabled()) {
             return null;
         }
-        Optional<MemoryBufferState> currentState = bufferPort.state(event.sessionId(), event.tenantId());
+        Optional<MemoryBufferState> currentState = bufferPort.state(event.userId(), event.sessionId(), event.tenantId());
         if (currentState.isEmpty() || !topicShiftDetector.shouldStartNewTopic(event, currentState.get())) {
             return null;
         }
         Optional<MemoryBufferSnapshot> snapshot = bufferPort.flushReady(
-                event.sessionId(), event.tenantId(), MemoryFlushTrigger.TOPIC_SHIFT, Instant.now(clock));
+                event.userId(), event.sessionId(), event.tenantId(), MemoryFlushTrigger.TOPIC_SHIFT, Instant.now(clock));
         if (snapshot.isEmpty()) {
             return null;
         }
@@ -227,7 +227,8 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
     }
 
     @Override
-    public MemoryIngestionResult flushReady(String sessionId,
+    public MemoryIngestionResult flushReady(String userId,
+                                            String sessionId,
                                             String tenantId,
                                             MemoryFlushTrigger trigger,
                                             Instant now) {
@@ -239,6 +240,7 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
             return MemoryIngestionResult.ignored(REASON_AGGREGATION_DISABLED);
         }
         Optional<MemoryBufferSnapshot> snapshot = bufferPort.flushReady(
+                        userId,
                         sessionId,
                         normalizeTenantId(tenantId),
                         Objects.requireNonNullElse(trigger, MemoryFlushTrigger.MANUAL),
@@ -271,7 +273,7 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
         int flushed = 0;
         for (MemoryBufferState state : bufferPort.listStates(safeLimit)) {
             MemoryIngestionResult result = flushReady(
-                    state.sessionId(), state.tenantId(), MemoryFlushTrigger.IDLE_TIMEOUT, safeNow);
+                    state.userId(), state.sessionId(), state.tenantId(), MemoryFlushTrigger.IDLE_TIMEOUT, safeNow);
             if (result.status() == MemoryIngestionStatus.ACCEPTED) {
                 flushed++;
             }
@@ -280,8 +282,8 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
     }
 
     @Override
-    public Optional<MemoryBufferState> state(String sessionId, String tenantId) {
-        return bufferPort.state(sessionId, normalizeTenantId(tenantId));
+    public Optional<MemoryBufferState> state(String userId, String sessionId, String tenantId) {
+        return bufferPort.state(userId, sessionId, normalizeTenantId(tenantId));
     }
 
     private MemoryIngestionResult submit(MemoryBufferSnapshot snapshot) {
