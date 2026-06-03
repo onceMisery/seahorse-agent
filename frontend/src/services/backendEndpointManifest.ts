@@ -13,11 +13,11 @@ export const backendEndpointManifest = [
   },
   {
     "method": "DELETE",
-    "path": "/api/skills/custom/{}"
+    "path": "/api/me/memories/{}"
   },
   {
     "method": "DELETE",
-    "path": "/api/me/memories/{}"
+    "path": "/api/skills/custom/{}"
   },
   {
     "method": "DELETE",
@@ -97,6 +97,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/agent-runs"
+  },
+  {
+    "method": "GET",
     "path": "/agent-runs/{}"
   },
   {
@@ -113,11 +117,11 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/agent-runs/{}/workflow"
+    "path": "/agent-runs/{}/steps"
   },
   {
     "method": "GET",
-    "path": "/agent-runs/{}/steps"
+    "path": "/agent-runs/{}/workflow"
   },
   {
     "method": "GET",
@@ -161,6 +165,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/agent-runs"
+  },
+  {
+    "method": "GET",
     "path": "/api/agent-runs/{}"
   },
   {
@@ -193,15 +201,11 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/api/agent-runs/{}/workflow"
-  },
-  {
-    "method": "GET",
-    "path": "/api/workflows/{}/visualization"
-  },
-  {
-    "method": "GET",
     "path": "/api/agent-runs/{}/steps"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent-runs/{}/workflow"
   },
   {
     "method": "GET",
@@ -329,10 +333,6 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/api/sre/health"
-  },
-  {
-    "method": "GET",
     "path": "/api/skills"
   },
   {
@@ -342,6 +342,10 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/api/skills/custom/{}/history"
+  },
+  {
+    "method": "GET",
+    "path": "/api/sre/health"
   },
   {
     "method": "GET",
@@ -362,6 +366,10 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/api/tools/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/workflows/{}/visualization"
   },
   {
     "method": "GET",
@@ -873,6 +881,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/skills/{}/disable"
+  },
+  {
+    "method": "POST",
+    "path": "/api/skills/{}/enable"
+  },
+  {
+    "method": "POST",
     "path": "/api/skills/custom"
   },
   {
@@ -882,14 +898,6 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/api/skills/install"
-  },
-  {
-    "method": "POST",
-    "path": "/api/skills/{}/disable"
-  },
-  {
-    "method": "POST",
-    "path": "/api/skills/{}/enable"
   },
   {
     "method": "POST",
@@ -1129,11 +1137,11 @@ export const backendEndpointManifest = [
   },
   {
     "method": "PUT",
-    "path": "/api/agent-artifacts/{}"
+    "path": "/agents/{}/draft"
   },
   {
     "method": "PUT",
-    "path": "/agents/{}/draft"
+    "path": "/api/agent-artifacts/{}"
   },
   {
     "method": "PUT",
