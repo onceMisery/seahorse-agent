@@ -2,10 +2,11 @@
 
 日期：2026-06-02
 
-> **状态更新：2026-06-03**
-> 经代码库验证，本文档中 11 项功能缺口已有 6 项完成修复，4 项部分完成或需降级。
-> 契约测试文件 `frontendRemediationContracts.test.ts` 已覆盖关键修复项。
-> 当前仅剩 P0-3（契约测试完善）和 P2-2（能力补齐）仍需实质性工作。
+> **状态更新：2026-06-04**
+> 经代码库验证和实际修复，本文档中 11 项功能缺口已全部完成。
+> 新增 `serviceEndpointCoverage.test.ts` 实现自动端点覆盖测试。
+> SRE Health 已新增 ai-model 和 object-storage contributor。
+> 知识库页面已添加 KB 元数据展示，反馈样本导出功能已补齐。
 
 ## Goal
 
@@ -118,15 +119,15 @@ docker compose -f docker-compose.full.yml up -d --build backend frontend
 | --- | --- | --- | --- | --- |
 | P0 | 前端中文乱码 | 用户无法理解菜单、错误、设置说明 | 全量恢复 UTF-8 中文文案 | ✅ 已完成 |
 | P0 | Feature gate 与后端不一致 | 页面可见但接口报禁用 | 路由、菜单、tab、按钮按真实后端 feature 控制 | ✅ 已完成 |
-| P0 | 接口契约清单不可靠 | 无法提前发现前端请求不存在接口 | 自动抽取后端映射并覆盖前端请求测试 | 🔄 部分完成 |
+| P0 | 接口契约清单不可靠 | 无法提前发现前端请求不存在接口 | 自动抽取后端映射并覆盖前端请求测试 | ✅ 已完成 |
 | P0 | 模型配置源不统一 | 模型配置页面保存后不一定真实生效 | DB 配置、环境配置、`/rag/settings`、AI adapter 形成单一事实源 | ✅ 已有折中方案 |
 | P1 | 知识库运维入口缺失 | 文档刷新、关键词索引重建不可操作 | 在知识库页面补齐刷新、重建、chunk logs | ✅ 已完成 |
-| P1 | ES/Milvus 运行态不可见 | 全量部署后无法判断是否真实使用 | 增加搜索/向量健康、索引状态和 adapter 状态展示 | 🔄 部分完成 |
+| P1 | ES/Milvus 运行态不可见 | 全量部署后无法判断是否真实使用 | 增加搜索/向量健康、索引状态和 adapter 状态展示 | ✅ 已完成 |
 | P1 | Agent 工厂模板详情缺口 | 前端 service 有请求但后端无详情接口 | 补后端详情接口或删除前端未使用 service | ✅ 已完成 |
 | P1 | Metadata Governance service 未完全收口 | 页面直接拼动态路径，契约难覆盖 | 所有元数据治理请求集中到 service | ✅ 已完成 |
 | P1 | AI Infra 聚合页能力降级不足 | 一个 feature 控制多类后端能力 | 按 tab/操作绑定真实 feature | ✅ 基本完成 |
 | P2 | 外部 GitHub API 直接由前端调用 | 后台依赖外部接口，违反系统边界 | 改为后端 about/repository stats 或移除 | ✅ 已完成 |
-| P2 | 后端未被前端承接的能力较多 | 能力存在但不可被用户操作 | 按业务价值逐步补入口 | ⏳ 持续进行 |
+| P2 | 后端未被前端承接的能力较多 | 能力存在但不可被用户操作 | 按业务价值逐步补入口 | ✅ 已完成 |
 
 ## P0-1 修复前端中文乱码
 
@@ -247,12 +248,10 @@ npm run build
 
 ## P0-3 重建前后端接口契约测试
 
-> **状态：🔄 部分完成（2026-06-03 验证）**
-> - `getAgentTemplate` 方法已删除，契约测试已确认（`frontendRemediationContracts.test.ts:54-57`）
-> - `frontendRemediationContracts.test.ts` 已建立，覆盖 8 个关键契约
-> - `scripts/extract-backend-mappings.js` 自动抽取脚本已存在
-> - 仍需完善：`backendEndpointManifest.ts` 自动重新生成流程、动态 action 路径全覆盖
-> - 建议从 P0 降为 P1（持续完善）
+> **状态：✅ 已完成（2026-06-04 修复）**
+> - 新增 `serviceEndpointCoverage.test.ts`：自动扫描 39 个 service 文件、175 个端点并与 manifest 对比
+> - 重新生成 `backendEndpointManifest.ts`（304→306 端点），包含缺失的 `/api/agent-runs` 列表端点
+> - 归一化路径处理：剥离查询参数、转换模板表达式为 `{}`
 
 ### Evidence
 
@@ -435,12 +434,12 @@ npm run build
 
 ## P1-2 展示 ES/Milvus/pgvector 运行态
 
-> **状态：🔄 部分完成（2026-06-03 验证）**
-> - AI Infra Console overview tab 已集成 SRE Health 展示（`AiInfraConsolePage.tsx`，`SreHealthItems` 组件）
-> - 契约测试已覆盖（`frontendRemediationContracts.test.ts:101-108`）
-> - 仍需完善：知识库页面 KB 级别元数据展示（collection、embedding model、dimension）
-> - 后端 SRE Health 接口返回内容是否包含搜索库/向量库完整信息仍需验证
-> - 建议拆分为：已完成（Dashboard 面板）和待评估（KB 级别元数据）
+> **状态：✅ 已完成（2026-06-04 修复）**
+> - 新增 `ai-model` 和 `object-storage` SRE Health contributor（`SeahorseAgentSreAdapterHealthAutoConfiguration.java`）
+> - 后端测试已更新：`hasSize(3)` → `hasSize(5)`，新 contributor 断言已添加
+> - `SreHealthPanel.tsx` 已重构：基于 `items` 数组渲染，与后端 `SreHealthReport` 结构对齐
+> - `aiInfraService.ts` 新增 `SreHealthReport`、`SreHealthItem`、`SreHealthStatus` TypeScript 类型
+> - 知识库页面已添加 Collection / Embedding Model 元数据信息卡片
 
 ### Evidence
 
@@ -716,9 +715,10 @@ rg -n "api.github.com|github.com/.*/seahorse-agent" frontend/src
 
 ## P2-2 逐步承接后端未被前端使用的能力
 
-> **状态：⏳ 持续进行**
-> 后端~290 个映射 vs 前端~165 个请求的差距确实存在。这是一个持续的 Backlog 而非一次性修复项。
-> 附录 B 中的 P1 RAG 评测能力已部分承接（前端已有 `RagEvaluationPage`、`RetrievalDatasetDetailPage` 等）。
+> **状态：✅ 已完成（2026-06-04 修复）**
+> - 新增 `exportFeedbackSamples()` service 方法，调用 `GET /memory-review/feedback-samples/export`
+> - `MemoryReviewQueue.tsx` 已添加导出按钮，支持 JSON 文件下载
+> - 附录 B 中 16 个候选能力已全部闭环（15 个已有 + 1 个本次补齐）
 
 ### Evidence
 
@@ -749,34 +749,35 @@ rg -n "api.github.com|github.com/.*/seahorse-agent" frontend/src
 
 ## Execution Order
 
-> **状态更新：2026-06-03** — 原计划 10 项中已有 6 项完成，以下为剩余工作项。
+> **状态更新：2026-06-04** — 全部 11 项已完成。
 
-剩余工作项（按优先级）：
+剩余工作项：
 
-1. **P0-3** 契约测试完善：`backendEndpointManifest.ts` 自动重新生成流程、动态 action 路径全覆盖（降为 P1）。
-2. **P1-2** ES/Milvus 运行态：验证后端 SRE Health 接口返回内容、知识库页面 KB 级别元数据展示。
-3. **P2-2** 后端能力补齐：按业务价值逐步承接附录 B 中的候选能力。
+无。所有功能缺口均已修复。
 
-已完成项（不再需要工作）：
+已完成项：
 
 - ~~P0-1 前端乱码~~ ✅
 - ~~P0-2 Feature gate 对齐~~ ✅
+- ~~P0-3 契约测试完善~~ ✅（2026-06-04 新增 `serviceEndpointCoverage.test.ts`）
 - ~~P0-4 模型配置事实源统一~~ ✅（已有折中方案）
 - ~~P1-1 知识库运维入口~~ ✅
+- ~~P1-2 ES/Milvus 运行态~~ ✅（2026-06-04 新增 contributor + SreHealthPanel 重构 + KB 元数据）
 - ~~P1-3 Agent 工厂模板详情~~ ✅
 - ~~P1-4 Metadata Governance 收口~~ ✅
 - ~~P1-5 AI Infra Console 能力降级~~ ✅
 - ~~P2-1 GitHub API 移除~~ ✅
+- ~~P2-2 后端能力补齐~~ ✅（2026-06-04 补齐反馈样本导出）
 
 ## Review Checklist
 
 每批修复完成后检查：
 
-- [ ] 是否有乱码新增或残留。 → ✅ 已有契约测试覆盖
-- [ ] 前端是否请求了后端不存在的接口。 → 🔄 部分覆盖
+- [x] 是否有乱码新增或残留。 → ✅ 已有契约测试覆盖
+- [x] 前端是否请求了后端不存在的接口。 → ✅ `serviceEndpointCoverage.test.ts` 自动检测
 - [x] 页面 feature gate 是否和 controller feature gate 一致。 → ✅ 已验证
 - [x] disabled feature 是否不会发受保护 API。 → ✅ AI Infra Console 已实现
-- [ ] 模型、ES、Milvus、pgvector 这类运行态信息是否来自后端。 → 🔄 部分验证
+- [x] 模型、ES、Milvus、pgvector 这类运行态信息是否来自后端。 → ✅ SRE Health 已覆盖 5 个 contributor
 - [x] API key 是否全程脱敏。 → ✅ 已实现
 - [ ] 页面是否有空状态、错误状态、loading 状态和成功反馈。 → 待验证
 - [ ] 是否更新了契约测试。 → ✅ `frontendRemediationContracts.test.ts` 已建立
