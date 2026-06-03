@@ -22,6 +22,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthContributorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -29,6 +33,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.io.InputStream;
 import java.util.Collection;
 import java.util.List;
 
@@ -51,7 +56,7 @@ class SeahorseAgentSreAdapterHealthAutoConfigurationTests {
                     Collection<SreHealthContributorPort> contributors =
                             context.getBeansOfType(SreHealthContributorPort.class).values();
 
-                    assertThat(contributors).hasSize(3);
+                    assertThat(contributors).hasSize(5);
                     assertThat(items(contributors))
                             .anySatisfy(item -> {
                                 assertThat(item.contributorName()).isEqualTo("vector-store");
@@ -71,6 +76,16 @@ class SeahorseAgentSreAdapterHealthAutoConfigurationTests {
                                 assertThat(item.status()).isEqualTo(SreHealthStatus.GREEN);
                                 assertThat(item.evidenceRef())
                                         .contains("seahorse-agent.adapters.keyword-index.type=elasticsearch");
+                            })
+                            .anySatisfy(item -> {
+                                assertThat(item.contributorName()).isEqualTo("ai-model");
+                                assertThat(item.status()).isEqualTo(SreHealthStatus.GREEN);
+                                assertThat(item.message()).contains("ChatModelPort");
+                            })
+                            .anySatisfy(item -> {
+                                assertThat(item.contributorName()).isEqualTo("object-storage");
+                                assertThat(item.status()).isEqualTo(SreHealthStatus.GREEN);
+                                assertThat(item.message()).contains("ObjectStoragePort");
                             });
                 });
     }
@@ -81,7 +96,7 @@ class SeahorseAgentSreAdapterHealthAutoConfigurationTests {
             Collection<SreHealthContributorPort> contributors =
                     context.getBeansOfType(SreHealthContributorPort.class).values();
 
-            assertThat(contributors).hasSize(3);
+            assertThat(contributors).hasSize(5);
             assertThat(items(contributors))
                     .allSatisfy(item -> assertThat(item.status()).isEqualTo(SreHealthStatus.WARN))
                     .anySatisfy(item -> {
@@ -95,6 +110,14 @@ class SeahorseAgentSreAdapterHealthAutoConfigurationTests {
                     .anySatisfy(item -> {
                         assertThat(item.contributorName()).isEqualTo("keyword-index");
                         assertThat(item.message()).contains("No KeywordIndexPort bean");
+                    })
+                    .anySatisfy(item -> {
+                        assertThat(item.contributorName()).isEqualTo("ai-model");
+                        assertThat(item.message()).contains("No ChatModelPort or StreamingChatModelPort bean");
+                    })
+                    .anySatisfy(item -> {
+                        assertThat(item.contributorName()).isEqualTo("object-storage");
+                        assertThat(item.message()).contains("No ObjectStoragePort bean");
                     });
         });
     }
@@ -121,6 +144,36 @@ class SeahorseAgentSreAdapterHealthAutoConfigurationTests {
         @Bean
         KeywordIndexPort keywordIndexPort() {
             return KeywordIndexPort.noop();
+        }
+
+        @Bean
+        ChatModelPort chatModelPort() {
+            return ChatModelPort.noop();
+        }
+
+        @Bean
+        StreamingChatModelPort streamingChatModelPort() {
+            return StreamingChatModelPort.noop();
+        }
+
+        @Bean
+        ObjectStoragePort objectStoragePort() {
+            return new ObjectStoragePort() {
+                @Override
+                public StoredObject upload(String bucketName, InputStream content, long size,
+                                           String originalFilename, String contentType) {
+                    return new StoredObject("test-url", "application/octet-stream", 0L, "test.bin");
+                }
+
+                @Override
+                public InputStream openStream(String url) {
+                    return InputStream.nullInputStream();
+                }
+
+                @Override
+                public void deleteByUrl(String url) {
+                }
+            };
         }
     }
 }

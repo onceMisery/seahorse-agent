@@ -22,6 +22,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.sre.SreHealthStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SreHealthContributorPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -36,7 +39,9 @@ import java.util.Locale;
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({
         SeahorseAgentVectorAdapterAutoConfiguration.class,
-        SeahorseAgentKeywordAdapterAutoConfiguration.class
+        SeahorseAgentKeywordAdapterAutoConfiguration.class,
+        SeahorseAgentAiAdapterAutoConfiguration.class,
+        SeahorseAgentStorageAdapterAutoConfiguration.class
 })
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentSreAdapterHealthAutoConfiguration {
@@ -84,6 +89,46 @@ public class SeahorseAgentSreAdapterHealthAutoConfiguration {
                 indexType,
                 false,
                 "seahorse-agent.adapters.keyword-index.mode=" + mode);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(name = "seahorseAiModelSreHealthContributor")
+    public SreHealthContributorPort seahorseAiModelSreHealthContributor(
+            ObjectProvider<ChatModelPort> chatModelPort,
+            ObjectProvider<StreamingChatModelPort> streamingChatModelPort,
+            Environment environment) {
+        return () -> {
+            Object chat = chatModelPort.getIfAvailable();
+            Object streaming = streamingChatModelPort.getIfAvailable();
+            String configuredType = environment.getProperty(
+                    "seahorse-agent.adapters.ai.type", "openai-compatible");
+            String evidence = "seahorse-agent.adapters.ai.type=" + configuredType;
+            if (chat != null && streaming != null) {
+                return new SreHealthItem("ai-model", SreHealthStatus.GREEN,
+                        "ChatModelPort and StreamingChatModelPort are available",
+                        evidence + "; bean=" + chat.getClass().getName());
+            }
+            if (chat != null || streaming != null) {
+                return new SreHealthItem("ai-model", SreHealthStatus.WARN,
+                        "Only partial AI model adapter is available", evidence);
+            }
+            return new SreHealthItem("ai-model", SreHealthStatus.WARN,
+                    "No ChatModelPort or StreamingChatModelPort bean available", evidence);
+        };
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(name = "seahorseObjectStorageSreHealthContributor")
+    public SreHealthContributorPort seahorseObjectStorageSreHealthContributor(
+            ObjectProvider<ObjectStoragePort> objectStoragePort,
+            Environment environment) {
+        return () -> runtimeAdapterItem(
+                "object-storage",
+                objectStoragePort.getIfAvailable(),
+                "ObjectStoragePort",
+                "seahorse-agent.adapters.storage.type",
+                environment.getProperty("seahorse-agent.adapters.storage.type", "local"),
+                false);
     }
 
     private static SreHealthItem runtimeAdapterItem(
