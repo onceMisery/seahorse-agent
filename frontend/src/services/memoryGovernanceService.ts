@@ -163,6 +163,16 @@ export function runMemoryGovernance(type: string) {
   return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/governance/run", { type });
 }
 
+// ── Recall 评测 ──
+
+export function evaluateRecallQuality() {
+  return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/recall-quality/evaluate");
+}
+
+export function runGoldenProfileEval(profileId: string) {
+  return api.post(`/memories/recall-quality/golden/profiles/${encodeURIComponent(profileId)}/run`);
+}
+
 export function runMemoryDecay() {
   return api.post<Record<string, unknown>, Record<string, unknown>>("/memories/governance/decay");
 }

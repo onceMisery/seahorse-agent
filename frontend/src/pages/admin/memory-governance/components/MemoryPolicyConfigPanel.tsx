@@ -3,7 +3,10 @@ import { Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { api } from "@/services/api";
+import {
+  getMemoryPolicyConfig,
+  updateMemoryPolicyConfig,
+} from "@/services/memoryGovernanceService";
 import { getErrorMessage } from "@/utils/error";
 
 export function MemoryPolicyConfigPanel() {
@@ -13,7 +16,7 @@ export function MemoryPolicyConfigPanel() {
 
   useEffect(() => {
     setLoading(true);
-    api.get<Record<string, unknown>>("/memories/policy-config")
+    getMemoryPolicyConfig()
       .then((data) => setConfig(JSON.stringify(data, null, 2)))
       .catch(() => setConfig("{}"))
       .finally(() => setLoading(false));
@@ -23,7 +26,7 @@ export function MemoryPolicyConfigPanel() {
     try {
       const parsed = JSON.parse(config);
       setSaving(true);
-      await api.post("/memories/policy-config", parsed);
+      await updateMemoryPolicyConfig(parsed);
       toast.success("策略配置已保存");
     } catch (error) {
       if (error instanceof SyntaxError) {

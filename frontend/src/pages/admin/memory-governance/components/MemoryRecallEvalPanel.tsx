@@ -3,7 +3,10 @@ import { Play } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { api } from "@/services/api";
+import {
+  evaluateRecallQuality,
+  runGoldenProfileEval,
+} from "@/services/memoryGovernanceService";
 import { getErrorMessage } from "@/utils/error";
 
 interface GoldenProfile {
@@ -19,9 +22,7 @@ export function MemoryRecallEvalPanel() {
   const handleRunEval = async () => {
     setRunning(true);
     try {
-      const data = await api.post<Record<string, unknown>, Record<string, unknown>>(
-        "/memories/recall-quality/evaluate"
-      );
+      const data = await evaluateRecallQuality();
       setResult(data);
       toast.success("Recall 评测已触发");
     } catch (error) {
@@ -33,7 +34,7 @@ export function MemoryRecallEvalPanel() {
 
   const handleRunProfile = async (profileId: string) => {
     try {
-      await api.post(`/memories/recall-quality/golden/profiles/${encodeURIComponent(profileId)}/run`);
+      await runGoldenProfileEval(profileId);
       toast.success(`Profile ${profileId} 评测已触发`);
     } catch (error) {
       toast.error(getErrorMessage(error, "评测失败"));
