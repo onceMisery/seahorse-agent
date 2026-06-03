@@ -81,7 +81,9 @@ public class SeahorseWebExceptionHandler {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Map<String, Object> internalError(Exception ex) {
         LOGGER.error("Unhandled web request failed", ex);
-        return error(ex);
+        return Map.of(
+                "code", ERROR_CODE,
+                "message", "Internal server error");
     }
 
     private Map<String, Object> error(Exception ex) {
