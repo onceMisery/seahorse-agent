@@ -21,6 +21,7 @@ import { AgentPublishDialog } from "./components/AgentPublishDialog";
 import { AgentRollbackDialog } from "./components/AgentRollbackDialog";
 import { AgentToolBindingPanel } from "../tools/components/AgentToolBindingPanel";
 import { getErrorMessage } from "@/utils/error";
+import { getAgentSkillSnapshot } from "@/services/skillService";
 
 export function AgentDetailPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT);
@@ -35,6 +36,7 @@ export function AgentDetailPage() {
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [skillSetJson, setSkillSetJson] = useState("{}");
 
   const loadAgent = useCallback(async () => {
     if (!agentId) return;
@@ -60,11 +62,21 @@ export function AgentDetailPage() {
     }
   }, [agentId]);
 
+  const loadSkillSnapshot = useCallback(async () => {
+    if (!agentId) return;
+    try {
+      setSkillSetJson(await getAgentSkillSnapshot(agentId));
+    } catch {
+      setSkillSetJson("{}");
+    }
+  }, [agentId]);
+
   useEffect(() => {
     if (!featureState.enabled) return;
     loadAgent();
     loadPublishChecks();
-  }, [featureState.enabled, loadAgent, loadPublishChecks]);
+    loadSkillSnapshot();
+  }, [featureState.enabled, loadAgent, loadPublishChecks, loadSkillSnapshot]);
 
   useEffect(() => {
     const currentVersion =
@@ -318,6 +330,7 @@ export function AgentDetailPage() {
         onOpenChange={setPublishDialogOpen}
         agentId={agentId || ""}
         publishCheck={publishCheck}
+        skillSetJson={skillSetJson}
         onSuccess={handlePublishSuccess}
       />
 

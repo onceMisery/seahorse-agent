@@ -913,6 +913,7 @@ CREATE TABLE IF NOT EXISTS sa_agent_version (
   model_config_json TEXT NOT NULL,
   memory_config_json TEXT NOT NULL,
   guardrail_config_json TEXT NOT NULL,
+  skill_set_json TEXT NOT NULL DEFAULT '{}',
   published_by VARCHAR(64) NOT NULL,
   published_at TIMESTAMP NOT NULL,
   change_summary VARCHAR(500) NOT NULL,
@@ -921,6 +922,64 @@ CREATE TABLE IF NOT EXISTS sa_agent_version (
 
 CREATE INDEX IF NOT EXISTS idx_sa_agent_version_agent
   ON sa_agent_version(agent_id, version_no);
+
+CREATE TABLE IF NOT EXISTS sa_agent_skill (
+  pk_id BIGSERIAL PRIMARY KEY,
+  skill_name VARCHAR(128) NOT NULL,
+  tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+  category VARCHAR(32) NOT NULL,
+  source VARCHAR(32) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  enabled SMALLINT NOT NULL DEFAULT 1,
+  latest_revision_id VARCHAR(128),
+  description TEXT NOT NULL,
+  tags_json TEXT NOT NULL DEFAULT '[]',
+  allowed_tools_json TEXT NOT NULL DEFAULT '[]',
+  created_by VARCHAR(64),
+  updated_by VARCHAR(64),
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  deleted SMALLINT NOT NULL DEFAULT 0,
+  UNIQUE(tenant_id, skill_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_skill_tenant_status
+  ON sa_agent_skill(tenant_id, status, enabled);
+
+CREATE TABLE IF NOT EXISTS sa_agent_skill_revision (
+  pk_id BIGSERIAL PRIMARY KEY,
+  revision_id VARCHAR(128) NOT NULL UNIQUE,
+  skill_name VARCHAR(128) NOT NULL,
+  tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+  revision_no BIGINT NOT NULL,
+  content_hash VARCHAR(128) NOT NULL,
+  content TEXT NOT NULL,
+  frontmatter_json TEXT NOT NULL,
+  scan_decision VARCHAR(32) NOT NULL,
+  scan_result_json TEXT NOT NULL,
+  created_by VARCHAR(64),
+  created_at TIMESTAMP NOT NULL,
+  deleted SMALLINT NOT NULL DEFAULT 0,
+  UNIQUE(tenant_id, skill_name, revision_no)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_skill_revision_skill
+  ON sa_agent_skill_revision(tenant_id, skill_name, revision_no);
+
+CREATE TABLE IF NOT EXISTS sa_agent_skill_binding (
+  pk_id BIGSERIAL PRIMARY KEY,
+  agent_id VARCHAR(64) NOT NULL,
+  tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+  skill_name VARCHAR(128) NOT NULL,
+  revision_id VARCHAR(128) NOT NULL,
+  inject_mode VARCHAR(32) NOT NULL DEFAULT 'METADATA_AND_BODY',
+  created_by VARCHAR(64),
+  created_at TIMESTAMP NOT NULL,
+  deleted SMALLINT NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_agent_skill_binding_agent
+  ON sa_agent_skill_binding(tenant_id, agent_id, deleted);
 
 CREATE TABLE IF NOT EXISTS sa_agent_run (
   pk_id BIGSERIAL PRIMARY KEY,

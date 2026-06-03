@@ -22,5 +22,6 @@ public record AgentVersionPublishRequest(String instructions,
                                          String modelConfigJson,
                                          String memoryConfigJson,
                                          String guardrailConfigJson,
+                                         String skillSetJson,
                                          String changeSummary) {
 }

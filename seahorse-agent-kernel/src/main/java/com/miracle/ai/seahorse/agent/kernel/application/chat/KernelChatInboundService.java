@@ -21,6 +21,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillRuntimeComposer;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillSetJsonSupport;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
@@ -99,6 +101,8 @@ public class KernelChatInboundService implements ChatInboundPort {
     private final Optional<AgentRunInboundPort> agentRunPort;
     private final Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository;
     private final ContextPackRuntimeAssembler contextPackAssembler;
+    private final SkillSetJsonSupport skillSetJsonSupport;
+    private final SkillRuntimeComposer skillRuntimeComposer;
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
         this(chatPipeline, streamTaskPort, KernelRagTraceRecorder.noop());
@@ -194,6 +198,8 @@ public class KernelChatInboundService implements ChatInboundPort {
                 ? Optional.empty()
                 : agentDefinitionRepository;
         this.contextPackAssembler = new ContextPackRuntimeAssembler(contextPackBuilder, attachmentContextAssembler);
+        this.skillSetJsonSupport = new SkillSetJsonSupport();
+        this.skillRuntimeComposer = new SkillRuntimeComposer();
     }
 
     @Override
@@ -264,6 +270,7 @@ public class KernelChatInboundService implements ChatInboundPort {
             versionId = selectedVersion(agentId, versionId).map(AgentVersion::versionId).orElse(versionId);
         }
         String tenantId = run == null ? null : run.tenantId();
+        Optional<AgentVersion> selectedVersion = selectedVersion(agentId, versionId);
         AgentModelExecutionConfig modelConfig = modelExecutionConfig(agentId, versionId);
         ContextPack contextPack = contextPackAssembler.assembleForAgent(
                 command.question(),
@@ -284,6 +291,8 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .samplingOptions(modelConfig.samplingOptions())
                 .contextPack(contextPack)
                 .memoryContext(memoryContext)
+                .skillRuntimeContext(skillRuntimeContext(selectedVersion))
+                .skillRuntimeBlocks(skillRuntimeBlocks(selectedVersion))
                 .runId(runId)
                 .agentId(agentId)
                 .versionId(versionId)
@@ -330,6 +339,22 @@ public class KernelChatInboundService implements ChatInboundPort {
         return selectedVersion(agentId, versionId)
                 .map(this::modelExecutionConfig)
                 .orElseGet(AgentModelExecutionConfig::defaults);
+    }
+
+    private String skillRuntimeContext(Optional<AgentVersion> selectedVersion) {
+        if (selectedVersion == null || selectedVersion.isEmpty()) {
+            return null;
+        }
+        return skillRuntimeComposer.compose(
+                skillSetJsonSupport.fromJson(selectedVersion.get().skillSetJson()).skills());
+    }
+
+    private List<com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock> skillRuntimeBlocks(
+            Optional<AgentVersion> selectedVersion) {
+        if (selectedVersion == null || selectedVersion.isEmpty()) {
+            return List.of();
+        }
+        return skillSetJsonSupport.fromJson(selectedVersion.get().skillSetJson()).skills();
     }
 
     private AgentModelExecutionConfig modelExecutionConfig(AgentVersion version) {
@@ -446,17 +471,26 @@ public class KernelChatInboundService implements ChatInboundPort {
 
     private Double doubleValue(JsonNode root, String fieldName, Double fallback) {
         JsonNode value = root.get(fieldName);
-        return value == null || !value.isNumber() ? fallback : value.asDouble();
+        if (value == null || !value.isNumber()) {
+            return fallback;
+        }
+        return value.asDouble();
     }
 
     private Integer intValue(JsonNode root, String fieldName, Integer fallback) {
         JsonNode value = root.get(fieldName);
-        return value == null || !value.isIntegralNumber() ? fallback : value.asInt();
+        if (value == null || !value.isIntegralNumber()) {
+            return fallback;
+        }
+        return value.asInt();
     }
 
     private Boolean booleanValue(JsonNode root, String fieldName, Boolean fallback) {
         JsonNode value = root.get(fieldName);
-        return value == null || !value.isBoolean() ? fallback : value.asBoolean();
+        if (value == null || !value.isBoolean()) {
+            return fallback;
+        }
+        return value.asBoolean();
     }
 
     private boolean hasText(String value) {

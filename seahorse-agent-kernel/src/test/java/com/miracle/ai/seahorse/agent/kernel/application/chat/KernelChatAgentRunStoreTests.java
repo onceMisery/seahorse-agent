@@ -234,6 +234,69 @@ class KernelChatAgentRunStoreTests {
     }
 
     @Test
+    void registeredAgentModeInjectsVersionedSkillSnapshotWithoutGrantingTools() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.create(agentDefinition("ops-agent", "ops-agent-v1"));
+        definitionRepository.saveVersion(agentVersion(
+                "ops-agent",
+                "ops-agent-v1",
+                "{\"modelId\":\"agent-chat-model\"}",
+                """
+                        {
+                          "version": 1,
+                          "mode": "BOUND_REVISIONS",
+                          "skills": [
+                            {
+                              "name": "deep-research",
+                              "revisionId": "skillrev_deep_research_1",
+                              "contentHash": "sha256:test",
+                              "description": "Research with sources",
+                              "category": "PUBLIC",
+                              "injectMode": "METADATA_AND_BODY",
+                              "allowedTools": ["web_search"],
+                              "content": "# Deep Research\\nAlways verify claims with sources."
+                            }
+                          ]
+                        }
+                        """));
+        KernelAgentRunService runService = new KernelAgentRunService(
+                definitionRepository, runRepository,
+                () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
+        ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("ops answer")));
+        KernelAgentLoop agentLoop = new KernelAgentLoop(
+                model,
+                new InMemoryToolRegistry(),
+                KernelAgentLoopOptions.defaults(),
+                new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runService),
+                Optional.empty(),
+                Optional.of(definitionRepository));
+
+        service.streamChat(new StreamChatCommand(
+                "Run ops", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT, "ops-agent", null),
+                callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals(null, callback.error);
+        ChatRequest modelRequest = model.requests.get(0);
+        String systemPrompt = modelRequest.getMessages().get(0).getContent();
+        assertTrue(systemPrompt.contains("<skills>"));
+        assertTrue(systemPrompt.contains("<skill name=\"deep-research\" revision=\"skillrev_deep_research_1\">"));
+        assertTrue(systemPrompt.contains("Always verify claims with sources."));
+        assertTrue(modelRequest.getTools().stream().anyMatch(tool -> "load_skill".equals(tool.toolId())));
+        assertTrue(modelRequest.getTools().stream().noneMatch(tool -> "web_search".equals(tool.toolId())));
+    }
+
+    @Test
     void explicitMissingRegisteredAgentVersionFailsInsteadOfUsingDefaultModelConfig() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
@@ -493,6 +556,13 @@ class KernelChatAgentRunStoreTests {
     }
 
     private static AgentVersion agentVersion(String agentId, String versionId, String modelConfigJson) {
+        return agentVersion(agentId, versionId, modelConfigJson, AgentVersion.EMPTY_JSON_OBJECT);
+    }
+
+    private static AgentVersion agentVersion(String agentId,
+                                             String versionId,
+                                             String modelConfigJson,
+                                             String skillSetJson) {
         return new AgentVersion(
                 versionId,
                 agentId,
@@ -502,6 +572,7 @@ class KernelChatAgentRunStoreTests {
                 modelConfigJson,
                 AgentVersion.EMPTY_JSON_OBJECT,
                 AgentVersion.EMPTY_JSON_OBJECT,
+                skillSetJson,
                 "owner-1",
                 FIXED_CLOCK.instant(),
                 "publish ops agent");

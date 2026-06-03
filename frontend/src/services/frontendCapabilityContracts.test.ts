@@ -12,6 +12,7 @@ vi.mock("@/services/api", () => ({
 import { api } from "@/services/api";
 import { backendEndpointManifest } from "@/services/backendEndpointManifest";
 import * as agentDefinitionService from "@/services/agentDefinitionService";
+import * as skillService from "@/services/skillService";
 import { createSecret } from "@/services/securityGovernanceService";
 import {
   compareStrategies,
@@ -45,6 +46,19 @@ describe("frontend capability service contracts", () => {
     expect(backendEndpoints).toContain("GET /api/features");
     expect(backendEndpoints).toContain("GET /api/agents");
     expect(backendEndpoints).toContain("POST /api/agents/{}/publish");
+    expect(backendEndpoints).toContain("GET /api/skills");
+    expect(backendEndpoints).toContain("GET /api/skills/{}");
+    expect(backendEndpoints).toContain("POST /api/skills/custom");
+    expect(backendEndpoints).toContain("PUT /api/skills/custom/{}");
+    expect(backendEndpoints).toContain("DELETE /api/skills/custom/{}");
+    expect(backendEndpoints).toContain("GET /api/skills/custom/{}/history");
+    expect(backendEndpoints).toContain("POST /api/skills/custom/{}/rollback");
+    expect(backendEndpoints).toContain("POST /api/skills/install");
+    expect(backendEndpoints).toContain("POST /api/skills/{}/enable");
+    expect(backendEndpoints).toContain("POST /api/skills/{}/disable");
+    expect(backendEndpoints).toContain("GET /api/agents/{}/skills");
+    expect(backendEndpoints).toContain("PUT /api/agents/{}/skills");
+    expect(backendEndpoints).toContain("GET /api/agents/{}/skills/snapshot");
     expect(backendEndpoints).toContain("GET /api/agent-runs/{}/snapshot");
     expect(backendEndpoints).toContain("GET /admin/ai-config");
     expect(backendEndpoints).toContain("POST /admin/ai-config");
@@ -57,6 +71,7 @@ describe("frontend capability service contracts", () => {
     await agentDefinitionService.publishAgent("agent-1", {
       instructions: "be useful",
       toolSetJson: "[]",
+      skillSetJson: "{\"version\":1,\"skills\":[]}",
       modelConfigJson: "{}",
       memoryConfigJson: "{}",
       guardrailConfigJson: "{}",
@@ -68,12 +83,67 @@ describe("frontend capability service contracts", () => {
       {
         instructions: "be useful",
         toolSetJson: "[]",
+        skillSetJson: "{\"version\":1,\"skills\":[]}",
         modelConfigJson: "{}",
         memoryConfigJson: "{}",
         guardrailConfigJson: "{}",
         changeSummary: "initial publish"
       }
     );
+  });
+
+  it("manages skills with backend skill endpoints", async () => {
+    await skillService.listSkills({ current: 1, size: 20, keyword: "research" });
+    await skillService.getSkill("research");
+    await skillService.createCustomSkill({ content: "---\nname: research\n---\nbody" });
+    await skillService.updateCustomSkill("research", { content: "---\nname: research\n---\nupdated" });
+    await skillService.installSkill({ content: "---\nname: research\n---\nbody" });
+    await skillService.enableSkill("research");
+    await skillService.disableSkill("research");
+    await skillService.listSkillHistory("research");
+    await skillService.rollbackCustomSkill("research", { revisionId: "rev-1" });
+    await skillService.deleteCustomSkill("research");
+    await skillService.replaceAgentSkillBindings("agent-1", {
+      bindings: [{ skillName: "research", revisionId: "rev-1", injectMode: "METADATA_AND_BODY" }]
+    });
+    await skillService.getAgentSkillSnapshot("agent-1");
+
+    expect(mockedApi.get).toHaveBeenNthCalledWith(1, "/api/skills", {
+      params: { current: 1, size: 20, keyword: "research" }
+    });
+    expect(mockedApi.get).toHaveBeenNthCalledWith(2, "/api/skills/research", {
+      params: { tenantId: undefined }
+    });
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/skills/custom", {
+      content: "---\nname: research\n---\nbody"
+    });
+    expect(mockedApi.put).toHaveBeenCalledWith("/api/skills/custom/research", {
+      content: "---\nname: research\n---\nupdated"
+    });
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/skills/install", {
+      content: "---\nname: research\n---\nbody"
+    });
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/skills/research/enable", {
+      tenantId: undefined
+    });
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/skills/research/disable", {
+      tenantId: undefined
+    });
+    expect(mockedApi.get).toHaveBeenNthCalledWith(3, "/api/skills/custom/research/history", {
+      params: { tenantId: undefined }
+    });
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/skills/custom/research/rollback", {
+      revisionId: "rev-1"
+    });
+    expect(mockedApi.delete).toHaveBeenCalledWith("/api/skills/custom/research", {
+      params: { tenantId: undefined }
+    });
+    expect(mockedApi.put).toHaveBeenCalledWith("/api/agents/agent-1/skills", {
+      bindings: [{ skillName: "research", revisionId: "rev-1", injectMode: "METADATA_AND_BODY" }]
+    });
+    expect(mockedApi.get).toHaveBeenNthCalledWith(4, "/api/agents/agent-1/skills/snapshot", {
+      params: { tenantId: undefined }
+    });
   });
 
   it("does not expose a missing agent versions endpoint", () => {

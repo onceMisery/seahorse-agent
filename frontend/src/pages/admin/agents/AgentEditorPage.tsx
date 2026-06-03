@@ -1,26 +1,34 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Save } from "lucide-react";
 import { toast } from "sonner";
 
+import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
-import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
-import { getAgent, updateAgentDraft, type AgentDefinition, type AgentDefinitionDraft } from "@/services/agentDefinitionService";
+import { Textarea } from "@/components/ui/textarea";
+import { ADVANCED_ADMIN_FEATURES, getAdvancedFeatureState } from "@/config/productMode";
+import { AgentSkillBindingPanel } from "@/pages/admin/agents/components/AgentSkillBindingPanel";
+import {
+  getAgent,
+  updateAgentDraft,
+  type AgentDefinition,
+  type AgentDefinitionDraft
+} from "@/services/agentDefinitionService";
 import { getErrorMessage } from "@/utils/error";
 
 export function AgentEditorPage() {
-  const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT);
+  const definitionFeature = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT);
+  const skillFeature = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.SKILL_MANAGEMENT);
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
 
   const [agent, setAgent] = useState<AgentDefinition | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [skillSetJson, setSkillSetJson] = useState("{}");
   const [form, setForm] = useState<AgentDefinitionDraft>({
     name: "",
     description: "",
@@ -31,7 +39,7 @@ export function AgentEditorPage() {
     toolBindingSummary: {}
   });
 
-  const loadAgent = async () => {
+  const loadAgent = useCallback(async () => {
     if (!agentId) return;
     try {
       setLoading(true);
@@ -48,16 +56,16 @@ export function AgentEditorPage() {
       });
     } catch (error) {
       toast.error(getErrorMessage(error, "加载 Agent 详情失败"));
-      console.error(error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [agentId]);
 
   useEffect(() => {
-    if (!featureState.enabled) return;
-    loadAgent();
-  }, [agentId]);
+    if (definitionFeature.enabled) {
+      loadAgent();
+    }
+  }, [definitionFeature.enabled, loadAgent]);
 
   const handleSave = async () => {
     if (!agentId) return;
@@ -72,7 +80,6 @@ export function AgentEditorPage() {
       toast.success("草稿已保存");
     } catch (error) {
       toast.error(getErrorMessage(error, "保存草稿失败"));
-      console.error(error);
     } finally {
       setSaving(false);
     }
@@ -83,16 +90,20 @@ export function AgentEditorPage() {
       const parsed = value.trim() ? JSON.parse(value) : {};
       setForm((prev) => ({ ...prev, [field]: parsed }));
     } catch {
-      // 允许用户在编辑过程中输入非 JSON，不覆盖
+      // Allow temporarily invalid JSON while the user is typing.
     }
   };
 
-  if (!featureState.enabled) {
-    return <FeatureUnavailableState featureState={featureState} featureName="Agent 管理" />;
+  if (!definitionFeature.enabled) {
+    return <FeatureUnavailableState featureState={definitionFeature} featureName="Agent 管理" />;
   }
 
   if (loading) {
-    return <div className="admin-page"><div className="text-center py-8 text-muted-foreground">加载中...</div></div>;
+    return (
+      <div className="admin-page">
+        <div className="py-8 text-center text-muted-foreground">加载中...</div>
+      </div>
+    );
   }
 
   return (
@@ -112,7 +123,7 @@ export function AgentEditorPage() {
             取消
           </Button>
           <Button className="admin-primary-gradient" disabled={saving} onClick={handleSave}>
-            <Save className="w-4 h-4 mr-1" />
+            <Save className="mr-1 h-4 w-4" />
             {saving ? "保存中..." : "保存草稿"}
           </Button>
         </div>
@@ -122,29 +133,22 @@ export function AgentEditorPage() {
         <TabsList>
           <TabsTrigger value="basic">基础信息</TabsTrigger>
           <TabsTrigger value="instructions">指令</TabsTrigger>
-          <TabsTrigger value="model">模型策略</TabsTrigger>
-          <TabsTrigger value="context">上下文策略</TabsTrigger>
-          <TabsTrigger value="risk">风险策略</TabsTrigger>
+          <TabsTrigger value="model">模型</TabsTrigger>
+          <TabsTrigger value="context">上下文</TabsTrigger>
+          <TabsTrigger value="risk">风险</TabsTrigger>
+          <TabsTrigger value="skills">Skills</TabsTrigger>
         </TabsList>
 
         <TabsContent value="basic">
           <Card>
-            <CardContent className="pt-6 space-y-4">
+            <CardContent className="space-y-4 pt-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Agent 名称</label>
-                <Input
-                  value={form.name || ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="请输入 Agent 名称"
-                />
+                <Input value={form.name || ""} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} placeholder="请输入 Agent 名称" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">描述</label>
-                <Input
-                  value={form.description || ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="请输入描述"
-                />
+                <Input value={form.description || ""} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} placeholder="请输入描述" />
               </div>
             </CardContent>
           </Card>
@@ -155,69 +159,61 @@ export function AgentEditorPage() {
             <CardContent className="pt-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">系统指令 (Instructions)</label>
-                <Textarea
-                  value={form.instructions || ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, instructions: e.target.value }))}
-                  placeholder="请输入 Agent 的系统指令"
-                  rows={16}
-                  className="font-mono text-sm"
-                />
+                <Textarea value={form.instructions || ""} onChange={(event) => setForm((prev) => ({ ...prev, instructions: event.target.value }))} placeholder="请输入 Agent 的系统指令" rows={16} className="font-mono text-sm" />
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="model">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">模型策略 (JSON)</label>
-                <Textarea
-                  value={JSON.stringify(form.modelStrategy || {}, null, 2)}
-                  onChange={(e) => handleStrategyJsonChange("modelStrategy", e.target.value)}
-                  placeholder="{}"
-                  rows={12}
-                  className="font-mono text-sm"
-                />
-              </div>
-            </CardContent>
-          </Card>
+          <JsonStrategyEditor label="模型策略 (JSON)" value={form.modelStrategy || {}} onChange={(value) => handleStrategyJsonChange("modelStrategy", value)} />
         </TabsContent>
 
         <TabsContent value="context">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">上下文策略 (JSON)</label>
-                <Textarea
-                  value={JSON.stringify(form.contextStrategy || {}, null, 2)}
-                  onChange={(e) => handleStrategyJsonChange("contextStrategy", e.target.value)}
-                  placeholder="{}"
-                  rows={12}
-                  className="font-mono text-sm"
-                />
-              </div>
-            </CardContent>
-          </Card>
+          <JsonStrategyEditor label="上下文策略 (JSON)" value={form.contextStrategy || {}} onChange={(value) => handleStrategyJsonChange("contextStrategy", value)} />
         </TabsContent>
 
         <TabsContent value="risk">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">风险策略 (JSON)</label>
-                <Textarea
-                  value={JSON.stringify(form.riskStrategy || {}, null, 2)}
-                  onChange={(e) => handleStrategyJsonChange("riskStrategy", e.target.value)}
-                  placeholder="{}"
-                  rows={12}
-                  className="font-mono text-sm"
-                />
-              </div>
-            </CardContent>
-          </Card>
+          <JsonStrategyEditor label="风险策略 (JSON)" value={form.riskStrategy || {}} onChange={(value) => handleStrategyJsonChange("riskStrategy", value)} />
+        </TabsContent>
+
+        <TabsContent value="skills">
+          {skillFeature.enabled && agentId ? (
+            <div className="space-y-4">
+              <AgentSkillBindingPanel agentId={agentId} onSnapshotChange={setSkillSetJson} />
+              <Card>
+                <CardContent className="space-y-2 pt-6">
+                  <label className="text-sm font-medium">发布快照预览</label>
+                  <Textarea readOnly value={skillSetJson} rows={8} className="font-mono text-xs" />
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <FeatureUnavailableState featureState={skillFeature} featureName="Skill 管理" />
+          )}
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function JsonStrategyEditor({
+  label,
+  value,
+  onChange
+}: {
+  label: string;
+  value: Record<string, unknown>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">{label}</label>
+          <Textarea value={JSON.stringify(value, null, 2)} onChange={(event) => onChange(event.target.value)} placeholder="{}" rows={12} className="font-mono text-sm" />
+        </div>
+      </CardContent>
+    </Card>
   );
 }

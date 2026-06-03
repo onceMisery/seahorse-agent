@@ -67,6 +67,7 @@ export interface AgentVersion {
 export interface AgentPublishPayload {
   instructions: string;
   toolSetJson?: string;
+  skillSetJson?: string;
   modelConfigJson?: string;
   memoryConfigJson?: string;
   guardrailConfigJson?: string;

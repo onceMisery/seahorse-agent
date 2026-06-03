@@ -13,6 +13,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "DELETE",
+    "path": "/api/skills/custom/{}"
+  },
+  {
+    "method": "DELETE",
     "path": "/api/me/memories/{}"
   },
   {
@@ -225,6 +229,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/agents/{}/skills"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agents/{}/skills/snapshot"
+  },
+  {
+    "method": "GET",
     "path": "/api/agents/{}/versions/{}/eval-summaries"
   },
   {
@@ -318,6 +330,18 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/api/sre/health"
+  },
+  {
+    "method": "GET",
+    "path": "/api/skills"
+  },
+  {
+    "method": "GET",
+    "path": "/api/skills/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/skills/custom/{}/history"
   },
   {
     "method": "GET",
@@ -849,6 +873,26 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/skills/custom"
+  },
+  {
+    "method": "POST",
+    "path": "/api/skills/custom/{}/rollback"
+  },
+  {
+    "method": "POST",
+    "path": "/api/skills/install"
+  },
+  {
+    "method": "POST",
+    "path": "/api/skills/{}/disable"
+  },
+  {
+    "method": "POST",
+    "path": "/api/skills/{}/enable"
+  },
+  {
+    "method": "POST",
     "path": "/api/tools/{}/disable"
   },
   {
@@ -1097,6 +1141,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "PUT",
+    "path": "/api/agents/{}/skills"
+  },
+  {
+    "method": "PUT",
     "path": "/api/agents/{}/versions/{}/tools"
   },
   {
@@ -1106,6 +1154,10 @@ export const backendEndpointManifest = [
   {
     "method": "PUT",
     "path": "/api/conversations/{}"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/skills/custom/{}"
   },
   {
     "method": "PUT",

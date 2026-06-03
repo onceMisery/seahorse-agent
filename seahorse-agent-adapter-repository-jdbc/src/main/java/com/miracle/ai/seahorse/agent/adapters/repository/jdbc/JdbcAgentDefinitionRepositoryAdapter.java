@@ -88,12 +88,12 @@ public class JdbcAgentDefinitionRepositoryAdapter implements AgentDefinitionRepo
     private static final String SQL_INSERT_VERSION = """
             INSERT INTO sa_agent_version
             (version_id, agent_id, version_no, instructions, tool_set_json, model_config_json,
-             memory_config_json, guardrail_config_json, published_by, published_at, change_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             memory_config_json, guardrail_config_json, skill_set_json, published_by, published_at, change_summary)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_LATEST_VERSION = """
             SELECT version_id, agent_id, version_no, instructions, tool_set_json, model_config_json,
-                   memory_config_json, guardrail_config_json, published_by, published_at, change_summary
+                   memory_config_json, guardrail_config_json, skill_set_json, published_by, published_at, change_summary
             FROM sa_agent_version
             WHERE agent_id = ?
             ORDER BY version_no DESC
@@ -101,7 +101,7 @@ public class JdbcAgentDefinitionRepositoryAdapter implements AgentDefinitionRepo
             """;
     private static final String SQL_FIND_VERSION = """
             SELECT version_id, agent_id, version_no, instructions, tool_set_json, model_config_json,
-                   memory_config_json, guardrail_config_json, published_by, published_at, change_summary
+                   memory_config_json, guardrail_config_json, skill_set_json, published_by, published_at, change_summary
             FROM sa_agent_version
             WHERE agent_id = ? AND version_id = ?
             """;
@@ -201,6 +201,7 @@ public class JdbcAgentDefinitionRepositoryAdapter implements AgentDefinitionRepo
                 safeVersion.modelConfigJson(),
                 safeVersion.memoryConfigJson(),
                 safeVersion.guardrailConfigJson(),
+                safeVersion.skillSetJson(),
                 safeVersion.publishedBy(),
                 toTimestamp(safeVersion.publishedAt()),
                 safeVersion.changeSummary());
@@ -251,9 +252,19 @@ public class JdbcAgentDefinitionRepositoryAdapter implements AgentDefinitionRepo
                 resultSet.getString("model_config_json"),
                 resultSet.getString("memory_config_json"),
                 resultSet.getString("guardrail_config_json"),
+                columnExists(resultSet, "skill_set_json") ? resultSet.getString("skill_set_json") : AgentVersion.EMPTY_JSON_OBJECT,
                 resultSet.getString("published_by"),
                 toInstant(resultSet.getTimestamp("published_at")),
                 resultSet.getString("change_summary"));
+    }
+
+    private boolean columnExists(ResultSet resultSet, String columnName) {
+        try {
+            resultSet.findColumn(columnName);
+            return true;
+        } catch (SQLException ex) {
+            return false;
+        }
     }
 
     private QueryParts keywordFilter(String keyword) {

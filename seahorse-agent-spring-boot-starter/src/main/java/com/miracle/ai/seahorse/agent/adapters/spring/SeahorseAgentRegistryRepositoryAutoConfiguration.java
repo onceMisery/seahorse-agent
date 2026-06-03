@@ -31,6 +31,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunEventB
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunLeaseRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunQueueRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentSkillRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentToolBindingRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentVersionActivationRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConnectorCredentialBindingRepositoryAdapter;
@@ -63,6 +64,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.DurableTaskQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunLeaseRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentTemplateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentVersionActivationRepositoryPort;
@@ -184,6 +186,14 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(AgentToolBindingRepositoryPort.class)
     public JdbcAgentToolBindingRepositoryAdapter seahorseJdbcAgentToolBindingRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentToolBindingRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentSkillRepositoryPort.class)
+    public JdbcAgentSkillRepositoryAdapter seahorseJdbcAgentSkillRepositoryAdapter(DataSource dataSource) {
+        return new JdbcAgentSkillRepositoryAdapter(dataSource);
     }
 
     @Bean

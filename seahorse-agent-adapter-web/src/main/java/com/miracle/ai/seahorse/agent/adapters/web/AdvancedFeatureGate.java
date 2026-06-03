@@ -62,6 +62,7 @@ public final class AdvancedFeatureGate {
                                                  boolean ingestionTaskManagementEnabled,
                                                  boolean ingestionPipelineManagementEnabled,
                                                  boolean toolCatalogManagementEnabled,
+                                                 boolean skillManagementEnabled,
                                                  boolean agentDefinitionManagementEnabled,
                                                  boolean agentFactoryManagementEnabled,
                                                  boolean agentToolBindingManagementEnabled,
@@ -89,6 +90,7 @@ public final class AdvancedFeatureGate {
         features.put(AdvancedFeature.INGESTION_TASK_MANAGEMENT, ingestionTaskManagementEnabled);
         features.put(AdvancedFeature.INGESTION_PIPELINE_MANAGEMENT, ingestionPipelineManagementEnabled);
         features.put(AdvancedFeature.TOOL_CATALOG_MANAGEMENT, toolCatalogManagementEnabled);
+        features.put(AdvancedFeature.SKILL_MANAGEMENT, skillManagementEnabled);
         features.put(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT, agentDefinitionManagementEnabled);
         features.put(AdvancedFeature.AGENT_FACTORY_MANAGEMENT, agentFactoryManagementEnabled);
         features.put(AdvancedFeature.AGENT_TOOL_BINDING_MANAGEMENT, agentToolBindingManagementEnabled);
@@ -105,6 +107,63 @@ public final class AdvancedFeatureGate {
         features.put(AdvancedFeature.AUDIT_LOG, auditLogEnabled);
         features.put(AdvancedFeature.COST_ANALYTICS, costAnalyticsEnabled);
         return new AdvancedFeatureGate(productMode, features);
+    }
+
+    public static AdvancedFeatureGate configured(ProductMode productMode,
+                                                 boolean sandboxEnabled,
+                                                 boolean connectorManagementEnabled,
+                                                 boolean mcpToolEnabled,
+                                                 boolean secretManagementEnabled,
+                                                 boolean agentHandoffEnabled,
+                                                 boolean remoteAgentEnabled,
+                                                 boolean localAgentEnabled,
+                                                 boolean intentTreeManagementEnabled,
+                                                 boolean ingestionTaskManagementEnabled,
+                                                 boolean ingestionPipelineManagementEnabled,
+                                                 boolean toolCatalogManagementEnabled,
+                                                 boolean agentDefinitionManagementEnabled,
+                                                 boolean agentFactoryManagementEnabled,
+                                                 boolean agentToolBindingManagementEnabled,
+                                                 boolean agentRunManagementEnabled,
+                                                 boolean agentEvaluationEnabled,
+                                                 boolean productionGateEnabled,
+                                                 boolean enterprisePilotReadinessEnabled,
+                                                 boolean agentRolloutManagementEnabled,
+                                                 boolean quotaManagementEnabled,
+                                                 boolean resourceAclManagementEnabled,
+                                                 boolean memoryGovernanceEnabled,
+                                                 boolean ragEvaluationEnabled,
+                                                 boolean metadataGovernanceEnabled,
+                                                 boolean auditLogEnabled,
+                                                 boolean costAnalyticsEnabled) {
+        return configured(productMode,
+                sandboxEnabled,
+                connectorManagementEnabled,
+                mcpToolEnabled,
+                secretManagementEnabled,
+                agentHandoffEnabled,
+                remoteAgentEnabled,
+                localAgentEnabled,
+                intentTreeManagementEnabled,
+                ingestionTaskManagementEnabled,
+                ingestionPipelineManagementEnabled,
+                toolCatalogManagementEnabled,
+                false,
+                agentDefinitionManagementEnabled,
+                agentFactoryManagementEnabled,
+                agentToolBindingManagementEnabled,
+                agentRunManagementEnabled,
+                agentEvaluationEnabled,
+                productionGateEnabled,
+                enterprisePilotReadinessEnabled,
+                agentRolloutManagementEnabled,
+                quotaManagementEnabled,
+                resourceAclManagementEnabled,
+                memoryGovernanceEnabled,
+                ragEvaluationEnabled,
+                metadataGovernanceEnabled,
+                auditLogEnabled,
+                costAnalyticsEnabled);
     }
 
     public static AdvancedFeatureGate configured(ProductMode productMode,
