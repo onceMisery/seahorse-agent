@@ -10,6 +10,7 @@ import {
   retryMetadataQuarantineItem,
   type MetadataQuarantineItem
 } from "@/services/metadataGovernanceService";
+import { extractRecords } from "@/types";
 import { getErrorMessage } from "@/utils/error";
 
 export function MetadataQuarantinePanel() {

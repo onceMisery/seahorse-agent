@@ -18,6 +18,7 @@ import {
   listMetadataDictionaryItems,
   type MetadataDictionaryItem
 } from "@/services/metadataGovernanceService";
+import { extractRecords } from "@/types";
 import { getErrorMessage } from "@/utils/error";
 
 export function MetadataDictionaryPanel() {

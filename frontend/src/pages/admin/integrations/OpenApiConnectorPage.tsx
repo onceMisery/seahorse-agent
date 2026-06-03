@@ -12,6 +12,7 @@ import { getAdvancedFeatureState, ADVANCED_ADMIN_FEATURES } from "@/config/produ
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
 import { listConnectors, type OpenApiConnector } from "@/services/openApiConnectorService";
 import { OpenApiImportDialog } from "./components/OpenApiImportDialog";
+import { extractRecords } from "@/types";
 import { getErrorMessage } from "@/utils/error";
 
 export function OpenApiConnectorPage() {

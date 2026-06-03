@@ -13,6 +13,7 @@ import {
   type MemoryMaintenanceRun,
   type MemoryPolicyConfig
 } from "@/services/memoryGovernanceService";
+import { extractRecords } from "@/types";
 import { getErrorMessage } from "@/utils/error";
 
 export function MemoryMaintenancePanel() {
