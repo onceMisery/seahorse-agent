@@ -2,6 +2,22 @@ import { api } from "@/services/api";
 
 export type ApiRecord = Record<string, unknown>;
 
+export type SreHealthStatus = "GREEN" | "WARN" | "RED";
+
+export interface SreHealthItem {
+  contributorName: string;
+  status: SreHealthStatus;
+  message: string;
+  evidenceRef: string | null;
+}
+
+export interface SreHealthReport {
+  reportId: string;
+  status: SreHealthStatus;
+  items: SreHealthItem[];
+  checkedAt: string;
+}
+
 export type PageResult<T> = {
   records: T[];
   total: number;
@@ -118,8 +134,8 @@ export async function getAiInfraTools(params: ToolPageParams): Promise<PageResul
   });
 }
 
-export async function getAiInfraSreHealth(): Promise<ApiRecord> {
-  return api.get<ApiRecord, ApiRecord>("/api/sre/health");
+export async function getAiInfraSreHealth(): Promise<SreHealthReport> {
+  return api.get<SreHealthReport, SreHealthReport>("/api/sre/health");
 }
 
 export async function getAiInfraCostUsageAggregate(params: CostUsageAggregateParams): Promise<ApiRecord> {
