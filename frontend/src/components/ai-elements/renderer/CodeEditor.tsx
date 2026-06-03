@@ -32,8 +32,7 @@ function normalizeLanguage(language?: string | null): CodeEditorLanguage {
     normalized === "javascript" ||
     normalized === "typescript" ||
     normalized === "python" ||
-    normalized === "json" ||
-    normalized === "markdown"
+    normalized === "json"
   ) {
     return normalized;
   }

@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Check, Copy, Edit, Eye } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ai-elements/renderer/CodeEditor";
@@ -22,9 +23,13 @@ export function CodeBlock({ code, language, editable = false, onChange }: CodeBl
   }, [code]);
 
   const copy = async () => {
-    await navigator.clipboard.writeText(draft);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(draft);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Copy failed");
+    }
   };
 
   const applyChange = (next: string) => {

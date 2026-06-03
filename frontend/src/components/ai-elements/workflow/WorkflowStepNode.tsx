@@ -1,24 +1,30 @@
-import { AlertCircle, CheckCircle, Clock, Loader2, MinusCircle } from "lucide-react";
+import { AlertCircle, CheckCircle, Clock, Loader2, MinusCircle, type LucideIcon } from "lucide-react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 
 import type { WorkflowStepNodeData } from "@/components/ai-elements/types";
 import { cn } from "@/lib/utils";
 
-function statusMeta(status?: string) {
-  const normalized = status?.toUpperCase();
-  if (normalized === "COMPLETED" || normalized === "SUCCESS") {
-    return { icon: CheckCircle, color: "#10b981", bg: "rgba(16,185,129,0.12)", label: "Completed" };
-  }
-  if (normalized === "FAILED" || normalized === "ERROR") {
-    return { icon: AlertCircle, color: "#ef4444", bg: "rgba(239,68,68,0.12)", label: "Failed" };
-  }
-  if (normalized === "RUNNING") {
-    return { icon: Loader2, color: "#3b82f6", bg: "rgba(59,130,246,0.12)", label: "Running" };
-  }
-  if (normalized === "SKIPPED") {
-    return { icon: MinusCircle, color: "#94a3b8", bg: "rgba(148,163,184,0.14)", label: "Skipped" };
-  }
-  return { icon: Clock, color: "#f59e0b", bg: "rgba(245,158,11,0.12)", label: "Pending" };
+interface StatusMeta {
+  icon: LucideIcon;
+  color: string;
+  bg: string;
+  label: string;
+}
+
+const STATUS_MAP: Record<string, StatusMeta> = {
+  COMPLETED: { icon: CheckCircle, color: "#10b981", bg: "rgba(16,185,129,0.12)", label: "Completed" },
+  SUCCESS:   { icon: CheckCircle, color: "#10b981", bg: "rgba(16,185,129,0.12)", label: "Completed" },
+  FAILED:    { icon: AlertCircle, color: "#ef4444", bg: "rgba(239,68,68,0.12)", label: "Failed" },
+  ERROR:     { icon: AlertCircle, color: "#ef4444", bg: "rgba(239,68,68,0.12)", label: "Failed" },
+  RUNNING:   { icon: Loader2, color: "#3b82f6", bg: "rgba(59,130,246,0.12)", label: "Running" },
+  SKIPPED:   { icon: MinusCircle, color: "#94a3b8", bg: "rgba(148,163,184,0.14)", label: "Skipped" },
+};
+
+const DEFAULT_STATUS: StatusMeta = { icon: Clock, color: "#f59e0b", bg: "rgba(245,158,11,0.12)", label: "Pending" };
+
+function statusMeta(status?: string): StatusMeta {
+  const key = status?.toUpperCase() ?? "";
+  return STATUS_MAP[key] ?? DEFAULT_STATUS;
 }
 
 type WorkflowStepNodeModel = Node<WorkflowStepNodeData, "workflowStep">;

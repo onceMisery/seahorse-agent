@@ -128,7 +128,7 @@ public class KernelAgentRunWorkflowService implements AgentRunWorkflowInboundPor
     }
 
     private String labelFor(AgentStep step) {
-        String summary = firstText(step.errorMessage(), step.outputJson(), step.inputJson());
+        String summary = firstText(step.outputJson(), step.inputJson(), step.errorMessage());
         if (summary != null && summary.length() <= 80) {
             return summary;
         }

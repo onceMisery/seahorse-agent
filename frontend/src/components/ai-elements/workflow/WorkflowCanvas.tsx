@@ -1,11 +1,8 @@
-import * as React from "react";
 import {
   Background,
   Controls,
   MiniMap,
   ReactFlow,
-  useEdgesState,
-  useNodesState,
   type Edge,
   type Node,
   type NodeTypes
@@ -28,18 +25,7 @@ interface WorkflowCanvasProps {
   height?: number;
 }
 
-export function WorkflowCanvas({ nodes: initialNodes, edges: initialEdges, onNodeClick, height = 460 }: WorkflowCanvasProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowStepNodeModel>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-
-  React.useEffect(() => {
-    setNodes(initialNodes);
-  }, [initialNodes, setNodes]);
-
-  React.useEffect(() => {
-    setEdges(initialEdges);
-  }, [initialEdges, setEdges]);
-
+export function WorkflowCanvas({ nodes, edges, onNodeClick, height = 460 }: WorkflowCanvasProps) {
   return (
     <div
       className="overflow-hidden rounded-lg border"
@@ -53,8 +39,6 @@ export function WorkflowCanvas({ nodes: initialNodes, edges: initialEdges, onNod
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
         onNodeClick={(_, node) => onNodeClick?.(node as WorkflowStepNodeModel)}
         fitView
         fitViewOptions={{ padding: 0.2 }}

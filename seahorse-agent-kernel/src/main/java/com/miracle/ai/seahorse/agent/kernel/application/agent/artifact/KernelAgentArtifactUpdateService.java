@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent.artifact;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifactScanStatus;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentArtifactUpdateInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
@@ -26,12 +27,16 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 public class KernelAgentArtifactUpdateService implements AgentArtifactUpdateInboundPort {
 
+    private static final Logger LOG = LoggerFactory.getLogger(KernelAgentArtifactUpdateService.class);
     private static final String ADMIN_ROLE = "admin";
     private static final String ACCESS_DENIED = "Access denied";
     private static final String ARTIFACT_BUCKET = "agent-artifacts";
@@ -75,13 +80,22 @@ public class KernelAgentArtifactUpdateService implements AgentArtifactUpdateInbo
                 stored.url(),
                 content,
                 current.provenanceJson(),
-                current.scanStatus(),
+                AgentArtifactScanStatus.PENDING,
                 current.createdAt());
-        AgentArtifact saved = artifactRepository.save(updated);
-        if (current.storageRef() != null && !current.storageRef().equals(stored.url())) {
-            objectStoragePort.deleteByUrl(current.storageRef());
+        try {
+            AgentArtifact saved = artifactRepository.save(updated);
+            if (current.storageRef() != null && !current.storageRef().equals(stored.url())) {
+                objectStoragePort.deleteByUrl(current.storageRef());
+            }
+            return saved;
+        } catch (RuntimeException e) {
+            try {
+                objectStoragePort.deleteByUrl(stored.url());
+            } catch (RuntimeException cleanup) {
+                LOG.warn("Failed to clean up orphaned object after DB save failure: {}", stored.url(), cleanup);
+            }
+            throw e;
         }
-        return saved;
     }
 
     private AgentArtifact requireWritable(AgentArtifact artifact, CurrentUser currentUser) {

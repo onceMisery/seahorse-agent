@@ -1,6 +1,3 @@
-// @ts-nocheck
-/* eslint-disable */
-
 import * as React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -27,12 +24,14 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
         li({ children, ...props }) {
           return <li {...props}>{renderWithCitations(children, sources)}</li>;
         },
-        code({ inline, className, children, node, ...props }) {
+        code({ className, children, ...props }) {
           const match = /language-(\w+)/.exec(className || "");
           const language = match?.[1] || "text";
           const value = String(children).replace(/\n$/, "");
+          const hasLanguage = Boolean(match);
+          const hasNewlines = value.includes('\n');
 
-          if (inline || !value.includes('\n')) {
+          if (!hasLanguage && !hasNewlines) {
             return (
               <code
                 className={cn("rounded px-1.5 py-0.5 text-[13px] font-mono", className)}
@@ -157,8 +156,6 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
   );
 }
 
-const CITATION_PATTERN = /\[(\d+)\]/g;
-
 function renderWithCitations(children: React.ReactNode, sources?: AgentSource[]): React.ReactNode {
   if (!sources || sources.length === 0) {
     return children;
@@ -169,19 +166,18 @@ function renderWithCitations(children: React.ReactNode, sources?: AgentSource[])
     }
     const segments: React.ReactNode[] = [];
     let lastIndex = 0;
-    let match: RegExpExecArray | null;
-    CITATION_PATTERN.lastIndex = 0;
-    while ((match = CITATION_PATTERN.exec(child)) !== null) {
+    for (const match of child.matchAll(/\[(\d+)\]/g)) {
       const num = parseInt(match[1], 10);
       const source = sources[num - 1];
       if (!source) continue;
-      if (match.index > lastIndex) {
-        segments.push(child.slice(lastIndex, match.index));
+      const matchIndex = match.index!;
+      if (matchIndex > lastIndex) {
+        segments.push(child.slice(lastIndex, matchIndex));
       }
       segments.push(
-        <CitationBadge key={`cite-${idx}-${match.index}`} index={num} source={source} />
+        <CitationBadge key={`cite-${idx}-${matchIndex}`} index={num} source={source} />
       );
-      lastIndex = match.index + match[0].length;
+      lastIndex = matchIndex + match[0].length;
     }
     if (segments.length === 0) return child;
     if (lastIndex < child.length) {

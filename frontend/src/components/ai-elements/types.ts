@@ -11,9 +11,6 @@ export type CodeEditorLanguage =
   | "typescript"
   | "python"
   | "json"
-  | "html"
-  | "css"
-  | "markdown"
   | "text";
 
 export type WorkflowStepStatus =
