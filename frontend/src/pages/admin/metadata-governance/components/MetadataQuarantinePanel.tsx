@@ -20,7 +20,7 @@ export function MetadataQuarantinePanel() {
     setLoading(true);
     try {
       const result = await pageMetadataQuarantineItems();
-      const data = Array.isArray(result) ? result : (result as any)?.records ?? [];
+      const data = extractRecords(result);
       setItems(data);
     } catch {
       setItems([]);

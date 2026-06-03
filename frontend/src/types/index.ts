@@ -1,3 +1,22 @@
+/**
+ * Generic paginated API response shape.
+ * Some endpoints return a raw array; others wrap in { records, total, ... }.
+ */
+export interface ApiPageResponse<T> {
+  records: T[];
+  total?: number;
+  current?: number;
+  size?: number;
+  pages?: number;
+}
+
+/** Extract records from either a raw array or a paginated envelope. */
+export function extractRecords<T>(data: T[] | ApiPageResponse<T> | null | undefined): T[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  return data.records ?? [];
+}
+
 export type Role = "user" | "assistant";
 
 export type FeedbackValue = "like" | "dislike" | null;

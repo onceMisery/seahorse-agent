@@ -5,14 +5,14 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: seahorse
-      POSTGRES_USER: seahorse
-      POSTGRES_PASSWORD: seahorse
+      POSTGRES_DB: ${POSTGRES_DB:-seahorse}
+      POSTGRES_USER: ${POSTGRES_USER:-seahorse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-seahorse}
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./resources/database/seahorse_init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U seahorse -d seahorse"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-seahorse} -d ${POSTGRES_DB:-seahorse}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -32,9 +32,9 @@ services:
       # Server port
       SERVER_PORT: "9090"
       # DataSource
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/seahorse
-      SPRING_DATASOURCE_USERNAME: seahorse
-      SPRING_DATASOURCE_PASSWORD: seahorse
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-seahorse}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-seahorse}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-seahorse}
       # Adapters
       SEAHORSE_AGENT_ADAPTERS_VECTOR_TYPE: noop
       SEAHORSE_AGENT_ADAPTERS_VECTOR_DIMENSION: "1024"

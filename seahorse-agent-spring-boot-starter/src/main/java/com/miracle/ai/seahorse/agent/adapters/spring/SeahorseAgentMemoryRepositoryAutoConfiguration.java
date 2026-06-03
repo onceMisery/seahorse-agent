@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
+import org.slf4j.LoggerFactory;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcChatSchemaUpgrade;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcConversationMemoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcCorrectionLedgerRepositoryAdapter;
@@ -96,7 +97,8 @@ public class SeahorseAgentMemoryRepositoryAutoConfiguration {
         try {
             upgrade.upgrade();
         } catch (Exception e) {
-            // Log and continue if upgrade fails
+            LoggerFactory.getLogger(SeahorseAgentMemoryRepositoryAutoConfiguration.class)
+                    .warn("Chat schema upgrade failed; continuing with existing schema", e);
         }
         return upgrade;
     }

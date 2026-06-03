@@ -8,6 +8,7 @@ import {
   listMetadataExtractionResults,
   type MetadataExtractionResult
 } from "@/services/metadataGovernanceService";
+import { extractRecords } from "@/types";
 
 export function MetadataExtractionResultDrawer() {
   const [results, setResults] = useState<MetadataExtractionResult[]>([]);
@@ -18,7 +19,7 @@ export function MetadataExtractionResultDrawer() {
     setLoading(true);
     try {
       const result = await listMetadataExtractionResults();
-      const data = Array.isArray(result) ? result : (result as any)?.records ?? [];
+      const data = extractRecords(result);
       setResults(data);
     } catch {
       setResults([]);

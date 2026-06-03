@@ -26,7 +26,7 @@ export function OpenApiConnectorPage() {
     try {
       setLoading(true);
       const data = await listConnectors({ current: 1, size: 50 });
-      setConnectors((data as any)?.records || data || []);
+      setConnectors(extractRecords(data));
     } catch (error) {
       toast.error(getErrorMessage(error, "加载连接器列表失败"));
       console.error(error);

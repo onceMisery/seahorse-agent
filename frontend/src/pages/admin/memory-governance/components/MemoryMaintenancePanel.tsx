@@ -32,7 +32,7 @@ export function MemoryMaintenancePanel() {
         listMemoryMaintenanceRuns({ current: 1, size: 20 }).catch(() => null),
         getMemoryPolicyConfig().catch(() => null)
       ]);
-      setRuns((runsData as any)?.records || runsData || []);
+      setRuns(extractRecords(runsData));
       setPolicyConfig(config);
       if (config) setConfigJson(JSON.stringify(config, null, 2));
     } catch (error) {
