@@ -52,6 +52,9 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
   const [saving, setSaving] = React.useState(false);
   const [editedContentById, setEditedContentById] = React.useState<Record<string, string>>({});
   const [a2uiParseError, setA2uiParseError] = React.useState<string | null>(null);
+  const copyTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
+
+  React.useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
   React.useEffect(() => {
     if (allItems.length > 0 && (!selectedId || !allItems.some((i) => i.id === selectedId))) {
@@ -104,7 +107,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
     try {
       await navigator.clipboard.writeText(activeCode);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
     } catch {
       toast.error("Copy failed");
     }

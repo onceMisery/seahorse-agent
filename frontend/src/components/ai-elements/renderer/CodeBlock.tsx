@@ -17,6 +17,9 @@ export function CodeBlock({ code, language, editable = false, onChange }: CodeBl
   const [copied, setCopied] = React.useState(false);
   const [isEditing, setIsEditing] = React.useState(editable);
   const [draft, setDraft] = React.useState(code);
+  const copyTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
+
+  React.useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
   React.useEffect(() => {
     setDraft(code);
@@ -26,7 +29,7 @@ export function CodeBlock({ code, language, editable = false, onChange }: CodeBl
     try {
       await navigator.clipboard.writeText(draft);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      copyTimerRef.current = window.setTimeout(() => setCopied(false), 1500);
     } catch {
       toast.error("Copy failed");
     }

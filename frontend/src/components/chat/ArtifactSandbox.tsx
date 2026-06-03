@@ -9,12 +9,15 @@ interface ArtifactSandboxProps {
 export function ArtifactSandbox({ artifact }: ArtifactSandboxProps) {
   const [copied, setCopied] = React.useState(false);
   const [expanded, setExpanded] = React.useState(false);
+  const copyTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
+
+  React.useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(artifact.code);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
     } catch {
       // Clipboard may be unavailable in restricted browser contexts.
     }
