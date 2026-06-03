@@ -56,16 +56,6 @@ public class SeahorseSkillController {
         this.advancedFeatureGate = advancedFeatureGateProvider.getIfAvailable(AdvancedFeatureGate::consumerWebDefaults);
     }
 
-    public SeahorseSkillController(ObjectProvider<AgentSkillManagementInboundPort> managementPortProvider,
-                                   ObjectProvider<AgentSkillBindingInboundPort> bindingPortProvider,
-                                   AdvancedFeatureGate advancedFeatureGate) {
-        this.managementPortProvider = managementPortProvider;
-        this.bindingPortProvider = bindingPortProvider;
-        this.advancedFeatureGate = advancedFeatureGate == null
-                ? AdvancedFeatureGate.consumerWebDefaults()
-                : advancedFeatureGate;
-    }
-
     @GetMapping("/api/skills")
     public ApiResponse<Object> page(@RequestParam(required = false) String tenantId,
                                     @RequestParam(required = false, defaultValue = DEFAULT_CURRENT) long current,

@@ -225,20 +225,23 @@ public class JdbcAgentSkillRepositoryAdapter implements AgentSkillRepositoryPort
                 SET deleted = 1
                 WHERE tenant_id = ? AND agent_id = ? AND deleted = 0
                 """, safeTenant, agentId);
-        for (AgentSkillBinding binding : bindings == null ? List.<AgentSkillBinding>of() : bindings) {
-            jdbcTemplate.update("""
-                    INSERT INTO sa_agent_skill_binding
-                    (agent_id, tenant_id, skill_name, revision_id, inject_mode, created_by, created_at, deleted)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-                    """,
-                    binding.agentId(),
-                    binding.tenantId(),
-                    binding.skillName(),
-                    binding.revisionId(),
-                    binding.injectMode().name(),
-                    binding.createdBy(),
-                    toTimestamp(binding.createdAt()));
+        List<AgentSkillBinding> items = bindings == null ? List.of() : bindings;
+        if (items.isEmpty()) {
+            return;
         }
+        jdbcTemplate.batchUpdate("""
+                INSERT INTO sa_agent_skill_binding
+                (agent_id, tenant_id, skill_name, revision_id, inject_mode, created_by, created_at, deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                """, items, items.size(), (ps, binding) -> {
+                    ps.setString(1, binding.agentId());
+                    ps.setString(2, binding.tenantId());
+                    ps.setString(3, binding.skillName());
+                    ps.setString(4, binding.revisionId());
+                    ps.setString(5, binding.injectMode().name());
+                    ps.setString(6, binding.createdBy());
+                    ps.setTimestamp(7, toTimestamp(binding.createdAt()));
+                });
     }
 
     private AgentSkill mapSkill(ResultSet rs, int rowNum) throws SQLException {

@@ -184,15 +184,32 @@ public class JdbcMemoryLifecycleRepositoryAdapter
         if (memoryIds == null || memoryIds.isEmpty()) {
             return 0;
         }
+        List<String> validIds = memoryIds.stream()
+                .filter(JdbcMemorySupport::hasText)
+                .toList();
+        if (validIds.isEmpty()) {
+            return 0;
+        }
         Instant now = Objects.requireNonNullElseGet(markedAt, Instant::now);
+        String placeholders = String.join(",", validIds.stream().map(id -> "?").toList());
         int updated = 0;
-        for (String memoryId : memoryIds) {
-            if (!JdbcMemorySupport.hasText(memoryId)) {
-                continue;
+        for (String tableName : List.of("t_short_term_memory", "t_long_term_memory", "t_semantic_memory")) {
+            Object[] args = new Object[validIds.size() + 2];
+            args[0] = JdbcMemorySupport.timestamp(now);
+            args[1] = JdbcMemorySupport.timestamp(Instant.now());
+            for (int i = 0; i < validIds.size(); i++) {
+                args[i + 2] = validIds.get(i);
             }
-            updated += markLayerDerivedIndexesDeleted("t_short_term_memory", memoryId, now);
-            updated += markLayerDerivedIndexesDeleted("t_long_term_memory", memoryId, now);
-            updated += markLayerDerivedIndexesDeleted("t_semantic_memory", memoryId, now);
+            updated += jdbcTemplate.update("""
+                    UPDATE %s
+                    SET derived_indexes_deleted_at = ?,
+                        update_time = ?
+                    WHERE id IN (%s)
+                      AND deleted = 0
+                      AND COALESCE(status, 'ACTIVE') IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED')
+                      AND derived_indexes_deleted_at IS NULL
+                    """.formatted(tableName, placeholders),
+                    args);
         }
         return updated;
     }
@@ -221,15 +238,35 @@ public class JdbcMemoryLifecycleRepositoryAdapter
         if (memoryIds == null || memoryIds.isEmpty()) {
             return 0;
         }
+        List<String> validIds = memoryIds.stream()
+                .filter(JdbcMemorySupport::hasText)
+                .toList();
+        if (validIds.isEmpty()) {
+            return 0;
+        }
         Instant now = Objects.requireNonNullElseGet(archivedAt, Instant::now);
         String safeReason = JdbcMemorySupport.hasText(reason) ? reason : "generational gc archive";
+        String placeholders = String.join(",", validIds.stream().map(id -> "?").toList());
         int updated = 0;
-        for (String memoryId : memoryIds) {
-            if (!JdbcMemorySupport.hasText(memoryId)) {
-                continue;
+        for (String tableName : List.of("t_long_term_memory", "t_semantic_memory")) {
+            Object[] args = new Object[validIds.size() + 3];
+            args[0] = safeReason;
+            args[1] = JdbcMemorySupport.timestamp(now);
+            args[2] = JdbcMemorySupport.timestamp(now);
+            for (int i = 0; i < validIds.size(); i++) {
+                args[i + 3] = validIds.get(i);
             }
-            updated += markLayerArchived("t_long_term_memory", memoryId, now, safeReason);
-            updated += markLayerArchived("t_semantic_memory", memoryId, now, safeReason);
+            updated += jdbcTemplate.update("""
+                    UPDATE %s
+                    SET status = 'ARCHIVED',
+                        obsolete_reason = ?,
+                        valid_until = ?,
+                        update_time = ?
+                    WHERE id IN (%s)
+                      AND deleted = 0
+                      AND COALESCE(status, 'ACTIVE') IN ('ACTIVE', 'REFERENCED')
+                    """.formatted(tableName, placeholders),
+                    args);
         }
         return updated;
     }
@@ -278,15 +315,32 @@ public class JdbcMemoryLifecycleRepositoryAdapter
         if (memoryIds == null || memoryIds.isEmpty()) {
             return 0;
         }
+        List<String> validIds = memoryIds.stream()
+                .filter(JdbcMemorySupport::hasText)
+                .toList();
+        if (validIds.isEmpty()) {
+            return 0;
+        }
         Instant now = Objects.requireNonNullElseGet(deletedAt, Instant::now);
+        String placeholders = String.join(",", validIds.stream().map(id -> "?").toList());
         int updated = 0;
-        for (String memoryId : memoryIds) {
-            if (!JdbcMemorySupport.hasText(memoryId)) {
-                continue;
+        for (String tableName : List.of("t_short_term_memory", "t_long_term_memory", "t_semantic_memory")) {
+            Object[] args = new Object[validIds.size() + 1];
+            args[0] = JdbcMemorySupport.timestamp(now);
+            for (int i = 0; i < validIds.size(); i++) {
+                args[i + 1] = validIds.get(i);
             }
-            updated += markLayerPhysicallyDeleted("t_short_term_memory", memoryId, now);
-            updated += markLayerPhysicallyDeleted("t_long_term_memory", memoryId, now);
-            updated += markLayerPhysicallyDeleted("t_semantic_memory", memoryId, now);
+            updated += jdbcTemplate.update("""
+                    UPDATE %s
+                    SET status = 'PHYSICAL_DELETED',
+                        deleted = 1,
+                        update_time = ?
+                    WHERE id IN (%s)
+                      AND deleted = 0
+                      AND COALESCE(status, 'ACTIVE') IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED')
+                      AND derived_indexes_deleted_at IS NOT NULL
+                    """.formatted(tableName, placeholders),
+                    args);
         }
         return updated;
     }
@@ -547,23 +601,6 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                 limit);
     }
 
-    private int markLayerArchived(String tableName, String memoryId, Instant archivedAt, String reason) {
-        return jdbcTemplate.update("""
-                UPDATE %s
-                SET status = 'ARCHIVED',
-                    obsolete_reason = ?,
-                    valid_until = ?,
-                    update_time = ?
-                WHERE id = ?
-                  AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') IN ('ACTIVE', 'REFERENCED')
-                """.formatted(tableName),
-                reason,
-                JdbcMemorySupport.timestamp(archivedAt),
-                JdbcMemorySupport.timestamp(archivedAt),
-                memoryId);
-    }
-
     private List<MemoryGarbageCollectionCandidate> scanLayerForPhysicalDeletes(
             String tableName,
             String layer,
@@ -599,21 +636,6 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                 limit);
     }
 
-    private int markLayerPhysicallyDeleted(String tableName, String memoryId, Instant deletedAt) {
-        return jdbcTemplate.update("""
-                UPDATE %s
-                SET status = 'PHYSICAL_DELETED',
-                    deleted = 1,
-                    update_time = ?
-                WHERE id = ?
-                  AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED', 'DELETED')
-                  AND derived_indexes_deleted_at IS NOT NULL
-                """.formatted(tableName),
-                JdbcMemorySupport.timestamp(deletedAt),
-                memoryId);
-    }
-
     private List<MemoryGarbageCollectionCandidate> scanLayerForDerivedIndexDeletes(
             String tableName,
             String layer,
@@ -647,21 +669,6 @@ public class JdbcMemoryLifecycleRepositoryAdapter
                         JdbcMemorySupport.instant(rs.getTimestamp("update_time"))),
                 JdbcMemorySupport.timestamp(cutoff),
                 limit);
-    }
-
-    private int markLayerDerivedIndexesDeleted(String tableName, String memoryId, Instant markedAt) {
-        return jdbcTemplate.update("""
-                UPDATE %s
-                SET derived_indexes_deleted_at = ?,
-                    update_time = ?
-                WHERE id = ?
-                  AND deleted = 0
-                  AND COALESCE(status, 'ACTIVE') IN ('OBSOLETE', 'COMPACTED', 'ARCHIVED')
-                  AND derived_indexes_deleted_at IS NULL
-                """.formatted(tableName),
-                JdbcMemorySupport.timestamp(markedAt),
-                JdbcMemorySupport.timestamp(Instant.now()),
-                memoryId);
     }
 
     private List<MemoryCompactionFragmentRow> scanShortTermCompactionRows(int limit) {

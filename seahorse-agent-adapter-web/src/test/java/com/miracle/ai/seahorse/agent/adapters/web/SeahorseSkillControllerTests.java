@@ -201,7 +201,7 @@ class SeahorseSkillControllerTests {
         return MockMvcBuilders.standaloneSetup(new SeahorseSkillController(
                         provider(AgentSkillManagementInboundPort.class, managementPort),
                         provider(AgentSkillBindingInboundPort.class, bindingPort),
-                        gate))
+                        provider(AdvancedFeatureGate.class, gate)))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
     }

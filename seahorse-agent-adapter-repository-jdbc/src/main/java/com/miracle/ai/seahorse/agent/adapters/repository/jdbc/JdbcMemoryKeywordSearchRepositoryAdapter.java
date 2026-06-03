@@ -109,25 +109,20 @@ public class JdbcMemoryKeywordSearchRepositoryAdapter implements MemoryKeywordSe
         if (!tableExists("t_memory_keyword_index")) {
             return List.of();
         }
-        Map<String, KeywordDocument> documents = new LinkedHashMap<>();
-        for (String term : terms) {
-            jdbcTemplate.query("""
-                    SELECT memory_id AS id, layer_name, memory_type AS type, content, metadata_json,
-                           status, source_update_time
-                    FROM t_memory_keyword_index
-                    WHERE user_id = ?
-                      AND tenant_id = ?
-                      AND deleted = 0
-                      AND status = 'ACTIVE'
-                      AND %s
-                    ORDER BY update_time DESC
-                    LIMIT ?
-                    """.formatted(termFilter(List.of(term), "LOWER(content)", "LOWER(CAST(metadata_json AS VARCHAR))")),
-                    (rs, rowNum) -> mapKeywordIndexDocument(rs),
-                    searchArgs(userId, tenantId, List.of(term), 2, limit))
-                    .forEach(document -> documents.putIfAbsent(document.memoryId(), document));
-        }
-        return List.copyOf(documents.values());
+        return jdbcTemplate.query("""
+                SELECT memory_id AS id, layer_name, memory_type AS type, content, metadata_json,
+                       status, source_update_time
+                FROM t_memory_keyword_index
+                WHERE user_id = ?
+                  AND tenant_id = ?
+                  AND deleted = 0
+                  AND status = 'ACTIVE'
+                  AND %s
+                ORDER BY update_time DESC
+                LIMIT ?
+                """.formatted(termFilter(terms, "LOWER(content)", "LOWER(CAST(metadata_json AS VARCHAR))")),
+                (rs, rowNum) -> mapKeywordIndexDocument(rs),
+                searchArgs(userId, tenantId, terms, 2, limit));
     }
 
     private List<KeywordDocument> searchShortTerm(String userId, String tenantId, List<String> terms, int limit) {
