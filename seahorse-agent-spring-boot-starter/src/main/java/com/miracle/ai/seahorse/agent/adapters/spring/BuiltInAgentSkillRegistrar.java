@@ -76,15 +76,18 @@ public class BuiltInAgentSkillRegistrar implements ApplicationRunner {
     }
 
     private void importResource(Resource resource) {
+        String skillName = skillName(resource);
         try {
             String markdown = resource.getContentAsString(StandardCharsets.UTF_8);
-            String skillName = skillName(resource);
             if (skillName != null) {
                 markdown = appendPackageResources(skillName, markdown);
             }
             skillManagementService.importPublic(AgentDefinition.DEFAULT_TENANT_ID, markdown, SYSTEM_OPERATOR);
         } catch (Exception ex) {
-            LOG.warn("Failed to import built-in Agent skill: resource={}", resource.getDescription(), ex);
+            LOG.warn("Failed to import built-in Agent skill: skillName={}, resource={}",
+                    Objects.requireNonNullElse(skillName, "unknown"),
+                    resource.getDescription(),
+                    ex);
         }
     }
 

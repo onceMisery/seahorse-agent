@@ -27,7 +27,10 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPo
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
@@ -48,6 +51,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(OutputCaptureExtension.class)
 class BuiltInAgentSkillRegistrarTests {
 
     @Test
@@ -145,6 +149,48 @@ class BuiltInAgentSkillRegistrarTests {
                         "print('read only')")
                 .doesNotContain("### SKILL.md");
         verifyNoMoreInteractions(service);
+    }
+
+    @Test
+    void shouldContinueImportingOtherBundledSkillsWhenOneResourceFails(CapturedOutput output) throws Exception {
+        KernelAgentSkillManagementService service = mock(KernelAgentSkillManagementService.class);
+        ResourcePatternResolver resolver = mock(ResourcePatternResolver.class);
+        when(resolver.getResources("classpath*:/skills/public/*/SKILL.md")).thenReturn(new Resource[]{
+                resource("file:/classes/skills/public/broken-skill/SKILL.md", """
+                        ---
+                        name: broken-skill
+                        description: Broken skill
+                        ---
+                        # Broken
+                        """),
+                resource("file:/classes/skills/public/working-skill/SKILL.md", """
+                        ---
+                        name: working-skill
+                        description: Working skill
+                        ---
+                        # Working
+                        """)
+        });
+        org.mockito.Mockito.doThrow(new IllegalArgumentException("invalid frontmatter line"))
+                .doReturn(null)
+                .when(service)
+                .importPublic(org.mockito.ArgumentMatchers.eq(AgentDefinition.DEFAULT_TENANT_ID),
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.eq("system"));
+        BuiltInAgentSkillRegistrar registrar = new BuiltInAgentSkillRegistrar(service, resolver);
+
+        registrar.run(null);
+
+        ArgumentCaptor<String> markdownCaptor = ArgumentCaptor.forClass(String.class);
+        verify(service, org.mockito.Mockito.times(2)).importPublic(
+                org.mockito.ArgumentMatchers.eq(AgentDefinition.DEFAULT_TENANT_ID),
+                markdownCaptor.capture(),
+                org.mockito.ArgumentMatchers.eq("system"));
+        assertThat(markdownCaptor.getAllValues().get(1)).contains("name: working-skill");
+        assertThat(output.getOut())
+                .contains("Failed to import built-in Agent skill")
+                .contains("skillName=broken-skill")
+                .contains("resource=file:/classes/skills/public/broken-skill/SKILL.md");
     }
 
     private static Resource resource(String content) {

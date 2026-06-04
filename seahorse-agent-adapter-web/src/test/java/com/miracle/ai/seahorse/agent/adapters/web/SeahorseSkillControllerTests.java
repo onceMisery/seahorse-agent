@@ -77,7 +77,7 @@ class SeahorseSkillControllerTests {
         when(managementPort.deleteCustom("tenant-a", "research-helper")).thenReturn(skill("research-helper", false));
         when(managementPort.history("tenant-a", "research-helper")).thenReturn(List.of(revision("rev-1")));
         when(managementPort.rollbackCustom("tenant-a", "research-helper", "rev-1")).thenReturn(skill);
-        when(managementPort.install("tenant-a", "# Installed")).thenReturn(skill);
+        when(managementPort.install("tenant-a", "# Installed")).thenReturn(skill("installed-helper", true));
 
         MockMvc mvc = mvc(managementPort, bindingPort, AdvancedFeatureGate.allEnabledForTests());
 
@@ -133,7 +133,9 @@ class SeahorseSkillControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("tenantId", "tenant-a", "content", "# Installed"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.name").value("research-helper"));
+                .andExpect(jsonPath("$.data.name").value("installed-helper"))
+                .andExpect(jsonPath("$.data.category").value("CUSTOM"))
+                .andExpect(jsonPath("$.data.source").value("MANUAL"));
 
         mvc.perform(delete("/api/skills/custom/research-helper")
                         .param("tenantId", "tenant-a"))

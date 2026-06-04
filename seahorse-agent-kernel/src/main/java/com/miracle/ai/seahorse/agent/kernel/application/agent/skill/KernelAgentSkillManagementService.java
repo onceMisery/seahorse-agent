@@ -167,8 +167,7 @@ public class KernelAgentSkillManagementService implements AgentSkillManagementIn
 
     @Override
     public AgentSkill install(String tenantId, String markdown) {
-        CurrentUser user = admin();
-        return importPublic(tenantId, markdown, operator(user));
+        return createCustom(tenantId, markdown);
     }
 
     public AgentSkill importPublic(String tenantId, String markdown, String operator) {
