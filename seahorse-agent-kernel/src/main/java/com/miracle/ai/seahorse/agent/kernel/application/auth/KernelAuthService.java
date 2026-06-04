@@ -59,8 +59,8 @@ public class KernelAuthService implements AuthInboundPort {
         if (user.id() == null) {
             throw new IllegalStateException("用户信息异常");
         }
-        String token = tokenServicePort.login(String.valueOf(user.id()));
-        return new LoginResult(String.valueOf(user.id()), user.role(), token, defaultAvatar(user.avatar()));
+        String token = tokenServicePort.login(String.valueOf(user.id()), user.tenantId());
+        return new LoginResult(String.valueOf(user.id()), user.role(), token, defaultAvatar(user.avatar()), user.tenantId());
     }
 
     @Override

@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTenantSupport;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
@@ -41,8 +42,8 @@ public class JdbcWorkingMemoryRepositoryAdapter implements WorkingMemoryPort {
         List<MemoryRecord> records = jdbcTemplate.query("""
                 SELECT id, conversation_id, role, content, update_time
                 FROM t_message
-                WHERE id = ? AND deleted = 0
-                """, this::mapRecord, JdbcMemorySupport.toLongId(id));
+                WHERE id = ? AND deleted = 0 AND tenant_id = ?
+                """, this::mapRecord, JdbcMemorySupport.toLongId(id), JdbcTenantSupport.resolveTenantId());
         return records.stream().findFirst();
     }
 
@@ -51,10 +52,10 @@ public class JdbcWorkingMemoryRepositoryAdapter implements WorkingMemoryPort {
         return jdbcTemplate.query("""
                 SELECT id, conversation_id, role, content, update_time
                 FROM t_message
-                WHERE conversation_id = ? AND deleted = 0
+                WHERE conversation_id = ? AND deleted = 0 AND tenant_id = ?
                 ORDER BY create_time DESC
                 LIMIT ?
-                """, this::mapRecord, JdbcMemorySupport.toLongId(conversationId), safeLimit(limit));
+                """, this::mapRecord, JdbcMemorySupport.toLongId(conversationId), JdbcTenantSupport.resolveTenantId(), safeLimit(limit));
     }
 
     @Override
@@ -62,10 +63,10 @@ public class JdbcWorkingMemoryRepositoryAdapter implements WorkingMemoryPort {
         return jdbcTemplate.query("""
                 SELECT id, conversation_id, role, content, update_time
                 FROM t_message
-                WHERE user_id = ? AND deleted = 0
+                WHERE user_id = ? AND deleted = 0 AND tenant_id = ?
                 ORDER BY create_time DESC
                 LIMIT ?
-                """, this::mapRecord, JdbcMemorySupport.toLongId(userId), safeLimit(limit));
+                """, this::mapRecord, JdbcMemorySupport.toLongId(userId), JdbcTenantSupport.resolveTenantId(), safeLimit(limit));
     }
 
     @Override
@@ -75,8 +76,8 @@ public class JdbcWorkingMemoryRepositoryAdapter implements WorkingMemoryPort {
 
     @Override
     public boolean deleteById(String id) {
-        return jdbcTemplate.update("UPDATE t_message SET deleted = 1 WHERE id = ? AND deleted = 0",
-                JdbcMemorySupport.toLongId(id)) > 0;
+        return jdbcTemplate.update("UPDATE t_message SET deleted = 1 WHERE id = ? AND deleted = 0 AND tenant_id = ?",
+                JdbcMemorySupport.toLongId(id), JdbcTenantSupport.resolveTenantId()) > 0;
     }
 
     private MemoryRecord mapRecord(ResultSet rs, int rowNum) throws SQLException {

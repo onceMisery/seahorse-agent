@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTenantSupport;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeBaseValues;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBasePage;
@@ -43,41 +44,41 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
     private static final int MAX_PAGE_SIZE = 100;
     private static final String SQL_INSERT = """
             INSERT INTO t_knowledge_base
-            (id, name, embedding_model, collection_name, created_by, updated_by, create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+            (id, name, embedding_model, collection_name, created_by, updated_by, create_time, update_time, deleted, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
             """;
     private static final String SQL_FIND_BY_ID = """
             SELECT kb.id, kb.name, kb.embedding_model, kb.collection_name, kb.created_by,
                    kb.create_time, kb.update_time, COUNT(doc.id) AS document_count
             FROM t_knowledge_base kb
             LEFT JOIN t_knowledge_document doc ON doc.kb_id = kb.id AND doc.deleted = 0
-            WHERE kb.id = ? AND kb.deleted = 0
+            WHERE kb.id = ? AND kb.deleted = 0 AND kb.tenant_id = ?
             GROUP BY kb.id, kb.name, kb.embedding_model, kb.collection_name,
                      kb.created_by, kb.create_time, kb.update_time
             """;
     private static final String SQL_COUNT_BY_NAME = """
             SELECT COUNT(1)
             FROM t_knowledge_base
-            WHERE deleted = 0 AND REPLACE(name, ' ', '') = ? AND (CAST(? AS VARCHAR) IS NULL OR id <> ?)
+            WHERE deleted = 0 AND REPLACE(name, ' ', '') = ? AND (CAST(? AS VARCHAR) IS NULL OR id <> ?) AND tenant_id = ?
             """;
     private static final String SQL_COUNT_PAGE_BASE = """
             SELECT COUNT(1)
             FROM t_knowledge_base
-            WHERE deleted = 0
+            WHERE deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_PAGE_BASE = """
             SELECT kb.id, kb.name, kb.embedding_model, kb.collection_name, kb.created_by,
                    kb.create_time, kb.update_time, COUNT(doc.id) AS document_count
             FROM t_knowledge_base kb
             LEFT JOIN t_knowledge_document doc ON doc.kb_id = kb.id AND doc.deleted = 0
-            WHERE kb.deleted = 0
+            WHERE kb.deleted = 0 AND kb.tenant_id = ?
             """;
     private static final String SQL_HAS_DOCUMENTS =
-            "SELECT COUNT(1) FROM t_knowledge_document WHERE kb_id = ? AND deleted = 0";
+            "SELECT COUNT(1) FROM t_knowledge_document WHERE kb_id = ? AND deleted = 0 AND tenant_id = ?";
     private static final String SQL_HAS_VECTORIZED_DOCUMENTS = """
             SELECT COUNT(1)
             FROM t_knowledge_document
-            WHERE kb_id = ? AND deleted = 0 AND chunk_count > 0
+            WHERE kb_id = ? AND deleted = 0 AND chunk_count > 0 AND tenant_id = ?
             """;
     private static final String SQL_UPDATE = """
             UPDATE t_knowledge_base
@@ -85,12 +86,12 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
                 embedding_model = COALESCE(?, embedding_model),
                 updated_by = ?,
                 update_time = ?
-            WHERE id = ? AND deleted = 0
+            WHERE id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_DELETE = """
             UPDATE t_knowledge_base
             SET deleted = 1, updated_by = ?, update_time = ?
-            WHERE id = ? AND deleted = 0
+            WHERE id = ? AND deleted = 0 AND tenant_id = ?
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -112,14 +113,16 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
                 parseOperatorId(safeValues.operator()),
                 parseOperatorId(safeValues.operator()),
                 now,
-                now);
+                now,
+                JdbcTenantSupport.resolveTenantId());
         return id;
     }
 
     @Override
     public boolean nameExists(String normalizedName, Long excludedKbId) {
         Integer count = jdbcTemplate.queryForObject(SQL_COUNT_BY_NAME, Integer.class,
-                requireText(normalizedName, "normalizedName"), excludedKbId, excludedKbId);
+                requireText(normalizedName, "normalizedName"), excludedKbId, excludedKbId,
+                JdbcTenantSupport.resolveTenantId());
         return count != null && count > 0;
     }
 
@@ -128,7 +131,8 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
         if (kbId == null) {
             return Optional.empty();
         }
-        return jdbcTemplate.query(SQL_FIND_BY_ID, this::toRecord, kbId).stream().findFirst();
+        return jdbcTemplate.query(SQL_FIND_BY_ID, this::toRecord, kbId,
+                JdbcTenantSupport.resolveTenantId()).stream().findFirst();
     }
 
     @Override
@@ -147,7 +151,8 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
         if (kbId == null) {
             return false;
         }
-        Integer count = jdbcTemplate.queryForObject(SQL_HAS_DOCUMENTS, Integer.class, kbId);
+        Integer count = jdbcTemplate.queryForObject(SQL_HAS_DOCUMENTS, Integer.class, kbId,
+                JdbcTenantSupport.resolveTenantId());
         return count != null && count > 0;
     }
 
@@ -157,7 +162,7 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
             return false;
         }
         Integer count = jdbcTemplate.queryForObject(SQL_HAS_VECTORIZED_DOCUMENTS,
-                Integer.class, kbId);
+                Integer.class, kbId, JdbcTenantSupport.resolveTenantId());
         return count != null && count > 0;
     }
 
@@ -172,7 +177,8 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
                 blankToNull(safeValues.embeddingModel()),
                 parseOperatorId(safeValues.operator()),
                 Timestamp.from(Instant.now()),
-                kbId);
+                kbId,
+                JdbcTenantSupport.resolveTenantId());
         return updated > 0;
     }
 
@@ -184,16 +190,19 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
         int updated = jdbcTemplate.update(SQL_DELETE,
                 parseOperatorId(operator),
                 Timestamp.from(Instant.now()),
-                kbId);
+                kbId,
+                JdbcTenantSupport.resolveTenantId());
         return updated > 0;
     }
 
     private long queryTotal(String whereName, String name) {
         if (whereName.isEmpty()) {
-            Long total = jdbcTemplate.queryForObject(SQL_COUNT_PAGE_BASE, Long.class);
+            Long total = jdbcTemplate.queryForObject(SQL_COUNT_PAGE_BASE, Long.class,
+                    JdbcTenantSupport.resolveTenantId());
             return total == null ? 0 : total;
         }
-        Long total = jdbcTemplate.queryForObject(SQL_COUNT_PAGE_BASE + whereName, Long.class, like(name));
+        Long total = jdbcTemplate.queryForObject(SQL_COUNT_PAGE_BASE + whereName, Long.class,
+                JdbcTenantSupport.resolveTenantId(), like(name));
         return total == null ? 0 : total;
     }
 
@@ -207,9 +216,9 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
                 """;
         long offset = (current - 1) * size;
         if (whereName.isEmpty()) {
-            return jdbcTemplate.query(sql, this::toRecord, size, offset);
+            return jdbcTemplate.query(sql, this::toRecord, JdbcTenantSupport.resolveTenantId(), size, offset);
         }
-        return jdbcTemplate.query(sql, this::toRecord, like(name), size, offset);
+        return jdbcTemplate.query(sql, this::toRecord, JdbcTenantSupport.resolveTenantId(), like(name), size, offset);
     }
 
     private KnowledgeBaseRecord toRecord(ResultSet resultSet, int rowNumber) throws SQLException {

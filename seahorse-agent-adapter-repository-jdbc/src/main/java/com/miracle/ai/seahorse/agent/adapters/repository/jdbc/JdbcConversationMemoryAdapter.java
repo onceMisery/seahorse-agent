@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import static com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMemorySupport.toLongId;
 
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTenantSupport;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
@@ -48,29 +49,29 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
     private static final String SQL_LIST_MESSAGES = """
             SELECT role, content, thinking_content, thinking_duration
             FROM t_message
-            WHERE conversation_id = ? AND user_id = ? AND deleted = 0
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ?
             ORDER BY create_time DESC, id DESC
             LIMIT ?
             """;
     private static final String SQL_INSERT_MESSAGE = """
             INSERT INTO t_message
             (id, conversation_id, user_id, role, content, thinking_content, thinking_duration,
-             agent_run_id, create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+             agent_run_id, create_time, update_time, deleted, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
             """;
     private static final String SQL_COUNT_CONVERSATION = """
             SELECT COUNT(1) FROM t_conversation
-            WHERE conversation_id = ? AND user_id = ? AND deleted = 0
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_INSERT_CONVERSATION = """
             INSERT INTO t_conversation
-            (id, conversation_id, user_id, title, last_time, create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            (id, conversation_id, user_id, title, last_time, create_time, update_time, deleted, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
             """;
     private static final String SQL_UPDATE_CONVERSATION = """
             UPDATE t_conversation
             SET last_time = ?, update_time = ?
-            WHERE conversation_id = ? AND user_id = ? AND deleted = 0
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ?
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -113,7 +114,8 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
                 message.getThinkingDuration(),
                 trimToNull(agentRunId),
                 now,
-                now);
+                now,
+                JdbcTenantSupport.resolveTenantId());
         upsertConversation(conversationId, userId, message, now);
     }
 
@@ -122,7 +124,7 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
             return List.of();
         }
         List<ChatMessage> messages = jdbcTemplate.query(SQL_LIST_MESSAGES, this::mapMessage,
-                toLongId(conversationId), toLongId(userId), historyLimit);
+                toLongId(conversationId), toLongId(userId), JdbcTenantSupport.resolveTenantId(), historyLimit);
         Collections.reverse(messages);
         return trimLeadingAssistant(messages);
     }
@@ -154,9 +156,10 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
     private void upsertConversation(String conversationId, String userId, ChatMessage message, Timestamp now) {
         long convId = toLongId(conversationId);
         long uid = toLongId(userId);
-        Integer count = jdbcTemplate.queryForObject(SQL_COUNT_CONVERSATION, Integer.class, convId, uid);
+        String tenantId = JdbcTenantSupport.resolveTenantId();
+        Integer count = jdbcTemplate.queryForObject(SQL_COUNT_CONVERSATION, Integer.class, convId, uid, tenantId);
         if (count != null && count > 0) {
-            jdbcTemplate.update(SQL_UPDATE_CONVERSATION, now, now, convId, uid);
+            jdbcTemplate.update(SQL_UPDATE_CONVERSATION, now, now, convId, uid, tenantId);
             return;
         }
         jdbcTemplate.update(SQL_INSERT_CONVERSATION,
@@ -166,7 +169,8 @@ public class JdbcConversationMemoryAdapter implements ConversationMemoryPort {
                 title(message.getContent()),
                 now,
                 now,
-                now);
+                now,
+                tenantId);
     }
 
     private String title(String question) {

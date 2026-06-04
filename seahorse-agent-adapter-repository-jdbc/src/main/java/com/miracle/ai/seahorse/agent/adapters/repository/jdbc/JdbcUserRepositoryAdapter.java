@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTenantSupport;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserCreateValues;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRecord;
@@ -51,8 +52,8 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
         }
         try {
             return Optional.ofNullable(jdbcTemplate.queryForObject(
-                    "SELECT " + SELECT_COLUMNS + " FROM t_user WHERE id = ? AND deleted = 0",
-                    this::mapUser, id));
+                    "SELECT " + SELECT_COLUMNS + " FROM t_user WHERE id = ? AND deleted = 0 AND tenant_id = ?",
+                    this::mapUser, id, JdbcTenantSupport.resolveTenantId()));
         } catch (EmptyResultDataAccessException ex) {
             return Optional.empty();
         }
@@ -65,8 +66,8 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
         }
         try {
             return Optional.ofNullable(jdbcTemplate.queryForObject(
-                    "SELECT " + SELECT_COLUMNS + " FROM t_user WHERE username = ? AND deleted = 0",
-                    this::mapUser, username));
+                    "SELECT " + SELECT_COLUMNS + " FROM t_user WHERE username = ? AND deleted = 0 AND tenant_id = ?",
+                    this::mapUser, username, JdbcTenantSupport.resolveTenantId()));
         } catch (EmptyResultDataAccessException ex) {
             return Optional.empty();
         }
@@ -84,6 +85,8 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
             sql.append(" AND id <> ?");
             args.add(excludedId);
         }
+        sql.append(" AND tenant_id = ?");
+        args.add(JdbcTenantSupport.resolveTenantId());
         Integer count = jdbcTemplate.queryForObject(sql.toString(), Integer.class, args.toArray());
         return count != null && count > 0;
     }
@@ -114,10 +117,10 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
         long id = JdbcMemorySupport.nextId();
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
-                INSERT INTO t_user (id, username, password, avatar, role, create_time, update_time, deleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                INSERT INTO t_user (id, username, password, avatar, role, create_time, update_time, deleted, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
                 """, id, safeValues.username(), safeValues.password(), safeValues.avatar(),
-                safeValues.role(), now, now);
+                safeValues.role(), now, now, JdbcTenantSupport.resolveTenantId());
         return id;
     }
 
@@ -139,8 +142,9 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
         sets.add("update_time = ?");
         args.add(Timestamp.from(Instant.now()));
         args.add(id);
+        args.add(JdbcTenantSupport.resolveTenantId());
         int updated = jdbcTemplate.update("UPDATE t_user SET " + String.join(", ", sets)
-                + " WHERE id = ? AND deleted = 0", args.toArray());
+                + " WHERE id = ? AND deleted = 0 AND tenant_id = ?", args.toArray());
         return updated > 0;
     }
 
@@ -150,8 +154,8 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
             return false;
         }
         int updated = jdbcTemplate.update("""
-                UPDATE t_user SET deleted = 1, update_time = ? WHERE id = ? AND deleted = 0
-                """, Timestamp.from(Instant.now()), id);
+                UPDATE t_user SET deleted = 1, update_time = ? WHERE id = ? AND deleted = 0 AND tenant_id = ?
+                """, Timestamp.from(Instant.now()), id, JdbcTenantSupport.resolveTenantId());
         return updated > 0;
     }
 
@@ -163,6 +167,8 @@ public class JdbcUserRepositoryAdapter implements UserRepositoryPort {
             args.add(pattern);
             args.add(pattern);
         }
+        where.append(" AND tenant_id = ?");
+        args.add(JdbcTenantSupport.resolveTenantId());
         return where.toString();
     }
 

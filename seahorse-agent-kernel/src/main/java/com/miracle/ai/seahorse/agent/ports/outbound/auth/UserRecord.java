@@ -20,5 +20,14 @@ package com.miracle.ai.seahorse.agent.ports.outbound.auth;
 import java.time.Instant;
 
 public record UserRecord(Long id, String username, String password, String role, String avatar,
+                         String tenantId,
                          Instant createTime, Instant updateTime) {
+
+    /**
+     * Backward-compatible constructor without tenantId (defaults to null).
+     */
+    public UserRecord(Long id, String username, String password, String role, String avatar,
+                      Instant createTime, Instant updateTime) {
+        this(id, username, password, role, avatar, null, createTime, updateTime);
+    }
 }

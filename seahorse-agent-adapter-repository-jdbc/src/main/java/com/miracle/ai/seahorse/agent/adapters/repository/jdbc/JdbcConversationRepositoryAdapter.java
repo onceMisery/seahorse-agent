@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTenantSupport;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationMessageRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
@@ -37,34 +38,34 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
 
     private static final String SQL_INSERT_CONVERSATION = """
             INSERT INTO t_conversation
-            (id, conversation_id, user_id, title, create_time, update_time, last_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            (id, conversation_id, user_id, title, create_time, update_time, last_time, deleted, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
             """;
     private static final String SQL_LIST_CONVERSATIONS = """
             SELECT conversation_id, title, last_time
             FROM t_conversation
-            WHERE user_id = ? AND deleted = 0
+            WHERE user_id = ? AND deleted = 0 AND tenant_id = ?
             ORDER BY last_time DESC
             """;
     private static final String SQL_RENAME = """
             UPDATE t_conversation
             SET title = ?, update_time = ?
-            WHERE conversation_id = ? AND user_id = ? AND deleted = 0
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_DELETE_CONVERSATION = """
             UPDATE t_conversation
             SET deleted = 1, update_time = ?
-            WHERE conversation_id = ? AND user_id = ? AND deleted = 0
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_DELETE_MESSAGES = """
             UPDATE t_message
             SET deleted = 1, update_time = ?
-            WHERE conversation_id = ? AND user_id = ? AND deleted = 0
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_DELETE_SUMMARY = """
             UPDATE t_conversation_summary
             SET deleted = 1, update_time = ?
-            WHERE conversation_id = ? AND user_id = ? AND deleted = 0
+            WHERE conversation_id = ? AND user_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_LIST_MESSAGES = """
             SELECT m.id, m.conversation_id, m.role, m.content, m.agent_run_id, m.thinking_content,
@@ -72,7 +73,7 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
             FROM t_message m
             LEFT JOIN t_message_feedback f
               ON f.message_id = m.id AND f.user_id = m.user_id AND f.deleted = 0
-            WHERE m.conversation_id = ? AND m.user_id = ? AND m.deleted = 0
+            WHERE m.conversation_id = ? AND m.user_id = ? AND m.deleted = 0 AND m.tenant_id = ?
             ORDER BY m.create_time ASC
             """;
 
@@ -90,7 +91,7 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
         long conversationId = JdbcMemorySupport.nextId();
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update(SQL_INSERT_CONVERSATION, conversationId, conversationId, Long.parseLong(userId),
-                "New conversation", now, now, now);
+                "New conversation", now, now, now, JdbcTenantSupport.resolveTenantId());
         return conversationId;
     }
 
@@ -99,7 +100,8 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
         if (!hasText(userId)) {
             return List.of();
         }
-        return jdbcTemplate.query(SQL_LIST_CONVERSATIONS, this::mapConversation, Long.parseLong(userId));
+        return jdbcTemplate.query(SQL_LIST_CONVERSATIONS, this::mapConversation,
+                Long.parseLong(userId), JdbcTenantSupport.resolveTenantId());
     }
 
     @Override
@@ -108,7 +110,7 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
             return false;
         }
         int updated = jdbcTemplate.update(SQL_RENAME, title, Timestamp.from(Instant.now()),
-                Long.parseLong(conversationId), Long.parseLong(userId));
+                Long.parseLong(conversationId), Long.parseLong(userId), JdbcTenantSupport.resolveTenantId());
         return updated > 0;
     }
 
@@ -120,9 +122,10 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
         Timestamp now = Timestamp.from(Instant.now());
         long cid = Long.parseLong(conversationId);
         long uid = Long.parseLong(userId);
-        int updated = jdbcTemplate.update(SQL_DELETE_CONVERSATION, now, cid, uid);
-        jdbcTemplate.update(SQL_DELETE_MESSAGES, now, cid, uid);
-        jdbcTemplate.update(SQL_DELETE_SUMMARY, now, cid, uid);
+        String tenantId = JdbcTenantSupport.resolveTenantId();
+        int updated = jdbcTemplate.update(SQL_DELETE_CONVERSATION, now, cid, uid, tenantId);
+        jdbcTemplate.update(SQL_DELETE_MESSAGES, now, cid, uid, tenantId);
+        jdbcTemplate.update(SQL_DELETE_SUMMARY, now, cid, uid, tenantId);
         return updated > 0;
     }
 
@@ -132,7 +135,7 @@ public class JdbcConversationRepositoryAdapter implements ConversationRepository
             return List.of();
         }
         return jdbcTemplate.query(SQL_LIST_MESSAGES, this::mapMessage,
-                Long.parseLong(conversationId), Long.parseLong(userId));
+                Long.parseLong(conversationId), Long.parseLong(userId), JdbcTenantSupport.resolveTenantId());
     }
 
     private ConversationRecord mapConversation(ResultSet resultSet, int rowNum) throws SQLException {

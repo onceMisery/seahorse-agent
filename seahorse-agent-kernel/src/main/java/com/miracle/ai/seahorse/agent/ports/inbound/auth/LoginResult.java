@@ -17,5 +17,12 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.auth;
 
-public record LoginResult(String userId, String role, String token, String avatar) {
+public record LoginResult(String userId, String role, String token, String avatar, String tenantId) {
+
+    /**
+     * Backward-compatible constructor without tenantId.
+     */
+    public LoginResult(String userId, String role, String token, String avatar) {
+        this(userId, role, token, avatar, null);
+    }
 }

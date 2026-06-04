@@ -17,7 +17,14 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.auth;
 
-public record CurrentUser(Long userId, String username, String role, String avatar) {
+public record CurrentUser(Long userId, String username, String role, String avatar, String tenantId) {
+
+    /**
+     * Backward-compatible constructor: defaults tenantId to null (resolved at adapter level).
+     */
+    public CurrentUser(Long userId, String username, String role, String avatar) {
+        this(userId, username, role, avatar, null);
+    }
 
     /**
      * Returns the operator identifier for audit trails and ownership comparisons.
@@ -30,5 +37,12 @@ public record CurrentUser(Long userId, String username, String role, String avat
 
     public boolean hasRole(String expectedRole) {
         return expectedRole != null && role != null && expectedRole.equalsIgnoreCase(role);
+    }
+
+    /**
+     * Returns the effective tenant ID, falling back to the default if null.
+     */
+    public String effectiveTenantId() {
+        return tenantId != null ? tenantId : "default";
     }
 }

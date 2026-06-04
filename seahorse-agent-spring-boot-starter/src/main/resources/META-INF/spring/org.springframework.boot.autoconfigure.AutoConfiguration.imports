@@ -1,3 +1,6 @@
+# Layer 0: Multi-tenancy (after DataSource, before all adapters)
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentTenantAutoConfiguration
+
 # Layer 1: Adapters (after DataSource)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAuthAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAiAdapterAutoConfiguration
@@ -18,6 +21,8 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRegistryRepositoryAut
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentStorageAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentVectorAdapterAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentSreAdapterHealthAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentSimpleMeterRegistryAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMiddlewareHealthAutoConfiguration
 
 # Layer 2: Outbox relay (after MQ + Ops)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentOutboxRelayAutoConfiguration

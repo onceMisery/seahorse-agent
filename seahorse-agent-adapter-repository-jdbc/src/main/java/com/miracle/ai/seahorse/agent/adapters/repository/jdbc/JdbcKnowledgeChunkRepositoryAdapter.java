@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTenantSupport;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeChunkValues;
@@ -52,83 +53,84 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     private static final int DEFAULT_DELETED_VALUE = 0;
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 100;
-    private static final String SQL_DELETE_BY_DOC_ID = "DELETE FROM t_knowledge_chunk WHERE doc_id = ?";
+    private static final String SQL_DELETE_BY_DOC_ID =
+            "DELETE FROM t_knowledge_chunk WHERE doc_id = ? AND tenant_id = ?";
     private static final String SQL_INSERT_CHUNK = """
             INSERT INTO t_knowledge_chunk
-            (id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_INSERT_CHUNK_WITH_METADATA = """
             INSERT INTO t_knowledge_chunk
-            (id, kb_id, doc_id, chunk_index, content, content_hash, char_count, metadata_json, enabled, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, kb_id, doc_id, chunk_index, content, content_hash, char_count, metadata_json, enabled, deleted, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String SQL_FIND_DOCUMENT_CONTEXT = """
             SELECT doc.id AS doc_id, doc.kb_id, doc.status, doc.enabled,
                    kb.collection_name, kb.embedding_model
             FROM t_knowledge_document doc
             LEFT JOIN t_knowledge_base kb ON kb.id = doc.kb_id AND kb.deleted = 0
-            WHERE doc.id = ? AND doc.deleted = 0
+            WHERE doc.id = ? AND doc.deleted = 0 AND doc.tenant_id = ?
             """;
     private static final String SQL_FIND_CHUNK = """
             SELECT id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
                    token_count, enabled, created_by, updated_by, create_time, update_time
             FROM t_knowledge_chunk
-            WHERE id = ? AND doc_id = ? AND deleted = 0
+            WHERE id = ? AND doc_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_COUNT_CHUNKS = """
             SELECT COUNT(1)
             FROM t_knowledge_chunk
-            WHERE doc_id = ? AND deleted = 0
+            WHERE doc_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_PAGE_CHUNKS_BASE = """
             SELECT id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
                    token_count, enabled, created_by, updated_by, create_time, update_time
             FROM t_knowledge_chunk
-            WHERE doc_id = ? AND deleted = 0
+            WHERE doc_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_MAX_CHUNK_INDEX = """
             SELECT MAX(chunk_index)
             FROM t_knowledge_chunk
-            WHERE doc_id = ? AND deleted = 0
+            WHERE doc_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_INSERT_MANAGED_CHUNK = """
             INSERT INTO t_knowledge_chunk
             (id, kb_id, doc_id, chunk_index, content, content_hash, char_count, token_count,
-             enabled, created_by, updated_by, create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+             enabled, created_by, updated_by, create_time, update_time, deleted, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
             """;
     private static final String SQL_UPDATE_CHUNK = """
             UPDATE t_knowledge_chunk
             SET content = ?, content_hash = ?, char_count = ?, token_count = ?,
                 updated_by = ?, update_time = ?
-            WHERE id = ? AND doc_id = ? AND deleted = 0
+            WHERE id = ? AND doc_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_DELETE_CHUNK = """
             UPDATE t_knowledge_chunk
             SET deleted = 1, update_time = ?
-            WHERE id = ? AND doc_id = ? AND deleted = 0
+            WHERE id = ? AND doc_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_FIND_CHUNKS_BY_IDS = """
             SELECT id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
                    token_count, enabled, created_by, updated_by, create_time, update_time
             FROM t_knowledge_chunk
-            WHERE doc_id = ? AND deleted = 0 AND id IN (%s)
+            WHERE doc_id = ? AND deleted = 0 AND id IN (%s) AND tenant_id = ?
             ORDER BY chunk_index ASC
             """;
     private static final String SQL_UPDATE_ENABLED_BY_IDS = """
             UPDATE t_knowledge_chunk
             SET enabled = ?, updated_by = ?, update_time = ?
-            WHERE doc_id = ? AND deleted = 0 AND id IN (%s)
+            WHERE doc_id = ? AND deleted = 0 AND id IN (%s) AND tenant_id = ?
             """;
     private static final String SQL_UPDATE_DOCUMENT_COUNT =
-            "UPDATE t_knowledge_document SET chunk_count = ? WHERE id = ?";
+            "UPDATE t_knowledge_document SET chunk_count = ? WHERE id = ? AND tenant_id = ?";
     private static final String SQL_INCREMENT_DOCUMENT_COUNT =
-            "UPDATE t_knowledge_document SET chunk_count = COALESCE(chunk_count, 0) + 1 WHERE id = ?";
+            "UPDATE t_knowledge_document SET chunk_count = COALESCE(chunk_count, 0) + 1 WHERE id = ? AND tenant_id = ?";
     private static final String SQL_DECREMENT_DOCUMENT_COUNT = """
             UPDATE t_knowledge_document
             SET chunk_count = CASE WHEN COALESCE(chunk_count, 0) > 0 THEN chunk_count - 1 ELSE 0 END
-            WHERE id = ?
+            WHERE id = ? AND tenant_id = ?
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -144,14 +146,15 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         Long safeKbId = requireId(kbId, "kbId");
         Long safeDocId = requireId(docId, "docId");
         List<VectorChunk> safeChunks = Objects.requireNonNullElse(chunks, List.of());
-        jdbcTemplate.update(SQL_DELETE_BY_DOC_ID, safeDocId);
+        jdbcTemplate.update(SQL_DELETE_BY_DOC_ID, safeDocId, JdbcTenantSupport.resolveTenantId());
         if (!safeChunks.isEmpty()) {
             boolean writeMetadata = metadataJsonColumnExists();
             jdbcTemplate.batchUpdate(writeMetadata ? SQL_INSERT_CHUNK_WITH_METADATA : SQL_INSERT_CHUNK,
                     safeChunks, safeChunks.size(),
                     (statement, chunk) -> bindChunk(statement, safeKbId, safeDocId, chunk, writeMetadata));
         }
-        jdbcTemplate.update(SQL_UPDATE_DOCUMENT_COUNT, safeChunks.size(), safeDocId);
+        jdbcTemplate.update(SQL_UPDATE_DOCUMENT_COUNT, safeChunks.size(), safeDocId,
+                JdbcTenantSupport.resolveTenantId());
     }
 
     @Override
@@ -159,7 +162,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         if (docId == null) {
             return Optional.empty();
         }
-        return jdbcTemplate.query(SQL_FIND_DOCUMENT_CONTEXT, this::toDocumentContext, docId)
+        return jdbcTemplate.query(SQL_FIND_DOCUMENT_CONTEXT, this::toDocumentContext, docId,
+                        JdbcTenantSupport.resolveTenantId())
                 .stream()
                 .findFirst();
     }
@@ -199,8 +203,9 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
                 safeValues.operator(),
                 safeValues.operator(),
                 now,
-                now);
-        jdbcTemplate.update(SQL_INCREMENT_DOCUMENT_COUNT, safeDocId);
+                now,
+                JdbcTenantSupport.resolveTenantId());
+        jdbcTemplate.update(SQL_INCREMENT_DOCUMENT_COUNT, safeDocId, JdbcTenantSupport.resolveTenantId());
         return findChunk(safeDocId, chunkId)
                 .orElseThrow(() -> new IllegalStateException("chunk created but invisible: " + chunkId));
     }
@@ -210,7 +215,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         if (docId == null || chunkId == null) {
             return Optional.empty();
         }
-        return jdbcTemplate.query(SQL_FIND_CHUNK, this::toChunkRecord, chunkId, docId)
+        return jdbcTemplate.query(SQL_FIND_CHUNK, this::toChunkRecord, chunkId, docId,
+                        JdbcTenantSupport.resolveTenantId())
                 .stream()
                 .findFirst();
     }
@@ -227,7 +233,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
                 Objects.requireNonNullElse(safeValues.operator(), ""),
                 Timestamp.from(Instant.now()),
                 requireId(chunkId, "chunkId"),
-                requireId(docId, "docId"));
+                requireId(docId, "docId"),
+                JdbcTenantSupport.resolveTenantId());
         return updated > 0;
     }
 
@@ -236,9 +243,10 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         int updated = jdbcTemplate.update(SQL_DELETE_CHUNK,
                 Timestamp.from(Instant.now()),
                 requireId(chunkId, "chunkId"),
-                requireId(docId, "docId"));
+                requireId(docId, "docId"),
+                JdbcTenantSupport.resolveTenantId());
         if (updated > 0) {
-            jdbcTemplate.update(SQL_DECREMENT_DOCUMENT_COUNT, docId);
+            jdbcTemplate.update(SQL_DECREMENT_DOCUMENT_COUNT, docId, JdbcTenantSupport.resolveTenantId());
         }
         return updated > 0;
     }
@@ -249,11 +257,12 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
             return List.of();
         }
         String placeholders = placeholders(chunkIds.size());
-        Object[] args = new Object[chunkIds.size() + 1];
+        Object[] args = new Object[chunkIds.size() + 2];
         args[0] = docId;
         for (int index = 0; index < chunkIds.size(); index++) {
             args[index + 1] = chunkIds.get(index);
         }
+        args[args.length - 1] = JdbcTenantSupport.resolveTenantId();
         return jdbcTemplate.query(SQL_FIND_CHUNKS_BY_IDS.formatted(placeholders), this::toChunkRecord, args);
     }
 
@@ -263,7 +272,7 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
             return false;
         }
         String placeholders = placeholders(chunkIds.size());
-        Object[] args = new Object[chunkIds.size() + 4];
+        Object[] args = new Object[chunkIds.size() + 5];
         args[0] = enabled ? ENABLED_VALUE : 0;
         args[1] = Objects.requireNonNullElse(operator, "");
         args[2] = Timestamp.from(Instant.now());
@@ -271,6 +280,7 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         for (int index = 0; index < chunkIds.size(); index++) {
             args[index + 4] = chunkIds.get(index);
         }
+        args[args.length - 1] = JdbcTenantSupport.resolveTenantId();
         return jdbcTemplate.update(SQL_UPDATE_ENABLED_BY_IDS.formatted(placeholders), args) > 0;
     }
 
@@ -294,6 +304,7 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         }
         statement.setInt(offset, ENABLED_VALUE);
         statement.setInt(offset + 1, DEFAULT_DELETED_VALUE);
+        statement.setString(offset + 2, JdbcTenantSupport.resolveTenantId());
     }
 
     private String metadataJson(VectorChunk chunk) {
@@ -352,8 +363,10 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
 
     private long queryChunkTotal(Long docId, String enabledWhere, Boolean enabled) {
         Long total = enabled == null
-                ? jdbcTemplate.queryForObject(SQL_COUNT_CHUNKS, Long.class, docId)
-                : jdbcTemplate.queryForObject(SQL_COUNT_CHUNKS + enabledWhere, Long.class, docId, enabled ? 1 : 0);
+                ? jdbcTemplate.queryForObject(SQL_COUNT_CHUNKS, Long.class, docId,
+                        JdbcTenantSupport.resolveTenantId())
+                : jdbcTemplate.queryForObject(SQL_COUNT_CHUNKS + enabledWhere, Long.class, docId,
+                        JdbcTenantSupport.resolveTenantId(), enabled ? 1 : 0);
         return total == null ? 0 : total;
     }
 
@@ -362,13 +375,16 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         String sql = SQL_PAGE_CHUNKS_BASE + enabledWhere + " ORDER BY chunk_index ASC LIMIT ? OFFSET ?";
         long offset = (current - 1) * size;
         if (enabled == null) {
-            return jdbcTemplate.query(sql, this::toChunkRecord, docId, size, offset);
+            return jdbcTemplate.query(sql, this::toChunkRecord, docId, JdbcTenantSupport.resolveTenantId(),
+                    size, offset);
         }
-        return jdbcTemplate.query(sql, this::toChunkRecord, docId, enabled ? 1 : 0, size, offset);
+        return jdbcTemplate.query(sql, this::toChunkRecord, docId, JdbcTenantSupport.resolveTenantId(),
+                enabled ? 1 : 0, size, offset);
     }
 
     private int nextChunkIndex(Long docId) {
-        Integer currentMax = jdbcTemplate.queryForObject(SQL_MAX_CHUNK_INDEX, Integer.class, docId);
+        Integer currentMax = jdbcTemplate.queryForObject(SQL_MAX_CHUNK_INDEX, Integer.class, docId,
+                JdbcTenantSupport.resolveTenantId());
         return currentMax == null ? 0 : currentMax + 1;
     }
 

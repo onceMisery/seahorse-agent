@@ -18,13 +18,19 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
 
 public class SaTokenServiceAdapter implements TokenServicePort {
 
+    private static final String SESSION_KEY_TENANT_ID = "tenantId";
+
     @Override
-    public String login(String userId) {
+    public String login(String userId, String tenantId) {
         StpUtil.login(userId);
+        // Store tenantId in Sa-Token session for TenantInterceptor to read
+        String effectiveTenantId = tenantId != null ? tenantId : TenantConstants.DEFAULT_TENANT_ID;
+        StpUtil.getSession().set(SESSION_KEY_TENANT_ID, effectiveTenantId);
         return StpUtil.getTokenValue();
     }
 

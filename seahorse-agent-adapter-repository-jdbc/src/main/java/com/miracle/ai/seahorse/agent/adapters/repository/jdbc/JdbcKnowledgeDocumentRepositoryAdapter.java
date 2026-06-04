@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTenantSupport;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeDocumentCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRecord;
@@ -62,13 +63,13 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     private static final String SQL_INSERT_DOCUMENT = """
             INSERT INTO t_knowledge_document(
                 id, kb_id, doc_name, source_type, enabled, chunk_count, file_url, file_type, file_size,
-                process_mode, pipeline_id, status, created_by, updated_by, deleted, create_time, update_time
-            ) VALUES (?, ?, ?, 'file', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                process_mode, pipeline_id, status, created_by, updated_by, deleted, create_time, update_time, tenant_id
+            ) VALUES (?, ?, ?, 'file', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
             """;
     private static final String SQL_FIND_BY_ID = """
             SELECT id, kb_id, doc_name, file_url, file_type, file_size, status, process_mode, pipeline_id
             FROM t_knowledge_document
-            WHERE id = ? AND deleted = 0
+            WHERE id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_FIND_DETAIL_BY_ID = """
             SELECT doc.id, doc.kb_id, kb.name AS kb_name, kb.collection_name, kb.embedding_model,
@@ -79,12 +80,12 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
                    doc.create_time, doc.update_time
             FROM t_knowledge_document doc
             LEFT JOIN t_knowledge_base kb ON kb.id = doc.kb_id AND kb.deleted = 0
-            WHERE doc.id = ? AND doc.deleted = 0
+            WHERE doc.id = ? AND doc.deleted = 0 AND doc.tenant_id = ?
             """;
     private static final String SQL_COUNT_PAGE_BASE = """
             SELECT COUNT(1)
             FROM t_knowledge_document doc
-            WHERE doc.kb_id = ? AND doc.deleted = 0
+            WHERE doc.kb_id = ? AND doc.deleted = 0 AND doc.tenant_id = ?
             """;
     private static final String SQL_PAGE_BASE = """
             SELECT doc.id, doc.kb_id, kb.name AS kb_name, kb.collection_name, kb.embedding_model,
@@ -95,10 +96,10 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
                    doc.create_time, doc.update_time
             FROM t_knowledge_document doc
             LEFT JOIN t_knowledge_base kb ON kb.id = doc.kb_id AND kb.deleted = 0
-            WHERE doc.kb_id = ? AND doc.deleted = 0
+            WHERE doc.kb_id = ? AND doc.deleted = 0 AND doc.tenant_id = ?
             """;
     private static final String SQL_COUNT_LOGS =
-            "SELECT COUNT(1) FROM t_knowledge_document_chunk_log WHERE doc_id = ?";
+            "SELECT COUNT(1) FROM t_knowledge_document_chunk_log WHERE doc_id = ? AND tenant_id = ?";
     private static final String SQL_PAGE_LOGS = """
             SELECT log.id, log.doc_id, log.status, log.process_mode, log.chunk_strategy,
                    log.pipeline_id, pipeline.name AS pipeline_name, log.extract_duration,
@@ -107,60 +108,60 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
                    log.end_time, log.create_time
             FROM t_knowledge_document_chunk_log log
             LEFT JOIN t_ingestion_pipeline pipeline ON pipeline.id = log.pipeline_id AND pipeline.deleted = 0
-            WHERE log.doc_id = ?
+            WHERE log.doc_id = ? AND log.tenant_id = ?
             ORDER BY log.create_time DESC
             LIMIT ? OFFSET ?
             """;
     private static final String SQL_MARK_RUNNING = """
             UPDATE t_knowledge_document
             SET status = ?, updated_by = ?, update_time = CURRENT_TIMESTAMP
-            WHERE id = ? AND deleted = 0 AND status <> ?
+            WHERE id = ? AND deleted = 0 AND status <> ? AND tenant_id = ?
             """;
     private static final String SQL_MARK_SUCCESS = """
             UPDATE t_knowledge_document
             SET status = ?, chunk_count = ?, updated_by = ?, update_time = CURRENT_TIMESTAMP
-            WHERE id = ? AND deleted = 0
+            WHERE id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_MARK_FAILED = """
             UPDATE t_knowledge_document
             SET status = ?, updated_by = ?, update_time = CURRENT_TIMESTAMP
-            WHERE id = ? AND deleted = 0
+            WHERE id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_UPDATE_ENABLED_DOCUMENT = """
             UPDATE t_knowledge_document
             SET enabled = ?, updated_by = ?, update_time = CURRENT_TIMESTAMP
-            WHERE id = ? AND deleted = 0
+            WHERE id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_UPDATE_ENABLED_CHUNKS = """
             UPDATE t_knowledge_chunk
             SET enabled = ?, updated_by = ?, update_time = CURRENT_TIMESTAMP
-            WHERE doc_id = ? AND deleted = 0
+            WHERE doc_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_REPLACE_FILE_FOR_REFRESH = """
             UPDATE t_knowledge_document
             SET doc_name = ?, file_url = ?, file_type = ?, file_size = ?, updated_by = ?,
                 update_time = CURRENT_TIMESTAMP
-            WHERE id = ? AND deleted = 0
+            WHERE id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_DELETE_DOCUMENT = """
             UPDATE t_knowledge_document
             SET deleted = 1, updated_by = ?, update_time = CURRENT_TIMESTAMP
-            WHERE id = ? AND deleted = 0
+            WHERE id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_DELETE_CHUNKS = """
             UPDATE t_knowledge_chunk
             SET deleted = 1, updated_by = ?, update_time = CURRENT_TIMESTAMP
-            WHERE doc_id = ? AND deleted = 0
+            WHERE doc_id = ? AND deleted = 0 AND tenant_id = ?
             """;
     private static final String SQL_DELETE_LOGS =
-            "DELETE FROM t_knowledge_document_chunk_log WHERE doc_id = ?";
+            "DELETE FROM t_knowledge_document_chunk_log WHERE doc_id = ? AND tenant_id = ?";
     private static final String SQL_LIST_DOCUMENT_CHUNKS_BASE = """
             SELECT id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
                    token_count, enabled, created_by, updated_by, create_time, update_time
             """;
     private static final String SQL_LIST_DOCUMENT_CHUNKS_TAIL = """
             FROM t_knowledge_chunk
-            WHERE doc_id = ? AND deleted = 0
+            WHERE doc_id = ? AND deleted = 0 AND tenant_id = ?
             ORDER BY chunk_index ASC
             """;
 
@@ -190,7 +191,8 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
                 STATUS_PENDING,
                 safeCommand.operator() != null ? parseOperatorId(safeCommand.operator()) : null,
                 safeCommand.operator() != null ? parseOperatorId(safeCommand.operator()) : null,
-                DELETED_VALUE);
+                DELETED_VALUE,
+                JdbcTenantSupport.resolveTenantId());
         return findById(documentId).orElseThrow(() -> new IllegalStateException("文档创建后不可见：" + documentId));
     }
 
@@ -199,7 +201,8 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
         if (docId == null) {
             return Optional.empty();
         }
-        return jdbcTemplate.query(SQL_FIND_BY_ID, this::toDocumentRecord, docId)
+        return jdbcTemplate.query(SQL_FIND_BY_ID, this::toDocumentRecord, docId,
+                        JdbcTenantSupport.resolveTenantId())
                 .stream()
                 .findFirst();
     }
@@ -209,7 +212,8 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
         if (docId == null) {
             return Optional.empty();
         }
-        return jdbcTemplate.query(SQL_FIND_DETAIL_BY_ID, this::toDocumentDetail, docId)
+        return jdbcTemplate.query(SQL_FIND_DETAIL_BY_ID, this::toDocumentDetail, docId,
+                        JdbcTenantSupport.resolveTenantId())
                 .stream()
                 .findFirst();
     }
@@ -221,6 +225,7 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
         QueryParts queryParts = buildPageQuery(status, keyword);
         List<Object> countArgs = new ArrayList<>();
         countArgs.add(kbId);
+        countArgs.add(JdbcTenantSupport.resolveTenantId());
         countArgs.addAll(queryParts.args());
         Long total = jdbcTemplate.queryForObject(SQL_COUNT_PAGE_BASE + queryParts.where(), Long.class,
                 countArgs.toArray());
@@ -240,9 +245,10 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     public KnowledgeDocumentChunkLogPage chunkLogs(Long docId, long current, long size) {
         long safeCurrent = current <= 0 ? 1 : current;
         long safeSize = clampSize(size);
-        Long total = jdbcTemplate.queryForObject(SQL_COUNT_LOGS, Long.class, docId);
+        Long total = jdbcTemplate.queryForObject(SQL_COUNT_LOGS, Long.class, docId,
+                JdbcTenantSupport.resolveTenantId());
         List<KnowledgeDocumentChunkLogRecord> records = jdbcTemplate.query(SQL_PAGE_LOGS, this::toChunkLogRecord,
-                docId, safeSize, (safeCurrent - 1) * safeSize);
+                docId, JdbcTenantSupport.resolveTenantId(), safeSize, (safeCurrent - 1) * safeSize);
         long safeTotal = total == null ? 0 : total;
         long pages = safeTotal == 0 ? 0 : (safeTotal + safeSize - 1) / safeSize;
         return new KnowledgeDocumentChunkLogPage(records, safeTotal, safeSize, safeCurrent, pages);
@@ -254,20 +260,21 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
             return false;
         }
         int updated = jdbcTemplate.update(SQL_MARK_RUNNING, STATUS_RUNNING,
-                parseOperatorId(operator), docId, STATUS_RUNNING);
+                parseOperatorId(operator), docId, STATUS_RUNNING,
+                JdbcTenantSupport.resolveTenantId());
         return updated > 0;
     }
 
     @Override
     public void markSuccess(Long docId, int chunkCount, String operator) {
         jdbcTemplate.update(SQL_MARK_SUCCESS, STATUS_SUCCESS, Math.max(chunkCount, 0),
-                parseOperatorId(operator), docId);
+                parseOperatorId(operator), docId, JdbcTenantSupport.resolveTenantId());
     }
 
     @Override
     public void markFailed(Long docId, String operator, String errorMessage) {
         jdbcTemplate.update(SQL_MARK_FAILED, STATUS_FAILED,
-                parseOperatorId(operator), docId);
+                parseOperatorId(operator), docId, JdbcTenantSupport.resolveTenantId());
     }
 
     @Override
@@ -277,6 +284,7 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
         if (updateSql.args().isEmpty()) {
             return true;
         }
+        updateSql.args().add(JdbcTenantSupport.resolveTenantId());
         updateSql.args().add(docId);
         return jdbcTemplate.update(updateSql.sql(), updateSql.args().toArray()) > 0;
     }
@@ -285,9 +293,11 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     public boolean updateEnabled(Long docId, boolean enabled, String operator) {
         int enabledValue = enabled ? 1 : 0;
         Long safeOperator = parseOperatorId(operator);
-        int updated = jdbcTemplate.update(SQL_UPDATE_ENABLED_DOCUMENT, enabledValue, safeOperator, docId);
+        int updated = jdbcTemplate.update(SQL_UPDATE_ENABLED_DOCUMENT, enabledValue, safeOperator, docId,
+                JdbcTenantSupport.resolveTenantId());
         if (updated > 0) {
-            jdbcTemplate.update(SQL_UPDATE_ENABLED_CHUNKS, enabledValue, safeOperator, docId);
+            jdbcTemplate.update(SQL_UPDATE_ENABLED_CHUNKS, enabledValue, safeOperator, docId,
+                    JdbcTenantSupport.resolveTenantId());
         }
         return updated > 0;
     }
@@ -307,16 +317,19 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
                 safeFile.fileType(),
                 safeFile.fileSize(),
                 safeOperator,
-                docId) > 0;
+                docId,
+                JdbcTenantSupport.resolveTenantId()) > 0;
     }
 
     @Override
     public boolean delete(Long docId, String operator) {
         Long safeOperator = parseOperatorId(operator);
-        int updated = jdbcTemplate.update(SQL_DELETE_DOCUMENT, safeOperator, docId);
+        int updated = jdbcTemplate.update(SQL_DELETE_DOCUMENT, safeOperator, docId,
+                JdbcTenantSupport.resolveTenantId());
         if (updated > 0) {
-            jdbcTemplate.update(SQL_DELETE_CHUNKS, safeOperator, docId);
-            jdbcTemplate.update(SQL_DELETE_LOGS, docId);
+            jdbcTemplate.update(SQL_DELETE_CHUNKS, safeOperator, docId,
+                    JdbcTenantSupport.resolveTenantId());
+            jdbcTemplate.update(SQL_DELETE_LOGS, docId, JdbcTenantSupport.resolveTenantId());
         }
         return updated > 0;
     }
@@ -326,7 +339,8 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
         if (docId == null) {
             return List.of();
         }
-        return jdbcTemplate.query(listDocumentChunksSql(), this::toChunkRecord, docId);
+        return jdbcTemplate.query(listDocumentChunksSql(), this::toChunkRecord, docId,
+                JdbcTenantSupport.resolveTenantId());
     }
 
     private KnowledgeDocumentRecord toDocumentRecord(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -517,7 +531,7 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
         args.add(Objects.requireNonNullElse(values.getOperator(), ""));
         sets.add("update_time = CURRENT_TIMESTAMP");
         String sql = "UPDATE t_knowledge_document SET " + String.join(", ", sets)
-                + " WHERE id = ? AND deleted = 0";
+                + " WHERE id = ? AND deleted = 0 AND tenant_id = ?";
         return new UpdateSql(sql, args);
     }
 

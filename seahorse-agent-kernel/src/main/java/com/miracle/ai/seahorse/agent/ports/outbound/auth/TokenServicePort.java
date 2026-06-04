@@ -19,7 +19,26 @@ package com.miracle.ai.seahorse.agent.ports.outbound.auth;
 
 public interface TokenServicePort {
 
-    String login(String userId);
+    /**
+     * Login with userId only (backward compatible).
+     * Delegates to {@link #login(String, String)} with null tenantId.
+     *
+     * @deprecated Use {@link #login(String, String)} to pass tenantId explicitly.
+     */
+    @Deprecated
+    default String login(String userId) {
+        return login(userId, null);
+    }
+
+    /**
+     * Login with userId and tenantId. The tenantId is stored in the session
+     * for multi-tenant context propagation.
+     *
+     * @param userId   the user identifier
+     * @param tenantId the tenant identifier (may be null for default tenant)
+     * @return the generated token value
+     */
+    String login(String userId, String tenantId);
 
     void logout();
 }

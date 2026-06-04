@@ -46,7 +46,20 @@ public class SaTokenCurrentUserAdapter implements CurrentUserPort {
     }
 
     private CurrentUser toCurrentUser(UserRecord record) {
-        return new CurrentUser(record.id(), record.username(), record.role(), defaultAvatar(record.avatar()));
+        String tenantId = resolveTenantIdFromSession();
+        return new CurrentUser(record.id(), record.username(), record.role(), defaultAvatar(record.avatar()), tenantId);
+    }
+
+    private String resolveTenantIdFromSession() {
+        try {
+            Object tenantId = StpUtil.getSession().get("tenantId");
+            if (tenantId instanceof String str && !str.isBlank()) {
+                return str;
+            }
+        } catch (Exception ignored) {
+            // Session access may fail for expired sessions
+        }
+        return null;
     }
 
     private String defaultAvatar(String avatar) {

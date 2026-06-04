@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.agent.definition;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.time.Instant;
 import java.util.Objects;
 
@@ -51,7 +53,11 @@ public record AgentDefinition(String agentId,
                               Instant createdAt,
                               Instant updatedAt) {
 
-    public static final String DEFAULT_TENANT_ID = "default";
+    /**
+     * @deprecated 使用 {@link com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants#DEFAULT_TENANT_ID}
+     */
+    @Deprecated
+    public static final String DEFAULT_TENANT_ID = com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants.DEFAULT_TENANT_ID;
     public static final int MAX_NAME_LENGTH = 80;
     public static final int MAX_DESCRIPTION_LENGTH = 500;
 

@@ -71,6 +71,7 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // 1. Sa-Token 认证 + 权限拦截器
         registry.addInterceptor(new SaInterceptor(handler -> {
                     ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
                     if (attrs != null && shouldSkip(attrs.getRequest())) {
@@ -95,6 +96,20 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
                         }
                     }
                 })
+                .addPathPatterns("/**")
+                .excludePathPatterns(
+                        "/",
+                        "/index.html",
+                        "/login",
+                        "/features",
+                        "/api/features",
+                        "/auth/**",
+                        "/error",
+                        "/assets/**",
+                        "/prototype/**");
+
+        // 2. 多租户上下文拦截器（在认证之后执行，从 Sa-Token Session 解析 tenantId）
+        registry.addInterceptor(new TenantInterceptor())
                 .addPathPatterns("/**")
                 .excludePathPatterns(
                         "/",
