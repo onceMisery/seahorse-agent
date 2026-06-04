@@ -50,11 +50,11 @@ class KernelAgentArtifactQueryServiceTests {
 
     @Test
     void shouldListAndReadArtifactsForOwner() {
-        MemoryRunRepository runRepository = new MemoryRunRepository(run("1"));
+        MemoryRunRepository runRepository = new MemoryRunRepository(run("user-1"));
         MemoryArtifactRepository artifactRepository = new MemoryArtifactRepository(List.of(
-                artifact("artifact-1", "1", AgentArtifactType.MARKDOWN, "text/markdown",
+                artifact("artifact-1", "user-1", AgentArtifactType.MARKDOWN, "text/markdown",
                         AgentArtifactScanStatus.CLEAN),
-                artifact("artifact-2", "1", AgentArtifactType.HTML, "text/html",
+                artifact("artifact-2", "user-1", AgentArtifactType.HTML, "text/html",
                         AgentArtifactScanStatus.CLEAN)));
         KernelAgentArtifactQueryService service = new KernelAgentArtifactQueryService(
                 artifactRepository,
@@ -74,9 +74,9 @@ class KernelAgentArtifactQueryServiceTests {
     @Test
     void shouldDenyUnrelatedUserArtifactAccess() {
         KernelAgentArtifactQueryService service = new KernelAgentArtifactQueryService(
-                new MemoryArtifactRepository(List.of(artifact("artifact-1", "1", AgentArtifactType.REPORT,
+                new MemoryArtifactRepository(List.of(artifact("artifact-1", "user-1", AgentArtifactType.REPORT,
                         "text/markdown", AgentArtifactScanStatus.CLEAN))),
-                new MemoryRunRepository(run("1")),
+                new MemoryRunRepository(run("user-1")),
                 currentUser(2L, "user"));
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
@@ -88,9 +88,9 @@ class KernelAgentArtifactQueryServiceTests {
     @Test
     void shouldBlockDownloadWhenScanIsNotClean() {
         KernelAgentArtifactQueryService service = new KernelAgentArtifactQueryService(
-                new MemoryArtifactRepository(List.of(artifact("artifact-1", "1", AgentArtifactType.REPORT,
+                new MemoryArtifactRepository(List.of(artifact("artifact-1", "user-1", AgentArtifactType.REPORT,
                         "text/markdown", AgentArtifactScanStatus.BLOCKED))),
-                new MemoryRunRepository(run("1")),
+                new MemoryRunRepository(run("user-1")),
                 currentUser(1L, "user"));
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
@@ -152,7 +152,7 @@ class KernelAgentArtifactQueryServiceTests {
     }
 
     private static CurrentUserPort currentUser(Long userId, String role) {
-        return () -> Optional.of(new CurrentUser(userId, String.valueOf(userId), role, null));
+        return () -> Optional.of(new CurrentUser(userId, role + "-" + userId, role, null));
     }
 
     private static final class MemoryArtifactRepository implements AgentArtifactRepositoryPort {

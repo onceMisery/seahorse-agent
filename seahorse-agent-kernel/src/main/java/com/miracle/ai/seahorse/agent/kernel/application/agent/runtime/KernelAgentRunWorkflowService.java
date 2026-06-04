@@ -162,7 +162,7 @@ public class KernelAgentRunWorkflowService implements AgentRunWorkflowInboundPor
     }
 
     private String currentUserId(CurrentUser currentUser) {
-        return currentUser == null || currentUser.userId() == null ? null : String.valueOf(currentUser.userId());
+        return currentUser == null ? null : currentUser.operator();
     }
 
     private String firstText(String... values) {

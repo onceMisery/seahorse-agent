@@ -46,7 +46,7 @@ class KernelAgentArtifactUpdateServiceTests {
     @Test
     void shouldResetScanStatusWhenCleanArtifactContentChanges() {
         MemoryArtifactRepository artifactRepository = new MemoryArtifactRepository(List.of(
-                artifact("artifact-1", "1", AgentArtifactScanStatus.CLEAN)));
+                artifact("artifact-1", "user-1", AgentArtifactScanStatus.CLEAN)));
         CapturingObjectStoragePort storagePort = new CapturingObjectStoragePort();
         KernelAgentArtifactUpdateService service = new KernelAgentArtifactUpdateService(
                 artifactRepository,
@@ -82,7 +82,7 @@ class KernelAgentArtifactUpdateServiceTests {
     }
 
     private static CurrentUserPort currentUser(Long userId, String role) {
-        return () -> Optional.of(new CurrentUser(userId, String.valueOf(userId), role, null));
+        return () -> Optional.of(new CurrentUser(userId, role + "-" + userId, role, null));
     }
 
     private static final class MemoryArtifactRepository implements AgentArtifactRepositoryPort {

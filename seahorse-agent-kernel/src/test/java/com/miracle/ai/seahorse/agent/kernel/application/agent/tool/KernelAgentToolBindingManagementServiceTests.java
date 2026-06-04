@@ -126,7 +126,7 @@ class KernelAgentToolBindingManagementServiceTests {
     }
 
     private static CurrentUserPort adminUser() {
-        return () -> Optional.of(new CurrentUser(1L, "root", "admin", null));
+        return () -> Optional.of(new CurrentUser(1L, "admin-1", "admin", null));
     }
 
     private static CurrentUserPort user() {

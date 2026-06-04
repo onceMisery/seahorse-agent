@@ -41,7 +41,7 @@ class KernelContextPackQueryServiceTests {
     @Test
     void shouldAllowOwnerToQueryPackAndItems() {
         RecordingContextPackRepository repository = new RecordingContextPackRepository(pack("user-1"));
-        KernelContextPackQueryService service = new KernelContextPackQueryService(repository, currentUser(2L,
+        KernelContextPackQueryService service = new KernelContextPackQueryService(repository, currentUser(1L,
                 "user"));
 
         Optional<ContextPack> result = service.findById("context-pack-1");
@@ -86,7 +86,7 @@ class KernelContextPackQueryServiceTests {
     }
 
     private static CurrentUserPort currentUser(Long userId, String role) {
-        return () -> Optional.of(new CurrentUser(userId, String.valueOf(userId), role, null));
+        return () -> Optional.of(new CurrentUser(userId, role + "-" + userId, role, null));
     }
 
     private static ContextPack pack(String userId) {

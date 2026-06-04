@@ -69,20 +69,20 @@ class KernelAgentRunSnapshotServiceTests {
     @Test
     void shouldBuildOwnerVisibleSnapshotFromExistingRunState() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
-        runRepository.createRun(run("1", AgentRunStatus.WAITING_APPROVAL));
+        runRepository.createRun(run("user-1", AgentRunStatus.WAITING_APPROVAL));
         runRepository.appendStep(step("step-1", 1, AgentStepType.MODEL_TURN, AgentStepStatus.SUCCEEDED));
         runRepository.appendStep(step("step-2", 2, AgentStepType.TOOL_CALL, AgentStepStatus.RUNNING));
         MemoryCheckpointRepository checkpointRepository = new MemoryCheckpointRepository();
         checkpointRepository.save(checkpoint("checkpoint-1", 1L, null));
         checkpointRepository.save(checkpoint("checkpoint-2", 2L, "context-pack-1"));
-        MemoryContextPackRepository contextRepository = new MemoryContextPackRepository(contextPack("1"));
+        MemoryContextPackRepository contextRepository = new MemoryContextPackRepository(contextPack("user-1"));
         MemoryApprovalQueryPort approvalQueryPort = new MemoryApprovalQueryPort(List.of(
-                approval("approval-1", "1", ApprovalRequestStatus.PENDING),
-                approval("approval-2", "1", ApprovalRequestStatus.APPROVED)));
+                approval("approval-1", "user-1", ApprovalRequestStatus.PENDING),
+                approval("approval-2", "user-1", ApprovalRequestStatus.APPROVED)));
         MemoryArtifactRepository artifactRepository = new MemoryArtifactRepository(List.of(
-                artifact("artifact-1", "1", AgentArtifactScanStatus.CLEAN),
-                artifact("artifact-2", "2", AgentArtifactScanStatus.CLEAN),
-                artifact("artifact-3", "1", AgentArtifactScanStatus.BLOCKED)));
+                artifact("artifact-1", "user-1", AgentArtifactScanStatus.CLEAN),
+                artifact("artifact-2", "user-2", AgentArtifactScanStatus.CLEAN),
+                artifact("artifact-3", "user-1", AgentArtifactScanStatus.BLOCKED)));
         KernelAgentRunSnapshotService service = new KernelAgentRunSnapshotService(
                 runRepository,
                 checkpointRepository,
@@ -285,7 +285,7 @@ class KernelAgentRunSnapshotServiceTests {
     }
 
     private static CurrentUserPort currentUser(Long userId, String role) {
-        return () -> Optional.of(new CurrentUser(userId, String.valueOf(userId), role, null));
+        return () -> Optional.of(new CurrentUser(userId, role + "-" + userId, role, null));
     }
 
     private static final class MemoryAgentRunRepository implements AgentRunRepositoryPort {

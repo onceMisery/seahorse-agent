@@ -50,7 +50,7 @@ class KernelAgentRunCostSummaryServiceTests {
         KernelAgentRunCostSummaryService service = new KernelAgentRunCostSummaryService(
                 runRepository,
                 costRepository,
-                currentUser(2L, "user"));
+                currentUser(1L, "user"));
 
         CostUsageAggregate aggregate = service.getCostSummary("run-1");
 
@@ -109,7 +109,7 @@ class KernelAgentRunCostSummaryServiceTests {
     }
 
     private static CurrentUserPort currentUser(Long userId, String role) {
-        return () -> Optional.of(new CurrentUser(userId, String.valueOf(userId), role, null));
+        return () -> Optional.of(new CurrentUser(userId, role + "-" + userId, role, null));
     }
 
     private static final class MemoryAgentRunRepository implements AgentRunRepositoryPort {

@@ -114,7 +114,7 @@ public class KernelAgentToolBindingManagementService implements AgentToolBinding
                     toolId,
                     safeItem.maxCallsPerRun(),
                     safeItem.argumentPolicyJson(),
-                    String.valueOf(currentUser.userId()),
+                    currentUser.operator(),
                     now));
         }
         return bindings;

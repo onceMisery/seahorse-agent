@@ -19,6 +19,15 @@ package com.miracle.ai.seahorse.agent.ports.outbound.auth;
 
 public record CurrentUser(Long userId, String username, String role, String avatar) {
 
+    /**
+     * Returns the operator identifier for audit trails and ownership comparisons.
+     * Uses {@code username} which preserves the application-level operator format
+     * (e.g. "admin-1", "user-2") independent of the numeric primary key type.
+     */
+    public String operator() {
+        return username != null ? username : String.valueOf(userId);
+    }
+
     public boolean hasRole(String expectedRole) {
         return expectedRole != null && role != null && expectedRole.equalsIgnoreCase(role);
     }
