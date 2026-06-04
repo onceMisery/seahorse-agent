@@ -19,15 +19,28 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.KernelAgentSkillManagementService;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkill;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillBinding;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillRevision;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.core.io.support.ResourcePatternResolver;
 
 import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -36,6 +49,24 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class BuiltInAgentSkillRegistrarTests {
+
+    @Test
+    void shouldImportActualBundledPublicSkills() throws Exception {
+        InMemoryAgentSkillRepository repository = new InMemoryAgentSkillRepository();
+        CurrentUserPort currentUserPort = () -> Optional.of(new CurrentUser(1L, "system", "admin", null));
+        KernelAgentSkillManagementService service = new KernelAgentSkillManagementService(repository, currentUserPort,
+                Clock.systemUTC());
+        ResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+        Resource[] resources = resolver.getResources("classpath*:/skills/public/*/SKILL.md");
+        long readableCount = java.util.Arrays.stream(resources).filter(Resource::isReadable).count();
+        BuiltInAgentSkillRegistrar registrar = new BuiltInAgentSkillRegistrar(service, resolver);
+
+        registrar.run(null);
+
+        assertThat(readableCount).isGreaterThan(0);
+        assertThat(repository.skills).hasSize((int) readableCount);
+        assertThat(repository.skills).containsKeys(skillKey("bootstrap"), skillKey("github-deep-research"));
+    }
 
     @Test
     void shouldImportReadableBundledPublicSkillResources() throws Exception {
@@ -132,5 +163,72 @@ class BuiltInAgentSkillRegistrarTests {
                 return url;
             }
         };
+    }
+
+    private static String skillKey(String name) {
+        return AgentDefinition.DEFAULT_TENANT_ID + ":" + name;
+    }
+
+    private static final class InMemoryAgentSkillRepository implements AgentSkillRepositoryPort {
+        private final Map<String, AgentSkill> skills = new HashMap<>();
+        private final Map<String, AgentSkillRevision> revisions = new HashMap<>();
+
+        @Override
+        public void saveSkill(AgentSkill skill) {
+            skills.put(key(skill.tenantId(), skill.name()), skill);
+        }
+
+        @Override
+        public Optional<AgentSkill> findSkill(String tenantId, String name) {
+            return Optional.ofNullable(skills.get(key(tenantId, name)));
+        }
+
+        @Override
+        public AgentSkillPage page(String tenantId, long current, long size, String keyword) {
+            return new AgentSkillPage(List.copyOf(skills.values()), skills.size(), size, current, 1);
+        }
+
+        @Override
+        public void saveRevision(AgentSkillRevision revision) {
+            revisions.put(revision.revisionId(), revision);
+        }
+
+        @Override
+        public long nextRevisionNo(String tenantId, String skillName) {
+            long count = revisions.values().stream()
+                    .filter(revision -> revision.tenantId().equals(tenantId) && revision.skillName().equals(skillName))
+                    .count();
+            return count + 1;
+        }
+
+        @Override
+        public Optional<AgentSkillRevision> findRevision(String tenantId, String revisionId) {
+            AgentSkillRevision revision = revisions.get(revisionId);
+            if (revision == null || !revision.tenantId().equals(tenantId)) {
+                return Optional.empty();
+            }
+            return Optional.of(revision);
+        }
+
+        @Override
+        public List<AgentSkillRevision> listRevisions(String tenantId, String skillName) {
+            return revisions.values().stream()
+                    .filter(revision -> revision.tenantId().equals(tenantId)
+                            && revision.skillName().equals(skillName))
+                    .toList();
+        }
+
+        @Override
+        public List<AgentSkillBinding> listBindings(String tenantId, String agentId) {
+            return List.of();
+        }
+
+        @Override
+        public void replaceBindings(String tenantId, String agentId, List<AgentSkillBinding> bindings) {
+        }
+
+        private String key(String tenantId, String name) {
+            return tenantId + ":" + name;
+        }
     }
 }

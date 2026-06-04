@@ -41,12 +41,28 @@ public class SkillMarkdownParser {
     private Map<String, Object> parseFrontmatter(String text) {
         Map<String, Object> values = new LinkedHashMap<>();
         String currentListKey = null;
+        String currentBlockKey = null;
+        String currentBlockStyle = null;
+        StringBuilder currentBlock = new StringBuilder();
         for (String rawLine : text.split("\n")) {
             String line = rawLine.stripTrailing();
             if (line.isBlank()) {
+                if (currentBlockKey != null) {
+                    currentBlock.append('\n');
+                }
                 continue;
             }
             String trimmed = line.trim();
+            if (currentBlockKey != null) {
+                if (isIndented(line)) {
+                    appendBlockLine(currentBlock, currentBlockStyle, trimmed);
+                    continue;
+                }
+                values.put(currentBlockKey, finishBlock(currentBlock, currentBlockStyle));
+                currentBlockKey = null;
+                currentBlockStyle = null;
+                currentBlock.setLength(0);
+            }
             if (trimmed.startsWith("- ")) {
                 if (currentListKey == null) {
                     throw new IllegalArgumentException("frontmatter list item has no key");
@@ -60,6 +76,13 @@ public class SkillMarkdownParser {
             }
             String key = line.substring(0, sep).trim();
             String value = line.substring(sep + 1).trim();
+            if (isBlockScalar(value)) {
+                values.put(key, "");
+                currentBlockKey = key;
+                currentBlockStyle = value;
+                currentListKey = null;
+                continue;
+            }
             if (value.isEmpty()) {
                 values.put(key, new ArrayList<String>());
                 currentListKey = key;
@@ -68,7 +91,37 @@ public class SkillMarkdownParser {
                 currentListKey = null;
             }
         }
+        if (currentBlockKey != null) {
+            values.put(currentBlockKey, finishBlock(currentBlock, currentBlockStyle));
+        }
         return values;
+    }
+
+    private boolean isBlockScalar(String value) {
+        return value.matches("[>|][+-]?");
+    }
+
+    private boolean isIndented(String line) {
+        return !line.isEmpty() && Character.isWhitespace(line.charAt(0));
+    }
+
+    private void appendBlockLine(StringBuilder out, String style, String line) {
+        if (style.startsWith("|")) {
+            out.append(line).append('\n');
+            return;
+        }
+        if (!out.isEmpty()) {
+            out.append(' ');
+        }
+        out.append(line);
+    }
+
+    private String finishBlock(StringBuilder out, String style) {
+        String value = out.toString();
+        if (style.endsWith("-")) {
+            return value.stripTrailing();
+        }
+        return value;
     }
 
     @SuppressWarnings("unchecked")
