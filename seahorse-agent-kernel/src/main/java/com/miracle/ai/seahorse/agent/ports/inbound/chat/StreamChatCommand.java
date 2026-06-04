@@ -122,17 +122,24 @@ public record StreamChatCommand(
                 .toList();
     }
 
+    private static int MAX_SELECTED_SKILLS = 5;
+
     private static List<String> normalizeSkillNames(List<String> values) {
         if (values == null || values.isEmpty()) {
             return List.of();
         }
-        return values.stream()
+        List<String> normalized = values.stream()
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(value -> !value.isEmpty())
                 .map(value -> value.toLowerCase().replace('_', '-'))
                 .distinct()
-                .limit(5)
                 .toList();
+        if (normalized.size() > MAX_SELECTED_SKILLS) {
+            throw new IllegalArgumentException(
+                    "Too many selectedSkillNames: " + normalized.size()
+                            + " (maximum " + MAX_SELECTED_SKILLS + ")");
+        }
+        return normalized;
     }
 }

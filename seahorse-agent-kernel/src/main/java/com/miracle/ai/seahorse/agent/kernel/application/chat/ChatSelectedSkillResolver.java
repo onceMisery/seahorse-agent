@@ -6,13 +6,10 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * Resolves per-turn selected skill names into validated {@link SkillRuntimeBlock} instances.
@@ -22,8 +19,6 @@ import java.util.Optional;
  * are resolved.</p>
  */
 public class ChatSelectedSkillResolver {
-
-    private static final Logger LOG = LoggerFactory.getLogger(ChatSelectedSkillResolver.class);
 
     private static final int DEFAULT_DIRECT_INJECT_THRESHOLD = 12000;
     private static final int DEFAULT_MAX_SELECTED_PER_TURN = 5;
@@ -57,48 +52,41 @@ public class ChatSelectedSkillResolver {
         if (selectedSkillNames == null || selectedSkillNames.isEmpty()) {
             return List.of();
         }
+        if (selectedSkillNames.size() > maxSelectedPerTurn) {
+            throw new IllegalArgumentException(
+                    "Too many skills selected: " + selectedSkillNames.size()
+                            + " (maximum " + maxSelectedPerTurn + ")");
+        }
         String safeTenantId = tenantId == null || tenantId.isBlank() ? "default" : tenantId;
-        List<String> names = selectedSkillNames.stream()
-                .limit(maxSelectedPerTurn)
-                .toList();
 
         List<SkillRuntimeBlock> blocks = new ArrayList<>();
-        for (String name : names) {
-            Optional<SkillRuntimeBlock> block = resolveOne(safeTenantId, name);
-            block.ifPresent(blocks::add);
+        for (String name : selectedSkillNames) {
+            blocks.add(resolveOne(safeTenantId, name));
         }
         return applyInjectionStrategy(blocks);
     }
 
-    private Optional<SkillRuntimeBlock> resolveOne(String tenantId, String name) {
-        Optional<AgentSkill> skillOpt = repository.findSkill(tenantId, name);
-        if (skillOpt.isEmpty()) {
-            LOG.warn("Per-turn selected skill not found: tenantId={}, name={}", tenantId, name);
-            return Optional.empty();
-        }
-        AgentSkill skill = skillOpt.get();
+    private SkillRuntimeBlock resolveOne(String tenantId, String name) {
+        AgentSkill skill = repository.findSkill(tenantId, name)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Selected skill not found: " + name));
         if (!skill.enabled()) {
-            LOG.warn("Per-turn selected skill is disabled: tenantId={}, name={}", tenantId, name);
-            return Optional.empty();
+            throw new IllegalArgumentException(
+                    "Selected skill is disabled: " + name);
         }
         if (skill.status() != AgentSkillStatus.ACTIVE) {
-            LOG.warn("Per-turn selected skill is not active: tenantId={}, name={}, status={}",
-                    tenantId, name, skill.status());
-            return Optional.empty();
+            throw new IllegalArgumentException(
+                    "Selected skill is not active: " + name + " (status=" + skill.status() + ")");
         }
         String revisionId = skill.latestRevisionId();
         if (revisionId == null || revisionId.isBlank()) {
-            LOG.warn("Per-turn selected skill has no revision: tenantId={}, name={}", tenantId, name);
-            return Optional.empty();
+            throw new IllegalArgumentException(
+                    "Selected skill has no revision: " + name);
         }
-        Optional<AgentSkillRevision> revisionOpt = repository.findRevision(tenantId, revisionId);
-        if (revisionOpt.isEmpty()) {
-            LOG.warn("Per-turn selected skill revision not found: tenantId={}, name={}, revisionId={}",
-                    tenantId, name, revisionId);
-            return Optional.empty();
-        }
-        AgentSkillRevision revision = revisionOpt.get();
-        return Optional.of(new SkillRuntimeBlock(
+        AgentSkillRevision revision = repository.findRevision(tenantId, revisionId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Selected skill revision not found: " + name + " (revisionId=" + revisionId + ")"));
+        return new SkillRuntimeBlock(
                 skill.name(),
                 revision.revisionId(),
                 revision.contentHash(),
@@ -106,7 +94,7 @@ public class ChatSelectedSkillResolver {
                 skill.category(),
                 SkillInjectMode.METADATA_AND_BODY,
                 skill.allowedTools(),
-                revision.content()));
+                revision.content());
     }
 
     /**

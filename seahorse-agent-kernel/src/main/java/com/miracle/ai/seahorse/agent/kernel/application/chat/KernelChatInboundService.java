@@ -307,6 +307,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 memoryContext,
                 command.conversationId(),
                 command.attachmentIds());
+        List<SkillRuntimeBlock> mergedSkills = mergeSkills(selectedVersion, command, tenantId);
         return AgentLoopRequest.builder()
                 .question(command.question())
                 .modelId(modelConfig.modelId())
@@ -315,8 +316,8 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .samplingOptions(modelConfig.samplingOptions())
                 .contextPack(contextPack)
                 .memoryContext(memoryContext)
-                .skillRuntimeContext(skillRuntimeContext(selectedVersion, command, tenantId))
-                .skillRuntimeBlocks(skillRuntimeBlocks(selectedVersion, command, tenantId))
+                .skillRuntimeContext(mergedSkills.isEmpty() ? null : skillRuntimeComposer.compose(mergedSkills))
+                .skillRuntimeBlocks(mergedSkills)
                 .runId(runId)
                 .agentId(agentId)
                 .versionId(versionId)
@@ -365,25 +366,11 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .orElseGet(AgentModelExecutionConfig::defaults);
     }
 
-    private String skillRuntimeContext(Optional<AgentVersion> selectedVersion,
-                                       StreamChatCommand command,
-                                       String tenantId) {
-        List<SkillRuntimeBlock> merged = mergeSkills(selectedVersion, command, tenantId);
-        if (merged.isEmpty()) {
-            return null;
-        }
-        return skillRuntimeComposer.compose(merged);
-    }
-
-    private List<SkillRuntimeBlock> skillRuntimeBlocks(Optional<AgentVersion> selectedVersion,
-                                                        StreamChatCommand command,
-                                                        String tenantId) {
-        return mergeSkills(selectedVersion, command, tenantId);
-    }
-
     /**
      * Merge version-bound skills with per-turn selected skills.
      * Version-bound skills take priority on name collision (published contract).
+     *
+     * @throws IllegalStateException if selectedSkillNames is non-empty but resolver is unavailable
      */
     private List<SkillRuntimeBlock> mergeSkills(Optional<AgentVersion> selectedVersion,
                                                  StreamChatCommand command,
@@ -394,9 +381,15 @@ public class KernelChatInboundService implements ChatInboundPort {
             versionBound = skillSetJsonSupport.fromJson(selectedVersion.get().skillSetJson()).skills();
         }
         // Per-turn selected skills (from chat input)
+        boolean hasPerTurnSelection = command.selectedSkillNames() != null
+                && !command.selectedSkillNames().isEmpty();
+        if (hasPerTurnSelection && chatSkillResolver == null) {
+            throw new IllegalStateException(
+                    "selectedSkillNames provided but ChatSelectedSkillResolver is not configured "
+                            + "(AgentSkillRepositoryPort bean is missing)");
+        }
         List<SkillRuntimeBlock> perTurn = List.of();
-        if (chatSkillResolver != null && command.selectedSkillNames() != null
-                && !command.selectedSkillNames().isEmpty()) {
+        if (hasPerTurnSelection) {
             perTurn = chatSkillResolver.resolve(tenantId, command.selectedSkillNames());
         }
         if (versionBound.isEmpty() && perTurn.isEmpty()) {
