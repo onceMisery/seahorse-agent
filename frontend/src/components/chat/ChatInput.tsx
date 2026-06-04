@@ -1,7 +1,8 @@
 import * as React from "react";
-import { Eye, Gauge, Lightbulb, Loader2, Mic, Paperclip, Send, Square, X } from "lucide-react";
+import { Eye, Gauge, Lightbulb, Loader2, Mic, Paperclip, Send, Sparkles, Square, X } from "lucide-react";
 import { PromptEnhancerButton } from "@/components/chat/prompt/PromptEnhancerButton";
 import { PromptEnhancerDialog } from "@/components/chat/prompt/PromptEnhancerDialog";
+import { SkillTrigger, type SkillTriggerHandle } from "@/components/chat/SkillTrigger";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 
@@ -166,6 +167,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
   const isComposingRef = React.useRef(false);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const speechRecognitionRef = React.useRef<InstanceType<SpeechRecognitionConstructor> | null>(null);
+  const skillTriggerRef = React.useRef<SkillTriggerHandle | null>(null);
   const {
     currentSessionId,
     sendMessage,
@@ -481,6 +483,14 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
               </div>
             ) : null}
             <div className="relative">
+              {/* 技能触发器：@ / 唤醒 + 内联下拉 + 热门技能 */}
+              <SkillTrigger
+                ref={skillTriggerRef}
+                value={value}
+                onChange={setValue}
+                textareaRef={textareaRef}
+                isStreaming={isStreaming}
+              />
               {previewOpen ? (
                 <div
                   className="min-h-[92px] rounded-2xl px-3 py-2 text-sm"
@@ -604,6 +614,20 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                   }}
                 >
                   <Mic className={cn("h-4 w-4", listening && "animate-pulse")} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => skillTriggerRef.current?.openPicker()}
+                  disabled={isStreaming}
+                  aria-label="选择技能"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    backgroundColor: "var(--theme-bg-elevated)",
+                    border: "1px solid var(--theme-accent-alpha-10)",
+                    color: "var(--theme-text-secondary)"
+                  }}
+                >
+                  <Sparkles className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
