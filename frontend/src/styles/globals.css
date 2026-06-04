@@ -414,6 +414,24 @@
 .dark {
   color-scheme: light;
 
+  /* ===== shadcn/ui 暗色模式覆盖 — 对话框 / 弹窗 / 控件必须使用深色背景 ===== */
+  --background: 215 63% 7%;
+  --foreground: 214 32% 91%;
+  --card: 213 45% 12%;
+  --card-foreground: 214 32% 91%;
+  --popover: 213 45% 12%;
+  --popover-foreground: 214 32% 91%;
+  --secondary: 213 40% 15%;
+  --secondary-foreground: 214 32% 91%;
+  --muted: 215 25% 18%;
+  --muted-foreground: 215 20% 55%;
+  --accent: 213 40% 15%;
+  --accent-foreground: 214 32% 91%;
+  --border: 214 20% 20%;
+  --input: 214 20% 20%;
+  --chat-user: 213 40% 15%;
+  --chat-assistant: 213 45% 12%;
+
   /* 暗色模式下文字颜色必须覆盖为浅色，否则在深色背景上不可见 */
   --theme-text-primary: #e2e8f0;
   --theme-text-secondary: #94a3b8;
