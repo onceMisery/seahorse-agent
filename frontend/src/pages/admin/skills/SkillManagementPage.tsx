@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { BookOpen, History, PackagePlus, Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { useRef, useEffect, useMemo, useState } from "react";
+import { AlertCircle, BookOpen, Check, FileUp, History, PackagePlus, Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
@@ -45,6 +45,46 @@ Describe the trigger.
 1. Describe the first step.
 2. Describe the expected output.`;
 
+const SKILL_FORMAT_TEMPLATE = `---
+name: skill-name
+description: skill description
+---
+
+# Skill Title
+
+## Overview
+技能概述...
+
+## When to Use This Skill
+使用场景...
+
+## Core Principle
+核心原则...`;
+
+/** 校验 SKILL.md 前置 frontmatter 格式 */
+function validateSkillFrontmatter(content: string): string | null {
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("---")) {
+    return "SKILL.md 必须以 YAML frontmatter（---）开头";
+  }
+  const endIndex = trimmed.indexOf("---", 3);
+  if (endIndex < 0) {
+    return "缺少 frontmatter 结束标记（---）";
+  }
+  const frontmatter = trimmed.slice(3, endIndex).trim();
+  if (!/^name:\s*.+/m.test(frontmatter)) {
+    return "frontmatter 中缺少 name 字段";
+  }
+  if (!/^description:\s*.+/m.test(frontmatter)) {
+    return "frontmatter 中缺少 description 字段";
+  }
+  const body = trimmed.slice(endIndex + 3).trim();
+  if (!body) {
+    return "Skill 正文内容不能为空";
+  }
+  return null;
+}
+
 export function SkillManagementPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.SKILL_MANAGEMENT);
   const [skills, setSkills] = useState<AgentSkill[]>([]);
@@ -52,10 +92,16 @@ export function SkillManagementPage() {
   const [loading, setLoading] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
+  const [installMode, setInstallMode] = useState<"file" | "paste">("file");
+  const [installMarkdown, setInstallMarkdown] = useState("");
+  const [installFileName, setInstallFileName] = useState("");
+  const [installValidation, setInstallValidation] = useState<string | null>(null);
+  const [installSubmitting, setInstallSubmitting] = useState(false);
+  const [showFormatTemplate, setShowFormatTemplate] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editing, setEditing] = useState<AgentSkill | null>(null);
   const [markdown, setMarkdown] = useState(EMPTY_MARKDOWN);
-  const [installMarkdown, setInstallMarkdown] = useState("");
   const [historySkill, setHistorySkill] = useState<AgentSkill | null>(null);
   const [revisions, setRevisions] = useState<AgentSkillRevision[]>([]);
 
@@ -129,15 +175,70 @@ export function SkillManagementPage() {
     }
   };
 
+  const handleFileSelect = (file: File) => {
+    if (!file.name.endsWith(".md") && !file.name.endsWith(".markdown") && !file.name.endsWith(".txt")) {
+      setInstallValidation("仅支持 .md / .markdown / .txt 格式文件");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result ?? "");
+      setInstallMarkdown(text);
+      setInstallFileName(file.name);
+      setInstallValidation(validateSkillFrontmatter(text));
+    };
+    reader.readAsText(file);
+  };
+
+  const handleInstallDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  };
+
+  const handleInstallFileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) handleFileSelect(file);
+  };
+
+  const openInstall = () => {
+    setInstallMarkdown("");
+    setInstallFileName("");
+    setInstallValidation(null);
+    setInstallMode("file");
+    setInstallOpen(true);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleInstallContentChange = (value: string) => {
+    setInstallMarkdown(value);
+    setInstallFileName("");
+    setInstallValidation(value.trim() ? validateSkillFrontmatter(value) : null);
+  };
+
   const submitInstall = async () => {
+    if (!installMarkdown.trim()) {
+      setInstallValidation("请先上传文件或粘贴 SKILL.md 内容");
+      return;
+    }
+    const error = validateSkillFrontmatter(installMarkdown);
+    if (error) {
+      setInstallValidation(error);
+      return;
+    }
+    setInstallSubmitting(true);
     try {
       await installSkill({ content: installMarkdown });
-      toast.success("Skill 已安装");
+      toast.success("Skill 安装成功");
       setInstallOpen(false);
       setInstallMarkdown("");
+      setInstallFileName("");
+      setInstallValidation(null);
       refresh();
     } catch (error) {
       toast.error(getErrorMessage(error, "安装 Skill 失败"));
+    } finally {
+      setInstallSubmitting(false);
     }
   };
 
@@ -210,7 +311,7 @@ export function SkillManagementPage() {
             <RefreshCw className={`mr-1 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             刷新
           </Button>
-          <Button variant="outline" onClick={() => setInstallOpen(true)}>
+          <Button variant="outline" onClick={openInstall}>
             <PackagePlus className="mr-1 h-4 w-4" />
             安装
           </Button>
@@ -293,16 +394,109 @@ export function SkillManagementPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={installOpen} onOpenChange={setInstallOpen}>
+      <Dialog open={installOpen} onOpenChange={(v) => { if (!v) { setInstallOpen(false); setInstallValidation(null); } }}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>安装 PUBLIC Skill</DialogTitle>
-            <DialogDescription>粘贴 Deer Flow 兼容的 SKILL.md，或包含只读资源附录的完整 Skill Markdown。</DialogDescription>
+            <DialogTitle>安装 Skill</DialogTitle>
+            <DialogDescription>上传 SKILL.md 文件或粘贴内容，安装后将作为 CUSTOM Skill 可编辑管理。</DialogDescription>
           </DialogHeader>
-          <Textarea className="min-h-[420px] font-mono text-sm" value={installMarkdown} onChange={(event) => setInstallMarkdown(event.target.value)} placeholder={EMPTY_MARKDOWN} />
+
+          {/* 模式切换 */}
+          <div className="flex gap-2">
+            <Button
+              variant={installMode === "file" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setInstallMode("file")}
+            >
+              <FileUp className="mr-1 h-4 w-4" />
+              上传文件
+            </Button>
+            <Button
+              variant={installMode === "paste" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setInstallMode("paste")}
+            >
+              <Pencil className="mr-1 h-4 w-4" />
+              粘贴内容
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={() => setShowFormatTemplate((v) => !v)}
+            >
+              {showFormatTemplate ? "隐藏格式参考" : "查看格式参考"}
+            </Button>
+          </div>
+
+          {/* 格式参考模板 */}
+          {showFormatTemplate ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="mb-2 text-xs font-semibold text-slate-500">SKILL.md 标准格式：</p>
+              <pre className="overflow-auto text-xs text-slate-600 whitespace-pre-wrap font-mono max-h-48">{SKILL_FORMAT_TEMPLATE}</pre>
+            </div>
+          ) : null}
+
+          {/* 上传文件模式 */}
+          {installMode === "file" ? (
+            <div
+              onDrop={handleInstallDrop}
+              onDragOver={(e) => e.preventDefault()}
+              className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-10 transition-colors hover:border-slate-400"
+            >
+              <FileUp className="h-10 w-10 text-slate-400" />
+              <p className="text-sm text-slate-500">拖拽 SKILL.md 文件到此处，或点击选择文件</p>
+              <p className="text-xs text-slate-400">支持 .md / .markdown / .txt 格式</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".md,.markdown,.txt"
+                className="hidden"
+                onChange={handleInstallFileInput}
+              />
+              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                选择文件
+              </Button>
+              {installFileName ? (
+                <div className="flex items-center gap-2 text-sm text-emerald-600">
+                  <Check className="h-4 w-4" />
+                  已选择：{installFileName}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* 内容编辑区（两种模式都显示） */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              {installMode === "file" ? "文件内容预览（可直接编辑）" : "粘贴 SKILL.md 内容"}
+            </label>
+            <Textarea
+              className="min-h-[320px] font-mono text-sm"
+              value={installMarkdown}
+              onChange={(event) => handleInstallContentChange(event.target.value)}
+              placeholder={installMode === "paste" ? SKILL_FORMAT_TEMPLATE : undefined}
+            />
+          </div>
+
+          {/* 验证提示 */}
+          {installValidation ? (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <span>{installValidation}</span>
+            </div>
+          ) : installMarkdown.trim() ? (
+            <div className="flex items-center gap-2 text-sm text-emerald-600">
+              <Check className="h-4 w-4" />
+              格式验证通过
+            </div>
+          ) : null}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setInstallOpen(false)}>取消</Button>
-            <Button onClick={submitInstall}>安装</Button>
+            <Button variant="outline" onClick={() => { setInstallOpen(false); setInstallValidation(null); }}>取消</Button>
+            <Button onClick={submitInstall} disabled={installSubmitting || !!installValidation || !installMarkdown.trim()}>
+              {installSubmitting ? "安装中..." : "安装"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
