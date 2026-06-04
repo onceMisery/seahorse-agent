@@ -378,7 +378,8 @@ class KernelChatAgentRunStoreTests {
                     ChatMode.AGENT,
                     null,
                     null,
-                    templateId), callback);
+                    templateId,
+                    List.of()), callback);
 
             assertTrue(callback.awaitTerminal());
             List<String> toolIds = model.requests.get(0).getTools().stream()

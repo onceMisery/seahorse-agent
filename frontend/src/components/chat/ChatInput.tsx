@@ -3,6 +3,7 @@ import { Eye, Gauge, Lightbulb, Loader2, Mic, Paperclip, Send, Sparkles, Square,
 import { PromptEnhancerButton } from "@/components/chat/prompt/PromptEnhancerButton";
 import { PromptEnhancerDialog } from "@/components/chat/prompt/PromptEnhancerDialog";
 import { SkillTrigger, type SkillTriggerHandle } from "@/components/chat/SkillTrigger";
+import type { AgentSkill } from "@/services/skillService";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 
@@ -163,6 +164,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
   const [isDraggingFiles, setIsDraggingFiles] = React.useState(false);
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [listening, setListening] = React.useState(false);
+  const [selectedSkills, setSelectedSkills] = React.useState<AgentSkill[]>([]);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const isComposingRef = React.useRef(false);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -371,6 +373,21 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
     }
   };
 
+  const handleSelectSkill = React.useCallback((skill: AgentSkill) => {
+    setSelectedSkills((prev) => {
+      if (prev.find((s) => s.name === skill.name)) return prev;
+      if (prev.length >= 5) {
+        toast.error("最多同时选择 5 个技能");
+        return prev;
+      }
+      return [...prev, skill];
+    });
+  }, []);
+
+  const handleRemoveSkill = React.useCallback((name: string) => {
+    setSelectedSkills((prev) => prev.filter((s) => s.name !== name));
+  }, []);
+
   const handleSubmit = async () => {
     if (isStreaming) {
       cancelGeneration();
@@ -396,10 +413,16 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
     const attachmentIds = attachments
       .filter((attachment) => attachment.uploadState !== "failed" && attachment.uploadState !== "uploading")
       .map((attachment) => attachment.attachmentId);
+    const skillNames = selectedSkills.map((s) => s.name);
     setValue("");
     focusInput();
-    await sendMessage(next, { attachmentIds, conversationIdOverride });
+    await sendMessage(next, {
+      attachmentIds,
+      conversationIdOverride,
+      selectedSkillNames: skillNames.length > 0 ? skillNames : undefined
+    });
     setAttachments([]);
+    setSelectedSkills([]);
     setPendingConversationId(null);
     focusInput();
   };
@@ -482,6 +505,33 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                 })}
               </div>
             ) : null}
+            {/* 已选技能 chips */}
+            {selectedSkills.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 px-1 pb-1">
+                {selectedSkills.map((skill) => (
+                  <span
+                    key={skill.name}
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors"
+                    style={{
+                      backgroundColor: "var(--theme-accent-alpha-15, rgba(99, 102, 241, 0.15))",
+                      color: "var(--theme-accent, #6366f1)"
+                    }}
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    {skill.name}
+                    <button
+                      type="button"
+                      className="ml-0.5 rounded-full p-0.5 transition-colors hover:opacity-70"
+                      onClick={() => handleRemoveSkill(skill.name)}
+                      aria-label={`移除 ${skill.name}`}
+                      disabled={isStreaming}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <div className="relative">
               {/* 技能触发器：@ / 唤醒 + 内联下拉 + 热门技能 */}
               <SkillTrigger
@@ -490,6 +540,7 @@ export function ChatInput({ draft }: ChatInputProps = {}) {
                 onChange={setValue}
                 textareaRef={textareaRef}
                 isStreaming={isStreaming}
+                onSelectSkill={handleSelectSkill}
               />
               {previewOpen ? (
                 <div

@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
@@ -204,7 +205,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    ObjectProvider<AgentRunInboundPort> agentRunPort,
                                                    ObjectProvider<ContextPackBuilderInboundPort> contextPackBuilder,
                                                    ObjectProvider<AgentDefinitionRepositoryPort> agentDefinitionRepository,
-                                                   ObjectProvider<ConversationAttachmentContextAssembler> attachmentContextAssembler) {
+                                                   ObjectProvider<ConversationAttachmentContextAssembler> attachmentContextAssembler,
+                                                   ObjectProvider<AgentSkillRepositoryPort> skillRepository) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
                 Optional.ofNullable(agentLoop.getIfAvailable()),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
@@ -213,6 +215,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 Optional.ofNullable(agentRunPort.getIfAvailable()),
                 Optional.ofNullable(contextPackBuilder.getIfAvailable()),
                 Optional.ofNullable(agentDefinitionRepository.getIfAvailable()),
-                attachmentContextAssembler.getIfAvailable(ConversationAttachmentContextAssembler::noop));
+                attachmentContextAssembler.getIfAvailable(ConversationAttachmentContextAssembler::noop),
+                Optional.ofNullable(skillRepository.getIfAvailable()));
     }
 }

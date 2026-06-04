@@ -3,6 +3,7 @@ import type { FeedbackReason, FeedbackValue, Message, Session, TaskTemplateId } 
 export interface SendMessageOptions {
   attachmentIds?: string[];
   conversationIdOverride?: string | null;
+  selectedSkillNames?: string[];
 }
 
 export interface SubmitFeedbackOptions {

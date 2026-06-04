@@ -35,7 +35,8 @@ public record StreamChatCommand(
         String agentId,
         String versionId,
         String taskTemplateId,
-        List<String> attachmentIds) {
+        List<String> attachmentIds,
+        List<String> selectedSkillNames) {
 
     public StreamChatCommand {
         question = requireText(question, "question");
@@ -47,6 +48,7 @@ public record StreamChatCommand(
         versionId = trimToNull(versionId);
         taskTemplateId = trimToNull(taskTemplateId);
         attachmentIds = normalizeIds(attachmentIds);
+        selectedSkillNames = normalizeSkillNames(selectedSkillNames);
     }
 
     public StreamChatCommand(String question,
@@ -57,9 +59,10 @@ public record StreamChatCommand(
                              ChatMode chatMode,
                              String agentId,
                              String versionId,
-                             String taskTemplateId) {
+                             String taskTemplateId,
+                             List<String> attachmentIds) {
         this(question, conversationId, taskId, userId, deepThinking, chatMode, agentId, versionId, taskTemplateId,
-                List.of());
+                attachmentIds, List.of());
     }
 
     public StreamChatCommand(String question,
@@ -70,7 +73,7 @@ public record StreamChatCommand(
                              ChatMode chatMode,
                              String agentId,
                              String versionId) {
-        this(question, conversationId, taskId, userId, deepThinking, chatMode, agentId, versionId, null, List.of());
+        this(question, conversationId, taskId, userId, deepThinking, chatMode, agentId, versionId, null, List.of(), List.of());
     }
 
     public StreamChatCommand(String question,
@@ -79,7 +82,7 @@ public record StreamChatCommand(
                              String userId,
                              boolean deepThinking,
                              ChatMode chatMode) {
-        this(question, conversationId, taskId, userId, deepThinking, chatMode, null, null, null, List.of());
+        this(question, conversationId, taskId, userId, deepThinking, chatMode, null, null, null, List.of(), List.of());
     }
 
     /**
@@ -90,7 +93,7 @@ public record StreamChatCommand(
                              String taskId,
                              String userId,
                              boolean deepThinking) {
-        this(question, conversationId, taskId, userId, deepThinking, ChatMode.RAG, null, null, null, List.of());
+        this(question, conversationId, taskId, userId, deepThinking, ChatMode.RAG, null, null, null, List.of(), List.of());
     }
 
     private static String requireText(String value, String name) {
@@ -116,6 +119,20 @@ public record StreamChatCommand(
                 .map(String::trim)
                 .filter(value -> !value.isEmpty())
                 .distinct()
+                .toList();
+    }
+
+    private static List<String> normalizeSkillNames(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .map(value -> value.toLowerCase().replace('_', '-'))
+                .distinct()
+                .limit(5)
                 .toList();
     }
 }

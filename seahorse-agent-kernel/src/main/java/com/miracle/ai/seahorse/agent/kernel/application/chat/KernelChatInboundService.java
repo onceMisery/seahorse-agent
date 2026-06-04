@@ -46,12 +46,14 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryLoadRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunStartCommand;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.ConversationMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
@@ -59,7 +61,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -103,6 +107,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     private final ContextPackRuntimeAssembler contextPackAssembler;
     private final SkillSetJsonSupport skillSetJsonSupport;
     private final SkillRuntimeComposer skillRuntimeComposer;
+    private final ChatSelectedSkillResolver chatSkillResolver;
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
         this(chatPipeline, streamTaskPort, KernelRagTraceRecorder.noop());
@@ -187,6 +192,22 @@ public class KernelChatInboundService implements ChatInboundPort {
                                     Optional<ContextPackBuilderInboundPort> contextPackBuilder,
                                     Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
                                     ConversationAttachmentContextAssembler attachmentContextAssembler) {
+        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
+                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
+                Optional.empty());
+    }
+
+    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+                                    StreamTaskPort streamTaskPort,
+                                    Optional<KernelAgentLoop> agentLoop,
+                                    KernelRagTraceRecorder traceRecorder,
+                                    ConversationMemoryPort memoryPort,
+                                    MemoryEnginePort memoryEnginePort,
+                                    Optional<AgentRunInboundPort> agentRunPort,
+                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
+                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
+                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
+                                    Optional<AgentSkillRepositoryPort> skillRepository) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop;
@@ -200,6 +221,9 @@ public class KernelChatInboundService implements ChatInboundPort {
         this.contextPackAssembler = new ContextPackRuntimeAssembler(contextPackBuilder, attachmentContextAssembler);
         this.skillSetJsonSupport = new SkillSetJsonSupport();
         this.skillRuntimeComposer = new SkillRuntimeComposer();
+        this.chatSkillResolver = skillRepository == null || skillRepository.isEmpty()
+                ? null
+                : new ChatSelectedSkillResolver(skillRepository.get());
     }
 
     @Override
@@ -291,8 +315,8 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .samplingOptions(modelConfig.samplingOptions())
                 .contextPack(contextPack)
                 .memoryContext(memoryContext)
-                .skillRuntimeContext(skillRuntimeContext(selectedVersion))
-                .skillRuntimeBlocks(skillRuntimeBlocks(selectedVersion))
+                .skillRuntimeContext(skillRuntimeContext(selectedVersion, command, tenantId))
+                .skillRuntimeBlocks(skillRuntimeBlocks(selectedVersion, command, tenantId))
                 .runId(runId)
                 .agentId(agentId)
                 .versionId(versionId)
@@ -341,20 +365,58 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .orElseGet(AgentModelExecutionConfig::defaults);
     }
 
-    private String skillRuntimeContext(Optional<AgentVersion> selectedVersion) {
-        if (selectedVersion == null || selectedVersion.isEmpty()) {
+    private String skillRuntimeContext(Optional<AgentVersion> selectedVersion,
+                                       StreamChatCommand command,
+                                       String tenantId) {
+        List<SkillRuntimeBlock> merged = mergeSkills(selectedVersion, command, tenantId);
+        if (merged.isEmpty()) {
             return null;
         }
-        return skillRuntimeComposer.compose(
-                skillSetJsonSupport.fromJson(selectedVersion.get().skillSetJson()).skills());
+        return skillRuntimeComposer.compose(merged);
     }
 
-    private List<com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock> skillRuntimeBlocks(
-            Optional<AgentVersion> selectedVersion) {
-        if (selectedVersion == null || selectedVersion.isEmpty()) {
+    private List<SkillRuntimeBlock> skillRuntimeBlocks(Optional<AgentVersion> selectedVersion,
+                                                        StreamChatCommand command,
+                                                        String tenantId) {
+        return mergeSkills(selectedVersion, command, tenantId);
+    }
+
+    /**
+     * Merge version-bound skills with per-turn selected skills.
+     * Version-bound skills take priority on name collision (published contract).
+     */
+    private List<SkillRuntimeBlock> mergeSkills(Optional<AgentVersion> selectedVersion,
+                                                 StreamChatCommand command,
+                                                 String tenantId) {
+        // Version-bound skills (from published Agent version snapshot)
+        List<SkillRuntimeBlock> versionBound = List.of();
+        if (selectedVersion != null && selectedVersion.isPresent()) {
+            versionBound = skillSetJsonSupport.fromJson(selectedVersion.get().skillSetJson()).skills();
+        }
+        // Per-turn selected skills (from chat input)
+        List<SkillRuntimeBlock> perTurn = List.of();
+        if (chatSkillResolver != null && command.selectedSkillNames() != null
+                && !command.selectedSkillNames().isEmpty()) {
+            perTurn = chatSkillResolver.resolve(tenantId, command.selectedSkillNames());
+        }
+        if (versionBound.isEmpty() && perTurn.isEmpty()) {
             return List.of();
         }
-        return skillSetJsonSupport.fromJson(selectedVersion.get().skillSetJson()).skills();
+        if (perTurn.isEmpty()) {
+            return versionBound;
+        }
+        if (versionBound.isEmpty()) {
+            return perTurn;
+        }
+        // Merge: version-bound takes priority on name collision
+        Map<String, SkillRuntimeBlock> merged = new LinkedHashMap<>();
+        for (SkillRuntimeBlock block : perTurn) {
+            merged.put(block.name(), block);
+        }
+        for (SkillRuntimeBlock block : versionBound) {
+            merged.put(block.name(), block);
+        }
+        return List.copyOf(merged.values());
     }
 
     private AgentModelExecutionConfig modelExecutionConfig(AgentVersion version) {

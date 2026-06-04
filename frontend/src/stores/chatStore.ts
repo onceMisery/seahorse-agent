@@ -234,13 +234,15 @@ export const useChatStore = create<ChatState>()(
       });
 
       const conversationId = options?.conversationIdOverride || get().currentSessionId;
+      const selectedSkillNames = options?.selectedSkillNames?.length ? options.selectedSkillNames : undefined;
       const query = buildQuery({
         question: trimmed,
         conversationId: conversationId || undefined,
         deepThinking: deepThinkingEnabled ? true : undefined,
         chatMode: chatModeForTaskTemplate(selectedTaskTemplateId as TaskTemplateId | undefined),
         taskTemplateId: selectedTaskTemplateId || undefined,
-        attachmentIds: attachmentIdsFiltered
+        attachmentIds: attachmentIdsFiltered,
+        selectedSkillNames
       });
       const url = `${API_BASE_URL}/rag/v3/chat${query}`;
       const token = storage.getToken();

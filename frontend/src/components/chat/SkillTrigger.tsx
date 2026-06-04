@@ -27,6 +27,8 @@ interface SkillTriggerProps {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   /** 是否正在流式生成 */
   isStreaming?: boolean;
+  /** 结构化技能选择回调（选中技能时调用，与文本插入并行） */
+  onSelectSkill?: (skill: AgentSkill) => void;
 }
 
 /** 从文本中解析当前光标前的触发词（@ 或 / 开头） */
@@ -52,7 +54,7 @@ function parseTrigger(text: string, cursorPos: number): { prefix: string; query:
 }
 
 export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerProps>(
-  function SkillTrigger({ value, onChange, textareaRef, isStreaming }, ref) {
+  function SkillTrigger({ value, onChange, textareaRef, isStreaming, onSelectSkill }, ref) {
   const [skills, setSkills] = React.useState<AgentSkill[]>([]);
   const [skillsLoading, setSkillsLoading] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
@@ -167,6 +169,9 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
       const el = textareaRef.current;
       if (!el) return;
 
+      // 触发结构化选择回调（与文本插入并行）
+      onSelectSkill?.(skill);
+
       if (inlineTrigger) {
         // 内联触发：替换 @query 为 @skill-name
         const before = value.slice(0, inlineTrigger.startIndex);
@@ -196,7 +201,7 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
         });
       }
     },
-    [value, onChange, textareaRef, inlineTrigger]
+    [value, onChange, textareaRef, inlineTrigger, onSelectSkill]
   );
 
   /* ─── 打开技能选择弹窗 ─── */
