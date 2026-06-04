@@ -109,8 +109,8 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
                 requireText(safeValues.name(), "name"),
                 blankToNull(safeValues.embeddingModel()),
                 requireText(safeValues.collectionName(), "collectionName"),
-                Objects.requireNonNullElse(safeValues.operator(), ""),
-                Objects.requireNonNullElse(safeValues.operator(), ""),
+                parseOperatorId(safeValues.operator()),
+                parseOperatorId(safeValues.operator()),
                 now,
                 now);
         return id;
@@ -170,7 +170,7 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
         int updated = jdbcTemplate.update(SQL_UPDATE,
                 blankToNull(safeValues.name()),
                 blankToNull(safeValues.embeddingModel()),
-                Objects.requireNonNullElse(safeValues.operator(), ""),
+                parseOperatorId(safeValues.operator()),
                 Timestamp.from(Instant.now()),
                 kbId);
         return updated > 0;
@@ -182,7 +182,7 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
             return false;
         }
         int updated = jdbcTemplate.update(SQL_DELETE,
-                Objects.requireNonNullElse(operator, ""),
+                parseOperatorId(operator),
                 Timestamp.from(Instant.now()),
                 kbId);
         return updated > 0;
@@ -257,5 +257,21 @@ public class JdbcKnowledgeBaseRepositoryAdapter implements KnowledgeBaseReposito
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value.trim();
+    }
+
+    /**
+     * 将 operator 字符串安全地转换为 Long 类型。
+     * 数据库 created_by / updated_by 列为 BIGINT，需要数值型用户 ID。
+     * 非数值或空值返回 null（用于可空列）或 0（用于 NOT NULL 列由调用方兜底）。
+     */
+    private Long parseOperatorId(String operator) {
+        if (operator == null || operator.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(operator.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

@@ -188,8 +188,8 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
                 process.processMode(),
                 blankToNull(process.pipelineId()),
                 STATUS_PENDING,
-                safeCommand.operator(),
-                safeCommand.operator(),
+                safeCommand.operator() != null ? parseOperatorId(safeCommand.operator()) : null,
+                safeCommand.operator() != null ? parseOperatorId(safeCommand.operator()) : null,
                 DELETED_VALUE);
         return findById(documentId).orElseThrow(() -> new IllegalStateException("文档创建后不可见：" + documentId));
     }
@@ -254,20 +254,20 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
             return false;
         }
         int updated = jdbcTemplate.update(SQL_MARK_RUNNING, STATUS_RUNNING,
-                Objects.requireNonNullElse(operator, ""), docId, STATUS_RUNNING);
+                parseOperatorId(operator), docId, STATUS_RUNNING);
         return updated > 0;
     }
 
     @Override
     public void markSuccess(Long docId, int chunkCount, String operator) {
         jdbcTemplate.update(SQL_MARK_SUCCESS, STATUS_SUCCESS, Math.max(chunkCount, 0),
-                Objects.requireNonNullElse(operator, ""), docId);
+                parseOperatorId(operator), docId);
     }
 
     @Override
     public void markFailed(Long docId, String operator, String errorMessage) {
         jdbcTemplate.update(SQL_MARK_FAILED, STATUS_FAILED,
-                Objects.requireNonNullElse(operator, ""), docId);
+                parseOperatorId(operator), docId);
     }
 
     @Override
@@ -284,7 +284,7 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     @Override
     public boolean updateEnabled(Long docId, boolean enabled, String operator) {
         int enabledValue = enabled ? 1 : 0;
-        String safeOperator = Objects.requireNonNullElse(operator, "");
+        Long safeOperator = parseOperatorId(operator);
         int updated = jdbcTemplate.update(SQL_UPDATE_ENABLED_DOCUMENT, enabledValue, safeOperator, docId);
         if (updated > 0) {
             jdbcTemplate.update(SQL_UPDATE_ENABLED_CHUNKS, enabledValue, safeOperator, docId);
@@ -295,7 +295,7 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
     @Override
     public boolean replaceFileForRefresh(Long docId, KnowledgeDocumentFileRef file, String operator) {
         KnowledgeDocumentFileRef safeFile = Objects.requireNonNull(file, "file must not be null");
-        String safeOperator = Objects.requireNonNullElse(operator, "");
+        Long safeOperator = parseOperatorId(operator);
         String docName = hasText(safeFile.fileUrl()) ? safeFile.fileUrl() : String.valueOf(docId);
         int slashIndex = docName.lastIndexOf('/');
         if (slashIndex >= 0 && slashIndex < docName.length() - 1) {
@@ -312,7 +312,7 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
 
     @Override
     public boolean delete(Long docId, String operator) {
-        String safeOperator = Objects.requireNonNullElse(operator, "");
+        Long safeOperator = parseOperatorId(operator);
         int updated = jdbcTemplate.update(SQL_DELETE_DOCUMENT, safeOperator, docId);
         if (updated > 0) {
             jdbcTemplate.update(SQL_DELETE_CHUNKS, safeOperator, docId);
@@ -472,6 +472,17 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
             return null;
         }
         return value.trim();
+    }
+
+    private Long parseOperatorId(String operator) {
+        if (operator == null || operator.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(operator.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private QueryParts buildPageQuery(String status, String keyword) {
