@@ -57,6 +57,8 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
   function SkillTrigger({ value, onChange, textareaRef, isStreaming, onSelectSkill }, ref) {
   const [skills, setSkills] = React.useState<AgentSkill[]>([]);
   const [skillsLoading, setSkillsLoading] = React.useState(false);
+  const [skillsError, setSkillsError] = React.useState(false);
+  const [skillsError, setSkillsError] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [activeIndex, setActiveIndex] = React.useState(0);
@@ -73,12 +75,13 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
   const ensureSkillsLoaded = React.useCallback(async () => {
     if (loadedRef.current) return;
     setSkillsLoading(true);
+    setSkillsError(false);
     try {
       const page = await listSkills({ current: 1, size: 100 });
       setSkills((page.records ?? []).filter((s) => s.enabled && s.status === "ACTIVE"));
       loadedRef.current = true;
     } catch {
-      // 静默处理
+      setSkillsError(true);
     } finally {
       setSkillsLoading(false);
     }
@@ -358,6 +361,10 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
             {skillsLoading ? (
               <div className="px-4 py-6 text-center text-sm" style={{ color: "var(--theme-text-muted)" }}>
                 加载中...
+              </div>
+            ) : skillsError ? (
+              <div className="px-4 py-6 text-center text-sm text-red-500">
+                加载失败，请关闭后重新打开
               </div>
             ) : filteredSkills.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm" style={{ color: "var(--theme-text-muted)" }}>

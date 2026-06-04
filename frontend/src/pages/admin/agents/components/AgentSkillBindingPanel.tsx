@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, RefreshCw, Save } from "lucide-react";
+import { AlertCircle, BookOpen, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,7 @@ export function AgentSkillBindingPanel({ agentId, onSnapshotChange }: Props) {
   const [bindings, setBindings] = useState<AgentSkillBinding[]>([]);
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const selected = useMemo(() => new Map(bindings.map((binding) => [binding.skillName, binding])), [bindings]);
@@ -43,6 +44,7 @@ export function AgentSkillBindingPanel({ agentId, onSnapshotChange }: Props) {
 
   const refresh = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [skillPage, currentBindings] = await Promise.all([
         listSkills({ current: 1, size: 200 }),
@@ -51,7 +53,9 @@ export function AgentSkillBindingPanel({ agentId, onSnapshotChange }: Props) {
       setSkills((skillPage.records || []).filter((skill) => skill.status !== "DELETED"));
       setBindings(currentBindings || []);
     } catch (error) {
-      toast.error(getErrorMessage(error, "加载 Skill 绑定失败"));
+      const message = getErrorMessage(error, "加载 Skill 绑定失败");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -124,7 +128,29 @@ export function AgentSkillBindingPanel({ agentId, onSnapshotChange }: Props) {
         <Input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索 Skill" />
 
         <div className="grid gap-3">
-          {filtered.map((skill) => {
+          {loading && skills.length === 0 ? (
+            Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="animate-pulse rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-4 w-4 rounded bg-slate-200" />
+                  <div className="h-4 w-32 rounded bg-slate-200" />
+                  <div className="h-5 w-16 rounded bg-slate-100" />
+                </div>
+                <div className="mt-2 ml-7 h-4 w-2/3 rounded bg-slate-100" />
+              </div>
+            ))
+          ) : loadError && skills.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-red-200 bg-red-50 py-8 text-center">
+              <AlertCircle className="h-6 w-6 text-red-400" />
+              <p className="text-sm text-red-600">{loadError}</p>
+              <Button variant="outline" size="sm" onClick={refresh}>
+                <RefreshCw className="mr-1 h-4 w-4" />
+                重试
+              </Button>
+            </div>
+          ) : (
+            <>
+              {filtered.map((skill) => {
             const binding = selected.get(skill.name);
             const enabled = Boolean(binding);
             return (
@@ -165,11 +191,13 @@ export function AgentSkillBindingPanel({ agentId, onSnapshotChange }: Props) {
               </div>
             );
           })}
-          {!loading && filtered.length === 0 ? (
+          {!loading && !loadError && filtered.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500">
               暂无可绑定 Skill
             </div>
           ) : null}
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

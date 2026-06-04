@@ -90,6 +90,7 @@ export function SkillManagementPage() {
   const [skills, setSkills] = useState<AgentSkill[]>([]);
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [installMode, setInstallMode] = useState<"file" | "paste">("file");
@@ -115,11 +116,14 @@ export function SkillManagementPage() {
 
   const refresh = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const page = await listSkills({ current: 1, size: 200, keyword: keyword.trim() || undefined });
       setSkills(page.records || []);
     } catch (error) {
-      toast.error(getErrorMessage(error, "加载 Skill 列表失败"));
+      const message = getErrorMessage(error, "加载 Skill 列表失败");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -326,7 +330,29 @@ export function SkillManagementPage() {
         <CardContent className="space-y-4 pt-6">
           <Input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索 Skill" />
           <div className="grid gap-3">
-            {filtered.map((skill) => (
+            {loading && skills.length === 0 ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="animate-pulse rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded bg-slate-200" />
+                    <div className="h-5 w-32 rounded bg-slate-200" />
+                    <div className="h-5 w-16 rounded bg-slate-100" />
+                  </div>
+                  <div className="mt-2 h-4 w-2/3 rounded bg-slate-100" />
+                </div>
+              ))
+            ) : loadError && skills.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-red-200 bg-red-50 py-10 text-center">
+                <AlertCircle className="h-8 w-8 text-red-400" />
+                <p className="text-sm text-red-600">{loadError}</p>
+                <Button variant="outline" size="sm" onClick={refresh}>
+                  <RefreshCw className="mr-1 h-4 w-4" />
+                  重试
+                </Button>
+              </div>
+            ) : (
+              <>
+                {filtered.map((skill) => (
               <div key={skill.name} className="rounded-lg border border-slate-200 bg-white p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
@@ -368,11 +394,13 @@ export function SkillManagementPage() {
                 </div>
               </div>
             ))}
-            {!loading && filtered.length === 0 ? (
+            {!loading && !loadError && filtered.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-slate-500">
                 暂无 Skill
               </div>
             ) : null}
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
