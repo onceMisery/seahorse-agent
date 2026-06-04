@@ -59,3 +59,6 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentKernelEvalAutoConfigu
 
 # Layer 7: Runtime guards (after kernel sub-configs)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRuntimeGuardAutoConfiguration
+
+# Layer 8: Alert notification (after runtime guards)
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAlertAutoConfiguration
