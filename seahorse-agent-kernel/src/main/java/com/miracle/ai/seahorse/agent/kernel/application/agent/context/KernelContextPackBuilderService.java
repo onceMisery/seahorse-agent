@@ -27,9 +27,12 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextPack;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ContextSensitivity;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAccessRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.context.ResourceAction;
+import com.miracle.ai.seahorse.agent.kernel.exception.ForbiddenException;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ContextPackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ResourceAccessPolicyPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -40,6 +43,7 @@ import java.util.Objects;
 
 public class KernelContextPackBuilderService implements ContextPackBuilderInboundPort {
 
+    private static final Logger log = LoggerFactory.getLogger(KernelContextPackBuilderService.class);
     private static final String CONTEXT_PACK_PREFIX = "ctx_";
     private static final String CONTEXT_ITEM_PREFIX = "ctxi_";
 
@@ -85,8 +89,10 @@ public class KernelContextPackBuilderService implements ContextPackBuilderInboun
                 .sorted(Comparator.comparingDouble(ContextBuildItemCandidate::score).reversed())
                 .toList();
         List<ContextItem> items = new ArrayList<>();
+        List<String> deniedResources = new ArrayList<>();
         int usedTokens = 0;
         int sequence = 1;
+        int aclCheckedCount = 0;
         for (ContextBuildItemCandidate candidate : candidates) {
             if (candidate.sensitivity() == ContextSensitivity.SECRET
                     || usedTokens + candidate.estimatedTokens() > request.budgetTokens()) {
@@ -98,12 +104,26 @@ public class KernelContextPackBuilderService implements ContextPackBuilderInboun
                     request.userId(),
                     ResourceAction.READ,
                     candidate.resourceRef()));
+            aclCheckedCount++;
             if (decision.effect() != AccessDecisionEffect.ALLOW) {
+                String resourceDesc = candidate.resourceRef().resourceType()
+                        + ":" + candidate.resourceRef().resourceId();
+                log.warn("ACL denied access to resource [{}], decision={}, reason={}",
+                        resourceDesc, decision.effect(), decision.reasonCode());
+                deniedResources.add(resourceDesc);
                 continue;
             }
             items.add(toItem(contextPackId, candidate, decision, sequence, createdAt));
             usedTokens += candidate.estimatedTokens();
             sequence++;
+        }
+        // If all ACL-checked candidates were denied, throw ForbiddenException
+        if (aclCheckedCount > 0 && items.isEmpty() && !deniedResources.isEmpty()) {
+            throw new ForbiddenException(
+                    "Access denied to all " + deniedResources.size() + " candidate resource(s): "
+                            + String.join(", ", deniedResources),
+                    "context_pack",
+                    contextPackId);
         }
         return List.copyOf(items);
     }

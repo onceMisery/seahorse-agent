@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
+import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentVersion;
@@ -48,15 +49,25 @@ public class KernelAgentRunService implements AgentRunInboundPort {
     private final AgentRunRepositoryPort runRepository;
     private final CurrentUserPort currentUserPort;
     private final Clock clock;
+    private final QuotaEnforcementService quotaEnforcementService;
 
     public KernelAgentRunService(AgentDefinitionRepositoryPort definitionRepository,
                                  AgentRunRepositoryPort runRepository,
                                  CurrentUserPort currentUserPort,
                                  Clock clock) {
+        this(definitionRepository, runRepository, currentUserPort, clock, null);
+    }
+
+    public KernelAgentRunService(AgentDefinitionRepositoryPort definitionRepository,
+                                 AgentRunRepositoryPort runRepository,
+                                 CurrentUserPort currentUserPort,
+                                 Clock clock,
+                                 QuotaEnforcementService quotaEnforcementService) {
         this.definitionRepository = Objects.requireNonNull(definitionRepository, "definitionRepository must not be null");
         this.runRepository = Objects.requireNonNull(runRepository, "runRepository must not be null");
         this.currentUserPort = Objects.requireNonNull(currentUserPort, "currentUserPort must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.quotaEnforcementService = quotaEnforcementService;
     }
 
     @Override
@@ -67,6 +78,25 @@ public class KernelAgentRunService implements AgentRunInboundPort {
         if (definition != null && definition.disabled()) {
             throw new IllegalStateException("DISABLED Agent cannot start a new run");
         }
+
+        // Quota enforcement: check token and concurrency limits before starting a run
+        if (quotaEnforcementService != null && safeCommand.tenantId() != null) {
+            try {
+                quotaEnforcementService.checkTokenQuota(safeCommand.tenantId());
+            } catch (com.miracle.ai.seahorse.agent.kernel.domain.billing.QuotaExceededException ex) {
+                throw ex;
+            } catch (Exception ignored) {
+                // Fail-open: quota system unavailable
+            }
+            try {
+                quotaEnforcementService.checkConcurrencyQuota(safeCommand.tenantId());
+            } catch (com.miracle.ai.seahorse.agent.kernel.domain.billing.QuotaExceededException ex) {
+                throw ex;
+            } catch (Exception ignored) {
+                // Fail-open: quota system unavailable
+            }
+        }
+
         String versionId = resolveVersionId(safeCommand, definition);
         AgentRun run = new AgentRun(
                 nextRunId(),

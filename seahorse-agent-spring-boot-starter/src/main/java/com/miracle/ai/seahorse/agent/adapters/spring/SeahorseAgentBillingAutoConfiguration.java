@@ -20,9 +20,11 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelBillingService;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelPaymentService;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelSubscriptionService;
+import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService;
 import com.miracle.ai.seahorse.agent.ports.inbound.billing.BillingInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.billing.PaymentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.billing.SubscriptionInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.BillLineItemRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.BillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentCallbackLogRepositoryPort;
@@ -31,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentOrderReposito
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionPlanRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.TransactionRunnerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -111,5 +114,23 @@ public class SeahorseAgentBillingAutoConfiguration {
             SubscriptionPlanRepositoryPort planRepository) {
         return new KernelBillingService(billRepository, lineItemRepository,
                 subscriptionRepository, planRepository);
+    }
+
+    /**
+     * Quota enforcement service — checks storage, token, and concurrency limits
+     * before resource-consuming operations.
+     */
+    @Bean
+    @ConditionalOnBean({
+            SubscriptionRepositoryPort.class,
+            KnowledgeDocumentRepositoryPort.class,
+            AgentRunRepositoryPort.class
+    })
+    @ConditionalOnMissingBean(QuotaEnforcementService.class)
+    public QuotaEnforcementService seahorseQuotaEnforcementService(
+            SubscriptionRepositoryPort subscriptionRepository,
+            KnowledgeDocumentRepositoryPort documentRepository,
+            AgentRunRepositoryPort agentRunRepository) {
+        return new QuotaEnforcementService(subscriptionRepository, documentRepository, agentRunRepository);
     }
 }

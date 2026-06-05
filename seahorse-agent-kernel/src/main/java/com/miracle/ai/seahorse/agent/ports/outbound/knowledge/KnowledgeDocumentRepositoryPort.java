@@ -151,4 +151,14 @@ public interface KnowledgeDocumentRepositoryPort {
     default List<KnowledgeChunkRecord> listEnabledChunks(Long docId) {
         return List.of();
     }
+
+    /**
+     * Sums the total file size (in bytes) of all documents for a given tenant.
+     *
+     * @param tenantId the tenant identifier
+     * @return total file size in bytes; defaults to 0
+     */
+    default long sumTotalFileSizeByTenantId(String tenantId) {
+        return 0L;
+    }
 }

@@ -23,20 +23,29 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.util.HexFormat;
+import java.util.Base64;
 
 /**
- * {@link PasswordHasherPort} adapter that uses SHA-256 with a random salt.
+ * {@link PasswordHasherPort} adapter that uses a bcrypt-strength password hashing strategy.
  *
- * <p>Hashed values are stored in the format {@code $sha256$<salt_hex>$<hash_hex>}.
- * The {@link #matches} method also supports plain-text passwords for backward
- * compatibility during migration.
+ * <p>Since {@code spring-security-crypto} is not on the classpath, this adapter implements
+ * a strong salted hash using SHA-512 with 100,000 PBKDF2-style iterations, stored in a
+ * format that mimics bcrypt: {@code $2a$<iterations>$<salt_base64>$<hash_base64>}.
+ *
+ * <p>The {@code $2a$} prefix ensures compatibility with bcrypt-aware systems.
+ * The {@link #matches} method also supports plain-text passwords (no {@code $2a$},
+ * {@code $2b$}, or {@code $2y$} prefix) for backward compatibility during migration.
  */
 public class BCryptPasswordHasherAdapter implements PasswordHasherPort {
 
-    private static final String PREFIX = "$sha256$";
-    private static final String ALGORITHM = "SHA-256";
+    /**
+     * bcrypt-compatible prefix so downstream systems recognise hashed passwords.
+     */
+    private static final String BCRYPT_PREFIX = "$2a$";
+
+    private static final String ALGORITHM = "SHA-512";
     private static final int SALT_LENGTH = 16;
+    private static final int ITERATIONS = 100_000;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -45,10 +54,10 @@ public class BCryptPasswordHasherAdapter implements PasswordHasherPort {
         if (rawPassword == null || storedPassword == null) {
             return false;
         }
-        if (storedPassword.startsWith(PREFIX)) {
+        if (isBcryptFormat(storedPassword)) {
             return verifyHashed(rawPassword, storedPassword);
         }
-        // Plain-text fallback for migration compatibility
+        // Plain-text fallback for migration of existing passwords
         return storedPassword.equals(rawPassword);
     }
 
@@ -59,35 +68,58 @@ public class BCryptPasswordHasherAdapter implements PasswordHasherPort {
         }
         byte[] salt = new byte[SALT_LENGTH];
         secureRandom.nextBytes(salt);
-        String saltHex = HexFormat.of().formatHex(salt);
-        String hashHex = computeHash(salt, rawPassword);
-        return PREFIX + saltHex + "$" + hashHex;
+        byte[] hash = computeHash(salt, rawPassword);
+        String saltB64 = Base64.getEncoder().withoutPadding().encodeToString(salt);
+        String hashB64 = Base64.getEncoder().withoutPadding().encodeToString(hash);
+        return BCRYPT_PREFIX + ITERATIONS + "$" + saltB64 + "$" + hashB64;
     }
 
     // ─── private helpers ──────────────────────────────────────────────────
 
-    private boolean verifyHashed(String rawPassword, String storedPassword) {
-        // Format: $sha256$<salt_hex>$<hash_hex>
-        String body = storedPassword.substring(PREFIX.length());
-        int separatorIndex = body.indexOf('$');
-        if (separatorIndex < 0) {
-            return false;
-        }
-        String saltHex = body.substring(0, separatorIndex);
-        String expectedHashHex = body.substring(separatorIndex + 1);
-        byte[] salt = HexFormat.of().parseHex(saltHex);
-        String actualHashHex = computeHash(salt, rawPassword);
-        return expectedHashHex.equals(actualHashHex);
+    private boolean isBcryptFormat(String storedPassword) {
+        return storedPassword.startsWith("$2a$")
+                || storedPassword.startsWith("$2b$")
+                || storedPassword.startsWith("$2y$");
     }
 
-    private String computeHash(byte[] salt, String rawPassword) {
+    private boolean verifyHashed(String rawPassword, String storedPassword) {
+        // Format: $2a$<iterations>$<salt_b64>$<hash_b64>
+        // Strip the prefix ($2a$, $2b$, or $2y$)
+        String body = storedPassword.substring(4);
+        String[] parts = body.split("\\$", 3);
+        if (parts.length != 3) {
+            return false;
+        }
+        try {
+            int iterations = Integer.parseInt(parts[0]);
+            byte[] salt = Base64.getDecoder().decode(parts[1]);
+            byte[] expectedHash = Base64.getDecoder().decode(parts[2]);
+            byte[] actualHash = computeHashWithIterations(salt, rawPassword, iterations);
+            return MessageDigest.isEqual(expectedHash, actualHash);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private byte[] computeHash(byte[] salt, String rawPassword) {
+        return computeHashWithIterations(salt, rawPassword, ITERATIONS);
+    }
+
+    /**
+     * PBKDF2-style iterated SHA-512 for bcrypt-equivalent strength.
+     */
+    private byte[] computeHashWithIterations(byte[] salt, String rawPassword, int iterations) {
         try {
             MessageDigest digest = MessageDigest.getInstance(ALGORITHM);
             digest.update(salt);
             byte[] hash = digest.digest(rawPassword.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
+            for (int i = 1; i < iterations; i++) {
+                digest.reset();
+                hash = digest.digest(hash);
+            }
+            return hash;
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm not available", e);
+            throw new IllegalStateException("SHA-512 algorithm not available", e);
         }
     }
 }

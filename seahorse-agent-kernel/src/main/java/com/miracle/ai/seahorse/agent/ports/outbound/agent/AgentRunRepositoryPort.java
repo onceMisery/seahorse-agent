@@ -56,4 +56,14 @@ public interface AgentRunRepositoryPort {
      * 查询 run 内执行步骤，返回顺序应与 stepNo 一致。
      */
     List<AgentStep> listSteps(String runId);
+
+    /**
+     * Counts the number of currently active (RUNNING) runs for a tenant.
+     *
+     * @param tenantId the tenant identifier
+     * @return active run count; defaults to 0
+     */
+    default long countActiveRunsByTenantId(String tenantId) {
+        return 0L;
+    }
 }

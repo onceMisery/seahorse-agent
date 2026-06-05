@@ -170,6 +170,7 @@ public class SeahorseAgentKernelKnowledgeAutoConfiguration {
             KnowledgeDocumentVectorPorts documentVectorPorts,
             ObjectProvider<DocumentRefreshSchedulePort> refreshSchedulePort,
             ObjectProvider<SchedulerPort> schedulerPort,
+            ObjectProvider<com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService> quotaEnforcementProvider,
             @Value("${seahorse-agent.adapters.mq.pulsar.topics.knowledge-document-chunk:"
                     + KernelKnowledgeDocumentService.DEFAULT_CHUNK_TOPIC + "}") String chunkTopic) {
         return new KernelKnowledgeDocumentService(
@@ -177,7 +178,8 @@ public class SeahorseAgentKernelKnowledgeAutoConfiguration {
                 documentVectorPorts,
                 chunkTopic,
                 refreshSchedulePort.getIfAvailable(DocumentRefreshSchedulePort::noop),
-                schedulerPort.getIfAvailable(SchedulerPort::none));
+                schedulerPort.getIfAvailable(SchedulerPort::none),
+                quotaEnforcementProvider.getIfAvailable());
     }
 
     @Bean

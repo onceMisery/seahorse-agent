@@ -17,10 +17,12 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.knowledge;
 
+import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService;
 import com.miracle.ai.seahorse.agent.kernel.application.ingestion.KernelIngestionEngine;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.IngestionContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeDocumentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.KnowledgeDocumentPageCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UpdateKnowledgeDocumentCommand;
@@ -74,11 +76,12 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
     private final DocumentRefreshSchedulePort refreshSchedulePort;
     private final SchedulerPort schedulerPort;
     private final String chunkTopic;
+    private final QuotaEnforcementService quotaEnforcementService;
 
     public KernelKnowledgeDocumentService(KnowledgeDocumentServicePorts servicePorts,
                                           KnowledgeDocumentVectorPorts vectorPorts,
                                           String chunkTopic) {
-        this(servicePorts, vectorPorts, chunkTopic, DocumentRefreshSchedulePort.noop(), SchedulerPort.none());
+        this(servicePorts, vectorPorts, chunkTopic, DocumentRefreshSchedulePort.noop(), SchedulerPort.none(), null);
     }
 
     public KernelKnowledgeDocumentService(KnowledgeDocumentServicePorts servicePorts,
@@ -86,6 +89,15 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
                                           String chunkTopic,
                                           DocumentRefreshSchedulePort refreshSchedulePort,
                                           SchedulerPort schedulerPort) {
+        this(servicePorts, vectorPorts, chunkTopic, refreshSchedulePort, schedulerPort, null);
+    }
+
+    public KernelKnowledgeDocumentService(KnowledgeDocumentServicePorts servicePorts,
+                                          KnowledgeDocumentVectorPorts vectorPorts,
+                                          String chunkTopic,
+                                          DocumentRefreshSchedulePort refreshSchedulePort,
+                                          SchedulerPort schedulerPort,
+                                          QuotaEnforcementService quotaEnforcementService) {
         KnowledgeDocumentServicePorts safePorts = Objects.requireNonNull(servicePorts,
                 "servicePorts must not be null");
         this.knowledgeBaseQueryPort = safePorts.knowledgeBaseQueryPort();
@@ -98,12 +110,26 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
                 "refreshSchedulePort must not be null");
         this.schedulerPort = Objects.requireNonNull(schedulerPort, "schedulerPort must not be null");
         this.chunkTopic = hasText(chunkTopic) ? chunkTopic : DEFAULT_CHUNK_TOPIC;
+        this.quotaEnforcementService = quotaEnforcementService;
     }
 
     @Override
     public KnowledgeDocumentRecord upload(UploadKnowledgeDocumentCommand command) {
         UploadKnowledgeDocumentCommand safeCommand = Objects.requireNonNull(command, "upload command must not be null");
         KnowledgeBaseRef knowledgeBase = requireKnowledgeBase(safeCommand.kbId());
+
+        // Quota enforcement: check storage limit before uploading file
+        if (quotaEnforcementService != null) {
+            try {
+                String tenantId = TenantContext.get();
+                quotaEnforcementService.checkStorageQuota(tenantId, safeCommand.file().size());
+            } catch (com.miracle.ai.seahorse.agent.kernel.domain.billing.QuotaExceededException ex) {
+                throw ex;
+            } catch (Exception ignored) {
+                // Fail-open: quota system unavailable — do not block upload
+            }
+        }
+
         StoredObject storedObject = uploadToStorage(knowledgeBase.collectionName(), safeCommand);
         return documentRepositoryPort.createPendingDocument(new CreateKnowledgeDocumentCommand(
                 knowledgeBase.id(),

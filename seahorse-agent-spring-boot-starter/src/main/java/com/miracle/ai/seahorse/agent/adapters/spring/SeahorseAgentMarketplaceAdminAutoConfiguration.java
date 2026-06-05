@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAdminTenantService;
 import com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAuditLogService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.KernelAgentMarketplaceService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.RevenueService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KernelKnowledgeBaseVersionService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeBasePermissionService;
 import com.miracle.ai.seahorse.agent.kernel.application.knowledge.KnowledgeBaseShareService;
@@ -28,6 +29,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.admin.AuditLogRepositoryPort
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.marketplace.AgentPublishReviewRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.marketplace.AgentRatingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.marketplace.AgentSubscriptionRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.marketplace.RevenueShareRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBasePermissionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseShareRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseVersionRepositoryPort;
@@ -109,6 +111,17 @@ public class SeahorseAgentMarketplaceAdminAutoConfiguration {
             AgentSubscriptionRepositoryPort subscriptionRepository,
             AgentRatingRepositoryPort ratingRepository) {
         return new KernelAgentMarketplaceService(reviewRepository, subscriptionRepository, ratingRepository);
+    }
+
+    /**
+     * Revenue share service — creator earnings calculation and monthly settlement.
+     */
+    @Bean
+    @ConditionalOnBean(RevenueShareRepositoryPort.class)
+    @ConditionalOnMissingBean(RevenueService.class)
+    public RevenueService seahorseRevenueService(
+            RevenueShareRepositoryPort revenueShareRepository) {
+        return new RevenueService(revenueShareRepository);
     }
 
     // ==================== Admin Operations (Module 10) ====================

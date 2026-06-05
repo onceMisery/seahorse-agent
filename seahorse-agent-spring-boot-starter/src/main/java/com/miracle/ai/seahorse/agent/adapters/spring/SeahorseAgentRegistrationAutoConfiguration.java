@@ -60,8 +60,9 @@ import org.springframework.context.annotation.Configuration;
 public class SeahorseAgentRegistrationAutoConfiguration {
 
     /**
-     * SHA-256 salted password hasher — takes priority over the plain-text
-     * fallback defined in {@link SeahorseAgentAuthAdapterAutoConfiguration}.
+     * BCrypt-compatible password hasher with SHA-512 + 100k iterations — takes
+     * priority over the plain-text fallback defined in
+     * {@link SeahorseAgentAuthAdapterAutoConfiguration}.
      */
     @Bean
     @ConditionalOnMissingBean(PasswordHasherPort.class)

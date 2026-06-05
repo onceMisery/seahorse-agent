@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.dev33.satoken.exception.NotLoginException;
+import com.miracle.ai.seahorse.agent.kernel.domain.billing.QuotaExceededException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -69,6 +70,16 @@ public class SeahorseWebExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public Map<String, Object> advancedFeatureDisabled(AdvancedFeatureDisabledException ex) {
         return error(ex);
+    }
+
+    @ExceptionHandler(QuotaExceededException.class)
+    public org.springframework.http.ResponseEntity<Map<String, Object>> quotaExceeded(QuotaExceededException ex) {
+        LOGGER.warn("Quota exceeded: reason={}, hint={}", ex.getReasonCode(), ex.getUpgradeHint());
+        return org.springframework.http.ResponseEntity.status(402).body(Map.of(
+                "code", ERROR_CODE,
+                "reasonCode", ex.getReasonCode(),
+                "message", ex.getMessage(),
+                "upgradeHint", ex.getUpgradeHint()));
     }
 
     @ExceptionHandler(SecurityException.class)

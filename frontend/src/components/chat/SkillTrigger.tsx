@@ -58,7 +58,6 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
   const [skills, setSkills] = React.useState<AgentSkill[]>([]);
   const [skillsLoading, setSkillsLoading] = React.useState(false);
   const [skillsError, setSkillsError] = React.useState(false);
-  const [skillsError, setSkillsError] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [activeIndex, setActiveIndex] = React.useState(0);

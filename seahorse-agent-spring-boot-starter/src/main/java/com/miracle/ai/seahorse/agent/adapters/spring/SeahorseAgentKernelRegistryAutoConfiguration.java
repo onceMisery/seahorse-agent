@@ -180,12 +180,14 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             AgentDefinitionRepositoryPort agentDefinitionRepositoryPort,
             AgentRunRepositoryPort agentRunRepositoryPort,
             CurrentUserPort currentUserPort,
-            ObjectProvider<Clock> clockProvider) {
+            ObjectProvider<Clock> clockProvider,
+            ObjectProvider<com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService> quotaEnforcementProvider) {
         return new KernelAgentRunService(
                 agentDefinitionRepositoryPort,
                 agentRunRepositoryPort,
                 currentUserPort,
-                clockProvider.getIfAvailable(Clock::systemUTC));
+                clockProvider.getIfAvailable(Clock::systemUTC),
+                quotaEnforcementProvider.getIfAvailable());
     }
 
     @Bean
