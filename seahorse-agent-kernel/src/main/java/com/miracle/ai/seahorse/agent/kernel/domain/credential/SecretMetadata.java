@@ -18,24 +18,77 @@
 package com.miracle.ai.seahorse.agent.kernel.domain.credential;
 
 import java.time.Instant;
-import java.util.Objects;
 
 /**
  * Secret metadata returned to management callers. It never carries secret plaintext.
+ *
+ * @param secretRef   unique secret reference identifier
+ * @param tenantId    owning tenant
+ * @param name        human-readable secret name
+ * @param secretType  type classification (e.g. API_KEY, OAUTH_TOKEN)
+ * @param maskedHint  masked hint for display (e.g. "sk-****abcd")
+ * @param status      current lifecycle status
+ * @param expiresAt   optional expiry time
+ * @param createdAt   creation timestamp
  */
 public record SecretMetadata(
         String secretRef,
         String tenantId,
-        String metadataJson,
-        Instant createdAt,
-        Instant rotatedAt
+        String name,
+        String secretType,
+        String maskedHint,
+        SecretStatus status,
+        Instant expiresAt,
+        Instant createdAt
 ) {
 
     public SecretMetadata {
         secretRef = requireText(secretRef, "secretRef must not be blank");
         tenantId = requireText(tenantId, "tenantId must not be blank");
-        metadataJson = Objects.requireNonNullElse(metadataJson, "");
-        createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
+        status = status == null ? SecretStatus.ACTIVE : status;
+    }
+
+    /**
+     * Backward-compatible constructor for existing callers using the legacy
+     * {@code (secretRef, tenantId, metadataJson, createdAt, rotatedAt)} signature.
+     *
+     * @param secretRef     unique secret reference
+     * @param tenantId      owning tenant
+     * @param metadataJson  metadata JSON (mapped to maskedHint for display)
+     * @param createdAt     creation timestamp
+     * @param rotatedAt     rotation timestamp (unused in new schema, retained for compat)
+     */
+    public SecretMetadata(String secretRef, String tenantId, String metadataJson,
+                          Instant createdAt, Instant rotatedAt) {
+        this(secretRef, tenantId, null, null, metadataJson, SecretStatus.ACTIVE, null, createdAt);
+    }
+
+    /**
+     * Backward-compatible accessor: returns the maskedHint as the legacy metadataJson field.
+     */
+    public String metadataJson() {
+        return maskedHint != null ? maskedHint : "";
+    }
+
+    /**
+     * Backward-compatible accessor: rotation timestamp is no longer tracked on this record.
+     */
+    public Instant rotatedAt() {
+        return null;
+    }
+
+    /**
+     * Returns {@code true} if this secret has passed its expiry time.
+     */
+    public boolean isExpired(Instant now) {
+        return expiresAt != null && now.isAfter(expiresAt);
+    }
+
+    /**
+     * Returns {@code true} if the secret is currently in ACTIVE status.
+     */
+    public boolean isActive() {
+        return status == SecretStatus.ACTIVE;
     }
 
     private static String requireText(String value, String message) {
