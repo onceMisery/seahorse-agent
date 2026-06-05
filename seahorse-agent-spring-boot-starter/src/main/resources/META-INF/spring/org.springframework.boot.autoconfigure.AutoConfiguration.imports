@@ -69,3 +69,9 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentSecurityAutoConfigura
 
 # Layer 10: Billing system (after kernel sub-configs)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentBillingAutoConfiguration
+
+# Layer 11: RAG + Workflow visualization
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRagWorkflowAutoConfiguration
+
+# Layer 12: Knowledge base enhancement + Marketplace + Admin operations
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMarketplaceAdminAutoConfiguration
