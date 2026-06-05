@@ -62,3 +62,7 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRuntimeGuardAutoConfi
 
 # Layer 8: Alert notification (after runtime guards)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAlertAutoConfiguration
+
+# Layer 9: User registration + Security hardening
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRegistrationAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentSecurityAutoConfiguration
