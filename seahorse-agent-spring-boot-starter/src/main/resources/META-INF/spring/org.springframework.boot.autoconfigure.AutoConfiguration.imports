@@ -75,3 +75,7 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRagWorkflowAutoConfig
 
 # Layer 12: Knowledge base enhancement + Marketplace + Admin operations
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMarketplaceAdminAutoConfiguration
+
+# Layer 13: AOP aspects + Trial interceptor + Redis health
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAopAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRedisHealthAutoConfiguration
