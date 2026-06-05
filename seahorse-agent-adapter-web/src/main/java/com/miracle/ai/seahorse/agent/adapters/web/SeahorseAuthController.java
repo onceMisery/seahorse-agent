@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.IpGeolocationPort;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,6 +45,7 @@ public class SeahorseAuthController {
         this(authInboundPortProvider, null);
     }
 
+    @Autowired
     public SeahorseAuthController(ObjectProvider<AuthInboundPort> authInboundPortProvider,
                                   ObjectProvider<IpGeolocationPort> ipGeolocationPortProvider) {
         this.authInboundPortProvider = authInboundPortProvider;

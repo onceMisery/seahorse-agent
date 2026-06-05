@@ -271,11 +271,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
-      args:
-        HTTP_PROXY: http://host.docker.internal:7890
-        HTTPS_PROXY: http://host.docker.internal:7890
-        NO_PROXY: localhost,127.0.0.1
+      dockerfile: Dockerfile.backend.simplified
     container_name: seahorse-backend
     ports:
       - "9090:9090"
@@ -389,6 +385,7 @@ services:
     volumes:
       - seahorse-storage:/app/seahorse-agent-storage
     networks:
+      - default
       - seahorse-net
     restart: unless-stopped
 
@@ -432,7 +429,7 @@ services:
     container_name: seahorse-grafana
     restart: unless-stopped
     ports:
-      - "3001:3000"
+      - "13001:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-seahorse}
