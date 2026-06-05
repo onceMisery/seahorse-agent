@@ -76,6 +76,8 @@ docker compose -f docker-compose.full.yml up -d --build
 | Pulsar Broker | 6650 | 消息队列 | 全量 |
 | Pulsar 管理台 | 8080 | Pulsar Web UI | 全量 |
 | ZooKeeper | 2181 | Pulsar 元数据 | 全量 |
+| Prometheus | 19090 | 指标采集 | 全量 |
+| Grafana | 3001 | 监控仪表板 | 全量 |
 
 ## 配置说明
 
@@ -113,6 +115,10 @@ SEAHORSE_AGENT_ADAPTERS_AI_EMBEDDING_MODEL=text-embedding-3-small
 |------|------|
 | http://localhost | 前端界面 |
 | http://localhost:9090 | 后端 API |
+| http://localhost:9090/actuator/health | 健康检查 |
+| http://localhost:9090/actuator/prometheus | Prometheus 指标 |
+| http://localhost:19090 | Prometheus UI（全量） |
+| http://localhost:3001 | Grafana 仪表板（全量） |
 | http://localhost:9001 | MinIO 控制台（全量） |
 | http://localhost:8000 | Milvus Attu（全量） |
 | http://localhost:8080 | Pulsar 管理台（全量） |
@@ -190,6 +196,42 @@ docker compose -f docker-compose.full.yml down -v
 docker compose -f docker-compose.full.yml up -d --build
 ```
 
+## SaaS 配置
+
+全量部署模式默认启用 SaaS 功能，最小化部署可通过 `.env` 关闭：
+
+```env
+# 多租户隔离（默认启用）
+SEAHORSE_AGENT_TENANT_ENABLED=true
+
+# 计费系统（默认启用）
+SEAHORSE_AGENT_BILLING_ENABLED=true
+
+# 钉钉告警（需配置 webhook）
+SEAHORSE_AGENT_OBSERVABILITY_ALERT_ENABLED=false
+SEAHORSE_ALERT_DINGTALK_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=xxx
+SEAHORSE_ALERT_DINGTALK_SECRET=SECxxx
+
+# IP 地理位置解析（调用 ip-api.com，默认关闭）
+SEAHORSE_AGENT_AUTH_GEOLOCATION_ENABLED=false
+
+# 超管 IP 白名单（逗号分隔，空则允许所有 IP）
+SEAHORSE_ADMIN_ALLOWED_IPS=
+
+# 试用配置
+SEAHORSE_AGENT_USER_TRIAL_DURATION_DAYS=14
+SEAHORSE_AGENT_USER_TRIAL_TOKEN_LIMIT=2000000
+SEAHORSE_AGENT_USER_TRIAL_STORAGE_LIMIT_BYTES=1073741824
+```
+
+### 监控仪表板
+
+全量部署自动启动 Prometheus + Grafana：
+
+1. 访问 http://localhost:3001（admin / seahorse，可通过 `GRAFANA_ADMIN_PASSWORD` 修改）
+2. Grafana 已预配置 Prometheus 数据源（`http://prometheus:9090`）
+3. 导入 Spring Boot 仪表板：Dashboard ID `12900`（JVM Micrometer）
+
 ## 架构图
 
 ```
@@ -202,5 +244,8 @@ docker compose -f docker-compose.full.yml up -d --build
 ├──────────┴──────────┴──────────┴──────────┴──────────┴──────────────┤
 │                       Backend (Java 17)             :9090           │
 │                       Frontend (nginx + React)      :80             │
+├──────────────────────────────────────────────────────────────────────┤
+│  Prometheus :19090          │  Grafana :3001                         │
+│  (指标采集 /actuator/prometheus)  │  (监控仪表板)                     │
 └──────────────────────────────────────────────────────────────────────┘
 ```

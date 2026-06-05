@@ -45,10 +45,10 @@ CREATE TABLE IF NOT EXISTS sa_agent_subscription (
 );
 
 CREATE INDEX IF NOT EXISTS idx_subscription_agent ON sa_agent_subscription (agent_id);
-CREATE INDEX IF NOT EXISTS idx_subscription_user ON sa_agent_subscription (user_id);
-CREATE INDEX IF NOT EXISTS idx_subscription_tenant ON sa_agent_subscription (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_agent_subscription_user ON sa_agent_subscription (user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_subscription_tenant ON sa_agent_subscription (tenant_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_unique ON sa_agent_subscription (agent_id, user_id);
-CREATE INDEX IF NOT EXISTS idx_subscription_active ON sa_agent_subscription (active);
+CREATE INDEX IF NOT EXISTS idx_agent_subscription_active ON sa_agent_subscription (active);
 
 -- Phase 4: Agent rating
 CREATE TABLE IF NOT EXISTS sa_agent_rating (

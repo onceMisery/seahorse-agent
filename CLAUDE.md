@@ -17,14 +17,22 @@ seahorse-agent-tests/               # 集成测试
 
 ## 自动配置架构
 
-所有自动配置类注册在 `AutoConfiguration.imports` 中，分 6 层：
+所有自动配置类注册在 `AutoConfiguration.imports` 中，分 13 层：
 
-1. **Layer 1 — Adapters**（15 个，after DataSource）：向量、缓存、存储、MQ、搜索等
+0. **Layer 0 — Multi-tenancy**（after DataSource）：租户隔离、RLS、TenantContext
+1. **Layer 1 — Adapters**（20 个，after DataSource）：向量、缓存、存储、MQ、搜索等
 2. **Layer 2 — Outbox relay**（after MQ + Ops）
 3. **Layer 3 — Native aggregator**（after DataSource）
 4. **Layer 4 — Kernel auth**（after Auth adapter）
 5. **Layer 5 — Kernel main**（after Native aggregator）
-6. **Layer 6 — Kernel sub-configs**（11 个，after Kernel main + 各自依赖的 adapter）
+6. **Layer 6 — Kernel sub-configs**（16 个，after Kernel main + 各自依赖的 adapter）
+7. **Layer 7 — Runtime guards**（after kernel sub-configs）
+8. **Layer 8 — Alert notification**（after runtime guards）：DingTalk 告警
+9. **Layer 9 — Registration + Security**：用户注册、BCrypt、安全加固
+10. **Layer 10 — Billing**：计费、订阅、配额强制
+11. **Layer 11 — RAG + Workflow**：高级 RAG、工作流可视化
+12. **Layer 12 — KB + Marketplace + Admin**：知识库增强、Agent 市场、管理后台
+13. **Layer 13 — AOP + Health**：权限切面、试用拦截器、Redis 健康检查
 
 **关键规则：** kernel 子配置必须在 `@AutoConfigureAfter` 中声明所有产生 `@ConditionalOnBean` 依赖的 adapter/repository 配置。
 
@@ -69,7 +77,28 @@ EOF
 docker compose -f docker-compose.full.yml up -d backend
 ```
 
-### 适配器配置（环境变量）
+### SaaS 模块
+
+| 模块 | 核心类 | 说明 |
+|------|--------|------|
+| 多租户 | `TenantContext`, `TenantInterceptor`, `JdbcTenantSupport` | ThreadLocal 租户上下文 + RLS 防御 |
+| 安全加固 | `SandboxPathValidator`, `SecretRotationService`, `ForbiddenException` | 沙箱/密钥/ACL 强制阻断 |
+| 用户体系 | `KernelRegistrationService`, `KernelTrialService`, `BCryptPasswordHasherAdapter` | 注册/试用/密码 |
+| 计费 | `KernelSubscriptionService`, `KernelPaymentService`, `QuotaEnforcementService` | 套餐/支付/配额 |
+| 监控 | `KernelAlertEvaluationService`, `DingTalkAlertNotifierAdapter` | Actuator + 告警 |
+| 知识库 | `KernelKnowledgeBaseVersionService`, `KnowledgeBaseShareService` | 版本/权限/分享 |
+| Agent 市场 | `KernelAgentMarketplaceService`, `RevenueService` | 发布/订阅/收益 |
+| 工作流 | `KernelWorkflowVisualizationService`, `WorkflowEventPublisher` | DAG + SSE |
+| 高级 RAG | `JinaRerankModelAdapter`, `CachedRetrievalEngine` | Reranker + 缓存 |
+| 管理后台 | `KernelAdminTenantService`, `KernelAuditLogService` | 租户/审计 |
+
+## 数据库迁移
+
+全量 SQL：`resources/database/seahorse_init.sql`（包含 V2-V13 所有迁移）
+增量迁移：`resources/database/migrations/V2__` 到 `V13__`
+应用启动时 `JdbcTenantSchemaUpgrade` + `JdbcChatSchemaUpgrade` 幂等执行。
+
+## 适配器配置（环境变量）
 
 | 适配器 | 环境变量前缀 | 类型选项 |
 |--------|-------------|---------|
@@ -79,6 +108,7 @@ docker compose -f docker-compose.full.yml up -d backend
 | 消息队列 | `SEAHORSE_AGENT_ADAPTERS_MQ_` | pulsar, direct |
 | 搜索 | `SEAHORSE_AGENT_ADAPTERS_SEARCH_` | elasticsearch, lucene |
 | AI 模型 | `SEAHORSE_AGENT_ADAPTERS_AI_` | openai-compatible |
+| 监控 | `SEAHORSE_AGENT_OBSERVABILITY_` | micrometer, noop |
 
 ## 已知问题
 

@@ -2061,7 +2061,548 @@ CREATE INDEX IF NOT EXISTS idx_sa_ai_model_config_key
     ON sa_ai_model_config(config_key, deleted);
 
 -- PostgreSQL Initial Data for Seahorse Agent
+-- NOTE: Admin user seed moved to end of file (after SaaS MVP extensions add tenant_id/email columns)
 
-INSERT INTO t_user (id, username, password, role, avatar, create_time, update_time, deleted)
-VALUES (2001523723396308993, 'admin', 'admin', 'admin', 'https://avatars.githubusercontent.com/u/37446017?v=4', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+-- ============================================
+-- SaaS MVP Extensions (V2-V13)
+-- Merged from resources/database/migrations/
+-- ============================================
+
+-- ---- V2: Multi-Tenancy ----
+-- Add tenant_id to core tables
+ALTER TABLE t_user ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_conversation ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_conversation_summary ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_message ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE sa_conversation_attachment ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_message_feedback ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_knowledge_base ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_knowledge_document ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_knowledge_chunk ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_knowledge_document_chunk_log ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_knowledge_vector ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_intent_node ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_query_term_mapping ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_rag_trace_run ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_rag_trace_node ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE t_sample_question ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64) NOT NULL DEFAULT 'default';
+
+-- Tenant indexes
+CREATE INDEX IF NOT EXISTS idx_t_user_tenant ON t_user (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_t_conversation_tenant ON t_conversation (tenant_id, user_id, last_time);
+CREATE INDEX IF NOT EXISTS idx_t_conv_summary_tenant ON t_conversation_summary (tenant_id, conversation_id);
+CREATE INDEX IF NOT EXISTS idx_t_message_tenant ON t_message (tenant_id, conversation_id, create_time);
+CREATE INDEX IF NOT EXISTS idx_sa_conv_attach_tenant ON sa_conversation_attachment (tenant_id, conversation_id);
+CREATE INDEX IF NOT EXISTS idx_t_msg_feedback_tenant ON t_message_feedback (tenant_id, conversation_id);
+CREATE INDEX IF NOT EXISTS idx_t_kb_tenant ON t_knowledge_base (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_t_kb_doc_tenant ON t_knowledge_document (tenant_id, kb_id);
+CREATE INDEX IF NOT EXISTS idx_t_kb_chunk_tenant ON t_knowledge_chunk (tenant_id, doc_id);
+CREATE INDEX IF NOT EXISTS idx_t_kb_chunk_log_tenant ON t_knowledge_document_chunk_log (tenant_id, doc_id);
+CREATE INDEX IF NOT EXISTS idx_t_intent_node_tenant ON t_intent_node (tenant_id, kb_id);
+CREATE INDEX IF NOT EXISTS idx_t_qtm_tenant ON t_query_term_mapping (tenant_id, domain);
+CREATE INDEX IF NOT EXISTS idx_t_rag_trace_run_tenant ON t_rag_trace_run (tenant_id, trace_id);
+CREATE INDEX IF NOT EXISTS idx_t_rag_trace_node_tenant ON t_rag_trace_node (tenant_id, trace_id);
+CREATE INDEX IF NOT EXISTS idx_t_sample_q_tenant ON t_sample_question (tenant_id);
+
+-- Enable Row Level Security
+ALTER TABLE t_user ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_conversation ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_conversation_summary ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_message ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sa_conversation_attachment ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_message_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_knowledge_base ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_knowledge_document ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_knowledge_chunk ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_knowledge_document_chunk_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_knowledge_vector ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_intent_node ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_query_term_mapping ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_rag_trace_run ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_rag_trace_node ENABLE ROW LEVEL SECURITY;
+ALTER TABLE t_sample_question ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sa_agent_definition ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sa_quota_policy ENABLE ROW LEVEL SECURITY;
+
+-- Force RLS for table owners
+ALTER TABLE t_user FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_conversation FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_conversation_summary FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_message FORCE ROW LEVEL SECURITY;
+ALTER TABLE sa_conversation_attachment FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_message_feedback FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_knowledge_base FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_knowledge_document FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_knowledge_chunk FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_knowledge_document_chunk_log FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_knowledge_vector FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_intent_node FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_query_term_mapping FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_rag_trace_run FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_rag_trace_node FORCE ROW LEVEL SECURITY;
+ALTER TABLE t_sample_question FORCE ROW LEVEL SECURITY;
+ALTER TABLE sa_agent_definition FORCE ROW LEVEL SECURITY;
+ALTER TABLE sa_quota_policy FORCE ROW LEVEL SECURITY;
+
+-- RLS policies
+CREATE POLICY rls_tenant_isolation ON t_user
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_conversation
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_conversation_summary
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_message
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON sa_conversation_attachment
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_message_feedback
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_knowledge_base
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_knowledge_document
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_knowledge_chunk
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_knowledge_document_chunk_log
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_knowledge_vector
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_intent_node
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_query_term_mapping
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_rag_trace_run
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_rag_trace_node
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON t_sample_question
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON sa_agent_definition
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY rls_tenant_isolation ON sa_quota_policy
+    USING (tenant_id = current_setting('app.current_tenant_id', true));
+
+-- ---- V3: User Trial ----
+-- Extend t_user with registration fields
+ALTER TABLE t_user ADD COLUMN IF NOT EXISTS email       VARCHAR(128);
+ALTER TABLE t_user ADD COLUMN IF NOT EXISTS status      VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE t_user ADD COLUMN IF NOT EXISTS external_id VARCHAR(128);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_t_user_email ON t_user (email) WHERE email IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_t_user_external_id ON t_user (external_id) WHERE external_id IS NOT NULL;
+
+-- User trial table
+CREATE TABLE IF NOT EXISTS t_user_trial (
+    id                BIGINT       NOT NULL PRIMARY KEY,
+    user_id           BIGINT       NOT NULL,
+    tenant_id         VARCHAR(64)  NOT NULL,
+    plan_code         VARCHAR(32),
+    status            VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE',
+    token_limit       BIGINT       NOT NULL DEFAULT 0,
+    storage_limit_bytes BIGINT     NOT NULL DEFAULT 0,
+    concurrency_limit INTEGER      NOT NULL DEFAULT 1,
+    started_at        TIMESTAMP,
+    expires_at        TIMESTAMP,
+    notified_at       TIMESTAMP,
+    created_at        TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_trial_user_id   ON t_user_trial (user_id);
+CREATE INDEX IF NOT EXISTS idx_trial_tenant_id ON t_user_trial (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_trial_status    ON t_user_trial (status);
+
+-- ---- V4: Secret & Credential Enhancement ----
+ALTER TABLE sa_secret_ref ADD COLUMN IF NOT EXISTS name VARCHAR(128);
+ALTER TABLE sa_secret_ref ADD COLUMN IF NOT EXISTS secret_type VARCHAR(32);
+ALTER TABLE sa_secret_ref ADD COLUMN IF NOT EXISTS masked_hint VARCHAR(64);
+ALTER TABLE sa_secret_ref ADD COLUMN IF NOT EXISTS status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE sa_secret_ref ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;
+ALTER TABLE sa_secret_ref ADD COLUMN IF NOT EXISTS rotated_by VARCHAR(64);
+ALTER TABLE sa_secret_ref ADD COLUMN IF NOT EXISTS rotated_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_sa_secret_ref_tenant_status ON sa_secret_ref (tenant_id, status);
+
+ALTER TABLE sa_connector_credential_binding ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;
+ALTER TABLE sa_connector_credential_binding ADD COLUMN IF NOT EXISTS last_verified_at TIMESTAMP;
+ALTER TABLE sa_connector_credential_binding ADD COLUMN IF NOT EXISTS verify_status VARCHAR(32) NOT NULL DEFAULT 'UNVERIFIED';
+
+-- ---- V5: Billing Tables ----
+-- Subscription plan definitions
+CREATE TABLE IF NOT EXISTS sa_subscription_plan (
+    id                  BIGINT         NOT NULL PRIMARY KEY,
+    code                VARCHAR(32)    NOT NULL,
+    name                VARCHAR(128)   NOT NULL,
+    description         VARCHAR(512),
+    monthly_price       DECIMAL(12,2)  NOT NULL DEFAULT 0.00,
+    yearly_price        DECIMAL(12,2)  NOT NULL DEFAULT 0.00,
+    token_limit         BIGINT         NOT NULL DEFAULT 0,
+    storage_limit_bytes BIGINT         NOT NULL DEFAULT 0,
+    concurrency_limit   INTEGER        NOT NULL DEFAULT 1,
+    active              BOOLEAN        NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_code ON sa_subscription_plan (code);
+
+-- Seed default plans
+INSERT INTO sa_subscription_plan (id, code, name, description, monthly_price, yearly_price, token_limit, storage_limit_bytes, concurrency_limit, active)
+VALUES
+    (1, 'FREE_TRIAL', 'Free Trial', 'Free trial with limited quota', 0.00, 0.00, 100000, 1073741824, 1, TRUE),
+    (2, 'BASIC', 'Basic', 'Basic plan for small teams', 29.99, 299.99, 1000000, 10737418240, 5, TRUE),
+    (3, 'PRO', 'Pro', 'Professional plan for growing teams', 99.99, 999.99, 10000000, 107374182400, 20, TRUE),
+    (4, 'ENTERPRISE', 'Enterprise', 'Enterprise plan with unlimited quota', 499.99, 4999.99, 100000000, 1099511627776, 100, TRUE)
+ON CONFLICT DO NOTHING;
+
+-- Tenant subscriptions
+CREATE TABLE IF NOT EXISTS sa_subscription (
+    id                  BIGINT         NOT NULL PRIMARY KEY,
+    tenant_id           VARCHAR(64)    NOT NULL,
+    plan_code           VARCHAR(32)    NOT NULL,
+    status              VARCHAR(32)    NOT NULL DEFAULT 'ACTIVE',
+    started_at          TIMESTAMP,
+    expires_at          TIMESTAMP,
+    token_limit         BIGINT         NOT NULL DEFAULT 0,
+    storage_limit_bytes BIGINT         NOT NULL DEFAULT 0,
+    concurrency_limit   INTEGER        NOT NULL DEFAULT 1,
+    created_at          TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_subscription_tenant ON sa_subscription (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_subscription_status ON sa_subscription (status);
+CREATE INDEX IF NOT EXISTS idx_subscription_tenant_status ON sa_subscription (tenant_id, status);
+
+-- Payment orders
+CREATE TABLE IF NOT EXISTS sa_payment_order (
+    id                BIGINT         NOT NULL PRIMARY KEY,
+    order_no          VARCHAR(64)    NOT NULL,
+    tenant_id         VARCHAR(64)    NOT NULL,
+    plan_code         VARCHAR(32)    NOT NULL,
+    payment_channel   VARCHAR(32)    NOT NULL,
+    status            VARCHAR(32)    NOT NULL DEFAULT 'PENDING',
+    amount            DECIMAL(12,2)  NOT NULL DEFAULT 0.00,
+    channel_trade_no  VARCHAR(128),
+    created_at        TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    paid_at           TIMESTAMP,
+    updated_at        TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_order_no ON sa_payment_order (order_no);
+CREATE INDEX IF NOT EXISTS idx_payment_order_tenant ON sa_payment_order (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_payment_order_status ON sa_payment_order (status);
+CREATE INDEX IF NOT EXISTS idx_payment_order_channel_trade ON sa_payment_order (channel_trade_no) WHERE channel_trade_no IS NOT NULL;
+
+-- Payment callback log (idempotency)
+CREATE TABLE IF NOT EXISTS sa_payment_callback_log (
+    id                BIGINT         NOT NULL PRIMARY KEY,
+    channel           VARCHAR(32)    NOT NULL,
+    channel_trade_no  VARCHAR(128)   NOT NULL,
+    order_no          VARCHAR(64)    NOT NULL,
+    created_at        TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_callback_channel_trade ON sa_payment_callback_log (channel, channel_trade_no);
+CREATE INDEX IF NOT EXISTS idx_callback_order_no ON sa_payment_callback_log (order_no);
+
+-- Usage rollup
+CREATE TABLE IF NOT EXISTS sa_usage_rollup (
+    id                BIGINT         NOT NULL PRIMARY KEY,
+    tenant_id         VARCHAR(64)    NOT NULL,
+    period            VARCHAR(7)     NOT NULL,
+    token_used        BIGINT         NOT NULL DEFAULT 0,
+    call_count        BIGINT         NOT NULL DEFAULT 0,
+    storage_bytes     BIGINT         NOT NULL DEFAULT 0,
+    cost_amount       DECIMAL(12,2)  NOT NULL DEFAULT 0.00,
+    created_at        TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_rollup_tenant_period ON sa_usage_rollup (tenant_id, period);
+CREATE INDEX IF NOT EXISTS idx_usage_rollup_period ON sa_usage_rollup (period);
+
+-- Bills
+CREATE TABLE IF NOT EXISTS sa_bill (
+    id                BIGINT         NOT NULL PRIMARY KEY,
+    bill_no           VARCHAR(64)    NOT NULL,
+    tenant_id         VARCHAR(64)    NOT NULL,
+    bill_period       VARCHAR(7)     NOT NULL,
+    total_amount      DECIMAL(12,2)  NOT NULL DEFAULT 0.00,
+    status            VARCHAR(32)    NOT NULL DEFAULT 'GENERATED',
+    generated_at      TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    due_at            TIMESTAMP,
+    updated_at        TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bill_no ON sa_bill (bill_no);
+CREATE INDEX IF NOT EXISTS idx_bill_tenant ON sa_bill (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_bill_period ON sa_bill (bill_period);
+CREATE INDEX IF NOT EXISTS idx_bill_tenant_period ON sa_bill (tenant_id, bill_period);
+CREATE INDEX IF NOT EXISTS idx_bill_status ON sa_bill (status);
+
+-- Bill line items
+CREATE TABLE IF NOT EXISTS sa_bill_line_item (
+    id                BIGINT         NOT NULL PRIMARY KEY,
+    bill_id           BIGINT         NOT NULL,
+    item_type         VARCHAR(32)    NOT NULL,
+    description       VARCHAR(256),
+    amount            DECIMAL(12,2)  NOT NULL DEFAULT 0.00,
+    quantity          BIGINT         NOT NULL DEFAULT 0,
+    created_at        TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_bill_line_item_bill ON sa_bill_line_item (bill_id);
+CREATE INDEX IF NOT EXISTS idx_bill_line_item_type ON sa_bill_line_item (item_type);
+
+-- ---- V6: Query Rewrite Log ----
+CREATE TABLE IF NOT EXISTS sa_query_rewrite_log (
+    id                BIGSERIAL      PRIMARY KEY,
+    tenant_id         VARCHAR(64)    NOT NULL DEFAULT 'default',
+    original_query    TEXT           NOT NULL,
+    rewritten_queries TEXT           NOT NULL,
+    rewrite_method    VARCHAR(64),
+    hit_count         INTEGER        DEFAULT 0,
+    created_at        TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_qrl_tenant ON sa_query_rewrite_log (tenant_id, created_at);
+
+-- ---- V7: Workflow Execution Steps ----
+CREATE TABLE IF NOT EXISTS t_agent_execution_steps (
+    step_id        VARCHAR(64)    NOT NULL PRIMARY KEY,
+    run_id         VARCHAR(64)    NOT NULL,
+    step_type      VARCHAR(32)    NOT NULL,
+    status         VARCHAR(32)    NOT NULL DEFAULT 'PENDING',
+    started_at     TIMESTAMP,
+    completed_at   TIMESTAMP,
+    duration_ms    BIGINT,
+    result_data    TEXT,
+    position_x     INTEGER,
+    position_y     INTEGER,
+    created_at     TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_exec_steps_run ON t_agent_execution_steps (run_id);
+CREATE INDEX IF NOT EXISTS idx_exec_steps_status ON t_agent_execution_steps (status);
+CREATE INDEX IF NOT EXISTS idx_exec_steps_run_started ON t_agent_execution_steps (run_id, started_at);
+
+CREATE TABLE IF NOT EXISTS t_agent_execution_step_edges (
+    id               BIGSERIAL      PRIMARY KEY,
+    source_step_id   VARCHAR(64)    NOT NULL,
+    target_step_id   VARCHAR(64)    NOT NULL,
+    edge_type        VARCHAR(32)    NOT NULL DEFAULT 'SEQUENTIAL',
+    created_at       TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_exec_edges_source ON t_agent_execution_step_edges (source_step_id);
+CREATE INDEX IF NOT EXISTS idx_exec_edges_target ON t_agent_execution_step_edges (target_step_id);
+CREATE INDEX IF NOT EXISTS idx_exec_edges_source_target ON t_agent_execution_step_edges (source_step_id, target_step_id);
+
+-- ---- V8: Knowledge Base Enhancement ----
+-- Knowledge base version snapshots
+CREATE TABLE IF NOT EXISTS t_knowledge_base_version (
+    id                 BIGINT         NOT NULL PRIMARY KEY,
+    kb_id              BIGINT         NOT NULL,
+    tenant_id          VARCHAR(64)    NOT NULL,
+    version_number     INTEGER        NOT NULL,
+    snapshot_json      JSONB          NOT NULL,
+    created_by         VARCHAR(128)   NOT NULL,
+    created_at         TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    change_description VARCHAR(512)
+);
+CREATE INDEX IF NOT EXISTS idx_kb_version_kb_id ON t_knowledge_base_version (kb_id);
+CREATE INDEX IF NOT EXISTS idx_kb_version_tenant ON t_knowledge_base_version (tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kb_version_unique ON t_knowledge_base_version (kb_id, version_number);
+CREATE INDEX IF NOT EXISTS idx_kb_version_created_at ON t_knowledge_base_version (created_at);
+
+-- Knowledge base permission control
+CREATE TABLE IF NOT EXISTS t_knowledge_base_permission (
+    id          BIGINT         NOT NULL PRIMARY KEY,
+    kb_id       BIGINT         NOT NULL,
+    tenant_id   VARCHAR(64)    NOT NULL,
+    user_id     BIGINT         NOT NULL,
+    permission  VARCHAR(32)    NOT NULL,
+    granted_at  TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_kb_permission_kb_id ON t_knowledge_base_permission (kb_id);
+CREATE INDEX IF NOT EXISTS idx_kb_permission_tenant ON t_knowledge_base_permission (tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kb_permission_user ON t_knowledge_base_permission (kb_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_kb_permission_granted ON t_knowledge_base_permission (granted_at);
+
+-- Knowledge base external sharing
+CREATE TABLE IF NOT EXISTS t_knowledge_base_share (
+    id                  BIGINT         NOT NULL PRIMARY KEY,
+    kb_id               BIGINT         NOT NULL,
+    tenant_id           VARCHAR(64)    NOT NULL,
+    share_token         VARCHAR(64)    NOT NULL,
+    password_hash       VARCHAR(128),
+    expires_at          TIMESTAMP,
+    max_access_count    INTEGER        NOT NULL DEFAULT 0,
+    current_access_count INTEGER       NOT NULL DEFAULT 0,
+    created_at          TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kb_share_token ON t_knowledge_base_share (share_token);
+CREATE INDEX IF NOT EXISTS idx_kb_share_kb_id ON t_knowledge_base_share (kb_id);
+CREATE INDEX IF NOT EXISTS idx_kb_share_tenant ON t_knowledge_base_share (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_kb_share_expires ON t_knowledge_base_share (expires_at);
+
+-- Knowledge base share access log
+CREATE TABLE IF NOT EXISTS t_knowledge_base_share_access_log (
+    id          BIGINT         NOT NULL PRIMARY KEY,
+    share_id    BIGINT         NOT NULL,
+    accessed_at TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    ip_address  VARCHAR(64),
+    user_agent  VARCHAR(512),
+    referrer    VARCHAR(512)
+);
+CREATE INDEX IF NOT EXISTS idx_kb_share_log_share ON t_knowledge_base_share_access_log (share_id);
+CREATE INDEX IF NOT EXISTS idx_kb_share_log_accessed ON t_knowledge_base_share_access_log (accessed_at);
+
+-- ---- V9: Agent Marketplace ----
+-- Add marketplace columns to agent definition
+ALTER TABLE sa_agent_definition ADD COLUMN IF NOT EXISTS visibility VARCHAR(32) DEFAULT 'PRIVATE';
+ALTER TABLE sa_agent_definition ADD COLUMN IF NOT EXISTS category VARCHAR(64);
+ALTER TABLE sa_agent_definition ADD COLUMN IF NOT EXISTS tags VARCHAR(512);
+ALTER TABLE sa_agent_definition ADD COLUMN IF NOT EXISTS pricing_type VARCHAR(32) DEFAULT 'FREE';
+ALTER TABLE sa_agent_definition ADD COLUMN IF NOT EXISTS price DECIMAL(10,2) DEFAULT 0.00;
+ALTER TABLE sa_agent_definition ADD COLUMN IF NOT EXISTS review_status VARCHAR(32) DEFAULT 'NOT_SUBMITTED';
+CREATE INDEX IF NOT EXISTS idx_agent_visibility ON sa_agent_definition (visibility);
+CREATE INDEX IF NOT EXISTS idx_agent_category ON sa_agent_definition (category);
+CREATE INDEX IF NOT EXISTS idx_agent_review_status ON sa_agent_definition (review_status);
+
+-- Agent publish review
+CREATE TABLE IF NOT EXISTS sa_agent_publish_review (
+    id              BIGINT         NOT NULL PRIMARY KEY,
+    agent_id        VARCHAR(64)    NOT NULL,
+    tenant_id       VARCHAR(64)    NOT NULL,
+    submitted_by    VARCHAR(128)   NOT NULL,
+    status          VARCHAR(32)    NOT NULL DEFAULT 'PENDING',
+    review_comment  VARCHAR(1024),
+    reviewed_by     VARCHAR(128),
+    submitted_at    TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at     TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_review_agent ON sa_agent_publish_review (agent_id);
+CREATE INDEX IF NOT EXISTS idx_review_tenant ON sa_agent_publish_review (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_review_status ON sa_agent_publish_review (status);
+CREATE INDEX IF NOT EXISTS idx_review_submitted ON sa_agent_publish_review (submitted_at);
+
+-- Agent subscription
+CREATE TABLE IF NOT EXISTS sa_agent_subscription (
+    id              BIGINT         NOT NULL PRIMARY KEY,
+    agent_id        VARCHAR(64)    NOT NULL,
+    user_id         BIGINT         NOT NULL,
+    tenant_id       VARCHAR(64)    NOT NULL,
+    subscribed_at   TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    active          BOOLEAN        NOT NULL DEFAULT TRUE
+);
+CREATE INDEX IF NOT EXISTS idx_subscription_agent ON sa_agent_subscription (agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_subscription_user ON sa_agent_subscription (user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_subscription_tenant ON sa_agent_subscription (tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_unique ON sa_agent_subscription (agent_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_subscription_active ON sa_agent_subscription (active);
+
+-- Agent rating
+CREATE TABLE IF NOT EXISTS sa_agent_rating (
+    id          BIGINT         NOT NULL PRIMARY KEY,
+    agent_id    VARCHAR(64)    NOT NULL,
+    user_id     BIGINT         NOT NULL,
+    rating      INTEGER        NOT NULL,
+    comment     VARCHAR(1024),
+    created_at  TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_rating_agent ON sa_agent_rating (agent_id);
+CREATE INDEX IF NOT EXISTS idx_rating_user ON sa_agent_rating (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rating_unique ON sa_agent_rating (agent_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_rating_value ON sa_agent_rating (rating);
+
+-- Agent rating summary (cached aggregation)
+CREATE TABLE IF NOT EXISTS sa_agent_rating_summary (
+    agent_id        VARCHAR(64)    NOT NULL PRIMARY KEY,
+    average_rating  DECIMAL(3,2)   NOT NULL DEFAULT 0.00,
+    rating_count    INTEGER        NOT NULL DEFAULT 0,
+    rating_1_count  INTEGER        NOT NULL DEFAULT 0,
+    rating_2_count  INTEGER        NOT NULL DEFAULT 0,
+    rating_3_count  INTEGER        NOT NULL DEFAULT 0,
+    rating_4_count  INTEGER        NOT NULL DEFAULT 0,
+    rating_5_count  INTEGER        NOT NULL DEFAULT 0,
+    updated_at      TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Agent popularity score
+CREATE TABLE IF NOT EXISTS sa_agent_popularity (
+    agent_id            VARCHAR(64)    NOT NULL PRIMARY KEY,
+    subscription_count  BIGINT         NOT NULL DEFAULT 0,
+    average_rating      DECIMAL(3,2)   NOT NULL DEFAULT 0.00,
+    rating_count        INTEGER        NOT NULL DEFAULT 0,
+    activity_score      DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
+    popularity_score    DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
+    rank_position       INTEGER,
+    updated_at          TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_popularity_score ON sa_agent_popularity (popularity_score DESC);
+CREATE INDEX IF NOT EXISTS idx_popularity_rank ON sa_agent_popularity (rank_position);
+
+-- ---- V10: Audit Log ----
+CREATE TABLE IF NOT EXISTS sa_audit_log (
+    id             BIGINT         NOT NULL PRIMARY KEY,
+    tenant_id      VARCHAR(64)    NOT NULL,
+    operator       VARCHAR(128)   NOT NULL,
+    action         VARCHAR(64)    NOT NULL,
+    resource_type  VARCHAR(64)    NOT NULL,
+    resource_id    VARCHAR(128),
+    detail         TEXT,
+    ip_address     VARCHAR(64),
+    user_agent     VARCHAR(512),
+    created_at     TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_tenant ON sa_audit_log (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action ON sa_audit_log (action);
+CREATE INDEX IF NOT EXISTS idx_audit_log_resource_type ON sa_audit_log (resource_type);
+CREATE INDEX IF NOT EXISTS idx_audit_log_operator ON sa_audit_log (operator);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON sa_audit_log (created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_tenant_action ON sa_audit_log (tenant_id, action);
+CREATE INDEX IF NOT EXISTS idx_audit_log_tenant_created ON sa_audit_log (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action_created ON sa_audit_log (action, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created_asc ON sa_audit_log (created_at ASC);
+
+-- ---- V11: KB Retrieval Config ----
+ALTER TABLE t_knowledge_base ADD COLUMN IF NOT EXISTS retrieval_config JSONB;
+COMMENT ON COLUMN t_knowledge_base.retrieval_config IS
+    '检索策略配置（JSONB），包含 top-k、相似度阈值、重排序策略等参数';
+
+-- ---- V12: Login History ----
+CREATE TABLE IF NOT EXISTS t_login_history (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    login_type VARCHAR(32) NOT NULL DEFAULT 'PASSWORD',
+    ip_address VARCHAR(45),
+    user_agent VARCHAR(512),
+    device_info VARCHAR(256),
+    status VARCHAR(16) NOT NULL DEFAULT 'SUCCESS',
+    failure_reason VARCHAR(256),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_login_history_user ON t_login_history (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_login_history_tenant ON t_login_history (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_login_history_ip ON t_login_history (ip_address, created_at DESC);
+
+-- ---- V13: Revenue Share ----
+CREATE TABLE IF NOT EXISTS sa_revenue_share (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    agent_id VARCHAR(64) NOT NULL,
+    creator_user_id BIGINT NOT NULL,
+    period VARCHAR(7) NOT NULL,  -- yyyy-MM
+    gross_revenue DECIMAL(12,2) NOT NULL DEFAULT 0,
+    platform_share DECIMAL(12,2) NOT NULL DEFAULT 0,
+    creator_share DECIMAL(12,2) NOT NULL DEFAULT 0,
+    platform_rate DECIMAL(5,4) NOT NULL DEFAULT 0.2000,  -- 20%
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',  -- PENDING, SETTLED, PAID
+    settled_at TIMESTAMP,
+    paid_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_revenue_share_period UNIQUE (agent_id, period)
+);
+CREATE INDEX IF NOT EXISTS idx_revenue_share_tenant ON sa_revenue_share (tenant_id, period);
+CREATE INDEX IF NOT EXISTS idx_revenue_share_creator ON sa_revenue_share (creator_user_id, period);
+
+-- ============================================
+-- Seed Data (after all schema extensions)
+-- ============================================
+
+-- Default admin user (includes tenant_id and email from V2/V3)
+INSERT INTO t_user (id, username, password, role, avatar, tenant_id, email, status, create_time, update_time, deleted)
+VALUES (2001523723396308993, 'admin', 'admin', 'admin', 'https://avatars.githubusercontent.com/u/37446017?v=4',
+        'default', 'admin@seahorse.local', 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
 ON CONFLICT (id) DO NOTHING;
