@@ -37,7 +37,11 @@ import {
   Upload,
   Users,
   Workflow,
-  Wrench
+  Wrench,
+  Store,
+  Building2,
+  CreditCard,
+  ClipboardCheck
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -142,6 +146,15 @@ const menuGroups: MenuGroup[] = [
     ]
   },
   {
+    title: "SaaS 运营",
+    items: [
+      { path: "/admin/billing", label: "计费管理", icon: CreditCard },
+      { path: "/admin/tenants", feature: "TENANT_MANAGEMENT", label: "租户管理", icon: Building2 },
+      { path: "/admin/audit-logs", feature: "TENANT_MANAGEMENT", label: "运营审计", icon: FileText },
+      { path: "/admin/marketplace-review", feature: "MARKETPLACE_REVIEW", label: "市场审核", icon: ClipboardCheck }
+    ]
+  },
+  {
     title: "治理与可观测",
     items: [
       { path: "/admin/memory-governance", feature: "MEMORY_GOVERNANCE", label: "记忆治理", icon: Brain },
@@ -222,6 +235,10 @@ const breadcrumbMap: Record<string, string> = {
   "model-config": "模型配置",
   settings: "系统设置",
   users: "用户管理",
+  billing: "计费管理",
+  tenants: "租户管理",
+  "audit-logs": "运营审计",
+  "marketplace-review": "市场审核",
   edit: "编辑"
 };
 

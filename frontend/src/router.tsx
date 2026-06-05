@@ -3,6 +3,7 @@ import { Navigate, createBrowserRouter } from "react-router-dom";
 import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableState";
 import { ADVANCED_ADMIN_FEATURES } from "@/config/productMode";
 import { LoginPage } from "@/pages/LoginPage";
+import { RegisterPage } from "@/pages/RegisterPage";
 import { ChatPage } from "@/pages/ChatPage";
 import { MemoryCenterPage } from "@/pages/MemoryCenterPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
@@ -54,6 +55,11 @@ import { AuditEventPage } from "@/pages/admin/audit/AuditEventPage";
 import { CostAnalyticsPage } from "@/pages/admin/cost/CostAnalyticsPage";
 import { SandboxPage } from "@/pages/admin/sandbox/SandboxPage";
 import { AgentRunListPage } from "@/pages/admin/agent-runs/AgentRunListPage";
+import { BillingPage } from "@/pages/admin/billing/BillingPage";
+import { MarketplacePage } from "@/pages/MarketplacePage";
+import { TenantListPage } from "@/pages/admin/tenants/TenantListPage";
+import { AuditLogPage } from "@/pages/admin/audit/AuditLogPage";
+import { MarketplaceReviewPage } from "@/pages/admin/marketplace/MarketplaceReviewPage";
 import { useAuthStore } from "@/stores/authStore";
 import { useFeatureStore } from "@/stores/featureStore";
 
@@ -161,6 +167,14 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: "/register",
+    element: (
+      <RedirectIfAuth>
+        <RegisterPage />
+      </RedirectIfAuth>
+    )
+  },
+  {
     path: "/chat",
     element: (
       <RequireAuth>
@@ -181,6 +195,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <MemoryCenterPage />
+      </RequireAuth>
+    )
+  },
+  {
+    path: "/marketplace",
+    element: (
+      <RequireAuth>
+        <MarketplacePage />
       </RequireAuth>
     )
   },
@@ -208,7 +230,11 @@ export const router = createBrowserRouter([
       { path: "mappings", element: <QueryTermMappingPage /> },
       { path: "context-packs", element: <ContextPackPage /> },
       { path: "task-templates", element: <TaskTemplatePage /> },
-      { path: "users", element: <UserListPage /> }
+      { path: "users", element: <UserListPage /> },
+      { path: "billing", element: <BillingPage /> },
+      { path: "tenants", element: withFeature(ADVANCED_ADMIN_FEATURES.TENANT_MANAGEMENT, "租户管理", <TenantListPage />) },
+      { path: "audit-logs", element: withFeature(ADVANCED_ADMIN_FEATURES.TENANT_MANAGEMENT, "审计日志", <AuditLogPage />) },
+      { path: "marketplace-review", element: withFeature(ADVANCED_ADMIN_FEATURES.MARKETPLACE_REVIEW, "市场审核", <MarketplaceReviewPage />) }
     ]
   },
   { path: "*", element: <NotFoundPage /> }
