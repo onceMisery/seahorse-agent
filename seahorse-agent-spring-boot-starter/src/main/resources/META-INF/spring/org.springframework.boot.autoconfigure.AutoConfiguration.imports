@@ -66,3 +66,6 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAlertAutoConfiguratio
 # Layer 9: User registration + Security hardening
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRegistrationAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentSecurityAutoConfiguration
+
+# Layer 10: Billing system (after kernel sub-configs)
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentBillingAutoConfiguration
