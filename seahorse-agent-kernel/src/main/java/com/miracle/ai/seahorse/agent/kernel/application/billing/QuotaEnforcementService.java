@@ -17,8 +17,11 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.billing;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.cost.CostUsageAggregate;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.QuotaExceededException;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.Subscription;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
@@ -39,16 +42,37 @@ public class QuotaEnforcementService {
     private final SubscriptionRepositoryPort subscriptionRepository;
     private final KnowledgeDocumentRepositoryPort documentRepository;
     private final AgentRunRepositoryPort agentRunRepository;
+    private final CostUsageRepositoryPort costUsageRepository;
 
+    /**
+     * Full constructor with all dependencies including cost usage tracking.
+     *
+     * @param subscriptionRepository subscription persistence port
+     * @param documentRepository     document persistence port for storage quota
+     * @param agentRunRepository     agent run persistence port for concurrency quota
+     * @param costUsageRepository    cost usage tracking port for token quota (nullable for backward compat)
+     */
     public QuotaEnforcementService(SubscriptionRepositoryPort subscriptionRepository,
                                     KnowledgeDocumentRepositoryPort documentRepository,
-                                    AgentRunRepositoryPort agentRunRepository) {
+                                    AgentRunRepositoryPort agentRunRepository,
+                                    CostUsageRepositoryPort costUsageRepository) {
         this.subscriptionRepository = Objects.requireNonNull(subscriptionRepository,
                 "subscriptionRepository must not be null");
         this.documentRepository = Objects.requireNonNull(documentRepository,
                 "documentRepository must not be null");
         this.agentRunRepository = Objects.requireNonNull(agentRunRepository,
                 "agentRunRepository must not be null");
+        this.costUsageRepository = costUsageRepository; // nullable — token quota disabled when null
+    }
+
+    /**
+     * Backward-compatible constructor without cost usage tracking.
+     * Token quota enforcement is disabled; storage and concurrency checks still work.
+     */
+    public QuotaEnforcementService(SubscriptionRepositoryPort subscriptionRepository,
+                                    KnowledgeDocumentRepositoryPort documentRepository,
+                                    AgentRunRepositoryPort agentRunRepository) {
+        this(subscriptionRepository, documentRepository, agentRunRepository, null);
     }
 
     /**
@@ -85,14 +109,22 @@ public class QuotaEnforcementService {
     /**
      * Checks token quota before an agent run starts.
      *
-     * <p>Verifies that the tenant has not exhausted their token allocation.
-     * Note: This is a simplified check based on subscription limits; actual
-     * token consumption tracking would require a usage metrics port.
+     * <p>Verifies that the tenant has not exhausted their token allocation by
+     * summing actual token usage from {@link CostUsageRepositoryPort} for the
+     * current billing period (subscription start → expiry) and comparing against
+     * the subscription's token limit.
+     *
+     * <p>If the cost usage repository is not configured (null), token quota
+     * enforcement is silently skipped (fail-open).
      *
      * @param tenantId the tenant identifier
      * @throws QuotaExceededException if the token quota is exhausted
      */
     public void checkTokenQuota(String tenantId) {
+        if (costUsageRepository == null) {
+            return; // Cost usage tracking not configured — skip enforcement
+        }
+
         Subscription subscription = loadActiveSubscription(tenantId);
         if (subscription == null) {
             return;
@@ -103,8 +135,26 @@ public class QuotaEnforcementService {
             return; // Unlimited or not configured
         }
 
-        // Token usage tracking would require a dedicated usage metrics port.
-        // For now, this is a placeholder that can be enhanced with actual usage data.
+        // Build query for the current billing period based on subscription dates
+        Instant from = subscription.startedAt() != null ? subscription.startedAt() : Instant.EPOCH;
+        Instant to = subscription.expiresAt() != null ? subscription.expiresAt() : Instant.now();
+
+        CostUsageAggregate aggregate;
+        try {
+            CostUsageQuery query = new CostUsageQuery(tenantId, null, null, from, to);
+            aggregate = costUsageRepository.aggregate(query);
+        } catch (Exception ex) {
+            // Fail-open: if usage lookup fails, don't block the operation
+            return;
+        }
+
+        long usedTokens = aggregate != null ? aggregate.totalTokens() : 0L;
+        if (usedTokens >= tokenLimit) {
+            throw new QuotaExceededException(
+                    "TOKEN_QUOTA_EXHAUSTED",
+                    "请升级套餐以获得更多 Token 额度。已使用: " + formatTokens(usedTokens)
+                            + ", 限额: " + formatTokens(tokenLimit));
+        }
     }
 
     /**
@@ -180,6 +230,18 @@ public class QuotaEnforcementService {
             return String.format("%.1f MB", bytes / (1024.0 * 1024));
         } else {
             return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
+        }
+    }
+
+    private static String formatTokens(long tokens) {
+        if (tokens < 1_000) {
+            return tokens + "";
+        } else if (tokens < 1_000_000) {
+            return String.format("%.1fK", tokens / 1_000.0);
+        } else if (tokens < 1_000_000_000) {
+            return String.format("%.1fM", tokens / 1_000_000.0);
+        } else {
+            return String.format("%.1fB", tokens / 1_000_000_000.0);
         }
     }
 }

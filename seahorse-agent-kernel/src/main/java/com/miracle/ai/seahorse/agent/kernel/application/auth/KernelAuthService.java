@@ -69,11 +69,11 @@ public class KernelAuthService implements AuthInboundPort {
         }
         UserRecord user = userRepositoryPort.findByUsername(username)
                 .orElseThrow(() -> {
-                    safeRecordLogin(0L, "default", LOGIN_TYPE_PASSWORD, STATUS_FAILED, "用户不存在");
+                    safeRecordLogin(safeCommand, 0L, "default", LOGIN_TYPE_PASSWORD, STATUS_FAILED, "用户不存在");
                     return new IllegalArgumentException("用户名或密码错误");
                 });
         if (!passwordHasherPort.matches(password, user.password())) {
-            safeRecordLogin(user.id() != null ? user.id() : 0L, user.tenantId(),
+            safeRecordLogin(safeCommand, user.id() != null ? user.id() : 0L, user.tenantId(),
                     LOGIN_TYPE_PASSWORD, STATUS_FAILED, "密码错误");
             throw new IllegalArgumentException("用户名或密码错误");
         }
@@ -81,7 +81,7 @@ public class KernelAuthService implements AuthInboundPort {
             throw new IllegalStateException("用户信息异常");
         }
         String token = tokenServicePort.login(String.valueOf(user.id()), user.tenantId());
-        safeRecordLogin(user.id(), user.tenantId(), LOGIN_TYPE_PASSWORD, STATUS_SUCCESS, null);
+        safeRecordLogin(safeCommand, user.id(), user.tenantId(), LOGIN_TYPE_PASSWORD, STATUS_SUCCESS, null);
         return new LoginResult(String.valueOf(user.id()), user.role(), token, defaultAvatar(user.avatar()), user.tenantId());
     }
 
@@ -90,13 +90,16 @@ public class KernelAuthService implements AuthInboundPort {
         tokenServicePort.logout();
     }
 
-    private void safeRecordLogin(long userId, String tenantId, String loginType,
+    private void safeRecordLogin(LoginCommand command, long userId, String tenantId, String loginType,
                                  String status, String failureReason) {
         if (loginHistoryPort == null) {
             return;
         }
         try {
-            loginHistoryPort.recordLogin(userId, tenantId, loginType, null, null, status, failureReason);
+            String ipAddress = command != null ? command.ipAddress() : null;
+            String userAgent = command != null ? command.userAgent() : null;
+            String deviceInfo = command != null ? command.deviceInfo() : null;
+            loginHistoryPort.recordLogin(userId, tenantId, loginType, ipAddress, userAgent, deviceInfo, status, failureReason);
         } catch (Exception e) {
             log.warn("Failed to record login history: {}", e.getMessage());
         }

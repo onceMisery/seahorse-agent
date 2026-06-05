@@ -17,10 +17,11 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.auth;
 
+import java.time.Instant;
+import java.util.List;
+
 /**
- * Outbound port for recording login history events.
- *
- * <p>MVP scope: only write (record) operations; query methods are deferred.
+ * Outbound port for recording and querying login history events.
  */
 public interface LoginHistoryPort {
 
@@ -32,10 +33,37 @@ public interface LoginHistoryPort {
      * @param loginType     the login type, e.g. "PASSWORD", "OAUTH", "TOKEN_REFRESH"
      * @param ipAddress     the client IP address (may be null)
      * @param userAgent     the User-Agent header (may be null)
+     * @param deviceInfo    parsed device information (may be null)
      * @param status        the outcome: "SUCCESS", "FAILED", or "BLOCKED"
      * @param failureReason the reason for failure (null on success)
      */
     void recordLogin(long userId, String tenantId, String loginType,
-                     String ipAddress, String userAgent,
+                     String ipAddress, String userAgent, String deviceInfo,
                      String status, String failureReason);
+
+    /**
+     * Find login history entries for a user with pagination.
+     *
+     * @param userId the user ID
+     * @param page   the page number (0-based)
+     * @param size   the page size
+     * @return list of login history entries
+     */
+    List<LoginHistoryEntry> findByUserId(long userId, int page, int size);
+
+    /**
+     * Count total login history entries for a user.
+     *
+     * @param userId the user ID
+     * @return the count
+     */
+    long countByUserId(long userId);
+
+    /**
+     * Login history entry record.
+     */
+    record LoginHistoryEntry(Long id, long userId, String tenantId, String loginType,
+                             String ipAddress, String userAgent, String deviceInfo,
+                             String status, String failureReason, Instant createdAt) {
+    }
 }

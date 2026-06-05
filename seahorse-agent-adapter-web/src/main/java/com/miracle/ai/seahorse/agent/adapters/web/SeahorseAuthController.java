@@ -17,8 +17,11 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import com.miracle.ai.seahorse.agent.kernel.application.auth.UserAgentParser;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginCommand;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.IpGeolocationPort;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -35,21 +38,65 @@ public class SeahorseAuthController {
     private static final String SUCCESS_CODE = "0";
 
     private final ObjectProvider<AuthInboundPort> authInboundPortProvider;
+    private final ObjectProvider<IpGeolocationPort> ipGeolocationPortProvider;
 
     public SeahorseAuthController(ObjectProvider<AuthInboundPort> authInboundPortProvider) {
+        this(authInboundPortProvider, null);
+    }
+
+    public SeahorseAuthController(ObjectProvider<AuthInboundPort> authInboundPortProvider,
+                                  ObjectProvider<IpGeolocationPort> ipGeolocationPortProvider) {
         this.authInboundPortProvider = authInboundPortProvider;
+        this.ipGeolocationPortProvider = ipGeolocationPortProvider;
     }
 
     @PostMapping("/auth/login")
-    public Map<String, Object> login(@RequestBody AuthLoginRequest request) {
+    public Map<String, Object> login(@RequestBody AuthLoginRequest request, HttpServletRequest httpRequest) {
         AuthLoginRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+
+        String ipAddress = extractIpAddress(httpRequest);
+        String userAgent = httpRequest.getHeader("User-Agent");
+        String deviceInfo = UserAgentParser.parse(userAgent);
+
+        // Optionally resolve IP geolocation (graceful degradation if not available)
+        if (ipGeolocationPortProvider != null && ipAddress != null) {
+            IpGeolocationPort geoPort = ipGeolocationPortProvider.getIfAvailable();
+            if (geoPort != null) {
+                try {
+                    IpGeolocationPort.GeoInfo geoInfo = geoPort.resolve(ipAddress);
+                    if (geoInfo != null) {
+                        deviceInfo = deviceInfo + " (" + geoInfo.toDisplayString() + ")";
+                    }
+                } catch (Exception e) {
+                    // Graceful degradation: continue without geo info
+                }
+            }
+        }
+
+        LoginCommand command = new LoginCommand(
+                safeRequest.getUsername(),
+                safeRequest.getPassword(),
+                ipAddress,
+                userAgent,
+                deviceInfo
+        );
+
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                authInboundPortProvider.getIfAvailable().login(new LoginCommand(safeRequest.getUsername(), safeRequest.getPassword())));
+                authInboundPortProvider.getIfAvailable().login(command));
     }
 
     @PostMapping("/auth/logout")
     public Map<String, Object> logout() {
         authInboundPortProvider.getIfAvailable().logout();
         return Map.of(KEY_CODE, SUCCESS_CODE);
+    }
+
+    private String extractIpAddress(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+            int commaIdx = xForwardedFor.indexOf(',');
+            return commaIdx > 0 ? xForwardedFor.substring(0, commaIdx).trim() : xForwardedFor.trim();
+        }
+        return request.getRemoteAddr();
     }
 }

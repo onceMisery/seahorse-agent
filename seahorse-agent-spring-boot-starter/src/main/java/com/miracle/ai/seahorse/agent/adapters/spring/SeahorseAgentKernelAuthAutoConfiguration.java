@@ -17,7 +17,9 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import cn.dev33.satoken.listener.SaTokenListener;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcLoginHistoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.web.SaTokenLoginListener;
 import com.miracle.ai.seahorse.agent.kernel.application.auth.KernelAuthService;
 import com.miracle.ai.seahorse.agent.kernel.application.user.KernelUserService;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
@@ -73,5 +75,12 @@ public class SeahorseAgentKernelAuthAutoConfiguration {
                                                      PasswordHasherPort passwordHasherPort,
                                                      CurrentUserPort currentUserPort) {
         return new KernelUserService(userRepositoryPort, passwordHasherPort, currentUserPort);
+    }
+
+    @Bean
+    @ConditionalOnBean(LoginHistoryPort.class)
+    @ConditionalOnMissingBean(SaTokenListener.class)
+    public SaTokenLoginListener seahorseSaTokenLoginListener(LoginHistoryPort loginHistoryPort) {
+        return new SaTokenLoginListener(loginHistoryPort);
     }
 }

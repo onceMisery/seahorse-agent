@@ -17,5 +17,24 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.auth;
 
-public record LoginCommand(String username, String password) {
+/**
+ * Command object for login requests.
+ *
+ * @param username   the username (required)
+ * @param password   the password (required)
+ * @param ipAddress  the client IP address (optional, may be null)
+ * @param userAgent  the User-Agent header (optional, may be null)
+ * @param deviceInfo parsed device information (optional, may be null)
+ */
+public record LoginCommand(String username, String password, String ipAddress, String userAgent, String deviceInfo) {
+
+    /**
+     * Backward-compatible constructor for username/password only.
+     *
+     * @param username the username
+     * @param password the password
+     */
+    public LoginCommand(String username, String password) {
+        this(username, password, null, null, null);
+    }
 }

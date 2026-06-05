@@ -21,10 +21,12 @@ import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelBillingSer
 import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelPaymentService;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelSubscriptionService;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.QuotaEnforcementService;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.RevenueService;
 import com.miracle.ai.seahorse.agent.ports.inbound.billing.BillingInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.billing.PaymentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.billing.SubscriptionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.BillLineItemRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.BillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentCallbackLogRepositoryPort;
@@ -34,6 +36,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionPlanRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.TransactionRunnerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -75,6 +78,8 @@ public class SeahorseAgentBillingAutoConfiguration {
     /**
      * Payment processing service — order creation, gateway integration,
      * and triple-idempotent callback handling.
+     *
+     * <p>Optionally integrates with {@link RevenueService} for marketplace revenue tracking.
      */
     @Bean
     @ConditionalOnBean({
@@ -90,9 +95,11 @@ public class SeahorseAgentBillingAutoConfiguration {
             SubscriptionPlanRepositoryPort planRepository,
             PaymentGatewayPort paymentGateway,
             PaymentCallbackLogRepositoryPort callbackLogRepository,
-            TransactionRunnerPort transactionRunner) {
+            TransactionRunnerPort transactionRunner,
+            ObjectProvider<RevenueService> revenueServiceProvider) {
         return new KernelPaymentService(orderRepository, planRepository,
-                paymentGateway, callbackLogRepository, transactionRunner);
+                paymentGateway, callbackLogRepository, transactionRunner,
+                revenueServiceProvider.getIfAvailable());
     }
 
     /**
@@ -119,6 +126,9 @@ public class SeahorseAgentBillingAutoConfiguration {
     /**
      * Quota enforcement service — checks storage, token, and concurrency limits
      * before resource-consuming operations.
+     *
+     * <p>Token quota enforcement is enabled only when {@link CostUsageRepositoryPort}
+     * is available; otherwise token checks are silently skipped (fail-open).
      */
     @Bean
     @ConditionalOnBean({
@@ -130,7 +140,9 @@ public class SeahorseAgentBillingAutoConfiguration {
     public QuotaEnforcementService seahorseQuotaEnforcementService(
             SubscriptionRepositoryPort subscriptionRepository,
             KnowledgeDocumentRepositoryPort documentRepository,
-            AgentRunRepositoryPort agentRunRepository) {
-        return new QuotaEnforcementService(subscriptionRepository, documentRepository, agentRunRepository);
+            AgentRunRepositoryPort agentRunRepository,
+            ObjectProvider<CostUsageRepositoryPort> costUsageRepositoryProvider) {
+        return new QuotaEnforcementService(subscriptionRepository, documentRepository,
+                agentRunRepository, costUsageRepositoryProvider.getIfAvailable());
     }
 }

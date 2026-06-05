@@ -18,12 +18,14 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import cn.dev33.satoken.stp.StpInterface;
+import com.miracle.ai.seahorse.agent.adapters.web.IpApiGeolocationAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SaTokenCurrentUserAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SaTokenServiceAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SeahorseSaTokenStpInterface;
 import com.miracle.ai.seahorse.agent.adapters.web.SpringCurrentUserAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcUserRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.IpGeolocationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
@@ -89,5 +91,12 @@ public class SeahorseAgentAuthAdapterAutoConfiguration {
     @ConditionalOnMissingBean(StpInterface.class)
     public SeahorseSaTokenStpInterface seahorseSaTokenStpInterface(UserRepositoryPort userRepositoryPort) {
         return new SeahorseSaTokenStpInterface(userRepositoryPort);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(IpGeolocationPort.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.auth.geolocation", name = "enabled", havingValue = "true", matchIfMissing = true)
+    public IpApiGeolocationAdapter seahorseIpGeolocationAdapter() {
+        return new IpApiGeolocationAdapter();
     }
 }

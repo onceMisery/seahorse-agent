@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.billing;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.PlanCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.PaymentOrder;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.SubscriptionPlan;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.RevenueService;
 import com.miracle.ai.seahorse.agent.ports.inbound.billing.PaymentInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentCallbackLogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.PaymentGatewayPort;
@@ -28,6 +29,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionPlanRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.TransactionRunnerPort;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -38,25 +41,56 @@ import java.util.UUID;
  * <p>Handles order creation, payment gateway integration, and callback processing
  * with triple idempotency: signature verification, callback log check, and
  * pessimistic lock with amount verification before state transition.
+ *
+ * <p>Optionally integrates with {@link RevenueService} to record marketplace
+ * revenue shares when a payment for a marketplace agent subscription completes.
  */
 public class KernelPaymentService implements PaymentInboundPort {
+
+    private static final DateTimeFormatter PERIOD_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM").withZone(ZoneId.systemDefault());
 
     private final PaymentOrderRepositoryPort orderRepository;
     private final SubscriptionPlanRepositoryPort planRepository;
     private final PaymentGatewayPort paymentGateway;
     private final PaymentCallbackLogRepositoryPort callbackLogRepository;
     private final TransactionRunnerPort transactionRunner;
+    private final RevenueService revenueService;
 
+    /**
+     * Full constructor with optional revenue service for marketplace revenue tracking.
+     *
+     * @param orderRepository       payment order persistence port
+     * @param planRepository        subscription plan persistence port
+     * @param paymentGateway        payment gateway integration port
+     * @param callbackLogRepository callback log persistence port for idempotency
+     * @param transactionRunner     transaction boundary port
+     * @param revenueService        optional revenue service for marketplace payments (nullable)
+     */
     public KernelPaymentService(PaymentOrderRepositoryPort orderRepository,
                                 SubscriptionPlanRepositoryPort planRepository,
                                 PaymentGatewayPort paymentGateway,
                                 PaymentCallbackLogRepositoryPort callbackLogRepository,
-                                TransactionRunnerPort transactionRunner) {
+                                TransactionRunnerPort transactionRunner,
+                                RevenueService revenueService) {
         this.orderRepository = Objects.requireNonNull(orderRepository, "orderRepository must not be null");
         this.planRepository = Objects.requireNonNull(planRepository, "planRepository must not be null");
         this.paymentGateway = Objects.requireNonNull(paymentGateway, "paymentGateway must not be null");
         this.callbackLogRepository = Objects.requireNonNull(callbackLogRepository, "callbackLogRepository must not be null");
         this.transactionRunner = Objects.requireNonNull(transactionRunner, "transactionRunner must not be null");
+        this.revenueService = revenueService; // nullable — revenue tracking disabled when null
+    }
+
+    /**
+     * Backward-compatible constructor without revenue service.
+     */
+    public KernelPaymentService(PaymentOrderRepositoryPort orderRepository,
+                                SubscriptionPlanRepositoryPort planRepository,
+                                PaymentGatewayPort paymentGateway,
+                                PaymentCallbackLogRepositoryPort callbackLogRepository,
+                                TransactionRunnerPort transactionRunner) {
+        this(orderRepository, planRepository, paymentGateway, callbackLogRepository,
+                transactionRunner, null);
     }
 
     @Override
@@ -145,7 +179,43 @@ public class KernelPaymentService implements PaymentInboundPort {
             // Record callback log for idempotency
             callbackLogRepository.save(channel, channelTradeNo, orderNo);
 
+            // Record marketplace revenue if revenue service is configured
+            if (PaymentOrder.STATUS_PAID.equals(order.status())) {
+                recordMarketplaceRevenue(order);
+            }
+
             return order;
         });
+    }
+
+    /**
+     * Records marketplace revenue share for a paid order.
+     *
+     * <p>This is a best-effort operation: any failure is silently ignored to ensure
+     * revenue recording issues never affect the payment flow. The current implementation
+     * uses the plan code as the agent reference and the tenant ID hash as the creator
+     * reference. Full marketplace agent-level revenue tracking requires extending
+     * {@link PaymentOrder} with agent metadata.
+     *
+     * @param order the paid payment order
+     */
+    private void recordMarketplaceRevenue(PaymentOrder order) {
+        if (revenueService == null) {
+            return;
+        }
+        try {
+            String period = PERIOD_FORMATTER.format(
+                    order.paidAt() != null ? order.paidAt() : Instant.now());
+            String agentRef = order.planCode() != null
+                    ? "plan:" + order.planCode().name()
+                    : "plan:UNKNOWN";
+            // Derive a stable creator user ID from tenant ID for revenue attribution.
+            // In a full marketplace integration, the agent creator's userId would be
+            // resolved from the order's marketplace metadata.
+            Long creatorUserId = Math.abs((long) order.tenantId().hashCode());
+            revenueService.calculateRevenue(agentRef, period, order.amount(), creatorUserId);
+        } catch (Exception ignored) {
+            // Best-effort: revenue recording failure must not affect payment flow
+        }
     }
 }
