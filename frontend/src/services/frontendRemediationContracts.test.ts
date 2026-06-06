@@ -56,17 +56,18 @@ describe("frontend remediation contracts", () => {
     expect(readSource("services/agentFactoryService.ts")).not.toContain("/api/agent-templates/${");
   });
 
-  it("does not call external GitHub APIs from the frontend", () => {
+  it("links official docs buttons to the official repository without GitHub API calls", () => {
     const sourceFiles = [
       "pages/admin/AdminLayout.tsx",
       "components/layout/Header.tsx",
       "components/layout/Sidebar.tsx"
     ];
+    const officialRepositoryUrl = "https://github.com/onceMisery/seahorse-agent";
 
     for (const sourceFile of sourceFiles) {
       const source = readSource(sourceFile);
       expect(source, sourceFile).not.toContain("api.github.com");
-      expect(source, sourceFile).not.toContain("onceMisery/seahorse-agent");
+      expect(source, sourceFile).toContain(officialRepositoryUrl);
     }
   });
 

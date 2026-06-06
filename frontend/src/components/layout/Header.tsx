@@ -35,7 +35,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         </div>
         <div className="flex items-center gap-2">
           <a
-            href="https://github.com/miracle-ai/seahorse-agent"
+            href="https://github.com/onceMisery/seahorse-agent"
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm transition glass-hover"
