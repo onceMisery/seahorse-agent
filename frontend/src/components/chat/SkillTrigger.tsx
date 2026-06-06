@@ -4,16 +4,6 @@ import { Search, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { listSkills, type AgentSkill } from "@/services/skillService";
 
-/* ─── 热门技能：手动排序靠前，作为快捷按钮展示 ─── */
-const HOT_SKILL_NAMES = [
-  "deep-research",
-  "data-analysis",
-  "code-review",
-  "document-generation",
-  "test-generation",
-  "architecture-design"
-];
-
 export interface SkillTriggerHandle {
   openPicker: () => void;
 }
@@ -86,34 +76,17 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
     }
   }, []);
 
-  /* ─── 热门技能（按预定义顺序排序） ─── */
-  const hotSkills = React.useMemo(() => {
-    const skillMap = new Map(skills.map((s) => [s.name, s]));
-    const ordered: AgentSkill[] = [];
-    for (const name of HOT_SKILL_NAMES) {
-      const skill = skillMap.get(name);
-      if (skill) ordered.push(skill);
-    }
-    // 追加未在热门列表中但已启用的技能
-    for (const skill of skills) {
-      if (!ordered.find((s) => s.name === skill.name)) {
-        ordered.push(skill);
-      }
-    }
-    return ordered;
-  }, [skills]);
-
   /* ─── 过滤后的技能列表 ─── */
   const filteredSkills = React.useMemo(() => {
     const query = (inlineTrigger?.query || searchQuery).toLowerCase().trim();
-    if (!query) return hotSkills;
-    return hotSkills.filter(
+    if (!query) return skills;
+    return skills.filter(
       (s) =>
         s.name.toLowerCase().includes(query) ||
         s.description.toLowerCase().includes(query) ||
         (s.tags ?? []).some((t) => t.toLowerCase().includes(query))
     );
-  }, [hotSkills, inlineTrigger, searchQuery]);
+  }, [skills, inlineTrigger, searchQuery]);
 
   /* ─── 监听 textarea 输入事件，检测 @ / 触发 ─── */
   React.useEffect(() => {
@@ -227,14 +200,11 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [pickerOpen]);
 
-  /* ─── 热门技能快捷按钮（最多展示 6 个） ─── */
-
   /* ─── 暴露 openPicker 给父组件 ─── */
   React.useImperativeHandle(ref, () => ({ openPicker }), [openPicker]);
 
   return (
     <>
-      {/* 热门技能快捷按钮 */}
       {/* 技能图标按钮（在工具栏中使用） */}
       {/* 由外部渲染，这里导出 openPicker 供外部调用 */}
 
