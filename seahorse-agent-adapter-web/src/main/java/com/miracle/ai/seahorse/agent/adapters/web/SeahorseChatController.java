@@ -199,6 +199,11 @@ public class SeahorseChatController {
         checkTaskTemplateRateLimit(taskTemplateId);
         ChatMode resolvedChatMode = resolveChatMode(chatMode, taskTemplateId);
         requireChatModeAllowed(chatMode, resolvedChatMode, taskTemplateId, agentId, versionId);
+        if (question == null || question.isBlank()) {
+            SseEmitter errorEmitter = new SseEmitter(sseTimeoutMs);
+            emitSseError(errorEmitter, new IllegalArgumentException("question parameter is required and must not be blank"));
+            return errorEmitter;
+        }
         String taskId = nextShortId();
         SseEmitter emitter = new SseEmitter(sseTimeoutMs);
         if (isDeepResearchTemplate(taskTemplateId)) {

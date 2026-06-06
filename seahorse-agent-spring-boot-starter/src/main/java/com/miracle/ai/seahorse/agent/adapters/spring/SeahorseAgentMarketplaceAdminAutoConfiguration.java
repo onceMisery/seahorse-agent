@@ -17,6 +17,12 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAdminRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentPublishReviewRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRatingRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentSubscriptionRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAuditLogRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRevenueShareRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAdminTenantService;
 import com.miracle.ai.seahorse.agent.kernel.application.admin.KernelAuditLogService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.marketplace.KernelAgentMarketplaceService;
@@ -33,11 +39,15 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.marketplace.RevenueSha
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBasePermissionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseShareRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseVersionRepositoryPort;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import javax.sql.DataSource;
 
 /**
  * Auto-configuration for Marketplace and Admin modules (Sprint 5-6 Modules 06, 07, 10).
@@ -55,9 +65,78 @@ import org.springframework.context.annotation.Configuration;
  * <p>Enabled by default; disable via {@code seahorse-agent.marketplace-admin.enabled=false}.
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.marketplace-admin", name = "enabled",
         havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentMarketplaceAdminAutoConfiguration {
+
+    // ==================== Admin Repository Adapters ====================
+
+    /**
+     * JDBC admin repository adapter — cross-tenant admin queries.
+     */
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(AdminRepositoryPort.class)
+    public JdbcAdminRepositoryAdapter seahorseJdbcAdminRepositoryAdapter(DataSource dataSource) {
+        return new JdbcAdminRepositoryAdapter(dataSource);
+    }
+
+    /**
+     * JDBC audit log repository adapter — audit log persistence.
+     */
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(AuditLogRepositoryPort.class)
+    public JdbcAuditLogRepositoryAdapter seahorseJdbcAuditLogRepositoryAdapter(DataSource dataSource) {
+        return new JdbcAuditLogRepositoryAdapter(dataSource);
+    }
+
+    // ==================== Marketplace Repository Adapters ====================
+
+    /**
+     * JDBC agent publish review repository adapter.
+     */
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(AgentPublishReviewRepositoryPort.class)
+    public JdbcAgentPublishReviewRepositoryAdapter seahorseJdbcAgentPublishReviewRepositoryAdapter(
+            DataSource dataSource) {
+        return new JdbcAgentPublishReviewRepositoryAdapter(dataSource);
+    }
+
+    /**
+     * JDBC agent subscription repository adapter.
+     */
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(AgentSubscriptionRepositoryPort.class)
+    public JdbcAgentSubscriptionRepositoryAdapter seahorseJdbcAgentSubscriptionRepositoryAdapter(
+            DataSource dataSource) {
+        return new JdbcAgentSubscriptionRepositoryAdapter(dataSource);
+    }
+
+    /**
+     * JDBC agent rating repository adapter.
+     */
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(AgentRatingRepositoryPort.class)
+    public JdbcAgentRatingRepositoryAdapter seahorseJdbcAgentRatingRepositoryAdapter(
+            DataSource dataSource) {
+        return new JdbcAgentRatingRepositoryAdapter(dataSource);
+    }
+
+    /**
+     * JDBC revenue share repository adapter.
+     */
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(RevenueShareRepositoryPort.class)
+    public JdbcRevenueShareRepositoryAdapter seahorseJdbcRevenueShareRepositoryAdapter(
+            DataSource dataSource) {
+        return new JdbcRevenueShareRepositoryAdapter(dataSource);
+    }
 
     // ==================== Knowledge Base Enhancement (Module 06) ====================
 

@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.adapters.web;
 
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionUpdateDraftCommand;
@@ -65,8 +66,13 @@ public class SeahorseAgentDefinitionController {
     public ApiResponse<Object> create(@RequestBody AgentDefinitionCreateRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         AgentDefinitionCreateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+        String agentId = safeRequest.agentId();
+        if (agentId == null || agentId.isBlank()) {
+            agentId = SnowflakeIds.nextIdString();
+        }
+        String finalAgentId = agentId;
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.createDraft(new AgentDefinitionCreateCommand(
-                safeRequest.agentId(),
+                finalAgentId,
                 safeRequest.tenantId(),
                 safeRequest.name(),
                 safeRequest.description(),

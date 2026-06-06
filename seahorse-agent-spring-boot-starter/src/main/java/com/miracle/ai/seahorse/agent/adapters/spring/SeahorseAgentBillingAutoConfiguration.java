@@ -17,6 +17,14 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcBillLineItemRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcBillRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPaymentCallbackLogRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPaymentOrderRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSubscriptionPlanRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSubscriptionRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTransactionRunnerAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.StubPaymentGatewayAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelBillingService;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelPaymentService;
 import com.miracle.ai.seahorse.agent.kernel.application.billing.KernelSubscriptionService;
@@ -42,11 +50,14 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.PlatformTransactionManager;
+
+import javax.sql.DataSource;
 
 /**
  * Auto-configuration for the billing system module (SaaS MVP Tasks 3.1-3.3).
  *
- * <p>Registers the following kernel services when all required outbound ports are available:
+ * <p>Registers JDBC adapter beans and kernel services when required outbound ports are available:
  * <ul>
  *   <li>{@link KernelSubscriptionService} — plan listing and subscription management</li>
  *   <li>{@link KernelPaymentService} — payment order creation and callback processing</li>
@@ -58,6 +69,66 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(prefix = "seahorse-agent.billing", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentBillingAutoConfiguration {
+
+    // ─── JDBC Adapter Beans ──────────────────────────────────────────────────
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(SubscriptionPlanRepositoryPort.class)
+    public JdbcSubscriptionPlanRepositoryAdapter seahorseJdbcSubscriptionPlanRepositoryAdapter(DataSource dataSource) {
+        return new JdbcSubscriptionPlanRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(SubscriptionRepositoryPort.class)
+    public JdbcSubscriptionRepositoryAdapter seahorseJdbcSubscriptionRepositoryAdapter(DataSource dataSource) {
+        return new JdbcSubscriptionRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(BillRepositoryPort.class)
+    public JdbcBillRepositoryAdapter seahorseJdbcBillRepositoryAdapter(DataSource dataSource) {
+        return new JdbcBillRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(BillLineItemRepositoryPort.class)
+    public JdbcBillLineItemRepositoryAdapter seahorseJdbcBillLineItemRepositoryAdapter(DataSource dataSource) {
+        return new JdbcBillLineItemRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(PaymentOrderRepositoryPort.class)
+    public JdbcPaymentOrderRepositoryAdapter seahorseJdbcPaymentOrderRepositoryAdapter(DataSource dataSource) {
+        return new JdbcPaymentOrderRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(PaymentCallbackLogRepositoryPort.class)
+    public JdbcPaymentCallbackLogRepositoryAdapter seahorseJdbcPaymentCallbackLogRepositoryAdapter(DataSource dataSource) {
+        return new JdbcPaymentCallbackLogRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(PlatformTransactionManager.class)
+    @ConditionalOnMissingBean(TransactionRunnerPort.class)
+    public JdbcTransactionRunnerAdapter seahorseJdbcTransactionRunnerAdapter(
+            PlatformTransactionManager transactionManager) {
+        return new JdbcTransactionRunnerAdapter(transactionManager);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PaymentGatewayPort.class)
+    public StubPaymentGatewayAdapter seahorseStubPaymentGatewayAdapter() {
+        return new StubPaymentGatewayAdapter();
+    }
+
+    // ─── Kernel Service Beans ────────────────────────────────────────────────
 
     /**
      * Subscription management service — plan listing, active subscription lookup,
