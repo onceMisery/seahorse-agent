@@ -38,6 +38,7 @@ public class RagTraceNode {
     private Long durationMs;
     private Instant startTime;
     private Instant endTime;
+    private String extraData;
 
     public String getId() {
         return id;
@@ -149,5 +150,13 @@ public class RagTraceNode {
 
     public void setEndTime(Instant endTime) {
         this.endTime = endTime;
+    }
+
+    public String getExtraData() {
+        return extraData;
+    }
+
+    public void setExtraData(String extraData) {
+        this.extraData = extraData;
     }
 }

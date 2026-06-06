@@ -139,6 +139,7 @@ public class KernelRagTraceRecorder {
         node.setMethodName(command.methodName());
         node.setStatus(STATUS_RUNNING);
         node.setStartTime(startTime);
+        node.setExtraData(command.extraData());
         try {
             repositoryPort.startNode(node);
             return TraceNodeScope.active(runScope.traceId(), nodeId, startTime);
@@ -154,6 +155,10 @@ public class KernelRagTraceRecorder {
     }
 
     public void finishNode(TraceNodeScope scope, Throwable error) {
+        finishNode(scope, error, null);
+    }
+
+    public void finishNode(TraceNodeScope scope, Throwable error, String extraData) {
         if (!enabled || scope == null || !scope.active()) {
             return;
         }
@@ -164,7 +169,8 @@ public class KernelRagTraceRecorder {
                 error == null ? STATUS_SUCCESS : STATUS_FAILED,
                 sanitizeError(error),
                 endTime,
-                durationMs(scope.startTime(), endTime));
+                durationMs(scope.startTime(), endTime),
+                extraData);
         try {
             repositoryPort.finishNode(finish);
         } catch (RuntimeException ex) {

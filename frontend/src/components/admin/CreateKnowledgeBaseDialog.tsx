@@ -35,6 +35,7 @@ import { createKnowledgeBase } from "@/services/knowledgeService";
 import { getSystemSettings, type ModelCandidate } from "@/services/settingsService";
 import { getAiModelConfigs, type AiModelConfigItem } from "@/services/aiConfigService";
 import { getErrorMessage } from "@/utils/error";
+import { storage } from "@/utils/storage";
 
 const formSchema = z.object({
   name: z.string().min(1, "请输入知识库名称").max(50, "名称不能超过50个字符"),
@@ -49,11 +50,38 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 const EMBEDDING_MODEL_CONFIG_KEY = "ai.embedding.model";
+const MODEL_REGISTRY_CONFIG_KEY = "ai.models";
+
+interface TenantModelRegistryItem {
+  id?: string;
+  provider?: string;
+  model?: string;
+  capability?: string;
+  enabled?: boolean;
+  dimension?: number | null;
+  priority?: number | null;
+}
+
+function currentTenantId() {
+  const user = storage.getUser() as ({ tenantId?: string } | null);
+  return user?.tenantId?.trim() || "default";
+}
+
+function parseModelRegistry(value?: string | null): TenantModelRegistryItem[] {
+  if (!value?.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 export function resolveEmbeddingModelCandidates(
   candidates: ModelCandidate[] = [],
   configs: AiModelConfigItem[] = [],
-  defaultModel?: string | null
+  defaultModel?: string | null,
+  tenantId = "default"
 ): ModelCandidate[] {
   const uniqueMap = new Map<string, ModelCandidate>();
 
@@ -63,6 +91,25 @@ export function resolveEmbeddingModelCandidates(
     if (!id) return;
     uniqueMap.set(id, { ...item, id });
   });
+
+  configs
+    .filter((item) => item.configKey === MODEL_REGISTRY_CONFIG_KEY)
+    .filter((item) => !item.tenantId || item.tenantId === tenantId)
+    .flatMap((item) => parseModelRegistry(item.configValue))
+    .filter((item) => item.enabled !== false)
+    .filter((item) => item.capability === "embedding")
+    .forEach((item) => {
+      const id = (item.id || item.model || "").trim();
+      if (!id || uniqueMap.has(id)) return;
+      uniqueMap.set(id, {
+        id,
+        provider: item.provider || "",
+        model: item.model || id,
+        enabled: true,
+        dimension: item.dimension,
+        priority: item.priority
+      });
+    });
 
   const addFallbackModel = (model?: string | null) => {
     const normalized = (model || "").trim();
@@ -115,7 +162,8 @@ export function CreateKnowledgeBaseDialog({
     if (!open) return;
     let active = true;
     setModelLoading(true);
-    Promise.allSettled([getSystemSettings(), getAiModelConfigs()])
+    const tenantId = currentTenantId();
+    Promise.allSettled([getSystemSettings(), getAiModelConfigs({ tenantId })])
       .then(([settingsResult, configsResult]) => {
         if (!active) return;
         const embeddingSettings =
@@ -125,7 +173,8 @@ export function CreateKnowledgeBaseDialog({
           resolveEmbeddingModelCandidates(
             embeddingSettings?.candidates || [],
             configs,
-            embeddingSettings?.defaultModel
+            embeddingSettings?.defaultModel,
+            tenantId
           )
         );
       })

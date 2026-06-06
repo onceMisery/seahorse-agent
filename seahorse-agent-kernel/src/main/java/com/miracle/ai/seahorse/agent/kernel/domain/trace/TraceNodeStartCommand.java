@@ -27,7 +27,8 @@ public record TraceNodeStartCommand(String nodeName,
                                     String className,
                                     String methodName,
                                     String parentNodeId,
-                                    int depth) {
+                                    int depth,
+                                    String extraData) {
 
     public TraceNodeStartCommand {
         nodeName = requireText(nodeName, "nodeName");
@@ -36,6 +37,16 @@ public record TraceNodeStartCommand(String nodeName,
         methodName = requireText(methodName, "methodName");
         parentNodeId = blankToNull(parentNodeId);
         depth = Math.max(depth, 0);
+        extraData = blankToNull(extraData);
+    }
+
+    public TraceNodeStartCommand(String nodeName,
+                                 String nodeType,
+                                 String className,
+                                 String methodName,
+                                 String parentNodeId,
+                                 int depth) {
+        this(nodeName, nodeType, className, methodName, parentNodeId, depth, null);
     }
 
     public static TraceNodeStartCommand pipelineStage(String nodeName, String nodeType, String methodName) {

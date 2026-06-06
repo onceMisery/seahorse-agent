@@ -22,6 +22,10 @@ import {
   createQuotaPolicy,
   evaluateQuotaDecision
 } from "@/services/securityGovernanceService";
+import {
+  createSandboxSession,
+  executeInSandbox
+} from "@/services/sandboxService";
 
 const mockedApi = vi.mocked(api);
 
@@ -270,6 +274,26 @@ describe("frontend capability service contracts", () => {
       tokens: 10,
       calls: 1,
       cost: 0.2
+    });
+  });
+
+  it("creates and executes sandbox sessions with backend required fields", async () => {
+    await createSandboxSession();
+    await executeInSandbox("session-1", {
+      input: "{\"hello\":\"world\"}"
+    });
+
+    expect(mockedApi.post).toHaveBeenNthCalledWith(1, "/api/sandbox/sessions", {
+      tenantId: "default",
+      runId: expect.stringMatching(/^sandbox-\d+-[a-z0-9]+$/),
+      runtimeType: "CODE_INTERPRETER",
+      networkRequested: false,
+      requestedHosts: []
+    });
+    expect(mockedApi.post).toHaveBeenNthCalledWith(2, "/api/sandbox/sessions/session-1/execute", {
+      input: "{\"hello\":\"world\"}",
+      networkRequested: false,
+      requestedHosts: []
     });
   });
 });

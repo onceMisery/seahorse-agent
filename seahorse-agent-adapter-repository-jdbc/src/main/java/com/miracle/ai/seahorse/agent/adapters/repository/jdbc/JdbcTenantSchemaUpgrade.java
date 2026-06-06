@@ -56,7 +56,8 @@ public class JdbcTenantSchemaUpgrade {
             "t_query_term_mapping",
             "t_rag_trace_run",
             "t_rag_trace_node",
-            "t_sample_question"
+            "t_sample_question",
+            "sa_ai_model_config"
     );
 
     /**
@@ -96,6 +97,7 @@ public class JdbcTenantSchemaUpgrade {
     public void upgrade() {
         log.info("[TenantSchema] 开始多租户 schema 升级...");
         addTenantIdColumns();
+        upgradeAiModelConfigUniqueness();
         enableRowLevelSecurity();
         log.info("[TenantSchema] 多租户 schema 升级完成");
     }
@@ -117,6 +119,27 @@ public class JdbcTenantSchemaUpgrade {
                 continue;
             }
             enableRls(table);
+        }
+    }
+
+    private void upgradeAiModelConfigUniqueness() {
+        if (!tableExists("sa_ai_model_config")) {
+            return;
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE sa_ai_model_config DROP CONSTRAINT IF EXISTS sa_ai_model_config_config_key_key");
+            jdbcTemplate.execute("DROP INDEX IF EXISTS idx_sa_ai_model_config_key");
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM pg_constraint WHERE conname = 'uk_sa_ai_model_config_tenant_key'",
+                    Integer.class);
+            if (count == null || count == 0) {
+                jdbcTemplate.execute(
+                        "ALTER TABLE sa_ai_model_config ADD CONSTRAINT uk_sa_ai_model_config_tenant_key UNIQUE (tenant_id, config_key)");
+            }
+            jdbcTemplate.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_sa_ai_model_config_tenant_key ON sa_ai_model_config(tenant_id, config_key, deleted)");
+        } catch (Exception e) {
+            log.warn("[TenantSchema] 升级 sa_ai_model_config 租户唯一键失败（可能不是 PostgreSQL）: {}", e.getMessage());
         }
     }
 

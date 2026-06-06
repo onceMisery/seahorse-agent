@@ -40,11 +40,17 @@ export interface AccessDecision {
 }
 
 export interface SecretItem {
+  secretRef?: string;
   secretId?: string;
+  tenantId?: string;
   name?: string;
+  secretType?: string;
   type?: string;
   maskedValue?: string;
+  maskedHint?: string;
   description?: string;
+  status?: string;
+  createdAt?: string;
   createTime?: string;
 }
 
@@ -143,7 +149,7 @@ export function listAccessDecisions(params: {
 // ── 密钥 ──
 
 export function createSecret(payload: CreateSecretPayload) {
-  return api.post<Record<string, unknown>, Record<string, unknown>>("/api/secrets", payload);
+  return api.post<SecretItem, SecretItem>("/api/secrets", payload);
 }
 
 // ── 配额策略 ──

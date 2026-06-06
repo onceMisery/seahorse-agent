@@ -63,6 +63,7 @@ class JdbcRagTraceRepositoryAdapterTests {
     @Test
     void shouldRecordAndQueryTraceNode() {
         RagTraceNode node = sampleNode();
+        node.setExtraData("{\"input\":\"query\",\"output\":\"hits\"}");
         adapter.startNode(node);
         adapter.finishNode(new RagTraceNodeFinish("trace-1", "node-1", "ERROR",
                 "failed", Instant.now(), 45));
@@ -71,6 +72,20 @@ class JdbcRagTraceRepositoryAdapterTests {
         RagTraceNode actual = adapter.listNodes("trace-1").get(0);
         assertThat(actual.getStatus()).isEqualTo("ERROR");
         assertThat(actual.getErrorMessage()).isEqualTo("failed");
+        assertThat(actual.getExtraData()).isEqualTo("{\"input\":\"query\",\"output\":\"hits\"}");
+    }
+
+    @Test
+    void shouldUpdateTraceNodeExtraDataWhenFinished() {
+        RagTraceNode node = sampleNode();
+        node.setExtraData("{\"input\":\"query\"}");
+        adapter.startNode(node);
+
+        adapter.finishNode(new RagTraceNodeFinish("trace-1", "node-1", "SUCCESS",
+                null, Instant.now(), 45, "{\"output\":\"hits\"}"));
+
+        RagTraceNode actual = adapter.listNodes("trace-1").get(0);
+        assertThat(actual.getExtraData()).isEqualTo("{\"output\":\"hits\"}");
     }
 
     @Test

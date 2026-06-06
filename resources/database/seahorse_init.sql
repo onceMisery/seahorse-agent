@@ -2044,7 +2044,8 @@ ON t_retrieval_evaluation_comparison (kb_id, dataset_id, create_time);
 
 CREATE TABLE IF NOT EXISTS sa_ai_model_config (
     id BIGINT PRIMARY KEY,
-    config_key VARCHAR(128) NOT NULL UNIQUE,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    config_key VARCHAR(128) NOT NULL,
     config_value TEXT NOT NULL,
     config_type VARCHAR(32) NOT NULL,
     is_encrypted SMALLINT NOT NULL DEFAULT 0,
@@ -2055,10 +2056,11 @@ CREATE TABLE IF NOT EXISTS sa_ai_model_config (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted SMALLINT NOT NULL DEFAULT 0,
     CONSTRAINT chk_sa_ai_model_config_type
-        CHECK (config_type IN ('STRING', 'INTEGER', 'BOOLEAN', 'JSON'))
+        CHECK (config_type IN ('STRING', 'INTEGER', 'BOOLEAN', 'JSON')),
+    CONSTRAINT uk_sa_ai_model_config_tenant_key UNIQUE (tenant_id, config_key)
 );
 CREATE INDEX IF NOT EXISTS idx_sa_ai_model_config_key
-    ON sa_ai_model_config(config_key, deleted);
+    ON sa_ai_model_config(tenant_id, config_key, deleted);
 
 -- PostgreSQL Initial Data for Seahorse Agent
 -- NOTE: Admin user seed moved to end of file (after SaaS MVP extensions add tenant_id/email columns)

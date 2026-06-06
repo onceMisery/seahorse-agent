@@ -55,7 +55,7 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
             """;
     private static final String SQL_NODE_SELECT = """
             SELECT id, trace_id, node_id, parent_node_id, depth, node_type, node_name,
-                   class_name, method_name, status, error_message, duration_ms, start_time, end_time
+                   class_name, method_name, status, error_message, duration_ms, start_time, end_time, extra_data
             FROM t_rag_trace_node
             WHERE trace_id = ? AND deleted = 0
             ORDER BY start_time ASC, id ASC
@@ -80,7 +80,8 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
             """;
     private static final String SQL_FINISH_NODE = """
             UPDATE t_rag_trace_node
-            SET status = ?, error_message = ?, end_time = ?, duration_ms = ?, update_time = ?
+            SET status = ?, error_message = ?, end_time = ?, duration_ms = ?, extra_data = COALESCE(?, extra_data),
+                update_time = ?
             WHERE trace_id = ? AND node_id = ? AND deleted = 0
             """;
     private static final String SQL_SELECT_EXPIRED_RUNS = """
@@ -202,7 +203,7 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
                 toTimestamp(nullToNow(safeNode.getStartTime())),
                 toTimestamp(safeNode.getEndTime()),
                 safeNode.getDurationMs(),
-                null,
+                safeNode.getExtraData(),
                 toTimestamp(now),
                 toTimestamp(now));
     }
@@ -218,6 +219,7 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
                 finish.errorMessage(),
                 toTimestamp(endTime),
                 finish.durationMs(),
+                finish.extraData(),
                 toTimestamp(Instant.now()),
                 toLongId(finish.traceId()),
                 toLongId(finish.nodeId()));
@@ -310,6 +312,7 @@ public class JdbcRagTraceRepositoryAdapter implements RagTraceRepositoryPort {
         node.setDurationMs(resultSet.getObject("duration_ms", Long.class));
         node.setStartTime(toInstant(resultSet.getTimestamp("start_time")));
         node.setEndTime(toInstant(resultSet.getTimestamp("end_time")));
+        node.setExtraData(resultSet.getString("extra_data"));
         return node;
     }
 

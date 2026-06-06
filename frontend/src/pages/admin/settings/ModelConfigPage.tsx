@@ -1,304 +1,336 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Pencil, Save, X, Eye, EyeOff } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getAiModelConfigs, createAiModelConfig, updateAiModelConfig, type AiModelConfigItem } from "@/services/aiConfigService";
 import { getErrorMessage } from "@/utils/error";
-import {
-  getAiModelConfigs,
-  updateAiModelConfig,
-  type AiModelConfigItem,
-} from "@/services/aiConfigService";
+import { storage } from "@/utils/storage";
 
-interface ConfigFormData {
+type ModelCapability = "chat" | "embedding" | "rerank";
+
+interface TenantModelItem {
+  id: string;
+  capability: ModelCapability;
+  provider: string;
+  model: string;
   baseUrl: string;
-  apiKey: string;
-  chatModel: string;
-  embeddingModel: string;
-  rerankModel: string;
+  secretRef: string;
+  dimension?: number | null;
+  priority?: number | null;
+  enabled: boolean;
+  defaultModel: boolean;
+}
+
+const MODEL_REGISTRY_KEY = "ai.models";
+
+const capabilityLabels: Record<ModelCapability, string> = {
+  chat: "对话",
+  embedding: "向量化",
+  rerank: "重排"
+};
+
+function activeTenantId() {
+  const user = storage.getUser() as ({ tenantId?: string } | null);
+  return user?.tenantId?.trim() || "default";
+}
+
+function emptyModel(capability: ModelCapability = "chat"): TenantModelItem {
+  return {
+    id: "",
+    capability,
+    provider: "",
+    model: "",
+    baseUrl: "",
+    secretRef: "",
+    dimension: null,
+    priority: null,
+    enabled: true,
+    defaultModel: false
+  };
+}
+
+function parseModels(config?: AiModelConfigItem): TenantModelItem[] {
+  if (!config?.configValue?.trim()) return [];
+  try {
+    const parsed = JSON.parse(config.configValue);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => ({
+      ...emptyModel(item.capability === "embedding" || item.capability === "rerank" ? item.capability : "chat"),
+      ...item,
+      enabled: item.enabled !== false,
+      defaultModel: item.defaultModel === true
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function legacyModels(configs: AiModelConfigItem[]): TenantModelItem[] {
+  const values = Object.fromEntries(configs.map((item) => [item.configKey, item.configValue]));
+  const baseUrl = values["ai.base.url"] || "";
+  return [
+    values["ai.chat.model"] ? { ...emptyModel("chat"), id: values["ai.chat.model"], model: values["ai.chat.model"], baseUrl, defaultModel: true } : null,
+    values["ai.embedding.model"] ? { ...emptyModel("embedding"), id: values["ai.embedding.model"], model: values["ai.embedding.model"], baseUrl, defaultModel: true } : null,
+    values["ai.rerank.model"] ? { ...emptyModel("rerank"), id: values["ai.rerank.model"], model: values["ai.rerank.model"], baseUrl, defaultModel: true } : null
+  ].filter(Boolean) as TenantModelItem[];
+}
+
+function normalizeModels(models: TenantModelItem[]) {
+  return models
+    .map((item, index) => ({
+      ...item,
+      id: item.id.trim(),
+      provider: item.provider.trim(),
+      model: item.model.trim(),
+      baseUrl: item.baseUrl.trim(),
+      secretRef: item.secretRef.trim(),
+      priority: item.priority ?? index + 1,
+      dimension: item.capability === "embedding" ? item.dimension ?? null : null
+    }))
+    .filter((item) => item.id && item.model);
 }
 
 export function ModelConfigPage() {
+  const [tenantId, setTenantId] = useState(activeTenantId());
   const [configs, setConfigs] = useState<AiModelConfigItem[]>([]);
+  const [models, setModels] = useState<TenantModelItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [formData, setFormData] = useState<ConfigFormData>({
-    baseUrl: "",
-    apiKey: "",
-    chatModel: "",
-    embeddingModel: "",
-    rerankModel: "",
-  });
-  const [originalData, setOriginalData] = useState<ConfigFormData>({
-    baseUrl: "",
-    apiKey: "",
-    chatModel: "",
-    embeddingModel: "",
-    rerankModel: "",
-  });
 
-  const loadConfigs = async () => {
+  const registryConfig = useMemo(
+    () => configs.find((item) => item.configKey === MODEL_REGISTRY_KEY),
+    [configs]
+  );
+
+  const loadConfigs = async (nextTenantId = tenantId) => {
     try {
       setLoading(true);
-      const data = await getAiModelConfigs();
+      const data = await getAiModelConfigs({ tenantId: nextTenantId });
+      const registry = data.find((item) => item.configKey === MODEL_REGISTRY_KEY);
+      const registryModels = parseModels(registry);
       setConfigs(data);
-
-      // 映射配置到表单
-      const configMap = data.reduce((acc, item) => {
-        acc[item.configKey] = item.configValue;
-        return acc;
-      }, {} as Record<string, string>);
-
-      const newFormData = {
-        baseUrl: configMap["ai.base.url"] || "",
-        apiKey: "",
-        chatModel: configMap["ai.chat.model"] || "",
-        embeddingModel: configMap["ai.embedding.model"] || "",
-        rerankModel: configMap["ai.rerank.model"] || "",
-      };
-
-      setFormData(newFormData);
-      setOriginalData(newFormData);
+      setModels(registryModels.length > 0 ? registryModels : legacyModels(data));
     } catch (error) {
-      toast.error(getErrorMessage(error, "加载配置失败"));
-      console.error(error);
+      toast.error(getErrorMessage(error, "加载模型配置失败"));
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadConfigs();
+    loadConfigs(tenantId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const updateModel = (index: number, patch: Partial<TenantModelItem>) => {
+    setModels((prev) => prev.map((item, idx) => (idx === index ? { ...item, ...patch } : item)));
+  };
+
+  const removeModel = (index: number) => {
+    setModels((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const setDefault = (index: number, value: boolean) => {
+    setModels((prev) => {
+      const capability = prev[index]?.capability;
+      return prev.map((item, idx) => {
+        if (idx === index) return { ...item, defaultModel: value };
+        if (value && item.capability === capability) return { ...item, defaultModel: false };
+        return item;
+      });
+    });
+  };
+
+  const handleTenantReload = () => {
+    const safeTenant = tenantId.trim() || "default";
+    setTenantId(safeTenant);
+    loadConfigs(safeTenant);
+  };
+
   const handleSave = async () => {
+    const safeTenant = tenantId.trim() || "default";
+    const payload = normalizeModels(models);
+    if (payload.length === 0) {
+      toast.error("请至少保留一个有效模型");
+      return;
+    }
+
     try {
       setSaving(true);
-
-      const updates: Array<{ key: string; value: string }> = [];
-
-      if (formData.baseUrl !== originalData.baseUrl) {
-        updates.push({ key: "ai.base.url", value: formData.baseUrl });
+      const value = JSON.stringify(payload, null, 2);
+      if (registryConfig) {
+        await updateAiModelConfig(MODEL_REGISTRY_KEY, value, safeTenant);
+      } else {
+        await createAiModelConfig({
+          tenantId: safeTenant,
+          configKey: MODEL_REGISTRY_KEY,
+          configValue: value,
+          configType: "JSON",
+          encrypted: false,
+          description: "Tenant model registry"
+        });
       }
-      if (formData.apiKey !== originalData.apiKey) {
-        updates.push({ key: "ai.api.key", value: formData.apiKey });
-      }
-      if (formData.chatModel !== originalData.chatModel) {
-        updates.push({ key: "ai.chat.model", value: formData.chatModel });
-      }
-      if (formData.embeddingModel !== originalData.embeddingModel) {
-        updates.push({ key: "ai.embedding.model", value: formData.embeddingModel });
-      }
-      if (formData.rerankModel !== originalData.rerankModel) {
-        updates.push({ key: "ai.rerank.model", value: formData.rerankModel });
-      }
-
-      if (updates.length === 0) {
-        toast.info("没有配置变更");
-        setEditing(false);
-        return;
-      }
-
-      // 批量更新
-      await Promise.all(
-        updates.map((update) => updateAiModelConfig(update.key, update.value))
-      );
-
-      toast.success("配置已保存。运行时模型适配器仍以部署环境配置为准。");
-      setEditing(false);
-      await loadConfigs();
+      toast.success("模型注册表已保存");
+      await loadConfigs(safeTenant);
     } catch (error) {
-      toast.error(getErrorMessage(error, "保存配置失败"));
+      toast.error(getErrorMessage(error, "保存模型配置失败"));
     } finally {
       setSaving(false);
     }
   };
 
-  const handleCancel = () => {
-    setEditing(false);
-    setFormData(originalData);
-    setShowApiKey(false);
-  };
-
-  if (loading) {
-    return (
-      <div className="admin-page">
-        <div className="text-sm text-muted-foreground">加载中...</div>
-      </div>
-    );
-  }
-
-  const apiKeyConfig = configs.find((c) => c.configKey === "ai.api.key");
-  const displayApiKey = editing && showApiKey ? formData.apiKey : (apiKeyConfig?.displayValue || "********");
+  const enabledCount = models.filter((item) => item.enabled).length;
+  const embeddingCount = models.filter((item) => item.capability === "embedding" && item.enabled).length;
 
   return (
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">大模型配置</h1>
-          <p className="admin-page-subtitle">维护数据库中的模型配置；当前运行时适配器以部署环境配置为准</p>
+          <h1 className="admin-page-title">模型管理</h1>
+          <p className="admin-page-subtitle">按租户维护可用模型、供应商凭据引用和默认模型</p>
         </div>
-        <div className="flex gap-2">
-          {!editing ? (
-            <Button onClick={() => setEditing(true)} variant="outline">
-              <Pencil className="mr-2 h-4 w-4" />
-              编辑配置
-            </Button>
-          ) : (
-            <>
-              <Button onClick={handleSave} variant="default" disabled={saving}>
-                <Save className="mr-2 h-4 w-4" />
-                {saving ? "保存中..." : "保存"}
-              </Button>
-              <Button onClick={handleCancel} variant="outline" disabled={saving}>
-                <X className="mr-2 h-4 w-4" />
-                取消
-              </Button>
-            </>
-          )}
+        <div className="admin-page-actions">
+          <Button variant="outline" onClick={handleTenantReload} disabled={loading}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            刷新
+          </Button>
+          <Button onClick={handleSave} disabled={saving || loading}>
+            <Save className="mr-2 h-4 w-4" />
+            {saving ? "保存中..." : "保存"}
+          </Button>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>模型服务配置</CardTitle>
-          <CardDescription>
-            保存 OpenAI 兼容的 API 服务地址和密钥；是否立即用于运行时取决于后端适配器配置
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="baseUrl">API 基础地址</Label>
-              <Input
-                id="baseUrl"
-                value={formData.baseUrl}
-                onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
-                disabled={!editing}
-                placeholder="https://api.siliconflow.cn/v1"
-              />
-              <p className="text-xs text-muted-foreground">
-                OpenAI 兼容的 API 端点地址
-              </p>
-            </div>
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_220px]">
+        <Card>
+          <CardHeader>
+            <CardTitle>租户</CardTitle>
+            <CardDescription>当前页面只读写指定租户的模型注册表</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 sm:flex-row">
+            <Input value={tenantId} onChange={(event) => setTenantId(event.target.value)} placeholder="default" />
+            <Button variant="outline" onClick={handleTenantReload}>切换租户</Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>{enabledCount}</CardTitle>
+            <CardDescription>启用模型</CardDescription>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>{embeddingCount}</CardTitle>
+            <CardDescription>可用于知识库的向量模型</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="apiKey">API 密钥</Label>
-              <div className="relative">
-                <Input
-                  id="apiKey"
-                  type={editing && showApiKey ? "text" : "password"}
-                  value={editing ? formData.apiKey : displayApiKey}
-                  onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                  disabled={!editing}
-                  placeholder="sk-..."
-                  className="pr-10"
-                />
-                {editing && (
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    {showApiKey ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                )}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle>模型注册表</CardTitle>
+            <CardDescription>知识库创建会读取当前租户启用的向量化模型</CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setModels((prev) => [...prev, emptyModel("embedding")])}>
+              <Plus className="mr-2 h-4 w-4" />
+              向量模型
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setModels((prev) => [...prev, emptyModel("chat")])}>
+              <Plus className="mr-2 h-4 w-4" />
+              对话模型
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {loading ? (
+            <div className="rounded border border-dashed p-6 text-sm text-muted-foreground">加载中...</div>
+          ) : models.length === 0 ? (
+            <div className="rounded border border-dashed p-6 text-sm text-muted-foreground">暂无模型</div>
+          ) : (
+            models.map((item, index) => (
+              <div key={`${item.capability}-${index}`} className="rounded-lg border bg-white p-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={item.enabled ? "default" : "outline"}>{capabilityLabels[item.capability]}</Badge>
+                    {item.defaultModel ? <Badge variant="secondary">默认</Badge> : null}
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => removeModel(index)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>能力</Label>
+                    <Select value={item.capability} onValueChange={(value) => updateModel(index, { capability: value as ModelCapability })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="chat">对话</SelectItem>
+                        <SelectItem value="embedding">向量化</SelectItem>
+                        <SelectItem value="rerank">重排</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>模型 ID</Label>
+                    <Input value={item.id} onChange={(event) => updateModel(index, { id: event.target.value })} placeholder="bge-m3" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>供应商</Label>
+                    <Input value={item.provider} onChange={(event) => updateModel(index, { provider: event.target.value })} placeholder="siliconflow" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>模型名称</Label>
+                    <Input value={item.model} onChange={(event) => updateModel(index, { model: event.target.value })} placeholder="BAAI/bge-m3" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Base URL</Label>
+                    <Input value={item.baseUrl} onChange={(event) => updateModel(index, { baseUrl: event.target.value })} placeholder="https://api.example.com/v1" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Secret Ref</Label>
+                    <Input value={item.secretRef} onChange={(event) => updateModel(index, { secretRef: event.target.value })} placeholder="secret_..." />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>维度</Label>
+                    <Input
+                      type="number"
+                      value={item.dimension ?? ""}
+                      onChange={(event) => updateModel(index, { dimension: event.target.value ? Number(event.target.value) : null })}
+                      disabled={item.capability !== "embedding"}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>优先级</Label>
+                    <Input
+                      type="number"
+                      value={item.priority ?? ""}
+                      onChange={(event) => updateModel(index, { priority: event.target.value ? Number(event.target.value) : null })}
+                    />
+                  </div>
+                  <div className="flex items-end gap-5">
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={item.enabled} onCheckedChange={(value) => updateModel(index, { enabled: value === true })} />
+                      启用
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={item.defaultModel} onCheckedChange={(value) => setDefault(index, value === true)} />
+                      默认
+                    </label>
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                用于身份验证的 API 密钥（加密存储）
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>模型选择</CardTitle>
-          <CardDescription>
-            配置对话、向量化和重排序模型
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="chatModel">对话模型</Label>
-            <Input
-              id="chatModel"
-              value={formData.chatModel}
-              onChange={(e) => setFormData({ ...formData, chatModel: e.target.value })}
-              disabled={!editing}
-              placeholder="deepseek-ai/DeepSeek-V3.2"
-            />
-            <p className="text-xs text-muted-foreground">
-              用于对话生成的主模型，例如：deepseek-ai/DeepSeek-V3.2, gpt-4o
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="embeddingModel">向量化模型</Label>
-            <Input
-              id="embeddingModel"
-              value={formData.embeddingModel}
-              onChange={(e) => setFormData({ ...formData, embeddingModel: e.target.value })}
-              disabled={!editing}
-              placeholder="BAAI/bge-m3"
-            />
-            <p className="text-xs text-muted-foreground">
-              用于文本向量化的模型，例如：BAAI/bge-m3, text-embedding-3-large
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="rerankModel">重排序模型</Label>
-            <Input
-              id="rerankModel"
-              value={formData.rerankModel}
-              onChange={(e) => setFormData({ ...formData, rerankModel: e.target.value })}
-              disabled={!editing}
-              placeholder="Qwen/Qwen3-Reranker-8B"
-            />
-            <p className="text-xs text-muted-foreground">
-              用于检索结果重排序的模型，例如：Qwen/Qwen3-Reranker-8B
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-green-200 bg-green-50/50">
-        <CardHeader>
-          <CardTitle className="text-green-900">配置说明</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-green-800">
-          <p>
-            <strong>运行时来源：</strong>当前 AI adapter 从 `seahorse-agent.adapters.ai.*` 部署环境配置读取模型服务。
-          </p>
-          <p>
-            <strong>保存影响：</strong>本页保存数据库配置，用于后台治理和后续运行时刷新能力；如需改变当前模型调用，请同步调整部署环境并按部署要求重启或刷新服务。
-          </p>
-          <p>
-            <strong>🔒 安全存储：</strong>加密配置前端显示时自动脱敏；运行时配置页面只展示密钥是否已配置。
-          </p>
-          <p>
-            <strong>👤 权限控制：</strong>仅管理员可以编辑配置，所有变更记录操作人和时间。
-          </p>
-          <p>
-            <strong>📝 推荐配置：</strong>
-          </p>
-          <ul className="ml-4 list-disc space-y-0.5">
-            <li>SiliconFlow：性价比高，国内访问快</li>
-            <li>对话模型：deepseek-ai/DeepSeek-V3.2</li>
-            <li>向量化：BAAI/bge-m3（多语言支持）</li>
-            <li>重排序：Qwen/Qwen3-Reranker-8B（中文优化）</li>
-          </ul>
+            ))
+          )}
         </CardContent>
       </Card>
     </div>

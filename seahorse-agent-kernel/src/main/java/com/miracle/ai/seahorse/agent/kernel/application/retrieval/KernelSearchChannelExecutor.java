@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
@@ -33,7 +35,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -42,15 +46,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * 执行已激活的检索通道，并处理通道级 timeout、trace 和降级。
- * <p>
- * 该类不参与上下文构建和结果后处理，避免检索编排器继续吸收并发执行细节。
+ * Executes enabled retrieval channels with per-channel timeout, observation, trace, and fallback handling.
  */
 final class KernelSearchChannelExecutor {
 
     private static final Logger LOG = LoggerFactory.getLogger(KernelSearchChannelExecutor.class);
-    private static final String LOG_MSG_CHANNEL_FAILED = "检索通道 {} 执行失败，按空结果降级";
-    private static final String LOG_MSG_CHANNEL_TIMEOUT = "检索通道 {} 执行超时，按空结果降级";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String LOG_MSG_CHANNEL_FAILED = "Search channel {} failed, fallback to empty result";
+    private static final String LOG_MSG_CHANNEL_TIMEOUT = "Search channel {} timed out, fallback to empty result";
+    private static final int TRACE_QUERY_MAX_LENGTH = 500;
+    private static final int TRACE_HIT_PREVIEW_MAX_LENGTH = 300;
+    private static final int TRACE_HIT_LIMIT = 3;
 
     private final ExtensionRegistry extensionRegistry;
     private final Executor retrievalExecutor;
@@ -99,7 +105,6 @@ final class KernelSearchChannelExecutor {
         TraceNodeScope nodeScope = traceRecorder.startNode(traceRunScope(context), channelTraceCommand(channel));
         long startedAt = System.currentTimeMillis();
         long timeoutMs = channelTimeout(context, channel).toMillis();
-        // 单通道超时只降级当前通道，避免慢后端拖住整个多通道检索流程。
         return CompletableFuture.supplyAsync(() -> channel.search(context), retrievalExecutor)
                 .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
                 .handle((result, throwable) -> completeSingleChannel(
@@ -118,13 +123,15 @@ final class KernelSearchChannelExecutor {
         if (cause == null) {
             SearchChannelResult safeResult = result == null ? emptyResult(channel, elapsedMs) : result;
             observationSupport.recordChannelCompleted(channel, context, safeResult, null, elapsedMs, timeoutMs, false);
-            traceRecorder.finishNode(nodeScope);
+            traceRecorder.finishNode(nodeScope, null,
+                    channelTraceExtraData(channel, context, safeResult, elapsedMs, timeoutMs, null, false));
             return safeResult;
         }
         SearchChannelResult fallback = emptyResult(channel, elapsedMs);
         boolean timedOut = cause instanceof TimeoutException;
         observationSupport.recordChannelCompleted(channel, context, fallback, cause, elapsedMs, timeoutMs, timedOut);
-        traceRecorder.finishNode(nodeScope, cause);
+        traceRecorder.finishNode(nodeScope, cause,
+                channelTraceExtraData(channel, context, fallback, elapsedMs, timeoutMs, cause, timedOut));
         if (timedOut) {
             LOG.warn(LOG_MSG_CHANNEL_TIMEOUT, channel.name(), cause);
         } else {
@@ -173,7 +180,6 @@ final class KernelSearchChannelExecutor {
     }
 
     private TraceNodeStartCommand channelTraceCommand(SearchChannelFeature channel) {
-        // Trace 只记录编排节点，不改变通道失败时返回空结果的降级语义。
         return new TraceNodeStartCommand(
                 "search-channel:" + Objects.requireNonNullElse(channel.name(), "unknown"),
                 "RETRIEVAL_CHANNEL",
@@ -181,5 +187,79 @@ final class KernelSearchChannelExecutor {
                 "search",
                 null,
                 1);
+    }
+
+    private String channelTraceExtraData(SearchChannelFeature channel,
+                                         SearchContext context,
+                                         SearchChannelResult result,
+                                         long elapsedMs,
+                                         long timeoutMs,
+                                         Throwable error,
+                                         boolean timedOut) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("input", truncate(context == null ? null : context.getMainQuestion(), TRACE_QUERY_MAX_LENGTH));
+        payload.put("query", truncate(context == null ? null : context.getMainQuestion(), TRACE_QUERY_MAX_LENGTH));
+        payload.put("originalQuestion", truncate(context == null ? null : context.getOriginalQuestion(),
+                TRACE_QUERY_MAX_LENGTH));
+        payload.put("rewrittenQuestion", truncate(context == null ? null : context.getRewrittenQuestion(),
+                TRACE_QUERY_MAX_LENGTH));
+        payload.put("channelName", channel == null ? null : channel.name());
+        payload.put("channelType", channel == null || channel.channelType() == null ? null : channel.channelType().name());
+        payload.put("topK", context == null ? 0 : context.getTopK());
+        payload.put("timeoutMs", timeoutMs);
+        payload.put("latencyMs", elapsedMs);
+        payload.put("timedOut", timedOut);
+        payload.put("hitCount", result == null || result.getChunks() == null ? 0 : result.getChunks().size());
+        payload.put("output", result == null || result.getChunks() == null
+                ? "0 hits"
+                : result.getChunks().size() + " hits");
+        payload.put("hits", traceHits(result));
+        if (error != null) {
+            payload.put("errorType", error.getClass().getSimpleName());
+            payload.put("errorMessage", truncate(error.getMessage(), TRACE_HIT_PREVIEW_MAX_LENGTH));
+        }
+        try {
+            return OBJECT_MAPPER.writeValueAsString(payload);
+        } catch (JsonProcessingException ex) {
+            LOG.debug("RAG Trace channel extra_data serialization failed, channel={}",
+                    channel == null ? null : channel.name(), ex);
+            return null;
+        }
+    }
+
+    private List<Map<String, Object>> traceHits(SearchChannelResult result) {
+        if (result == null || result.getChunks() == null || result.getChunks().isEmpty()) {
+            return List.of();
+        }
+        return result.getChunks().stream()
+                .limit(TRACE_HIT_LIMIT)
+                .map(this::traceHit)
+                .toList();
+    }
+
+    private Map<String, Object> traceHit(RetrievedChunk chunk) {
+        Map<String, Object> hit = new LinkedHashMap<>();
+        if (chunk == null) {
+            return hit;
+        }
+        hit.put("id", chunk.getId());
+        hit.put("docId", chunk.getDocId());
+        hit.put("kbId", chunk.getKbId());
+        hit.put("collectionName", chunk.getCollectionName());
+        hit.put("chunkIndex", chunk.getChunkIndex());
+        hit.put("score", chunk.getScore());
+        hit.put("textPreview", truncate(chunk.getText(), TRACE_HIT_PREVIEW_MAX_LENGTH));
+        return hit;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.replace('\r', ' ').replace('\n', ' ').replace('\t', ' ').trim();
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        return normalized.substring(0, Math.max(maxLength - 3, 0)) + "...";
     }
 }

@@ -27,5 +27,15 @@ public record RagTraceNodeFinish(String traceId,
                                  String status,
                                  String errorMessage,
                                  Instant endTime,
-                                 long durationMs) {
+                                 long durationMs,
+                                 String extraData) {
+
+    public RagTraceNodeFinish(String traceId,
+                              String nodeId,
+                              String status,
+                              String errorMessage,
+                              Instant endTime,
+                              long durationMs) {
+        this(traceId, nodeId, status, errorMessage, endTime, durationMs, null);
+    }
 }

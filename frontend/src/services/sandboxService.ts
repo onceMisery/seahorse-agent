@@ -1,6 +1,8 @@
 import { api } from "@/services/api";
+import { storage } from "@/utils/storage";
 
-// ── 类型定义 ──
+const DEFAULT_TENANT_ID = "default";
+const DEFAULT_RUNTIME_TYPE = "CODE_INTERPRETER";
 
 export interface SandboxSession {
   sessionId?: string;
@@ -33,16 +35,50 @@ export interface SandboxArtifact {
   content?: string;
 }
 
-// ── API 调用 ──
-
-export function createSandboxSession(payload?: { agentId?: string; config?: Record<string, unknown> }) {
-  return api.post<SandboxSession, SandboxSession>("/api/sandbox/sessions", payload || {});
+export interface SandboxSessionCreatePayload {
+  tenantId?: string;
+  runId?: string;
+  runtimeType?: "CODE_INTERPRETER" | "BROWSER_AUTOMATION" | "SHELL" | "FILE_CONVERSION";
+  networkRequested?: boolean;
+  requestedHosts?: string[];
 }
 
-export function executeInSandbox(sessionId: string, payload: { toolId?: string; argumentsJson?: string }) {
+export interface SandboxExecutePayload {
+  input?: string;
+  argumentsJson?: string;
+  toolId?: string;
+  networkRequested?: boolean;
+  requestedHosts?: string[];
+}
+
+function currentTenantId() {
+  const user = storage.getUser() as ({ tenantId?: string | null } | null);
+  return user?.tenantId?.trim() || DEFAULT_TENANT_ID;
+}
+
+function createRunId() {
+  return `sandbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function createSandboxSession(payload: SandboxSessionCreatePayload = {}) {
+  return api.post<SandboxSession, SandboxSession>("/api/sandbox/sessions", {
+    tenantId: payload.tenantId?.trim() || currentTenantId(),
+    runId: payload.runId?.trim() || createRunId(),
+    runtimeType: payload.runtimeType || DEFAULT_RUNTIME_TYPE,
+    networkRequested: payload.networkRequested ?? false,
+    requestedHosts: payload.requestedHosts || []
+  });
+}
+
+export function executeInSandbox(sessionId: string, payload: SandboxExecutePayload) {
+  const input = payload.input ?? payload.argumentsJson ?? "";
   return api.post<SandboxExecutionResult, SandboxExecutionResult>(
     `/api/sandbox/sessions/${encodeURIComponent(sessionId)}/execute`,
-    payload
+    {
+      input,
+      networkRequested: payload.networkRequested ?? false,
+      requestedHosts: payload.requestedHosts || []
+    }
   );
 }
 

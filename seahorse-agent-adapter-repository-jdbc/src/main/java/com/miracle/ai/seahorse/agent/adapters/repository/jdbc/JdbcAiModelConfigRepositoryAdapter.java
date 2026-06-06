@@ -28,6 +28,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -48,43 +49,76 @@ public class JdbcAiModelConfigRepositoryAdapter implements AiModelConfigReposito
     private static final String ALGORITHM = "AES";
 
     private final JdbcTemplate jdbcTemplate;
+    private final boolean h2Database;
 
     public JdbcAiModelConfigRepositoryAdapter(DataSource dataSource) {
-        this.jdbcTemplate = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource must not be null"));
+        DataSource safeDataSource = Objects.requireNonNull(dataSource, "dataSource must not be null");
+        this.jdbcTemplate = new JdbcTemplate(safeDataSource);
+        this.h2Database = isH2Database(safeDataSource);
     }
 
     @Override
     public List<AiModelConfig> findAll() {
+        return findAll(DEFAULT_TENANT_ID);
+    }
+
+    @Override
+    public List<AiModelConfig> findAll(String tenantId) {
         String sql = """
-                SELECT id, config_key, config_value, config_type, is_encrypted, description,
+                SELECT id, tenant_id, config_key, config_value, config_type, is_encrypted, description,
                        created_by, updated_by, created_at, updated_at, deleted
                 FROM sa_ai_model_config
-                WHERE deleted = 0
+                WHERE tenant_id = ? AND deleted = 0
                 ORDER BY created_at ASC
                 """;
-        return jdbcTemplate.query(sql, new AiModelConfigRowMapper());
+        return jdbcTemplate.query(sql, new AiModelConfigRowMapper(), normalizeTenantId(tenantId));
     }
 
     @Override
     public Optional<AiModelConfig> findByKey(String configKey) {
+        return findByKey(DEFAULT_TENANT_ID, configKey);
+    }
+
+    @Override
+    public Optional<AiModelConfig> findByKey(String tenantId, String configKey) {
         String sql = """
-                SELECT id, config_key, config_value, config_type, is_encrypted, description,
+                SELECT id, tenant_id, config_key, config_value, config_type, is_encrypted, description,
                        created_by, updated_by, created_at, updated_at, deleted
                 FROM sa_ai_model_config
-                WHERE config_key = ? AND deleted = 0
+                WHERE tenant_id = ? AND config_key = ? AND deleted = 0
                 """;
-        List<AiModelConfig> results = jdbcTemplate.query(sql, new AiModelConfigRowMapper(), configKey);
+        List<AiModelConfig> results = jdbcTemplate.query(sql, new AiModelConfigRowMapper(),
+                normalizeTenantId(tenantId), configKey);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     @Override
     public void save(AiModelConfig config) {
-        String sql = """
+        String sql = h2Database ? h2UpsertSql() : postgresUpsertSql();
+
+        String valueToStore = config.isEncrypted() ? encrypt(config.getConfigValue()) : config.getConfigValue();
+
+        jdbcTemplate.update(sql,
+                requiredLong(config.getId(), "id"),
+                normalizeTenantId(config.getTenantId()),
+                config.getConfigKey(),
+                valueToStore,
+                config.getConfigType().name(),
+                config.isEncrypted() ? 1 : 0,
+                config.getDescription(),
+                nullableLong(config.getCreatedBy()),
+                nullableLong(config.getUpdatedBy()),
+                Timestamp.valueOf(config.getCreatedAt()),
+                Timestamp.valueOf(config.getUpdatedAt()));
+    }
+
+    private String postgresUpsertSql() {
+        return """
                 INSERT INTO sa_ai_model_config
-                    (id, config_key, config_value, config_type, is_encrypted, description,
+                    (id, tenant_id, config_key, config_value, config_type, is_encrypted, description,
                      created_by, updated_by, created_at, updated_at, deleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-                ON CONFLICT (config_key) DO UPDATE SET
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                ON CONFLICT (tenant_id, config_key) DO UPDATE SET
                     config_value = EXCLUDED.config_value,
                     config_type = EXCLUDED.config_type,
                     is_encrypted = EXCLUDED.is_encrypted,
@@ -92,25 +126,26 @@ public class JdbcAiModelConfigRepositoryAdapter implements AiModelConfigReposito
                     updated_by = EXCLUDED.updated_by,
                     updated_at = EXCLUDED.updated_at
                 """;
+    }
 
-        String valueToStore = config.isEncrypted() ? encrypt(config.getConfigValue()) : config.getConfigValue();
-
-        jdbcTemplate.update(sql,
-                config.getId(),
-                config.getConfigKey(),
-                valueToStore,
-                config.getConfigType().name(),
-                config.isEncrypted() ? 1 : 0,
-                config.getDescription(),
-                config.getCreatedBy(),
-                config.getUpdatedBy(),
-                Timestamp.valueOf(config.getCreatedAt()),
-                Timestamp.valueOf(config.getUpdatedAt()));
+    private String h2UpsertSql() {
+        return """
+                MERGE INTO sa_ai_model_config
+                    (id, tenant_id, config_key, config_value, config_type, is_encrypted, description,
+                     created_by, updated_by, created_at, updated_at, deleted)
+                KEY (tenant_id, config_key)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                """;
     }
 
     @Override
     public void update(String configKey, String configValue, String updatedBy) {
-        Optional<AiModelConfig> existing = findByKey(configKey);
+        update(DEFAULT_TENANT_ID, configKey, configValue, updatedBy);
+    }
+
+    @Override
+    public void update(String tenantId, String configKey, String configValue, String updatedBy) {
+        Optional<AiModelConfig> existing = findByKey(tenantId, configKey);
         if (existing.isEmpty()) {
             return;
         }
@@ -121,20 +156,26 @@ public class JdbcAiModelConfigRepositoryAdapter implements AiModelConfigReposito
         String sql = """
                 UPDATE sa_ai_model_config
                 SET config_value = ?, updated_by = ?, updated_at = ?
-                WHERE config_key = ? AND deleted = 0
+                WHERE tenant_id = ? AND config_key = ? AND deleted = 0
                 """;
 
-        jdbcTemplate.update(sql, valueToStore, updatedBy, Timestamp.valueOf(LocalDateTime.now()), configKey);
+        jdbcTemplate.update(sql, valueToStore, nullableLong(updatedBy), Timestamp.valueOf(LocalDateTime.now()),
+                normalizeTenantId(tenantId), configKey);
     }
 
     @Override
     public void delete(String configKey) {
+        delete(DEFAULT_TENANT_ID, configKey);
+    }
+
+    @Override
+    public void delete(String tenantId, String configKey) {
         String sql = """
                 UPDATE sa_ai_model_config
                 SET deleted = 1, updated_at = ?
-                WHERE config_key = ?
+                WHERE tenant_id = ? AND config_key = ?
                 """;
-        jdbcTemplate.update(sql, Timestamp.valueOf(LocalDateTime.now()), configKey);
+        jdbcTemplate.update(sql, Timestamp.valueOf(LocalDateTime.now()), normalizeTenantId(tenantId), configKey);
     }
 
     private String encrypt(String value) {
@@ -176,6 +217,7 @@ public class JdbcAiModelConfigRepositoryAdapter implements AiModelConfigReposito
         public AiModelConfig mapRow(ResultSet rs, int rowNum) throws SQLException {
             AiModelConfig config = new AiModelConfig();
             config.setId(rs.getString("id"));
+            config.setTenantId(rs.getString("tenant_id"));
             config.setConfigKey(rs.getString("config_key"));
 
             boolean isEncrypted = rs.getInt("is_encrypted") == 1;
@@ -196,6 +238,33 @@ public class JdbcAiModelConfigRepositoryAdapter implements AiModelConfigReposito
 
             config.setDeleted(rs.getInt("deleted") == 1);
             return config;
+        }
+    }
+
+    private String normalizeTenantId(String tenantId) {
+        return tenantId == null || tenantId.isBlank() ? DEFAULT_TENANT_ID : tenantId.trim();
+    }
+
+    private Long nullableLong(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return Long.valueOf(value.trim());
+    }
+
+    private Long requiredLong(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+        return nullableLong(value);
+    }
+
+    private boolean isH2Database(DataSource dataSource) {
+        try (Connection connection = dataSource.getConnection()) {
+            return "H2".equalsIgnoreCase(connection.getMetaData().getDatabaseProductName());
+        } catch (SQLException ex) {
+            LOGGER.warn("Unable to detect AI model config database dialect; defaulting to PostgreSQL SQL", ex);
+            return false;
         }
     }
 }

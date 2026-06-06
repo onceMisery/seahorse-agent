@@ -49,10 +49,10 @@ public class AiModelConfigController {
     }
 
     @GetMapping
-    public Map<String, Object> list() {
+    public Map<String, Object> list(@RequestParam(value = "tenantId", required = false) String tenantId) {
         try {
             StpUtil.checkLogin();
-            List<AiModelConfig> configs = configRepository.findAll();
+            List<AiModelConfig> configs = configRepository.findAll(normalizeTenantId(tenantId));
             List<Map<String, Object>> data = configs.stream()
                     .map(this::toResponseMap)
                     .collect(Collectors.toList());
@@ -63,10 +63,11 @@ public class AiModelConfigController {
     }
 
     @GetMapping("/{key}")
-    public Map<String, Object> getByKey(@PathVariable("key") String key) {
+    public Map<String, Object> getByKey(@PathVariable("key") String key,
+                                        @RequestParam(value = "tenantId", required = false) String tenantId) {
         try {
             StpUtil.checkLogin();
-            return configRepository.findByKey(key)
+            return configRepository.findByKey(normalizeTenantId(tenantId), key)
                     .map(config -> Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, toResponseMap(config)))
                     .orElse(Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "配置不存在"));
         } catch (Exception e) {
@@ -86,7 +87,7 @@ public class AiModelConfigController {
                 return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "配置值不能为空");
             }
 
-            configRepository.update(key, value, userId);
+            configRepository.update(normalizeTenantId(request.get("tenantId")), key, value, userId);
 
             return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "配置更新成功");
         } catch (Exception e) {
@@ -102,6 +103,7 @@ public class AiModelConfigController {
 
             AiModelConfig config = new AiModelConfig();
             config.setId(SnowflakeIds.nextIdString());
+            config.setTenantId(normalizeTenantId((String) request.get("tenantId")));
             config.setConfigKey((String) request.get("configKey"));
             config.setConfigValue((String) request.get("configValue"));
             config.setConfigType(AiModelConfig.ConfigType.valueOf((String) request.getOrDefault("configType", "STRING")));
@@ -121,10 +123,11 @@ public class AiModelConfigController {
     }
 
     @DeleteMapping("/{key}")
-    public Map<String, Object> delete(@PathVariable("key") String key) {
+    public Map<String, Object> delete(@PathVariable("key") String key,
+                                      @RequestParam(value = "tenantId", required = false) String tenantId) {
         try {
             StpUtil.checkLogin();
-            configRepository.delete(key);
+            configRepository.delete(normalizeTenantId(tenantId), key);
             return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "配置删除成功");
         } catch (Exception e) {
             return Map.of(KEY_CODE, ERROR_CODE, KEY_MESSAGE, "删除配置失败: " + e.getMessage());
@@ -136,6 +139,7 @@ public class AiModelConfigController {
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id", config.getId());
+        response.put("tenantId", config.getTenantId() != null ? config.getTenantId() : "default");
         response.put("configKey", config.getConfigKey());
         response.put("configValue", config.isEncrypted() ? "" : config.getConfigValue());
         response.put("displayValue", displayValue); // 显示值，敏感信息脱敏
@@ -147,6 +151,10 @@ public class AiModelConfigController {
         response.put("createdAt", config.getCreatedAt() != null ? config.getCreatedAt().toString() : "");
         response.put("updatedAt", config.getUpdatedAt() != null ? config.getUpdatedAt().toString() : "");
         return response;
+    }
+
+    private String normalizeTenantId(String tenantId) {
+        return tenantId == null || tenantId.isBlank() ? "default" : tenantId.trim();
     }
 
     private String maskValue(String value) {

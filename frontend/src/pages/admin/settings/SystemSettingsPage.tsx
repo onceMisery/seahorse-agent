@@ -1,290 +1,196 @@
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { Database, FileQuestion, Gauge, KeyRound, Layers, Settings2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { SystemSettings } from "@/services/settingsService";
 import { getSystemSettings } from "@/services/settingsService";
 import { getErrorMessage } from "@/utils/error";
 
-const BoolBadge = ({ value }: { value: boolean }) => (
-  <Badge variant={value ? "default" : "outline"}>{value ? "启用" : "禁用"}</Badge>
-);
-
-function InfoItem({ label, value }: { label: string; value: ReactNode }) {
+function ValueTile({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-slate-200/70 bg-white px-4 py-3">
-      <span className="text-xs text-slate-500">{label}</span>
-      <div className="text-sm font-medium text-slate-800">{value}</div>
+    <div className="rounded border bg-white px-4 py-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-slate-900">{value}</div>
     </div>
   );
 }
 
+function EntryCard({
+  icon,
+  title,
+  description,
+  action,
+  onClick
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  action: string;
+  onClick: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="rounded border bg-slate-50 p-2 text-slate-700">{icon}</div>
+          <CardTitle className="text-base">{title}</CardTitle>
+        </div>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button variant="outline" onClick={onClick}>{action}</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SystemSettingsPage() {
+  const navigate = useNavigate();
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadSettings = async () => {
-    try {
-      setLoading(true);
-      const data = await getSystemSettings();
-      setSettings(data);
-    } catch (error) {
-      toast.error(getErrorMessage(error, "加载系统配置失败"));
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadSettings();
+    getSystemSettings()
+      .then(setSettings)
+      .catch((error) => toast.error(getErrorMessage(error, "加载系统设置失败")))
+      .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <div className="admin-page">
-        <div className="text-sm text-muted-foreground">加载中...</div>
-      </div>
-    );
-  }
-
-  if (!settings) {
-    return (
-      <div className="admin-page">
-        <div className="text-sm text-muted-foreground">暂无可展示的配置</div>
-      </div>
-    );
-  }
-
-  const { rag, ai } = settings;
-  const providers = Object.entries(ai.providers || {});
+  const providerCount = useMemo(() => Object.keys(settings?.ai.providers || {}).length, [settings]);
+  const chatCount = settings?.ai.chat.candidates.filter((item) => item.enabled !== false).length ?? 0;
+  const embeddingCount = settings?.ai.embedding.candidates.filter((item) => item.enabled !== false).length ?? 0;
+  const rerankCount = settings?.ai.rerank.candidates.filter((item) => item.enabled !== false).length ?? 0;
 
   return (
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">系统配置</h1>
-          <p className="admin-page-subtitle">只读展示当前运行时配置，来源为部署环境与 application 配置</p>
+          <h1 className="admin-page-title">系统设置</h1>
+          <p className="admin-page-subtitle">运行状态总览与配置入口</p>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>RAG 默认配置</CardTitle>
-          <CardDescription>向量空间与检索基础参数</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-3">
-          <InfoItem label="集合名" value={rag.defaultConfig.collectionName} />
-          <InfoItem label="向量维度" value={rag.defaultConfig.dimension} />
-          <InfoItem label="距离度量" value={rag.defaultConfig.metricType} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>查询改写</CardTitle>
-          <CardDescription>历史上下文压缩与改写策略</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-3">
-          <InfoItem label="启用" value={<BoolBadge value={rag.queryRewrite.enabled} />} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>全局限流</CardTitle>
-          <CardDescription>并发与租约控制</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-3">
-          <InfoItem label="启用" value={<BoolBadge value={rag.rateLimit.global.enabled} />} />
-          <InfoItem label="最大并发" value={rag.rateLimit.global.maxConcurrent} />
-          <InfoItem label="最大等待(秒)" value={rag.rateLimit.global.maxWaitSeconds} />
-          <InfoItem label="租约(秒)" value={rag.rateLimit.global.leaseSeconds} />
-          <InfoItem label="轮询间隔(ms)" value={rag.rateLimit.global.pollIntervalMs} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>记忆管理</CardTitle>
-          <CardDescription>摘要与上下文保留策略</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-3">
-          <InfoItem label="历史保留轮次" value={rag.memory.historyKeepTurns} />
-          <InfoItem label="摘要起始轮次" value={rag.memory.summaryStartTurns} />
-          <InfoItem label="摘要启用" value={<BoolBadge value={rag.memory.summaryEnabled} />} />
-          <InfoItem label="摘要最大字符" value={rag.memory.summaryMaxChars} />
-          <InfoItem label="标题最大长度" value={rag.memory.titleMaxLength} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>模型服务提供方</CardTitle>
-          <CardDescription>接入地址与端点配置，密钥只显示配置状态</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {providers.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-              未配置模型服务提供方。请在 `.env.full.example` 或部署环境中配置 `seahorse-agent.adapters.ai`。
-            </div>
-          ) : (
-            <Table className="min-w-[760px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[140px]">提供方</TableHead>
-                  <TableHead className="w-[240px]">地址</TableHead>
-                  <TableHead className="w-[200px]">密钥状态</TableHead>
-                  <TableHead>端点</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {providers.map(([name, provider]) => (
-                  <TableRow key={name}>
-                    <TableCell className="font-medium">{name}</TableCell>
-                    <TableCell>{provider.url}</TableCell>
-                    <TableCell>{provider.apiKeyConfigured ? "已配置" : "未配置"}</TableCell>
-                    <TableCell>
-                      <div className="space-y-1 text-xs text-muted-foreground">
-                        {Object.entries(provider.endpoints || {}).map(([key, value]) => (
-                          <div key={key}>
-                            {key}: {value}
-                          </div>
-                        ))}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>模型选择策略</CardTitle>
-          <CardDescription>熔断与选择阈值</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <InfoItem label="熔断阈值" value={ai.selection.failureThreshold} />
-          <InfoItem label="熔断恢复(ms)" value={ai.selection.openDurationMs} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>流式响应</CardTitle>
-          <CardDescription>输出分片大小</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <InfoItem label="消息分片大小" value={ai.stream.messageChunkSize} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Chat 模型配置</CardTitle>
-          <CardDescription>默认模型与候选列表</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <InfoItem label="默认模型" value={ai.chat.defaultModel} />
-            <InfoItem label="深度思考模型" value={ai.chat.deepThinkingModel} />
+      {loading ? (
+        <div className="rounded border border-dashed p-6 text-sm text-muted-foreground">加载中...</div>
+      ) : !settings ? (
+        <div className="rounded border border-dashed p-6 text-sm text-muted-foreground">暂无系统设置</div>
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>{providerCount}</CardTitle>
+                <CardDescription>运行时供应商</CardDescription>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{embeddingCount}</CardTitle>
+                <CardDescription>运行时向量模型</CardDescription>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{settings.upload.maxFileSize}</CardTitle>
+                <CardDescription>单文件上传上限</CardDescription>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <CardTitle>{settings.rag.rateLimit.global.maxConcurrent}</CardTitle>
+                  <Badge variant={settings.rag.rateLimit.global.enabled ? "default" : "outline"}>
+                    {settings.rag.rateLimit.global.enabled ? "限流开启" : "限流关闭"}
+                  </Badge>
+                </div>
+                <CardDescription>RAG 并发保护</CardDescription>
+              </CardHeader>
+            </Card>
           </div>
-          <Table className="min-w-[720px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[220px]">ID</TableHead>
-                <TableHead className="w-[120px]">提供方</TableHead>
-                <TableHead className="w-[200px]">模型</TableHead>
-                <TableHead className="w-[100px]">思维链</TableHead>
-                <TableHead className="w-[90px]">优先级</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ai.chat.candidates.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.id}</TableCell>
-                  <TableCell>{item.provider}</TableCell>
-                  <TableCell>{item.model}</TableCell>
-                  <TableCell>{item.supportsThinking ? "支持" : "-"}</TableCell>
-                  <TableCell>{item.priority}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Embedding 模型配置</CardTitle>
-          <CardDescription>向量化模型列表</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <InfoItem label="默认模型" value={ai.embedding.defaultModel} />
-          </div>
-          <Table className="min-w-[720px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[220px]">ID</TableHead>
-                <TableHead className="w-[120px]">提供方</TableHead>
-                <TableHead className="w-[200px]">模型</TableHead>
-                <TableHead className="w-[110px]">维度</TableHead>
-                <TableHead className="w-[90px]">优先级</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ai.embedding.candidates.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.id}</TableCell>
-                  <TableCell>{item.provider}</TableCell>
-                  <TableCell>{item.model}</TableCell>
-                  <TableCell>{item.dimension}</TableCell>
-                  <TableCell>{item.priority}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <Card>
+              <CardHeader>
+                <CardTitle>RAG 运行参数</CardTitle>
+                <CardDescription>当前服务实际加载的检索与记忆策略</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-3">
+                <ValueTile label="默认 Collection" value={settings.rag.defaultConfig.collectionName} />
+                <ValueTile label="向量维度" value={settings.rag.defaultConfig.dimension} />
+                <ValueTile label="距离度量" value={settings.rag.defaultConfig.metricType} />
+                <ValueTile label="历史保留轮次" value={settings.rag.memory.historyKeepTurns} />
+                <ValueTile label="摘要起始轮次" value={settings.rag.memory.summaryStartTurns} />
+                <ValueTile label="摘要最大字符" value={settings.rag.memory.summaryMaxChars} />
+              </CardContent>
+            </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Rerank 模型配置</CardTitle>
-          <CardDescription>重排模型列表</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <InfoItem label="默认模型" value={ai.rerank.defaultModel} />
+            <Card>
+              <CardHeader>
+                <CardTitle>运行时模型快照</CardTitle>
+                <CardDescription>部署环境当前加载的模型候选</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex justify-between"><span>Chat</span><span>{chatCount}</span></div>
+                <div className="flex justify-between"><span>Embedding</span><span>{embeddingCount}</span></div>
+                <div className="flex justify-between"><span>Rerank</span><span>{rerankCount}</span></div>
+                <div className="border-t pt-3 text-xs text-muted-foreground">
+                  租户级业务模型以“模型管理”为准；本区仅显示服务启动时加载的运行时快照。
+                </div>
+              </CardContent>
+            </Card>
           </div>
-          <Table className="min-w-[640px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[220px]">ID</TableHead>
-                <TableHead className="w-[120px]">提供方</TableHead>
-                <TableHead className="w-[200px]">模型</TableHead>
-                <TableHead className="w-[90px]">优先级</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ai.rerank.candidates.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.id}</TableCell>
-                  <TableCell>{item.provider}</TableCell>
-                  <TableCell>{item.model}</TableCell>
-                  <TableCell>{item.priority}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <EntryCard
+              icon={<Settings2 className="h-4 w-4" />}
+              title="模型管理"
+              description="维护租户级 Chat、Embedding、Rerank 模型"
+              action="进入模型管理"
+              onClick={() => navigate("/admin/model-config")}
+            />
+            <EntryCard
+              icon={<KeyRound className="h-4 w-4" />}
+              title="供应商凭据"
+              description="保存模型供应商和外部连接器的 Secret Ref"
+              action="进入凭据中心"
+              onClick={() => navigate("/admin/secrets")}
+            />
+            <EntryCard
+              icon={<Database className="h-4 w-4" />}
+              title="知识库"
+              description="创建知识库时选择租户级向量模型"
+              action="进入知识库"
+              onClick={() => navigate("/admin/knowledge")}
+            />
+            <EntryCard
+              icon={<Layers className="h-4 w-4" />}
+              title="上下文包"
+              description="查看上下文裁剪和打包结果"
+              action="进入上下文包"
+              onClick={() => navigate("/admin/context-packs")}
+            />
+            <EntryCard
+              icon={<FileQuestion className="h-4 w-4" />}
+              title="样例问题"
+              description="维护检索评测和问答体验样本"
+              action="进入样例问题"
+              onClick={() => navigate("/admin/sample-questions")}
+            />
+            <EntryCard
+              icon={<Gauge className="h-4 w-4" />}
+              title="任务模板"
+              description="维护常用任务流程模板"
+              action="进入任务模板"
+              onClick={() => navigate("/admin/task-templates")}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

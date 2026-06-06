@@ -30,6 +30,7 @@ import java.time.LocalDateTime;
 public class AiModelConfig {
 
     private String id;
+    private String tenantId;
     private String configKey;
     private String configValue;
     private ConfigType configType;

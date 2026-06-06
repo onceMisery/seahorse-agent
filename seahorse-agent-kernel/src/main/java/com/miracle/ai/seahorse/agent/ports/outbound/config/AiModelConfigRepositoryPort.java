@@ -24,13 +24,31 @@ import java.util.Optional;
 
 public interface AiModelConfigRepositoryPort {
 
+    String DEFAULT_TENANT_ID = "default";
+
     List<AiModelConfig> findAll();
 
+    default List<AiModelConfig> findAll(String tenantId) {
+        return findAll();
+    }
+
     Optional<AiModelConfig> findByKey(String configKey);
+
+    default Optional<AiModelConfig> findByKey(String tenantId, String configKey) {
+        return findByKey(configKey);
+    }
 
     void save(AiModelConfig config);
 
     void update(String configKey, String configValue, String updatedBy);
 
+    default void update(String tenantId, String configKey, String configValue, String updatedBy) {
+        update(configKey, configValue, updatedBy);
+    }
+
     void delete(String configKey);
+
+    default void delete(String tenantId, String configKey) {
+        delete(configKey);
+    }
 }
