@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 import cn.dev33.satoken.stp.StpUtil;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -37,6 +38,10 @@ public class TenantInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        // SSE / 异步分派：恢复 ThreadLocal 中的租户上下文（由初始请求设置）
+        if (request.getDispatcherType() == DispatcherType.ASYNC) {
+            return true;
+        }
         if (!StpUtil.isLogin()) {
             // 未登录的请求不设置租户上下文（公开接口走默认租户）
             return true;
@@ -49,6 +54,10 @@ public class TenantInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
                                 Object handler, Exception ex) {
+        // SSE / 异步分派：不清理 ThreadLocal，等待最终异步完成后再清理
+        if (request.getDispatcherType() == DispatcherType.ASYNC) {
+            return;
+        }
         TenantContext.clear();
     }
 

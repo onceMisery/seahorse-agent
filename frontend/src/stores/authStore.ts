@@ -90,27 +90,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   checkAuth: async () => {
     const token = storage.getToken();
+    if (!token) {
+      set({ isAuthenticated: false });
+      return;
+    }
     const user = storage.getUser();
     setAuthToken(token);
-    set({ token, user, isAuthenticated: Boolean(token) });
-    if (token) {
+    set({ token, user, isAuthenticated: true });
+    try {
       await get().fetchCurrentUser();
+    } catch {
+      // Token expired or invalid — clear auth state
+      storage.clearAuth();
+      setAuthToken(null);
+      set({ user: null, token: null, isAuthenticated: false });
     }
   },
   fetchCurrentUser: async () => {
     const token = get().token || storage.getToken();
     if (!token) return;
-    try {
-      const data = await getCurrentUser();
-      const nextUser = { ...data, token };
-      storage.setUser(nextUser);
-      set({ user: nextUser, token, isAuthenticated: true });
-    } catch {
-      if (!storage.getToken()) {
-        setAuthToken(null);
-        set({ user: null, token: null, isAuthenticated: false });
-      }
-      return;
-    }
+    const data = await getCurrentUser();
+    const nextUser = { ...data, token };
+    storage.setUser(nextUser);
+    set({ user: nextUser, token, isAuthenticated: true });
   }
 }));

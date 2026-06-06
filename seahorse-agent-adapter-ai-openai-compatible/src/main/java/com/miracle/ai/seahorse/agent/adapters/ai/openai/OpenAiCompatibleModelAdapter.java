@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelHealthPort;
@@ -110,7 +111,16 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         Map<String, Object> payload = chatPayload(request, request == null ? null : request.getModelId(), true);
         Call call = httpClient.newCall(httpRequest("/chat/completions", payload));
         // SSE readLine 是阻塞 I/O，必须交给可治理的专用 executor，避免占用公共 ForkJoinPool。
-        CompletableFuture.runAsync(() -> consumeStream(call, safeCallback), streamingExecutor);
+        // 捕获当前线程的租户上下文，在异步线程中恢复，防止跨租户数据泄漏
+        String capturedCtx = TenantContext.capture();
+        CompletableFuture.runAsync(() -> {
+            TenantContext.restore(capturedCtx);
+            try {
+                consumeStream(call, safeCallback);
+            } finally {
+                TenantContext.clear();
+            }
+        }, streamingExecutor);
         return call::cancel;
     }
 
@@ -123,7 +133,15 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         ToolCallCollector safeCollector = Objects.requireNonNullElseGet(toolCallCollector, ToolCallCollector::noop);
         Map<String, Object> payload = chatPayload(request, request == null ? null : request.getModelId(), true);
         Call call = httpClient.newCall(httpRequest("/chat/completions", payload));
-        CompletableFuture.runAsync(() -> consumeStreamWithTools(call, safeCallback, safeCollector), streamingExecutor);
+        String capturedCtx2 = TenantContext.capture();
+        CompletableFuture.runAsync(() -> {
+            TenantContext.restore(capturedCtx2);
+            try {
+                consumeStreamWithTools(call, safeCallback, safeCollector);
+            } finally {
+                TenantContext.clear();
+            }
+        }, streamingExecutor);
         return call::cancel;
     }
 
