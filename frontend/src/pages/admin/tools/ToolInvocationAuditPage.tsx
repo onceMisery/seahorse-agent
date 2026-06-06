@@ -16,9 +16,17 @@ import { getErrorMessage } from "@/utils/error";
 
 const PAGE_SIZE = 10;
 
+const STATUS_LABELS: Record<string, string> = {
+  REQUESTED: "已请求",
+  ALLOWED: "已允许",
+  DENIED: "已拒绝",
+  APPROVAL_REQUIRED: "待审批",
+  SUCCEEDED: "成功",
+  FAILED: "失败"
+};
+
 export function ToolInvocationAuditPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT);
-
   const [pageData, setPageData] = useState<PageResult<ToolInvocation> | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState("");
@@ -66,6 +74,12 @@ export function ToolInvocationAuditPage() {
     return new Date(dateStr).toLocaleString("zh-CN");
   };
 
+  const statusVariant = (status?: string | null) => {
+    if (status === "SUCCEEDED") return "default";
+    if (status === "FAILED" || status === "DENIED") return "destructive";
+    return "secondary";
+  };
+
   if (!featureState.enabled) {
     return <FeatureUnavailableState featureState={featureState} featureName="工具调用审计" />;
   }
@@ -80,22 +94,23 @@ export function ToolInvocationAuditPage() {
         <div className="admin-page-actions">
           <Input
             value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
+            onChange={(event) => setSearchInput(event.target.value)}
             placeholder="搜索 Run ID"
             className="w-[200px]"
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            onKeyDown={(event) => event.key === "Enter" && handleSearch()}
           />
           <Button variant="outline" onClick={handleSearch}>
             <Search className="w-4 h-4 mr-1" />
             搜索
           </Button>
-          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPageNo(1); }}>
-            <SelectTrigger className="w-[120px]"><SelectValue placeholder="状态" /></SelectTrigger>
+          <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setPageNo(1); }}>
+            <SelectTrigger className="w-[130px]"><SelectValue placeholder="状态" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="SUCCESS">成功</SelectItem>
+              <SelectItem value="SUCCEEDED">成功</SelectItem>
               <SelectItem value="FAILED">失败</SelectItem>
-              <SelectItem value="PENDING">待审批</SelectItem>
+              <SelectItem value="APPROVAL_REQUIRED">待审批</SelectItem>
+              <SelectItem value="DENIED">已拒绝</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={handleRefresh}>
@@ -125,19 +140,19 @@ export function ToolInvocationAuditPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invocations.map((inv) => (
-                  <TableRow key={inv.invocationId}>
-                    <TableCell className="font-medium">{inv.toolName || "-"}</TableCell>
+                {invocations.map((invocation) => (
+                  <TableRow key={invocation.invocationId}>
+                    <TableCell className="font-medium">{invocation.toolName || "-"}</TableCell>
                     <TableCell>
-                      <Badge variant={inv.status === "SUCCESS" ? "default" : inv.status === "FAILED" ? "destructive" : "secondary"}>
-                        {inv.status || "-"}
+                      <Badge variant={statusVariant(invocation.status)}>
+                        {STATUS_LABELS[invocation.status || ""] || invocation.status || "-"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground truncate max-w-[150px]">{inv.argumentsSummary || "-"}</TableCell>
-                    <TableCell className="text-muted-foreground">{inv.durationMs ?? "-"}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{inv.approvalId || "-"}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{inv.runId || "-"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{formatTime(inv.createTime)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground truncate max-w-[150px]">{invocation.argumentsSummary || "-"}</TableCell>
+                    <TableCell className="text-muted-foreground">{invocation.durationMs ?? "-"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{invocation.approvalId || "-"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{invocation.runId || "-"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatTime(invocation.createTime)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

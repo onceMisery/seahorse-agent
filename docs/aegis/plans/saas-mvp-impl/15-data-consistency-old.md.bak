@@ -1,0 +1,552 @@
+# 块F · 数据一致性保障 — 生产级数据安全方案
+
+> 文档定位：SaaS MVP 执行计划第 15 篇。功能增强系列之「后端健壮性」。  
+> 关键属性：**P0 优先级、数据安全必需、独立可实施**。  
+> 编写依据：2026-06-05 代码审查 + 分布式系统最佳实践。  
+> 工作量口径：1 人 × 3 天。
+
+---
+
+## ⚡ 快速决策指南
+
+### 为什么需要这个方案？
+
+**现状问题**：
+- ❌ 无分布式事务保障（注册 + 建租户可能部分失败）
+- ❌ 支付接口不幂等（重复提交可能重复扣款）
+- ❌ 并发更新无控制（多用户同时修改配额可能丢失更新）
+- ❌ 数据校验不完整（前端校验可绕过，后端无二次校验）
+- ❌ 无审计日志（敏感操作无法追溯）
+
+**生产风险**：
+- 🔥 **资损风险**：支付重复扣款、配额计算错误
+- 🔥 **数据不一致**：用户注册成功但租户未创建
+- 🔥 **并发丢失更新**：多人同时修改配置，后者覆盖前者
+- 🔥 **无法追溯**：数据被篡改无法定位责任人
+
+**本方案价值**：
+- ✅ 轻量级事务保障（数据库事务 + 补偿日志 + 异步重试）
+- ✅ 幂等性设计（Redis + 唯一索引双重保障）
+- ✅ 并发控制（乐观锁为主、悲观锁为辅、分布式锁补充）
+- ✅ 双层校验（前端 + 后端）
+- ✅ 审计日志（操作记录、数据变更追踪）
+
+**设计原则**：
+- 🎯 **轻量优先**：不引入额外中间件（Seata/TCC）
+- 🎯 **简单可靠**：基于数据库事务 + Redis，技术栈统一
+- 🎯 **渐进式**：先保证核心场景，复杂场景后续优化
+
+---
+
+## 1. 目标与范围
+
+### 1.1 做什么（本方案交付物）
+
+| 编号 | 目标 | 优先级 | 现状 |
+|------|------|--------|------|
+| G1 | 轻量级事务保障（数据库事务 + 补偿日志） | **P0** | 无 ❌ |
+| G2 | 幂等性设计（Redis + 唯一索引双重保障） | **P0** | 无 ❌ |
+| G3 | 并发控制（乐观锁为主、悲观锁补充） | **P0** | 部分 ⚠️ |
+| G4 | 数据校验（Bean Validation + 自定义校验器） | **P0** | 前端有 ⚠️ |
+| G5 | 审计日志（操作记录、数据变更追踪） | P1 | 无 ❌ |
+
+### 1.2 明确不做（后延）
+
+- **不做** Saga 编排（轻量方案足够，避免过度设计）
+- **不做** TCC 事务（复杂度高）
+- **不做** 分布式事务中间件（Seata）— 不引入额外中间件
+- **不做** 区块链审计（过度设计）
+- **不做** 实时数据同步（CDC）— Phase 2
+
+### 1.3 验收信号
+
+#### P0 验收
+
+1. ✅ 用户注册 + 租户创建：模拟租户创建失败，用户记录自动回滚
+2. ✅ 支付接口：相同 Idempotency Key 调用 3 次，只扣款 1 次
+3. ✅ 配额扣减：10 个并发请求同时扣减 10 tokens，最终余额准确（无丢失更新）
+4. ✅ 恶意输入：前端绕过校验，后端返回 400 错误（参数校验失败）
+
+#### P1 验收
+
+5. ⚠️ 审计日志：删除知识库后，在 `sa_audit_log` 表中查到操作记录（操作人、时间、IP）
+6. ⚠️ 数据变更追踪：修改用户邮箱，记录变更前后值
+
+---
+
+## 2. 现状（代码级审查）
+
+### 2.1 分布式事务现状
+
+**场景 1：用户注册 + 租户创建**
+
+**当前实现**（`UserRegistrationService`）：
+```java
+@Transactional
+public void register(UserRegistrationRequest request) {
+    // 1. 创建用户
+    User user = userRepository.save(new User(...));
+    
+    // 2. 创建租户（可能失败）
+    tenantProvisioningPort.provision(user.getTenantId());
+    
+    // 3. 发送欢迎邮件（可能失败）
+    emailPort.sendWelcomeEmail(user.getEmail());
+}
+```
+
+**问题**：
+- ❌ `@Transactional` 只覆盖数据库操作
+- ❌ 如果第 2 步失败，第 1 步已提交（用户存在但租户不存在）
+- ❌ 如果第 3 步失败，整个事务回滚（不合理）
+
+**场景 2：支付 + 订阅激活**
+
+**当前实现**（假设）：
+```java
+@Transactional
+public void processPayment(PaymentRequest request) {
+    // 1. 创建支付订单
+    PaymentOrder order = paymentRepository.save(...);
+    
+    // 2. 调用第三方支付（支付宝/微信）
+    PaymentResult result = paymentGateway.pay(order);
+    
+    // 3. 激活订阅
+    subscriptionRepository.activate(order.getSubscriptionId());
+}
+```
+
+**问题**：
+- ❌ 第三方支付成功，但第 3 步数据库异常导致回滚
+- ❌ 钱已扣，但订阅未激活（资损风险）
+
+### 2.2 幂等性现状
+
+**支付接口**（假设）：
+```java
+@PostMapping("/api/payments")
+public PaymentResponse createPayment(@RequestBody PaymentRequest request) {
+    return paymentService.process(request);
+}
+```
+
+**问题**：
+- ❌ 无 Idempotency Key
+- ❌ 用户重复点击 → 重复扣款
+
+### 2.3 并发控制现状
+
+**配额扣减**（`QuotaService`）：
+```java
+public void deduct(String tenantId, int tokens) {
+    Quota quota = quotaRepository.findByTenantId(tenantId);
+    
+    if (quota.getRemaining() < tokens) {
+        throw new QuotaExceededException();
+    }
+    
+    quota.setRemaining(quota.getRemaining() - tokens);
+    quotaRepository.save(quota);
+}
+```
+
+**问题**：
+- ❌ 典型的 **Read-Modify-Write** 竞态
+- ❌ 并发场景：
+  - 线程 A 读取 `remaining = 100`
+  - 线程 B 读取 `remaining = 100`
+  - 线程 A 扣减 10，写入 `remaining = 90`
+  - 线程 B 扣减 10，写入 `remaining = 90`（应该是 80！）
+
+### 2.4 数据校验现状
+
+**前端校验**（`RegisterForm.tsx`）：
+```typescript
+const schema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+```
+
+**后端校验**（缺失）：
+```java
+@PostMapping("/api/register")
+public void register(@RequestBody UserRegistrationRequest request) {
+    // ❌ 无参数校验，直接处理
+    userService.register(request);
+}
+```
+
+**问题**：
+- ❌ 前端校验可绕过（Postman/curl 直接调用）
+- ❌ 后端无二次校验，恶意输入进入数据库
+
+---
+
+## 3. 技术方案
+
+### 3.1 分布式事务 — Saga 编排模式（P0）
+
+#### 3.1.1 Saga 模式原理
+
+**核心思想**：
+- 将长事务拆分为多个本地事务
+- 每个本地事务更新数据库并发布事件
+- 失败时执行补偿事务（Compensating Transaction）
+
+**编排 vs 协同**：
+- **编排（Orchestration）**：中央协调器控制流程（推荐，便于维护）
+- **协同（Choreography）**：各服务监听事件自主反应（去中心化，复杂）
+
+#### 3.1.2 用户注册 Saga 设计
+
+**正向流程**：
+```
+1. CreateUser → 2. CreateTenant → 3. SendWelcomeEmail
+```
+
+**补偿流程**（失败时逆序执行）：
+```
+3. [无需补偿] ← 2. DeleteTenant ← 1. DeleteUser
+```
+
+**实现**（Saga 编排器）：
+
+```java
+package com.miracle.ai.seahorse.agent.kernel.application.saga;
+
+public class UserRegistrationSaga {
+    
+    private final UserRepository userRepository;
+    private final TenantProvisioningPort tenantPort;
+    private final EmailPort emailPort;
+    private final TransactionTemplate transactionTemplate;  // ✅ 编程式事务
+    
+    public SagaResult execute(UserRegistrationRequest request) {
+        SagaContext context = new SagaContext();
+        
+        try {
+            // Step 1: 创建用户（✅ 使用编程式事务，避免 @Transactional 在 private 方法上失效）
+            User user = transactionTemplate.execute(status -> 
+                userRepository.save(User.from(request))
+            );
+            context.setUser(user);
+            
+            // Step 2: 创建租户
+            tenantPort.provision(user.getTenantId());
+            context.setTenantCreated(true);
+            
+            // Step 3: 发送邮件（失败不回滚）
+            try {
+                emailPort.sendWelcomeEmail(user.getEmail());
+            } catch (Exception ex) {
+                log.warn("Email failed, continue: userId={}", user.getId(), ex);
+            }
+            
+            return SagaResult.success(user);
+            
+        } catch (Exception ex) {
+            // 执行补偿
+            compensate(context, ex);
+            throw new SagaFailedException("User registration saga failed", ex);
+        }
+    }
+    
+    private void compensate(SagaContext context, Exception cause) {
+        log.error("Saga compensation started: cause={}", cause.getMessage());
+        
+        // 补偿 Step 2：删除租户（使用独立事务 REQUIRES_NEW）
+        if (context.isTenantCreated()) {
+            try {
+                tenantPort.deprovision(context.getUser().getTenantId());
+            } catch (Exception ex) {
+                log.error("Failed to deprovision tenant", ex);
+                // TODO: 写入死信队列，人工介入
+            }
+        }
+        
+        // 补偿 Step 1：删除用户（使用独立事务 REQUIRES_NEW）
+        if (context.getUser() != null) {
+            try {
+                transactionTemplate.executeWithoutResult(status -> 
+                    userRepository.deleteById(context.getUser().getId())
+                );
+            } catch (Exception ex) {
+                log.error("Failed to delete user", ex);
+                // TODO: 写入死信队列，人工介入
+            }
+        }
+    }
+}
+```
+
+> **架构修正**：
+> - ✅ `createUser` 从 `private` + `@Transactional` 改为 `TransactionTemplate` 编程式事务
+>   （Spring AOP 基于代理模式，`@Transactional` 在 private 方法上**不生效**）
+> - ✅ 补偿事务使用独立事务，避免与主事务隔离级别冲突
+> - ✅ 补偿失败时写入死信队列（人工介入），而非静默忽略
+
+**SagaContext**（上下文，存储中间状态）：
+
+```java
+@Data
+public class SagaContext {
+    private User user;
+    private boolean tenantCreated = false;
+}
+```
+
+#### 3.1.3 支付 Saga 设计
+
+**正向流程**：
+```
+1. CreateOrder → 2. CallPaymentGateway → 3. ActivateSubscription
+```
+
+**关键点**：第三方支付已扣款，必须成功激活订阅（最终一致性 + 重试）
+
+**异常表设计**：
+```sql
+CREATE TABLE t_failed_activation (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id       VARCHAR(64) NOT NULL,
+    order_id        BIGINT NOT NULL,
+    subscription_id BIGINT NOT NULL,
+    failure_reason  TEXT,
+    retry_count     SMALLINT NOT NULL DEFAULT 0,
+    status          SMALLINT NOT NULL DEFAULT 0,
+    -- 状态枚举：0=PENDING_RETRY, 1=SUCCESS, 2=MANUAL_REVIEW
+    resolved_at     TIMESTAMP WITH TIME ZONE,
+    created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 索引（PostgreSQL 使用 CREATE INDEX，不支持内联 INDEX 语法）
+CREATE INDEX idx_failed_activation_tenant ON t_failed_activation (tenant_id, status, created_at DESC);
+CREATE INDEX idx_failed_activation_order ON t_failed_activation (order_id);
+
+-- CHECK 约束：限制状态值范围
+ALTER TABLE t_failed_activation ADD CONSTRAINT chk_failed_activation_status
+    CHECK (status IN (0, 1, 2));
+```
+
+> **DDL 审查要点**：
+> - ✅ 主键使用 `BIGSERIAL`（数字类型），不使用字符串
+> - ✅ `status` 使用 `SMALLINT` 替代 `VARCHAR(32)`，减少存储空间和比较开销
+> - ✅ `retry_count` 使用 `SMALLINT`（重试次数不会超过 32767）
+> - ✅ 补充 `tenant_id` 字段，与 01-multi-tenancy 方案对齐
+> - ✅ 时间字段使用 `TIMESTAMP WITH TIME ZONE`，支持国际化时区
+
+---
+
+### 3.2 幂等性设计（P0）
+
+#### 3.2.1 表设计
+
+```sql
+CREATE TABLE t_idempotency_record (
+    id              BIGSERIAL PRIMARY KEY,
+    tenant_id       VARCHAR(64) NOT NULL,
+    idempotency_key VARCHAR(64) NOT NULL,
+    request_hash    VARCHAR(64) NOT NULL,
+    response_body   TEXT,
+    created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at      TIMESTAMP WITH TIME ZONE NOT NULL,
+
+    -- 唯一约束：保证幂等键不重复（业务唯一键）
+    CONSTRAINT uk_idempotency_key UNIQUE (idempotency_key)
+);
+
+-- 索引（PostgreSQL 使用独立 CREATE INDEX）
+CREATE INDEX idx_idempotency_tenant ON t_idempotency_record (tenant_id, created_at);
+CREATE INDEX idx_idempotency_expires ON t_idempotency_record (expires_at);
+```
+
+> **DDL 审查要点**：
+> - ✅ 主键改为 `BIGSERIAL`（数字自增），原 `VARCHAR(64) PRIMARY KEY` 不利于 B-Tree 页分裂
+> - ✅ `idempotency_key` 保留为 `UNIQUE` 约束，业务唯一性不变
+> - ✅ 补充 `tenant_id` 字段，支持租户级幂等隔离
+> - ✅ 修正 MySQL 内联 `INDEX` 语法为 PostgreSQL `CREATE INDEX`
+> - ✅ 时间字段使用 `TIMESTAMP WITH TIME ZONE`
+
+#### 3.2.2 前端集成
+
+```typescript
+const idempotencyKey = `${userId}-${Date.now()}-${crypto.randomUUID()}`;
+
+axios.post('/api/payments', data, {
+  headers: { 'X-Idempotency-Key': idempotencyKey }
+});
+```
+
+---
+
+### 3.3 并发控制（P0）
+
+#### 3.3.1 乐观锁（推荐）
+
+**表结构**：
+```sql
+ALTER TABLE sa_quota_policy ADD COLUMN version INT DEFAULT 0;
+```
+
+**Entity 定义**：
+```java
+@Entity
+public class QuotaPolicy {
+    @Id
+    private Long id;
+    private Long remaining;
+    
+    @Version
+    private Integer version;
+}
+```
+
+**并发扣减**：
+```java
+@Transactional
+public void deduct(Long quotaId, int tokens) {
+    QuotaPolicy quota = quotaRepository.findById(quotaId).orElseThrow();
+    
+    if (quota.getRemaining() < tokens) {
+        throw new QuotaExceededException();
+    }
+    
+    quota.setRemaining(quota.getRemaining() - tokens);
+    quotaRepository.save(quota);  // JPA 自动检查 version
+}
+```
+
+#### 3.3.2 分布式锁
+
+```java
+@Scheduled(fixedRate = 60000)
+public void syncQuota() {
+    RLock lock = redisson.getLock("sync-quota-lock");
+    
+    try {
+        if (lock.tryLock(5, 30, TimeUnit.SECONDS)) {
+            doSync();
+        }
+    } finally {
+        if (lock.isHeldByCurrentThread()) {
+            lock.unlock();
+        }
+    }
+}
+```
+
+---
+
+### 3.4 数据校验（P0）
+
+#### 3.4.1 Bean Validation
+
+```java
+public record UserRegistrationRequest(
+    @NotBlank @Email String email,
+    @NotBlank @Size(min = 8, max = 32) String password
+) {}
+```
+
+#### 3.4.2 Controller 启用
+
+```java
+@PostMapping("/api/register")
+public void register(@Valid @RequestBody UserRegistrationRequest request) {
+    userService.register(request);
+}
+```
+
+---
+
+### 3.5 审计日志（P1）
+
+> **跨文档统一**：本方案的审计日志表与 20-audit-compliance 方案统一使用 `sa_audit_log` 表名。
+> 20 号方案在此基础上增强了 `changes JSONB`、`user_agent`、`geo_location` 等字段。
+> 本方案仅定义基础表结构，增强字段由 20-audit-compliance 方案负责。
+
+#### 3.5.1 表设计
+
+```sql
+CREATE TABLE sa_audit_log (
+    log_id        BIGSERIAL PRIMARY KEY,
+    tenant_id     VARCHAR(64) NOT NULL,
+    user_id       BIGINT NOT NULL,
+    action        SMALLINT NOT NULL,
+    -- 操作枚举：1=CREATE, 2=UPDATE, 3=DELETE, 4=LOGIN, 5=LOGOUT, 6=EXPORT
+    resource_type SMALLINT NOT NULL,
+    -- 资源类型枚举：1=USER, 2=KB, 3=DOCUMENT, 4=SUBSCRIPTION, 5=AGENT, 6=SYSTEM_CONFIG
+    resource_id   VARCHAR(64),
+    changes       JSONB,
+    ip_address    VARCHAR(45),
+    user_agent    TEXT,
+    request_id    VARCHAR(64),
+    status        SMALLINT NOT NULL DEFAULT 0,
+    -- 状态枚举：0=SUCCESS, 1=FAILED
+    created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 索引（tenant_id 作为最左前缀，与 RLS 策略对齐）
+CREATE INDEX idx_audit_log_tenant_time ON sa_audit_log (tenant_id, created_at DESC);
+CREATE INDEX idx_audit_log_user ON sa_audit_log (user_id, created_at DESC);
+CREATE INDEX idx_audit_log_user_action ON sa_audit_log (tenant_id, user_id, action, created_at DESC);
+CREATE INDEX idx_audit_log_resource ON sa_audit_log (resource_type, resource_id);
+
+-- CHECK 约束
+ALTER TABLE sa_audit_log ADD CONSTRAINT chk_audit_log_action
+    CHECK (action BETWEEN 1 AND 6);
+ALTER TABLE sa_audit_log ADD CONSTRAINT chk_audit_log_resource_type
+    CHECK (resource_type BETWEEN 1 AND 6);
+ALTER TABLE sa_audit_log ADD CONSTRAINT chk_audit_log_status
+    CHECK (status IN (0, 1));
+```
+
+> **DDL 审查要点**：
+> - ✅ `action` 和 `resource_type` 使用 `SMALLINT`，减少存储和索引开销
+> - ✅ 索引使用 PostgreSQL `CREATE INDEX` 语法（非 MySQL 内联 `INDEX`）
+> - ✅ 时间字段使用 `TIMESTAMP WITH TIME ZONE`
+> - ✅ 添加 CHECK 约束限制枚举值范围
+> - ✅ 表名统一为 `sa_audit_log`，与 20-audit-compliance 方案对齐
+> - ✅ 包含 `changes`/`user_agent`/`request_id`/`status` 字段，20 号方案无需再 ALTER TABLE
+
+#### 3.5.2 使用
+
+```java
+@DeleteMapping("/api/knowledge-bases/{id}")
+@Auditable(action = "DELETE", resourceType = "KB")
+public void delete(@PathVariable Long id) {
+    knowledgeBaseService.delete(id);
+}
+```
+
+---
+
+## 4. 实施步骤
+
+### Day 1：Saga + 幂等性
+- 上午：实现 Saga 编排器（2h）
+- 下午：实现幂等性拦截器（3h）
+
+### Day 2：并发控制 + 校验
+- 上午：乐观锁 + 悲观锁（2h）
+- 下午：Bean Validation（2h）
+
+### Day 3：审计日志 + 验收
+- 上午：审计日志 AOP（2h）
+- 下午：集成测试（3h）
+
+---
+
+## 5. 验收标准
+
+✅ P0 验收全部通过（见 §1.3）
+✅ 并发测试：100 并发无丢失更新
+✅ 幂等性测试：相同 Key 调用 10 次只执行 1 次
+
+---
+
+**文档版本**：v1.1-review  
+**最后更新**：2026-06-06  
+**修订说明**：Saga 使用 TransactionTemplate 替代 @Transactional+private；审计表 t_audit_log→sa_audit_log（与 20 号方案统一）；补偿事务增加死信队列

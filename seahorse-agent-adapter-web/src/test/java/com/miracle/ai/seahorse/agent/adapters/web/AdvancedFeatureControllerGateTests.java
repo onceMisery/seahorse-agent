@@ -64,7 +64,7 @@ class AdvancedFeatureControllerGateTests {
                                 "networkRequested", false,
                                 "requestedHosts", List.of()))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature SANDBOX is disabled in CONSUMER_WEB mode"));
 
@@ -83,7 +83,7 @@ class AdvancedFeatureControllerGateTests {
 
         mvc.perform(get("/api/agent-runs/run-1/handoffs").param("tenantId", "tenant-a"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature AGENT_HANDOFF is disabled in CONSUMER_WEB mode"));
 
@@ -102,7 +102,7 @@ class AdvancedFeatureControllerGateTests {
 
         mvc.perform(get("/api/connectors").param("tenantId", "tenant-a"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature CONNECTOR_MANAGEMENT is disabled in CONSUMER_WEB mode"));
 
@@ -126,7 +126,7 @@ class AdvancedFeatureControllerGateTests {
                                 "secretValue", "super-secret-token",
                                 "metadataJson", "{}"))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature SECRET_MANAGEMENT is disabled in CONSUMER_WEB mode"));
 
@@ -145,7 +145,7 @@ class AdvancedFeatureControllerGateTests {
 
         mvc.perform(get("/intent-tree/trees"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature INTENT_TREE_MANAGEMENT is disabled in CONSUMER_WEB mode"));
 
@@ -164,7 +164,7 @@ class AdvancedFeatureControllerGateTests {
 
         mvc.perform(get("/ingestion/pipelines"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature INGESTION_PIPELINE_MANAGEMENT is disabled in CONSUMER_WEB mode"));
 
@@ -183,7 +183,7 @@ class AdvancedFeatureControllerGateTests {
 
         mvc.perform(get("/api/tools"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature TOOL_CATALOG_MANAGEMENT is disabled in CONSUMER_WEB mode"));
 
@@ -203,7 +203,7 @@ class AdvancedFeatureControllerGateTests {
         mvc.perform(get("/api/agents/agent-1/versions/v1/rollouts/latest")
                         .param("tenantId", "tenant-a"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature AGENT_ROLLOUT_MANAGEMENT is disabled in CONSUMER_WEB mode"));
 
@@ -222,13 +222,13 @@ class AdvancedFeatureControllerGateTests {
 
         mvc.perform(get("/api/approvals"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
 
         mvc.perform(get("/api/approvals/approval-1"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
 

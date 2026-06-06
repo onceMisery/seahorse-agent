@@ -49,6 +49,11 @@ public interface AgentDefinitionInboundPort {
     AgentDefinition disable(String agentId);
 
     /**
+     * 启用之前被禁用的 Agent，恢复为可编辑/可发布状态。
+     */
+    AgentDefinition enable(String agentId);
+
+    /**
      * 查询单个 Agent 定义。
      */
     Optional<AgentDefinition> findById(String agentId);

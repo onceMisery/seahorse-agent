@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
     "format": "prettier --write .",
-    "test": "vitest --run",
+    "test": "vitest --run --pool threads --no-file-parallelism --maxWorkers 1",
     "test:watch": "vitest"
   },
   "dependencies": {

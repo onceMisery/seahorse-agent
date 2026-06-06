@@ -9,6 +9,7 @@ const servicesDir = resolve(__dirname);
 
 const EXCLUDED_FILES = new Set([
   "api.ts",
+  "api.test.ts",
   "backendEndpointManifest.ts",
   "featureService.test.ts",
   "frontendCapabilityContracts.test.ts",

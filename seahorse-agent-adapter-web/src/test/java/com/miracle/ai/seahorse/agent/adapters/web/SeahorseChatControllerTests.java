@@ -164,7 +164,7 @@ class SeahorseChatControllerTests {
                         .param("taskTemplateId", "deep-research")
                         .param("agentId", "custom-agent"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
 
@@ -192,7 +192,7 @@ class SeahorseChatControllerTests {
                         .param("userId", "user-1")
                         .param("chatMode", "agent"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
 

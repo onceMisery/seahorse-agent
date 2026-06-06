@@ -111,7 +111,8 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                     name VARCHAR(128),
                     embedding_model VARCHAR(128),
                     collection_name VARCHAR(128),
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         jdbcTemplate.execute("""
@@ -137,7 +138,8 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                     updated_by VARCHAR(64),
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         jdbcTemplate.execute("""
@@ -155,7 +157,8 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                     updated_by VARCHAR(64),
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         jdbcTemplate.execute("""
@@ -167,7 +170,7 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_knowledge_document_chunk_log (
-                    id VARCHAR(64) PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     doc_id BIGINT,
                     status VARCHAR(32),
                     process_mode VARCHAR(32),
@@ -183,7 +186,8 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                     start_time TIMESTAMP,
                     end_time TIMESTAMP,
                     create_time TIMESTAMP,
-                    update_time TIMESTAMP
+                    update_time TIMESTAMP,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         seedRows();
@@ -193,8 +197,8 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_base
-                (id, name, embedding_model, collection_name, deleted)
-                VALUES (1, 'Knowledge Base', 'embedding-a', 'collection-a', 0)
+                (id, name, embedding_model, collection_name, deleted, tenant_id)
+                VALUES (1, 'Knowledge Base', 'embedding-a', 'collection-a', 0, 'default')
                 """);
         jdbcTemplate.update("""
                 INSERT INTO t_ingestion_pipeline(id, name, deleted)
@@ -205,34 +209,34 @@ class JdbcKnowledgeDocumentRepositoryAdapterTests {
                 (id, kb_id, doc_name, source_type, source_location, schedule_enabled,
                  schedule_cron, enabled, chunk_count, file_url, file_type, file_size,
                  chunk_strategy, process_mode, chunk_config, pipeline_id, status,
-                 created_by, updated_by, create_time, update_time, deleted)
+                 created_by, updated_by, create_time, update_time, deleted, tenant_id)
                 VALUES
                 (1, 1, 'Guide', 'file', null, 0, null, 1, 2,
                  'local://guide.pdf', 'pdf', 12, null, 'pipeline', null, 'pipeline-1',
-                 'success', 'tester', 'tester', ?, ?, 0)
+                 'success', 'tester', 'tester', ?, ?, 0, 'default')
                 """, now, now);
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_chunk
                 (id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
-                 token_count, enabled, created_by, updated_by, create_time, update_time, deleted)
+                 token_count, enabled, created_by, updated_by, create_time, update_time, deleted, tenant_id)
                 VALUES (10, 1, 1, 0, 'first', 'hash-0',
-                        5, 5, 1, 'tester', 'tester', ?, ?, 0)
+                        5, 5, 1, 'tester', 'tester', ?, ?, 0, 'default')
                 """, now, now);
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_chunk
                 (id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
-                 token_count, enabled, created_by, updated_by, create_time, update_time, deleted)
+                 token_count, enabled, created_by, updated_by, create_time, update_time, deleted, tenant_id)
                 VALUES (11, 1, 1, 1, 'second', 'hash-1',
-                        6, 6, 1, 'tester', 'tester', ?, ?, 0)
+                        6, 6, 1, 'tester', 'tester', ?, ?, 0, 'default')
                 """, now, now);
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_document_chunk_log
                 (id, doc_id, status, process_mode, chunk_strategy, pipeline_id,
                  extract_duration, chunk_duration, embed_duration, persist_duration,
                  total_duration, chunk_count, error_message, start_time, end_time,
-                 create_time, update_time)
-                VALUES ('log-1', 1, 'success', 'pipeline', null, 'pipeline-1',
-                        0, 50, 0, 20, 100, 2, null, ?, ?, ?, ?)
+                 create_time, update_time, tenant_id)
+                VALUES (1, 1, 'success', 'pipeline', null, 'pipeline-1',
+                        0, 50, 0, 20, 100, 2, null, ?, ?, ?, ?, 'default')
                 """, now, now, now, now);
     }
 }

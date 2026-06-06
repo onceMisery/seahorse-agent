@@ -118,7 +118,7 @@ class KernelMetadataBackfillServiceTests {
         assertThat(result.processedDocuments()).isEqualTo(3);
         assertThat(result.succeededDocuments()).isEqualTo(2);
         assertThat(result.failedDocuments()).isEqualTo(1);
-        assertThat(result.failures()).singleElement().asString().contains("doc-2").contains("boom");
+        assertThat(result.failures()).singleElement().asString().contains("2").contains("boom");
         assertThat(documents.failedDocuments).containsExactly(2L);
         assertThat(documents.successDocuments).containsExactly(1L, 3L);
     }
@@ -280,7 +280,7 @@ class KernelMetadataBackfillServiceTests {
                 .singleElement()
                 .satisfies(event -> assertThat(event.attributes())
                         .containsEntry("tenantId", "tenant-1")
-                        .containsEntry("knowledgeBaseId", "kb-1")
+                        .containsEntry("knowledgeBaseId", "1")
                         .containsEntry("status", "COMPLETED")
                         .containsEntry("processedDocuments", "1")
                         .containsEntry("succeededDocuments", "1")
@@ -518,7 +518,7 @@ class KernelMetadataBackfillServiceTests {
                 .containsEntry("forceRerun", true)
                 .containsEntry("overwriteApproved", true)
                 .containsEntry("reExtract", true);
-        assertThat(created.checkpoint().get("documentIds")).isEqualTo(List.of("doc-2"));
+        assertThat(created.checkpoint().get("documentIds")).isEqualTo(List.of("2"));
         assertThat(result.status()).isEqualTo(MetadataBackfillJobStatus.COMPLETED);
         assertThat(result.processedDocuments()).isEqualTo(1);
         assertThat(documents.runningDocuments).containsExactly(2L);
@@ -692,7 +692,8 @@ class KernelMetadataBackfillServiceTests {
         public MetadataBackfillJobPage page(MetadataBackfillJobQuery query) {
             List<MetadataBackfillJobRecord> matched = records.values().stream()
                     .filter(record -> query.tenantId().isBlank() || query.tenantId().equals(record.tenantId()))
-                    .filter(record -> query.knowledgeBaseId() == null || query.knowledgeBaseId().equals(record.knowledgeBaseId()))
+                    .filter(record -> query.knowledgeBaseId() == null
+                            || query.knowledgeBaseId().equals(String.valueOf(record.knowledgeBaseId())))
                     .filter(record -> query.status() == null || query.status().equals(record.status()))
                     .filter(record -> query.pipelineId().isBlank() || query.pipelineId().equals(record.pipelineId()))
                     .filter(record -> query.operator().isBlank() || query.operator().equals(record.operator()))

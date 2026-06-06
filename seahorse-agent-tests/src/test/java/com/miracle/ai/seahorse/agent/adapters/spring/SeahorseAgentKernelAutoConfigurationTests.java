@@ -2325,7 +2325,7 @@ class SeahorseAgentKernelAutoConfigurationTests {
         TokenServicePort tokenServicePort() {
             return new TokenServicePort() {
                 @Override
-                public String login(String userId) {
+                public String login(String userId, String tenantId) {
                     return "token";
                 }
 

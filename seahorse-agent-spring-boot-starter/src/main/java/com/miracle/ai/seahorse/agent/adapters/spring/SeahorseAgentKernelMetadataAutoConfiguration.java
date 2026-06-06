@@ -134,11 +134,11 @@ public class SeahorseAgentKernelMetadataAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(MetadataExtractionResultManagementRepositoryPort.class)
     @ConditionalOnMissingBean(MetadataExtractionResultInboundPort.class)
     public KernelMetadataExtractionResultService seahorseMetadataExtractionResultInboundPort(
-            MetadataExtractionResultManagementRepositoryPort repositoryPort) {
-        return new KernelMetadataExtractionResultService(repositoryPort);
+            ObjectProvider<MetadataExtractionResultManagementRepositoryPort> repositoryPort) {
+        return new KernelMetadataExtractionResultService(
+                repositoryPort.getIfAvailable(MetadataExtractionResultManagementRepositoryPort::empty));
     }
 
     @Bean

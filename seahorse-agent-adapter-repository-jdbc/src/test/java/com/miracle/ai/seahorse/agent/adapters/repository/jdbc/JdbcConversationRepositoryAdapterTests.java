@@ -48,14 +48,14 @@ class JdbcConversationRepositoryAdapterTests {
     void shouldListRenameAndDeleteConversation() {
         insertConversation();
 
-        List<ConversationRecord> conversations = adapter.listConversations("user-1");
-        boolean renamed = adapter.rename("conv-1", "user-1", "renamed");
-        boolean deleted = adapter.delete("conv-1", "user-1");
+        List<ConversationRecord> conversations = adapter.listConversations("1");
+        boolean renamed = adapter.rename("1", "1", "renamed");
+        boolean deleted = adapter.delete("1", "1");
 
-        assertThat(conversations).extracting(ConversationRecord::conversationId).containsExactly("conv-1");
+        assertThat(conversations).extracting(ConversationRecord::conversationId).containsExactly("1");
         assertThat(renamed).isTrue();
         assertThat(deleted).isTrue();
-        assertThat(adapter.listConversations("user-1")).isEmpty();
+        assertThat(adapter.listConversations("1")).isEmpty();
     }
 
     @Test
@@ -64,9 +64,9 @@ class JdbcConversationRepositoryAdapterTests {
         insertMessage("msg-1", "user", null);
         insertMessage("msg-2", "assistant", 1, "run-1");
 
-        List<ConversationMessageRecord> messages = adapter.listMessages("conv-1", "user-1");
+        List<ConversationMessageRecord> messages = adapter.listMessages("1", "1");
 
-        assertThat(messages).extracting(ConversationMessageRecord::getId).containsExactly("msg-1", "msg-2");
+        assertThat(messages).extracting(ConversationMessageRecord::getId).containsExactly("1", "2");
         assertThat(messages.get(1).getVote()).isEqualTo(1);
         assertThat(messages.get(1).getAgentRunId()).isEqualTo("run-1");
     }
@@ -75,8 +75,8 @@ class JdbcConversationRepositoryAdapterTests {
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
                 INSERT INTO t_conversation
-                (id, conversation_id, user_id, title, last_time, create_time, update_time, deleted)
-                VALUES ('1', 'conv-1', 'user-1', 'title', ?, ?, ?, 0)
+                (id, conversation_id, user_id, title, last_time, create_time, update_time, deleted, tenant_id)
+                VALUES (1, 1, 1, 'title', ?, ?, ?, 0, 'default')
                 """, now, now, now);
     }
 
@@ -89,17 +89,17 @@ class JdbcConversationRepositoryAdapterTests {
         jdbcTemplate.update("""
                 INSERT INTO t_message
                 (id, conversation_id, user_id, role, content, thinking_content, thinking_duration,
-                 agent_run_id, create_time, update_time, deleted)
-                VALUES (?, 'conv-1', 'user-1', ?, ?, null, null, ?, ?, ?, 0)
-                """, id, role, "content-" + id, agentRunId, now, now);
+                 agent_run_id, create_time, update_time, deleted, tenant_id)
+                VALUES (?, 1, 1, ?, ?, null, null, ?, ?, ?, 0, 'default')
+                """, Long.parseLong(id.replace("msg-", "")), role, "content-" + id, agentRunId, now, now);
         if (vote == null) {
             return;
         }
         jdbcTemplate.update("""
                 INSERT INTO t_message_feedback
                 (id, message_id, conversation_id, user_id, vote, create_time, update_time, deleted)
-                VALUES (?, ?, 'conv-1', 'user-1', ?, ?, ?, 0)
-                """, "fb-" + id, id, vote, now, now);
+                VALUES (?, ?, 1, 1, ?, ?, ?, 0)
+                """, Long.parseLong(id.replace("msg-", "")), Long.parseLong(id.replace("msg-", "")), vote, now, now);
     }
 
     private void createSchema() {
@@ -109,30 +109,32 @@ class JdbcConversationRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_conversation");
         jdbcTemplate.execute("""
                 CREATE TABLE t_conversation (
-                    id VARCHAR(20) PRIMARY KEY,
-                    conversation_id VARCHAR(20) NOT NULL,
-                    user_id VARCHAR(20) NOT NULL,
+                    id BIGINT PRIMARY KEY,
+                    conversation_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
                     title VARCHAR(128) NOT NULL,
                     last_time TIMESTAMP,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_conversation_summary (
-                    id VARCHAR(20) PRIMARY KEY,
-                    conversation_id VARCHAR(20) NOT NULL,
-                    user_id VARCHAR(20) NOT NULL,
+                    id BIGINT PRIMARY KEY,
+                    conversation_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
                     update_time TIMESTAMP,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_message (
-                    id VARCHAR(20) PRIMARY KEY,
-                    conversation_id VARCHAR(20) NOT NULL,
-                    user_id VARCHAR(20) NOT NULL,
+                    id BIGINT PRIMARY KEY,
+                    conversation_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
                     role VARCHAR(16) NOT NULL,
                     content TEXT NOT NULL,
                     thinking_content TEXT,
@@ -140,15 +142,16 @@ class JdbcConversationRepositoryAdapterTests {
                     agent_run_id VARCHAR(64),
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_message_feedback (
-                    id VARCHAR(20) PRIMARY KEY,
-                    message_id VARCHAR(20) NOT NULL,
-                    conversation_id VARCHAR(20) NOT NULL,
-                    user_id VARCHAR(20) NOT NULL,
+                    id BIGINT PRIMARY KEY,
+                    message_id BIGINT NOT NULL,
+                    conversation_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
                     vote SMALLINT NOT NULL,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,

@@ -197,15 +197,14 @@ public class SeahorseAgentKernelRetrievalAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(RetrievalEvaluationDatasetRepositoryPort.class)
     @ConditionalOnMissingBean(RetrievalEvaluationDatasetInboundPort.class)
     public KernelRetrievalEvaluationDatasetService seahorseRetrievalEvaluationDatasetInboundPort(
-            RetrievalEvaluationDatasetRepositoryPort repositoryPort,
+            ObjectProvider<RetrievalEvaluationDatasetRepositoryPort> repositoryPort,
             ObjectProvider<RetrievalEvaluationComparisonRepositoryPort> comparisonRepositoryPort,
             ObjectProvider<RetrievalEvaluationRunRepositoryPort> runRepositoryPort,
             ObjectProvider<RetrievalEvaluationInboundPort> evaluationPort) {
         return new KernelRetrievalEvaluationDatasetService(
-                repositoryPort,
+                repositoryPort.getIfAvailable(RetrievalEvaluationDatasetRepositoryPort::empty),
                 comparisonRepositoryPort.getIfAvailable(RetrievalEvaluationComparisonRepositoryPort::empty),
                 runRepositoryPort.getIfAvailable(RetrievalEvaluationRunRepositoryPort::empty),
                 evaluationPort.getIfAvailable());

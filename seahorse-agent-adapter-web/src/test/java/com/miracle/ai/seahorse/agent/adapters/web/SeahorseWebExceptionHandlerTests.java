@@ -19,8 +19,9 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import cn.dev33.satoken.exception.NotLoginException;
 import org.junit.jupiter.api.Test;
-
-import java.util.Map;
+import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,14 +30,35 @@ class SeahorseWebExceptionHandlerTests {
     @Test
     void shouldSanitizeNotLoginMessage() {
         SeahorseWebExceptionHandler handler = new SeahorseWebExceptionHandler();
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/secure");
 
-        Map<String, Object> response = handler.notLogin(new NotLoginException(
-                "login",
-                NotLoginException.INVALID_TOKEN,
-                "token invalid: abc-raw-token"));
+        ResponseEntity<ErrorResponse> response = handler.notLogin(
+                new NotLoginException("login", NotLoginException.INVALID_TOKEN, "token invalid: abc-raw-token"),
+                request);
 
-        assertThat(response.get("code")).isEqualTo("1");
-        assertThat(response.get("message")).isEqualTo("登录已过期，请重新登录");
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().code()).isEqualTo("UNAUTHORIZED");
+        assertThat(response.getBody().message()).isEqualTo("登录已过期，请重新登录");
+        assertThat(response.getBody().path()).isEqualTo("/api/secure");
+        assertThat(response.getBody().details()).isEmpty();
         assertThat(response.toString()).doesNotContain("abc-raw-token");
+    }
+
+    @Test
+    void shouldReturnBadRequestForMissingRequestParameter() {
+        SeahorseWebExceptionHandler handler = new SeahorseWebExceptionHandler();
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/metadata-extraction/results");
+
+        ResponseEntity<ErrorResponse> response = handler.missingRequestParameter(
+                new MissingServletRequestParameterException("tenantId", "String"),
+                request);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().code()).isEqualTo("VALIDATION_ERROR");
+        assertThat(response.getBody().message()).contains("tenantId");
+        assertThat(response.getBody().path()).isEqualTo("/metadata-extraction/results");
+        assertThat(response.getBody().details()).containsEntry("parameter", "tenantId");
     }
 }

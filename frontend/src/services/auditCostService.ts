@@ -6,14 +6,20 @@ import type { PageResult } from "@/services/metadataGovernanceService";
 export interface AuditEvent {
   auditId?: string;
   actor?: string;
+  actorType?: string;
+  actorId?: string;
   eventType?: string;
   agentId?: string;
   runId?: string;
   tenantId?: string;
   resource?: string;
+  resourceType?: string;
+  resourceId?: string;
   action?: string;
   payload?: Record<string, unknown>;
+  redactedPayload?: string;
   timestamp?: string;
+  occurredAt?: string;
 }
 
 export interface CostUsageRecord {
@@ -40,9 +46,64 @@ export interface CostAggregate {
   timeBuckets?: Array<{ bucket?: string; cost?: number; calls?: number }>;
 }
 
+const parsePayload = (payload?: Record<string, unknown>, redactedPayload?: string): Record<string, unknown> | undefined => {
+  if (payload && typeof payload === "object") {
+    return payload;
+  }
+  if (!redactedPayload) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(redactedPayload);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : { value: parsed };
+  } catch {
+    return { value: redactedPayload };
+  }
+};
+
+const formatResource = (event: AuditEvent) => {
+  if (event.resource) return event.resource;
+  if (event.resourceType && event.resourceId) return `${event.resourceType}/${event.resourceId}`;
+  return event.resourceId || event.resourceType;
+};
+
+export function normalizeAuditEvent(event: AuditEvent): AuditEvent {
+  const payload = parsePayload(event.payload, event.redactedPayload);
+  return {
+    ...event,
+    actor: event.actor || event.actorId || event.actorType,
+    resource: formatResource(event),
+    payload,
+    timestamp: event.timestamp || event.occurredAt
+  };
+}
+
+export function normalizeAuditEventPage(
+  page: PageResult<AuditEvent> | AuditEvent[] | null | undefined
+): PageResult<AuditEvent> {
+  if (Array.isArray(page)) {
+    return {
+      records: page.map(normalizeAuditEvent),
+      total: page.length,
+      size: page.length,
+      current: 1,
+      pages: page.length > 0 ? 1 : 0
+    };
+  }
+  return {
+    records: (page?.records || []).map(normalizeAuditEvent),
+    total: page?.total ?? page?.records?.length ?? 0,
+    size: page?.size ?? 0,
+    current: page?.current ?? 1,
+    pages: page?.pages ?? 0
+  };
+}
+
 // ── 审计日志 ──
 
-export function listAuditEvents(params: {
+export async function listAuditEvents(params: {
   current?: number;
   size?: number;
   actor?: string;
@@ -53,11 +114,13 @@ export function listAuditEvents(params: {
   startTime?: string;
   endTime?: string;
 }) {
-  return api.get<PageResult<AuditEvent>>("/api/audit-events", { params });
+  const data = await api.get<PageResult<AuditEvent> | AuditEvent[]>("/api/audit-events", { params });
+  return normalizeAuditEventPage(data);
 }
 
-export function getAuditEvent(auditId: string) {
-  return api.get<AuditEvent>(`/api/audit-events/${encodeURIComponent(auditId)}`);
+export async function getAuditEvent(auditId: string) {
+  const data = await api.get<AuditEvent>(`/api/audit-events/${encodeURIComponent(auditId)}`);
+  return normalizeAuditEvent(data);
 }
 
 // ── 成本明细与聚合 ──

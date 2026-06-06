@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-06-saas-mvp-11-21-implementation",
+  "lastCheckpointRef": "docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/todo-checkpoint-draft.json",
+  "resumeInstruction": "Resume by reading 20-checkpoint.md, 10-intent.md, and Phase 16-21 specs; do not revert dirty worktree changes",
+  "knownPartialWork": [
+    "Reproduced Phase 1 starter auto-configuration failure; fixed optional CompensationRetryService and IdempotencyService conditional beans"
+  ],
+  "mustReadBeforeContinuing": [
+    "docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/10-intent.md",
+    "docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/20-checkpoint.md",
+    "docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/todo-checkpoint-draft.json"
+  ],
+  "unsafeToAssume": [
+    "Do not assume untracked Phase 2-4 files are complete without tests and compile verification"
+  ]
+}

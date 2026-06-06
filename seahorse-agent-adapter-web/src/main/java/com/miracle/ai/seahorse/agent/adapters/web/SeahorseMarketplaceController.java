@@ -62,6 +62,15 @@ public class SeahorseMarketplaceController {
                 svc -> svc.submitForReview(agentId, user.operator()));
     }
 
+    @GetMapping("/api/marketplace/reviews/pending")
+    public ApiResponse<List<ReviewResponse>> listPendingReviews(@RequestParam(defaultValue = "1") int page,
+                                                                @RequestParam(defaultValue = "20") int size) {
+        return ApiResponses.requireService(marketplaceServiceProvider,
+                svc -> svc.listPendingReviews(page, size).stream()
+                        .map(ReviewResponse::from)
+                        .toList());
+    }
+
     @PutMapping("/api/marketplace/reviews/{reviewId}/approve")
     public ApiResponse<Void> approve(@PathVariable Long reviewId,
                                      @RequestBody(required = false) ReviewActionRequest request) {
@@ -141,6 +150,21 @@ public class SeahorseMarketplaceController {
     }
 
     public record RateRequest(int rating, String comment) {
+    }
+
+    public record ReviewResponse(Long id,
+                                 String agentId,
+                                 String submittedBy,
+                                 String status,
+                                 String reviewComment,
+                                 Instant submittedAt,
+                                 Instant reviewedAt) {
+
+        static ReviewResponse from(AgentPublishReview review) {
+            return new ReviewResponse(
+                    review.id(), review.agentId(), review.submittedBy(), review.status(),
+                    review.reviewComment(), review.submittedAt(), review.reviewedAt());
+        }
     }
 
     public record SubscriptionResponse(Long id,

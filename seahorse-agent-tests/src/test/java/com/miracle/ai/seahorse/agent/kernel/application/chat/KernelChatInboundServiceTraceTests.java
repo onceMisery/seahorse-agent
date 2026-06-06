@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamChatContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
@@ -38,6 +39,7 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
@@ -48,11 +50,17 @@ class KernelChatInboundServiceTraceTests {
         RecordingTraceRepository repository = new RecordingTraceRepository();
         KernelChatPipeline pipeline = mock(KernelChatPipeline.class);
         StreamTaskPort taskPort = mock(StreamTaskPort.class);
+        doAnswer(invocation -> {
+            StreamChatContext context = invocation.getArgument(0);
+            context.getCallback().onComplete();
+            return null;
+        }).when(pipeline).execute(any());
         KernelChatInboundService service = new KernelChatInboundService(
                 pipeline, taskPort, new KernelRagTraceRecorder(repository));
 
-        service.streamChat(command(), mock(StreamCallback.class));
-
+        StreamCallback callback = mock(StreamCallback.class);
+        service.streamChat(command(), callback);
+        org.mockito.Mockito.verify(callback).onComplete();
         verify(pipeline).execute(argThat(context -> context.getTraceRunScope() != null
                 && context.getTraceRunScope().active()));
         Assertions.assertEquals("stream-chat", repository.startedRuns.get(0).getTraceName());

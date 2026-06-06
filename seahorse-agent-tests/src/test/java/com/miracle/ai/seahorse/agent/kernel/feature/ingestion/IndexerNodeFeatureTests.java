@@ -47,22 +47,22 @@ class IndexerNodeFeatureTests {
         RecordingPorts ports = new RecordingPorts();
         IndexerNodeFeature feature = new IndexerNodeFeature(ports, ports, ports);
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-1")
-                .chunks(List.of(chunk("chunk-1", 0), chunk("chunk-2", 1)))
-                .metadata(Map.of("tenantId", "tenant-1", "kbId", "kb-1", "collectionName", "collection-a"))
+                .taskId("1")
+                .chunks(List.of(chunk("1", 0), chunk("2", 1)))
+                .metadata(Map.of("tenantId", "tenant-1", "kbId", "1", "collectionName", "collection-a"))
                 .build();
 
         NodeResult result = feature.execute(context, NodeConfig.builder().nodeType("indexer").build());
 
         assertThat(result.isSuccess()).isTrue();
         assertThat(ports.collectionNames).containsExactly("collection-a");
-        assertThat(ports.repositoryWrites).containsExactly("kb-1/doc-1/2");
-        assertThat(ports.vectorWrites).containsExactly("collection-a/doc-1/2");
+        assertThat(ports.repositoryWrites).containsExactly("1/1/2");
+        assertThat(ports.vectorWrites).containsExactly("collection-a/1/2");
         assertThat(ports.repositoryBatches.get(0).get(0).getMetadata())
                 .containsEntry("tenant_id", "tenant-1")
-                .containsEntry("kb_id", "kb-1")
-                .containsEntry("doc_id", "doc-1")
-                .containsEntry("chunk_id", "chunk-1")
+                .containsEntry("kb_id", 1L)
+                .containsEntry("doc_id", 1L)
+                .containsEntry("chunk_id", "1")
                 .containsEntry("chunk_index", 0)
                 .containsEntry("collection_name", "collection-a")
                 .containsEntry("enabled", true);
@@ -74,19 +74,19 @@ class IndexerNodeFeatureTests {
         RecordingKeywordIndexPort keywordIndexPort = new RecordingKeywordIndexPort();
         IndexerNodeFeature feature = new IndexerNodeFeature(ports, ports, ports, keywordIndexPort);
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-1")
-                .chunks(List.of(chunk("chunk-1", 0), chunk("chunk-2", 1)))
-                .metadata(Map.of("tenantId", "tenant-1", "kbId", "kb-1", "collectionName", "collection-a"))
+                .taskId("1")
+                .chunks(List.of(chunk("1", 0), chunk("2", 1)))
+                .metadata(Map.of("tenantId", "tenant-1", "kbId", "1", "collectionName", "collection-a"))
                 .build();
 
         NodeResult result = feature.execute(context, NodeConfig.builder().nodeType("indexer").build());
 
         assertThat(result.isSuccess()).isTrue();
-        assertThat(keywordIndexPort.keywordWrites).containsExactly("kb-1/doc-1/2");
+        assertThat(keywordIndexPort.keywordWrites).containsExactly("1/1/2");
         assertThat(keywordIndexPort.lastChunks.get(0).getMetadata())
                 .containsEntry("tenant_id", "tenant-1")
-                .containsEntry("kb_id", "kb-1")
-                .containsEntry("doc_id", "doc-1");
+                .containsEntry("kb_id", 1L)
+                .containsEntry("doc_id", 1L);
     }
 
     @Test
@@ -100,9 +100,9 @@ class IndexerNodeFeatureTests {
         metadata.put("department", "HR");
         metadata.put("internal_note", "only-for-postgres");
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-1")
-                .chunks(List.of(chunk("chunk-1", 0, metadata)))
-                .metadata(Map.of("kbId", "kb-1", "collectionName", "collection-a"))
+                .taskId("1")
+                .chunks(List.of(chunk("1", 0, metadata)))
+                .metadata(Map.of("kbId", "1", "collectionName", "collection-a"))
                 .metadataSchema(schema(
                         field("department", "department", true),
                         field("internal_note", "internal_note", false)))
@@ -118,9 +118,9 @@ class IndexerNodeFeatureTests {
         Map<String, Object> vectorMetadata = ports.vectorBatches.get(0).get(0).getMetadata();
         assertThat(vectorMetadata)
                 .containsEntry("tenant_id", "tenant-1")
-                .containsEntry("kb_id", "kb-1")
-                .containsEntry("doc_id", "doc-1")
-                .containsEntry("chunk_id", "chunk-1")
+                .containsEntry("kb_id", 1L)
+                .containsEntry("doc_id", 1L)
+                .containsEntry("chunk_id", "1")
                 .containsEntry("chunk_index", 0)
                 .containsEntry("collection_name", "collection-a")
                 .containsEntry("file_type", "pdf")
@@ -134,10 +134,10 @@ class IndexerNodeFeatureTests {
         RecordingPorts ports = new RecordingPorts();
         IndexerNodeFeature feature = new IndexerNodeFeature(ports, ports, ports);
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-1")
+                .taskId("1")
                 .skipIndexerWrite(true)
-                .chunks(List.of(chunk("chunk-1", 0)))
-                .metadata(Map.of("kbId", "kb-1", "collectionName", "collection-a"))
+                .chunks(List.of(chunk("1", 0)))
+                .metadata(Map.of("kbId", "1", "collectionName", "collection-a"))
                 .build();
 
         NodeResult result = feature.execute(context, NodeConfig.builder().nodeType("indexer").build());
@@ -156,20 +156,20 @@ class IndexerNodeFeatureTests {
                 .nodeType("indexer")
                 .settings(OBJECT_MAPPER.valueToTree(Map.of(
                         "collectionName", "collection-settings",
-                        "kbId", "kb-settings",
-                        "docId", "doc-settings")))
+                        "kbId", "2",
+                        "docId", "3")))
                 .build();
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-1")
-                .chunks(List.of(chunk("chunk-1", 0)))
-                .metadata(Map.of("kbId", "kb-1", "collectionName", "collection-a"))
+                .taskId("1")
+                .chunks(List.of(chunk("1", 0)))
+                .metadata(Map.of("kbId", "1", "collectionName", "collection-a"))
                 .build();
 
         NodeResult result = feature.execute(context, config);
 
         assertThat(result.isSuccess()).isTrue();
-        assertThat(ports.repositoryWrites).containsExactly("kb-settings/doc-settings/1");
-        assertThat(ports.vectorWrites).containsExactly("collection-settings/doc-settings/1");
+        assertThat(ports.repositoryWrites).containsExactly("2/3/1");
+        assertThat(ports.vectorWrites).containsExactly("collection-settings/3/1");
     }
 
     @Test
@@ -177,9 +177,9 @@ class IndexerNodeFeatureTests {
         RecordingPorts ports = new RecordingPorts();
         IndexerNodeFeature feature = new IndexerNodeFeature(ports, ports, ports);
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-1")
-                .chunks(List.of(VectorChunk.builder().chunkId("chunk-1").index(0).content("text").build()))
-                .metadata(Map.of("kbId", "kb-1", "collectionName", "collection-a"))
+                .taskId("1")
+                .chunks(List.of(VectorChunk.builder().chunkId("1").index(0).content("text").build()))
+                .metadata(Map.of("kbId", "1", "collectionName", "collection-a"))
                 .build();
 
         NodeResult result = feature.execute(context, NodeConfig.builder().nodeType("indexer").build());
@@ -209,7 +209,7 @@ class IndexerNodeFeatureTests {
     }
 
     private MetadataSchema schema(MetadataFieldDescriptor... fields) {
-        return new MetadataSchema("tenant-1", "kb-1", 1, List.of(fields));
+        return new MetadataSchema("tenant-1", "1", 1, List.of(fields));
     }
 
     private MetadataFieldDescriptor field(String fieldKey, String canonicalName, boolean pushdownToVector) {

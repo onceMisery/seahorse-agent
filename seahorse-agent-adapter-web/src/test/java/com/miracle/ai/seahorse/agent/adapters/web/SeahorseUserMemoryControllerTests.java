@@ -99,7 +99,7 @@ class SeahorseUserMemoryControllerTests {
 
         mvc.perform(delete("/api/me/memories/memory-1").header(WebUserIdResolver.HEADER_USER_ID, "user-1"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"));
+                .andExpect(jsonPath("$.code").value("HTTP_403"));
 
         verify(managementPort, never()).deleteMemory("long_term", "memory-1");
     }

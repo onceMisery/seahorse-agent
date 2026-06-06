@@ -19,7 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationDatasetPayload;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,113 +29,112 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * 检索评测集管理 Web adapter。
+ * Retrieval evaluation dataset web adapter.
  */
 @RestController
-@ConditionalOnBean(RetrievalEvaluationDatasetInboundPort.class)
 public class SeahorseRetrievalEvaluationDatasetController {
 
-    private static final String KEY_CODE = "code";
-    private static final String KEY_DATA = "data";
-    private static final String SUCCESS_CODE = "0";
+    private final ObjectProvider<RetrievalEvaluationDatasetInboundPort> datasetPortProvider;
 
-    private final RetrievalEvaluationDatasetInboundPort datasetPort;
-
-    public SeahorseRetrievalEvaluationDatasetController(RetrievalEvaluationDatasetInboundPort datasetPort) {
-        this.datasetPort = Objects.requireNonNull(datasetPort, "datasetPort must not be null");
+    public SeahorseRetrievalEvaluationDatasetController(
+            ObjectProvider<RetrievalEvaluationDatasetInboundPort> datasetPortProvider) {
+        this.datasetPortProvider = datasetPortProvider;
     }
 
     @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets")
-    public Map<String, Object> listDatasets(@PathVariable("kb-id") String kbId,
+    public ApiResponse<Object> listDatasets(@PathVariable("kb-id") String kbId,
                                             @RequestParam(name = "includeDisabled", defaultValue = "false")
                                             boolean includeDisabled) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, datasetPort.listDatasets(kbId, includeDisabled));
+        return ApiResponses.requireServiceOrError(datasetPortProvider,
+                port -> port.listDatasets(kbId, includeDisabled));
     }
 
     @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}")
-    public Map<String, Object> getDataset(@PathVariable("kb-id") String kbId,
+    public ApiResponse<Object> getDataset(@PathVariable("kb-id") String kbId,
                                           @PathVariable("dataset-id") String datasetId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, datasetPort.getDataset(kbId, datasetId));
+        return ApiResponses.requireServiceOrError(datasetPortProvider, port -> port.getDataset(kbId, datasetId));
     }
 
     @PostMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets")
-    public Map<String, Object> createDataset(@PathVariable("kb-id") String kbId,
+    public ApiResponse<Object> createDataset(@PathVariable("kb-id") String kbId,
                                              @RequestBody RetrievalEvaluationDatasetPayload request) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, datasetPort.upsertDataset(kbId, request));
+        return ApiResponses.requireServiceOrError(datasetPortProvider, port -> port.upsertDataset(kbId, request));
     }
 
     @PutMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}")
-    public Map<String, Object> updateDataset(@PathVariable("kb-id") String kbId,
+    public ApiResponse<Object> updateDataset(@PathVariable("kb-id") String kbId,
                                              @PathVariable("dataset-id") String datasetId,
                                              @RequestBody RetrievalEvaluationDatasetPayload request) {
         RetrievalEvaluationDatasetPayload safeRequest = Objects.requireNonNull(request,
                 "request must not be null");
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                datasetPort.upsertDataset(kbId, safeRequest.withDatasetId(datasetId)));
+        return ApiResponses.requireServiceOrError(datasetPortProvider,
+                port -> port.upsertDataset(kbId, safeRequest.withDatasetId(datasetId)));
     }
 
     @DeleteMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}")
-    public Map<String, Object> deleteDataset(@PathVariable("kb-id") String kbId,
+    public ApiResponse<Object> deleteDataset(@PathVariable("kb-id") String kbId,
                                              @PathVariable("dataset-id") String datasetId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                Map.of("deleted", datasetPort.deleteDataset(kbId, datasetId)));
+        return ApiResponses.requireServiceOrError(datasetPortProvider,
+                port -> Map.of("deleted", port.deleteDataset(kbId, datasetId)));
     }
 
     @PostMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/evaluate")
-    public Map<String, Object> evaluateDataset(@PathVariable("kb-id") String kbId,
+    public ApiResponse<Object> evaluateDataset(@PathVariable("kb-id") String kbId,
                                                @PathVariable("dataset-id") String datasetId,
                                                @RequestBody(required = false)
                                                RetrievalEvaluationDatasetRunRequest request) {
         RetrievalEvaluationDatasetRunRequest safeRequest = request == null
                 ? new RetrievalEvaluationDatasetRunRequest("", 5, null)
                 : request;
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                datasetPort.evaluateDataset(kbId, safeRequest.toCommand(datasetId)));
+        return ApiResponses.requireServiceOrError(datasetPortProvider,
+                port -> port.evaluateDataset(kbId, safeRequest.toCommand(datasetId)));
     }
 
     @PostMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/compare")
-    public Map<String, Object> compareDataset(@PathVariable("kb-id") String kbId,
+    public ApiResponse<Object> compareDataset(@PathVariable("kb-id") String kbId,
                                               @PathVariable("dataset-id") String datasetId,
                                               @RequestBody(required = false)
                                               RetrievalEvaluationDatasetComparisonRequest request) {
         RetrievalEvaluationDatasetComparisonRequest safeRequest = request == null
-                ? new RetrievalEvaluationDatasetComparisonRequest("", 5, java.util.List.of())
+                ? new RetrievalEvaluationDatasetComparisonRequest("", 5, List.of())
                 : request;
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                datasetPort.compareDataset(kbId, safeRequest.toCommand(datasetId)));
+        return ApiResponses.requireServiceOrError(datasetPortProvider,
+                port -> port.compareDataset(kbId, safeRequest.toCommand(datasetId)));
     }
 
     @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons")
-    public Map<String, Object> listComparisons(@PathVariable("kb-id") String kbId,
+    public ApiResponse<Object> listComparisons(@PathVariable("kb-id") String kbId,
                                                @PathVariable("dataset-id") String datasetId,
                                                @RequestParam(name = "limit", defaultValue = "20") int limit) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                datasetPort.listComparisons(kbId, datasetId, limit));
+        return ApiResponses.requireServiceOrError(datasetPortProvider,
+                port -> port.listComparisons(kbId, datasetId, limit));
     }
 
     @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/comparisons/{comparison-id}")
-    public Map<String, Object> getComparison(@PathVariable("kb-id") String kbId,
+    public ApiResponse<Object> getComparison(@PathVariable("kb-id") String kbId,
                                              @PathVariable("dataset-id") String datasetId,
                                              @PathVariable("comparison-id") String comparisonId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                datasetPort.getComparison(kbId, datasetId, comparisonId));
+        return ApiResponses.requireServiceOrError(datasetPortProvider,
+                port -> port.getComparison(kbId, datasetId, comparisonId));
     }
 
     @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs")
-    public Map<String, Object> listRuns(@PathVariable("kb-id") String kbId,
+    public ApiResponse<Object> listRuns(@PathVariable("kb-id") String kbId,
                                         @PathVariable("dataset-id") String datasetId,
                                         @RequestParam(name = "limit", defaultValue = "20") int limit) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, datasetPort.listRuns(kbId, datasetId, limit));
+        return ApiResponses.requireServiceOrError(datasetPortProvider,
+                port -> port.listRuns(kbId, datasetId, limit));
     }
 
     @GetMapping("/knowledge-base/{kb-id}/retrieval-evaluation-datasets/{dataset-id}/runs/{run-id}")
-    public Map<String, Object> getRun(@PathVariable("kb-id") String kbId,
+    public ApiResponse<Object> getRun(@PathVariable("kb-id") String kbId,
                                       @PathVariable("dataset-id") String datasetId,
                                       @PathVariable("run-id") String runId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, datasetPort.getRun(kbId, datasetId, runId));
+        return ApiResponses.requireServiceOrError(datasetPortProvider, port -> port.getRun(kbId, datasetId, runId));
     }
 }

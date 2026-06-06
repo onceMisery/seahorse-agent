@@ -19,14 +19,18 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentType;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
-public record AgentDefinitionCreateRequest(String agentId,
-                                           String tenantId,
-                                           String name,
-                                           String description,
-                                           String ownerUserId,
-                                           String ownerTeam,
-                                           AgentType agentType,
-                                           String baseAgentId,
-                                           AgentRiskLevel riskLevel) {
+public record AgentDefinitionCreateRequest(
+        String agentId,
+        @NotBlank(message = "Tenant ID is required") String tenantId,
+        @NotBlank(message = "Agent name is required") @Size(max = 128) String name,
+        @Size(max = 500) String description,
+        String ownerUserId,
+        String ownerTeam,
+        @NotNull(message = "Agent type is required") AgentType agentType,
+        String baseAgentId,
+        AgentRiskLevel riskLevel) {
 }

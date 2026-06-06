@@ -93,6 +93,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGarbageCollecti
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphIndexPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryGraphPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordIndexPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryInferencePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryKeywordSearchPort;
@@ -359,22 +360,25 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(MemoryIngestionWorkflowPort.class)
     @ConditionalOnMissingBean(MemoryReviewInboundPort.class)
     public KernelMemoryReviewService seahorseMemoryReviewInboundPort(
             ObjectProvider<MemoryReviewManagementRepositoryPort> reviewRepositoryPort,
             ObjectProvider<MemoryReviewFeedbackRepositoryPort> reviewFeedbackRepositoryPort,
-            MemoryIngestionWorkflowPort ingestionWorkflowPort,
+            ObjectProvider<MemoryIngestionWorkflowPort> ingestionWorkflowPort,
             ObjectProvider<MemoryTraceRecorder> traceRecorder,
             ObjectProvider<MemoryAliasPort> memoryAliasPort,
             ObjectProvider<ObservationPort> observationPort) {
         return new KernelMemoryReviewService(
                 reviewRepositoryPort.getIfAvailable(MemoryReviewManagementRepositoryPort::empty),
-                ingestionWorkflowPort,
+                ingestionWorkflowPort.getIfAvailable(SeahorseAgentKernelMemoryAutoConfiguration::noopMemoryIngestionWorkflowPort),
                 reviewFeedbackRepositoryPort.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty),
                 traceRecorder.getIfAvailable(MemoryTraceRecorder::noop),
                 memoryAliasPort.getIfAvailable(MemoryAliasPort::noop),
                 observationPort.getIfAvailable(ObservationPort::noop));
+    }
+
+    private static MemoryIngestionWorkflowPort noopMemoryIngestionWorkflowPort() {
+        return command -> MemoryIngestionResult.ignored("memory_ingestion_workflow_unavailable");
     }
 
     @Bean

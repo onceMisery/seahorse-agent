@@ -2597,12 +2597,164 @@ CREATE TABLE IF NOT EXISTS sa_revenue_share (
 CREATE INDEX IF NOT EXISTS idx_revenue_share_tenant ON sa_revenue_share (tenant_id, period);
 CREATE INDEX IF NOT EXISTS idx_revenue_share_creator ON sa_revenue_share (creator_user_id, period);
 
+-- ---- V14: Compensation, idempotency, export, optimistic locking ----
+CREATE TABLE IF NOT EXISTS sa_compensation_log (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    operation_type VARCHAR(64) NOT NULL,
+    operation_id VARCHAR(128) NOT NULL,
+    payload JSONB,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    retry_count INT NOT NULL DEFAULT 0,
+    max_retries INT NOT NULL DEFAULT 3,
+    last_error TEXT,
+    next_retry_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
+    CONSTRAINT uk_compensation_operation UNIQUE (operation_type, operation_id)
+);
+CREATE INDEX IF NOT EXISTS idx_compensation_status ON sa_compensation_log (status, next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_compensation_tenant ON sa_compensation_log (tenant_id, created_at);
+
+CREATE TABLE IF NOT EXISTS sa_idempotency_key (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    idempotency_key VARCHAR(128) NOT NULL,
+    operation_type VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PROCESSING',
+    response_body JSONB,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    CONSTRAINT uk_idempotency_key UNIQUE (idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_idempotency_expires ON sa_idempotency_key (expires_at);
+
+ALTER TABLE t_user ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 0;
+ALTER TABLE t_knowledge_base ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 0;
+ALTER TABLE t_conversation ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS sa_export_task (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    user_id BIGINT NOT NULL,
+    export_type VARCHAR(32) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    file_name VARCHAR(255),
+    file_path VARCHAR(512),
+    progress INT NOT NULL DEFAULT 0,
+    file_url VARCHAR(512),
+    parameters TEXT,
+    total_count INT NOT NULL DEFAULT 0,
+    processed_count INT NOT NULL DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_export_task_user ON sa_export_task (tenant_id, user_id, created_at DESC);
+
+-- ---- V15: Notification center ----
+CREATE TABLE IF NOT EXISTS sa_notification (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    user_id BIGINT NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content TEXT,
+    type VARCHAR(32) NOT NULL DEFAULT 'SYSTEM',
+    priority VARCHAR(16) NOT NULL DEFAULT 'NORMAL',
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    read_at TIMESTAMP,
+    link VARCHAR(512),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_notification_user ON sa_notification (tenant_id, user_id, is_read, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notification_expires ON sa_notification (expires_at) WHERE expires_at IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS sa_notification_template (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    template_code VARCHAR(64) NOT NULL,
+    channel VARCHAR(16) NOT NULL DEFAULT 'IN_APP',
+    title_template VARCHAR(255) NOT NULL,
+    body_template TEXT NOT NULL,
+    locale VARCHAR(10) NOT NULL DEFAULT 'zh_CN',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_notification_template UNIQUE (template_code, channel, locale)
+);
+
+CREATE TABLE IF NOT EXISTS sa_notification_preference (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    user_id BIGINT NOT NULL,
+    channel VARCHAR(16) NOT NULL,
+    notification_type VARCHAR(32) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_notification_pref UNIQUE (user_id, channel, notification_type)
+);
+
+CREATE TABLE IF NOT EXISTS sa_webhook (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    name VARCHAR(128) NOT NULL,
+    url VARCHAR(512) NOT NULL,
+    secret VARCHAR(256) NOT NULL,
+    events TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_tenant ON sa_webhook (tenant_id, is_active);
+
+CREATE TABLE IF NOT EXISTS sa_webhook_log (
+    id BIGSERIAL PRIMARY KEY,
+    webhook_id BIGINT NOT NULL REFERENCES sa_webhook(id),
+    event_type VARCHAR(64) NOT NULL,
+    payload JSONB NOT NULL,
+    response_status INT,
+    response_body TEXT,
+    attempt INT NOT NULL DEFAULT 1,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    next_retry_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_log_status ON sa_webhook_log (status, next_retry_at);
+
+-- ---- V16: Performance indexes ----
+CREATE INDEX IF NOT EXISTS idx_t_conversation_tenant_user_time
+    ON t_conversation (tenant_id, user_id, last_time DESC)
+    WHERE deleted = 0;
+CREATE INDEX IF NOT EXISTS idx_message_conv_user_time
+    ON t_message (conversation_id, user_id, create_time ASC)
+    WHERE deleted = 0;
+CREATE INDEX IF NOT EXISTS idx_kb_tenant_created
+    ON t_knowledge_base (tenant_id, create_time DESC)
+    WHERE deleted = 0;
+CREATE INDEX IF NOT EXISTS idx_document_kb_status
+    ON t_knowledge_document (kb_id, status, create_time DESC)
+    WHERE deleted = 0;
+CREATE INDEX IF NOT EXISTS idx_agent_def_tenant_active
+    ON sa_agent_definition (tenant_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_run_user_status
+    ON sa_agent_run (tenant_id, user_id, status, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_tenant_time
+    ON sa_audit_log (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bill_tenant_period
+    ON sa_bill (tenant_id, bill_period DESC);
+CREATE INDEX IF NOT EXISTS idx_cost_usage_tenant_time
+    ON sa_cost_usage_record (tenant_id, created_at DESC);
+
 -- ============================================
 -- Seed Data (after all schema extensions)
 -- ============================================
 
--- Default admin user (includes tenant_id and email from V2/V3)
+-- Default admin user (includes tenant_id and email from V2/V3).
+-- The password must satisfy the web login validation rule (6-128 characters).
 INSERT INTO t_user (id, username, password, role, avatar, tenant_id, email, status, create_time, update_time, deleted)
-VALUES (2001523723396308993, 'admin', 'admin', 'admin', 'https://avatars.githubusercontent.com/u/37446017?v=4',
+VALUES (2001523723396308993, 'admin', 'admin123', 'admin', 'https://avatars.githubusercontent.com/u/37446017?v=4',
         'default', 'admin@seahorse.local', 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
 ON CONFLICT (id) DO NOTHING;

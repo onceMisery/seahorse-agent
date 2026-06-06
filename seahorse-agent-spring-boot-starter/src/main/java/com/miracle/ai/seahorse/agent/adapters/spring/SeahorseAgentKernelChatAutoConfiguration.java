@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.chat.ConversationAttachm
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.RuleBasedQueryOptimizerPort;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.MemoryAggregationPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
@@ -53,6 +54,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
@@ -131,7 +133,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
                 memoryEnginePort.getIfAvailable(MemoryEnginePort::noop),
                 memoryIngestionWorkflowPort.getIfAvailable(() -> command ->
-                        com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult.ignored("noop")),
+                        MemoryIngestionResult.ignored("noop")),
                 memoryAggregationServicePort.getIfAvailable(MemoryAggregationServicePort::noop),
                 memoryAggregationPolicy.getIfAvailable(MemoryAggregationPolicy::defaults),
                 queryOptimizerPort.getIfAvailable(QueryOptimizerPort::passthrough),
@@ -156,7 +158,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 promptTemplatePort.getIfAvailable(PromptTemplatePort::empty),
                 streamingChatModelPort.getIfAvailable(StreamingChatModelPort::noop),
                 streamTaskPort.getIfAvailable(StreamTaskPort::noop),
-                contextWeaverPort.getIfAvailable(com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver::new));
+                contextWeaverPort.getIfAvailable(DefaultContextWeaver::new));
     }
 
     @Bean

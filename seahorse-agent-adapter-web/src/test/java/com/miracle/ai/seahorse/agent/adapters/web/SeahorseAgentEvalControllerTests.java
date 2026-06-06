@@ -153,7 +153,7 @@ class SeahorseAgentEvalControllerTests {
                                 }
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature AGENT_EVALUATION is disabled in CONSUMER_WEB mode"));
 

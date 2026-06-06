@@ -102,7 +102,7 @@ class SeahorseEvalCandidateDecisionControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"note\": \"test\"}"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"));
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"));
 
         verifyNoInteractions(decisionService);
     }

@@ -50,6 +50,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolP
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.web.WebFetchSafetyPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyRequest;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
@@ -179,8 +180,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 toolGatewayPort.getIfAvailable(() -> new LocalToolGatewayPort(toolRegistry)),
                 options,
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
-                contextWeaverPort.getIfAvailable(
-                        com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver::new),
+                contextWeaverPort.getIfAvailable(DefaultContextWeaver::new),
                 runStepRecorder.getIfAvailable(AgentRunStepRecorder::noop),
                 approvalWaitHandler.getIfAvailable(AgentApprovalWaitHandler::noop),
                 outputGovernanceService.getIfAvailable());

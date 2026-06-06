@@ -230,7 +230,7 @@ class SeahorseWebApiContractTests {
 
         mvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("username", "admin", "password", "pw"))))
+                        .content(json(Map.of("username", "admin", "password", "password"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.token").value("token-1"));
@@ -779,9 +779,9 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.records[0].id").value(1));
         mvc.perform(post("/knowledge-base/docs/1/chunks")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("chunkId", "chunk-1", "content", "hello", "index", 1))))
+                        .content(json(Map.of("chunkId", "1", "content", "hello", "index", 1))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").value("chunk-1"));
+                .andExpect(jsonPath("$.data.id").value(1));
         mvc.perform(put("/knowledge-base/docs/1/chunks/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("content", "updated"))))
@@ -1104,7 +1104,7 @@ class SeahorseWebApiContractTests {
                 .toList())
                 .containsExactly("baseline", "keyword");
         assertThat(captor.getValue().cases().get(0).filter().system().tenantId()).isEqualTo("tenant-1");
-        assertThat(captor.getValue().cases().get(0).filter().system().knowledgeBaseIds()).containsExactly("kb-1");
+        assertThat(captor.getValue().cases().get(0).filter().system().knowledgeBaseIds()).containsExactly("1");
         assertThat(captor.getValue().cases().get(0).filter().system().aclSubjectIds()).containsExactly("dept-a");
     }
 
@@ -1280,7 +1280,7 @@ class SeahorseWebApiContractTests {
                 .andExpect(jsonPath("$.data.records[0].reviewStatus").value("PENDING"));
         mvc.perform(get("/metadata-review/items/review-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.documentId").value("doc-1"));
+                .andExpect(jsonPath("$.data.documentId").value(1));
         mvc.perform(get("/metadata-review/items/review-1/audits"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].id").value("audit-1"))

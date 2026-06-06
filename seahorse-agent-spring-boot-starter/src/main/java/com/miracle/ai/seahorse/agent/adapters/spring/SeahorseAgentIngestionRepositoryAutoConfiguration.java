@@ -20,8 +20,10 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcIngestionTaskRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPipelineDefinitionRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.PipelineDefinitionRepositoryPort;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -43,20 +45,28 @@ import javax.sql.DataSource;
 public class SeahorseAgentIngestionRepositoryAutoConfiguration {
 
     @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(PipelineDefinitionRepositoryPort.class)
     public JdbcPipelineDefinitionRepositoryAdapter seahorseJdbcPipelineDefinitionRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcPipelineDefinitionRepositoryAdapter(dataSource, objectMapper);
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcPipelineDefinitionRepositoryAdapter(dataSource, objectMapperProvider.getIfAvailable(ObjectMapper::new));
     }
 
     @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnBean(JdbcPipelineDefinitionRepositoryAdapter.class)
+    @ConditionalOnMissingBean(IngestionPipelineRepositoryPort.class)
+    public IngestionPipelineRepositoryPort seahorseJdbcIngestionPipelineRepositoryPort(
+            JdbcPipelineDefinitionRepositoryAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(IngestionTaskRepositoryPort.class)
     public JdbcIngestionTaskRepositoryAdapter seahorseJdbcIngestionTaskRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcIngestionTaskRepositoryAdapter(dataSource, objectMapper);
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcIngestionTaskRepositoryAdapter(dataSource, objectMapperProvider.getIfAvailable(ObjectMapper::new));
     }
 }

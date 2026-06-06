@@ -52,7 +52,7 @@ class SpringCurrentUserAdapterTests {
         var currentUser = adapter.currentUser();
 
         assertThat(currentUser).isPresent();
-        assertThat(currentUser.orElseThrow().userId()).isEqualTo("1");
+        assertThat(currentUser.orElseThrow().userId()).isEqualTo(1L);
         verify(repository).findById(1L);
         verify(repository, never()).findById(2L);
     }

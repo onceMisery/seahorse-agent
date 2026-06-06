@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.IpGeolocationPort;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -53,7 +54,7 @@ public class SeahorseAuthController {
     }
 
     @PostMapping("/auth/login")
-    public Map<String, Object> login(@RequestBody AuthLoginRequest request, HttpServletRequest httpRequest) {
+    public Map<String, Object> login(@RequestBody @Valid AuthLoginRequest request, HttpServletRequest httpRequest) {
         AuthLoginRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
 
         String ipAddress = extractIpAddress(httpRequest);

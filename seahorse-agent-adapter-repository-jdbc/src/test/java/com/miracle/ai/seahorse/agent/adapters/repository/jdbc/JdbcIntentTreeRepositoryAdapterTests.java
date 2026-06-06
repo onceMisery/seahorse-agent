@@ -46,20 +46,20 @@ class JdbcIntentTreeRepositoryAdapterTests {
     @Test
     void shouldCreateUpdateEnableAndDeleteIntentNode() {
         IntentNodePayload payload = new IntentNodePayload();
-        payload.setKbId("kb-1");
+        payload.setKbId("1");
         payload.setIntentCode("domain");
         payload.setName("Domain");
         payload.setLevel(0);
         payload.setExamples(List.of("hello"));
 
-        String id = adapter.create(payload, "tester");
+        String id = adapter.create(payload, "100");
         IntentNodePayload update = new IntentNodePayload();
         update.setName("Updated");
         update.setEnabled(0);
 
-        boolean updated = adapter.update(id, update, "tester");
+        boolean updated = adapter.update(id, update, "100");
         IntentNodeTree record = adapter.findById(id).orElseThrow();
-        boolean enabled = adapter.updateEnabled(List.of(id), 1, "tester");
+        boolean enabled = adapter.updateEnabled(List.of(id), 1, "100");
         boolean deleted = adapter.deleteByIds(List.of(id));
 
         assertThat(updated).isTrue();
@@ -93,15 +93,15 @@ class JdbcIntentTreeRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_knowledge_base");
         jdbcTemplate.execute("""
                 CREATE TABLE t_knowledge_base (
-                    id VARCHAR(20) PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     collection_name VARCHAR(128),
                     deleted SMALLINT DEFAULT 0
                 )
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_intent_node (
-                    id VARCHAR(20) PRIMARY KEY,
-                    kb_id VARCHAR(20),
+                    id BIGINT PRIMARY KEY,
+                    kb_id BIGINT,
                     intent_code VARCHAR(64) NOT NULL,
                     name VARCHAR(64) NOT NULL,
                     level SMALLINT NOT NULL,
@@ -117,8 +117,8 @@ class JdbcIntentTreeRepositoryAdapterTests {
                     param_prompt_template TEXT,
                     sort_order INTEGER DEFAULT 0,
                     enabled SMALLINT DEFAULT 1,
-                    create_by VARCHAR(20),
-                    update_by VARCHAR(20),
+                    create_by BIGINT,
+                    update_by BIGINT,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
@@ -126,7 +126,7 @@ class JdbcIntentTreeRepositoryAdapterTests {
                 """);
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_base (id, collection_name, deleted)
-                VALUES ('kb-1', 'collection_1', 0)
+                VALUES (1, 'collection_1', 0)
                 """);
     }
 }

@@ -62,7 +62,7 @@ class MetadataGovernanceNodeFeatureTests {
 
     @Test
     void shouldExtractNormalizeValidateAndAttachAcceptedMetadataToChunks() {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 3, List.of(
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 3, List.of(
                 field("department", MetadataValueType.STRING, true,
                         Map.of("dictionaryCode", "department", "sourceKeys", List.of("dept")))));
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
@@ -72,9 +72,9 @@ class MetadataGovernanceNodeFeatureTests {
         List<MetadataExtractionRecord> savedRecords = new ArrayList<>();
         AtomicReference<Map<String, Object>> writtenDocumentMetadata = new AtomicReference<>();
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
+                .taskId("1")
                 .rawText("content")
-                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a", "dept", "Finance"))
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1", "dept", "Finance"))
                 .build();
 
         NodeResult extractResult = new MetadataExtractorNodeFeature(schemaRegistry)
@@ -105,14 +105,14 @@ class MetadataGovernanceNodeFeatureTests {
 
     @Test
     void shouldRecordMetadataExtractionAndValidationObservationEvents() {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 3, List.of(
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 3, List.of(
                 field("department", MetadataValueType.STRING, false, Map.of("sourceKeys", List.of("dept")))));
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
         RecordingObservationPort observationPort = new RecordingObservationPort();
         List<MetadataExtractionRecord> savedRecords = new ArrayList<>();
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
-                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a", "dept", "Finance"))
+                .taskId("1")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1", "dept", "Finance"))
                 .build();
 
         NodeResult extractResult = new MetadataExtractorNodeFeature(
@@ -138,7 +138,7 @@ class MetadataGovernanceNodeFeatureTests {
                 .singleElement()
                 .satisfies(event -> assertThat(event.attributes())
                         .containsEntry("tenantId", "tenant-a")
-                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("knowledgeBaseId", "1")
                         .containsEntry("schemaVersion", "3")
                         .containsEntry("candidateCount", "1")
                         .containsEntry("success", "true"));
@@ -147,7 +147,7 @@ class MetadataGovernanceNodeFeatureTests {
                 .singleElement()
                 .satisfies(event -> assertThat(event.attributes())
                         .containsEntry("tenantId", "tenant-a")
-                        .containsEntry("knowledgeBaseId", "kb-a")
+                        .containsEntry("knowledgeBaseId", "1")
                         .containsEntry("schemaVersion", "3")
                         .containsEntry("candidateCount", "1")
                         .containsEntry("normalizedFieldCount", "1")
@@ -165,14 +165,14 @@ class MetadataGovernanceNodeFeatureTests {
 
     @Test
     void shouldMapParserMetadataByParseKeysWithoutUsingSourceAliases() {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
                 field("owner", MetadataValueType.STRING, false, Map.of("parseKeys", List.of("author")))));
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
+                .taskId("1")
                 .metadata(Map.of(
                         "tenantId", "tenant-a",
-                        "kbId", "kb-a",
+                        "kbId", "1",
                         "author", "source-author",
                         "parseMetadata", Map.of("author", "Data Team")))
                 .build();
@@ -190,14 +190,14 @@ class MetadataGovernanceNodeFeatureTests {
 
     @Test
     void shouldUseContextExtractorVersionForReExtractCandidates() {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 3, List.of(
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 3, List.of(
                 field("department", MetadataValueType.STRING, false, Map.of())));
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
+                .taskId("1")
                 .metadata(Map.of(
                         "tenantId", "tenant-a",
-                        "kbId", "kb-a",
+                        "kbId", "1",
                         "department", "Finance",
                         "extractorVersion", "extractor-v2"))
                 .build();
@@ -216,8 +216,8 @@ class MetadataGovernanceNodeFeatureTests {
     void shouldFailBackfillValidationWhenSchemaMissing() {
         MetadataSchemaRegistryPort schemaRegistry = MetadataSchemaRegistryPort.empty();
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
-                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a", "backfillJobId", "job-a"))
+                .taskId("1")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1", "backfillJobId", "job-a"))
                 .build();
 
         NodeResult result = new MetadataValidatorNodeFeature(schemaRegistry,
@@ -231,15 +231,15 @@ class MetadataGovernanceNodeFeatureTests {
 
     @Test
     void shouldPersistReExtractExtractorVersionAfterValidation() {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 3, List.of(
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 3, List.of(
                 field("department", MetadataValueType.STRING, false, Map.of())));
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
         List<MetadataExtractionRecord> savedRecords = new ArrayList<>();
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
+                .taskId("1")
                 .metadata(Map.of(
                         "tenantId", "tenant-a",
-                        "kbId", "kb-a",
+                        "kbId", "1",
                         "department", "Finance",
                         "extractorVersion", "extractor-v2"))
                 .build();
@@ -262,12 +262,12 @@ class MetadataGovernanceNodeFeatureTests {
 
     @Test
     void shouldKeepHighConfidenceDeterministicCandidateOverLlmConflict() {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
                 field("department", MetadataValueType.STRING, false, Map.of())));
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
-                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .taskId("1")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1"))
                 .metadataCandidates(List.of(
                         new MetadataFieldCandidate("department", "Finance", "source",
                                 "SourceMetadataExtractor", 0.86D, "dept", 1, "deterministic-1"),
@@ -289,12 +289,12 @@ class MetadataGovernanceNodeFeatureTests {
 
     @Test
     void shouldBoostConfidenceWhenMultipleExtractorsAgree() {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
                 field("department", MetadataValueType.STRING, false, Map.of())));
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
-                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .taskId("1")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1"))
                 .metadataCandidates(List.of(
                         new MetadataFieldCandidate("department", "Finance", "source",
                                 "SourceMetadataExtractor", 0.78D, "dept", 1, "deterministic-1"),
@@ -319,15 +319,15 @@ class MetadataGovernanceNodeFeatureTests {
 
     @Test
     void shouldQuarantineWhenRequiredMetadataMissing() {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
                 field("securityLevel", MetadataValueType.STRING, true, Map.of())));
         List<String> quarantineReasons = new ArrayList<>();
         List<MetadataExtractionRecord> savedRecords = new ArrayList<>();
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
         MetadataQuarantinePort quarantinePort = item -> quarantineReasons.add(item.reasonCode());
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
-                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a", "extractorVersion", "extractor-v2"))
+                .taskId("1")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1", "extractorVersion", "extractor-v2"))
                 .build();
 
         NodeResult result = new MetadataValidatorNodeFeature(schemaRegistry,
@@ -346,14 +346,14 @@ class MetadataGovernanceNodeFeatureTests {
 
     @Test
     void shouldQuarantineUntrustedSecurityMetadataSource() {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
                 field("securityLevel", MetadataValueType.STRING, false, Map.of())));
         List<String> quarantineReasons = new ArrayList<>();
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
         MetadataQuarantinePort quarantinePort = item -> quarantineReasons.add(item.reasonCode());
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
-                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .taskId("1")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1"))
                 .normalizedMetadata(Map.of("securityLevel", "internal"))
                 .metadataFieldQualities(List.of(new MetadataFieldQuality(
                         "securityLevel", 0.99D, "llm", "LlmMetadataExtractor", true, "")))
@@ -375,7 +375,7 @@ class MetadataGovernanceNodeFeatureTests {
 
     @Test
     void shouldRouteLowConfidenceMetadataToReviewWithoutCanonicalWrite() {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
                 field("department", MetadataValueType.STRING, false, Map.of())));
         MetadataSchemaRegistryPort schemaRegistry = (tenantId, knowledgeBaseId) -> schema;
         List<MetadataReviewItem> reviewItems = new ArrayList<>();
@@ -394,10 +394,10 @@ class MetadataGovernanceNodeFeatureTests {
         };
         AtomicReference<Map<String, Object>> writtenDocumentMetadata = new AtomicReference<>();
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
+                .taskId("1")
                 .metadata(Map.of(
                         "tenantId", "tenant-a",
-                        "kbId", "kb-a",
+                        "kbId", "1",
                         "metadataExtractionContext", Map.of(
                                 "llmExtractorVersion", "llm-v2",
                                 "llmPromptVersion", "prompt-v2")))
@@ -406,7 +406,7 @@ class MetadataGovernanceNodeFeatureTests {
                         "department", 0.5D, "llm", "LlmMetadataExtractor", true, "")))
                 .metadataCandidates(List.of(new MetadataFieldCandidate(
                         "department", "Finance", "llm", "LlmMetadataExtractor",
-                        0.5D, "财务部预算说明", 1, "extractor-v1")))
+                        0.5D, "finance budget note", 1, "extractor-v1")))
                 .build();
 
         NodeResult result = new MetadataValidatorNodeFeature(schemaRegistry,
@@ -427,15 +427,15 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(reviewItems.get(0).reviewContext().get("extractionContext").toString())
                 .contains("llm-v2", "prompt-v2");
         assertThat(reviewItems.get(0).reviewContext().get("rawCandidates").toString())
-                .contains("财务部预算说明");
+                .contains("finance budget note");
         assertThat(writtenDocumentMetadata.get()).isNull();
         assertThat(context.getMetadata()).doesNotContainKeys("department", "acceptedMetadata");
     }
 
     @Test
     void shouldExtractOnlyRegisteredSchemaFieldsFromLlm() throws Exception {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
-                field("department", MetadataValueType.STRING, false, Map.of("description", "所属部门"))));
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of("description", "department"))));
         AtomicReference<String> modelIdRef = new AtomicReference<>();
         AtomicReference<List<ChatMessage>> messagesRef = new AtomicReference<>();
         ChatModelPort modelPort = (request, modelId) -> {
@@ -443,22 +443,22 @@ class MetadataGovernanceNodeFeatureTests {
             messagesRef.set(request.getMessages());
             return """
                     {
-                      "department": {"value": "Finance", "confidence": 0.73, "evidence": "财务部预算说明"},
+                      "department": {"value": "Finance", "confidence": 0.73, "evidence": "finance budget note"},
                       "tenant_id": "evil"
                     }
                     """;
         };
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
-                .rawText("财务部预算说明，面向内部员工。")
-                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .taskId("1")
+                .rawText("finance budget note for internal staff")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1"))
                 .build();
         NodeConfig config = NodeConfig.builder()
                 .nodeType("metadata_extractor")
                 .settings(objectMapper.readTree("""
                         {
                           "tenantId": "tenant-a",
-                          "kbId": "kb-a",
+                          "kbId": "1",
                           "llmEnabled": true,
                           "llmModel": "metadata-model",
                           "llmConfidence": 0.7,
@@ -475,7 +475,7 @@ class MetadataGovernanceNodeFeatureTests {
         assertThat(modelIdRef.get()).isEqualTo("metadata-model");
         assertThat(messagesRef.get())
                 .extracting(ChatMessage::getContent)
-                .anySatisfy(content -> assertThat(content).contains("department").contains("只返回 JSON"));
+                .anySatisfy(content -> assertThat(content).contains("department").contains("JSON"));
         assertThat(messagesRef.get())
                 .extracting(ChatMessage::getContent)
                 .anySatisfy(content -> assertThat(content).contains("prompt-v2"));
@@ -495,24 +495,24 @@ class MetadataGovernanceNodeFeatureTests {
 
     @Test
     void shouldCapLlmConfidenceWhenEvidenceMissing() throws Exception {
-        MetadataSchema schema = new MetadataSchema("tenant-a", "kb-a", 1, List.of(
-                field("department", MetadataValueType.STRING, false, Map.of("description", "所属部门"))));
+        MetadataSchema schema = new MetadataSchema("tenant-a", "1", 1, List.of(
+                field("department", MetadataValueType.STRING, false, Map.of("description", "department"))));
         ChatModelPort modelPort = (request, modelId) -> """
                 {
                   "department": {"value": "Finance", "confidence": 0.95}
                 }
                 """;
         IngestionContext context = IngestionContext.builder()
-                .taskId("doc-a")
-                .rawText("财务部预算说明，面向内部员工。")
-                .metadata(Map.of("tenantId", "tenant-a", "kbId", "kb-a"))
+                .taskId("1")
+                .rawText("finance budget note for internal staff")
+                .metadata(Map.of("tenantId", "tenant-a", "kbId", "1"))
                 .build();
         NodeConfig config = NodeConfig.builder()
                 .nodeType("metadata_extractor")
                 .settings(objectMapper.readTree("""
                         {
                           "tenantId": "tenant-a",
-                          "kbId": "kb-a",
+                          "kbId": "1",
                           "llmEnabled": true,
                           "llmModel": "metadata-model"
                         }

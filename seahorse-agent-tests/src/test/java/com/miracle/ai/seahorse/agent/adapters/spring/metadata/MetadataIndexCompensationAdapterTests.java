@@ -85,10 +85,10 @@ class MetadataIndexCompensationAdapterTests {
         assertThat(vectorIndexPort.lastIndexedChunks).hasSize(1);
         assertThat(vectorIndexPort.lastIndexedChunks.get(0).getMetadata())
                 .containsEntry("tenant_id", "tenant-1")
-                .containsEntry("kb_id", "1")
-                .containsEntry("doc_id", "1")
+                .containsEntry("kb_id", 1L)
+                .containsEntry("doc_id", 1L)
                 .containsEntry("collection_name", "collection-1")
-                .containsEntry("chunk_id", "chunk-1")
+                .containsEntry("chunk_id", 1L)
                 .containsEntry("chunk_index", 0)
                 .containsEntry("enabled", true)
                 .containsEntry("file_type", "text/plain")

@@ -256,3 +256,14 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-06-02 | work | docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/90-evidence.md | Frontend backend gap remediation evidence |
 | 2026-06-02 | work | docs/aegis/work/2026-06-02-frontend-backend-gap-remediation/99-reflection.md | Frontend backend gap remediation reflection |
 | 2026-06-03 | plan | docs/aegis/plans/2026-06-03-agent-skills-full-stack-implementation-plan.md | Agent skills full stack implementation plan |
+| 2026-06-06 | work | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/10-intent.md | SaaS MVP 11-21 implementation intent |
+| 2026-06-06 | work | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/20-checkpoint.md | SaaS MVP 11-21 implementation checkpoint |
+| 2026-06-06 | work | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/90-evidence.md | SaaS MVP 11-21 implementation evidence |
+| 2026-06-06 | work | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/99-reflection.md | SaaS MVP 11-21 implementation reflection |
+| 2026-06-06 | artifact | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/task-intent-draft.json | SaaS MVP 11-21 implementation task intent draft |
+| 2026-06-06 | artifact | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/baseline-read-set-hint.json | SaaS MVP 11-21 implementation baseline read-set hint |
+| 2026-06-06 | artifact | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/impact-statement-draft.json | SaaS MVP 11-21 implementation impact statement draft |
+| 2026-06-06 | artifact | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/todo-checkpoint-draft.json | SaaS MVP 11-21 implementation todo checkpoint draft |
+| 2026-06-06 | artifact | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/drift-check-draft.json | SaaS MVP 11-21 implementation drift check draft |
+| 2026-06-06 | artifact | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/resume-state-hint.json | 2026-06-06-saas-mvp-11-21-implementation resume state hint |
+| 2026-06-06 | artifact | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/evidence-bundle-draft-phase1-targeted-regression.json | 2026-06-06-saas-mvp-11-21-implementation evidence phase1-targeted-regression |

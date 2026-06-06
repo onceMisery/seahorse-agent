@@ -71,7 +71,7 @@ class JdbcMemoryKeywordIndexRepositoryAdapterTests {
 
         assertThat(row)
                 .containsEntry("MEMORY_ID", "memory-1")
-                .containsEntry("USER_ID", "user-1")
+                .containsEntry("USER_ID", JdbcMemorySupport.toLongId("user-1"))
                 .containsEntry("TENANT_ID", "tenant-1")
                 .containsEntry("LAYER_NAME", "LONG_TERM")
                 .containsEntry("MEMORY_TYPE", "PROJECT_FACT")

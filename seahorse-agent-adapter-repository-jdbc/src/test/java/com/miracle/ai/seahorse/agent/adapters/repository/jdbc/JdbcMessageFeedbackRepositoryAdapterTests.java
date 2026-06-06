@@ -47,47 +47,47 @@ class JdbcMessageFeedbackRepositoryAdapterTests {
 
     @Test
     void shouldInsertAndUpdateFeedbackForAssistantMessage() {
-        insertMessage("msg-1", "conv-1", "user-1", "assistant");
+        insertMessage("1", "1", "1", "assistant");
 
-        adapter.upsert(new MessageFeedbackSubmission("msg-1", "user-1", 1, "good", "useful", Instant.now()));
-        adapter.upsert(new MessageFeedbackSubmission("msg-1", "user-1", -1, "bad", "wrong", Instant.now()));
+        adapter.upsert(new MessageFeedbackSubmission("1", "1", 1, "good", "useful", Instant.now()));
+        adapter.upsert(new MessageFeedbackSubmission("1", "1", -1, "bad", "wrong", Instant.now()));
 
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM t_message_feedback", Integer.class);
         Integer vote = jdbcTemplate.queryForObject("SELECT vote FROM t_message_feedback WHERE message_id = ?",
-                Integer.class, "msg-1");
-        Map<String, Integer> votes = adapter.findUserVotes("user-1", List.of("msg-1", "missing"));
+                Integer.class, 1L);
+        Map<String, Integer> votes = adapter.findUserVotes("1", List.of("1", "99"));
         assertThat(count).isEqualTo(1);
         assertThat(vote).isEqualTo(-1);
-        assertThat(votes).containsEntry("msg-1", -1);
+        assertThat(votes).containsEntry("1", -1);
     }
 
     @Test
     void shouldRejectFeedbackForUserMessage() {
-        insertMessage("msg-2", "conv-1", "user-1", "user");
+        insertMessage("2", "1", "1", "user");
 
         assertThatThrownBy(() -> adapter.upsert(
-                new MessageFeedbackSubmission("msg-2", "user-1", 1, "", "", Instant.now())))
+                new MessageFeedbackSubmission("2", "1", 1, "", "", Instant.now())))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("assistant message not found");
     }
 
     @Test
     void shouldPageDislikedAssistantFeedbackEvaluationCandidates() {
-        insertMessage("msg-1", "conv-1", "user-1", "assistant", "run-1", "candidate answer");
-        insertMessage("msg-2", "conv-1", "user-1", "assistant", "run-2", "other run");
-        insertMessage("msg-3", "conv-1", "user-1", "assistant", "run-1", "liked answer");
-        adapter.upsert(new MessageFeedbackSubmission("msg-1", "user-1", -1, "incorrect", "needs fact fix",
+        insertMessage("1", "1", "1", "assistant", "1", "candidate answer");
+        insertMessage("2", "1", "1", "assistant", "2", "other run");
+        insertMessage("3", "1", "1", "assistant", "1", "liked answer");
+        adapter.upsert(new MessageFeedbackSubmission("1", "1", -1, "incorrect", "needs fact fix",
                 Instant.now()));
-        adapter.upsert(new MessageFeedbackSubmission("msg-2", "user-1", -1, "incorrect", "wrong run",
+        adapter.upsert(new MessageFeedbackSubmission("2", "1", -1, "incorrect", "wrong run",
                 Instant.now()));
-        adapter.upsert(new MessageFeedbackSubmission("msg-3", "user-1", 1, "good", "useful", Instant.now()));
+        adapter.upsert(new MessageFeedbackSubmission("3", "1", 1, "good", "useful", Instant.now()));
 
-        var page = adapter.page(new FeedbackEvaluationCandidateQuery("user-1", "run-1", "incorrect", 1L, 10L));
+        var page = adapter.page(new FeedbackEvaluationCandidateQuery("1", "1", "incorrect", 1L, 10L));
 
         assertThat(page.total()).isEqualTo(1L);
         assertThat(page.records()).hasSize(1);
-        assertThat(page.records().get(0).messageId()).isEqualTo("msg-1");
-        assertThat(page.records().get(0).agentRunId()).isEqualTo("run-1");
+        assertThat(page.records().get(0).messageId()).isEqualTo("1");
+        assertThat(page.records().get(0).agentRunId()).isEqualTo("1");
         assertThat(page.records().get(0).content()).isEqualTo("candidate answer");
         assertThat(page.records().get(0).vote()).isEqualTo(-1);
     }
@@ -97,9 +97,9 @@ class JdbcMessageFeedbackRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_message");
         jdbcTemplate.execute("""
                 CREATE TABLE t_message (
-                    id VARCHAR(20) PRIMARY KEY,
-                    conversation_id VARCHAR(20) NOT NULL,
-                    user_id VARCHAR(20) NOT NULL,
+                    id BIGINT PRIMARY KEY,
+                    conversation_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
                     role VARCHAR(16) NOT NULL,
                     content TEXT NOT NULL,
                     agent_run_id VARCHAR(64),
@@ -110,10 +110,10 @@ class JdbcMessageFeedbackRepositoryAdapterTests {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_message_feedback (
-                    id VARCHAR(20) PRIMARY KEY,
-                    message_id VARCHAR(20) NOT NULL,
-                    conversation_id VARCHAR(20) NOT NULL,
-                    user_id VARCHAR(20) NOT NULL,
+                    id BIGINT PRIMARY KEY,
+                    message_id BIGINT NOT NULL,
+                    conversation_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
                     vote INTEGER NOT NULL,
                     reason VARCHAR(255),
                     comment TEXT,

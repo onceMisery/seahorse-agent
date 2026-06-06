@@ -103,14 +103,34 @@ export interface VersionQualityDiff {
   improvedSamples?: Array<{ documentId?: string; baseQuality?: number; candidateQuality?: number }>;
 }
 
+function normalizePage<T>(data: PageResult<T> | T[] | null | undefined, current = 1, size = 50): PageResult<T> {
+  if (Array.isArray(data)) {
+    return {
+      records: data,
+      total: data.length,
+      size,
+      current,
+      pages: data.length === 0 ? 0 : Math.ceil(data.length / size)
+    };
+  }
+  return {
+    records: data?.records ?? [],
+    total: data?.total ?? data?.records?.length ?? 0,
+    size: data?.size ?? size,
+    current: data?.current ?? current,
+    pages: data?.pages ?? 0
+  };
+}
+
 // ── API 调用 ──
 
 // 数据集 CRUD
-export function listDatasets(kbId: string, params?: { current?: number; size?: number; keyword?: string }) {
-  return api.get<PageResult<RetrievalEvaluationDataset>>(
+export async function listDatasets(kbId: string, params?: { current?: number; size?: number; keyword?: string }) {
+  const data = await api.get<PageResult<RetrievalEvaluationDataset> | RetrievalEvaluationDataset[]>(
     `/knowledge-base/${encodeURIComponent(kbId)}/retrieval-evaluation-datasets`,
     { params }
   );
+  return normalizePage(data, params?.current ?? 1, params?.size ?? 50);
 }
 
 export function getDataset(kbId: string, datasetId: string) {

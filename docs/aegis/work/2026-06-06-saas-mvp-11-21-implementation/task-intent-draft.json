@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Implement SaaS MVP 11-21 backend robustness, persistence migration, feature enhancement, i18n, audit compliance with tests",
+  "goal": "Implement SaaS MVP 11-21 backend robustness, persistence migration, feature enhancement, i18n, audit compliance with tests",
+  "successEvidence": [],
+  "stopCondition": "Stop when success evidence is satisfied or a blocker/risk requires pause.",
+  "nonGoals": [],
+  "scope": "Phase 1-4 per SaaS_MVP_11-21_Implementation_task-94b.md and docs/aegis/plans/saas-mvp-impl 11-21",
+  "changeKinds": [
+    "feature"
+  ],
+  "riskHints": []
+}

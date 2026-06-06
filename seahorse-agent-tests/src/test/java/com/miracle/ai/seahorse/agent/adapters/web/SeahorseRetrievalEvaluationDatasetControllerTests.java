@@ -33,6 +33,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluationStrategy;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -73,7 +75,8 @@ class SeahorseRetrievalEvaluationDatasetControllerTests {
         when(datasetPort.listRuns("kb-1", "dataset-1", 20)).thenReturn(List.of(runSummary()));
         when(datasetPort.getRun("kb-1", "dataset-1", "run-1")).thenReturn(runRecord());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseRetrievalEvaluationDatasetController(datasetPort)).build();
+                new SeahorseRetrievalEvaluationDatasetController(
+                        provider(RetrievalEvaluationDatasetInboundPort.class, datasetPort))).build();
 
         mvc.perform(get("/knowledge-base/kb-1/retrieval-evaluation-datasets"))
                 .andExpect(status().isOk())
@@ -157,6 +160,12 @@ class SeahorseRetrievalEvaluationDatasetControllerTests {
 
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
+    }
+
+    private static <T> ObjectProvider<T> provider(Class<T> type, T instance) {
+        StaticListableBeanFactory beanFactory = new StaticListableBeanFactory();
+        beanFactory.addBean(type.getName(), instance);
+        return beanFactory.getBeanProvider(type);
     }
 
     private RetrievalEvaluationDatasetSummary summary() {

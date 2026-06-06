@@ -239,9 +239,10 @@ class JdbcMemoryRepositoryAdapterTests {
                 INSERT INTO t_long_term_memory
                 (id, user_id, tenant_id, memory_category, title, content, source_type, source_ids, tags,
                  importance_score, confidence_level, status, last_referenced_at, update_time, create_time, deleted)
-                VALUES ('cold-ltm', 'user-1', 'tenant-1', 'FACT', 'cold', 'low value long memory',
+                VALUES ('cold-ltm', ?, 'tenant-1', 'FACT', 'cold', 'low value long memory',
                         'short_term', '[]', '{}', 0.1, 0.1, 'ACTIVE', ?, ?, ?, 0)
                 """,
+                JdbcMemorySupport.toLongId("user-1"),
                 java.sql.Timestamp.from(oldUpdateTime),
                 java.sql.Timestamp.from(oldUpdateTime),
                 java.sql.Timestamp.from(oldUpdateTime));
@@ -249,9 +250,10 @@ class JdbcMemoryRepositoryAdapterTests {
                 INSERT INTO t_long_term_memory
                 (id, user_id, tenant_id, memory_category, title, content, source_type, source_ids, tags,
                  importance_score, confidence_level, status, last_referenced_at, update_time, create_time, deleted)
-                VALUES ('strong-ltm', 'user-1', 'tenant-1', 'FACT', 'strong', 'important long memory',
+                VALUES ('strong-ltm', ?, 'tenant-1', 'FACT', 'strong', 'important long memory',
                         'short_term', '[]', '{}', 0.9, 0.9, 'ACTIVE', ?, ?, ?, 0)
                 """,
+                JdbcMemorySupport.toLongId("user-1"),
                 java.sql.Timestamp.from(oldUpdateTime),
                 java.sql.Timestamp.from(oldUpdateTime),
                 java.sql.Timestamp.from(oldUpdateTime));
@@ -259,9 +261,10 @@ class JdbcMemoryRepositoryAdapterTests {
                 INSERT INTO t_semantic_memory
                 (id, user_id, tenant_id, semantic_key, semantic_type, value_json, confidence_level, source_memory_ids,
                  status, last_referenced_at, update_time, create_time, deleted)
-                VALUES ('cold-sem', 'user-1', 'tenant-1', 'project:cold', 'FACT', '{}', 0.1, '[]',
+                VALUES ('cold-sem', ?, 'tenant-1', 'project:cold', 'FACT', '{}', 0.1, '[]',
                         'ACTIVE', ?, ?, ?, 0)
                 """,
+                JdbcMemorySupport.toLongId("user-1"),
                 java.sql.Timestamp.from(oldUpdateTime),
                 java.sql.Timestamp.from(oldUpdateTime),
                 java.sql.Timestamp.from(oldUpdateTime));
@@ -399,11 +402,11 @@ class JdbcMemoryRepositoryAdapterTests {
         assertThat(jdbcTemplate.queryForList("""
                 SELECT value_text, status, version
                 FROM t_user_profile_fact
-                WHERE user_id = 'user-1'
+                WHERE user_id = ?
                   AND tenant_id = 'default'
                   AND slot_key = 'identity.occupation'
                 ORDER BY version ASC
-                """))
+                """, JdbcMemorySupport.toLongId("user-1")))
                 .hasSize(2)
                 .satisfies(rows -> {
                     assertThat(rows.get(0)).containsEntry("STATUS", "HISTORICAL")
@@ -431,11 +434,11 @@ class JdbcMemoryRepositoryAdapterTests {
         Map<String, Object> row = jdbcTemplate.queryForMap("""
                 SELECT access_count, last_referenced_at
                 FROM t_user_profile_fact
-                WHERE user_id = 'user-1'
+                WHERE user_id = ?
                   AND tenant_id = 'default'
                   AND slot_key = 'preferences.response_style'
                   AND status = 'ACTIVE'
-                """);
+                """, JdbcMemorySupport.toLongId("user-1"));
         assertThat(row.get("ACCESS_COUNT")).isEqualTo(1);
         assertThat(row.get("LAST_REFERENCED_AT")).isNotNull();
     }
@@ -581,7 +584,7 @@ class JdbcMemoryRepositoryAdapterTests {
                 WHERE id = 'review-op-1'
                 """);
 
-        assertThat(row.get("USER_ID")).isEqualTo("user-1");
+        assertThat(row.get("USER_ID").toString()).isEqualTo(String.valueOf(JdbcMemorySupport.toLongId("user-1")));
         assertThat(row.get("TENANT_ID")).isEqualTo("default");
         assertThat(row.get("OPERATION_ID")).isEqualTo("op-1");
         assertThat(row.get("REQUESTED_ACTION")).isEqualTo("REVIEW");
@@ -809,25 +812,27 @@ class JdbcMemoryRepositoryAdapterTests {
                  importance_score, access_count, last_access_time, decay_score, expires_time, status,
                  generation_id, last_referenced_at, schema_version, policy_version, sensitivity_level,
                  obsolete_reason, create_time, update_time, deleted)
-                VALUES ('active-1', 'user-1', 'default', 'conv-1', 'PROFILE', 'active student',
+                VALUES ('active-1', ?, 'default', ?, 'PROFILE', 'active student',
                         '{"profileSlot":"identity.occupation"}', '[]',
                         0.8, 0, CURRENT_TIMESTAMP, 0.5, ?,
                         'ACTIVE', 'identity.occupation:g1', NULL, '1', 'policy-v1', 'LOW', NULL,
                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
-                """, java.sql.Timestamp.from(Instant.now().plusSeconds(3600)));
+                """, JdbcMemorySupport.toLongId("user-1"), JdbcMemorySupport.toLongId("conv-1"),
+                java.sql.Timestamp.from(Instant.now().plusSeconds(3600)));
         jdbcTemplate.update("""
                 INSERT INTO t_short_term_memory
                 (id, user_id, tenant_id, conversation_id, memory_type, content, metadata_json, source_message_ids,
                  importance_score, access_count, last_access_time, decay_score, expires_time, status,
                  generation_id, last_referenced_at, schema_version, policy_version, sensitivity_level,
                  obsolete_reason, create_time, update_time, deleted)
-                VALUES ('obsolete-1', 'user-1', 'default', 'conv-1', 'PROFILE', 'obsolete student',
+                VALUES ('obsolete-1', ?, 'default', ?, 'PROFILE', 'obsolete student',
                         '{"profileSlot":"identity.occupation"}', '[]',
                         0.8, 0, CURRENT_TIMESTAMP, 0.5, ?,
                         'OBSOLETE', 'identity.occupation:old', NULL, '1', 'policy-v1', 'LOW',
                         'profile slot updated',
                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
-                """, java.sql.Timestamp.from(Instant.now().plusSeconds(3600)));
+                """, JdbcMemorySupport.toLongId("user-1"), JdbcMemorySupport.toLongId("conv-1"),
+                java.sql.Timestamp.from(Instant.now().plusSeconds(3600)));
 
         assertThat(shortTermAdapter.listByUser("user-1", 10))
                 .extracting(MemoryRecord::id)
@@ -961,7 +966,7 @@ class JdbcMemoryRepositoryAdapterTests {
         assertThat(candidates).hasSize(1);
         MemoryCompactionCandidate candidate = candidates.get(0);
         assertThat(candidate.groupKey()).isEqualTo("semanticKey:project.alpha");
-        assertThat(candidate.userId()).isEqualTo("user-1");
+        assertThat(candidate.userId()).isEqualTo(String.valueOf(JdbcMemorySupport.toLongId("user-1")));
         assertThat(candidate.fragments()).extracting(fragment -> fragment.memoryId())
                 .containsExactlyInAnyOrder("stm-compact-1", "stm-compact-2");
 

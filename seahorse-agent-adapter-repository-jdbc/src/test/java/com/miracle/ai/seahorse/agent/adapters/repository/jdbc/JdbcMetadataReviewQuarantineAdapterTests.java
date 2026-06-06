@@ -63,7 +63,7 @@ class JdbcMetadataReviewQuarantineAdapterTests {
         insertReviewItem("review-1", "PENDING");
 
         MetadataReviewPage page = adapter.pageReviewItems(
-                new MetadataReviewQuery("tenant-1", "kb-1", MetadataReviewStatus.PENDING, 1, 10));
+                new MetadataReviewQuery("tenant-1", "1", MetadataReviewStatus.PENDING, 1, 10));
 
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.records()).extracting(MetadataReviewRecord::id).containsExactly("review-1");
@@ -196,17 +196,17 @@ class JdbcMetadataReviewQuarantineAdapterTests {
     void shouldFilterReviewAndQuarantineManagementPages() {
         insertExtractionResult("result-review-filter-1");
         insertReviewItem("review-filter-1", "PENDING", "result-review-filter-1",
-                "doc-1", "LOW_CONFIDENCE");
+                "101", "LOW_CONFIDENCE");
         insertExtractionResult("result-review-filter-2");
         insertReviewItem("review-filter-2", "PENDING", "result-review-filter-2",
-                "doc-2", "REQUIRED_MISSING");
-        insertQuarantineItem("q-filter-1", 0, 0, "doc-1", "job-1", "VALIDATE", "SCHEMA_MISSING");
-        insertQuarantineItem("q-filter-2", 0, 0, "doc-2", "job-2", "PARSE", "PARSE_FAILED");
+                "102", "REQUIRED_MISSING");
+        insertQuarantineItem("q-filter-1", 0, 0, "101", "job-1", "VALIDATE", "SCHEMA_MISSING");
+        insertQuarantineItem("q-filter-2", 0, 0, "102", "job-2", "PARSE", "PARSE_FAILED");
 
         MetadataReviewPage reviewPage = adapter.pageReviewItems(new MetadataReviewQuery(
-                "tenant-1", "kb-1", MetadataReviewStatus.PENDING, "LOW_CONFIDENCE", "doc-1", 1, 10));
+                "tenant-1", "1", MetadataReviewStatus.PENDING, "LOW_CONFIDENCE", "101", 1, 10));
         MetadataQuarantinePage quarantinePage = adapter.pageQuarantineItems(new MetadataQuarantineQuery(
-                "tenant-1", "kb-1", Boolean.FALSE, "VALIDATE", "SCHEMA_MISSING", "doc-1", "job-1", 1, 10));
+                "tenant-1", "1", Boolean.FALSE, "VALIDATE", "SCHEMA_MISSING", "101", "job-1", 1, 10));
 
         assertThat(reviewPage.records()).extracting(MetadataReviewRecord::id).containsExactly("review-filter-1");
         assertThat(quarantinePage.records()).extracting(MetadataQuarantineRecord::id).containsExactly("q-filter-1");
@@ -217,7 +217,7 @@ class JdbcMetadataReviewQuarantineAdapterTests {
         insertQuarantineItem("q-1", 0, 1);
 
         MetadataQuarantinePage page = adapter.pageQuarantineItems(
-                new MetadataQuarantineQuery("tenant-1", "kb-1", Boolean.FALSE, 1, 10));
+                new MetadataQuarantineQuery("tenant-1", "1", Boolean.FALSE, 1, 10));
 
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.records()).extracting(MetadataQuarantineRecord::id).containsExactly("q-1");
@@ -327,7 +327,7 @@ class JdbcMetadataReviewQuarantineAdapterTests {
     }
 
     private void insertReviewItem(String id, String status, String resultId) {
-        insertReviewItem(id, status, resultId, "doc-1", "LOW_CONFIDENCE");
+        insertReviewItem(id, status, resultId, "101", "LOW_CONFIDENCE");
     }
 
     private void insertReviewItem(String id, String status, String resultId, String docId, String reasonCode) {
@@ -335,14 +335,14 @@ class JdbcMetadataReviewQuarantineAdapterTests {
                 INSERT INTO t_metadata_review_item(
                     id, tenant_id, kb_id, doc_id, result_id, review_status, priority,
                     reason_code, reason_message, suggested_metadata, review_context
-                ) VALUES (?, 'tenant-1', 'kb-1', ?, ?, ?, 10,
+                ) VALUES (?, 'tenant-1', '1', ?, ?, ?, 10,
                     ?, '字段置信度低', ?, ?)
                 """, id, docId, resultId, status, reasonCode, "{\"department\":\"hr\"}",
                 "{\"issues\":[\"LOW_CONFIDENCE\"]}");
     }
 
     private void insertQuarantineItem(String id, int resolved, int retryCount) {
-        insertQuarantineItem(id, resolved, retryCount, "doc-1", "job-1", "VALIDATE", "SCHEMA_MISSING");
+        insertQuarantineItem(id, resolved, retryCount, "101", "job-1", "VALIDATE", "SCHEMA_MISSING");
     }
 
     private void insertQuarantineItem(String id,
@@ -356,7 +356,7 @@ class JdbcMetadataReviewQuarantineAdapterTests {
                 INSERT INTO t_metadata_quarantine_item(
                     id, tenant_id, kb_id, doc_id, job_id, stage, reason_code, reason_message,
                     source_snapshot, retry_count, resolved
-                ) VALUES (?, 'tenant-1', 'kb-1', ?, ?, ?, ?, '缺少 Schema', ?, ?, ?)
+                ) VALUES (?, 'tenant-1', '1', ?, ?, ?, ?, '缺少 Schema', ?, ?, ?)
                 """, id, docId, jobId, stage, reasonCode, "{\"source\":\"test\"}", retryCount, resolved);
     }
 }

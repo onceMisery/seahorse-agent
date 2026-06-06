@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.adapters.local.LocalQueryRewriteAdapter;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalRagPromptAdapter;
 import com.miracle.ai.seahorse.agent.adapters.local.LocalRetrievalContextFormatAdapter;
 import com.miracle.ai.seahorse.agent.adapters.parser.tika.TikaDocumentParserAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentGuidancePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.IntentResolutionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.chat.PromptTemplatePort;
@@ -97,8 +98,7 @@ public class SeahorseAgentLocalAdapterAutoConfiguration {
             matchIfMissing = true)
     @ConditionalOnMissingBean(RagPromptPort.class)
     public LocalRagPromptAdapter seahorseLocalRagPromptAdapter(ObjectProvider<ContextWeaverPort> contextWeaverPort) {
-        return new LocalRagPromptAdapter(contextWeaverPort.getIfAvailable(
-                com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver::new));
+        return new LocalRagPromptAdapter(contextWeaverPort.getIfAvailable(DefaultContextWeaver::new));
     }
 
     @Bean

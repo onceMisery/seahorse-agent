@@ -27,7 +27,15 @@ interface MergedItem {
 function mergeArtifacts(artifacts: ArtifactBlock[], serverArtifacts: AgentArtifact[]): MergedItem[] {
   const items: MergedItem[] = [];
   for (const a of artifacts) {
-    items.push({ id: a.id, title: a.title, code: a.code, isComplete: a.isComplete, language: a.language });
+    const server = serverArtifacts.find((item) => item.artifactId === a.id);
+    items.push({
+      id: a.id,
+      title: a.title,
+      code: server?.previewText ?? a.code,
+      server,
+      isComplete: a.isComplete,
+      language: a.language
+    });
   }
   for (const sa of serverArtifacts) {
     if (!items.some((i) => i.id === sa.artifactId)) {
@@ -44,7 +52,7 @@ function mergeArtifacts(artifacts: ArtifactBlock[], serverArtifacts: AgentArtifa
 }
 
 export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose: _onClose }: ArtifactInspectorTabProps) {
-  const allItems = React.useMemo(() => mergeArtifacts(artifacts, serverArtifacts), [artifacts, serverArtifacts]);
+  const [liveServerArtifacts, setLiveServerArtifacts] = React.useState<AgentArtifact[]>(serverArtifacts);
   const [selectedId, setSelectedId] = React.useState<string>("");
   const [copied, setCopied] = React.useState(false);
   const [fullscreen, setFullscreen] = React.useState(false);
@@ -53,6 +61,12 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
   const [editedContentById, setEditedContentById] = React.useState<Record<string, string>>({});
   const [a2uiParseError, setA2uiParseError] = React.useState<string | null>(null);
   const copyTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
+
+  React.useEffect(() => {
+    setLiveServerArtifacts(serverArtifacts);
+  }, [serverArtifacts]);
+
+  const allItems = React.useMemo(() => mergeArtifacts(artifacts, liveServerArtifacts), [artifacts, liveServerArtifacts]);
 
   React.useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
@@ -63,8 +77,12 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
   }, [allItems, selectedId]);
 
   const active = allItems.find((i) => i.id === selectedId) ?? allItems[0] ?? null;
+  const activeServerArtifact = React.useMemo(
+    () => active?.server ?? liveServerArtifacts.find((item) => item.artifactId === active?.id),
+    [active, liveServerArtifacts]
+  );
   const activeCode = active ? editedContentById[active.id] ?? active.code ?? "" : "";
-  const isClean = !active?.server || active.server.scanStatus === AGENT_ARTIFACT_SCAN_STATUS.CLEAN;
+  const isClean = !activeServerArtifact || activeServerArtifact.scanStatus === AGENT_ARTIFACT_SCAN_STATUS.CLEAN;
 
   const a2uiSurface = React.useMemo<A2UILiteSurface | null>(() => {
     if (!active) return null;
@@ -143,14 +161,23 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
 
   const handleSave = async () => {
     if (!active) return;
-    if (!active.server) {
+    if (!activeServerArtifact) {
       setEditing(false);
       toast.success("Saved locally");
       return;
     }
     setSaving(true);
     try {
-      const updated = await updateAgentArtifact(active.server.artifactId, activeCode);
+      const updated = await updateAgentArtifact(activeServerArtifact.artifactId, activeCode);
+      setLiveServerArtifacts((current) => {
+        const next = current.filter((item) => item.artifactId !== updated.artifactId);
+        next.push({
+          ...activeServerArtifact,
+          ...updated,
+          artifactId: updated.artifactId ?? activeServerArtifact.artifactId
+        });
+        return next;
+      });
       setEditedContentById((current) => ({
         ...current,
         [active.id]: updated.previewText ?? activeCode

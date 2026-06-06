@@ -126,15 +126,23 @@ class JdbcRagTraceRepositoryAdapterTests {
     private void createSchema() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_rag_trace_node");
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_rag_trace_run");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS t_user");
+        jdbcTemplate.execute("""
+                CREATE TABLE t_user (
+                    id BIGINT PRIMARY KEY,
+                    username VARCHAR(64),
+                    deleted SMALLINT DEFAULT 0
+                )
+                """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_rag_trace_run (
-                    id VARCHAR(20) PRIMARY KEY,
-                    trace_id VARCHAR(64) NOT NULL,
+                    id BIGINT PRIMARY KEY,
+                    trace_id BIGINT NOT NULL,
                     trace_name VARCHAR(128),
                     entry_method VARCHAR(256),
-                    conversation_id VARCHAR(20),
-                    task_id VARCHAR(20),
-                    user_id VARCHAR(20),
+                    conversation_id BIGINT,
+                    task_id BIGINT,
+                    user_id BIGINT,
                     status VARCHAR(16) NOT NULL,
                     error_message VARCHAR(1000),
                     start_time TIMESTAMP,
@@ -148,10 +156,10 @@ class JdbcRagTraceRepositoryAdapterTests {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_rag_trace_node (
-                    id VARCHAR(20) PRIMARY KEY,
-                    trace_id VARCHAR(20) NOT NULL,
-                    node_id VARCHAR(20) NOT NULL,
-                    parent_node_id VARCHAR(20),
+                    id BIGINT PRIMARY KEY,
+                    trace_id BIGINT NOT NULL,
+                    node_id BIGINT NOT NULL,
+                    parent_node_id BIGINT,
                     depth INTEGER,
                     node_type VARCHAR(16),
                     node_name VARCHAR(128),
@@ -168,5 +176,7 @@ class JdbcRagTraceRepositoryAdapterTests {
                     deleted SMALLINT DEFAULT 0
                 )
                 """);
+        jdbcTemplate.update("INSERT INTO t_user (id, username, deleted) VALUES (?, 'alice', 0)",
+                JdbcMemorySupport.toLongId("user-1"));
     }
 }

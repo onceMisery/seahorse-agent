@@ -84,7 +84,7 @@ class SeahorseConversationAttachmentControllerTests {
         mvc.perform(delete("/api/conversations/conversation-1/attachments/attachment-1")
                         .header(WebUserIdResolver.HEADER_USER_ID, "intruder"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"));
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 
     private static SeahorseConversationAttachmentController controller(ConversationAttachmentInboundPort port) {

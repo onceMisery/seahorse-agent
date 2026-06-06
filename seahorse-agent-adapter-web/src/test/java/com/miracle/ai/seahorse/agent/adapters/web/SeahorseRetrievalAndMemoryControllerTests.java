@@ -87,7 +87,8 @@ class SeahorseRetrievalAndMemoryControllerTests {
         RetrievalEvaluationDatasetInboundPort port = mock(RetrievalEvaluationDatasetInboundPort.class);
         when(port.listDatasets("kb-1", false)).thenReturn(List.of());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseRetrievalEvaluationDatasetController(port)).build();
+                new SeahorseRetrievalEvaluationDatasetController(
+                        provider(RetrievalEvaluationDatasetInboundPort.class, port))).build();
 
         mvc.perform(get("/knowledge-base/kb-1/retrieval-evaluation-datasets"))
                 .andExpect(status().isOk())

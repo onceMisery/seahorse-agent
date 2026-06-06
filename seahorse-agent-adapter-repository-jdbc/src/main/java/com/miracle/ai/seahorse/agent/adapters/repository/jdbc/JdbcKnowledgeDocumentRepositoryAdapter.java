@@ -284,8 +284,8 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
         if (updateSql.args().isEmpty()) {
             return true;
         }
-        updateSql.args().add(JdbcTenantSupport.resolveTenantId());
         updateSql.args().add(docId);
+        updateSql.args().add(JdbcTenantSupport.resolveTenantId());
         return jdbcTemplate.update(updateSql.sql(), updateSql.args().toArray()) > 0;
     }
 

@@ -87,11 +87,11 @@ class JdbcMemoryAliasRepositoryAdapterTests {
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM t_memory_entity_alias
-                WHERE user_id = 'user-1'
+                WHERE user_id = ?
                   AND tenant_id = 'tenant-1'
                   AND normalized_alias = 'k8s'
                   AND deleted = 0
-                """, Integer.class)).isEqualTo(1);
+                """, Integer.class, JdbcMemorySupport.toLongId("user-1"))).isEqualTo(1);
     }
 
     @Test
@@ -127,7 +127,7 @@ class JdbcMemoryAliasRepositoryAdapterTests {
         assertThat(candidates.get(0).sourceMemoryIds()).containsExactly("memory-low-1", "memory-low-2");
         assertThat(candidates)
                 .extracting(MemoryAliasCandidate::userId, MemoryAliasCandidate::tenantId)
-                .containsExactly(tuple("user-1", "tenant-1"), tuple("user-1", "tenant-1"));
+                .containsExactly(tuple(userId("user-1"), "tenant-1"), tuple(userId("user-1"), "tenant-1"));
     }
 
     @Test
@@ -163,9 +163,9 @@ class JdbcMemoryAliasRepositoryAdapterTests {
         assertThat(candidates)
                 .extracting(MemoryAliasCandidate::userId, MemoryAliasCandidate::tenantId, MemoryAliasCandidate::aliasText)
                 .containsExactly(
-                        tuple("user-3", "tenant-3", "Scope C"),
-                        tuple("user-2", "tenant-2", "Scope B"),
-                        tuple("user-1", "tenant-1", "Scope A"));
+                        tuple(userId("user-3"), "tenant-3", "Scope C"),
+                        tuple(userId("user-2"), "tenant-2", "Scope B"),
+                        tuple(userId("user-1"), "tenant-1", "Scope A"));
         assertThat(candidates)
                 .extracting(MemoryAliasCandidate::canonicalEntityId)
                 .containsExactly("entity-c", "entity-b", "entity-a");
@@ -186,5 +186,9 @@ class JdbcMemoryAliasRepositoryAdapterTests {
                 "maintenance-test",
                 sourceMemoryIds,
                 Map.of()));
+    }
+
+    private String userId(String value) {
+        return String.valueOf(JdbcMemorySupport.toLongId(value));
     }
 }

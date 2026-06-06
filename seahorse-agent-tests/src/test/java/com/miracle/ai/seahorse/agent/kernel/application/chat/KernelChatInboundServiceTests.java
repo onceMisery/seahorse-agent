@@ -90,11 +90,10 @@ class KernelChatInboundServiceTests {
         service.streamChat(new StreamChatCommand("hello", "conv-1", "task-1", "user-1", false), callback);
 
         verify(memoryPort).loadAndAppend("conv-1", "user-1", ChatMessage.user("hello"));
-        // 空检索默认走 FALLBACK_GENERIC：调用流式模型而不是返回固定文案
+        // 缂備礁鐬奸崕銈壦夐崨顖涱潟闁靛繈鍊楃敮娑㈡偣娴ｉ潧鈧盯鎽?FALLBACK_GENERIC闂佹寧绋掓穱娲儍閻斿吋鍋ㄩ柕濠忓閵堬妇鈧鍠栫换鎴ｅ暞闂佹悶鍔岄鍫ュ焵椤掆偓婵傛梻绮径鎰強妞ゆ牗绻勭粻鏌ユ煕閵壯冧粶婵炲瓨鍔楅埀顒冾潐绾板秹寮搁崘顭戞禆?
         verify(streamingModel).streamChat(any(), any());
         verify(callback, org.mockito.Mockito.never()).onContent("未检索到与问题相关的文档内容。");
     }
-
     @Test
     void shouldIncludeLoadedMemoryInGenericFallbackPrompt() {
         ConversationMemoryPort memoryPort = mock(ConversationMemoryPort.class);
@@ -108,14 +107,14 @@ class KernelChatInboundServiceTests {
         MemoryContext loadedMemory = MemoryContext.builder()
                 .userId("user-1")
                 .conversationId("conv-1")
-                .currentQuestion("我的职业是什么？")
+                .currentQuestion("what is my job")
                 .shortTermMemories(List.of(MemoryItem.builder()
                         .id("m1")
                         .userId("user-1")
                         .conversationId("conv-old")
                         .layer(MemoryLayer.SHORT_TERM)
                         .type("PROFILE")
-                        .content("我是一名学生")
+                        .content("student profile note")
                         .build()))
                 .build();
         KernelChatPipeline pipeline = new KernelChatPipeline(
@@ -124,12 +123,12 @@ class KernelChatInboundServiceTests {
                         rewritePort, intentPort, guidancePort, retrievalPort),
                 new ChatResponsePorts(
                         RagPromptPort.simple(),
-                        path -> "你是一个助手。",
+                        path -> "assistant helper",
                         streamingModel,
                         taskPort));
 
-        when(memoryPort.loadAndAppend(any(), any(), any())).thenReturn(List.of(ChatMessage.user("我的职业是什么？")));
-        when(rewritePort.rewriteWithSplit(any(), any())).thenReturn(new RewriteResult("我的职业是什么？", List.of()));
+        when(memoryPort.loadAndAppend(any(), any(), any())).thenReturn(List.of(ChatMessage.user("what is my job")));
+        when(rewritePort.rewriteWithSplit(any(), any())).thenReturn(new RewriteResult("what is my job", List.of()));
         when(intentPort.resolve(any())).thenReturn(List.of());
         when(intentPort.mergeIntentGroup(any())).thenReturn(new IntentGroup(List.of(), List.of()));
         when(guidancePort.detectAmbiguity(any(), any())).thenReturn(GuidanceDecision.none());
@@ -137,15 +136,16 @@ class KernelChatInboundServiceTests {
         });
 
         KernelChatInboundService service = new KernelChatInboundService(pipeline, taskPort);
-
-        service.streamChat(new StreamChatCommand("我的职业是什么？", "conv-1", "task-1", "user-1", false), callback);
+        service.streamChat(new StreamChatCommand("what is my job", "conv-1", "task-1", "user-1", false), callback);
 
         ArgumentCaptor<com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest> requestCaptor =
                 ArgumentCaptor.forClass(com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest.class);
         verify(streamingModel).streamChat(requestCaptor.capture(), any());
-        String systemPrompt = requestCaptor.getValue().getMessages().get(0).getContent();
-        Assertions.assertTrue(systemPrompt.contains("用户记忆上下文："));
-        Assertions.assertTrue(systemPrompt.contains("我是一名学生"));
+        List<ChatMessage> messages = requestCaptor.getValue().getMessages();
+        Assertions.assertTrue(messages.stream().anyMatch(message ->
+                message.getContent() != null && message.getContent().contains("<runtime-context>")));
+        Assertions.assertTrue(messages.stream().anyMatch(message ->
+                message.getContent() != null && message.getContent().contains("student profile note")));
     }
 
     private MemoryEnginePort fixedMemoryEngine(MemoryContext memoryContext) {

@@ -44,7 +44,8 @@ class JdbcQuotaSchemaAlignmentTests {
 
     private void assertQuotaSchema(String sql) {
         assertThat(sql).contains("CREATE TABLE IF NOT EXISTS sa_quota_policy");
-        assertThat(sql).contains("policy_id VARCHAR(64) PRIMARY KEY");
+        assertThat(sql).contains("pk_id BIGSERIAL PRIMARY KEY");
+        assertThat(sql).contains("policy_id VARCHAR(64) NOT NULL UNIQUE");
         assertThat(sql).contains("scope VARCHAR(32) NOT NULL");
         assertThat(sql).contains("subject_id VARCHAR(128) NOT NULL");
         assertThat(sql).contains("token_limit BIGINT");
@@ -54,7 +55,7 @@ class JdbcQuotaSchemaAlignmentTests {
         assertThat(sql).contains("ON sa_quota_policy(tenant_id, scope, subject_id, status, updated_at DESC, policy_id DESC)");
 
         assertThat(sql).contains("CREATE TABLE IF NOT EXISTS sa_cost_usage_record");
-        assertThat(sql).contains("usage_id VARCHAR(64) PRIMARY KEY");
+        assertThat(sql).contains("usage_id VARCHAR(64) NOT NULL UNIQUE");
         assertThat(sql).contains("source VARCHAR(32) NOT NULL");
         assertThat(sql).contains("tokens BIGINT NOT NULL");
         assertThat(sql).contains("calls BIGINT NOT NULL");

@@ -5,11 +5,23 @@ export const backendEndpointManifest = [
   },
   {
     "method": "DELETE",
+    "path": "/api/admin/tenants/{}"
+  },
+  {
+    "method": "DELETE",
     "path": "/api/conversations/{}"
   },
   {
     "method": "DELETE",
     "path": "/api/conversations/{}/attachments/{}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/knowledge-bases/{}/shares/{}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/marketplace/agents/{}/subscribe"
   },
   {
     "method": "DELETE",
@@ -149,6 +161,22 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/admin/audit-logs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/tenants"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/tenants/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/tenants/{}/users"
+  },
+  {
+    "method": "GET",
     "path": "/api/agent-artifacts/{}"
   },
   {
@@ -273,6 +301,26 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/billing/bills"
+  },
+  {
+    "method": "GET",
+    "path": "/api/billing/bills/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/billing/orders/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/billing/plans"
+  },
+  {
+    "method": "GET",
+    "path": "/api/billing/subscription"
+  },
+  {
+    "method": "GET",
     "path": "/api/connectors"
   },
   {
@@ -309,6 +357,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/export/tasks/{}"
+  },
+  {
+    "method": "GET",
     "path": "/api/features"
   },
   {
@@ -317,11 +369,51 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/knowledge-bases/{}/shares"
+  },
+  {
+    "method": "GET",
+    "path": "/api/knowledge-bases/share/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/marketplace/agents"
+  },
+  {
+    "method": "GET",
+    "path": "/api/marketplace/agents/my-subscriptions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/marketplace/reviews/pending"
+  },
+  {
+    "method": "GET",
+    "path": "/api/marketplace/revenue/my-earnings"
+  },
+  {
+    "method": "GET",
+    "path": "/api/marketplace/revenue/my-earnings/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/me/login-history"
+  },
+  {
+    "method": "GET",
     "path": "/api/me/memories"
   },
   {
     "method": "GET",
     "path": "/api/me/quota-summary"
+  },
+  {
+    "method": "GET",
+    "path": "/api/notifications"
+  },
+  {
+    "method": "GET",
+    "path": "/api/notifications/unread-count"
   },
   {
     "method": "GET",
@@ -373,11 +465,27 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/workflows/runs/{}/stream"
+  },
+  {
+    "method": "GET",
+    "path": "/api/workflows/runs/{}/visualization"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/email-available"
+  },
+  {
+    "method": "GET",
     "path": "/conversations"
   },
   {
     "method": "GET",
     "path": "/conversations/{}/messages"
+  },
+  {
+    "method": "GET",
+    "path": "/export/tasks/{}"
   },
   {
     "method": "GET",
@@ -625,6 +733,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/notifications"
+  },
+  {
+    "method": "GET",
+    "path": "/notifications/unread-count"
+  },
+  {
+    "method": "GET",
     "path": "/rag/sample-questions"
   },
   {
@@ -705,11 +821,23 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/agents/{}/enable"
+  },
+  {
+    "method": "POST",
     "path": "/agents/{}/publish"
   },
   {
     "method": "POST",
     "path": "/agents/{}/runs"
+  },
+  {
+    "method": "POST",
+    "path": "/api/admin/marketplace/revenue/settle/{}"
+  },
+  {
+    "method": "POST",
+    "path": "/api/admin/users/{}/force-logout"
   },
   {
     "method": "POST",
@@ -734,6 +862,10 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/api/agents/{}/disable"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agents/{}/enable"
   },
   {
     "method": "POST",
@@ -797,6 +929,18 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/billing/callbacks/{}"
+  },
+  {
+    "method": "POST",
+    "path": "/api/billing/orders"
+  },
+  {
+    "method": "POST",
+    "path": "/api/billing/subscribe"
+  },
+  {
+    "method": "POST",
     "path": "/api/connectors/{}/operations/{}/disable"
   },
   {
@@ -833,7 +977,35 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/export/tasks"
+  },
+  {
+    "method": "POST",
+    "path": "/api/knowledge-bases/{}/share"
+  },
+  {
+    "method": "POST",
+    "path": "/api/marketplace/agents/{}/publish"
+  },
+  {
+    "method": "POST",
+    "path": "/api/marketplace/agents/{}/ratings"
+  },
+  {
+    "method": "POST",
+    "path": "/api/marketplace/agents/{}/subscribe"
+  },
+  {
+    "method": "POST",
     "path": "/api/me/memory-settings/privacy-mode"
+  },
+  {
+    "method": "POST",
+    "path": "/api/notifications/mark-all-read"
+  },
+  {
+    "method": "POST",
+    "path": "/api/notifications/mark-read"
   },
   {
     "method": "POST",
@@ -917,11 +1089,23 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/auth/register"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/send-code"
+  },
+  {
+    "method": "POST",
     "path": "/conversations"
   },
   {
     "method": "POST",
     "path": "/conversations/messages/{}/feedback"
+  },
+  {
+    "method": "POST",
+    "path": "/export/tasks"
   },
   {
     "method": "POST",
@@ -1121,6 +1305,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/notifications/mark-all-read"
+  },
+  {
+    "method": "POST",
+    "path": "/notifications/mark-read"
+  },
+  {
+    "method": "POST",
     "path": "/rag/v3/stop"
   },
   {
@@ -1138,6 +1330,18 @@ export const backendEndpointManifest = [
   {
     "method": "PUT",
     "path": "/agents/{}/draft"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/admin/tenants/{}/suspend"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/admin/users/{}/ban"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/admin/users/{}/reset-password"
   },
   {
     "method": "PUT",
@@ -1162,6 +1366,14 @@ export const backendEndpointManifest = [
   {
     "method": "PUT",
     "path": "/api/conversations/{}"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/marketplace/reviews/{}/approve"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/marketplace/reviews/{}/reject"
   },
   {
     "method": "PUT",

@@ -17,15 +17,18 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.billing;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.common.exception.SeahorseBusinessException;
+
 /**
  * Thrown when a tenant exceeds their subscription quota limits.
  *
  * <p>Carries a machine-readable {@link #getReasonCode() reasonCode} and a
  * human-readable {@link #getUpgradeHint() upgradeHint} guiding the user
- * toward a higher-tier plan.
+ * toward a higher-tier plan. Maps to HTTP 402 Payment Required.
  */
-public class QuotaExceededException extends RuntimeException {
+public class QuotaExceededException extends SeahorseBusinessException {
 
+    private static final String ERROR_CODE = "QUOTA_EXCEEDED";
     private final String reasonCode;
     private final String upgradeHint;
 
@@ -36,7 +39,7 @@ public class QuotaExceededException extends RuntimeException {
      * @param upgradeHint human-readable suggestion to upgrade
      */
     public QuotaExceededException(String reasonCode, String upgradeHint) {
-        super(reasonCode + ": " + upgradeHint);
+        super(ERROR_CODE, reasonCode + ": " + upgradeHint, 402);
         this.reasonCode = reasonCode;
         this.upgradeHint = upgradeHint;
     }
@@ -49,7 +52,7 @@ public class QuotaExceededException extends RuntimeException {
      * @param cause       underlying cause
      */
     public QuotaExceededException(String reasonCode, String upgradeHint, Throwable cause) {
-        super(reasonCode + ": " + upgradeHint, cause);
+        super(ERROR_CODE, reasonCode + ": " + upgradeHint, 402, cause);
         this.reasonCode = reasonCode;
         this.upgradeHint = upgradeHint;
     }

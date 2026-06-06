@@ -20,8 +20,11 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRetrievalEvaluationDatasetRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRetrievalStrategyTemplateRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationComparisonRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationDatasetRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluationRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalStrategyTemplateRepositoryPort;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -43,20 +46,38 @@ import javax.sql.DataSource;
 public class SeahorseAgentRetrievalRepositoryAutoConfiguration {
 
     @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(RetrievalStrategyTemplateRepositoryPort.class)
     public JdbcRetrievalStrategyTemplateRepositoryAdapter seahorseJdbcRetrievalStrategyTemplateRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcRetrievalStrategyTemplateRepositoryAdapter(dataSource, objectMapper);
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcRetrievalStrategyTemplateRepositoryAdapter(
+                dataSource, objectMapperProvider.getIfAvailable(ObjectMapper::new));
     }
 
     @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(RetrievalEvaluationDatasetRepositoryPort.class)
     public JdbcRetrievalEvaluationDatasetRepositoryAdapter seahorseJdbcRetrievalEvaluationDatasetRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcRetrievalEvaluationDatasetRepositoryAdapter(dataSource, objectMapper);
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcRetrievalEvaluationDatasetRepositoryAdapter(
+                dataSource, objectMapperProvider.getIfAvailable(ObjectMapper::new));
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcRetrievalEvaluationDatasetRepositoryAdapter.class)
+    @ConditionalOnMissingBean(RetrievalEvaluationRunRepositoryPort.class)
+    public RetrievalEvaluationRunRepositoryPort seahorseJdbcRetrievalEvaluationRunRepositoryPort(
+            JdbcRetrievalEvaluationDatasetRepositoryAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcRetrievalEvaluationDatasetRepositoryAdapter.class)
+    @ConditionalOnMissingBean(RetrievalEvaluationComparisonRepositoryPort.class)
+    public RetrievalEvaluationComparisonRepositoryPort seahorseJdbcRetrievalEvaluationComparisonRepositoryPort(
+            JdbcRetrievalEvaluationDatasetRepositoryAdapter adapter) {
+        return adapter;
     }
 }

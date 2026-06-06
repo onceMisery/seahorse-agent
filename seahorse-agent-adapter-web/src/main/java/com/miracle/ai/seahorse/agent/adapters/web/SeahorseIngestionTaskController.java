@@ -93,14 +93,15 @@ public class SeahorseIngestionTaskController {
     }
 
     @PostMapping("/ingestion/tasks")
-    public Map<String, Object> create(@RequestBody IngestionTaskRequest request,
+    public ApiResponse<Object> create(@RequestBody IngestionTaskRequest request,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().execute(toCommand(request, operator(userId))));
+        return ApiResponses.requireServiceOrError(taskPortProvider,
+                port -> port.execute(toCommand(request, operator(userId))));
     }
 
     @PostMapping(value = "/ingestion/tasks/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Map<String, Object> upload(@RequestParam("pipelineId") String pipelineId,
+    public ApiResponse<Object> upload(@RequestParam("pipelineId") String pipelineId,
                                       @RequestPart("file") MultipartFile file,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId)
             throws IOException {
@@ -113,27 +114,27 @@ public class SeahorseIngestionTaskController {
                 file.getContentType(),
                 file.getBytes(),
                 operator);
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().upload(command));
+        return ApiResponses.requireServiceOrError(taskPortProvider, port -> port.upload(command));
     }
 
     @GetMapping("/ingestion/tasks/{id}")
-    public Map<String, Object> get(@PathVariable String id) {
+    public ApiResponse<Object> get(@PathVariable String id) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().get(id));
+        return ApiResponses.requireServiceOrError(taskPortProvider, port -> port.get(id));
     }
 
     @GetMapping("/ingestion/tasks/{id}/nodes")
-    public Map<String, Object> nodes(@PathVariable String id) {
+    public ApiResponse<Object> nodes(@PathVariable String id) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().listNodes(id));
+        return ApiResponses.requireServiceOrError(taskPortProvider, port -> port.listNodes(id));
     }
 
     @GetMapping("/ingestion/tasks")
-    public Map<String, Object> page(@RequestParam(value = "pageNo", defaultValue = "1") long pageNo,
+    public ApiResponse<Object> page(@RequestParam(value = "pageNo", defaultValue = "1") long pageNo,
                                     @RequestParam(value = "pageSize", defaultValue = "10") long pageSize,
                                     @RequestParam(value = "status", required = false) String status) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.INGESTION_TASK_MANAGEMENT);
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, taskPortProvider.getIfAvailable().page(pageNo, pageSize, status));
+        return ApiResponses.requireServiceOrError(taskPortProvider, port -> port.page(pageNo, pageSize, status));
     }
 
     private IngestionTaskCreateCommand toCommand(IngestionTaskRequest request, String operator) {

@@ -38,6 +38,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.sample.SampleQuestionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRepositoryPort;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -116,21 +117,21 @@ public class SeahorseAgentOpsRepositoryAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentExtensionStatusPort.class)
     public JdbcAgentExtensionStatusAdapter seahorseJdbcAgentExtensionStatusAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcAgentExtensionStatusAdapter(dataSource, objectMapper);
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcAgentExtensionStatusAdapter(dataSource, objectMapperProvider.getIfAvailable(ObjectMapper::new));
     }
 
     @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(IntentTreeRepositoryPort.class)
     public JdbcIntentTreeRepositoryAdapter seahorseJdbcIntentTreeRepositoryAdapter(
-            DataSource dataSource, ObjectMapper objectMapper) {
-        return new JdbcIntentTreeRepositoryAdapter(dataSource, objectMapper);
+            DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
+        return new JdbcIntentTreeRepositoryAdapter(dataSource, objectMapperProvider.getIfAvailable(ObjectMapper::new));
     }
 
     @Bean

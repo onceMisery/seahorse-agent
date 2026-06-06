@@ -82,8 +82,8 @@ class SeahorseIngestionAndIntentControllerTests {
                 new SeahorseIngestionPipelineController(provider(IngestionPipelineInboundPort.class, port))).build();
 
         mvc.perform(get("/ingestion/pipelines")
-                        .param("current", "1")
-                        .param("size", "10")
+                        .param("pageNo", "1")
+                        .param("pageSize", "10")
                         .param("keyword", "test"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
@@ -143,13 +143,26 @@ class SeahorseIngestionAndIntentControllerTests {
                 new SeahorseIngestionTaskController(provider(IngestionTaskInboundPort.class, port))).build();
 
         mvc.perform(get("/ingestion/tasks")
-                        .param("current", "1")
-                        .param("size", "10")
+                        .param("pageNo", "1")
+                        .param("pageSize", "10")
                         .param("status", "COMPLETED"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"));
 
         verify(port).page(1L, 10L, "COMPLETED");
+    }
+
+    @Test
+    void shouldReturnControlledErrorWhenIngestionTaskServiceIsMissing() throws Exception {
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseIngestionTaskController(emptyProvider(IngestionTaskInboundPort.class))).build();
+
+        mvc.perform(get("/ingestion/tasks")
+                        .param("pageNo", "1")
+                        .param("pageSize", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.message").value("Service not available"));
     }
 
     // --- IntentTree ---
@@ -241,5 +254,9 @@ class SeahorseIngestionAndIntentControllerTests {
         StaticListableBeanFactory beanFactory = new StaticListableBeanFactory();
         beanFactory.addBean(type.getName(), instance);
         return beanFactory.getBeanProvider(type);
+    }
+
+    private static <T> ObjectProvider<T> emptyProvider(Class<T> type) {
+        return new StaticListableBeanFactory().getBeanProvider(type);
     }
 }

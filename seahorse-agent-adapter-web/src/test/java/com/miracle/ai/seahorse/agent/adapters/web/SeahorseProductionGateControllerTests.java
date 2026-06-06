@@ -81,7 +81,7 @@ class SeahorseProductionGateControllerTests {
 
         mvc.perform(post("/api/agents/agent-1/production-gate"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature PRODUCTION_GATE is disabled in CONSUMER_WEB mode"));
 

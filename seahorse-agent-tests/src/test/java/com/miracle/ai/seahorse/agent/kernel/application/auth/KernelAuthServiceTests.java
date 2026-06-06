@@ -64,7 +64,7 @@ class KernelAuthServiceTests {
         private String loginId;
 
         @Override
-        public String login(String userId) {
+        public String login(String userId, String tenantId) {
             loginId = userId;
             return "token-" + userId;
         }

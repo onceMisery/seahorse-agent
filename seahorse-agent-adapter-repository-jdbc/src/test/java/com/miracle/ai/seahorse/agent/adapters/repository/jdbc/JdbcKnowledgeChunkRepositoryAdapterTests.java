@@ -105,8 +105,8 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_chunk
                 (id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
-                 token_count, enabled, created_by, updated_by, create_time, update_time, deleted)
-                VALUES (?, 1, 1, ?, ?, ?, ?, ?, ?, 'tester', 'tester', ?, ?, 0)
+                 token_count, enabled, created_by, updated_by, create_time, update_time, deleted, tenant_id)
+                VALUES (?, 1, 1, ?, ?, ?, ?, ?, ?, 'tester', 'tester', ?, ?, 0, 'default')
                 """, id, index, content, id + "-hash", content.length(), content.length(), enabled, now, now);
     }
 
@@ -120,7 +120,8 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
                     name VARCHAR(128),
                     embedding_model VARCHAR(128),
                     collection_name VARCHAR(128),
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         jdbcTemplate.execute("""
@@ -131,7 +132,8 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
                     status VARCHAR(32),
                     enabled INTEGER,
                     chunk_count INTEGER,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         jdbcTemplate.execute("""
@@ -150,18 +152,19 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
                     updated_by VARCHAR(64),
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_base
-                (id, name, embedding_model, collection_name, deleted)
-                VALUES (1, 'Knowledge Base', 'embed-a', 'collection-a', 0)
+                (id, name, embedding_model, collection_name, deleted, tenant_id)
+                VALUES (1, 'Knowledge Base', 'embed-a', 'collection-a', 0, 'default')
                 """);
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_document
-                (id, kb_id, doc_name, status, enabled, chunk_count, deleted)
-                VALUES (1, 1, 'Document', 'success', 1, 0, 0)
+                (id, kb_id, doc_name, status, enabled, chunk_count, deleted, tenant_id)
+                VALUES (1, 1, 'Document', 'success', 1, 0, 0, 'default')
                 """);
     }
 }

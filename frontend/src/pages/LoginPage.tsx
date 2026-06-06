@@ -26,7 +26,7 @@ export function LoginPage() {
   const { login, isLoading } = useAuthStore();
   const [showPassword, setShowPassword] = React.useState(false);
   const [remember, setRemember] = React.useState(true);
-  const [form, setForm] = React.useState({ username: "admin", password: "admin" });
+  const [form, setForm] = React.useState({ username: "admin", password: "admin123" });
   const [error, setError] = React.useState<string | null>(null);
   const [focusedField, setFocusedField] = React.useState<string | null>(null);
 

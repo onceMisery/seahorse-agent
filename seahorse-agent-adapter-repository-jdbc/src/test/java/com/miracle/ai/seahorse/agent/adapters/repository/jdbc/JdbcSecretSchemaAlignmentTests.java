@@ -44,7 +44,8 @@ class JdbcSecretSchemaAlignmentTests {
 
     private void assertSecretSchema(String sql) {
         assertThat(sql).contains("CREATE TABLE IF NOT EXISTS sa_secret_ref");
-        assertThat(sql).contains("secret_ref VARCHAR(128) PRIMARY KEY");
+        assertThat(sql).contains("pk_id BIGSERIAL PRIMARY KEY");
+        assertThat(sql).contains("secret_ref VARCHAR(128) NOT NULL UNIQUE");
         assertThat(sql).contains("tenant_id VARCHAR(64) NOT NULL");
         assertThat(sql).contains("encrypted_value TEXT NOT NULL");
         assertThat(sql).contains("metadata_json TEXT");

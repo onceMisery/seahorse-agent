@@ -5,6 +5,22 @@ import { handleUnauthorizedSession } from "@/utils/authSession";
 import { storage } from "@/utils/storage";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const API_PROXY_PREFIX = "/api";
+
+function isAbsoluteUrl(url: string) {
+  return /^[a-z][a-z\d+\-.]*:\/\//i.test(url) || url.startsWith("//");
+}
+
+function normalizeApiPath(url?: string, baseURL?: string) {
+  if (!url || baseURL || isAbsoluteUrl(url)) {
+    return url;
+  }
+  const path = url.startsWith("/") ? url : `/${url}`;
+  if (path === API_PROXY_PREFIX || path.startsWith(`${API_PROXY_PREFIX}/`)) {
+    return path;
+  }
+  return `${API_PROXY_PREFIX}${path}`;
+}
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -20,6 +36,7 @@ export function setAuthToken(token: string | null) {
 }
 
 api.interceptors.request.use((config) => {
+  config.url = normalizeApiPath(config.url, config.baseURL);
   const token = storage.getToken();
   if (token) {
     config.headers.Authorization = token;

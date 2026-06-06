@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionUpdateDraftCommand;
@@ -66,17 +67,41 @@ public class SeahorseAgentDefinitionController {
     public ApiResponse<Object> create(@RequestBody AgentDefinitionCreateRequest request) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         AgentDefinitionCreateRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+
+        // Auto-generate agentId if not provided
         String agentId = safeRequest.agentId();
         if (agentId == null || agentId.isBlank()) {
             agentId = SnowflakeIds.nextIdString();
         }
+
+        // Auto-fill ownerUserId from Sa-Token session if not provided
+        String ownerUserId = safeRequest.ownerUserId();
+        if (ownerUserId == null || ownerUserId.isBlank()) {
+            ownerUserId = WebUserIdResolver.resolve(null, null);
+        }
+
+        // Auto-fill tenantId from TenantContext if not provided
+        String tenantId = safeRequest.tenantId();
+        if (tenantId == null || tenantId.isBlank()) {
+            String ctxTenant = TenantContext.get();
+            tenantId = (ctxTenant != null && !ctxTenant.isBlank()) ? ctxTenant : "default";
+        }
+
+        // Validate required fields at web layer for friendly 400 errors
+        String name = safeRequest.name();
+        if (name == null || name.isBlank()) {
+            return ApiResponse.error("name is required and must not be blank");
+        }
+
         String finalAgentId = agentId;
+        String finalOwnerUserId = ownerUserId;
+        String finalTenantId = tenantId;
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.createDraft(new AgentDefinitionCreateCommand(
                 finalAgentId,
-                safeRequest.tenantId(),
+                finalTenantId,
                 safeRequest.name(),
                 safeRequest.description(),
-                safeRequest.ownerUserId(),
+                finalOwnerUserId,
                 safeRequest.ownerTeam(),
                 safeRequest.agentType(),
                 safeRequest.baseAgentId(),
@@ -134,5 +159,11 @@ public class SeahorseAgentDefinitionController {
     public ApiResponse<Object> disable(@PathVariable String agentId) {
         advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
         return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.disable(agentId));
+    }
+
+    @PostMapping({"/agents/{agentId}/enable", "/api/agents/{agentId}/enable"})
+    public ApiResponse<Object> enable(@PathVariable String agentId) {
+        advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_DEFINITION_MANAGEMENT);
+        return ApiResponses.requireService(agentDefinitionPortProvider, port -> port.enable(agentId));
     }
 }

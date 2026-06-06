@@ -54,7 +54,7 @@ function parseTrigger(text: string, cursorPos: number): { prefix: string; query:
 }
 
 export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerProps>(
-  function SkillTrigger({ value, onChange, textareaRef, isStreaming, onSelectSkill }, ref) {
+  function SkillTrigger({ value, onChange, textareaRef, onSelectSkill }, ref) {
   const [skills, setSkills] = React.useState<AgentSkill[]>([]);
   const [skillsLoading, setSkillsLoading] = React.useState(false);
   const [skillsError, setSkillsError] = React.useState(false);
@@ -228,7 +228,6 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
   }, [pickerOpen]);
 
   /* ─── 热门技能快捷按钮（最多展示 6 个） ─── */
-  const visibleHotSkills = hotSkills.slice(0, 6);
 
   /* ─── 暴露 openPicker 给父组件 ─── */
   React.useImperativeHandle(ref, () => ({ openPicker }), [openPicker]);
@@ -236,28 +235,6 @@ export const SkillTrigger = React.forwardRef<SkillTriggerHandle, SkillTriggerPro
   return (
     <>
       {/* 热门技能快捷按钮 */}
-      {visibleHotSkills.length > 0 && !isStreaming ? (
-        <div className="flex flex-wrap gap-1.5 px-1 pb-1">
-          {visibleHotSkills.map((skill) => (
-            <button
-              key={skill.name}
-              type="button"
-              onClick={() => selectSkill(skill)}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] transition-colors"
-              style={{
-                backgroundColor: "var(--theme-accent-alpha-10)",
-                border: "1px solid var(--theme-accent-alpha-20)",
-                color: "var(--theme-accent)"
-              }}
-              title={skill.description}
-            >
-              <Sparkles className="h-3 w-3" />
-              {skill.name}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
       {/* 技能图标按钮（在工具栏中使用） */}
       {/* 由外部渲染，这里导出 openPicker 供外部调用 */}
 

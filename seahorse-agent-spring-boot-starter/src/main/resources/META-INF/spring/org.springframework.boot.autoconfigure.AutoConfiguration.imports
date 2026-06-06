@@ -1,5 +1,9 @@
 # Layer 0: Multi-tenancy (after DataSource, before all adapters)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentTenantAutoConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentJacksonAutoConfiguration
+
+# Layer 0.5: MyBatis Plus adapters (before JDBC adapters, uses @ConditionalOnMissingBean to take priority)
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMybatisPlusAutoConfiguration
 
 # Layer 1: Adapters (after DataSource)
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAuthAdapterAutoConfiguration
@@ -79,3 +83,16 @@ com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMarketplaceAdminAutoC
 # Layer 13: AOP aspects + Trial interceptor + Redis health
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentAopAutoConfiguration
 com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentRedisHealthAutoConfiguration
+
+# Layer 14: Resilience + Async executors
+com.miracle.ai.seahorse.agent.adapters.spring.AsyncExecutorConfiguration
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentResilienceAutoConfiguration
+
+# Layer 15: Multi-level cache
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentMultiLevelCacheAutoConfiguration
+
+# Layer 16: Notification center
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentNotificationAutoConfiguration
+
+# Layer 17: Data consistency (compensation + idempotency + concurrency control)
+com.miracle.ai.seahorse.agent.adapters.spring.SeahorseAgentConsistencyAutoConfiguration

@@ -389,7 +389,7 @@ class SeahorseAgentControllerTests {
                                 "inputSummary", "summary",
                                 "traceId", "trace-1"))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
 
@@ -424,7 +424,7 @@ class SeahorseAgentControllerTests {
                                 "inputSummary", "summary",
                                 "traceId", "trace-1"))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
                 .andExpect(jsonPath("$.message")
                         .value("Advanced feature AGENT_HANDOFF is disabled in ENTERPRISE_PLATFORM mode"));
 
@@ -1012,7 +1012,7 @@ class SeahorseAgentControllerTests {
                                 "secretValue", "super-secret-token",
                                 "metadataJson", "{\"note\":\"super-secret-token\"}"))))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("1"))
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"))
                 .andExpect(jsonPath("$.message").value("metadataJson must not contain secret plaintext"))
                 .andExpect(jsonPath("$.data").doesNotExist());
 

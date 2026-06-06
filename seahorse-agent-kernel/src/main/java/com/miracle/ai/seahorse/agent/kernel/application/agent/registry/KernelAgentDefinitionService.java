@@ -125,6 +125,14 @@ public class KernelAgentDefinitionService implements AgentDefinitionInboundPort 
     }
 
     @Override
+    public AgentDefinition enable(String agentId) {
+        currentUserPort.requireRole(ADMIN_ROLE);
+        AgentDefinition enabled = load(agentId).enable(clock.instant());
+        repository.update(enabled);
+        return enabled;
+    }
+
+    @Override
     public Optional<AgentDefinition> findById(String agentId) {
         currentUserPort.requireRole(ADMIN_ROLE);
         return repository.findById(requireText(agentId, "agentId 不能为空"));

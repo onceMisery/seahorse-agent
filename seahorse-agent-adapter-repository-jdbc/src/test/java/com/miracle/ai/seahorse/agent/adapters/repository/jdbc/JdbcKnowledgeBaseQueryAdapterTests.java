@@ -151,7 +151,8 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                     name varchar(128),
                     collection_name varchar(128),
                     deleted int,
-                    update_time timestamp
+                    update_time timestamp,
+                    tenant_id varchar(64) not null default 'default'
                 )
                 """);
         jdbcTemplate.execute("""
@@ -172,7 +173,8 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                     updated_by varchar(64),
                     deleted int,
                     create_time timestamp,
-                    update_time timestamp
+                    update_time timestamp,
+                    tenant_id varchar(64) not null default 'default'
                 )
                 """);
         jdbcTemplate.execute("""
@@ -185,7 +187,8 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                     content_hash varchar(128),
                     char_count int,
                     enabled int,
-                    deleted int
+                    deleted int,
+                    tenant_id varchar(64) not null default 'default'
                 )
                 """);
         jdbcTemplate.execute("""
@@ -214,11 +217,11 @@ class JdbcKnowledgeBaseQueryAdapterTests {
 
     private void seedRows(JdbcTemplate jdbcTemplate) {
         LocalDateTime baseTime = LocalDateTime.of(2026, 5, 10, 10, 0);
-        jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time) VALUES (?, ?, ?, ?, ?)",
+        jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, 'default')",
                 1L, "Product Knowledge Base", "collection-a", 0, baseTime);
-        jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time) VALUES (?, ?, ?, ?, ?)",
+        jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, 'default')",
                 2L, "Empty Collection", "", 0, baseTime.minusMinutes(1));
-        jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time) VALUES (?, ?, ?, ?, ?)",
+        jdbcTemplate.update("INSERT INTO t_knowledge_base(id, name, collection_name, deleted, update_time, tenant_id) VALUES (?, ?, ?, ?, ?, 'default')",
                 3L, "Deleted Knowledge Base", "collection-deleted", 1, baseTime.minusMinutes(2));
         for (int index = 0; index < 25; index++) {
             jdbcTemplate.update(
@@ -226,8 +229,8 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                             INSERT INTO t_knowledge_document(
                                 id, kb_id, doc_name, source_type, enabled, chunk_count, file_url, file_type,
                                 file_size, process_mode, pipeline_id, status, created_by, updated_by,
-                                deleted, create_time, update_time
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                deleted, create_time, update_time, tenant_id
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')
                             """,
                     index + 1L, 1L, "guide-" + index, "file", 1, 0, "", "pdf",
                     0L, "pipeline", null, "pending", "tester", "tester", 0,
@@ -238,20 +241,20 @@ class JdbcKnowledgeBaseQueryAdapterTests {
                         INSERT INTO t_knowledge_document(
                             id, kb_id, doc_name, source_type, enabled, chunk_count, file_url, file_type,
                             file_size, process_mode, pipeline_id, status, created_by, updated_by,
-                            deleted, create_time, update_time
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            deleted, create_time, update_time, tenant_id
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')
                         """,
                 99L, 1L, "guide-deleted", "file", 1, 0, "", "pdf",
                 0L, "pipeline", null, "pending", "tester", "tester", 1,
                 baseTime.plusDays(1), baseTime.plusDays(1));
         jdbcTemplate.update(
-                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
                 11L, 1L, 1L, 1, "second chunk", "", 12, 0, 0);
         jdbcTemplate.update(
-                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
                 10L, 1L, 1L, 0, "first chunk", "", 11, 1, 0);
         jdbcTemplate.update(
-                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO t_knowledge_chunk(id, kb_id, doc_id, chunk_index, content, content_hash, char_count, enabled, deleted, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'default')",
                 12L, 1L, 1L, 2, "deleted chunk", "", 13, 1, 1);
         jdbcTemplate.update("INSERT INTO t_ingestion_pipeline(id, name, description, deleted) VALUES (?, ?, ?, ?)",
                 "pipeline-1", "Default ingestion pipeline", "Default", 0);

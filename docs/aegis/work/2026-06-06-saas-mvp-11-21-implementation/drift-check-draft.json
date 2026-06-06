@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-06-saas-mvp-11-21-implementation",
+  "taskIntentRef": "docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/task-intent-draft.json",
+  "baselineRefs": [],
+  "scopeStatus": "not-yet-verified",
+  "compatStatus": "not-yet-verified",
+  "retirementStatus": "not-yet-verified",
+  "newRiskSignals": [],
+  "decision": "needs-verification"
+}

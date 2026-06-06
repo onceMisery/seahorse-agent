@@ -111,8 +111,8 @@ class JdbcKnowledgeBaseRepositoryAdapterTests {
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_base
                 (id, name, embedding_model, collection_name, created_by, updated_by,
-                 create_time, update_time, deleted)
-                VALUES (?, ?, 'embed', ?, 'tester', 'tester', ?, ?, 0)
+                 create_time, update_time, deleted, tenant_id)
+                VALUES (?, ?, 'embed', ?, 'tester', 'tester', ?, ?, 0, 'default')
                 """, id, name, collectionName, updateTime, updateTime);
     }
 
@@ -121,16 +121,16 @@ class JdbcKnowledgeBaseRepositoryAdapterTests {
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_base
                 (id, name, embedding_model, collection_name, created_by, updated_by,
-                 create_time, update_time, deleted)
-                VALUES (3, 'Gamma', 'embed', 'col-c', 'tester', 'tester', ?, ?, 1)
+                 create_time, update_time, deleted, tenant_id)
+                VALUES (3, 'Gamma', 'embed', 'col-c', 'tester', 'tester', ?, ?, 1, 'default')
                 """, now, now);
     }
 
     private void insertDocument(Long id, Long kbId, int chunkCount) {
         jdbcTemplate.update("""
                 INSERT INTO t_knowledge_document
-                (id, kb_id, doc_name, chunk_count, deleted)
-                VALUES (?, ?, ?, ?, 0)
+                (id, kb_id, doc_name, chunk_count, deleted, tenant_id)
+                VALUES (?, ?, ?, ?, 0, 'default')
                 """, id, kbId, "doc-" + id, chunkCount);
     }
 
@@ -147,7 +147,8 @@ class JdbcKnowledgeBaseRepositoryAdapterTests {
                     updated_by VARCHAR(64),
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         jdbcTemplate.execute("""
@@ -156,7 +157,8 @@ class JdbcKnowledgeBaseRepositoryAdapterTests {
                     kb_id BIGINT NOT NULL,
                     doc_name VARCHAR(128),
                     chunk_count INTEGER DEFAULT 0,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
     }

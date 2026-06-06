@@ -145,6 +145,20 @@ public record AgentDefinition(String agentId,
                 Objects.requireNonNull(now, "updatedAt must not be null"));
     }
 
+    /**
+     * 重新启用之前被禁用的 Agent，恢复到 DRAFT 或 PUBLISHED 状态。
+     */
+    public AgentDefinition enable(Instant now) {
+        if (status != AgentStatus.DISABLED) {
+            throw new IllegalStateException("只有 DISABLED 状态的 Agent 才能启用，当前状态：" + status);
+        }
+        AgentStatus restoredStatus = (latestVersionId != null) ? AgentStatus.PUBLISHED : AgentStatus.DRAFT;
+        return new AgentDefinition(
+                agentId, tenantId, name, description, ownerUserId, ownerTeam,
+                agentType, baseAgentId, restoredStatus, riskLevel, latestVersionId,
+                createdAt, Objects.requireNonNull(now, "updatedAt must not be null"));
+    }
+
     public boolean disabled() {
         return status == AgentStatus.DISABLED;
     }

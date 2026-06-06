@@ -192,7 +192,7 @@ class SeahorseSkillControllerTests {
 
         mvc.perform(get("/api/skills"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("1"));
+                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"));
 
         verifyNoInteractions(managementPort, bindingPort);
     }

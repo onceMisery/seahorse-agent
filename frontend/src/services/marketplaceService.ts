@@ -1,4 +1,5 @@
 import { api } from "@/services/api";
+import { extractRecords } from "@/types";
 
 export interface MarketplaceAgent {
   agentId: string;
@@ -42,7 +43,11 @@ export interface MySubscription {
 
 // Marketplace browsing
 export function listMarketplaceAgents(params: { category?: string; sort?: string; page?: number; size?: number }) {
-  return api.get<MarketplaceAgent[], MarketplaceAgent[]>("/api/marketplace/agents", { params });
+  return api
+    .get<MarketplaceAgent[], MarketplaceAgent[] | { records?: MarketplaceAgent[] }>("/api/marketplace/agents", {
+      params
+    })
+    .then((data) => extractRecords(data));
 }
 
 // Subscription
@@ -55,7 +60,9 @@ export function unsubscribeAgent(agentId: string) {
 }
 
 export function getMySubscriptions() {
-  return api.get<MySubscription[], MySubscription[]>("/api/marketplace/agents/my-subscriptions");
+  return api
+    .get<MySubscription[], MySubscription[] | { records?: MySubscription[] }>("/api/marketplace/agents/my-subscriptions")
+    .then((data) => extractRecords(data));
 }
 
 // Rating
@@ -77,5 +84,7 @@ export function rejectPublish(reviewId: number, comment: string) {
 }
 
 export function listPendingReviews() {
-  return api.get<AgentReview[], AgentReview[]>("/api/marketplace/reviews/pending");
+  return api
+    .get<AgentReview[], AgentReview[] | { records?: AgentReview[] }>("/api/marketplace/reviews/pending")
+    .then((data) => extractRecords(data));
 }

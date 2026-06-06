@@ -65,8 +65,8 @@ class JdbcUserRepositoryAdapterTests {
     private void insertUser(Long id, String username, String role) {
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update("""
-                INSERT INTO t_user (id, username, password, avatar, role, create_time, update_time, deleted)
-                VALUES (?, ?, 'pw', null, ?, ?, ?, 0)
+                INSERT INTO t_user (id, username, password, avatar, role, create_time, update_time, deleted, tenant_id)
+                VALUES (?, ?, 'pw', null, ?, ?, ?, 0, 'default')
                 """, id, username, role, now, now);
     }
 
@@ -81,7 +81,8 @@ class JdbcUserRepositoryAdapterTests {
                     role VARCHAR(32),
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
     }

@@ -53,6 +53,6 @@ class SeahorseFeatureControllerTests {
         Map<?, ?> sandbox = (Map<?, ?>) features.get("SANDBOX");
         assertThat(sandbox.get("enabled")).isEqualTo(false);
         assertThat(sandbox.get("visible")).isEqualTo(false);
-        assertThat((String) sandbox.get("reason")).contains("消费端模式");
+        assertThat((String) sandbox.get("reason")).contains("consumer web");
     }
 }

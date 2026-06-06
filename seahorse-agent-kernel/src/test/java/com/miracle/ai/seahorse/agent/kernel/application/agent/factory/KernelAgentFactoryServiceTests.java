@@ -489,6 +489,11 @@ class KernelAgentFactoryServiceTests {
         }
 
         @Override
+        public AgentDefinition enable(String agentId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public Optional<AgentDefinition> findById(String agentId) {
             return Optional.ofNullable(definitions.get(agentId));
         }

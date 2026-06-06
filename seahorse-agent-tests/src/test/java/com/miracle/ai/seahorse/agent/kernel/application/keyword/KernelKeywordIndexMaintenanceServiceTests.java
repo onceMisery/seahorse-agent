@@ -58,8 +58,8 @@ class KernelKeywordIndexMaintenanceServiceTests {
         assertThat(result.indexedChunks()).isEqualTo(2);
         assertThat(keywordIndex.operations).containsExactly("delete:1:1", "index:1:1:2");
         assertThat(keywordIndex.lastChunks.get(0).getMetadata())
-                .containsEntry("kb_id", "1")
-                .containsEntry("doc_id", "1")
+                .containsEntry("kb_id", 1L)
+                .containsEntry("doc_id", 1L)
                 .containsEntry("collection_name", "collection-a")
                 .containsEntry("department", "研发")
                 .containsEntry("file_type", "text/plain")

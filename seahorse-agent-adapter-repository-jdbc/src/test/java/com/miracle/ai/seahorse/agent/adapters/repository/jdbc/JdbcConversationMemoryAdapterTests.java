@@ -47,10 +47,10 @@ class JdbcConversationMemoryAdapterTests {
     @Test
     void shouldLoadHistoryAndAppendUserMessage() {
         Timestamp sameMoment = Timestamp.from(Instant.parse("2026-05-19T12:00:00Z"));
-        insertMessage("msg-1", "conv-1", "user-1", "user", "hello", sameMoment);
-        insertMessage("msg-2", "conv-1", "user-1", "assistant", "hi", sameMoment);
+        insertMessage("1", "1", "1", "user", "hello", sameMoment);
+        insertMessage("2", "1", "1", "assistant", "hi", sameMoment);
 
-        List<ChatMessage> history = adapter.loadAndAppend("conv-1", "user-1", ChatMessage.user("next"));
+        List<ChatMessage> history = adapter.loadAndAppend("1", "1", ChatMessage.user("next"));
 
         assertThat(history).extracting(ChatMessage::getContent).containsExactly("hello", "hi");
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(1) FROM t_message", Integer.class)).isEqualTo(3);
@@ -59,10 +59,10 @@ class JdbcConversationMemoryAdapterTests {
 
     @Test
     void shouldTrimLeadingAssistantFromLimitedHistory() {
-        adapter.append("conv-1", "user-1", ChatMessage.assistant("orphan"));
-        adapter.append("conv-1", "user-1", ChatMessage.user("hello"));
+        adapter.append("1", "1", ChatMessage.assistant("orphan"));
+        adapter.append("1", "1", ChatMessage.user("hello"));
 
-        List<ChatMessage> history = adapter.loadAndAppend("conv-1", "user-1", ChatMessage.user("next"));
+        List<ChatMessage> history = adapter.loadAndAppend("1", "1", ChatMessage.user("next"));
 
         assertThat(history).hasSize(1);
         assertThat(history.get(0).getRole()).isEqualTo(ChatRole.USER);
@@ -71,13 +71,13 @@ class JdbcConversationMemoryAdapterTests {
 
     @Test
     void shouldPersistAgentRunIdWhenAppendingAssistantMessage() {
-        adapter.append("conv-1", "user-1", ChatMessage.assistant("answer"), "run-1");
+        adapter.append("1", "1", ChatMessage.assistant("answer"), "run-1");
 
         String runId = jdbcTemplate.queryForObject("""
                 SELECT agent_run_id
                 FROM t_message
                 WHERE conversation_id = ? AND user_id = ? AND role = ?
-                """, String.class, "conv-1", "user-1", "assistant");
+                """, String.class, 1L, 1L, "assistant");
 
         assertThat(runId).isEqualTo("run-1");
     }
@@ -94,7 +94,8 @@ class JdbcConversationMemoryAdapterTests {
                     last_time TIMESTAMP,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
         jdbcTemplate.execute("""
@@ -109,7 +110,8 @@ class JdbcConversationMemoryAdapterTests {
                     agent_run_id VARCHAR(64),
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
-                    deleted SMALLINT DEFAULT 0
+                    deleted SMALLINT DEFAULT 0,
+                    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default'
                 )
                 """);
     }
