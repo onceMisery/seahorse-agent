@@ -244,7 +244,8 @@ const breadcrumbMap: Record<string, string> = {
 
 function itemVisible(item: MenuItem, featureState: (feature: string) => { visible: boolean; enabled: boolean }) {
   if (!item.feature) return true;
-  return featureState(ADVANCED_ADMIN_FEATURES[item.feature]).visible;
+  // 使用 enabled 而不是 visible，核心功能在 CONSUMER_WEB 下 enabled=true 但 visible=false
+  return featureState(ADVANCED_ADMIN_FEATURES[item.feature]).enabled;
 }
 
 function visibleMenuGroups(featureState: (feature: string) => { visible: boolean; enabled: boolean }) {

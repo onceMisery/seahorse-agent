@@ -191,4 +191,12 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
     public ModelHealthPort seahorseNativeModelHealthPort(OpenAiCompatibleModelAdapter adapter) {
         return adapter;
     }
+
+    // Mock Embedding Adapter for E2E Testing
+    @Bean
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.ai", name = "type", havingValue = "mock")
+    @ConditionalOnMissingBean(EmbeddingModelPort.class)
+    public EmbeddingModelPort seahorseMockEmbeddingModelPort() {
+        return new com.miracle.ai.seahorse.agent.adapters.ai.openai.MockEmbeddingAdapter();
+    }
 }

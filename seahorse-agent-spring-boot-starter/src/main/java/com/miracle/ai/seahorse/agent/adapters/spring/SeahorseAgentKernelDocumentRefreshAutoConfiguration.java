@@ -33,6 +33,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentR
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.schedule.SchedulerPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -49,9 +51,11 @@ import org.springframework.context.annotation.Configuration;
  * 自动配置中。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentIngestionRepositoryAutoConfiguration.class, SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentLocalAdapterAutoConfiguration.class, SeahorseAgentMqAdapterAutoConfiguration.class})
+@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKernelKnowledgeAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentIngestionRepositoryAutoConfiguration.class, SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentLocalAdapterAutoConfiguration.class, SeahorseAgentMqAdapterAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelDocumentRefreshAutoConfiguration {
+
+    private static final Logger log = LoggerFactory.getLogger(SeahorseAgentKernelDocumentRefreshAutoConfiguration.class);
 
     @Bean
     @ConditionalOnBean({DocumentRefreshSchedulePort.class, DocumentRefreshStateRepositoryPort.class,
@@ -102,11 +106,21 @@ public class SeahorseAgentKernelDocumentRefreshAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({KnowledgeDocumentInboundPort.class, PipelineDefinitionRepositoryPort.class})
     @ConditionalOnMissingBean
     public KernelKnowledgeDocumentChunkHandler seahorseKernelKnowledgeDocumentChunkHandler(
-            KnowledgeDocumentInboundPort documentInboundPort,
-            PipelineDefinitionRepositoryPort pipelineDefinitionRepositoryPort) {
+            ObjectProvider<KnowledgeDocumentInboundPort> documentInboundPortProvider,
+            ObjectProvider<PipelineDefinitionRepositoryPort> pipelineDefinitionRepositoryProvider) {
+        log.info("Creating KernelKnowledgeDocumentChunkHandler Bean with lazy dependencies");
+        KnowledgeDocumentInboundPort documentInboundPort = documentInboundPortProvider.getIfAvailable();
+        PipelineDefinitionRepositoryPort pipelineDefinitionRepositoryPort = pipelineDefinitionRepositoryProvider.getIfAvailable();
+
+        if (documentInboundPort == null || pipelineDefinitionRepositoryPort == null) {
+            log.warn("KernelKnowledgeDocumentChunkHandler dependencies not available: documentInboundPort={}, pipelineDefinitionRepositoryPort={}",
+                    documentInboundPort != null, pipelineDefinitionRepositoryPort != null);
+            throw new IllegalStateException("Required dependencies for KernelKnowledgeDocumentChunkHandler are not available");
+        }
+
+        log.info("KernelKnowledgeDocumentChunkHandler created successfully");
         return new KernelKnowledgeDocumentChunkHandler(documentInboundPort, pipelineDefinitionRepositoryPort);
     }
 
@@ -118,7 +132,10 @@ public class SeahorseAgentKernelDocumentRefreshAutoConfiguration {
             MessageSubscriptionPort subscriptionPort,
             @Value("${seahorse-agent.adapters.mq.pulsar.topics.knowledge-document-chunk:"
                     + KernelKnowledgeDocumentService.DEFAULT_CHUNK_TOPIC + "}") String chunkTopic) {
-        return subscriptionPort.subscribe(chunkTopic, "seahorse-knowledge-document-chunk",
+        log.info("Creating Pulsar subscription for topic: {}, subscription: seahorse-knowledge-document-chunk", chunkTopic);
+        AutoCloseable subscription = subscriptionPort.subscribe(chunkTopic, "seahorse-knowledge-document-chunk",
                 KnowledgeDocumentChunkEvent.class, chunkHandler::handle);
+        log.info("Pulsar subscription created successfully for topic: {}", chunkTopic);
+        return subscription;
     }
 }

@@ -32,6 +32,8 @@ import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.PulsarClientException;
 import org.apache.pulsar.client.api.Schema;
 import org.apache.pulsar.client.api.SubscriptionType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Objects;
@@ -43,6 +45,8 @@ import java.util.concurrent.TimeUnit;
  * Apache Pulsar 消息队列 adapter。
  */
 public class PulsarMessageQueueAdapter implements MessageQueuePort, MessageSubscriptionPort, AutoCloseable {
+
+    private static final Logger log = LoggerFactory.getLogger(PulsarMessageQueueAdapter.class);
 
     private final PulsarClient pulsarClient;
 
@@ -101,9 +105,16 @@ public class PulsarMessageQueueAdapter implements MessageQueuePort, MessageSubsc
         String safeSubscription = requireText(subscriptionName, "subscriptionName");
         Class<T> safePayloadType = Objects.requireNonNull(payloadType, "payloadType must not be null");
         MessageHandler<T> safeHandler = Objects.requireNonNull(handler, "handler must not be null");
+
+        log.info("Creating Pulsar consumer: topic={}, subscription={}, payloadType={}",
+                safeTopic, safeSubscription, safePayloadType.getSimpleName());
+
         String key = safeTopic + "#" + safeSubscription;
         Consumer<PulsarMessageEnvelope> consumer = consumers.computeIfAbsent(key,
                 ignored -> createConsumer(safeTopic, safeSubscription, safePayloadType, safeHandler));
+
+        log.info("Pulsar consumer created successfully: topic={}, subscription={}", safeTopic, safeSubscription);
+
         return () -> closeAndRemoveConsumer(key, consumer);
     }
 

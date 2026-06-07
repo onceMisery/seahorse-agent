@@ -194,7 +194,8 @@ export function KnowledgeListPage() {
 
   const formatStatValue = (value: number) => {
     if (statsLoading) return "--";
-    return value.toLocaleString("zh-CN");
+    // 不使用千分位分隔符，避免在某些字体下逗号渲染异常
+    return value.toString();
   };
 
   const renderEmbeddingModel = (model?: string) => {

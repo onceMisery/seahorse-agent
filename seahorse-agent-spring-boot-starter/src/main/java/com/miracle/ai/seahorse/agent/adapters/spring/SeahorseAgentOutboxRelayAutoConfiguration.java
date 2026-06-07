@@ -29,6 +29,7 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -38,23 +39,24 @@ import org.springframework.context.annotation.Configuration;
  * <p>relay job 依赖 outbox 仓储和消息队列端口，单独配置后可以清晰表达它是跨仓储与 MQ 的集成任务。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter({SeahorseAgentMqAdapterAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class})
+@AutoConfigureAfter({SeahorseAgentMqAdapterAutoConfiguration.class, SeahorseAgentOpsRepositoryAutoConfiguration.class, JacksonAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentOutboxRelayAutoConfiguration {
 
     @Bean
-    @ConditionalOnBean({OutboxEventRepositoryPort.class, MessageQueuePort.class, ObjectMapper.class})
+    @ConditionalOnBean({OutboxEventRepositoryPort.class, MessageQueuePort.class})
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.mq.outbox.relay", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(SeahorseOutboxRelayJob.class)
     public SeahorseOutboxRelayJob seahorseOutboxRelayJob(
             OutboxEventRepositoryPort outboxEventRepositoryPort,
             MessageQueuePort messageQueuePort,
-            ObjectMapper objectMapper,
+            ObjectProvider<ObjectMapper> objectMapperProvider,
             ObjectProvider<DistributedLockPort> lockPort,
             ObjectProvider<MetadataQuarantinePort> quarantinePort,
             @Value("${seahorse-agent.adapters.mq.outbox.relay.batch-size:50}") int batchSize) {
-        return new SeahorseOutboxRelayJob(outboxEventRepositoryPort, messageQueuePort, objectMapper,
+        return new SeahorseOutboxRelayJob(outboxEventRepositoryPort, messageQueuePort,
+                objectMapperProvider.getIfAvailable(ObjectMapper::new),
                 lockPort.getIfAvailable(DistributedLockPort::noop),
                 quarantinePort.getIfAvailable(MetadataQuarantinePort::noop), batchSize);
     }

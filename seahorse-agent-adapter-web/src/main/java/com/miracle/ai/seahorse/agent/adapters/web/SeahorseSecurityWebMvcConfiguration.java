@@ -104,6 +104,7 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
                         "/features",
                         "/api/features",
                         "/auth/**",
+                        "/api/auth/**",
                         "/error",
                         "/assets/**",
                         "/prototype/**");
@@ -118,6 +119,7 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
                         "/features",
                         "/api/features",
                         "/auth/**",
+                        "/api/auth/**",
                         "/error",
                         "/assets/**",
                         "/prototype/**");

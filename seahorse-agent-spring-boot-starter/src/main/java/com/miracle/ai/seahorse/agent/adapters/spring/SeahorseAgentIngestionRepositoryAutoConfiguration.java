@@ -69,4 +69,14 @@ public class SeahorseAgentIngestionRepositoryAutoConfiguration {
             DataSource dataSource, ObjectProvider<ObjectMapper> objectMapperProvider) {
         return new JdbcIngestionTaskRepositoryAdapter(dataSource, objectMapperProvider.getIfAvailable(ObjectMapper::new));
     }
+
+    @Bean
+    @ConditionalOnBean({DataSource.class, IngestionPipelineRepositoryPort.class})
+    @ConditionalOnProperty(prefix = "seahorse-agent.kernel.pipeline", name = "auto-init", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean(com.miracle.ai.seahorse.agent.adapters.repository.jdbc.DefaultPipelineInitializer.class)
+    public com.miracle.ai.seahorse.agent.adapters.repository.jdbc.DefaultPipelineInitializer seahorseDefaultPipelineInitializer(
+            DataSource dataSource, IngestionPipelineRepositoryPort pipelineRepository) {
+        return new com.miracle.ai.seahorse.agent.adapters.repository.jdbc.DefaultPipelineInitializer(
+                new org.springframework.jdbc.core.JdbcTemplate(dataSource), pipelineRepository);
+    }
 }

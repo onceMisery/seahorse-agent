@@ -64,7 +64,7 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
             INSERT INTO t_knowledge_document(
                 id, kb_id, doc_name, source_type, enabled, chunk_count, file_url, file_type, file_size,
                 process_mode, pipeline_id, status, created_by, updated_by, deleted, create_time, update_time, tenant_id
-            ) VALUES (?, ?, ?, 'file', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
+            ) VALUES (?, ?, ?, 'file', ?, 0, ?, ?, ?, ?, CAST(? AS BIGINT), ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
             """;
     private static final String SQL_FIND_BY_ID = """
             SELECT id, kb_id, doc_name, file_url, file_type, file_size, status, process_mode, pipeline_id
@@ -539,7 +539,12 @@ public class JdbcKnowledgeDocumentRepositoryAdapter implements KnowledgeDocument
         if (value == null) {
             return;
         }
-        sets.add(column + " = ?");
+        // pipeline_id 需要转换为 bigint
+        if ("pipeline_id".equals(column)) {
+            sets.add(column + " = CAST(? AS BIGINT)");
+        } else {
+            sets.add(column + " = ?");
+        }
         args.add(value);
     }
 

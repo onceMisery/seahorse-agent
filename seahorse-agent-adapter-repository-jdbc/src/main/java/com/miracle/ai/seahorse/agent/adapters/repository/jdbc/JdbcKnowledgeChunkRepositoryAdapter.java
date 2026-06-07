@@ -63,7 +63,7 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
     private static final String SQL_INSERT_CHUNK_WITH_METADATA = """
             INSERT INTO t_knowledge_chunk
             (id, kb_id, doc_id, chunk_index, content, content_hash, char_count, metadata_json, enabled, deleted, tenant_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), ?, ?, ?)
             """;
     private static final String SQL_FIND_DOCUMENT_CONTEXT = """
             SELECT doc.id AS doc_id, doc.kb_id, doc.status, doc.enabled,

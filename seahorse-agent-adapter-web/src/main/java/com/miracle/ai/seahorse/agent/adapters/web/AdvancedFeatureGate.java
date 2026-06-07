@@ -196,10 +196,56 @@ public final class AdvancedFeatureGate {
     }
 
     public boolean isEnabled(AdvancedFeature feature) {
+        // CONSUMER_WEB 模式下，核心功能默认启用，通过配额而非开关来限制使用量
         if (productMode == ProductMode.CONSUMER_WEB) {
-            return false;
+            return isConsumerWebCoreFeature(feature) || Boolean.TRUE.equals(enabledFeatures.get(feature));
         }
         return Boolean.TRUE.equals(enabledFeatures.get(feature));
+    }
+
+    /**
+     * 判断是否为消费者版核心功能。
+     * <p>
+     * 核心功能在所有产品模式下都应该可用，通过配额而非开关来限制使用量。
+     * 这样设计的好处：
+     * <ul>
+     *   <li>免费用户可以体验完整的核心功能</li>
+     *   <li>通过使用量限制引导付费升级</li>
+     *   <li>符合行业标准（ChatGPT、Claude、Coze 等都采用此策略）</li>
+     * </ul>
+     *
+     * @param feature 要检查的功能
+     * @return 如果是核心功能返回 true，否则返回 false
+     */
+    private boolean isConsumerWebCoreFeature(AdvancedFeature feature) {
+        return switch (feature) {
+            // Agent 核心能力 - 这些是 RAG Agent 平台的基础功能
+            case SKILL_MANAGEMENT ->            // Skills 系统：Agent 调用外部能力的机制
+                    true;
+            case AGENT_RUN_MANAGEMENT ->        // Agent 执行：运行和管理 Agent 实例
+                    true;
+            case AGENT_DEFINITION_MANAGEMENT -> // Agent 定义：创建和配置 Agent
+                    true;
+            case TOOL_CATALOG_MANAGEMENT ->     // 工具目录：管理可用的工具和 API
+                    true;
+
+            // 知识处理核心能力 - RAG 平台的文档处理能力
+            case INGESTION_PIPELINE_MANAGEMENT -> // 文档处理流水线：自定义文档处理流程
+                    true;
+            case INGESTION_TASK_MANAGEMENT ->     // 任务管理：监控文档处理任务
+                    true;
+
+            // 其他功能默认禁用，需要升级到 PROFESSIONAL 或 ENTERPRISE 版本
+            // 包括：
+            // - SANDBOX: 代码沙箱隔离（安全相关，成本较高）
+            // - AUDIT_LOG: 审计日志（企业合规需求）
+            // - COST_ANALYTICS: 成本分析（企业财务管理）
+            // - MEMORY_GOVERNANCE: 内存治理（企业级管理）
+            // - METADATA_GOVERNANCE: 元数据治理（企业级管理）
+            // - ENTERPRISE_PILOT_READINESS: 企业试点就绪（企业专属）
+            // - 等等...
+            default -> false;
+        };
     }
 
     public void requireEnabled(AdvancedFeature feature) {

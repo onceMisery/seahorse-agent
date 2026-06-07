@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  Cpu,
   Database,
   FileText,
   Gauge,
@@ -20,6 +21,7 @@ import {
   MessageSquareText,
   RefreshCw,
   Search,
+  Settings,
   TimerReset,
   User,
   XCircle,
@@ -183,6 +185,11 @@ function runModel(extra: unknown) {
 
 function tokenUsage(extra: unknown) {
   const value = pickValue(extra, ["tokenUsage", "usage", "tokens"]);
+  return isRecord(value) ? value : null;
+}
+
+function modelParams(extra: unknown) {
+  const value = pickValue(extra, ["modelParams", "modelParameters", "parameters", "config"]);
   return isRecord(value) ? value : null;
 }
 
@@ -370,6 +377,7 @@ function RunOverview({
 }) {
   const model = runModel(runExtra);
   const usage = tokenUsage(runExtra);
+  const params = modelParams(runExtra);
   const retrievalCount = nodes.filter((node) => classifyNode(node) === "retrieval").length;
   const errorCount = nodes.filter((node) => normalizeStatus(node.status) === "failed").length;
   const topLevelDuration = nodes
@@ -436,10 +444,51 @@ function RunOverview({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <KeyValue label="入口方法" value={run.entryMethod} mono />
-            <KeyValue label="模型 / Provider" value={model || "-"} />
-            <KeyValue label="Token Usage" value={usage ? compact(usage, 160) : "-"} mono />
+          <div className="space-y-3">
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-500">
+                <Cpu className="h-4 w-4" />
+                模型信息
+              </div>
+              <div className="space-y-2">
+                <KeyValue label="入口方法" value={run.entryMethod} mono />
+                <KeyValue label="模型 / Provider" value={model || "-"} />
+              </div>
+            </div>
+
+            {usage ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                <div className="mb-2 flex items-center gap-2 text-xs font-medium text-emerald-700">
+                  <Zap className="h-4 w-4" />
+                  Token 使用量
+                </div>
+                <div className="space-y-1.5 text-sm">
+                  {isRecord(usage) && Object.entries(usage).map(([key, value]) => (
+                    <div key={key} className="flex justify-between">
+                      <span className="text-emerald-600">{key}:</span>
+                      <span className="font-mono font-semibold text-emerald-800">{String(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {params ? (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                <div className="mb-2 flex items-center gap-2 text-xs font-medium text-blue-700">
+                  <Settings className="h-4 w-4" />
+                  模型参数
+                </div>
+                <div className="max-h-32 space-y-1.5 overflow-y-auto text-sm">
+                  {isRecord(params) && Object.entries(params).map(([key, value]) => (
+                    <div key={key} className="flex justify-between gap-2">
+                      <span className="truncate text-blue-600">{key}:</span>
+                      <span className="font-mono text-xs text-blue-800">{compact(value, 40)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </CardContent>
@@ -465,6 +514,9 @@ function SpanDetailPanel({ node }: { node?: EnrichedNode }) {
 
   const input = nodeInput(extra);
   const output = nodeOutput(extra);
+  const usage = tokenUsage(extra);
+  const params = modelParams(extra);
+  const model = pickValue(extra, ["model", "modelId", "modelName"]);
   const raw = {
     ...node,
     extraData: extra
@@ -518,6 +570,44 @@ function SpanDetailPanel({ node }: { node?: EnrichedNode }) {
             </div>
           </div>
         </section>
+
+        {(usage || params || model) ? (
+          <section>
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <Cpu className="h-4 w-4 text-slate-500" />
+              模型与 Token
+            </h3>
+            <div className="space-y-2">
+              {model ? <KeyValue label="Model" value={model} mono /> : null}
+              {usage ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2">
+                  <p className="mb-1.5 text-xs font-medium text-emerald-700">Token 使用量</p>
+                  <div className="space-y-1 text-xs">
+                    {isRecord(usage) && Object.entries(usage).map(([key, value]) => (
+                      <div key={key} className="flex justify-between">
+                        <span className="text-emerald-600">{key}:</span>
+                        <span className="font-mono font-semibold text-emerald-800">{String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {params ? (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-2">
+                  <p className="mb-1.5 text-xs font-medium text-blue-700">模型参数</p>
+                  <div className="max-h-28 space-y-1 overflow-y-auto text-xs">
+                    {isRecord(params) && Object.entries(params).map(([key, value]) => (
+                      <div key={key} className="flex justify-between gap-2">
+                        <span className="truncate text-blue-600">{key}:</span>
+                        <span className="font-mono text-blue-800">{compact(value, 30)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
 
         <section>
           <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-900">

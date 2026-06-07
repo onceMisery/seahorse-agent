@@ -44,7 +44,7 @@ public class JdbcOutboxEventRepositoryAdapter implements OutboxEventRepositoryPo
             INSERT INTO t_outbox_event
             (id, topic, message_key, event_type, payload_json, status, retry_count,
              next_retry_time, last_error, create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, 0)
             """;
     private static final String SQL_CLAIM_PENDING = """
             SELECT id, topic, message_key, event_type, payload_json, status, retry_count,

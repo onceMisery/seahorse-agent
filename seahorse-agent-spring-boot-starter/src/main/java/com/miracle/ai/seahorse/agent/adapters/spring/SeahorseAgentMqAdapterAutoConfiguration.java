@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.adapters.mq.pulsar.PulsarMessageQueueAdapte
 import com.miracle.ai.seahorse.agent.adapters.mq.pulsar.PulsarMessageQueueProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.mq.ReliableMessageQueueAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageSubscriptionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import org.apache.pulsar.client.api.PulsarClient;
 import org.springframework.beans.factory.ObjectProvider;
@@ -63,19 +64,40 @@ public class SeahorseAgentMqAdapterAutoConfiguration {
     })
     static class PulsarMqAutoConfiguration {
 
+        @Bean(destroyMethod = "close")
+        @ConditionalOnMissingBean(PulsarClient.class)
+        @ConditionalOnProperty(prefix = "seahorse-agent.adapters.mq", name = "type",
+                havingValue = "pulsar", matchIfMissing = true)
+        public PulsarClient seahorsePulsarClient(
+                @org.springframework.beans.factory.annotation.Value("${seahorse-agent.adapters.mq.pulsar.service-url:pulsar://localhost:6650}")
+                String serviceUrl) throws Exception {
+            return PulsarClient.builder()
+                    .serviceUrl(serviceUrl)
+                    .build();
+        }
+
         @Bean
         @ConditionalOnBean(PulsarClient.class)
         @ConditionalOnProperty(prefix = "seahorse-agent.adapters.mq", name = "type",
                 havingValue = "pulsar", matchIfMissing = true)
         @ConditionalOnMissingBean(MessageQueuePort.class)
-        public ReliableMessageQueueAdapter seahorsePulsarMessageQueueAdapter(
+        public PulsarMessageQueueAdapter seahorsePulsarMessageQueueAdapter(
                 PulsarClient pulsarClient,
-                ObjectMapper objectMapper,
-                ObjectProvider<OutboxEventRepositoryPort> outboxRepositoryPort) {
-            PulsarMessageQueueAdapter delegate = new PulsarMessageQueueAdapter(
+                ObjectMapper objectMapper) {
+            return new PulsarMessageQueueAdapter(
                     pulsarClient, objectMapper, new PulsarMessageQueueProperties());
+        }
+
+        @Bean
+        @ConditionalOnBean(PulsarMessageQueueAdapter.class)
+        @ConditionalOnMissingBean(MessageQueuePort.class)
+        public ReliableMessageQueueAdapter seahorseReliableMessageQueueAdapter(
+                PulsarMessageQueueAdapter pulsarAdapter,
+                ObjectProvider<OutboxEventRepositoryPort> outboxRepositoryPort,
+                ObjectProvider<ObjectMapper> objectMapperProvider) {
             return new ReliableMessageQueueAdapter(
-                    delegate, delegate, outboxRepositoryPort::getIfAvailable, () -> objectMapper);
+                    pulsarAdapter, pulsarAdapter, outboxRepositoryPort::getIfAvailable,
+                    objectMapperProvider::getIfAvailable);
         }
     }
 }

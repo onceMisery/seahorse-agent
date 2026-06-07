@@ -57,7 +57,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
             FROM t_ingestion_pipeline p
             LEFT JOIN t_ingestion_pipeline_node n
               ON n.pipeline_id = p.id AND n.deleted = 0
-            WHERE p.id = ? AND p.deleted = 0
+            WHERE p.id = CAST(? AS BIGINT) AND p.deleted = 0
             ORDER BY n.create_time ASC
             """;
     private static final String SQL_INSERT_PIPELINE = """

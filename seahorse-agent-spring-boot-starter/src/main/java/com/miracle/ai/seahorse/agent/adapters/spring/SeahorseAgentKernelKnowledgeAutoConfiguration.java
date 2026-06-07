@@ -60,6 +60,7 @@ import java.util.concurrent.Executor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
+import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -74,6 +75,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKnowledgeRepositoryAutoConfiguration.class, SeahorseAgentVectorAdapterAutoConfiguration.class, SeahorseAgentStorageAdapterAutoConfiguration.class, SeahorseAgentIngestionRepositoryAutoConfiguration.class, SeahorseAgentMqAdapterAutoConfiguration.class, SeahorseAgentMetadataAdapterAutoConfiguration.class})
+@AutoConfigureBefore(SeahorseAgentKernelDocumentRefreshAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelKnowledgeAutoConfiguration {
 
@@ -165,7 +167,7 @@ public class SeahorseAgentKernelKnowledgeAutoConfiguration {
     @Bean
     @ConditionalOnBean(KnowledgeDocumentServicePorts.class)
     @ConditionalOnMissingBean(KnowledgeDocumentInboundPort.class)
-    public KernelKnowledgeDocumentService seahorseKernelKnowledgeDocumentService(
+    public KnowledgeDocumentInboundPort seahorseKernelKnowledgeDocumentService(
             KnowledgeDocumentServicePorts servicePorts,
             KnowledgeDocumentVectorPorts documentVectorPorts,
             ObjectProvider<DocumentRefreshSchedulePort> refreshSchedulePort,
