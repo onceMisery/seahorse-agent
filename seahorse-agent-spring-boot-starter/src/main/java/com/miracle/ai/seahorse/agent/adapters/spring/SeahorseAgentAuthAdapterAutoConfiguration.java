@@ -23,10 +23,12 @@ import com.miracle.ai.seahorse.agent.adapters.web.SaTokenCurrentUserAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SaTokenServiceAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.SeahorseSaTokenStpInterface;
 import com.miracle.ai.seahorse.agent.adapters.web.SpringCurrentUserAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRefreshTokenRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcUserRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.IpGeolocationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.RefreshTokenRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -55,6 +57,13 @@ public class SeahorseAgentAuthAdapterAutoConfiguration {
     @ConditionalOnMissingBean(UserRepositoryPort.class)
     public JdbcUserRepositoryAdapter seahorseJdbcUserRepositoryAdapter(DataSource dataSource) {
         return new JdbcUserRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean(RefreshTokenRepositoryPort.class)
+    public JdbcRefreshTokenRepositoryAdapter seahorseJdbcRefreshTokenRepositoryAdapter(DataSource dataSource) {
+        return new JdbcRefreshTokenRepositoryAdapter(dataSource);
     }
 
     @Bean

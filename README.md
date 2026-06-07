@@ -1,373 +1,184 @@
 # Seahorse Agent
 
-Seahorse Agent 是一个面向企业知识问答与智能体应用的 Agent 工程平台，首发核心能力是 RAG（Retrieval-Augmented Generation，检索增强生成）闭环。项目以后端微内核为核心，将领域模型、端口契约和核心编排收敛在 `seahorse-agent-kernel`，再通过可插拔适配器接入模型、向量库、缓存、消息队列、对象存储、文档解析、MCP 工具和可观测能力。整体采用 Spring Boot 3 + Java 17 的多模块架构，并配套 React + TypeScript 前端，围绕知识库管理、文档入库、向量检索、意图解析、会话记忆、流式对话、基础 Agent Loop 和 RAG Trace 构建完整的 AI 应用工程化链路。
+Seahorse Agent 是一个面向企业知识问答、RAG 检索增强生成和 Agent 应用治理的工程平台。后端采用 Java 17、Spring Boot 3.5、多模块 Maven 和端口适配器架构；前端采用 React 18、TypeScript、Vite 和 TailwindCSS。项目当前提供聊天入口、知识库管理、文档入库、RAG 评测与 Trace、Agent/Skill/Tool 管理、记忆治理、审计、计费、租户、模型配置和系统设置等后台能力。
 
-## 项目亮点
+## 当前状态
 
-- **微内核架构**：`seahorse-agent-kernel` 只保留稳定的领域模型、端口接口、应用服务、Feature 扩展点和主链路编排，把外部依赖全部隔离到适配器模块。
-- **可插拔适配器体系**：AI 模型、向量库、缓存、消息队列、对象存储、文档解析、可观测、MCP 等能力均通过端口契约接入，可在本地、noop、远程服务和生产级实现之间切换。
-- **完整 RAG 闭环**：覆盖文档上传、解析、分块、Embedding、向量索引、意图检索、上下文组装、Prompt 构造和大模型流式回答。
-- **基础 Agent 工具循环**：`chatMode=agent` 可进入 `KernelAgentLoop`，通过 OpenAI-compatible function-calling、`ToolRegistryPort` / `ToolPort` 和 MCP allowlist adapter 执行多轮工具调用。
-- **OpenAI 兼容模型接入**：`OpenAiCompatibleModelAdapter` 支持 Chat、Streaming Chat、Embedding、Rerank、模型发现和健康检查，可接入 OpenAI 兼容协议的模型服务。
-- **多向量后端**：提供 Milvus、pgvector 和 noop 向量适配器，`MilvusVectorAdapter` 实现基于 `id/content/metadata/embedding` 字段模型和 HNSW 索引。
-- **可配置文档入库 Pipeline**：`KernelIngestionEngine` 按节点定义串联执行入库任务，原生节点包括 fetcher、parser、chunker、embedder、indexer、enhancer、enricher 等。
-- **企业级治理能力**：内置 Sa-Token 鉴权、用户/会话管理、限流、任务取消、消息反馈、RAG Trace、插件健康检查、内存治理与定时刷新。
-- **现代化管理前端**：前端提供聊天、知识库、文档分块、意图树、入库流水线、RAG 追踪、系统设置、样例问题、术语映射和用户管理页面。
+- 默认本地部署方式：`docker-compose.yml`，启动 PostgreSQL/pgvector、后端和前端。
+- 默认访问地址：前端 `http://localhost`，后端 `http://localhost:9090`。
+- 默认管理员账号：`admin / admin123`，由 `resources/database/seahorse_init.sql` 初始化。
+- 前端 Docker 与 Vite 开发服务通过 `/api` 反向代理访问后端，并在代理层去掉 `/api` 前缀；直接调后端 `9090` 端口时使用 Controller 的真实路径。
+- 后端入口：`seahorse-agent-bootstrap`。
+- 前端入口：`frontend`。
+- 数据库初始化脚本：`resources/database/seahorse_init.sql`。
+- 增量迁移脚本：`resources/database/migrations/`。
 
-## 技术栈分析
+## 架构
 
-### 后端
+后端按六边形架构组织：
 
-| 分类    | 技术                                                                         |
-|-------|----------------------------------------------------------------------------|
-| 基础框架  | Java 17+、Spring Boot 3.5.7、Spring Scheduling                               |
-| 构建与模块 | Maven 多模块、微内核 + 可插拔适配器、Spring Boot Starter 自动装配                            |
-| 数据访问  | MyBatis Plus 3.5.14、JDBC Adapter、PostgreSQL 脚本                             |
-| 认证授权  | Sa-Token 1.43.0、Sa-Token Redis Template                                    |
-| 缓存与协调 | Redisson 4.0.0、Redis、本地缓存、分布式锁/信号量端口                                       |
-| 消息队列  | Apache Pulsar 3.1.3、Direct MQ、Outbox Relay                                 |
-| AI 模型 | OpenAI Compatible HTTP Adapter、OkHttp 4.12.0                               |
-| 向量检索  | Milvus SDK 2.6.6、pgvector、noop vector                                      |
-| 文档解析  | Apache Tika 3.2.3，支持 PDF、Word、Excel、PPT、HTML、Markdown、TXT 等常见格式            |
-| 对象存储  | 本地存储、AWS S3 SDK 2.40.2 / S3 兼容存储                                           |
-| 可观测性  | Micrometer Adapter、noop observation、RAG Trace                              |
-| 工具库   | Lombok、Jackson、Hutool、Transmittable Thread Local、Mockito、Surefire、Spotless |
+- `seahorse-agent-kernel`：领域模型、Inbound/Outbound Port、应用服务、RAG/Agent/Memory/Ingestion 编排。
+- `seahorse-agent-adapter-web`：REST/SSE Controller、Sa-Token 登录鉴权、后台管理 API。
+- `seahorse-agent-adapter-repository-jdbc`：PostgreSQL 仓储适配器，当前包含 MyBatis Plus mapper、Spring JDBC 兼容实现、租户隔离、RAG Trace、知识库、Agent、审计等表访问。
+- `seahorse-agent-adapter-ai-openai-compatible`：OpenAI-compatible Chat/Streaming Chat/Embedding/Rerank 适配器。
+- `seahorse-agent-adapter-vector-*`：Milvus、pgvector、noop 向量适配器。
+- `seahorse-agent-adapter-search-*`：Elasticsearch、Lucene 关键词检索适配器。
+- `seahorse-agent-adapter-cache-*`：local、Redis/Redisson 缓存适配器。
+- `seahorse-agent-adapter-mq-*`：direct、Pulsar 消息适配器。
+- `seahorse-agent-adapter-parser-tika`：Apache Tika 文档解析适配器。
+- `seahorse-agent-adapter-source-feishu`：飞书文档源适配器。
+- `seahorse-agent-adapter-storage-*`：local、S3 兼容对象存储适配器。
+- `seahorse-agent-adapter-mcp-http`：MCP HTTP 工具适配器。
+- `seahorse-agent-adapter-openapi`：OpenAPI 连接器与规范解析适配器。
+- `seahorse-agent-mcp-server`：MCP Server 模块。
+- `seahorse-agent-spring-boot-starter*`：自动装配与运行时聚合。
 
-### 前端
+Port 接口位于 kernel，外部依赖通过 adapter 实现接入。新增能力应优先保持 Port 契约稳定，在 Adapter、Controller 或配置层扩展。
 
-| 分类           | 技术                                                                               |
-|--------------|----------------------------------------------------------------------------------|
-| 基础框架         | React 18.3.1、TypeScript 5.5.4、Vite 5.4.3                                         |
-| UI 与样式       | TailwindCSS 3.4.10、Radix UI、lucide-react、class-variance-authority、tailwind-merge |
-| 状态与路由        | Zustand、React Router DOM 6                                                       |
-| 数据访问         | Axios、Fetch SSE、自定义流式响应 Hook                                                     |
-| 表单与校验        | React Hook Form、Zod、@hookform/resolvers                                          |
-| Markdown 与代码 | react-markdown、remark-gfm、react-syntax-highlighter                               |
-| 表格与图表        | TanStack React Table、Recharts                                                    |
-| 体验组件         | Sonner、React Dropzone、React Virtuoso                                             |
-| 工程化          | ESLint、Prettier、PostCSS、Autoprefixer                                             |
+## 技术栈
 
-## AI 能力
+后端：
 
-Seahorse Agent 的 AI 能力由内核编排和出站端口共同组成：
+- Java 17
+- Spring Boot 3.5.7
+- Maven 多模块
+- MyBatis Plus 3.5.14 与 Spring JDBC 兼容仓储
+- PostgreSQL 16 / pgvector
+- Sa-Token 1.43.0
+- Resilience4j 2.2.0
+- Redisson 4.0.0
+- Apache Pulsar 3.1.3
+- Apache Tika 3.2.3
+- Milvus SDK 2.6.6
+- OkHttp 4.12.0
 
-- **智能对话**：`ChatInboundPort` 接收外部请求，`KernelChatPipeline` 负责编排会话记忆、查询改写、意图解析、检索增强和流式响应。
-- **Agent 模式**：聊天请求可通过 `chatMode=agent` 进入 `KernelAgentLoop`，由模型基于 function-calling 在运行时选择工具、读取 observation 并继续决策；默认仍保持 RAG 模式以兼容既有链路。
-- **OpenAI 兼容大模型适配**：模型适配器调用 `/chat/completions`、`/embeddings`、`/rerank`，支持普通对话、SSE 流式输出、Embedding、Rerank、模型列表和健康判断。
-- **向量检索**：`VectorSearchPort` 抽象检索能力，`MilvusVectorAdapter` 使用 FloatVector 字段、HNSW 索引和可配置 metric；pgvector Adapter 适合 PostgreSQL 向量化部署。
-- **知识库问答**：知识库、文档和分块通过仓储端口持久化，分块内容写入向量库后可被 RAG 检索链路召回。
-- **意图解析与引导**：查询先经过 rewrite/split，再解析为子意图；当意图存在歧义时可返回引导提示，系统类意图可走系统提示回答。
-- **会话记忆**：`ConversationMemoryPort` 加载历史消息并追加用户输入，`DefaultMemoryEnginePort` 编排短期/长期/语义三层记忆，通过 `activateMemory` 阶段注入 Prompt 上下文。
-- **查询优化**：`QueryOptimizerPort` 在查询改写前执行专有名词保护和术语映射，默认规则版确定性实现，可切换为 LLM 版。
-- **深度思考开关**：聊天接口支持 `deepThinking` 参数，最终传入模型采样选项，前端可处理 thinking 类型流式事件。
-- **MCP 工具扩展**：RAG 路径可把 MCP 结果作为上下文来源；Agent 模式可将 allowlist 中的 MCP 工具注册为 `ToolPort`，由 LLM function-calling 按需调用。
+前端：
 
-## 系统架构
+- React 18.3.1
+- TypeScript 5.5.4
+- Vite 5.4.x
+- TailwindCSS 3.4.x
+- Radix UI
+- Zustand
+- React Router 6
+- Axios
+- Vitest 4
 
-项目后端以“微内核 + 端口适配器 + 插件扩展”组织。微内核位于 `seahorse-agent-kernel`，负责稳定的业务语义和主流程编排；外部系统对接位于 `seahorse-agent-adapter-*`，以独立模块实现端口；Web 入口位于 `seahorse-agent-adapter-web`。自动装配默认由精简实现 `seahorse-agent-spring-boot-starter` 提供，并通过 `seahorse-agent-spring-boot-starter-core` 暴露核心坐标；重型官方适配器聚合入口由 `seahorse-agent-spring-boot-starter-all` 提供，运行入口由 `seahorse-agent-bootstrap` 提供。
+## 认证与会话
 
-### 微内核与可插拔设计
+后端认证入口由 `SeahorseAuthController` 提供：
 
-Seahorse Agent 的微内核不是一个“大而全”的服务层，而是一组稳定边界：
+- `POST /auth/login`：用户名密码登录，默认管理员为 `admin / admin123`。
+- `POST /auth/logout`：退出登录。
+- `POST /auth/refresh`：刷新访问令牌；刷新令牌持久化在 `t_user.refresh_token` 和 `t_user.refresh_token_expires_at`。
 
-- **领域与流程内核**：`KernelChatPipeline`、`KernelIngestionEngine`、知识库服务、记忆服务、模型路由服务等保留在内核中，负责业务规则和流程编排。
-- **端口契约**：内核通过 `ChatModelPort`、`StreamingChatModelPort`、`EmbeddingModelPort`、`VectorSearchPort`、`DocumentParserPort`、`ObjectStoragePort`、`MessageQueuePort`、`ObservationPort` 等端口访问外部能力。
-- **适配器插件**：具体实现放在独立适配器模块，例如 `OpenAiCompatibleModelAdapter`、`MilvusVectorAdapter`、`TikaDocumentParserAdapter`、Redis/Pulsar/S3/Micrometer/MCP 适配器。
-- **Feature 扩展点**：检索通道、入库节点、MCP 工具等以 Feature 形式注册，支持在不侵入主链路的情况下扩展能力。
-- **PortWrapper 横切增强**：`PortWrapper` / `PortWrapperChain` 可为端口调用叠加观测、限流、重试、熔断、审计等治理能力。
+`LoginResult` 当前返回 `userId`、`role`、`token`、`avatar`、`tenantId`、`refreshToken` 和 `refreshTokenExpiresAt`。前端当前登录态仍以访问令牌为主，刷新令牌接口已由后端提供，便于后续接入自动续期。
 
-这种设计让开发环境可以使用 local/noop 适配器快速运行，生产环境再替换为 Redis、Pulsar、Milvus、S3、Micrometer 或 OpenAI 兼容模型服务，而内核编排逻辑保持不变。
+## 模型与凭据管理
 
-```mermaid
-graph TB
-    subgraph FE["前端 frontend"]
-        React["React 18 + TypeScript"]
-        Pages["聊天 / 知识库 / 入库 / Trace / 设置"]
-        Api["Axios API + Fetch SSE"]
-        React --> Pages --> Api
-    end
+当前代码支持按租户维护模型注册表。后台路径：
 
-    subgraph Web["Web 入站适配器"]
-        Controllers["Seahorse*Controller"]
-        SSE["SSE 回调与任务管理"]
-        Security["Sa-Token 鉴权 / 限流"]
-    end
+- 模型配置：`/admin/model-config`
+- 供应商凭据：`/admin/secrets`
+- 系统设置概览：`/admin/settings`
 
-    subgraph Kernel["微内核 seahorse-agent-kernel"]
-        Inbound["Inbound Ports"]
-        Services["应用服务与编排器"]
-        Domain["领域模型"]
-        Outbound["Outbound Ports"]
-        Plugins["Feature / Extension / PortWrapper"]
-        Inbound --> Services --> Domain
-        Services --> Outbound
-        Plugins --> Services
-    end
+模型注册表存储在 `sa_ai_model_config` 表中，核心 key 为 `ai.models`。该表包含 `tenant_id`，并使用 `(tenant_id, config_key)` 唯一约束。`ai.models` 的值是 JSON 数组，示例：
 
-    subgraph Adapters["可插拔适配器"]
-        AI["OpenAI Compatible"]
-        Vector["Milvus / pgvector / noop"]
-        Parser["Tika Parser"]
-        Repo["JDBC Repository"]
-        Cache["Local / Redis"]
-        MQ["Direct / Pulsar"]
-        Storage["Local / S3"]
-        Obs["Micrometer / noop"]
-        MCP["MCP HTTP"]
-    end
-
-    Api --> Controllers
-    Controllers --> SSE
-    Controllers --> Security
-    Controllers --> Inbound
-    Outbound --> AI
-    Outbound --> Vector
-    Outbound --> Parser
-    Outbound --> Repo
-    Outbound --> Cache
-    Outbound --> MQ
-    Outbound --> Storage
-    Outbound --> Obs
-    Outbound --> MCP
+```json
+[
+  {
+    "id": "bge-m3-default",
+    "capability": "embedding",
+    "provider": "ollama",
+    "model": "bge-m3",
+    "baseUrl": "http://ollama:11434",
+    "secretRef": "",
+    "dimension": 1024,
+    "priority": 1,
+    "enabled": true,
+    "defaultModel": true
+  },
+  {
+    "id": "qwen-chat-default",
+    "capability": "chat",
+    "provider": "openai-compatible",
+    "model": "qwen-plus",
+    "baseUrl": "https://api.openai.com/v1",
+    "secretRef": "openai-prod",
+    "priority": 2,
+    "enabled": true,
+    "defaultModel": true
+  }
+]
 ```
 
-### 后端模块关系
+知识库创建弹窗会优先读取当前租户 `ai.models` 中启用的 `embedding` 模型；如果没有租户模型注册表，再回退到旧的模型配置和 RAG settings。
 
-```mermaid
-graph LR
-    Root["seahorse-agent pom"]
-    Bootstrap["seahorse-agent-bootstrap<br/>Spring Boot 启动入口"]
-    Starter["seahorse-agent-spring-boot-starter<br/>自动装配"]
-    Kernel["seahorse-agent-kernel<br/>微内核：领域 / 端口 / 应用服务 / Feature"]
-    Web["seahorse-agent-adapter-web<br/>REST / SSE 入站"]
-    Tests["seahorse-agent-tests"]
-
-    Root --> Bootstrap
-    Root --> Starter
-    Root --> Kernel
-    Root --> Web
-    Root --> Tests
-    Root --> AI["adapter-ai-openai-compatible"]
-    Root --> VectorA["adapter-vector-milvus / pgvector / noop"]
-    Root --> ParserA["adapter-parser-tika"]
-    Root --> RepoA["adapter-repository-jdbc"]
-    Root --> CacheA["adapter-cache-local / redis"]
-    Root --> MQA["adapter-mq-direct / pulsar"]
-    Root --> StorageA["adapter-storage-local / s3"]
-    Root --> ObsA["adapter-observation-noop / micrometer"]
-    Root --> McpA["adapter-mcp-http"]
-
-    Bootstrap --> Starter
-    Starter --> Kernel
-    Web --> Kernel
-```
-
-### 端口适配器模式
-
-```mermaid
-sequenceDiagram
-    participant Client as 前端/外部客户端
-    participant Web as Web Controller
-    participant Inbound as 入站端口
-    participant Kernel as Kernel 应用服务
-    participant Outbound as 出站端口
-    participant Adapter as 外部系统适配器
-
-    Client->>Web: HTTP / SSE 请求
-    Web->>Inbound: 协议转换为 Command
-    Inbound->>Kernel: 执行业务编排
-    Kernel->>Outbound: 调用抽象依赖
-    Outbound->>Adapter: 调用具体实现
-    Adapter-->>Outbound: 返回结果
-    Outbound-->>Kernel: 返回领域对象
-    Kernel-->>Web: 回调/响应
-    Web-->>Client: JSON 或 SSE 流
-```
-
-## 核心链路
-
-### 1. 流式智能对话链路
-
-`SeahorseChatController` 暴露 `GET /rag/v3/chat`，返回 `text/event-stream;charset=UTF-8`。接口支持 `question`、`conversationId`、`userId`、`deepThinking`、`chatMode` 参数，并通过 `RateLimiterPort` 做聊天限流。`chatMode` 默认走 RAG；显式传入 `agent` 时进入基础 Agent Loop。用户可以通过 `POST /rag/v3/stop` 停止指定流式任务。
-
-```mermaid
-flowchart TD
-    A["用户在前端输入问题"] --> B["前端 useStreamResponse 发起 SSE 请求"]
-    B --> C["SeahorseChatController /rag/v3/chat"]
-    C --> D["生成 conversationId/taskId/userId"]
-    D --> E["ChatInboundPort.streamChat"]
-    E --> F["KernelChatPipeline.execute"]
-    F --> G["loadMemory 加载会话记忆"]
-    G --> G2["activateMemory 激活四层记忆"]
-    G2 --> G3["optimizeQuery 查询优化"]
-    G3 --> H["rewriteQuery 查询改写与拆分"]
-    H --> I["resolveIntents 子意图解析"]
-    I --> J{"是否需要澄清引导"}
-    J -- 是 --> K["返回引导提示并结束"]
-    J -- 否 --> L{"是否系统类意图"}
-    L -- 是 --> M["加载系统 Prompt 并流式回答"]
-    L -- 否 --> N["retrieve 检索 KB/MCP 上下文"]
-    N --> O{"检索为空"}
-    O -- 是 --> P["返回未检索到相关文档"]
-    O -- 否 --> Q["构造 RAG Prompt（含用户记忆上下文）"]
-    Q --> R["StreamingChatModelPort.streamChat"]
-    R --> S["OpenAI 兼容模型 SSE"]
-    S --> T["前端处理 meta/message/thinking/finish/done"]
-```
-
-关键设计点：
-
-- RAG 回答温度根据上下文来源调整：MCP 上下文使用更高温度，知识库上下文使用更稳定的低温配置。
-- 每个主要阶段可由 `KernelRagTraceRecorder` 记录 trace node，便于定位慢阶段与回答质量问题。
-- 前端 SSE 解析支持 `meta`、`message`、`finish`、`done`、`cancel`、`reject`、`title`、`error` 等事件。
-- `activateMemory` 从短期/长期/语义三层记忆中检索用户记忆，注入 Prompt 上下文。
-- `optimizeQuery` 对原始问题进行专有名词保护和术语映射（Phase 3A 确定性规则）。
-
-### 2. 文档解析与知识入库链路
-
-入库由 `KernelIngestionEngine` 根据 `PipelineDefinition` 执行。引擎查找起始节点，按 `nextNodeId` 串联节点；节点失败会将上下文标记为失败并停止后续执行。
-
-```mermaid
-flowchart TD
-    A["上传文件或创建入库任务"] --> B["IngestionTaskController / IngestionPipelineController"]
-    B --> C["IngestionTaskInboundPort / IngestionPipelineInboundPort"]
-    C --> D["KernelIngestionEngine"]
-    D --> E["fetcher 获取原始内容"]
-    E --> F["parser 调用 DocumentParserPort"]
-    F --> G["TikaDocumentParserAdapter 解析 PDF/Office/HTML/文本"]
-    G --> H["chunker 文本分块"]
-    H --> I["embedder / EmbeddingModelPort 生成向量"]
-    I --> J["indexer 确保向量集合存在"]
-    J --> K["KnowledgeChunkRepositoryPort 写分块元数据"]
-    J --> L["VectorIndexPort 写向量索引"]
-    K --> M["知识库文档可检索"]
-    L --> M
-```
-
-入库节点能力：
-
-- `parser`：识别 PDF、Markdown、Word、Excel、PPT、TXT 等类型，并委托 Tika 或纯文本解析。
-- `chunker`：支持 `fixed_size` 和 `structure_aware` 策略，默认分块大小 512、重叠 128。
-- `embedder`：通过 `EmbeddingModelPort` 调用模型服务生成向量。
-- `indexer`：校验向量维度与 chunkId，确保 collection 存在，写入知识分块仓储与向量索引。
-- `enhancer` / `enricher`：为文本增强、元数据补充和后续检索质量优化提供扩展节点。
-
-### 3. 检索增强链路
-
-```mermaid
-flowchart LR
-    Q["用户问题"] --> RW["查询改写/拆分"]
-    RW --> Intent["意图解析"]
-    Intent --> Engine["KernelMultiChannelRetrievalEngine"]
-    Engine --> Search["SearchChannelFeature 多路检索通道"]
-    Search --> V1["IntentDirectedSearchFeature"]
-    Search --> V2["VectorGlobalSearchFeature"]
-    V1 --> VP["VectorSearchPort"]
-    V2 --> VP
-    VP --> Milvus["Milvus / pgvector"]
-    Milvus --> Chunks["RetrievedChunk"]
-    Chunks --> Post["SearchResultPostProcessorFeature 后处理链"]
-    Post --> Format["RetrievalContextFormatPort"]
-    Format --> Prompt["RagPromptPort"]
-    Prompt --> LLM["StreamingChatModelPort"]
-```
-
-检索层由 `KernelMultiChannelRetrievalEngine` 负责多路检索编排：它从扩展注册表中加载已激活的 `SearchChannelFeature`，并行执行多个检索通道，合并各通道召回结果，再按顺序执行 `SearchResultPostProcessorFeature` 后处理链。当前默认通道包括 `IntentDirectedSearchFeature`（意图定向检索）和 `VectorGlobalSearchFeature`（全局向量检索）；召回结果进入 `RetrievalContext` 后再由 Prompt 端口构造成结构化消息，最终交给模型端口流式生成回答。
-
-### 4. 混合检索当前状态与扩展方向
-
-当前代码已具备 `KernelMultiChannelRetrievalEngine` 多路检索编排、向量检索主链路、`SearchChannelFeature` 多通道扩展点、`SearchResultPostProcessorFeature` 后处理扩展点、`VectorSearchRequest.filters` 过滤字段和 `RerankModelPort` / OpenAI 兼容 rerank 模型端口。旧版 README 中的 BM25、RRF、metadata filter 和 reranker 缺口已经被代码追上，当前状态以 [混合检索与重排详细设计](docs/zh/content/架构设计/混合检索与重排详细设计.md) 和 [未来规划审计与剩余设计](docs/zh/content/架构设计/未来规划审计与剩余设计.md) 为准。
-
-| 能力           | 当前状态                                                                                                               | 扩展方向                                                                                                                      |
-|--------------|--------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
-| 向量检索         | 已支持。`IntentDirectedSearchFeature` 与 `VectorGlobalSearchFeature` 通过 `VectorSearchPort` 调用 Milvus/pgvector/noop 适配器。 | 保持作为默认召回通道，并补齐 embedding 生成与检索请求之间的统一向量化策略。                                                                               |
-| BM25 / 关键词检索 | 已落地。`KeywordSearchChannelFeature` 通过关键词检索端口接入 Elasticsearch、Lucene Embedded 和轻量 JDBC/FTS 路径。                         | OpenSearch 可按同一端口契约作为新增 adapter 接入；生产侧继续调优字段 boost、分词和索引同步策略。                                                       |
-| RRF 结果融合     | 已落地。`RrfFusionPostProcessorFeature` 负责多通道候选去重和 Reciprocal Rank Fusion。                                      | 后续重点是权重策略、通道贡献指标和评测集闭环，而不是重新实现融合器。                                                                                     |
-| 元数据过滤        | 已落地强类型过滤、filter compiler 和 metadata guard 兜底。                                                                            | 保持 Milvus、PGVector、关键词后端的过滤下推语义一致，并补齐跨后端回归测试。                                                                              |
-| Reranker     | 已落地。`RerankPostProcessorFeature` 可调用 `RerankModelPort` 做二阶段排序。                                                         | 后续重点是 rerank 开关、成本预算、失败降级和评测指标。                                                                                               |
-
-目标形态：
-
-```mermaid
-flowchart LR
-    Q["用户问题"] --> Rewrite["改写/拆分"]
-    Rewrite --> Meta["元数据过滤条件"]
-    Rewrite --> V["向量召回"]
-    Rewrite --> B["BM25/关键词召回"]
-    Rewrite --> I["意图定向召回"]
-    Meta --> V
-    Meta --> B
-    V --> RRF["RRF 融合"]
-    B --> RRF
-    I --> RRF
-    RRF --> RR["Reranker 重排"]
-    RR --> TopK["TopK 上下文"]
-    TopK --> Prompt["RAG Prompt"]
-```
-
-### 5. 前后端交互链路
-
-```mermaid
-graph TB
-    Login["/login 登录"] --> Auth["/auth/login"]
-    Chat["/chat 对话页"] --> ChatApi["/rag/v3/chat SSE"]
-    Chat --> Stop["/rag/v3/stop"]
-    Admin["/admin 管理后台"] --> KB["/knowledge-base*"]
-    Admin --> Ingest["/ingestion/*"]
-    Admin --> Trace["/rag/traces/*"]
-    Admin --> Settings["/rag/settings"]
-    Admin --> Users["/users"]
-    Admin --> Intent["/intent-tree*"]
-    Admin --> Mapping["/mappings"]
-```
-
-前端通过 Axios 实例统一设置 `VITE_API_BASE_URL`、鉴权头和业务错误处理；SSE 对话使用 Fetch 流式读取，支持中断和指数退避重试。
-
-## 目录结构
-
-```text
-.
-├── frontend/                                      # React + TypeScript 前端
-├── seahorse-agent-kernel/                         # 内核：领域模型、端口、应用服务、Feature、插件机制
-├── seahorse-agent-adapter-web/                    # Web 入站适配器：REST、SSE、认证、管理接口
-├── seahorse-agent-adapter-ai-openai-compatible/   # OpenAI 兼容模型适配器
-├── seahorse-agent-adapter-vector-milvus/          # Milvus 向量库适配器
-├── seahorse-agent-adapter-vector-pgvector/        # pgvector 向量库适配器
-├── seahorse-agent-adapter-vector-noop/            # 空向量实现
-├── seahorse-agent-adapter-parser-tika/            # Apache Tika 文档解析适配器
-├── seahorse-agent-adapter-repository-jdbc/        # JDBC 仓储适配器
-├── seahorse-agent-adapter-cache-local/            # 本地缓存适配器
-├── seahorse-agent-adapter-cache-redis/            # Redis/Redisson 缓存与协调适配器
-├── seahorse-agent-adapter-mq-direct/              # 进程内消息队列适配器
-├── seahorse-agent-adapter-mq-pulsar/              # Pulsar 消息队列适配器
-├── seahorse-agent-adapter-storage-local/          # 本地对象存储适配器
-├── seahorse-agent-adapter-storage-s3/             # S3 兼容对象存储适配器
-├── seahorse-agent-adapter-observation-*           # 可观测适配器
-├── seahorse-agent-adapter-mcp-http/               # MCP HTTP 适配器
-├── seahorse-agent-spring-boot-starter/            # 自动装配与运行时配置
-├── seahorse-agent-bootstrap/                      # Spring Boot 应用启动入口
-├── seahorse-agent-tests/                          # 测试模块
-├── resources/                                     # 数据库脚本、Docker Compose、示例知识文档
-└── docs/                                          # 中文架构、部署、接口、测试与开发文档
-```
+`.env` 或 Docker 环境变量中的 `SEAHORSE_AGENT_ADAPTERS_AI_*` 仍作为运行时 adapter 的基础配置和兼容回退。生产或多租户场景下，推荐在后台模型配置页维护租户级模型，并用供应商凭据页保存供应商 API Key 或连接器凭据引用，再通过 `secretRef` 绑定到模型配置。
 
 ## 快速开始
 
-### 后端
+### 1. 准备环境
+
+需要：
+
+- JDK 17
+- Maven 3.9+，或使用仓库内 `mvnw`
+- Node.js 20+
+- Docker Desktop
+
+### 2. 配置环境变量
 
 ```bash
-mvn clean test
+cp .env.example .env
+```
+
+按需填写 `.env` 中的模型服务地址和 key。没有外部模型服务时，系统仍可启动，但真实聊天、Embedding、Rerank 会受限。
+
+### 3. 构建后端 jar
+
+`Dockerfile.backend.simplified` 会复制已生成的 Spring Boot exec jar，因此构建后端镜像前需要先打包：
+
+```bash
+mvn -pl seahorse-agent-bootstrap -am -DskipTests package
+```
+
+### 4. 启动 Docker
+
+```bash
+docker compose build backend frontend
+docker compose up -d postgres backend frontend
+```
+
+健康检查：
+
+```bash
+curl http://localhost:9090/actuator/health
+```
+
+打开前端：
+
+```text
+http://localhost
+```
+
+登录：
+
+```text
+admin / admin123
+```
+
+如果本地 Docker 已经有旧的 PostgreSQL 数据卷，`seahorse_init.sql` 不会自动重新执行。旧库仍是 `admin / admin` 或缺少新字段时，应执行对应迁移脚本，或在确认不需要保留数据后重建数据库数据卷。
+
+## 本地开发
+
+后端本地启动：
+
+```bash
 mvn -pl seahorse-agent-bootstrap -am spring-boot:run
 ```
 
-默认启动类为 `com.miracle.ai.seahorse.agent.SeahorseAgentApplication`，扫描 `com.miracle.ai.seahorse.agent` 命名空间并启用调度。基础配置位于：
-
-- `seahorse-agent-bootstrap/src/main/resources/application.properties`
-- `seahorse-agent-spring-boot-starter/src/main/resources/application.properties`
-- `resources/database/`
-- `resources/docker/`
-
-### 前端
+前端本地启动：
 
 ```bash
 cd frontend
@@ -375,56 +186,157 @@ npm install
 npm run dev
 ```
 
-如需指定后端地址，可配置 `VITE_API_BASE_URL`。
+如需指定 API 地址，可设置：
 
-## 未来规划
+```bash
+VITE_API_BASE_URL=http://localhost:9090
+```
 
-以下内容只记录仍需要继续推进的产品化、治理和依赖边界事项。已被代码追上的旧规划不再重复列为未实现项；完整审计见 [未来规划审计与剩余设计](docs/zh/content/架构设计/未来规划审计与剩余设计.md)。
+## 常用验证命令
 
-| 方向 | 规划内容 |
-|------|----------|
-| Starter 依赖治理 | `starter-core` 目前仍是 `starter` 的别名，`bootstrap` 仍同时依赖 `starter-core` 和 `starter-all`。下一步需要让 core 成为真实轻量入口，让 all 只承担全量官方 adapter 聚合，并把 bootstrap 改成 core + 显式 adapter 依赖。 |
-| 元数据治理 JDBC 拆分 | `JdbcMetadataGovernanceRepositoryAdapter` 已抽出多个 support，但仍作为多个 metadata 端口的兼容门面。下一步按 schema、dictionary、extraction、review、quarantine、backfill、canonical write、quality report 等子域拆成独立 Bean。 |
-| 术语映射在线扩展 | `/admin/mappings`、`QueryTermMappingRepositoryPort` 和 JDBC 管理 adapter 已存在，但 `QueryTermExpansionPort` 仍没有生产实现，扩展词也还没有进入检索链路。下一步落地 JDBC online adapter 和 keyword channel 消费路径。 |
-| Agent 平台产品化 | Agent Loop、标准工具、审批、run store、factory、handoff、rollout、readiness、connector、sandbox、ACL 等能力已具备基础。后续重点是稳定工作流、版本治理、前端工作台体验和输出自愈。 |
-| 记忆系统长尾治理 | 四层记忆、混合召回、review、compaction、alias、GC 与观测已形成最小闭环。后续保留 LLM compaction adapter、Neo4j adapter、高级 topic-shift detection、物理删除策略等远期项。 |
-| 大类治理制度化 | 对超过 500 行且包含多个变更原因的类建立拆分触发器；超过 800 行且跨 3 个以上职责时列为 P1 候选，拆分时保持外部端口、Bean 名称和配置契约兼容。 |
+后端编译/打包：
 
-Agent 平台相关未来项已拆成四份专项详细设计：
-[OpenAPI Connector](docs/zh/content/架构设计/未实现功能详细设计/02-OpenAPI-Connector-设计.md)、
-[Sandbox Runtime](docs/zh/content/架构设计/未实现功能详细设计/03-Sandbox-Runtime-设计.md)、
-[Agent Factory UI](docs/zh/content/架构设计/未实现功能详细设计/04-Agent-Factory-UI-设计.md)、
-[Multi-Agent / A2A](docs/zh/content/架构设计/未实现功能详细设计/05-Multi-Agent-A2A-设计.md)。
+```bash
+mvn -pl seahorse-agent-bootstrap -am -DskipTests package
+```
 
-### 记忆系统规划
+指定后端测试示例：
 
-四层记忆架构的当前状态以 [Gemini memory alignment current-state design](docs/aegis/specs/2026-05-25-gemini-memory-alignment-current-state.md) 为准。旧版规划把 Phase 2/5 和旧向量端口都视为纯待办的表述已不再完整准确；`ScoredMemoryVectorPort`、`VectorSearchScoredMemoryVectorPort` 与 hybrid recall 管线已经存在，真实向量检索可通过 `seahorse-agent.memory.recall.vector-search-enabled=true` 接入。
+```bash
+mvn -pl seahorse-agent-adapter-web -am "-Dtest=SeahorseAuthControllerTests" -DfailIfNoTests=false "-Dsurefire.failIfNoSpecifiedTests=false" test
+mvn -pl seahorse-agent-adapter-repository-jdbc -am -Dtest=JdbcAiModelConfigRepositoryAdapterTests -DfailIfNoTests=false "-Dsurefire.failIfNoSpecifiedTests=false" test
+mvn -pl seahorse-agent-adapter-repository-jdbc -am "-Dtest=JdbcRefreshTokenRepositoryAdapterTests" -DfailIfNoTests=false "-Dsurefire.failIfNoSpecifiedTests=false" test
+```
 
-以下只保留当前仍需继续设计或产品化的尾项：
+前端验证：
 
-| 事项 | 规划内容 | 状态 |
-|------|----------|------|
-| 术语映射在线扩展 | 实现 `JdbcQueryTermExpansionAdapter`，并让扩展词进入 keyword retrieval，而不是只写 debug log。 | ⏳ 待实施，详见 [未来规划审计与剩余设计](docs/zh/content/架构设计/未来规划审计与剩余设计.md) |
-| Token 预算管理 | 对记忆上下文做更细的 token 预算、截断和层级配额，避免长期记忆、语义记忆挤占核心 prompt。 | ⏳ 待实施 |
-| 生产级 LLM compaction | 当前 compaction 服务和 summarizer port 已存在，后续可接入生产 LLM compaction adapter。 | 🔮 远期规划 |
-| 高级语义 topic-shift detection | 在 debounce/aggregation 基础上引入更精细的主题切换检测。 | 🔮 远期规划 |
-| 物理删除保留策略 | 在安全 tombstone 和派生索引清理之外，制定可审计的物理 hard-delete retention policy。 | 🔮 远期规划 |
-| 知识图谱集成 | 可选集成 Neo4j，增强语义记忆的关系推理能力 | 🔮 远期规划 |
-| 多模态记忆 | 支持图片、音频等多模态记忆存储与检索 | 🔮 远期规划 |
-| 记忆可解释性 | 提供记忆来源和推理路径的可解释性 | 🔮 远期规划 |
+```bash
+cd frontend
+npx tsc --noEmit
+npm run build
+npx vitest run src/components/admin/CreateKnowledgeBaseDialog.test.ts --pool forks --no-file-parallelism --maxWorkers 1
+```
+
+API 冒烟示例：
+
+```bash
+curl http://localhost:9090/actuator/health
+curl -X POST http://localhost:9090/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"admin123"}'
+```
+
+登录后可验证：
+
+- `GET /admin/ai-config?tenantId=default`
+- `GET /intent-tree/trees`
+- `GET /ingestion/pipelines?page=1&size=10`
+- `GET /ingestion/tasks?page=1&size=10`
+
+## 主要功能入口
+
+前台：
+
+- `/login`：登录
+- `/register`：注册
+- `/chat`：聊天/RAG/Agent 对话
+- `/chat/:sessionId`：指定会话对话
+- `/memories`：个人记忆中心
+- `/marketplace`：Agent 市场
+
+后台：
+
+- `/admin/dashboard`：仪表盘
+- `/admin/knowledge`：知识库管理
+- `/admin/rag-evaluation`：RAG 评测
+- `/admin/rag-strategies`：RAG 策略模板
+- `/admin/rag-version-compare`：版本质量对比
+- `/admin/traces`：RAG Trace
+- `/admin/model-config`：租户模型配置
+- `/admin/secrets`：供应商凭据
+- `/admin/settings`：系统设置入口
+- `/admin/context-packs`：上下文包
+- `/admin/task-templates`：任务模板
+- `/admin/sample-questions`：样例问题
+- `/admin/mappings`：查询术语映射
+- `/admin/memory-governance`：记忆治理
+- `/admin/metadata-governance`：元数据治理
+- `/admin/intent-tree` 与 `/admin/intent-list`：意图树与意图列表
+- `/admin/ingestion?tab=pipelines`：流水线管理
+- `/admin/ingestion?tab=tasks`：流水线任务
+- `/admin/ai-infra` 与 `/admin/agent-inspector`：Agent 控制台与运行检视
+- `/admin/agents`：Agent 管理
+- `/admin/agent-runs`：Agent 运行管理
+- `/admin/approvals`：审批中心
+- `/admin/skills`：Skill 管理
+- `/admin/tools`：工具目录
+- `/admin/tool-invocations`：工具调用审计
+- `/admin/security/resource-acl`、`/admin/security/access-decisions`、`/admin/security/quotas`：安全与配额治理
+- `/admin/integrations/connectors`：OpenAPI 连接器
+- `/admin/plugins`：插件管理
+- `/admin/audit`：审计事件
+- `/admin/audit-logs`：租户审计日志
+- `/admin/billing`：计费管理
+- `/admin/cost`：成本分析
+- `/admin/sandbox`：沙箱
+- `/admin/tenants`：租户管理
+- `/admin/users`：用户管理
+- `/admin/marketplace-review`：市场审核
+
+## 数据库说明
+
+`resources/database/seahorse_init.sql` 是 Docker 首次初始化数据库时使用的完整脚本。已存在数据库不会自动重新执行该脚本；需要保留数据时，应通过 `resources/database/migrations/` 中的迁移脚本或应用内 schema upgrade 逻辑升级。
+
+当前 README 提到的关键迁移：
+
+- `resources/database/migrations/V17__default_admin_password_validation_alignment.sql`
+- `resources/database/migrations/V18__tenant_scoped_ai_model_config.sql`
+- `resources/database/migrations/V19__add_refresh_token_columns.sql`
+
+`V17` 将默认管理员密码对齐为 `admin123`；`V18` 为 `sa_ai_model_config` 增加 `tenant_id`，删除旧的全局 `config_key` 唯一约束，并建立 `(tenant_id, config_key)` 唯一约束；`V19` 为 `t_user` 增加 refresh token 字段和索引。应用启动时的 `JdbcTenantSchemaUpgrade` 也会对部分新字段和索引做幂等升级。
+
+## 目录结构
+
+```text
+.
+|-- frontend/
+|-- resources/
+|   |-- database/
+|   `-- database/migrations/
+|-- seahorse-agent-mcp-server/
+|-- seahorse-agent-bootstrap/
+|-- seahorse-agent-kernel/
+|-- seahorse-agent-adapter-web/
+|-- seahorse-agent-adapter-repository-jdbc/
+|-- seahorse-agent-adapter-ai-openai-compatible/
+|-- seahorse-agent-adapter-mcp-http/
+|-- seahorse-agent-adapter-openapi/
+|-- seahorse-agent-adapter-source-feishu/
+|-- seahorse-agent-adapter-vector-milvus/
+|-- seahorse-agent-adapter-vector-pgvector/
+|-- seahorse-agent-adapter-vector-noop/
+|-- seahorse-agent-adapter-search-elasticsearch/
+|-- seahorse-agent-adapter-search-lucene/
+|-- seahorse-agent-adapter-parser-tika/
+|-- seahorse-agent-adapter-cache-local/
+|-- seahorse-agent-adapter-cache-redis/
+|-- seahorse-agent-adapter-mq-direct/
+|-- seahorse-agent-adapter-mq-pulsar/
+|-- seahorse-agent-adapter-storage-local/
+|-- seahorse-agent-adapter-storage-s3/
+|-- seahorse-agent-adapter-observation-noop/
+|-- seahorse-agent-adapter-observation-micrometer/
+|-- seahorse-agent-spring-boot-starter/
+|-- seahorse-agent-spring-boot-starter-core/
+|-- seahorse-agent-spring-boot-starter-all/
+`-- seahorse-agent-tests/
+```
 
 ## 参考文档
 
-- `docs/zh/content/项目概述.md`
-- `docs/zh/content/架构设计/端口适配器模式.md`
-- `docs/zh/content/架构设计/架构设计.md`
-- `docs/zh/content/后端系统/核心内核/核心内核.md`
-- `docs/zh/content/后端系统/适配器模块/适配器模块.md`
-- `docs/zh/content/前端系统/前端系统.md`
-- `docs/zh/content/API 接口文档/API 接口文档.md`
-- `docs/zh/content/架构设计/未来规划审计与剩余设计.md`
-- `resources/docker/lightweight/README.md`
+- `DEPLOY.md`
+- `docs/`
+- `resources/database/migrations/`
+- `frontend/src/services/backendEndpointManifest.ts`
 
 ## License
 
-本项目采用 Apache License 2.0，详见 `LICENSE`。
+Apache License 2.0，详见 `LICENSE`。

@@ -22,12 +22,18 @@ import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.LoginHistoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.RefreshTokenRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
 import java.util.Objects;
 
 public class KernelAuthService implements AuthInboundPort {
@@ -37,11 +43,16 @@ public class KernelAuthService implements AuthInboundPort {
     private static final String LOGIN_TYPE_PASSWORD = "PASSWORD";
     private static final String STATUS_SUCCESS = "SUCCESS";
     private static final String STATUS_FAILED = "FAILED";
+    private static final Duration REFRESH_TOKEN_TTL = Duration.ofDays(7);
+    private static final int REFRESH_TOKEN_BYTES = 32;
 
     private final UserRepositoryPort userRepositoryPort;
     private final PasswordHasherPort passwordHasherPort;
     private final TokenServicePort tokenServicePort;
     private final LoginHistoryPort loginHistoryPort;
+    private final RefreshTokenRepositoryPort refreshTokenRepositoryPort;
+    private final Clock clock;
+    private final SecureRandom secureRandom = new SecureRandom();
 
     public KernelAuthService(UserRepositoryPort userRepositoryPort,
                              PasswordHasherPort passwordHasherPort,
@@ -53,10 +64,21 @@ public class KernelAuthService implements AuthInboundPort {
                              PasswordHasherPort passwordHasherPort,
                              TokenServicePort tokenServicePort,
                              LoginHistoryPort loginHistoryPort) {
+        this(userRepositoryPort, passwordHasherPort, tokenServicePort, loginHistoryPort, null, Clock.systemUTC());
+    }
+
+    public KernelAuthService(UserRepositoryPort userRepositoryPort,
+                             PasswordHasherPort passwordHasherPort,
+                             TokenServicePort tokenServicePort,
+                             LoginHistoryPort loginHistoryPort,
+                             RefreshTokenRepositoryPort refreshTokenRepositoryPort,
+                             Clock clock) {
         this.userRepositoryPort = Objects.requireNonNull(userRepositoryPort, "userRepositoryPort must not be null");
         this.passwordHasherPort = Objects.requireNonNull(passwordHasherPort, "passwordHasherPort must not be null");
         this.tokenServicePort = Objects.requireNonNull(tokenServicePort, "tokenServicePort must not be null");
         this.loginHistoryPort = loginHistoryPort;
+        this.refreshTokenRepositoryPort = refreshTokenRepositoryPort;
+        this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
     @Override
@@ -82,7 +104,15 @@ public class KernelAuthService implements AuthInboundPort {
         }
         String token = tokenServicePort.login(String.valueOf(user.id()), user.tenantId());
         safeRecordLogin(safeCommand, user.id(), user.tenantId(), LOGIN_TYPE_PASSWORD, STATUS_SUCCESS, null);
-        return new LoginResult(String.valueOf(user.id()), user.role(), token, defaultAvatar(user.avatar()), user.tenantId());
+        if (refreshTokenRepositoryPort == null) {
+            return new LoginResult(String.valueOf(user.id()), user.role(), token,
+                    defaultAvatar(user.avatar()), user.tenantId());
+        }
+        Instant expiresAt = clock.instant().plus(REFRESH_TOKEN_TTL);
+        String refreshToken = generateRefreshToken();
+        refreshTokenRepositoryPort.save(user.id(), refreshToken, expiresAt);
+        return new LoginResult(String.valueOf(user.id()), user.role(), token,
+                defaultAvatar(user.avatar()), user.tenantId(), refreshToken, expiresAt);
     }
 
     @Override
@@ -107,6 +137,12 @@ public class KernelAuthService implements AuthInboundPort {
 
     private String defaultAvatar(String avatar) {
         return avatar == null || avatar.isBlank() ? DEFAULT_AVATAR_URL : avatar;
+    }
+
+    private String generateRefreshToken() {
+        byte[] bytes = new byte[REFRESH_TOKEN_BYTES];
+        secureRandom.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private String trimToNull(String value) {

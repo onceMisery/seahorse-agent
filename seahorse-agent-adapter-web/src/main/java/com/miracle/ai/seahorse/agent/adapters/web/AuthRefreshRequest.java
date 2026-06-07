@@ -15,24 +15,22 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.ports.inbound.auth;
+package com.miracle.ai.seahorse.agent.adapters.web;
 
-import java.time.Instant;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
-public record LoginResult(String userId, String role, String token, String avatar, String tenantId,
-                          String refreshToken, Instant refreshTokenExpiresAt) {
+public class AuthRefreshRequest {
 
-    /**
-     * Backward-compatible constructor without refresh token fields.
-     */
-    public LoginResult(String userId, String role, String token, String avatar, String tenantId) {
-        this(userId, role, token, avatar, tenantId, null, null);
+    @NotBlank(message = "refreshToken 不能为空")
+    @Size(min = 16, max = 512, message = "refreshToken 长度需在 16-512 字符之间")
+    private String refreshToken;
+
+    public String getRefreshToken() {
+        return refreshToken;
     }
 
-    /**
-     * Backward-compatible constructor without tenantId.
-     */
-    public LoginResult(String userId, String role, String token, String avatar) {
-        this(userId, role, token, avatar, null, null, null);
+    public void setRefreshToken(String refreshToken) {
+        this.refreshToken = refreshToken;
     }
 }

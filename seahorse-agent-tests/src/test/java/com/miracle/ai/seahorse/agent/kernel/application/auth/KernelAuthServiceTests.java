@@ -20,6 +20,8 @@ package com.miracle.ai.seahorse.agent.kernel.application.auth;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.RefreshTokenRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.auth.RefreshTokenRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserCreateValues;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserPage;
@@ -28,12 +30,18 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserUpdateValues;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class KernelAuthServiceTests {
+
+    private static final Instant NOW = Instant.parse("2026-06-06T00:00:00Z");
+    private static final Clock FIXED_CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @Test
     void shouldLoginWithCompatiblePayload() {
@@ -48,6 +56,22 @@ class KernelAuthServiceTests {
         assertThat(result.token()).isEqualTo("token-1");
         assertThat(result.avatar()).isNotBlank();
         assertThat(tokenService.loginId).isEqualTo("1");
+    }
+
+    @Test
+    void shouldIssueRefreshTokenWhenRepositoryIsAvailable() {
+        FakeTokenService tokenService = new FakeTokenService();
+        InMemoryRefreshTokenRepository refreshTokenRepository = new InMemoryRefreshTokenRepository();
+        KernelAuthService service = new KernelAuthService(new SingleUserRepository(),
+                PasswordHasherPort.plainText(), tokenService, null, refreshTokenRepository, FIXED_CLOCK);
+
+        LoginResult result = service.login(new LoginCommand("alice", "secret"));
+
+        assertThat(result.refreshToken()).isNotBlank();
+        assertThat(result.refreshTokenExpiresAt()).isEqualTo(NOW.plusSeconds(7 * 24 * 60 * 60));
+        assertThat(refreshTokenRepository.userId).isEqualTo(1L);
+        assertThat(refreshTokenRepository.refreshToken).isEqualTo(result.refreshToken());
+        assertThat(refreshTokenRepository.expiresAt).isEqualTo(result.refreshTokenExpiresAt());
     }
 
     @Test
@@ -110,6 +134,28 @@ class KernelAuthServiceTests {
         @Override
         public boolean delete(Long id) {
             return true;
+        }
+    }
+
+    private static class InMemoryRefreshTokenRepository implements RefreshTokenRepositoryPort {
+        private Long userId;
+        private String refreshToken;
+        private Instant expiresAt;
+
+        @Override
+        public void save(Long userId, String refreshToken, Instant expiresAt) {
+            this.userId = userId;
+            this.refreshToken = refreshToken;
+            this.expiresAt = expiresAt;
+        }
+
+        @Override
+        public Optional<RefreshTokenRecord> findValid(String refreshToken, Instant now) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void revoke(String refreshToken) {
         }
     }
 }

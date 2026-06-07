@@ -1,0 +1,124 @@
+﻿[INFO] Scanning for projects...
+[INFO] 
+[INFO] ----------------< com.miracle.ai:seahorse-agent-kernel >----------------
+[INFO] Building seahorse-agent-kernel 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ seahorse-agent-kernel ---
+[INFO] skip non existing resourceDirectory D:\code\seahorse-agent\seahorse-agent-kernel\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ seahorse-agent-kernel ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ seahorse-agent-kernel ---
+[INFO] skip non existing resourceDirectory D:\code\seahorse-agent\seahorse-agent-kernel\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ seahorse-agent-kernel ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ seahorse-agent-kernel ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryServiceTests
+[ERROR] Tests run: 4, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.238 s <<< FAILURE! -- in com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryServiceTests
+[ERROR] com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryServiceTests.shouldAllowOwnerToQueryPackAndItems -- Time elapsed: 0.022 s <<< ERROR!
+java.lang.IllegalStateException: Context pack access denied
+	at com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryService.requireReadable(KernelContextPackQueryService.java:70)
+	at com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryService.lambda$findById$0(KernelContextPackQueryService.java:51)
+	at java.base/java.util.Optional.map(Optional.java:260)
+	at com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryService.findById(KernelContextPackQueryService.java:51)
+	at com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelContextPackQueryServiceTests.shouldAllowOwnerToQueryPackAndItems(KernelContextPackQueryServiceTests.java:47)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+[INFO] Running com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelResourceAclManagementServiceTests
+[ERROR] Tests run: 8, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.662 s <<< FAILURE! -- in com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelResourceAclManagementServiceTests
+[ERROR] com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelResourceAclManagementServiceTests.shouldCreateAndPageResourceAclRulesBehindAdminBoundary -- Time elapsed: 0.007 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: expected: <admin-1> but was: <1>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:182)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:177)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:1145)
+	at com.miracle.ai.seahorse.agent.kernel.application.agent.context.KernelResourceAclManagementServiceTests.shouldCreateAndPageResourceAclRulesBehindAdminBoundary(KernelResourceAclManagementServiceTests.java:90)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+[INFO] Running com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelAgentRunCostSummaryServiceTests
+[ERROR] Tests run: 3, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.021 s <<< FAILURE! -- in com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelAgentRunCostSummaryServiceTests
+[ERROR] com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelAgentRunCostSummaryServiceTests.shouldAggregateOwnerRunCostByRunTenantAndAgent -- Time elapsed: 0.006 s <<< ERROR!
+java.lang.IllegalStateException: 权限不足
+	at com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelAgentRunCostSummaryService.requireReadable(KernelAgentRunCostSummaryService.java:68)
+	at com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelAgentRunCostSummaryService.getCostSummary(KernelAgentRunCostSummaryService.java:55)
+	at com.miracle.ai.seahorse.agent.kernel.application.agent.cost.KernelAgentRunCostSummaryServiceTests.shouldAggregateOwnerRunCostByRunTenantAndAgent(KernelAgentRunCostSummaryServiceTests.java:55)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+[INFO] Running com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionServiceTests
+[ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.047 s <<< FAILURE! -- in com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionServiceTests
+[ERROR] com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionServiceTests.shouldPublishImmutableVersionAndLockDraftUpdates -- Time elapsed: 0.018 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: expected: <admin-1> but was: <1>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:182)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:177)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:1145)
+	at com.miracle.ai.seahorse.agent.kernel.application.agent.registry.KernelAgentDefinitionServiceTests.shouldPublishImmutableVersionAndLockDraftUpdates(KernelAgentDefinitionServiceTests.java:99)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+[INFO] Running com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementServiceTests
+[ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.034 s <<< FAILURE! -- in com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementServiceTests
+[ERROR] com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementServiceTests.shouldReplaceVersionToolBindingsBehindAdminBoundary -- Time elapsed: 0.003 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: expected: <admin-1> but was: <1>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:182)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:177)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:1145)
+	at com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelAgentToolBindingManagementServiceTests.shouldReplaceVersionToolBindingsBehindAdminBoundary(KernelAgentToolBindingManagementServiceTests.java:71)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   KernelResourceAclManagementServiceTests.shouldCreateAndPageResourceAclRulesBehindAdminBoundary:90 expected: <admin-1> but was: <1>
+[ERROR]   KernelAgentDefinitionServiceTests.shouldPublishImmutableVersionAndLockDraftUpdates:99 expected: <admin-1> but was: <1>
+[ERROR]   KernelAgentToolBindingManagementServiceTests.shouldReplaceVersionToolBindingsBehindAdminBoundary:71 expected: <admin-1> but was: <1>
+[ERROR] Errors: 
+[ERROR]   KernelContextPackQueryServiceTests.shouldAllowOwnerToQueryPackAndItems:47 ? IllegalState Context pack access denied
+[ERROR]   KernelAgentRunCostSummaryServiceTests.shouldAggregateOwnerRunCostByRunTenantAndAgent:55 ? IllegalState 权限不足
+[INFO] 
+[ERROR] Tests run: 23, Failures: 3, Errors: 2, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  6.003 s
+[INFO] Finished at: 2026-06-04T19:27:13+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test (default-test) on project seahorse-agent-kernel: There are test failures.
+[ERROR] 
+[ERROR] Please refer to D:\code\seahorse-agent\seahorse-agent-kernel\target\surefire-reports for the individual test results.
+[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

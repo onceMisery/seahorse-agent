@@ -18,8 +18,10 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.application.auth.UserAgentParser;
+import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthRefreshInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.AuthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.auth.LoginCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.auth.RefreshTokenCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.IpGeolocationPort;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -40,16 +42,24 @@ public class SeahorseAuthController {
     private static final String SUCCESS_CODE = "0";
 
     private final ObjectProvider<AuthInboundPort> authInboundPortProvider;
+    private final ObjectProvider<AuthRefreshInboundPort> authRefreshInboundPortProvider;
     private final ObjectProvider<IpGeolocationPort> ipGeolocationPortProvider;
 
     public SeahorseAuthController(ObjectProvider<AuthInboundPort> authInboundPortProvider) {
-        this(authInboundPortProvider, null);
+        this(authInboundPortProvider, null, null);
+    }
+
+    public SeahorseAuthController(ObjectProvider<AuthInboundPort> authInboundPortProvider,
+                                  ObjectProvider<IpGeolocationPort> ipGeolocationPortProvider) {
+        this(authInboundPortProvider, null, ipGeolocationPortProvider);
     }
 
     @Autowired
     public SeahorseAuthController(ObjectProvider<AuthInboundPort> authInboundPortProvider,
+                                  ObjectProvider<AuthRefreshInboundPort> authRefreshInboundPortProvider,
                                   ObjectProvider<IpGeolocationPort> ipGeolocationPortProvider) {
         this.authInboundPortProvider = authInboundPortProvider;
+        this.authRefreshInboundPortProvider = authRefreshInboundPortProvider;
         this.ipGeolocationPortProvider = ipGeolocationPortProvider;
     }
 
@@ -86,6 +96,19 @@ public class SeahorseAuthController {
 
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
                 authInboundPortProvider.getIfAvailable().login(command));
+    }
+
+    @PostMapping("/auth/refresh")
+    public Map<String, Object> refresh(@RequestBody @Valid AuthRefreshRequest request) {
+        AuthRefreshRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+        AuthRefreshInboundPort port = authRefreshInboundPortProvider != null
+                ? authRefreshInboundPortProvider.getIfAvailable()
+                : null;
+        if (port == null) {
+            throw new IllegalStateException("Auth refresh service not available");
+        }
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
+                port.refresh(new RefreshTokenCommand(safeRequest.getRefreshToken())));
     }
 
     @PostMapping("/auth/logout")

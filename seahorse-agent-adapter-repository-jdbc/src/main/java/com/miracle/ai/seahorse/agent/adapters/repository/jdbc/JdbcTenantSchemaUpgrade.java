@@ -97,6 +97,7 @@ public class JdbcTenantSchemaUpgrade {
     public void upgrade() {
         log.info("[TenantSchema] 开始多租户 schema 升级...");
         addTenantIdColumns();
+        upgradeAuthRefreshTokenColumns();
         upgradeAiModelConfigUniqueness();
         enableRowLevelSecurity();
         log.info("[TenantSchema] 多租户 schema 升级完成");
@@ -140,6 +141,19 @@ public class JdbcTenantSchemaUpgrade {
                     "CREATE INDEX IF NOT EXISTS idx_sa_ai_model_config_tenant_key ON sa_ai_model_config(tenant_id, config_key, deleted)");
         } catch (Exception e) {
             log.warn("[TenantSchema] 升级 sa_ai_model_config 租户唯一键失败（可能不是 PostgreSQL）: {}", e.getMessage());
+        }
+    }
+
+    private void upgradeAuthRefreshTokenColumns() {
+        if (!tableExists("t_user")) {
+            return;
+        }
+        addColumnIfMissing("t_user", "refresh_token", "VARCHAR(255)");
+        addColumnIfMissing("t_user", "refresh_token_expires_at", "TIMESTAMP");
+        try {
+            jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_user_refresh_token ON t_user(refresh_token)");
+        } catch (Exception e) {
+            log.warn("[TenantSchema] 创建 t_user refresh token 索引失败（可能不是 PostgreSQL）: {}", e.getMessage());
         }
     }
 

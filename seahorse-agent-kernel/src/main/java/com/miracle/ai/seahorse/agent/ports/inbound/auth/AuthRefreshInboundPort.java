@@ -17,22 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.ports.inbound.auth;
 
-import java.time.Instant;
+public interface AuthRefreshInboundPort {
 
-public record LoginResult(String userId, String role, String token, String avatar, String tenantId,
-                          String refreshToken, Instant refreshTokenExpiresAt) {
-
-    /**
-     * Backward-compatible constructor without refresh token fields.
-     */
-    public LoginResult(String userId, String role, String token, String avatar, String tenantId) {
-        this(userId, role, token, avatar, tenantId, null, null);
-    }
-
-    /**
-     * Backward-compatible constructor without tenantId.
-     */
-    public LoginResult(String userId, String role, String token, String avatar) {
-        this(userId, role, token, avatar, null, null, null);
-    }
+    RefreshTokenResult refresh(RefreshTokenCommand command);
 }

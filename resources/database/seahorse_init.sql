@@ -15,11 +15,14 @@ CREATE TABLE t_user (
     password     VARCHAR(128) NOT NULL,
     role         VARCHAR(32)  NOT NULL,
     avatar       VARCHAR(128),
+    refresh_token VARCHAR(255),
+    refresh_token_expires_at TIMESTAMP,
     create_time  TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
     update_time  TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
     deleted      SMALLINT     DEFAULT 0,
     CONSTRAINT uk_user_username UNIQUE (username)
 );
+CREATE INDEX idx_user_refresh_token ON t_user (refresh_token);
 
 CREATE TABLE t_conversation (
     id              BIGINT NOT NULL PRIMARY KEY,
