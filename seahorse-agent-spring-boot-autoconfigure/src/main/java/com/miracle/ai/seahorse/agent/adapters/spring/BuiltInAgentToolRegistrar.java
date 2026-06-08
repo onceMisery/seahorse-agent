@@ -19,6 +19,10 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
@@ -107,14 +111,14 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
     }
 
     private ToolRiskLevel riskLevel(String toolId) {
-        if (ImageGenerationToolPortAdapter.TOOL_ID.equals(toolId)) {
+        if (isModelGenerationTool(toolId)) {
             return ToolRiskLevel.MEDIUM;
         }
         return ToolRiskLevel.LOW;
     }
 
     private ToolActionType actionType(String toolId) {
-        if (ImageGenerationToolPortAdapter.TOOL_ID.equals(toolId)) {
+        if (isModelGenerationTool(toolId)) {
             return ToolActionType.EXECUTE;
         }
         return ToolActionType.READ;
@@ -124,8 +128,20 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
         return switch (toolId) {
             case WebFetchToolPortAdapter.TOOL_ID, WebSearchToolPortAdapter.TOOL_ID -> "WEB";
             case GitHubRepositoryReaderToolPortAdapter.TOOL_ID -> "GITHUB";
-            case ImageGenerationToolPortAdapter.TOOL_ID -> "MODEL";
+            case ImageGenerationToolPortAdapter.TOOL_ID,
+                    NewsletterGenerationToolPortAdapter.TOOL_ID,
+                    PptGenerationToolPortAdapter.TOOL_ID,
+                    ChartVisualizationToolPortAdapter.TOOL_ID,
+                    FrontendDesignToolPortAdapter.TOOL_ID -> "MODEL";
             default -> "BUILTIN";
         };
+    }
+
+    private boolean isModelGenerationTool(String toolId) {
+        return ImageGenerationToolPortAdapter.TOOL_ID.equals(toolId)
+                || NewsletterGenerationToolPortAdapter.TOOL_ID.equals(toolId)
+                || PptGenerationToolPortAdapter.TOOL_ID.equals(toolId)
+                || ChartVisualizationToolPortAdapter.TOOL_ID.equals(toolId)
+                || FrontendDesignToolPortAdapter.TOOL_ID.equals(toolId);
     }
 }

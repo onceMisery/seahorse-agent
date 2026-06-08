@@ -20,12 +20,17 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.InMemoryToolRegistry;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJsonSupport;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.source.GitHubRepositorySnapshot;
 import org.junit.jupiter.api.Test;
@@ -60,6 +65,14 @@ class BuiltInAgentToolRegistrarTests {
                 () -> new ImageGenerationToolPortAdapter(request -> ImageGenerationResult.generated(
                         request.prompt(), request.model(), "https://cdn.example.com/image.png", "", "image/png"),
                         "agnes-image-2.0-flash", jsonSupport));
+        context.registerBean(NewsletterGenerationToolPortAdapter.class,
+                () -> new NewsletterGenerationToolPortAdapter(ChatModelPort.noop(), "agnes-2.0-flash", jsonSupport));
+        context.registerBean(PptGenerationToolPortAdapter.class,
+                () -> new PptGenerationToolPortAdapter(ChatModelPort.noop(), "agnes-2.0-flash", jsonSupport));
+        context.registerBean(ChartVisualizationToolPortAdapter.class,
+                () -> new ChartVisualizationToolPortAdapter(ChatModelPort.noop(), "agnes-2.0-flash", jsonSupport));
+        context.registerBean(FrontendDesignToolPortAdapter.class,
+                () -> new FrontendDesignToolPortAdapter(ChatModelPort.noop(), "agnes-2.0-flash", jsonSupport));
         context.refresh();
 
         BuiltInAgentToolRegistrar registrar = new BuiltInAgentToolRegistrar(
@@ -71,7 +84,11 @@ class BuiltInAgentToolRegistrarTests {
 
         assertThat(registry.find(GitHubRepositoryReaderToolPortAdapter.TOOL_ID)).isPresent();
         assertThat(registry.find(ImageGenerationToolPortAdapter.TOOL_ID)).isPresent();
-        assertThat(catalog.savedEntries()).hasSize(2);
+        assertThat(registry.find(NewsletterGenerationToolPortAdapter.TOOL_ID)).isPresent();
+        assertThat(registry.find(PptGenerationToolPortAdapter.TOOL_ID)).isPresent();
+        assertThat(registry.find(ChartVisualizationToolPortAdapter.TOOL_ID)).isPresent();
+        assertThat(registry.find(FrontendDesignToolPortAdapter.TOOL_ID)).isPresent();
+        assertThat(catalog.savedEntries()).hasSize(6);
         assertThat(catalog.findById(GitHubRepositoryReaderToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
             assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
             assertThat(entry.actionType()).isEqualTo(ToolActionType.READ);
@@ -81,6 +98,11 @@ class BuiltInAgentToolRegistrarTests {
             assertThat(entry.createdAt()).isEqualTo(FIXED_NOW);
         });
         assertThat(catalog.findById(ImageGenerationToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
+            assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
+            assertThat(entry.actionType()).isEqualTo(ToolActionType.EXECUTE);
+            assertThat(entry.resourceType()).isEqualTo("MODEL");
+        });
+        assertThat(catalog.findById(NewsletterGenerationToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
             assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
             assertThat(entry.actionType()).isEqualTo(ToolActionType.EXECUTE);
             assertThat(entry.resourceType()).isEqualTo("MODEL");

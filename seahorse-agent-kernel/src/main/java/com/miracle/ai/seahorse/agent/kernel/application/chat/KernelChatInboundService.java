@@ -21,6 +21,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillRuntimeComposer;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillSetJsonSupport;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
@@ -109,6 +110,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     private final SkillSetJsonSupport skillSetJsonSupport;
     private final SkillRuntimeComposer skillRuntimeComposer;
     private final ChatSelectedSkillResolver chatSkillResolver;
+    private final KernelAgentLoopOptions agentLoopOptions;
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
         this(chatPipeline, streamTaskPort, KernelRagTraceRecorder.noop());
@@ -209,6 +211,23 @@ public class KernelChatInboundService implements ChatInboundPort {
                                     Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
                                     ConversationAttachmentContextAssembler attachmentContextAssembler,
                                     Optional<AgentSkillRepositoryPort> skillRepository) {
+        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
+                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
+                skillRepository, KernelAgentLoopOptions.defaults());
+    }
+
+    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+                                    StreamTaskPort streamTaskPort,
+                                    Optional<KernelAgentLoop> agentLoop,
+                                    KernelRagTraceRecorder traceRecorder,
+                                    ConversationMemoryPort memoryPort,
+                                    MemoryEnginePort memoryEnginePort,
+                                    Optional<AgentRunInboundPort> agentRunPort,
+                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
+                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
+                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
+                                    Optional<AgentSkillRepositoryPort> skillRepository,
+                                    KernelAgentLoopOptions agentLoopOptions) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop;
@@ -225,6 +244,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         this.chatSkillResolver = skillRepository == null || skillRepository.isEmpty()
                 ? null
                 : new ChatSelectedSkillResolver(skillRepository.get());
+        this.agentLoopOptions = Objects.requireNonNullElseGet(agentLoopOptions, KernelAgentLoopOptions::defaults);
     }
 
     @Override
@@ -315,6 +335,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .history(loadAgentHistory(command))
                 .allowedToolIds(allowedToolIds(command))
                 .samplingOptions(modelConfig.samplingOptions())
+                .maxSteps(agentLoopOptions.maxSteps())
                 .contextPack(contextPack)
                 .memoryContext(memoryContext)
                 .skillRuntimeContext(agentRuntimeContext(selectedVersion, mergedSkills))

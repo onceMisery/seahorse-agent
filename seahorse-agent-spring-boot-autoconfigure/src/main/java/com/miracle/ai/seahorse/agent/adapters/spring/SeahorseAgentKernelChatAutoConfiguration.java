@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.adapters.local.LocalChatStreamCallbackFacto
 import com.miracle.ai.seahorse.agent.adapters.local.LocalStreamTaskPort;
 import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatPreparationPorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ChatResponsePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.ConversationAttachmentContextAssembler;
@@ -208,7 +209,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    ObjectProvider<ContextPackBuilderInboundPort> contextPackBuilder,
                                                    ObjectProvider<AgentDefinitionRepositoryPort> agentDefinitionRepository,
                                                    ObjectProvider<ConversationAttachmentContextAssembler> attachmentContextAssembler,
-                                                   ObjectProvider<AgentSkillRepositoryPort> skillRepository) {
+                                                   ObjectProvider<AgentSkillRepositoryPort> skillRepository,
+                                                   ObjectProvider<KernelAgentLoopOptions> agentLoopOptions) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
                 Optional.ofNullable(agentLoop.getIfAvailable()),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
@@ -218,6 +220,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 Optional.ofNullable(contextPackBuilder.getIfAvailable()),
                 Optional.ofNullable(agentDefinitionRepository.getIfAvailable()),
                 attachmentContextAssembler.getIfAvailable(ConversationAttachmentContextAssembler::noop),
-                Optional.ofNullable(skillRepository.getIfAvailable()));
+                Optional.ofNullable(skillRepository.getIfAvailable()),
+                agentLoopOptions.getIfAvailable(KernelAgentLoopOptions::defaults));
     }
 }

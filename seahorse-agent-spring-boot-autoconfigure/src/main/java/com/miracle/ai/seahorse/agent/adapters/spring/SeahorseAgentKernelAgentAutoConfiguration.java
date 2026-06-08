@@ -39,6 +39,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.Repository
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgentHandoffService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.LocalAgentAsToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJsonSupport;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
@@ -46,6 +48,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryWriteToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.QueryMetadataToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
@@ -83,6 +87,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
@@ -149,6 +154,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             "seahorse-agent.chat.agent.tools.github.user-agent";
     private static final String PROP_IMAGE_MODEL =
             "seahorse-agent.adapters.ai.image-model";
+    private static final String PROP_CHAT_MODEL =
+            "seahorse-agent.adapters.ai.chat-model";
     private static final String PROP_PRODUCT_MODE = "seahorse-agent.product-mode";
     private static final String PROP_ADVANCED_AGENT_HANDOFF =
             "seahorse-agent.advanced.agent-handoff-enabled";
@@ -502,6 +509,62 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
         return new ImageGenerationToolPortAdapter(
                 imageGenerationPort,
                 environment.getProperty(PROP_IMAGE_MODEL, ""),
+                jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(ChatModelPort.class)
+    @ConditionalOnMissingBean
+    public NewsletterGenerationToolPortAdapter seahorseNewsletterGenerationToolPortAdapter(
+            ChatModelPort chatModelPort,
+            AgentToolJsonSupport jsonSupport,
+            Environment environment) {
+        return new NewsletterGenerationToolPortAdapter(
+                chatModelPort,
+                environment.getProperty(PROP_CHAT_MODEL, ""),
+                jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(ChatModelPort.class)
+    @ConditionalOnMissingBean
+    public PptGenerationToolPortAdapter seahorsePptGenerationToolPortAdapter(
+            ChatModelPort chatModelPort,
+            AgentToolJsonSupport jsonSupport,
+            Environment environment) {
+        return new PptGenerationToolPortAdapter(
+                chatModelPort,
+                environment.getProperty(PROP_CHAT_MODEL, ""),
+                jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(ChatModelPort.class)
+    @ConditionalOnMissingBean
+    public ChartVisualizationToolPortAdapter seahorseChartVisualizationToolPortAdapter(
+            ChatModelPort chatModelPort,
+            AgentToolJsonSupport jsonSupport,
+            Environment environment) {
+        return new ChartVisualizationToolPortAdapter(
+                chatModelPort,
+                environment.getProperty(PROP_CHAT_MODEL, ""),
+                jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(ChatModelPort.class)
+    @ConditionalOnMissingBean
+    public FrontendDesignToolPortAdapter seahorseFrontendDesignToolPortAdapter(
+            ChatModelPort chatModelPort,
+            AgentToolJsonSupport jsonSupport,
+            Environment environment) {
+        return new FrontendDesignToolPortAdapter(
+                chatModelPort,
+                environment.getProperty(PROP_CHAT_MODEL, ""),
                 jsonSupport);
     }
 

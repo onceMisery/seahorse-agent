@@ -137,6 +137,58 @@ class KernelChatAgentRunStoreTests {
     }
 
     @Test
+    void agentModePropagatesConfiguredMaxStepsToLoopRequest() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        KernelAgentRunService runService = new KernelAgentRunService(
+                new EmptyAgentDefinitionRepository(), runRepository,
+                () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
+        List<Turn> turns = new ArrayList<>();
+        for (int i = 1; i <= 6; i++) {
+            turns.add(Turn.toolCalls(
+                    "need lookup " + i,
+                    List.of(AgentToolCall.of("call-" + i, "weather", Map.of("city", "Shanghai")))));
+        }
+        turns.add(Turn.finalAnswer("complete after configured steps"));
+        ScriptedModel model = new ScriptedModel(turns);
+        InMemoryToolRegistry toolRegistry = new InMemoryToolRegistry();
+        toolRegistry.register(new ToolDescriptor("weather", "Weather", "Weather lookup", "{}"),
+                (callId, toolId, arguments) -> ToolInvocationResult.ok("{\"temp\":21}"));
+        KernelAgentLoopOptions options = KernelAgentLoopOptions.builder().maxSteps(7).build();
+        KernelAgentLoop agentLoop = new KernelAgentLoop(
+                model,
+                toolRegistry,
+                successfulWeatherGateway(),
+                options,
+                com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder.noop(),
+                new com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver(),
+                new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runService),
+                Optional.empty(),
+                Optional.empty(),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.empty(),
+                options);
+
+        service.streamChat(new StreamChatCommand(
+                "Use as many steps as needed", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT),
+                callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals(List.of("complete after configured steps"), callback.contents);
+        assertEquals(7, model.requests.size());
+        AgentRun run = runRepository.runs.values().iterator().next();
+        assertEquals(AgentRunStatus.SUCCEEDED, run.status());
+    }
+
+    @Test
     void shouldKeepRunWaitingApprovalWhenAgentLoopPausesForApproval() {
         MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
         MemoryAgentCheckpointRepository checkpointRepository = new MemoryAgentCheckpointRepository();

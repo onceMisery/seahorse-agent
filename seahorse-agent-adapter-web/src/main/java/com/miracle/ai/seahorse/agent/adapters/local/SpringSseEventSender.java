@@ -60,7 +60,7 @@ public class SpringSseEventSender implements StreamEventSender {
     @Override
     public void complete() {
         if (closed.compareAndSet(false, true)) {
-            emitter.complete();
+            completeQuietly();
         }
     }
 
@@ -68,7 +68,7 @@ public class SpringSseEventSender implements StreamEventSender {
     public void fail(Throwable error) {
         if (closed.compareAndSet(false, true)) {
             sendError(error);
-            emitter.complete();
+            completeQuietly();
         }
         log.warn("SSE send failed", error);
     }
@@ -88,8 +88,16 @@ public class SpringSseEventSender implements StreamEventSender {
                     .data(Map.of("error", Objects.requireNonNullElse(error.getMessage(),
                             error.getClass().getSimpleName()))));
             emitter.send(SseEmitter.event().name(StreamEventType.DONE.value()).data("[DONE]"));
-        } catch (IOException ioException) {
-            log.debug("Failed to send SSE error payload", ioException);
+        } catch (Exception sendException) {
+            log.debug("Failed to send SSE error payload", sendException);
+        }
+    }
+
+    private void completeQuietly() {
+        try {
+            emitter.complete();
+        } catch (Exception completeException) {
+            log.debug("Failed to complete SSE emitter", completeException);
         }
     }
 }
