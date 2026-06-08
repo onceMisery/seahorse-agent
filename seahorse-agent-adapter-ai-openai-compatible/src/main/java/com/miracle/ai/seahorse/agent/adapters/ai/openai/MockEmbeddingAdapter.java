@@ -27,7 +27,20 @@ import java.util.List;
  */
 public class MockEmbeddingAdapter implements EmbeddingModelPort {
 
-    private static final int DIMENSION = 768;
+    public static final int DEFAULT_DIMENSION = 768;
+
+    private final int dimension;
+
+    public MockEmbeddingAdapter() {
+        this(DEFAULT_DIMENSION);
+    }
+
+    public MockEmbeddingAdapter(int dimension) {
+        if (dimension <= 0) {
+            throw new IllegalArgumentException("dimension must be positive");
+        }
+        this.dimension = dimension;
+    }
 
     @Override
     public List<Float> embed(String modelId, String text) {
@@ -36,9 +49,9 @@ public class MockEmbeddingAdapter implements EmbeddingModelPort {
         }
 
         int hash = text.hashCode();
-        List<Float> vector = new ArrayList<>(DIMENSION);
+        List<Float> vector = new ArrayList<>(dimension);
 
-        for (int i = 0; i < DIMENSION; i++) {
+        for (int i = 0; i < dimension; i++) {
             float value = (float) Math.sin((hash + i * 31) / 1000.0) * 0.1f;
             vector.add(value);
         }
@@ -47,8 +60,8 @@ public class MockEmbeddingAdapter implements EmbeddingModelPort {
     }
 
     private List<Float> generateZeroVector() {
-        List<Float> vector = new ArrayList<>(DIMENSION);
-        for (int i = 0; i < DIMENSION; i++) {
+        List<Float> vector = new ArrayList<>(dimension);
+        for (int i = 0; i < dimension; i++) {
             vector.add(0.01f);
         }
         return vector;
