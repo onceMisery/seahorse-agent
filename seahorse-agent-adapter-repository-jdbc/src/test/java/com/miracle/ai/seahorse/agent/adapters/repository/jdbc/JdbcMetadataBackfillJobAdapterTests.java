@@ -39,7 +39,7 @@ class JdbcMetadataBackfillJobAdapterTests {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private JdbcTemplate jdbcTemplate;
-    private JdbcMetadataGovernanceRepositoryAdapter adapter;
+    private JdbcMetadataBackfillJobRepositoryAdapter adapter;
 
     @BeforeEach
     void setUp() {
@@ -47,7 +47,7 @@ class JdbcMetadataBackfillJobAdapterTests {
                 "jdbc:h2:mem:metadata-backfill-job;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
         jdbcTemplate = new JdbcTemplate(dataSource);
         createSchema();
-        adapter = new JdbcMetadataGovernanceRepositoryAdapter(dataSource, objectMapper);
+        adapter = new JdbcMetadataBackfillJobRepositoryAdapter(dataSource, objectMapper);
     }
 
     @Test

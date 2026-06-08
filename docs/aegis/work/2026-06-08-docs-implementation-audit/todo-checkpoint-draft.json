@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-08-docs-implementation-audit",
+  "currentTodo": "Synchronize docs and verify final focused regression.",
+  "completedTodos": [
+    "RED verified for missing low-risk adapters.",
+    "GREEN implemented canonical write, quarantine, schema usage report, and quality report repository adapters and default Spring Beans.",
+    "RED verified for missing schema/extraction/review/backfill adapters.",
+    "GREEN implemented schema, extraction result, review, and backfill repository adapters and default Spring Beans.",
+    "RED verified compatibility facade still owned SQL/support state.",
+    "GREEN converted JdbcMetadataGovernanceRepositoryAdapter into a pure delegating compatibility facade.",
+    "Updated docs to mark metadata JDBC deep split complete and retain only true residual planning items."
+  ],
+  "activeSlice": "Documentation alignment and final verification.",
+  "evidenceRefs": [
+    "green-low-risk-metadata-adapters",
+    "green-schema-extraction-review-backfill-adapters",
+    "red-metadata-governance-facade-owned-sql-support",
+    "green-metadata-governance-facade-delegates-only",
+    "final-focused-metadata-regression",
+    "final-diff-hygiene"
+  ],
+  "blockedOn": null,
+  "nextStep": "Run final focused Maven command and diff hygiene checks.",
+  "updatedAt": "2026-06-08"
+}

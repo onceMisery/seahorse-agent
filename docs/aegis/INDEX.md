@@ -267,3 +267,28 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-06-06 | artifact | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/drift-check-draft.json | SaaS MVP 11-21 implementation drift check draft |
 | 2026-06-06 | artifact | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/resume-state-hint.json | 2026-06-06-saas-mvp-11-21-implementation resume state hint |
 | 2026-06-06 | artifact | docs/aegis/work/2026-06-06-saas-mvp-11-21-implementation/evidence-bundle-draft-phase1-targeted-regression.json | 2026-06-06-saas-mvp-11-21-implementation evidence phase1-targeted-regression |
+| 2026-06-07 | work | docs/aegis/work/2026-06-07-e2e-core-flow-verification/10-intent.md | Core E2E verification and repair intent |
+| 2026-06-07 | work | docs/aegis/work/2026-06-07-e2e-core-flow-verification/20-checkpoint.md | Core E2E verification and repair checkpoint |
+| 2026-06-07 | work | docs/aegis/work/2026-06-07-e2e-core-flow-verification/90-evidence.md | Core E2E verification and repair evidence |
+| 2026-06-07 | work | docs/aegis/work/2026-06-07-e2e-core-flow-verification/99-reflection.md | Core E2E verification and repair reflection |
+| 2026-06-07 | artifact | docs/aegis/work/2026-06-07-e2e-core-flow-verification/task-intent-draft.json | Core E2E verification and repair task intent draft |
+| 2026-06-07 | artifact | docs/aegis/work/2026-06-07-e2e-core-flow-verification/baseline-read-set-hint.json | Core E2E verification and repair baseline read-set hint |
+| 2026-06-07 | artifact | docs/aegis/work/2026-06-07-e2e-core-flow-verification/impact-statement-draft.json | Core E2E verification and repair impact statement draft |
+| 2026-06-07 | artifact | docs/aegis/work/2026-06-07-e2e-core-flow-verification/todo-checkpoint-draft.json | Core E2E verification and repair todo checkpoint draft |
+| 2026-06-07 | artifact | docs/aegis/work/2026-06-07-e2e-core-flow-verification/drift-check-draft.json | Core E2E verification and repair drift check draft |
+| 2026-06-08 | work | docs/aegis/work/2026-06-08-docs-implementation-audit/10-intent.md | Docs Implementation Audit intent |
+| 2026-06-08 | work | docs/aegis/work/2026-06-08-docs-implementation-audit/20-checkpoint.md | Docs Implementation Audit checkpoint |
+| 2026-06-08 | work | docs/aegis/work/2026-06-08-docs-implementation-audit/90-evidence.md | Docs Implementation Audit evidence |
+| 2026-06-08 | work | docs/aegis/work/2026-06-08-docs-implementation-audit/99-reflection.md | Docs Implementation Audit reflection |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/task-intent-draft.json | Docs Implementation Audit task intent draft |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/baseline-read-set-hint.json | Docs Implementation Audit baseline read-set hint |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/impact-statement-draft.json | Docs Implementation Audit impact statement draft |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/todo-checkpoint-draft.json | Docs Implementation Audit todo checkpoint draft |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/drift-check-draft.json | Docs Implementation Audit drift check draft |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/resume-state-hint.json | 2026-06-08-docs-implementation-audit resume state hint |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/evidence-bundle-draft-green-low-risk-metadata-adapters.json | 2026-06-08-docs-implementation-audit evidence green-low-risk-metadata-adapters |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/evidence-bundle-draft-green-schema-extraction-review-backfill-adapters.json | 2026-06-08-docs-implementation-audit evidence green-schema-extraction-review-backfill-adapters |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/evidence-bundle-draft-red-metadata-governance-facade-owned-sql-support.json | 2026-06-08-docs-implementation-audit evidence red-metadata-governance-facade-owned-sql-support |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/evidence-bundle-draft-green-metadata-governance-facade-delegates-only.json | 2026-06-08-docs-implementation-audit evidence green-metadata-governance-facade-delegates-only |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/evidence-bundle-draft-final-focused-metadata-regression.json | 2026-06-08-docs-implementation-audit evidence final-focused-metadata-regression |
+| 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/evidence-bundle-draft-final-diff-hygiene.json | 2026-06-08-docs-implementation-audit evidence final-diff-hygiene |

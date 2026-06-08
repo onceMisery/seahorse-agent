@@ -13,13 +13,68 @@
     <packaging>jar</packaging>
 
     <name>seahorse-agent-spring-boot-starter-core</name>
-    <description>Core Spring Boot starter alias for Seahorse agent slim auto-configuration.</description>
+    <description>Core Spring Boot starter for Seahorse agent slim auto-configuration.</description>
 
     <dependencies>
         <dependency>
             <groupId>com.miracle.ai</groupId>
-            <artifactId>seahorse-agent-spring-boot-starter</artifactId>
+            <artifactId>seahorse-agent-spring-boot-autoconfigure</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>ban-heavy-adapters-from-core-starter</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>com.miracle.ai:seahorse-agent-spring-boot-starter-all</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-ai-openai-compatible</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-mcp-http</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-openapi</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-parser-tika</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-source-feishu</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-vector-milvus</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-vector-pgvector</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-cache-redis</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-storage-s3</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-mq-pulsar</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-observation-micrometer</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-search-elasticsearch</exclude>
+                                        <exclude>com.miracle.ai:seahorse-agent-adapter-search-lucene</exclude>
+                                    </excludes>
+                                    <message>
+                                        starter-core must stay a lightweight entrypoint. Add official heavy adapters
+                                        to starter-all or the application module explicitly.
+                                    </message>
+                                </bannedDependencies>
+                            </rules>
+                            <fail>true</fail>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -83,6 +83,23 @@ final class JdbcMetadataBackfillSupport {
         }
     }
 
+    List<MetadataBackfillJobRecord> list(String tenantId, String knowledgeBaseId) {
+        try {
+            return jdbcTemplate.query("""
+                    SELECT id, tenant_id, kb_id, pipeline_id, status, checkpoint_json, batch_size,
+                           current_page,
+                           processed_count, success_count, failed_count, skipped_count, review_count,
+                           quarantine_count, failure_summary, operator, create_time, update_time
+                    FROM t_metadata_extraction_job
+                    WHERE tenant_id = ?
+                      AND (? = '' OR kb_id = ?)
+                    ORDER BY update_time DESC, create_time DESC, id DESC
+                    """, this::toBackfillJobRecord, tenantId, knowledgeBaseId, knowledgeBaseId);
+        } catch (DataAccessException ex) {
+            return List.of();
+        }
+    }
+
     MetadataBackfillJobPage page(MetadataBackfillJobQuery query) {
         MetadataBackfillJobQuery safeQuery = Objects.requireNonNull(query, "query must not be null");
         SqlWhere where = backfillJobWhere(safeQuery);

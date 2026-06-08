@@ -82,8 +82,9 @@ seahorse-agent/                          # 根 POM（聚合 + 依赖管理）
 ├── seahorse-agent-adapter-openapi/               # OpenAPI 连接器
 ├── seahorse-agent-adapter-source-feishu/         # 飞书数据源
 ├── seahorse-agent-mcp-server/                    # MCP Server
-├── seahorse-agent-spring-boot-starter-core/      # 核心自动装配坐标
-├── seahorse-agent-spring-boot-starter/           # 自动装配（精简）
+├── seahorse-agent-spring-boot-autoconfigure/     # Spring Boot 自动配置实现
+├── seahorse-agent-spring-boot-starter-core/      # 核心轻量 starter 坐标
+├── seahorse-agent-spring-boot-starter/           # 旧 starter 兼容别名
 ├── seahorse-agent-spring-boot-starter-all/       # 自动装配（全量适配器）
 ├── seahorse-agent-bootstrap/                     # 🔵 Spring Boot 启动入口
 ├── seahorse-agent-tests/                         # 集成测试
@@ -92,10 +93,14 @@ seahorse-agent/                          # 根 POM（聚合 + 依赖管理）
 
 **模块依赖关系：**
 ```
-bootstrap → starter-all → starter → kernel
-                                  → 各 adapter 模块
+bootstrap → starter-core → autoconfigure → kernel
+starter → starter-core → autoconfigure → kernel
+starter-all → starter-core → autoconfigure → kernel
+starter-all → 各重型 adapter 模块
 adapter-web → kernel（入站适配器直接依赖内核端口）
 ```
+
+当前 `starter-core` 已依赖内部 `seahorse-agent-spring-boot-autoconfigure` 模块，旧 `starter` 只作为指向 `starter-core` 的兼容别名。依赖边界已有回归检查：`starter-core` 和 `bootstrap` 使用 Maven Enforcer 防止误引入全量 starter/重型 adapter，`starter-core` 使用 `SeahorseAgentStarterCoreContextTests` 验证 local/direct/noop/JDBC 默认能力，`starter-all` 使用 `SeahorseAgentStarterAllSmokeTests` 验证官方重型 adapter 类和相关自动配置候选可被全量 starter 发现。
 
 ### 1.4 前后端分离架构
 
@@ -463,8 +468,9 @@ adapters/local/            # 本地认证适配器等
 项目通过 Spring Boot 的 `AutoConfiguration` 机制实现适配器的自动注册。装配分为 6 层（见 CLAUDE.md），确保依赖顺序正确。
 
 **关键文件位置：**
-- 自动配置类：各 `seahorse-agent-spring-boot-starter*/src/main/java/.../config/` 目录
-- 配置属性：`seahorse-agent-spring-boot-starter/src/main/resources/application.properties`
+- 自动配置类：`seahorse-agent-spring-boot-autoconfigure/src/main/java/com/miracle/ai/seahorse/agent/adapters/spring/`
+- 自动配置注册：`seahorse-agent-spring-boot-autoconfigure/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
+- 默认配置属性：`seahorse-agent-spring-boot-autoconfigure/src/main/resources/application.properties`
 
 ---
 
@@ -476,7 +482,7 @@ adapters/local/            # 本地认证适配器等
 |------|---------|
 | **启动类** | `seahorse-agent-bootstrap/.../SeahorseAgentApplication.java` |
 | **启动配置** | `seahorse-agent-bootstrap/src/main/resources/application.properties` |
-| **内核配置** | `seahorse-agent-spring-boot-starter/src/main/resources/application.properties` |
+| **内核配置** | `seahorse-agent-spring-boot-autoconfigure/src/main/resources/application.properties` |
 | **对话控制器** | `seahorse-agent-adapter-web/.../web/SeahorseChatController.java` |
 | **对话管线** | `seahorse-agent-kernel/.../kernel/application/chat/KernelChatPipeline.java` |
 | **Agent 循环** | `seahorse-agent-kernel/.../kernel/application/agent/KernelAgentLoop.java` |
@@ -587,7 +593,7 @@ seahorse-agent-adapter-cache-memcached/
 在 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` 中注册配置类。
 
 **第 5 步：添加到 starter-all**（可选）
-在 `seahorse-agent-spring-boot-starter-all/pom.xml` 中添加依赖。
+在 `seahorse-agent-spring-boot-starter-all/pom.xml` 中添加依赖。若新增的是官方重型 adapter，还需要同步更新 `SeahorseAgentStarterAllSmokeTests`，确保全量 starter 的 classpath 和自动配置候选检查继续覆盖它。
 
 ### 6.3 修改内核逻辑的注意事项
 

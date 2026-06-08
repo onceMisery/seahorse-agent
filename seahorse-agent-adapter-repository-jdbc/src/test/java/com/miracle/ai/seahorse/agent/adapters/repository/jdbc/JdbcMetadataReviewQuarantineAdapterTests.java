@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRecord;
@@ -46,7 +47,8 @@ class JdbcMetadataReviewQuarantineAdapterTests {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private JdbcTemplate jdbcTemplate;
-    private JdbcMetadataGovernanceRepositoryAdapter adapter;
+    private JdbcMetadataReviewRepositoryAdapter adapter;
+    private JdbcMetadataQuarantineRepositoryAdapter quarantineAdapter;
 
     @BeforeEach
     void setUp() {
@@ -54,7 +56,8 @@ class JdbcMetadataReviewQuarantineAdapterTests {
                 "jdbc:h2:mem:metadata-review-quarantine;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
         jdbcTemplate = new JdbcTemplate(dataSource);
         createSchema();
-        adapter = new JdbcMetadataGovernanceRepositoryAdapter(dataSource, objectMapper);
+        adapter = new JdbcMetadataReviewRepositoryAdapter(dataSource, objectMapper);
+        quarantineAdapter = new JdbcMetadataQuarantineRepositoryAdapter(dataSource, objectMapper);
     }
 
     @Test
@@ -135,6 +138,28 @@ class JdbcMetadataReviewQuarantineAdapterTests {
     }
 
     @Test
+    void shouldPersistQuarantineItemWithIndependentRepositoryAdapter() {
+        quarantineAdapter.quarantine(new MetadataQuarantineItem(
+                "tenant-1",
+                "1",
+                "doc-quarantine",
+                "job-quarantine",
+                "VALIDATE",
+                "SCHEMA_MISSING",
+                "缺少 Schema",
+                Map.of("source", "test")));
+
+        MetadataQuarantinePage page = quarantineAdapter.pageQuarantineItems(new MetadataQuarantineQuery(
+                "tenant-1", "1", Boolean.FALSE, "VALIDATE", "SCHEMA_MISSING", "doc-quarantine",
+                "job-quarantine", 1, 10));
+
+        assertThat(page.records()).singleElement().satisfies(record -> {
+            assertThat(record.documentId()).isEqualTo("doc-quarantine");
+            assertThat(record.sourceSnapshot()).containsEntry("source", "test");
+        });
+    }
+
+    @Test
     void shouldSyncExtractionTerminalStatusWhenReviewRejectedOrQuarantined() {
         insertExtractionResult("result-rejected");
         insertReviewItem("review-rejected", "PENDING", "result-rejected");
@@ -205,7 +230,7 @@ class JdbcMetadataReviewQuarantineAdapterTests {
 
         MetadataReviewPage reviewPage = adapter.pageReviewItems(new MetadataReviewQuery(
                 "tenant-1", "1", MetadataReviewStatus.PENDING, "LOW_CONFIDENCE", "101", 1, 10));
-        MetadataQuarantinePage quarantinePage = adapter.pageQuarantineItems(new MetadataQuarantineQuery(
+        MetadataQuarantinePage quarantinePage = quarantineAdapter.pageQuarantineItems(new MetadataQuarantineQuery(
                 "tenant-1", "1", Boolean.FALSE, "VALIDATE", "SCHEMA_MISSING", "101", "job-1", 1, 10));
 
         assertThat(reviewPage.records()).extracting(MetadataReviewRecord::id).containsExactly("review-filter-1");
@@ -216,19 +241,19 @@ class JdbcMetadataReviewQuarantineAdapterTests {
     void shouldPageResolveAndScheduleQuarantineRetry() {
         insertQuarantineItem("q-1", 0, 1);
 
-        MetadataQuarantinePage page = adapter.pageQuarantineItems(
+        MetadataQuarantinePage page = quarantineAdapter.pageQuarantineItems(
                 new MetadataQuarantineQuery("tenant-1", "1", Boolean.FALSE, 1, 10));
 
         assertThat(page.total()).isEqualTo(1);
         assertThat(page.records()).extracting(MetadataQuarantineRecord::id).containsExactly("q-1");
 
-        MetadataQuarantineRecord resolved = adapter.resolveQuarantineItem(
+        MetadataQuarantineRecord resolved = quarantineAdapter.resolveQuarantineItem(
                 new MetadataQuarantineResolution("q-1", "auditor"));
 
         assertThat(resolved.resolved()).isTrue();
         assertThat(resolved.resolvedBy()).isEqualTo("auditor");
 
-        MetadataQuarantineRecord retried = adapter.scheduleQuarantineRetry(new MetadataQuarantineRetry(
+        MetadataQuarantineRecord retried = quarantineAdapter.scheduleQuarantineRetry(new MetadataQuarantineRetry(
                 "q-1",
                 "auditor",
                 Instant.parse("2026-05-13T10:00:00Z")));

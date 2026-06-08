@@ -17,7 +17,6 @@
 
 package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemPayload;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryItemRecord;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class JdbcMetadataDictionaryManagementAdapterTests {
 
     private JdbcTemplate jdbcTemplate;
-    private JdbcMetadataGovernanceRepositoryAdapter adapter;
+    private JdbcMetadataDictionaryRepositoryAdapter adapter;
 
     @BeforeEach
     void setUp() {
@@ -41,7 +40,7 @@ class JdbcMetadataDictionaryManagementAdapterTests {
                 "jdbc:h2:mem:metadata-dictionary-management;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
         jdbcTemplate = new JdbcTemplate(dataSource);
         createSchema();
-        adapter = new JdbcMetadataGovernanceRepositoryAdapter(dataSource, new ObjectMapper());
+        adapter = new JdbcMetadataDictionaryRepositoryAdapter(dataSource);
     }
 
     @Test

@@ -43,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class JdbcMetadataSchemaManagementAdapterTests {
 
     private JdbcTemplate jdbcTemplate;
-    private JdbcMetadataGovernanceRepositoryAdapter adapter;
+    private JdbcMetadataSchemaRepositoryAdapter adapter;
 
     @BeforeEach
     void setUp() {
@@ -51,7 +51,7 @@ class JdbcMetadataSchemaManagementAdapterTests {
                 "jdbc:h2:mem:metadata-schema-management;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
         jdbcTemplate = new JdbcTemplate(dataSource);
         createSchema();
-        adapter = new JdbcMetadataGovernanceRepositoryAdapter(dataSource, new ObjectMapper());
+        adapter = new JdbcMetadataSchemaRepositoryAdapter(dataSource, new ObjectMapper());
     }
 
     @Test

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "red-metadata-governance-facade-owned-sql-support",
+  "type": "command",
+  "source": ".\\mvnw.cmd -pl seahorse-agent-adapter-repository-jdbc -am \"-Dtest=JdbcMetadataGovernanceRepositoryAdapterCompatibilityTests\" \"-Dsurefire.failIfNoSpecifiedTests=false\" test",
+  "summary": "RED: JdbcMetadataGovernanceRepositoryAdapterCompatibilityTests failed because JdbcMetadataGovernanceRepositoryAdapter still owned JdbcTemplate, JSON/support fields, and did not only own granular repository adapters.",
+  "verifier": "codex"
+}

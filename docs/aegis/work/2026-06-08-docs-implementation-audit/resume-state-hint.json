@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-08-docs-implementation-audit",
+  "lastCheckpointRef": "docs/aegis/work/2026-06-08-docs-implementation-audit/todo-checkpoint-draft.json",
+  "resumeInstruction": "Resume from tests passing for low-risk adapters; do not claim full metadata split complete until schema/extraction/review/backfill owner state is resolved or accurately documented.",
+  "knownPartialWork": [
+    "RED verified for missing low-risk adapters.",
+    "GREEN implemented canonical write, quarantine, schema usage report, and quality report repository adapters and default Spring Beans."
+  ],
+  "mustReadBeforeContinuing": [
+    "docs/aegis/work/2026-06-08-docs-implementation-audit/10-intent.md",
+    "docs/aegis/work/2026-06-08-docs-implementation-audit/20-checkpoint.md",
+    "docs/aegis/work/2026-06-08-docs-implementation-audit/todo-checkpoint-draft.json"
+  ],
+  "unsafeToAssume": [
+    "Do not assume review/applyReviewDecision can move without preserving extraction result status/approval updates."
+  ]
+}

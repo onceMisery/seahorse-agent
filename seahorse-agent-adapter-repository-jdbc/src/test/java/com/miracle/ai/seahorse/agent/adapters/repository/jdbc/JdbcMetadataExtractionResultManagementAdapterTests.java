@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class JdbcMetadataExtractionResultManagementAdapterTests {
 
     private JdbcTemplate jdbcTemplate;
-    private JdbcMetadataGovernanceRepositoryAdapter adapter;
+    private JdbcMetadataExtractionResultRepositoryAdapter adapter;
 
     @BeforeEach
     void setUp() {
@@ -41,7 +41,7 @@ class JdbcMetadataExtractionResultManagementAdapterTests {
                 "jdbc:h2:mem:metadata-extraction-result-management;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
         jdbcTemplate = new JdbcTemplate(dataSource);
         createSchema();
-        adapter = new JdbcMetadataGovernanceRepositoryAdapter(dataSource, new ObjectMapper());
+        adapter = new JdbcMetadataExtractionResultRepositoryAdapter(dataSource, new ObjectMapper());
     }
 
     @Test

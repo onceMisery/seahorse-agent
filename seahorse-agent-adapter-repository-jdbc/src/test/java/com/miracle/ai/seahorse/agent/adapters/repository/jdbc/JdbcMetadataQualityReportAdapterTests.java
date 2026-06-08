@@ -44,6 +44,7 @@ class JdbcMetadataQualityReportAdapterTests {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private JdbcTemplate jdbcTemplate;
     private JdbcMetadataGovernanceRepositoryAdapter adapter;
+    private JdbcMetadataQualityReportRepositoryAdapter qualityReportAdapter;
 
     @BeforeEach
     void setUp() {
@@ -52,13 +53,14 @@ class JdbcMetadataQualityReportAdapterTests {
         jdbcTemplate = new JdbcTemplate(dataSource);
         createSchema();
         adapter = new JdbcMetadataGovernanceRepositoryAdapter(dataSource, objectMapper);
+        qualityReportAdapter = new JdbcMetadataQualityReportRepositoryAdapter(dataSource, objectMapper, adapter);
     }
 
     @Test
     void shouldBuildMetadataQualityReportFromGovernanceTables() {
         seedReportRows();
 
-        MetadataQualityReport report = adapter.report("tenant-1", "kb-1", 1);
+        MetadataQualityReport report = qualityReportAdapter.report("tenant-1", "kb-1", 1);
 
         assertThat(report.totalDocuments()).isEqualTo(3);
         assertThat(report.extractedDocuments()).isEqualTo(2);
@@ -97,7 +99,7 @@ class JdbcMetadataQualityReportAdapterTests {
                 List.of(),
                 Instant.parse("2026-05-13T08:00:00Z"));
 
-        MetadataQualityReport report = adapter.report("tenant-1", "kb-1", 1);
+        MetadataQualityReport report = qualityReportAdapter.report("tenant-1", "kb-1", 1);
 
         assertThat(report.extractedDocuments()).isEqualTo(1);
         assertThat(coverage(report, "department").coverageRate()).isZero();
@@ -124,7 +126,7 @@ class JdbcMetadataQualityReportAdapterTests {
                 List.of(quality("department", 0.92D)),
                 Instant.parse("2026-05-13T10:00:00Z"));
 
-        MetadataQualityReport report = adapter.report("tenant-1", "kb-1", 1, 2, "extractor-v2");
+        MetadataQualityReport report = qualityReportAdapter.report("tenant-1", "kb-1", 1, 2, "extractor-v2");
 
         assertThat(report.schemaVersion()).isEqualTo(2);
         assertThat(report.extractorVersion()).isEqualTo("extractor-v2");
@@ -155,7 +157,8 @@ class JdbcMetadataQualityReportAdapterTests {
                 Map.of("department", "Legal"), Map.of("department", "Legal"));
         insertReviewAudit("audit-p2", "review-p2", "doc-1", "result-p2-1");
 
-        MetadataQualityReport report = adapter.report("tenant-1", "kb-1", 5, 2, "extractor-v2", "prompt-v2");
+        MetadataQualityReport report = qualityReportAdapter.report(
+                "tenant-1", "kb-1", 5, 2, "extractor-v2", "prompt-v2");
 
         assertThat(report.schemaVersion()).isEqualTo(2);
         assertThat(report.extractorVersion()).isEqualTo("extractor-v2");

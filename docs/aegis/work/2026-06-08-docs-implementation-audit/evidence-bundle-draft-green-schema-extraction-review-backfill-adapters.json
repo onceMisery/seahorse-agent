@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "green-schema-extraction-review-backfill-adapters",
+  "type": "command",
+  "source": "mvnw focused metadata adapter and autoconfigure tests",
+  "summary": "GREEN: 20 focused tests passed across JDBC metadata schema, extraction result, review, backfill adapters and Spring metadata auto-configuration.",
+  "verifier": "codex"
+}

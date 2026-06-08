@@ -43,7 +43,8 @@ class JdbcMetadataSchemaUsageReportAdapterTests {
                 "jdbc:h2:mem:metadata-schema-usage;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
         jdbcTemplate = new JdbcTemplate(dataSource);
         createSchema();
-        usageReportRepositoryPort = new JdbcMetadataGovernanceRepositoryAdapter(dataSource, objectMapper);
+        usageReportRepositoryPort = new JdbcMetadataSchemaUsageReportRepositoryAdapter(
+                dataSource, new JdbcMetadataGovernanceRepositoryAdapter(dataSource, objectMapper));
     }
 
     @Test

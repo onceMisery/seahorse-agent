@@ -36,14 +36,14 @@ class JdbcMetadataCanonicalWriteAdapterTests {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private JdbcTemplate jdbcTemplate;
-    private JdbcMetadataGovernanceRepositoryAdapter adapter;
+    private JdbcMetadataCanonicalWriteRepositoryAdapter adapter;
 
     @BeforeEach
     void setUp() {
         DataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:metadata-canonical-write;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
         jdbcTemplate = new JdbcTemplate(dataSource);
-        adapter = new JdbcMetadataGovernanceRepositoryAdapter(dataSource, objectMapper);
+        adapter = new JdbcMetadataCanonicalWriteRepositoryAdapter(dataSource, objectMapper);
     }
 
     @Test

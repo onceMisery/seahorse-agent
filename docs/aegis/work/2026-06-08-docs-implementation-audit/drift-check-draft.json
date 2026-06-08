@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-08-docs-implementation-audit",
+  "taskIntentRef": "docs/aegis/work/2026-06-08-docs-implementation-audit/task-intent-draft.json",
+  "baselineRefs": [
+    "docs/zh/content/架构设计/未来规划审计与剩余设计.md"
+  ],
+  "scopeStatus": "Still inside docs implementation audit and metadata JDBC governance scope.",
+  "compatStatus": "Compatibility facade remains available through explicit switch; default Beans now use more independent adapters.",
+  "retirementStatus": "Retirement path advanced for low-risk subdomain wrappers; legacy delegate remains for unsplit schema/extraction/review/backfill paths.",
+  "newRiskSignals": [
+    "Review and backfill overview retain cross-table coupling and need separate TDD."
+  ],
+  "decision": "continue"
+}

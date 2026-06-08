@@ -22,11 +22,6 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.miracle.ai</groupId>
-            <artifactId>seahorse-agent-spring-boot-starter-all</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
@@ -60,6 +55,33 @@
             </resource>
         </resources>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>ban-default-all-starter</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>com.miracle.ai:seahorse-agent-spring-boot-starter-all</exclude>
+                                    </excludes>
+                                    <message>
+                                        seahorse-agent-bootstrap must depend on starter-core plus explicit application
+                                        adapters, not the aggregate starter-all module.
+                                    </message>
+                                </bannedDependencies>
+                            </rules>
+                            <fail>true</fail>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>

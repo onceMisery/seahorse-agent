@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "green-metadata-governance-facade-delegates-only",
+  "type": "command",
+  "source": ".\\mvnw.cmd -pl seahorse-agent-adapter-repository-jdbc -am \"-Dtest=JdbcMetadataGovernanceRepositoryAdapterCompatibilityTests\" \"-Dsurefire.failIfNoSpecifiedTests=false\" test",
+  "summary": "GREEN: 1 compatibility facade structure test passed after JdbcMetadataGovernanceRepositoryAdapter was converted to a pure delegating facade over granular metadata JDBC adapters.",
+  "verifier": "codex"
+}
