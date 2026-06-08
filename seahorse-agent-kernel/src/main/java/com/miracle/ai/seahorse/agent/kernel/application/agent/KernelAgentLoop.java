@@ -316,6 +316,7 @@ public class KernelAgentLoop {
 
         List<AgentStep> steps = new ArrayList<>();
         Set<String> exhaustedToolIds = new HashSet<>();
+        boolean hasToolObservations = false;
         int maxSteps = Math.min(request.maxSteps(), options.maxSteps());
         for (int step = 0; step < maxSteps; step++) {
             runControl.checkCancelled();
@@ -330,7 +331,7 @@ public class KernelAgentLoop {
                 recordModelTurn(request, messages, turn, exhaustedToolIds, null);
                 modelTurnRecorded = true;
                 if (turn.toolCalls().isEmpty()) {
-                    String finalContent = applyOutputGovernance(request, turn.content());
+                    String finalContent = normalizeFinalMarkdown(applyOutputGovernance(request, turn.content()));
                     emitContent(callback, finalContent);
                     emitFinalArtifact(callback, request, finalContent);
                     steps.add(AgentStep.finalAnswer(finalContent));
@@ -351,6 +352,7 @@ public class KernelAgentLoop {
                         stepScope,
                         callback);
                 markExhaustedTools(turn.toolCalls(), observations, exhaustedToolIds);
+                hasToolObservations = hasToolObservations || !observations.isEmpty();
                 if (requiresApproval(observations)) {
                     emitToolThinking(callback, turn, observations);
                     AgentStep pendingStep = AgentStep.thought(turn.thought(), turn.toolCalls(), observations);
@@ -393,9 +395,56 @@ public class KernelAgentLoop {
                 throw ex;
             }
         }
+        if (hasToolObservations) {
+            AgentLoopResult finalResult = requestFinalAnswerAfterToolSteps(
+                    request, messages, steps, runControl, callback, traceRunScope, maxSteps + 1);
+            if (finalResult != null) {
+                return finalResult;
+            }
+        }
         emitContent(callback, TRUNCATED_MESSAGE);
         emitComplete(callback);
         return new AgentLoopResult(TRUNCATED_MESSAGE, steps, true);
+    }
+
+    private AgentLoopResult requestFinalAnswerAfterToolSteps(AgentLoopRequest request,
+                                                             List<ChatMessage> messages,
+                                                             List<AgentStep> steps,
+                                                             AgentRunControl runControl,
+                                                             StreamCallback callback,
+                                                             TraceRunScope traceRunScope,
+                                                             int stepNo) {
+        runControl.checkCancelled();
+        String stepId = modelStepId(stepNo);
+        Instant stepStartedAt = Instant.now();
+        emitStepStarted(callback, request, stepId, stepNo, stepStartedAt);
+        TraceNodeScope stepScope = traceRecorder.startNode(traceRunScope, agentStepCommand(stepNo));
+        try {
+            ModelTurn turn = requestFinalModelTurn(request, messages, runControl);
+            recordModelTurn(request, messages, turn, Set.of(), null);
+            if (!turn.toolCalls().isEmpty()) {
+                emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
+                        null, "Final answer turn attempted to call tools.");
+                traceRecorder.finishNode(stepScope);
+                return null;
+            }
+            String finalContent = normalizeFinalMarkdown(applyOutputGovernance(request, turn.content()));
+            emitContent(callback, finalContent);
+            emitFinalArtifact(callback, request, finalContent);
+            steps.add(AgentStep.finalAnswer(finalContent));
+            emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
+                    null, finalContent);
+            emitComplete(callback);
+            traceRecorder.finishNode(stepScope);
+            return new AgentLoopResult(finalContent, steps, false);
+        } catch (RuntimeException ex) {
+            recordModelTurn(request, messages, null, Set.of(), ex);
+            emitRecoverableError(callback, request, stepId, ex);
+            emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
+                    ex, null);
+            traceRecorder.finishNode(stepScope, ex);
+            throw ex;
+        }
     }
 
     private boolean requiresApproval(List<AgentObservation> observations) {
@@ -439,6 +488,25 @@ public class KernelAgentLoop {
                                        List<ChatMessage> messages,
                                        AgentRunControl control,
                                        Set<String> exhaustedToolIds) {
+        return requestModelTurn(
+                request,
+                messages,
+                control,
+                exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks(), exhaustedToolIds),
+                "auto");
+    }
+
+    private ModelTurn requestFinalModelTurn(AgentLoopRequest request,
+                                            List<ChatMessage> messages,
+                                            AgentRunControl control) {
+        return requestModelTurn(request, messages, control, List.of(), "none");
+    }
+
+    private ModelTurn requestModelTurn(AgentLoopRequest request,
+                                       List<ChatMessage> messages,
+                                       AgentRunControl control,
+                                       List<ToolDescriptor> tools,
+                                       String toolChoice) {
         TurnBuffer callback = new TurnBuffer();
         AtomicReference<List<AgentToolCall>> collectedCalls = new AtomicReference<>();
         AtomicBoolean collectorInvoked = new AtomicBoolean(false);
@@ -447,8 +515,8 @@ public class KernelAgentLoop {
                 .messages(List.copyOf(messages))
                 .modelId(request.modelId())
                 .samplingOptions(request.samplingOptions())
-                .tools(exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks(), exhaustedToolIds))
-                .toolChoice("auto")
+                .tools(tools == null ? List.of() : tools)
+                .toolChoice(toolChoice)
                 .build(), callback, toolCalls -> {
                     if (callback.completed()) {
                         throw new AgentLoopException("Model adapter protocol error: collector called after onComplete");
@@ -1037,6 +1105,36 @@ public class KernelAgentLoop {
                 Map.of());
         OutputGovernanceResult result = outputGovernance.governFinalAnswer(validationRequest);
         return result.governedContent();
+    }
+
+    private String normalizeFinalMarkdown(String content) {
+        if (content == null || content.isBlank()) {
+            return content;
+        }
+        String normalized = content
+                .replaceAll("```mermaid\\s*(?i:flowchart)\\b", "```mermaid\nflowchart")
+                .replaceAll("```mermaid\\s*(?i:graph)\\b", "```mermaid\ngraph")
+                .replaceAll("```mermaid\\s*(?i:sequenceDiagram)\\b", "```mermaid\nsequenceDiagram")
+                .replaceAll("```mermaid\\s*(?i:classDiagram)\\b", "```mermaid\nclassDiagram")
+                .replaceAll("```mermaid\\s*(?i:stateDiagram-v2)\\b", "```mermaid\nstateDiagram-v2")
+                .replaceAll("```mermaid\\s*(?i:erDiagram)\\b", "```mermaid\nerDiagram")
+                .replaceAll("```mermaid\\s*(?i:gantt)\\b", "```mermaid\ngantt")
+                .replaceAll("```mermaid\\s*(?i:journey)\\b", "```mermaid\njourney")
+                .replaceAll("```mermaid\\s*(?i:pie)\\b", "```mermaid\npie")
+                .replaceAll("```mermaid\\s*(?i:mindmap)\\b", "```mermaid\nmindmap")
+                .replaceAll("```mermaid\\s*(?i:timeline)\\b", "```mermaid\ntimeline");
+        normalized = normalized
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .replaceAll("(?<!\\n)---(?=##)", "\n\n---\n\n")
+                .replaceAll("(?m)^(#{1,6}[^\\n|#]+)\\|", "$1\n\n|")
+                .replaceAll("(\\|[^\\n|]+\\|)(?=\\|)", "$1\n")
+                .replaceAll("(?<!\\n)(- \\*\\*)", "\n$1")
+                .replaceAll("(?<!\\n)```(?=---)", "\n```\n")
+                .replaceAll("(?<!\\n)```(?=##)", "\n```\n\n")
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
+        return normalized;
     }
 
     private void emitComplete(StreamCallback callback) {

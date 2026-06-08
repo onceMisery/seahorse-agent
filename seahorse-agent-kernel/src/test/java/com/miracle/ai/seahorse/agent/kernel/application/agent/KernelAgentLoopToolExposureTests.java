@@ -27,6 +27,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationResult;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
 import org.junit.jupiter.api.Test;
@@ -34,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -86,6 +89,30 @@ class KernelAgentLoopToolExposureTests {
         assertEquals(true, correction.contains("calendar"));
     }
 
+    @Test
+    void summarizesWithoutToolsWhenLastAllowedStepExecutedToolCalls() {
+        AgentToolCall calendar = AgentToolCall.of("call-1", "calendar", Map.of());
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need calendar", List.of(calendar)),
+                Turn.finalAnswer("final summary")));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new SingleToolRegistry("calendar"),
+                request -> ToolInvocationResult.ok("calendar result"),
+                KernelAgentLoopOptions.builder().maxSteps(1).build());
+
+        AgentLoopResult result = loop.execute(requestWithAllowedTools(1, "calendar"));
+
+        assertEquals("final summary", result.finalAnswer());
+        assertEquals(List.of("calendar"), model.requests.get(0).getTools().stream()
+                .map(ToolDescriptor::toolId)
+                .toList());
+        assertEquals(List.of(), model.requests.get(1).getTools().stream()
+                .map(ToolDescriptor::toolId)
+                .toList());
+        assertEquals("none", model.requests.get(1).getToolChoice());
+    }
+
     private static AgentLoopRequest requestWithAllowedTools(int maxSteps, String... toolIds) {
         return AgentLoopRequest.builder()
                 .question("What should I do?")
@@ -132,6 +159,24 @@ class KernelAgentLoopToolExposureTests {
 
         private static Turn toolCalls(String content, List<AgentToolCall> toolCalls) {
             return new Turn(content, toolCalls);
+        }
+    }
+
+    private static final class SingleToolRegistry implements ToolRegistryPort {
+        private final String toolId;
+
+        private SingleToolRegistry(String toolId) {
+            this.toolId = toolId;
+        }
+
+        @Override
+        public List<ToolDescriptor> listTools() {
+            return List.of(new ToolDescriptor(toolId, "Tool", "Test tool", "{}"));
+        }
+
+        @Override
+        public Optional<ToolPort> find(String toolId) {
+            return Optional.empty();
         }
     }
 }
