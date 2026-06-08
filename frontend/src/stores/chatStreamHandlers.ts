@@ -98,9 +98,7 @@ export function applyAgentRunSnapshotToMessage(
   if (thinking) message.thinking = thinking;
   message.serverArtifacts = mergeServerArtifacts(message.serverArtifacts, snapshot.artifacts ?? []);
   message.approvals = mergeById(message.approvals, snapshotApprovals(snapshot.pendingApprovals));
-  if (!message.status || message.status === "streaming") {
-    message.status = snapshot.run?.status === "FAILED" ? "error" : "done";
-  }
+  message.status = snapshotMessageStatus(message.status, snapshot.run?.status);
 }
 
 function mergeArtifacts(current: ArtifactBlock[] | undefined, incoming: ArtifactBlock[]) {
@@ -187,6 +185,13 @@ function maxSeq(current: number | undefined, incoming: number | undefined): numb
   if (typeof incoming !== "number") return current;
   if (typeof current !== "number") return incoming;
   return Math.max(current, incoming);
+}
+
+function snapshotMessageStatus(current: Message["status"], runStatus?: string): Message["status"] {
+  if (runStatus === "FAILED") return "error";
+  if (runStatus === "CANCELLED" || runStatus === "CANCELED") return "cancelled";
+  if (runStatus === "COMPLETED" || runStatus === "DONE" || runStatus === "SUCCEEDED") return "done";
+  return current ?? "done";
 }
 
 function stripAppend<T extends ArtifactBlock>(artifact: T): ArtifactBlock {

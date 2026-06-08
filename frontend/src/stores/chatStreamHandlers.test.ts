@@ -151,4 +151,27 @@ describe("chatStreamHandlers", () => {
       scanStatus: "CLEAN"
     }]);
   });
+
+  it("keeps a streaming message active when hydrating a running snapshot", () => {
+    const message = assistantMessage({
+      status: "streaming",
+      lastEventSeq: 1
+    });
+    const snapshot: AgentRunSnapshot = {
+      run: {
+        runId: "run-1",
+        status: "RUNNING"
+      },
+      lastEventSeq: 2,
+      messageSnapshot: {
+        content: "partial"
+      }
+    };
+
+    applyAgentRunSnapshotToMessage(message, snapshot);
+
+    expect(message.content).toBe("partial");
+    expect(message.status).toBe("streaming");
+    expect(message.agentRunStatus).toBe("RUNNING");
+  });
 });
