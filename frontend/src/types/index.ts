@@ -216,6 +216,7 @@ export interface AgentRunSnapshot {
   sources?: AgentRunSnapshotSource[];
   artifacts?: AgentArtifact[];
   pendingApprovals?: unknown[];
+  costSummary?: AgentRunCostSummary;
   lastEventSeq?: number;
   canResume?: boolean;
   canRetry?: boolean;

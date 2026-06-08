@@ -82,6 +82,7 @@ export function applyAgentRunSnapshotToMessage(
   message.currentStepId = snapshot.currentStepId ?? message.currentStepId;
   message.canResume = snapshot.canResume ?? message.canResume;
   message.canRetry = snapshot.canRetry ?? message.canRetry;
+  message.costSummary = snapshot.costSummary ?? message.costSummary;
 
   if (!staleSnapshot) {
     const content = snapshot.messageSnapshot?.content;
