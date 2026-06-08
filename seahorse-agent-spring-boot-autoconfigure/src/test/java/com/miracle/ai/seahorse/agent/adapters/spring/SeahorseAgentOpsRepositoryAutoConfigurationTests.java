@@ -18,8 +18,8 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermExpansionAdapter;
-import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermExpansionPort;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -37,18 +37,18 @@ class SeahorseAgentOpsRepositoryAutoConfigurationTests {
             .withBean(DataSource.class, () -> mock(DataSource.class));
 
     @Test
-    void shouldExposeJdbcQueryTermExpansionPortWhenRepositoryIsJdbc() {
+    void shouldExposeJdbcQueryTermMappingRepositoryWhenRepositoryIsJdbc() {
         contextRunner.run(context -> {
             assertThat(context).hasNotFailed();
-            assertThat(context).hasSingleBean(QueryTermExpansionPort.class);
-            assertThat(context.getBean(QueryTermExpansionPort.class))
-                    .isInstanceOf(JdbcQueryTermExpansionAdapter.class);
+            assertThat(context).hasSingleBean(QueryTermMappingRepositoryPort.class);
+            assertThat(context.getBean(QueryTermMappingRepositoryPort.class))
+                    .isInstanceOf(JdbcQueryTermMappingRepositoryAdapter.class);
         });
     }
 
     @Test
-    void shouldAllowDisablingQueryTermExpansion() {
-        contextRunner.withPropertyValues("seahorse-agent.query-term-expansion.enabled=false")
-                .run(context -> assertThat(context).doesNotHaveBean(QueryTermExpansionPort.class));
+    void shouldSkipJdbcQueryTermMappingRepositoryWhenRepositoryIsNotJdbc() {
+        contextRunner.withPropertyValues("seahorse-agent.adapters.repository.type=none")
+                .run(context -> assertThat(context).doesNotHaveBean(QueryTermMappingRepositoryPort.class));
     }
 }
