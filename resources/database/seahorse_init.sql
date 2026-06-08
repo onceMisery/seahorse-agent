@@ -2836,12 +2836,14 @@ VALUES (
 内容质量要求：
 1. 必须基于读取到的文件证据总结，不要编造仓库不存在的模块、架构或能力。
 2. 输出必须是中文 Markdown，包含：项目概览、架构设计、架构图、流程图、核心逻辑、重点特性、关键文件证据、生成图片引用、生成稿件和版式产物摘要。
-3. 架构图和流程图优先用 Mermaid 代码块表达；图片生成结果必须以 Markdown 图片或可点击链接引用。
-4. 关键文件证据需要列出文件路径和对应用途，说明结论来自哪些 README、docs 或源码文件。
-5. 最终回答必须是可直接渲染的 Markdown；标题、段落、表格、列表、分隔线和代码块前后必须保留换行，禁止把多个 Markdown 块压缩到同一行。
-6. 每个 Mermaid 图必须独立成块：第一行只能是 ```mermaid，第二行才开始 graph、flowchart 或 sequenceDiagram，最后单独一行 ```；禁止输出 ```mermaidgraph、```mermaidflowchart、```mermaidsequenceDiagram。
-7. 同一个 Mermaid 图内节点 ID 必须唯一，禁止重复使用同一个 ID 表示不同节点；不要使用不稳定或 beta Mermaid 语法。
-8. 输出前必须自检：硬性工具调用是否满足清单；所有关键结论是否能在 README、docs、源码或 web_fetch 材料中找到；是否包含图片引用和关键文件证据表。
+3. 最终 Markdown 必须使用固定大纲并逐节输出，至少包含这些二级标题，且不要合并或改名：## 一、项目概览、## 二、架构设计、## 三、架构图、## 四、流程图、## 五、核心逻辑、## 六、重点特性、## 七、关键文件证据表、## 八、生成图片引用、## 九、生成稿件和版式产物摘要、## 十、总结。
+4. “流程图”必须是独立章节，不能合并到“核心逻辑”；该章节至少包含一个 Mermaid sequenceDiagram 或 flowchart，描述用户请求到仓库读取、工具生成、最终 Markdown 输出的流程，或描述该项目的核心执行流程。
+5. 架构图和流程图优先用 Mermaid 代码块表达；图片生成结果必须以 Markdown 图片或可点击链接引用。
+6. 关键文件证据需要列出文件路径和对应用途，说明结论来自哪些 README、docs 或源码文件。
+7. 最终回答必须是可直接渲染的 Markdown；标题、段落、表格、列表、分隔线和代码块前后必须保留换行，禁止把多个 Markdown 块压缩到同一行。
+8. 每个 Mermaid 图必须独立成块：第一行只能是 ```mermaid，第二行才开始 graph、flowchart 或 sequenceDiagram，最后单独一行 ```；禁止输出 ```mermaidgraph、```mermaidflowchart、```mermaidsequenceDiagram。
+9. 同一个 Mermaid 图内节点 ID 必须唯一，禁止重复使用同一个 ID 表示不同节点；不要使用不稳定或 beta Mermaid 语法。
+10. 输出前必须自检：硬性工具调用是否满足清单；所有关键结论是否能在 README、docs、源码或 web_fetch 材料中找到；是否包含图片引用和关键文件证据表。
     $instructions$,
     $toolset${"tools":["github_repository_reader","web_fetch","chart_visualization","image_generation","newsletter_generation","ppt_generation","frontend_design"]}$toolset$,
     $model${"temperature":0.3,"maxTokens":4096,"thinking":true}$model$,

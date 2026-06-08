@@ -30,14 +30,19 @@ class GithubVisualAgentSqlAlignmentTests {
     private static final Path INIT_SQL = DATABASE_DIR.resolve("seahorse_init.sql");
     private static final Path EXECUTION_PLAN_MIGRATION =
             DATABASE_DIR.resolve("migrations").resolve("V23__github_visual_agent_execution_plan.sql");
+    private static final Path FINAL_OUTLINE_MIGRATION =
+            DATABASE_DIR.resolve("migrations").resolve("V24__github_visual_agent_final_outline.sql");
 
     @Test
     void githubVisualAgentShouldHaveExecutionPlanContractInInitSqlAndLatestMigration() throws Exception {
         String initSql = Files.readString(INIT_SQL);
         String migrationSql = Files.readString(EXECUTION_PLAN_MIGRATION);
+        String finalOutlineSql = Files.readString(FINAL_OUTLINE_MIGRATION);
 
         assertGithubVisualExecutionPlan(initSql);
         assertGithubVisualExecutionPlan(migrationSql);
+        assertGithubVisualFinalOutline(initSql);
+        assertGithubVisualFinalOutline(finalOutlineSql);
     }
 
     private static void assertGithubVisualExecutionPlan(String sql) {
@@ -48,6 +53,13 @@ class GithubVisualAgentSqlAlignmentTests {
                 + " -> newsletter_generation -> ppt_generation -> frontend_design");
         assertContains(sql, "每个硬性工具至少成功调用一次后，才能输出最终 Markdown");
         assertContains(sql, "'github_repository_reader', 2, '{}'");
+    }
+
+    private static void assertGithubVisualFinalOutline(String sql) {
+        assertContains(sql, "最终 Markdown 必须使用固定大纲并逐节输出");
+        assertContains(sql, "## 四、流程图");
+        assertContains(sql, "“流程图”必须是独立章节，不能合并到“核心逻辑”");
+        assertContains(sql, "至少包含一个 Mermaid sequenceDiagram 或 flowchart");
     }
 
     private static void assertContains(String sql, String expected) {

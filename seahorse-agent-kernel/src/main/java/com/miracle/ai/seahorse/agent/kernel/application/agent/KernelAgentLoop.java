@@ -1111,30 +1111,255 @@ public class KernelAgentLoop {
         if (content == null || content.isBlank()) {
             return content;
         }
-        String normalized = content
-                .replaceAll("```mermaid\\s*(?i:flowchart)\\b", "```mermaid\nflowchart")
-                .replaceAll("```mermaid\\s*(?i:graph)\\b", "```mermaid\ngraph")
-                .replaceAll("```mermaid\\s*(?i:sequenceDiagram)\\b", "```mermaid\nsequenceDiagram")
-                .replaceAll("```mermaid\\s*(?i:classDiagram)\\b", "```mermaid\nclassDiagram")
-                .replaceAll("```mermaid\\s*(?i:stateDiagram-v2)\\b", "```mermaid\nstateDiagram-v2")
-                .replaceAll("```mermaid\\s*(?i:erDiagram)\\b", "```mermaid\nerDiagram")
-                .replaceAll("```mermaid\\s*(?i:gantt)\\b", "```mermaid\ngantt")
-                .replaceAll("```mermaid\\s*(?i:journey)\\b", "```mermaid\njourney")
-                .replaceAll("```mermaid\\s*(?i:pie)\\b", "```mermaid\npie")
-                .replaceAll("```mermaid\\s*(?i:mindmap)\\b", "```mermaid\nmindmap")
-                .replaceAll("```mermaid\\s*(?i:timeline)\\b", "```mermaid\ntimeline");
-        normalized = normalized
-                .replace("\r\n", "\n")
-                .replace('\r', '\n')
-                .replaceAll("(?<!\\n)---(?=##)", "\n\n---\n\n")
-                .replaceAll("(?m)^(#{1,6}[^\\n|#]+)\\|", "$1\n\n|")
-                .replaceAll("(\\|[^\\n|]+\\|)(?=\\|)", "$1\n")
-                .replaceAll("(?<!\\n)(- \\*\\*)", "\n$1")
-                .replaceAll("(?<!\\n)```(?=---)", "\n```\n")
-                .replaceAll("(?<!\\n)```(?=##)", "\n```\n\n")
-                .replaceAll("\\n{3,}", "\n\n")
-                .trim();
+        String normalized = normalizeMermaidFenceOpenings(content.replace("\r\n", "\n").replace('\r', '\n'));
+        StringBuilder builder = new StringBuilder(normalized.length() + 64);
+        int offset = 0;
+        int openingFence = normalized.indexOf("```", offset);
+        while (openingFence >= 0) {
+            appendNormalizedMarkdownText(builder, normalized.substring(offset, openingFence));
+
+            int closingFence = findClosingFence(normalized, openingFence + 3);
+            if (closingFence < 0) {
+                appendNormalizedCodeBlock(builder, normalized.substring(openingFence));
+                offset = normalized.length();
+                break;
+            }
+
+            appendNormalizedCodeBlock(builder, normalized.substring(openingFence, closingFence + 3));
+            offset = closingFence + 3;
+            openingFence = normalized.indexOf("```", offset);
+        }
+        appendNormalizedMarkdownText(builder, normalized.substring(offset));
+        return builder.toString().trim();
+    }
+
+    private String normalizeMermaidFenceOpenings(String content) {
+        String normalized = content;
+        normalized = normalized.replaceAll("```mermaid\\s*(?i:flowchart)\\b", "```mermaid\nflowchart");
+        normalized = normalized.replaceAll("```mermaid\\s*(?i:graph)\\b", "```mermaid\ngraph");
+        normalized = normalized.replaceAll("```mermaid\\s*(?i:sequenceDiagram)\\b", "```mermaid\nsequenceDiagram");
+        normalized = normalized.replaceAll("```mermaid\\s*(?i:classDiagram)\\b", "```mermaid\nclassDiagram");
+        normalized = normalized.replaceAll("```mermaid\\s*(?i:stateDiagram-v2)\\b", "```mermaid\nstateDiagram-v2");
+        normalized = normalized.replaceAll("```mermaid\\s*(?i:erDiagram)\\b", "```mermaid\nerDiagram");
+        normalized = normalized.replaceAll("```mermaid\\s*(?i:gantt)\\b", "```mermaid\ngantt");
+        normalized = normalized.replaceAll("```mermaid\\s*(?i:journey)\\b", "```mermaid\njourney");
+        normalized = normalized.replaceAll("```mermaid\\s*(?i:pie)\\b", "```mermaid\npie");
+        normalized = normalized.replaceAll("```mermaid\\s*(?i:mindmap)\\b", "```mermaid\nmindmap");
+        normalized = normalized.replaceAll("```mermaid\\s*(?i:timeline)\\b", "```mermaid\ntimeline");
         return normalized;
+    }
+
+    private void appendNormalizedMarkdownText(StringBuilder builder, String content) {
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        String normalized = normalizeMarkdownTextSegment(content).trim();
+        if (normalized.isEmpty()) {
+            return;
+        }
+        ensureBlankLineBefore(builder);
+        builder.append(normalized);
+    }
+
+    private String normalizeMarkdownTextSegment(String content) {
+        String normalized = content;
+        normalized = normalized.replaceAll("([^\\n])---(?=#{1,6}\\s*\\S)", "$1\n\n---\n\n");
+        normalized = normalized.replaceAll("^---(?=#{1,6}\\s*\\S)", "---\n\n");
+        normalized = normalized.replaceAll("([^\\n])---(?=\\*)", "$1\n\n---\n\n");
+        normalized = normalized.replaceAll("([^#\\n])(?=#{1,6}\\S)", "$1\n\n");
+        normalized = normalized.replaceAll("(?m)^(#{1,6})(\\S)", "$1 $2");
+        normalized = separateGeneratedReportHeadings(normalized);
+        normalized = normalized.replaceAll("(?m)^(#{1,6}\\s+[^\\n|#]+)\\|", "$1\n\n|");
+        normalized = normalized.replaceAll("(?m)^(#{1,6}\\s+[^\\n`#]+)```", "$1\n\n```");
+        normalized = normalized.replaceAll("(?<!\\n)(\\d+\\.\\s+\\*\\*)", "\n$1");
+        normalized = separateGeneratedReportListItems(normalized);
+        normalized = splitCompressedListItemsInLines(normalized);
+        normalized = normalized.replaceAll("(\\|[^\\n|]+\\|)(?=\\|)", "$1\n");
+        normalized = normalized.replaceAll("(?<!\\n)(- \\*\\*)", "\n$1");
+        normalized = normalized.replaceAll("(\\]\\([^\\n)]+\\))(?=\\*)", "$1\n\n");
+        normalized = normalized.replaceAll("([^\\n])```", "$1\n```");
+        normalized = normalized.replaceAll("```(?=---)", "```\n");
+        normalized = normalized.replaceAll("```(?=#{1,6}\\s*\\S)", "```\n\n");
+        normalized = normalized.replaceAll("(?m)([^\\n])\\n(#{1,6}\\s+)", "$1\n\n$2");
+        normalized = normalized.replaceAll("\\n{3,}", "\n\n");
+        return normalized;
+    }
+
+    private void appendNormalizedCodeBlock(StringBuilder builder, String content) {
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        ensureBlankLineBefore(builder);
+        builder.append(normalizeCodeBlockSegment(content));
+    }
+
+    private String normalizeCodeBlockSegment(String content) {
+        int closingFence = content.lastIndexOf("```");
+        if (closingFence > 0 && content.charAt(closingFence - 1) != '\n') {
+            return content.substring(0, closingFence) + "\n" + content.substring(closingFence);
+        }
+        return content;
+    }
+
+    private int findClosingFence(String content, int offset) {
+        int fence = content.indexOf("```", offset);
+        while (fence >= 0 && fence + 3 < content.length() && content.charAt(fence + 3) == '`') {
+            fence = content.indexOf("```", fence + 4);
+        }
+        return fence;
+    }
+
+    private void ensureBlankLineBefore(StringBuilder builder) {
+        if (builder.isEmpty()) {
+            return;
+        }
+        int length = builder.length();
+        if (builder.charAt(length - 1) != '\n') {
+            builder.append("\n\n");
+            return;
+        }
+        if (length < 2 || builder.charAt(length - 2) != '\n') {
+            builder.append('\n');
+        }
+    }
+
+    private String separateGeneratedReportHeadings(String content) {
+        String normalized = content;
+        for (String marker : generatedReportHeadingMarkers()) {
+            normalized = ensureBreakAfterMarker(normalized, marker);
+        }
+        return normalized;
+    }
+
+    private String separateGeneratedReportListItems(String content) {
+        String normalized = content;
+        for (String marker : generatedReportListMarkers()) {
+            normalized = normalized.replace(marker + "-", marker + "\n\n- ");
+        }
+        normalized = normalized.replaceAll("([：:]\\s*)-\\s*(?=[\\p{IsHan}A-Za-z])", "$1\n\n- ");
+        normalized = normalized.replaceAll("(?m)^-(?!\\s)(?=[\\p{IsHan}])", "- ");
+        return normalized;
+    }
+
+    private String splitCompressedListItemsInLines(String content) {
+        String[] lines = content.split("\n", -1);
+        StringBuilder builder = new StringBuilder(content.length() + 64);
+        for (int i = 0; i < lines.length; i++) {
+            if (i > 0) {
+                builder.append('\n');
+            }
+            builder.append(splitCompressedListItemsInLine(lines[i]));
+        }
+        return builder.toString();
+    }
+
+    private String splitCompressedListItemsInLine(String line) {
+        if (!line.startsWith("- ")) {
+            return line;
+        }
+        StringBuilder builder = new StringBuilder(line.length() + 32);
+        builder.append("- ");
+        for (int i = 2; i < line.length(); i++) {
+            char current = line.charAt(i);
+            if (current == '-' && i + 1 < line.length() && isListItemStart(line.charAt(i + 1))) {
+                builder.append('\n').append("- ");
+            } else {
+                builder.append(current);
+            }
+        }
+        return builder.toString();
+    }
+
+    private boolean isListItemStart(char value) {
+        return isCjk(value) || Character.isUpperCase(value) || Character.isDigit(value);
+    }
+
+    private boolean isCjk(char value) {
+        Character.UnicodeScript script = Character.UnicodeScript.of(value);
+        return Character.UnicodeScript.HAN.equals(script);
+    }
+
+    private List<String> generatedReportListMarkers() {
+        return List.of(
+                "### 6.2高性能",
+                "### 1.事件驱动模型",
+                "### 2.数据结构实现",
+                "### 3.持久化机制",
+                "### 1.数据结构支持",
+                "### 2.高可用架构",
+                "### 3.模块扩展",
+                "### 4. AI集成",
+                "### 项目介绍视觉图",
+                "### 长文 Markdown草稿",
+                "### 演示文稿结构",
+                "### 前端设计版式",
+                "### 8.2演示文稿结构（ppt_generation）已生成10页演示文稿结构，包含：",
+                "### 8.3前端设计版式草案（frontend_design）已生成 HTML/CSS版式草案，包含：");
+    }
+
+    private String ensureBreakAfterMarker(String content, String marker) {
+        StringBuilder builder = new StringBuilder(content.length() + 64);
+        int offset = 0;
+        int index = content.indexOf(marker, offset);
+        while (index >= 0) {
+            int afterMarker = index + marker.length();
+            builder.append(content, offset, afterMarker);
+            if (afterMarker < content.length() && content.charAt(afterMarker) != '\n') {
+                builder.append("\n\n");
+            }
+            offset = afterMarker;
+            index = content.indexOf(marker, offset);
+        }
+        builder.append(content, offset, content.length());
+        return builder.toString();
+    }
+
+    private List<String> generatedReportHeadingMarkers() {
+        return List.of(
+                "# Redis project intro",
+                "## 一、项目概览",
+                "## 二、架构设计",
+                "## 三、架构图",
+                "## 四、流程图",
+                "## 五、核心逻辑",
+                "## 六、重点特性",
+                "## 七、关键文件证据表",
+                "## 八、生成图片引用",
+                "## 九、生成稿件摘要",
+                "## 九、生成稿件和版式产物摘要",
+                "## 十、总结",
+                "## 八、生成稿件摘要",
+                "## 九、总结",
+                "### 关键用途",
+                "### 核心定位",
+                "### 关键优势",
+                "### 核心架构组件",
+                "### 架构层次说明",
+                "### 架构要点",
+                "### 命令执行流程",
+                "### 持久化流程",
+                "### 1.事件驱动模型",
+                "### 2.数据结构实现",
+                "### 3.持久化机制",
+                "### 1.数据结构支持",
+                "### 2.高可用架构",
+                "### 3.模块扩展",
+                "### 4. AI集成",
+                "### 项目介绍视觉图",
+                "### 长文 Markdown草稿",
+                "### 演示文稿结构",
+                "### 前端设计版式",
+                "### 5.1单线程事件循环",
+                "### 5.2数据结构实现逻辑",
+                "### 5.3持久化逻辑",
+                "### 6.1丰富的数据结构",
+                "### 6.2高性能",
+                "### 6.3高可用与扩展性",
+                "### 6.4扩展能力",
+                "### 6.5 AI与搜索",
+                "### 新闻稿摘要",
+                "### 演示文稿摘要",
+                "### 前端设计摘要");
     }
 
     private void emitComplete(StreamCallback callback) {
