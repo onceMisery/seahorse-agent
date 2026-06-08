@@ -4,8 +4,6 @@ import { nanoid } from "nanoid";
 import { toast } from "sonner";
 
 import {
-  AGENT_STREAM_EVENTS,
-  type AgentApproval,
   type Message,
   type Role,
   type TaskTemplateId
@@ -30,9 +28,12 @@ import type { ChatState } from "@/stores/chatStoreTypes";
 import { upsertSession } from "@/stores/chatSessionUtils";
 import {
   API_BASE_URL,
-  computeThinkingDuration,
-  normalizeAgentStreamEvent
+  computeThinkingDuration
 } from "@/stores/chatStreamUtils";
+import {
+  applyAgentRunSnapshotToMessage,
+  applyAgentStreamEventToMessage
+} from "@/stores/chatStreamHandlers";
 import { RenderBuffer } from "@/lib/stream/renderBuffer";
 
 const CONTROLLED_WEB_AGENT_CHAT_MODE = "agent";
@@ -250,8 +251,6 @@ export const useChatStore = create<ChatState>()(
       if (token) headers.Authorization = token;
 
       let currentAssistantMessageId = assistantId;
-      const stagedApprovals: AgentApproval[] = [];
-
       const buffer = new RenderBuffer((flushedText) => {
         set((state) => {
           const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
@@ -308,15 +307,12 @@ export const useChatStore = create<ChatState>()(
         onDone: () => { markDone(); },
         onCancel: () => { markDone(); },
         onStreamEvent: (envelope) => {
-          const normalized = normalizeAgentStreamEvent(envelope.eventType, envelope.typedPayload);
-          if (!normalized) return;
-          switch (normalized.type) {
-            case AGENT_STREAM_EVENTS.APPROVAL: {
-              const approval = (envelope.typedPayload as { approval?: AgentApproval })?.approval;
-              if (approval) stagedApprovals.push(approval);
-              break;
-            }
-          }
+          set((state) => {
+            const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+            if (!msg) return;
+            applyAgentStreamEventToMessage(msg, envelope);
+            currentAssistantMessageId = msg.id;
+          });
         },
         onError: (error) => { markError(error.message || "对话失败"); }
       };
@@ -395,16 +391,7 @@ export const useChatStore = create<ChatState>()(
         const snapshot = await getAgentRunSnapshot(runId);
         set((state) => {
           const msg = state.messages.find((m) => m.id === messageId);
-          if (msg && snapshot.messageSnapshot) {
-            if (snapshot.messageSnapshot.content) {
-              msg.content = snapshot.messageSnapshot.content;
-              msg.rawText = snapshot.messageSnapshot.content;
-            }
-            if (snapshot.messageSnapshot.thinking) {
-              msg.thinking = snapshot.messageSnapshot.thinking;
-            }
-            msg.status = "done";
-          }
+          if (msg) applyAgentRunSnapshotToMessage(msg, snapshot);
         });
       } catch (error) {
         console.error("Failed to refresh run snapshot:", error);

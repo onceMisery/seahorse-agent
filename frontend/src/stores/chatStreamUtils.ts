@@ -63,6 +63,14 @@ function stringValue(record: Record<string, unknown>, keys: string[]): string | 
   return undefined;
 }
 
+function rawStringValue(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return undefined;
+}
+
 function numberValue(record: Record<string, unknown>, keys: string[]): number | undefined {
   for (const key of keys) {
     const value = record[key];
@@ -101,7 +109,7 @@ function normalizeArtifactLanguage(value: string | undefined): ArtifactLanguage 
 }
 
 function fallbackId(prefix: string, index: number, record: Record<string, unknown>) {
-  return stringValue(record, ["id", "sourceId", "approvalId", "artifactId", "memoryId"]) ?? `${prefix}-${index}`;
+  return stringValue(record, ["id", "itemId", "sourceId", "approvalId", "artifactId", "memoryId"]) ?? `${prefix}-${index}`;
 }
 
 function normalizeRunStarted(payload: unknown): AgentTimelineItem[] {
@@ -229,7 +237,7 @@ function normalizeArtifactStarts(payload: unknown): ArtifactBlock[] {
 function normalizeArtifactContent(payload: unknown): ArtifactBlock[] {
   return payloadItems(payload).flatMap((item, index) => {
     if (!isRecord(item)) return [];
-    const delta = stringValue(item, ["delta"]);
+    const delta = rawStringValue(item, ["delta"]);
     const code = delta ?? stringValue(item, ["code", "content", "text"]);
     if (!code) return [];
     return [{
