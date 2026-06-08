@@ -30,6 +30,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.kernel.tenant.TenantContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationResult;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelHealthPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelProviderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
@@ -65,7 +68,8 @@ import java.util.concurrent.ForkJoinPool;
  * SiliconFlow 等兼容 /chat/completions 与 /embeddings 协议的供应商。
  */
 public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingChatModelPort,
-        EmbeddingModelPort, RerankModelPort, ModelProviderPort, TokenCounterPort, ModelHealthPort {
+        EmbeddingModelPort, RerankModelPort, ModelProviderPort, TokenCounterPort, ModelHealthPort,
+        ImageGenerationPort {
 
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final String HEADER_AUTHORIZATION = "Authorization";
@@ -152,6 +156,32 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         payload.put("input", Objects.requireNonNullElse(text, ""));
         JsonNode response = executeJson("/embeddings", payload);
         return embeddingValues(response.at("/data/0/embedding"));
+    }
+
+    @Override
+    public ImageGenerationResult generate(ImageGenerationRequest request) {
+        ImageGenerationRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
+        String model = resolveImageModel(safeRequest.model());
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", model);
+        payload.put("prompt", safeRequest.prompt());
+        payload.put("size", safeRequest.size());
+        putImageResponseFormat(payload, safeRequest.responseFormat());
+        if (safeRequest.style() != null && !safeRequest.style().isBlank()) {
+            payload.put("style", safeRequest.style());
+        }
+        JsonNode response = executeJson("/images/generations", payload);
+        JsonNode first = response.path("data").path(0);
+        String imageUrl = first.path("url").asText("");
+        String b64Json = first.path("b64_json").asText("");
+        return ImageGenerationResult.generated(safeRequest.prompt(), model, imageUrl, b64Json, "image/png");
+    }
+
+    private void putImageResponseFormat(Map<String, Object> payload, String responseFormat) {
+        String normalized = Objects.requireNonNullElse(responseFormat, "").trim();
+        if ("b64_json".equals(normalized)) {
+            payload.put("response_format", normalized);
+        }
     }
 
     @Override
@@ -567,6 +597,14 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
             return model;
         }
         return requireText(properties.defaultRerankModel(), "defaultRerankModel");
+    }
+
+    private String resolveImageModel(String modelId) {
+        String model = Objects.requireNonNullElse(modelId, "").trim();
+        if (!model.isBlank()) {
+            return model;
+        }
+        return requireText(properties.defaultImageModel(), "defaultImageModel");
     }
 
     private void putIfPresent(Map<String, Object> payload, String key, Object value) {

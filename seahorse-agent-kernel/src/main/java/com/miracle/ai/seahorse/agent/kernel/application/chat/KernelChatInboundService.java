@@ -62,6 +62,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -316,7 +317,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .samplingOptions(modelConfig.samplingOptions())
                 .contextPack(contextPack)
                 .memoryContext(memoryContext)
-                .skillRuntimeContext(mergedSkills.isEmpty() ? null : skillRuntimeComposer.compose(mergedSkills))
+                .skillRuntimeContext(agentRuntimeContext(selectedVersion, mergedSkills))
                 .skillRuntimeBlocks(mergedSkills)
                 .runId(runId)
                 .agentId(agentId)
@@ -327,8 +328,77 @@ public class KernelChatInboundService implements ChatInboundPort {
                 .build();
     }
 
+    private String agentRuntimeContext(Optional<AgentVersion> selectedVersion,
+                                       List<SkillRuntimeBlock> mergedSkills) {
+        List<String> parts = new java.util.ArrayList<>();
+        selectedVersion
+                .map(AgentVersion::instructions)
+                .filter(this::hasText)
+                .map(String::trim)
+                .ifPresent(parts::add);
+        if (mergedSkills != null && !mergedSkills.isEmpty()) {
+            parts.add(skillRuntimeComposer.compose(mergedSkills));
+        }
+        return parts.isEmpty() ? null : String.join(System.lineSeparator() + System.lineSeparator(), parts);
+    }
+
     private List<String> allowedToolIds(StreamChatCommand command) {
-        return isControlledWebAgentTemplate(command) ? CONTROLLED_WEB_RESEARCH_TOOL_IDS : List.of();
+        if (isControlledWebAgentTemplate(command)) {
+            return CONTROLLED_WEB_RESEARCH_TOOL_IDS;
+        }
+        String agentId = selectedAgentId(command);
+        String versionId = command.versionId();
+        return selectedVersion(agentId, versionId)
+                .map(version -> toolIdsFromToolSetJson(version.toolSetJson()))
+                .orElseGet(List::of);
+    }
+
+    private List<String> toolIdsFromToolSetJson(String toolSetJson) {
+        if (toolSetJson == null || toolSetJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(toolSetJson);
+            LinkedHashSet<String> toolIds = new LinkedHashSet<>();
+            collectToolIds(root, toolIds);
+            return List.copyOf(toolIds);
+        } catch (JsonProcessingException ex) {
+            LOG.warn("Agent version tool set is not valid JSON, no tools exposed: {}", toolSetJson, ex);
+            return List.of();
+        }
+    }
+
+    private void collectToolIds(JsonNode node, LinkedHashSet<String> toolIds) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+        if (node.isTextual()) {
+            addToolId(node.asText(), toolIds);
+            return;
+        }
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                collectToolIds(item, toolIds);
+            }
+            return;
+        }
+        if (!node.isObject()) {
+            return;
+        }
+        addToolId(text(node, "toolId"), toolIds);
+        addToolId(text(node, "tool_id"), toolIds);
+        addToolId(text(node, "id"), toolIds);
+        addToolId(text(node, "name"), toolIds);
+        collectToolIds(node.get("tools"), toolIds);
+        collectToolIds(node.get("toolIds"), toolIds);
+        collectToolIds(node.get("tool_ids"), toolIds);
+        collectToolIds(node.get("selectedTools"), toolIds);
+    }
+
+    private void addToolId(String toolId, LinkedHashSet<String> toolIds) {
+        if (toolId != null && !toolId.isBlank()) {
+            toolIds.add(toolId.trim());
+        }
     }
 
     private OutputArtifactType expectedOutputArtifactType(StreamChatCommand command) {

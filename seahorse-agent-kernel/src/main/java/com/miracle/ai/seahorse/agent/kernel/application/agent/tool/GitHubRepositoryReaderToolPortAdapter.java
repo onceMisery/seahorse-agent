@@ -86,7 +86,7 @@ public class GitHubRepositoryReaderToolPortAdapter implements DescribedToolPort 
         observation.put("htmlUrl", safeSnapshot.htmlUrl());
         observation.put("description", safeSnapshot.description());
         observation.put("truncated", safeSnapshot.truncated());
-        observation.put("fetchedAt", safeSnapshot.fetchedAt());
+        observation.put("fetchedAt", safeSnapshot.fetchedAt().toString());
         observation.put("files", safeSnapshot.files().stream().map(this::file).toList());
         return observation;
     }

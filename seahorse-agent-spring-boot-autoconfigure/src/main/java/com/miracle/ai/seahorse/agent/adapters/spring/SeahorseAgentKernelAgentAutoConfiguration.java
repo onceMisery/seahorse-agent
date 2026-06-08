@@ -40,6 +40,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.LocalAgentAsToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJsonSupport;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
@@ -81,9 +83,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.mcp.McpToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.ContextWeaverPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryEnginePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionWorkflowPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.source.GitHubRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -139,6 +143,12 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             "seahorse-agent.chat.agent.tools.web-research.fetch-max-bytes";
     private static final String PROP_WEB_FETCH_USER_AGENT =
             "seahorse-agent.chat.agent.tools.web-research.user-agent";
+    private static final String PROP_GITHUB_FETCH_TIMEOUT =
+            "seahorse-agent.chat.agent.tools.github.fetch-timeout";
+    private static final String PROP_GITHUB_USER_AGENT =
+            "seahorse-agent.chat.agent.tools.github.user-agent";
+    private static final String PROP_IMAGE_MODEL =
+            "seahorse-agent.adapters.ai.image-model";
     private static final String PROP_PRODUCT_MODE = "seahorse-agent.product-mode";
     private static final String PROP_ADVANCED_AGENT_HANDOFF =
             "seahorse-agent.advanced.agent-handoff-enabled";
@@ -455,6 +465,48 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean(GitHubRepositoryPort.class)
+    public JdkHttpGitHubRepositoryPortAdapter seahorseGitHubRepositoryPort(
+            ObjectProvider<HttpClient> httpClient,
+            ObjectProvider<ObjectMapper> objectMapper,
+            ObjectProvider<Clock> clockProvider,
+            Environment environment) {
+        return new JdkHttpGitHubRepositoryPortAdapter(
+                httpClient.getIfAvailable(),
+                objectMapper.getIfAvailable(ObjectMapper::new),
+                parseDuration(environment.getProperty(PROP_GITHUB_FETCH_TIMEOUT), Duration.ofSeconds(15)),
+                environment.getProperty(PROP_GITHUB_USER_AGENT),
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(GitHubRepositoryPort.class)
+    @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public GitHubRepositoryReaderToolPortAdapter seahorseGitHubRepositoryReaderToolPortAdapter(
+            GitHubRepositoryPort gitHubRepositoryPort,
+            AgentToolJsonSupport jsonSupport) {
+        return new GitHubRepositoryReaderToolPortAdapter(gitHubRepositoryPort, jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(ImageGenerationPort.class)
+    @ConditionalOnMissingBean
+    public ImageGenerationToolPortAdapter seahorseImageGenerationToolPortAdapter(
+            ImageGenerationPort imageGenerationPort,
+            AgentToolJsonSupport jsonSupport,
+            Environment environment) {
+        return new ImageGenerationToolPortAdapter(
+                imageGenerationPort,
+                environment.getProperty(PROP_IMAGE_MODEL, ""),
+                jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(WebSearchPort.class)
     @ConditionalOnProperty(name = PROP_WEB_RESEARCH_TOOLS_ENABLED, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
@@ -478,8 +530,14 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @ConditionalOnMissingBean
     public BuiltInAgentToolRegistrar seahorseBuiltInAgentToolRegistrar(
             ToolRegistryPort toolRegistry,
-            ObjectProvider<DescribedToolPort> toolPorts) {
-        return new BuiltInAgentToolRegistrar(toolRegistry, toolPorts);
+            ObjectProvider<DescribedToolPort> toolPorts,
+            ObjectProvider<ToolCatalogRepositoryPort> toolCatalogRepository,
+            ObjectProvider<Clock> clockProvider) {
+        return new BuiltInAgentToolRegistrar(
+                toolRegistry,
+                toolPorts,
+                toolCatalogRepository.getIfAvailable(ToolCatalogRepositoryPort::empty),
+                clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean

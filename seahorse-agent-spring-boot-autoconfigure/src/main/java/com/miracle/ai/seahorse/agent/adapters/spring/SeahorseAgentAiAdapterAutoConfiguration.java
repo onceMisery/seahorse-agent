@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelHealthPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ModelProviderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.RerankModelPort;
@@ -145,9 +146,10 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
             @Value("${seahorse-agent.adapters.ai.api-key:}") String apiKey,
             @Value("${seahorse-agent.adapters.ai.chat-model:}") String chatModel,
             @Value("${seahorse-agent.adapters.ai.embedding-model:}") String embeddingModel,
-            @Value("${seahorse-agent.adapters.ai.rerank-model:}") String rerankModel) {
+            @Value("${seahorse-agent.adapters.ai.rerank-model:}") String rerankModel,
+            @Value("${seahorse-agent.adapters.ai.image-model:}") String imageModel) {
         OpenAiCompatibleModelProperties properties = new OpenAiCompatibleModelProperties(
-                baseUrl, apiKey, chatModel, embeddingModel, rerankModel, List.of());
+                baseUrl, apiKey, chatModel, embeddingModel, rerankModel, imageModel, List.of());
         return new OpenAiCompatibleModelAdapter(httpClient, objectMapper, properties, streamingExecutor);
     }
 
@@ -206,6 +208,13 @@ public class SeahorseAgentAiAdapterAutoConfiguration {
     @ConditionalOnBean(OpenAiCompatibleModelAdapter.class)
     @ConditionalOnMissingBean(ModelHealthPort.class)
     public ModelHealthPort seahorseNativeModelHealthPort(OpenAiCompatibleModelAdapter adapter) {
+        return adapter;
+    }
+
+    @Bean
+    @ConditionalOnBean(OpenAiCompatibleModelAdapter.class)
+    @ConditionalOnMissingBean(ImageGenerationPort.class)
+    public ImageGenerationPort seahorseNativeImageGenerationPort(OpenAiCompatibleModelAdapter adapter) {
         return adapter;
     }
 

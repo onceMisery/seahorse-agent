@@ -17,7 +17,16 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolCatalogEntry;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
@@ -27,6 +36,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -39,11 +50,23 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
 
     private final ToolRegistryPort toolRegistry;
     private final ObjectProvider<DescribedToolPort> toolPorts;
+    private final ToolCatalogRepositoryPort toolCatalogRepository;
+    private final Clock clock;
 
     public BuiltInAgentToolRegistrar(ToolRegistryPort toolRegistry,
                                      ObjectProvider<DescribedToolPort> toolPorts) {
+        this(toolRegistry, toolPorts, ToolCatalogRepositoryPort.empty(), Clock.systemUTC());
+    }
+
+    public BuiltInAgentToolRegistrar(ToolRegistryPort toolRegistry,
+                                     ObjectProvider<DescribedToolPort> toolPorts,
+                                     ToolCatalogRepositoryPort toolCatalogRepository,
+                                     Clock clock) {
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry must not be null");
         this.toolPorts = Objects.requireNonNull(toolPorts, "toolPorts must not be null");
+        this.toolCatalogRepository = Objects.requireNonNullElseGet(toolCatalogRepository,
+                ToolCatalogRepositoryPort::empty);
+        this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
     @Override
@@ -57,9 +80,52 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
         }
         try {
             toolRegistry.register(descriptor, toolPort);
+            toolCatalogRepository.save(toCatalogEntry(descriptor));
         } catch (UnsupportedOperationException ex) {
             LOG.warn("ToolRegistryPort does not support built-in tool registration: toolId={}",
                     descriptor.toolId(), ex);
         }
+    }
+
+    private ToolCatalogEntry toCatalogEntry(ToolDescriptor descriptor) {
+        Instant now = clock.instant();
+        return new ToolCatalogEntry(
+                descriptor.toolId(),
+                ToolProvider.BUILTIN,
+                descriptor.name(),
+                descriptor.description(),
+                descriptor.jsonSchema(),
+                null,
+                riskLevel(descriptor.toolId()),
+                actionType(descriptor.toolId()),
+                resourceType(descriptor.toolId()),
+                "kernel-agent",
+                true,
+                false,
+                now,
+                now);
+    }
+
+    private ToolRiskLevel riskLevel(String toolId) {
+        if (ImageGenerationToolPortAdapter.TOOL_ID.equals(toolId)) {
+            return ToolRiskLevel.MEDIUM;
+        }
+        return ToolRiskLevel.LOW;
+    }
+
+    private ToolActionType actionType(String toolId) {
+        if (ImageGenerationToolPortAdapter.TOOL_ID.equals(toolId)) {
+            return ToolActionType.EXECUTE;
+        }
+        return ToolActionType.READ;
+    }
+
+    private String resourceType(String toolId) {
+        return switch (toolId) {
+            case WebFetchToolPortAdapter.TOOL_ID, WebSearchToolPortAdapter.TOOL_ID -> "WEB";
+            case GitHubRepositoryReaderToolPortAdapter.TOOL_ID -> "GITHUB";
+            case ImageGenerationToolPortAdapter.TOOL_ID -> "MODEL";
+            default -> "BUILTIN";
+        };
     }
 }

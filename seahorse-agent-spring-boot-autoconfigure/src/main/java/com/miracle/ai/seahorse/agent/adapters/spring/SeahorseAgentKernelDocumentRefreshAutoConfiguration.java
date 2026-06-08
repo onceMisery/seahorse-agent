@@ -106,21 +106,11 @@ public class SeahorseAgentKernelDocumentRefreshAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({KnowledgeDocumentInboundPort.class, PipelineDefinitionRepositoryPort.class})
     @ConditionalOnMissingBean
     public KernelKnowledgeDocumentChunkHandler seahorseKernelKnowledgeDocumentChunkHandler(
-            ObjectProvider<KnowledgeDocumentInboundPort> documentInboundPortProvider,
-            ObjectProvider<PipelineDefinitionRepositoryPort> pipelineDefinitionRepositoryProvider) {
-        log.info("Creating KernelKnowledgeDocumentChunkHandler Bean with lazy dependencies");
-        KnowledgeDocumentInboundPort documentInboundPort = documentInboundPortProvider.getIfAvailable();
-        PipelineDefinitionRepositoryPort pipelineDefinitionRepositoryPort = pipelineDefinitionRepositoryProvider.getIfAvailable();
-
-        if (documentInboundPort == null || pipelineDefinitionRepositoryPort == null) {
-            log.warn("KernelKnowledgeDocumentChunkHandler dependencies not available: documentInboundPort={}, pipelineDefinitionRepositoryPort={}",
-                    documentInboundPort != null, pipelineDefinitionRepositoryPort != null);
-            throw new IllegalStateException("Required dependencies for KernelKnowledgeDocumentChunkHandler are not available");
-        }
-
-        log.info("KernelKnowledgeDocumentChunkHandler created successfully");
+            KnowledgeDocumentInboundPort documentInboundPort,
+            PipelineDefinitionRepositoryPort pipelineDefinitionRepositoryPort) {
         return new KernelKnowledgeDocumentChunkHandler(documentInboundPort, pipelineDefinitionRepositoryPort);
     }
 

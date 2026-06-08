@@ -36,6 +36,7 @@ public record OpenAiCompatibleModelProperties(
         String defaultChatModel,
         String defaultEmbeddingModel,
         String defaultRerankModel,
+        String defaultImageModel,
         List<String> supportedModels
 ) {
 
@@ -47,6 +48,7 @@ public record OpenAiCompatibleModelProperties(
         defaultChatModel = Objects.requireNonNullElse(defaultChatModel, "");
         defaultEmbeddingModel = Objects.requireNonNullElse(defaultEmbeddingModel, "");
         defaultRerankModel = Objects.requireNonNullElse(defaultRerankModel, "");
+        defaultImageModel = Objects.requireNonNullElse(defaultImageModel, "");
         supportedModels = List.copyOf(Objects.requireNonNullElse(supportedModels, List.of()));
     }
 
@@ -54,15 +56,27 @@ public record OpenAiCompatibleModelProperties(
                                            String apiKey,
                                            String defaultChatModel,
                                            String defaultEmbeddingModel,
+                                           String defaultRerankModel,
                                            List<String> supportedModels) {
-        this(baseUrl, apiKey, defaultChatModel, defaultEmbeddingModel, "", supportedModels);
+        this(baseUrl, apiKey, defaultChatModel, defaultEmbeddingModel, defaultRerankModel, "", supportedModels);
+    }
+
+    public OpenAiCompatibleModelProperties(String baseUrl,
+                                           String apiKey,
+                                           String defaultChatModel,
+                                           String defaultEmbeddingModel,
+                                           List<String> supportedModels) {
+        this(baseUrl, apiKey, defaultChatModel, defaultEmbeddingModel, "", "", supportedModels);
     }
 
     private static String normalizeBaseUrl(String value) {
         String trimmed = value.trim();
         if (trimmed.endsWith("/")) {
-            return trimmed.substring(0, trimmed.length() - 1);
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
         }
-        return trimmed;
+        if (trimmed.endsWith("/v1")) {
+            return trimmed;
+        }
+        return trimmed + "/v1";
     }
 }

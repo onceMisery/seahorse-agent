@@ -22,6 +22,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationRequest;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ImageGenerationResult;
 import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
 import okhttp3.Response;
@@ -86,6 +88,86 @@ class OpenAiCompatibleModelAdapterTests {
                 .build(), new NoopStreamCallback());
 
         assertThat(capturedBody.get()).doesNotContain("\"thinking\"");
+    }
+
+    @Test
+    void shouldGenerateImageThroughOpenAiCompatibleImageEndpoint() throws Exception {
+        AtomicReference<String> capturedPath = new AtomicReference<>();
+        AtomicReference<String> capturedBody = new AtomicReference<>();
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .addInterceptor(chain -> {
+                    capturedPath.set(chain.request().url().encodedPath());
+                    Buffer buffer = new Buffer();
+                    chain.request().body().writeTo(buffer);
+                    capturedBody.set(buffer.readUtf8());
+                    return new Response.Builder()
+                            .request(chain.request())
+                            .protocol(Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("OK")
+                            .body(ResponseBody.create("""
+                                    {"data":[{"url":"https://cdn.example.com/redis.png"}]}
+                                    """, null))
+                            .build();
+                })
+                .build();
+        OpenAiCompatibleModelAdapter adapter = new OpenAiCompatibleModelAdapter(
+                httpClient,
+                new ObjectMapper(),
+                new OpenAiCompatibleModelProperties("https://apihub.agnes-ai.com", "",
+                        "gpt-test", "", "", "agnes-image-2.0-flash", List.of()),
+                Runnable::run);
+
+        ImageGenerationResult result = adapter.generate(new ImageGenerationRequest(
+                "Draw Redis architecture", null, "1024x1024", "technical diagram", "url"));
+
+        assertThat(capturedPath.get()).isEqualTo("/v1/images/generations");
+        assertThat(capturedBody.get()).contains("\"model\":\"agnes-image-2.0-flash\"");
+        assertThat(capturedBody.get()).contains("\"prompt\":\"Draw Redis architecture\"");
+        assertThat(capturedBody.get()).contains("\"size\":\"1024x1024\"");
+        assertThat(capturedBody.get()).doesNotContain("response_format");
+        assertThat(result.imageUrl()).isEqualTo("https://cdn.example.com/redis.png");
+        assertThat(result.model()).isEqualTo("agnes-image-2.0-flash");
+    }
+
+    @Test
+    void shouldOnlySendImageResponseFormatWhenBase64IsExplicitlyRequested() {
+        AtomicReference<String> capturedBody = new AtomicReference<>();
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .addInterceptor(chain -> {
+                    Buffer buffer = new Buffer();
+                    chain.request().body().writeTo(buffer);
+                    capturedBody.set(buffer.readUtf8());
+                    return new Response.Builder()
+                            .request(chain.request())
+                            .protocol(Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("OK")
+                            .body(ResponseBody.create("""
+                                    {"data":[{"b64_json":"abc"}]}
+                                    """, null))
+                            .build();
+                })
+                .build();
+        OpenAiCompatibleModelAdapter adapter = new OpenAiCompatibleModelAdapter(
+                httpClient,
+                new ObjectMapper(),
+                new OpenAiCompatibleModelProperties("https://apihub.agnes-ai.com", "",
+                        "gpt-test", "", "", "agnes-image-2.0-flash", List.of()),
+                Runnable::run);
+
+        adapter.generate(new ImageGenerationRequest(
+                "Draw Redis architecture", null, "1024x1024", null, "b64_json"));
+
+        assertThat(capturedBody.get()).contains("\"response_format\":\"b64_json\"");
+    }
+
+    @Test
+    void shouldNormalizeBareProviderBaseUrlToOpenAiV1Path() {
+        OpenAiCompatibleModelProperties properties = new OpenAiCompatibleModelProperties(
+                "https://apihub.agnes-ai.com", "", "gpt-test", "", "", "image-test", List.of());
+
+        assertThat(properties.baseUrl()).isEqualTo("https://apihub.agnes-ai.com/v1");
     }
 
     private static final class RecordingExecutor implements Executor {
