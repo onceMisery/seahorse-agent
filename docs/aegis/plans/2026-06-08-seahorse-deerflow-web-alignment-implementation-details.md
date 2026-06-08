@@ -23,12 +23,13 @@ Snippets in this document are examples. Verify them against current repository t
 
 ## Review Accuracy Notes
 
-`2026-06-08-implementation-details-review.md` is technically useful, but its text is mojibake. The following points were rechecked against the current repository before changing this companion document:
+`2026-06-08-implementation-details-review.md` is technically useful. Read it as UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. The following points were rechecked against the current repository before changing this companion document:
 
 - Accurate: `StreamEventEnvelope` has `eventId`, `eventSeq`, `eventType`, `runId`, optional `stepId`, `timestamp`, and `typedPayload`; it does not carry `messageId`.
 - Accurate: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context, but `LocalToolGatewayPort` currently calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read that context unless the execution contract is extended.
 - Accurate: there is no existing `SkillSelectionContext`; current selected-skill validation lives in `ChatSelectedSkillResolver` and produces `SkillRuntimeBlock` values.
-- Partly stale: the old suggestion to add `/api/agent-runs/{runId}/events` first conflicts with the main plan. Reuse `resumeRunId` and `lastEventSeq` first; add a separate event list endpoint only after that path is proven insufficient.
+- Accurate with a narrower scope: `useStreamResponse.ts`, `SeahorseChatController`, and `ResearchSseBridge` already support `resumeRunId` and `lastEventSeq`; reuse that path before adding any separate event-list endpoint.
+- Needs correction in implementation work: the named chat/workbench files are currently clean for the known mojibake code points, while `frontend/src/hooks/useStreamResponse.ts` still has confirmed mojibake in watchdog comments and the stream-timeout error message.
 
 ---
 
@@ -90,6 +91,17 @@ npm run build
 ---
 
 ## Task 2 Encoding Guard
+
+Current baseline:
+
+- `frontend/src/components/chat/workbench/WorkspaceInspector.tsx`, `frontend/src/components/chat/workbench/ArtifactInspectorTab.tsx`, `frontend/src/stores/chatStore.ts`, and `frontend/src/services/agentArtifactService.ts` are clean for the known mojibake code points from the review scan.
+- `frontend/src/hooks/useStreamResponse.ts` still contains mojibake in watchdog comments and the user-facing stream-timeout message on the SSE retry path.
+
+Execution constraints:
+
+- Treat this task as a guard plus targeted repair, not a broad rewrite.
+- Do not batch-rewrite unrelated Chinese copy.
+- If the scan finds a real hit, record the exact file and line in the commit/review note.
 
 Guard these files when they are touched:
 
@@ -162,6 +174,8 @@ Context boundary:
 
 - Do not use undefined `ExecutionContext`, `ExecutionMetadata`, `AgentRunContext`, or `SkillSelectionContext` names in implementation or tests unless the same change creates and wires that contract.
 - Preferred execution shape: preserve `ToolInvocationRequest` as the gateway-level context carrier, then either pass a typed invocation metadata object into tool adapters or publish artifacts from a gateway/kernel collaborator that still has the full request.
+- If `ToolPort.invoke(...)` is extended, update all implementations and registry tests in the same slice. Keep the new parameter explicit and typed; do not make generation tools read global state.
+- If artifact publishing is implemented above `ToolPort`, keep `ToolPort` result semantics stable and persist artifacts in a gateway/kernel collaborator that can see `runId`, `stepId`, `tenantId`, `userId`, `allowedToolIds`, and the raw `ToolInvocationResult`.
 - If a scoped context holder is introduced instead, it must be set and cleared inside `LocalToolGatewayPort` with tests proving cleanup after success, failure, denial, and nested/parallel invocations.
 - `AgentArtifact.messageId` is optional in the current domain model. Do not block artifact persistence solely because `messageId` is unavailable at tool-adapter level; use `runId` as the required recovery key and attach `messageId` only when a verified owner supplies it.
 
@@ -187,6 +201,7 @@ Implementation constraints:
 - `load_skill_resource` must only load resources for skills that are already selected or version-bound in the current run context.
 - Do not trust skill names from the frontend or from model tool arguments as authorization proof.
 - Reuse selected `SkillRuntimeBlock` metadata or an explicit tool invocation metadata carrier; do not create a second independent skill-selection owner.
+- If the selected-skill set is carried into tool invocation, derive it from the same `ChatSelectedSkillResolver` result used to compose the prompt/runtime blocks.
 - Reject absolute paths, parent traversal, empty paths, and paths outside the selected skill revision resource set.
 - Register the tool through `SeahorseAgentKernelAgentAutoConfiguration`; `BuiltInAgentToolRegistrar` should discover it as a `DescribedToolPort`.
 
