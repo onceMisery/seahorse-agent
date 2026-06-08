@@ -224,6 +224,87 @@ class KernelAgentLoopMarkdownOutputTests {
         assertFalse(answer.contains("stroke:\n\n# 01579b"));
     }
 
+    @Test
+    void finalMarkdownSplitsCompressedMermaidStatementsWithoutTouchingStyles() {
+        String compressedMarkdown = """
+                ##三、架构图```mermaid
+                flowchart TD Client[客户端] --> Network[网络引擎] Network --> Parser[命令解析器] Parser --> Engine[数据结构引擎] style Client fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+                ```
+                ##四、流程图```mermaid
+                sequenceDiagram participant Client as 客户端 participant Server as Redis服务器 Client->>Server:发送命令 Server->>Client:返回结果
+                ```
+                """;
+        KernelAgentLoop loop = new KernelAgentLoop(
+                new FinalAnswerModel(compressedMarkdown),
+                ToolRegistryPort.empty(),
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("render markdown")
+                .allowedToolIds(List.of())
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .maxSteps(1)
+                .build());
+
+        String answer = result.finalAnswer();
+        assertTrue(answer.contains("```mermaid\nflowchart TD\nClient[客户端] --> Network[网络引擎]\nNetwork --> Parser[命令解析器]\nParser --> Engine[数据结构引擎]\nstyle Client fill:#e1f5fe,stroke:#01579b,stroke-width:2px\n```"), answer);
+        assertTrue(answer.contains("```mermaid\nsequenceDiagram\nparticipant Client as 客户端\nparticipant Server as Redis服务器\nClient->>Server:发送命令\nServer->>Client:返回结果\n```"), answer);
+        assertFalse(answer.contains("flowchart TD Client[客户端]"));
+        assertFalse(answer.contains("sequenceDiagram participant Client"));
+        assertFalse(answer.contains("fill:\n\n# e1f5fe"));
+    }
+
+    @Test
+    void finalMarkdownSplitsCompressedMermaidSubgraphsDirectionsAndStandaloneNodes() {
+        String compressedMarkdown = """
+                ##三、架构图```mermaid
+                flowchart TD subgraph ServerSide [Redis Server内部架构] direction TB N[网络层 Network] P[RESP协议解析] Cmd[命令执行引擎] end Mem --> Pers RedisServer[Redis Server] RedisServer --> Rep
+                ```
+                """;
+        KernelAgentLoop loop = new KernelAgentLoop(
+                new FinalAnswerModel(compressedMarkdown),
+                ToolRegistryPort.empty(),
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("render markdown")
+                .allowedToolIds(List.of())
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .maxSteps(1)
+                .build());
+
+        String answer = result.finalAnswer();
+        assertTrue(answer.contains("```mermaid\nflowchart TD\nsubgraph ServerSide [Redis Server内部架构]\ndirection TB\nN[网络层 Network]\nP[RESP协议解析]\nCmd[命令执行引擎]\nend\nMem --> Pers\nRedisServer[Redis Server]\nRedisServer --> Rep\n```"), answer);
+        assertFalse(answer.contains("direction TB N["));
+        assertFalse(answer.contains("Pers RedisServer["));
+    }
+
+    @Test
+    void finalMarkdownSeparatesAdjacentMermaidFences() {
+        String compressedMarkdown = """
+                ##三、架构图```mermaid
+                sequenceDiagram Client->>Redis:发送命令 Redis-->>Client:返回响应``````mermaid
+                flowchart TD Client[客户端] --> Redis[Redis服务]
+                ```
+                """;
+        KernelAgentLoop loop = new KernelAgentLoop(
+                new FinalAnswerModel(compressedMarkdown),
+                ToolRegistryPort.empty(),
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("render markdown")
+                .allowedToolIds(List.of())
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .maxSteps(1)
+                .build());
+
+        String answer = result.finalAnswer();
+        assertTrue(answer.contains("```mermaid\nsequenceDiagram\nClient->>Redis:发送命令\nRedis-->>Client:返回响应\n```\n\n```mermaid\nflowchart TD\nClient[客户端] --> Redis[Redis服务]\n```"), answer);
+        assertFalse(answer.contains("返回响应``````mermaid"));
+        assertFalse(answer.contains("sequenceDiagram Client"));
+    }
+
     private static final class FinalAnswerModel implements StreamingChatModelPort {
         private final String answer;
 

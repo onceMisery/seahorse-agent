@@ -1135,6 +1135,7 @@ public class KernelAgentLoop {
 
     private String normalizeMermaidFenceOpenings(String content) {
         String normalized = content;
+        normalized = normalized.replaceAll("```\\s*```\\s*(?i:mermaid)\\b", "```\n\n```mermaid");
         normalized = normalized.replaceAll("```mermaid\\s*(?i:flowchart)\\b", "```mermaid\nflowchart");
         normalized = normalized.replaceAll("```mermaid\\s*(?i:graph)\\b", "```mermaid\ngraph");
         normalized = normalized.replaceAll("```mermaid\\s*(?i:sequenceDiagram)\\b", "```mermaid\nsequenceDiagram");
@@ -1194,6 +1195,14 @@ public class KernelAgentLoop {
     }
 
     private String normalizeCodeBlockSegment(String content) {
+        String normalized = ensureCodeBlockClosingFenceOnOwnLine(content);
+        if (isMermaidCodeBlock(normalized)) {
+            return normalizeMermaidCodeBlock(normalized);
+        }
+        return normalized;
+    }
+
+    private String ensureCodeBlockClosingFenceOnOwnLine(String content) {
         int closingFence = content.lastIndexOf("```");
         if (closingFence > 0 && content.charAt(closingFence - 1) != '\n') {
             return content.substring(0, closingFence) + "\n" + content.substring(closingFence);
@@ -1201,12 +1210,234 @@ public class KernelAgentLoop {
         return content;
     }
 
-    private int findClosingFence(String content, int offset) {
-        int fence = content.indexOf("```", offset);
-        while (fence >= 0 && fence + 3 < content.length() && content.charAt(fence + 3) == '`') {
-            fence = content.indexOf("```", fence + 4);
+    private boolean isMermaidCodeBlock(String content) {
+        if (content.length() < "```mermaid".length()
+                || !content.regionMatches(true, 0, "```mermaid", 0, "```mermaid".length())) {
+            return false;
         }
-        return fence;
+        if (content.length() == "```mermaid".length()) {
+            return true;
+        }
+        char next = content.charAt("```mermaid".length());
+        return Character.isWhitespace(next);
+    }
+
+    private String normalizeMermaidCodeBlock(String content) {
+        int bodyStart = content.indexOf('\n');
+        if (bodyStart < 0) {
+            return content;
+        }
+        String openingFence = content.substring(0, bodyStart + 1);
+        String bodyWithClosingFence = content.substring(bodyStart + 1);
+        int closingFence = bodyWithClosingFence.lastIndexOf("```");
+        String body = closingFence >= 0
+                ? bodyWithClosingFence.substring(0, closingFence)
+                : bodyWithClosingFence;
+        String closing = closingFence >= 0
+                ? bodyWithClosingFence.substring(closingFence)
+                : "";
+
+        String normalizedBody = normalizeMermaidBody(body).stripTrailing();
+        if (normalizedBody.isEmpty()) {
+            return openingFence + closing;
+        }
+        return openingFence + normalizedBody + "\n" + closing;
+    }
+
+    private String normalizeMermaidBody(String body) {
+        String[] lines = body.split("\n", -1);
+        String diagramType = "";
+        List<String> normalizedLines = new ArrayList<>();
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            if (startsWithIgnoreCase(trimmed, "flowchart ") || startsWithIgnoreCase(trimmed, "graph ")) {
+                diagramType = "flowchart";
+                normalizedLines.addAll(splitFlowchartMermaidLine(trimmed));
+            } else if (startsWithIgnoreCase(trimmed, "sequenceDiagram")) {
+                diagramType = "sequence";
+                normalizedLines.addAll(splitSequenceMermaidLine(trimmed));
+            } else if ("flowchart".equals(diagramType)) {
+                normalizedLines.addAll(splitMermaidStatements(splitCompressedFlowchartStatements(trimmed)));
+            } else if ("sequence".equals(diagramType)) {
+                normalizedLines.addAll(splitMermaidStatements(splitCompressedSequenceStatements(trimmed)));
+            } else {
+                normalizedLines.add(trimmed);
+            }
+        }
+        return String.join("\n", normalizedLines);
+    }
+
+    private List<String> splitFlowchartMermaidLine(String line) {
+        String[] parts = line.split("\\s+", 3);
+        if (parts.length <= 2) {
+            return List.of(line);
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add(parts[0] + " " + parts[1]);
+        lines.addAll(splitMermaidStatements(splitCompressedFlowchartStatements(parts[2])));
+        return lines;
+    }
+
+    private List<String> splitSequenceMermaidLine(String line) {
+        String keyword = "sequenceDiagram";
+        if (line.length() == keyword.length()) {
+            return List.of(line);
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add(keyword);
+        lines.addAll(splitMermaidStatements(splitCompressedSequenceStatements(line.substring(keyword.length()).trim())));
+        return lines;
+    }
+
+    private String splitCompressedFlowchartStatements(String line) {
+        String normalized = line.replaceAll(
+                "\\s+(?=(?:style|classDef|class|linkStyle|click|subgraph|direction|end)\\b)",
+                "\n");
+        normalized = normalized.replaceAll(
+                "\\s+(?=[A-Za-z_][A-Za-z0-9_]*\\s*(?:\\[[^\\]]*]|\\([^)]*\\)|\\{[^}]*}|>[^\\n<]*]|\\(\\([^)]*\\)\\))?\\s*(?:<-->|<-.->|<==>|-->|---|==>|-.->|--[ox]|[ox]--|~~~))",
+                "\n");
+        return splitStandaloneFlowchartNodes(normalized);
+    }
+
+    private String splitCompressedSequenceStatements(String line) {
+        String normalized = line.replaceAll(
+                "\\s+(?=(?:participant|actor|create|activate|deactivate|destroy|loop|alt|else|opt|par|and|critical|option|break|rect|end|box)\\b|Note\\s+(?:over|left|right)\\b)",
+                "\n");
+        return normalized.replaceAll(
+                "\\s+(?=[A-Za-z_][A-Za-z0-9_]*\\s*(?:-->>|->>|-->|->|--x|-x|--\\)|-\\))\\s*[A-Za-z_][A-Za-z0-9_]*)",
+                "\n");
+    }
+
+    private List<String> splitMermaidStatements(String content) {
+        String[] lines = content.split("\n", -1);
+        List<String> result = new ArrayList<>();
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                result.add(trimmed);
+            }
+        }
+        return result;
+    }
+
+    private String splitStandaloneFlowchartNodes(String content) {
+        String[] lines = content.split("\n", -1);
+        StringBuilder builder = new StringBuilder(content.length() + 32);
+        for (int i = 0; i < lines.length; i++) {
+            if (i > 0) {
+                builder.append('\n');
+            }
+            builder.append(splitStandaloneFlowchartNodesInLine(lines[i]));
+        }
+        return builder.toString();
+    }
+
+    private String splitStandaloneFlowchartNodesInLine(String line) {
+        if (line.isBlank() || line.startsWith("style ") || line.startsWith("classDef ")
+                || line.startsWith("class ") || line.startsWith("linkStyle ") || line.startsWith("click ")) {
+            return line;
+        }
+        StringBuilder builder = new StringBuilder(line.length() + 16);
+        int groupingDepth = 0;
+        for (int i = 0; i < line.length(); i++) {
+            char current = line.charAt(i);
+            if (isOpeningMermaidGrouping(current)) {
+                groupingDepth++;
+            } else if (isClosingMermaidGrouping(current) && groupingDepth > 0) {
+                groupingDepth--;
+            }
+            if (groupingDepth == 0 && Character.isWhitespace(current)
+                    && shouldBreakBeforeStandaloneFlowchartNode(line, i)) {
+                builder.append('\n');
+                while (i + 1 < line.length() && Character.isWhitespace(line.charAt(i + 1))) {
+                    i++;
+                }
+            } else {
+                builder.append(current);
+            }
+        }
+        return builder.toString();
+    }
+
+    private boolean shouldBreakBeforeStandaloneFlowchartNode(String line, int whitespaceIndex) {
+        int candidateIndex = whitespaceIndex + 1;
+        while (candidateIndex < line.length() && Character.isWhitespace(line.charAt(candidateIndex))) {
+            candidateIndex++;
+        }
+        if (!isFlowchartNodeDefinitionAt(line, candidateIndex)) {
+            return false;
+        }
+        String before = line.substring(0, whitespaceIndex).trim();
+        int operatorIndex = lastFlowchartEdgeOperatorIndex(before);
+        if (operatorIndex < 0) {
+            return true;
+        }
+        return hasFlowchartTargetAfterOperator(before.substring(operatorIndex));
+    }
+
+    private boolean isFlowchartNodeDefinitionAt(String line, int index) {
+        if (index >= line.length() || !isMermaidIdentifierStart(line.charAt(index))) {
+            return false;
+        }
+        int cursor = index + 1;
+        while (cursor < line.length() && isMermaidIdentifierPart(line.charAt(cursor))) {
+            cursor++;
+        }
+        return cursor < line.length() && isOpeningMermaidGrouping(line.charAt(cursor));
+    }
+
+    private int lastFlowchartEdgeOperatorIndex(String value) {
+        int result = -1;
+        for (String operator : flowchartEdgeOperators()) {
+            result = Math.max(result, value.lastIndexOf(operator));
+        }
+        return result;
+    }
+
+    private boolean hasFlowchartTargetAfterOperator(String value) {
+        int cursor = 0;
+        while (cursor < value.length() && !Character.isWhitespace(value.charAt(cursor))) {
+            cursor++;
+        }
+        String afterOperator = value.substring(cursor).trim();
+        if (afterOperator.startsWith("|")) {
+            int endLabel = afterOperator.indexOf('|', 1);
+            if (endLabel >= 0) {
+                afterOperator = afterOperator.substring(endLabel + 1).trim();
+            }
+        }
+        return !afterOperator.isEmpty();
+    }
+
+    private List<String> flowchartEdgeOperators() {
+        return List.of("<-.->", "<-->", "<==>", "-.->", "-->", "---", "==>", "--x", "--o", "x--", "o--", "~~~");
+    }
+
+    private boolean isMermaidIdentifierStart(char value) {
+        return Character.isLetter(value) || value == '_';
+    }
+
+    private boolean isMermaidIdentifierPart(char value) {
+        return Character.isLetterOrDigit(value) || value == '_';
+    }
+
+    private boolean isOpeningMermaidGrouping(char value) {
+        return value == '[' || value == '(' || value == '{';
+    }
+
+    private boolean isClosingMermaidGrouping(char value) {
+        return value == ']' || value == ')' || value == '}';
+    }
+
+    private boolean startsWithIgnoreCase(String value, String prefix) {
+        return value.regionMatches(true, 0, prefix, 0, prefix.length());
+    }
+
+    private int findClosingFence(String content, int offset) {
+        return content.indexOf("```", offset);
     }
 
     private void ensureBlankLineBefore(StringBuilder builder) {
