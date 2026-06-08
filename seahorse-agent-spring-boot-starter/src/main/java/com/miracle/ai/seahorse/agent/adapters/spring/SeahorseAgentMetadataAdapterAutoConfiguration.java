@@ -71,7 +71,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
     @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnMissingBean(MetadataSchemaRegistryPort.class)
+    @ConditionalOnMissingBean(JdbcMetadataGovernanceRepositoryAdapter.class)
     public JdbcMetadataGovernanceRepositoryAdapter seahorseJdbcMetadataGovernanceRepositoryAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
         return new JdbcMetadataGovernanceRepositoryAdapter(dataSource, objectMapper);

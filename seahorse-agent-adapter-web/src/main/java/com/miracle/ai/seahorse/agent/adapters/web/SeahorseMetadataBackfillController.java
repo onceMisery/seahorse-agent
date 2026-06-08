@@ -59,7 +59,7 @@ public class SeahorseMetadataBackfillController {
                                          @RequestBody(required = false) MetadataBackfillCreateRequest request,
                                          @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                backfillPortProvider.getIfAvailable().createJob(toCommand(kbId, request, operator(userId))));
+                backfillPort().createJob(toCommand(kbId, request, operator(userId))));
     }
 
     @GetMapping("/knowledge-base/{kb-id}/metadata-backfill/jobs")
@@ -77,7 +77,7 @@ public class SeahorseMetadataBackfillController {
                                         @RequestParam(value = "size", defaultValue = "10") long size) {
         // 列表查询只拼装筛选条件，具体分页和状态口径由 kernel 统一处理。
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                backfillPortProvider.getIfAvailable().pageJobs(new MetadataBackfillJobQuery(
+                backfillPort().pageJobs(new MetadataBackfillJobQuery(
                         tenantId, kbId, status(status), pipelineId, operator, documentId, pauseReason,
                         failureKeyword, hasFailures, reExtract, current, size)));
     }
@@ -85,35 +85,43 @@ public class SeahorseMetadataBackfillController {
     @GetMapping("/knowledge-base/{kb-id}/metadata-backfill/overview")
     public Map<String, Object> overview(@PathVariable("kb-id") String kbId,
                                         @RequestParam(value = "tenantId", required = false) String tenantId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().overview(tenantId, kbId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort().overview(tenantId, kbId));
     }
 
     @GetMapping("/metadata-backfill/jobs/{job-id}")
     public Map<String, Object> getJob(@PathVariable("job-id") String jobId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().getJob(jobId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort().getJob(jobId));
     }
 
     @PostMapping("/metadata-backfill/jobs/{job-id}/run-next")
     public Map<String, Object> runNextBatch(@PathVariable("job-id") String jobId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().runNextBatch(jobId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort().runNextBatch(jobId));
     }
 
     @PostMapping("/metadata-backfill/jobs/{job-id}/pause")
     public Map<String, Object> pause(@PathVariable("job-id") String jobId,
                                      @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().pause(jobId, operator(userId)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort().pause(jobId, operator(userId)));
     }
 
     @PostMapping("/metadata-backfill/jobs/{job-id}/resume")
     public Map<String, Object> resume(@PathVariable("job-id") String jobId,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().resume(jobId, operator(userId)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort().resume(jobId, operator(userId)));
     }
 
     @PostMapping("/metadata-backfill/jobs/{job-id}/cancel")
     public Map<String, Object> cancel(@PathVariable("job-id") String jobId,
                                       @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPortProvider.getIfAvailable().cancel(jobId, operator(userId)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, backfillPort().cancel(jobId, operator(userId)));
+    }
+
+    private MetadataBackfillInboundPort backfillPort() {
+        MetadataBackfillInboundPort port = backfillPortProvider.getIfAvailable();
+        if (port == null) {
+            throw new IllegalStateException(ApiResponses.SERVICE_NOT_AVAILABLE_MESSAGE);
+        }
+        return port;
     }
 
     private MetadataBackfillCommand toCommand(String kbId,

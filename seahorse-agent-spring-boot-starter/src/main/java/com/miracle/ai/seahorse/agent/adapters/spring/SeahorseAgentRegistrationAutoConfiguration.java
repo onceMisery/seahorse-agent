@@ -17,23 +17,24 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.DefaultTenantProvisioningAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcTrialRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.BCryptPasswordHasherAdapter;
 import com.miracle.ai.seahorse.agent.adapters.web.LoggingEmailSenderAdapter;
-import com.miracle.ai.seahorse.agent.kernel.application.auth.KernelRegistrationService;
-import com.miracle.ai.seahorse.agent.kernel.application.trial.KernelTrialService;
-import com.miracle.ai.seahorse.agent.ports.inbound.auth.RegistrationInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.PasswordHasherPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.auth.TokenServicePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.auth.UserRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.email.EmailSenderPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.tenant.TenantProvisioningPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.user.TrialRepositoryPort;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import javax.sql.DataSource;
 
 /**
  * Auto-configuration for the user registration and trial system.
@@ -55,6 +56,7 @@ import org.springframework.context.annotation.Configuration;
  * </pre>
  */
 @Configuration(proxyBeanMethods = false)
+@AutoConfigureAfter({DataSourceAutoConfiguration.class, SeahorseAgentTenantAutoConfiguration.class})
 @AutoConfigureBefore(SeahorseAgentAuthAdapterAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentRegistrationAutoConfiguration {
@@ -80,38 +82,18 @@ public class SeahorseAgentRegistrationAutoConfiguration {
         return new LoggingEmailSenderAdapter();
     }
 
-    /**
-     * Registration service orchestrating the full sign-up flow.
-     */
     @Bean
-    @ConditionalOnBean({
-            UserRepositoryPort.class,
-            TokenServicePort.class,
-            EmailSenderPort.class,
-            TenantProvisioningPort.class,
-            TrialRepositoryPort.class,
-            PasswordHasherPort.class
-    })
-    @ConditionalOnMissingBean(RegistrationInboundPort.class)
-    public KernelRegistrationService seahorseRegistrationInboundPort(
-            UserRepositoryPort userRepositoryPort,
-            TokenServicePort tokenServicePort,
-            EmailSenderPort emailSenderPort,
-            TenantProvisioningPort tenantProvisioningPort,
-            TrialRepositoryPort trialRepositoryPort,
-            PasswordHasherPort passwordHasherPort) {
-        return new KernelRegistrationService(
-                userRepositoryPort, tokenServicePort, emailSenderPort,
-                tenantProvisioningPort, trialRepositoryPort, passwordHasherPort);
+    @ConditionalOnMissingBean(TenantProvisioningPort.class)
+    public DefaultTenantProvisioningAdapter seahorseDefaultTenantProvisioningAdapter() {
+        return new DefaultTenantProvisioningAdapter();
     }
 
-    /**
-     * Trial query service.
-     */
     @Bean
-    @ConditionalOnBean(TrialRepositoryPort.class)
-    @ConditionalOnMissingBean(KernelTrialService.class)
-    public KernelTrialService seahorseKernelTrialService(TrialRepositoryPort trialRepositoryPort) {
-        return new KernelTrialService(trialRepositoryPort);
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc",
+            matchIfMissing = true)
+    @ConditionalOnMissingBean(TrialRepositoryPort.class)
+    public JdbcTrialRepositoryAdapter seahorseJdbcTrialRepositoryAdapter(DataSource dataSource) {
+        return new JdbcTrialRepositoryAdapter(dataSource);
     }
 }

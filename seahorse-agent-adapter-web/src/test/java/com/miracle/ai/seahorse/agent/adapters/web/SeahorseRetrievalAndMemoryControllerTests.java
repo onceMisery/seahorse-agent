@@ -121,7 +121,8 @@ class SeahorseRetrievalAndMemoryControllerTests {
         when(port.compare(any())).thenReturn(
                 mock(com.miracle.ai.seahorse.agent.ports.outbound.metadata.VersionQualityComparisonReport.class));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseVersionQualityComparisonController(port)).build();
+                new SeahorseVersionQualityComparisonController(
+                        provider(VersionQualityComparisonInboundPort.class, port))).build();
 
         mvc.perform(post("/knowledge-base/kb-1/version-quality/compare")
                         .contentType(MediaType.APPLICATION_JSON)

@@ -61,19 +61,19 @@ public class SeahorseMetadataQuarantineController {
                                     @RequestParam(defaultValue = "1") long current,
                                     @RequestParam(defaultValue = "10") long size) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                quarantinePortProvider.getIfAvailable().page(tenantId, kbId, resolved, stage, reasonCode, documentId, jobId, current, size));
+                quarantinePort().page(tenantId, kbId, resolved, stage, reasonCode, documentId, jobId, current, size));
     }
 
     @GetMapping("/metadata-quarantine/items/{item-id}")
     public Map<String, Object> queryById(@PathVariable("item-id") String itemId) {
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, quarantinePortProvider.getIfAvailable().queryById(itemId));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, quarantinePort().queryById(itemId));
     }
 
     @PostMapping("/metadata-quarantine/items/{item-id}/resolve")
     public Map<String, Object> resolve(@PathVariable("item-id") String itemId,
                                        @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                quarantinePortProvider.getIfAvailable().resolve(itemId, operator(userId)));
+                quarantinePort().resolve(itemId, operator(userId)));
     }
 
     @PostMapping("/metadata-quarantine/items/{item-id}/retry")
@@ -81,8 +81,16 @@ public class SeahorseMetadataQuarantineController {
                                      @RequestBody(required = false) MetadataQuarantineRetryRequest request,
                                      @RequestHeader(value = HEADER_USER_ID, required = false) String userId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                quarantinePortProvider.getIfAvailable().retry(itemId, new MetadataQuarantineRetryCommand(
+                quarantinePort().retry(itemId, new MetadataQuarantineRetryCommand(
                         operator(userId), nextRetryTime(request))));
+    }
+
+    private MetadataQuarantineInboundPort quarantinePort() {
+        MetadataQuarantineInboundPort port = quarantinePortProvider.getIfAvailable();
+        if (port == null) {
+            throw new IllegalStateException(ApiResponses.SERVICE_NOT_AVAILABLE_MESSAGE);
+        }
+        return port;
     }
 
     private Instant nextRetryTime(MetadataQuarantineRetryRequest request) {

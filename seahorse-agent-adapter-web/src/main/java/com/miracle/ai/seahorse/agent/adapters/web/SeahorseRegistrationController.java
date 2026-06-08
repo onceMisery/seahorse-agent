@@ -55,7 +55,7 @@ public class SeahorseRegistrationController {
     @PostMapping("/auth/send-code")
     public Map<String, Object> sendCode(@RequestBody SendCodeRequest request) {
         SendCodeRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        registrationPortProvider.getIfAvailable().sendVerificationCode(safeRequest.getEmail());
+        registrationPort().sendVerificationCode(safeRequest.getEmail());
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_MESSAGE, "验证码已发送");
     }
 
@@ -65,7 +65,7 @@ public class SeahorseRegistrationController {
     @PostMapping("/auth/register")
     public Map<String, Object> register(@RequestBody RegisterRequest request) {
         RegisterRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
-        RegistrationResult result = registrationPortProvider.getIfAvailable()
+        RegistrationResult result = registrationPort()
                 .register(safeRequest.getEmail(), safeRequest.getCode(), safeRequest.getPassword());
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, result);
     }
@@ -75,11 +75,19 @@ public class SeahorseRegistrationController {
      */
     @GetMapping("/auth/email-available")
     public Map<String, Object> isEmailAvailable(@RequestParam("email") String email) {
-        boolean available = registrationPortProvider.getIfAvailable().isEmailAvailable(email);
+        boolean available = registrationPort().isEmailAvailable(email);
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, available);
     }
 
     // ─── request DTOs ─────────────────────────────────────────────────────
+
+    private RegistrationInboundPort registrationPort() {
+        RegistrationInboundPort port = registrationPortProvider.getIfAvailable();
+        if (port == null) {
+            throw new IllegalStateException(ApiResponses.SERVICE_NOT_AVAILABLE_MESSAGE);
+        }
+        return port;
+    }
 
     /**
      * Request body for {@code POST /auth/send-code}.

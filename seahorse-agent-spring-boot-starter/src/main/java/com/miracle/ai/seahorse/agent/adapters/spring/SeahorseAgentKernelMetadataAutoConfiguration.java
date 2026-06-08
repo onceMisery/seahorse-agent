@@ -63,7 +63,8 @@ import org.springframework.context.annotation.Configuration;
  * kernel 配置继续承担治理链路的装配细节。
  */
 @Configuration(proxyBeanMethods = false)
-@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentMetadataAdapterAutoConfiguration.class})
+@AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentMetadataAdapterAutoConfiguration.class,
+        SeahorseAgentKernelRetrievalAutoConfiguration.class})
 @ConditionalOnProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SeahorseAgentKernelMetadataAutoConfiguration {
 

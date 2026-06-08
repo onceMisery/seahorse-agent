@@ -53,26 +53,34 @@ public class SeahorseMetadataDictionaryController {
                                          @RequestParam(required = false, defaultValue = "false")
                                          boolean includeDisabled) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                dictionaryPortProvider.getIfAvailable().listItems(tenantId, dictCode, includeDisabled));
+                dictionaryPort().listItems(tenantId, dictCode, includeDisabled));
     }
 
     @PostMapping("/metadata-dictionaries/items")
     public Map<String, Object> createItem(@RequestBody MetadataDictionaryItemRequest request) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                dictionaryPortProvider.getIfAvailable().createItem(toPayload(request)));
+                dictionaryPort().createItem(toPayload(request)));
     }
 
     @PutMapping("/metadata-dictionaries/items/{item-id}")
     public Map<String, Object> updateItem(@PathVariable("item-id") String itemId,
                                           @RequestBody MetadataDictionaryItemRequest request) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                dictionaryPortProvider.getIfAvailable().updateItem(itemId, toPayload(request)));
+                dictionaryPort().updateItem(itemId, toPayload(request)));
     }
 
     @DeleteMapping("/metadata-dictionaries/items/{item-id}")
     public Map<String, Object> deleteItem(@PathVariable("item-id") String itemId) {
         return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA,
-                Map.of("deleted", dictionaryPortProvider.getIfAvailable().deleteItem(itemId)));
+                Map.of("deleted", dictionaryPort().deleteItem(itemId)));
+    }
+
+    private MetadataDictionaryInboundPort dictionaryPort() {
+        MetadataDictionaryInboundPort port = dictionaryPortProvider.getIfAvailable();
+        if (port == null) {
+            throw new IllegalStateException(ApiResponses.SERVICE_NOT_AVAILABLE_MESSAGE);
+        }
+        return port;
     }
 
     private MetadataDictionaryItemPayload toPayload(MetadataDictionaryItemRequest request) {

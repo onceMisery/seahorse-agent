@@ -88,6 +88,13 @@ public class SeahorseWorkflowVisualizationController {
             return emitter;
         }
 
+        try {
+            emitter.send(SseEmitter.event().name("connected").data(Map.of("runId", runId)));
+        } catch (IOException ex) {
+            emitter.completeWithError(ex);
+            return emitter;
+        }
+
         WorkflowEventPublisher.WorkflowStepEventListener listener =
                 (evtRunId, stepId, status, payload) -> {
                     try {

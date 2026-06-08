@@ -18,14 +18,13 @@
 package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.VersionQualityComparisonInboundPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 跨版本质量对比 Web adapter。
@@ -34,17 +33,16 @@ import java.util.Objects;
  * 治理报表查询、检索评测和最终组合口径均由 kernel 端口处理。
  */
 @RestController
-@ConditionalOnBean(VersionQualityComparisonInboundPort.class)
 public class SeahorseVersionQualityComparisonController {
 
     private static final String KEY_CODE = "code";
     private static final String KEY_DATA = "data";
     private static final String SUCCESS_CODE = "0";
 
-    private final VersionQualityComparisonInboundPort comparisonPort;
+    private final ObjectProvider<VersionQualityComparisonInboundPort> comparisonPortProvider;
 
-    public SeahorseVersionQualityComparisonController(VersionQualityComparisonInboundPort comparisonPort) {
-        this.comparisonPort = Objects.requireNonNull(comparisonPort, "comparisonPort must not be null");
+    public SeahorseVersionQualityComparisonController(ObjectProvider<VersionQualityComparisonInboundPort> comparisonPortProvider) {
+        this.comparisonPortProvider = comparisonPortProvider;
     }
 
     @PostMapping("/knowledge-base/{kb-id}/version-quality/compare")
@@ -53,6 +51,14 @@ public class SeahorseVersionQualityComparisonController {
         VersionQualityComparisonRequest safeRequest = request == null
                 ? new VersionQualityComparisonRequest("", 5, null, "", "", null, "", "", null)
                 : request;
-        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, comparisonPort.compare(safeRequest.toCommand(kbId)));
+        return Map.of(KEY_CODE, SUCCESS_CODE, KEY_DATA, comparisonPort().compare(safeRequest.toCommand(kbId)));
+    }
+
+    private VersionQualityComparisonInboundPort comparisonPort() {
+        VersionQualityComparisonInboundPort port = comparisonPortProvider.getIfAvailable();
+        if (port == null) {
+            throw new IllegalStateException(ApiResponses.SERVICE_NOT_AVAILABLE_MESSAGE);
+        }
+        return port;
     }
 }
