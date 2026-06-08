@@ -1,0 +1,56 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.miracle.ai.seahorse.agent.kernel.application.agent;
+
+import org.junit.jupiter.api.Test;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class GithubVisualAgentSqlAlignmentTests {
+
+    private static final Path DATABASE_DIR = Path.of("..", "resources", "database");
+    private static final Path INIT_SQL = DATABASE_DIR.resolve("seahorse_init.sql");
+    private static final Path EXECUTION_PLAN_MIGRATION =
+            DATABASE_DIR.resolve("migrations").resolve("V23__github_visual_agent_execution_plan.sql");
+
+    @Test
+    void githubVisualAgentShouldHaveExecutionPlanContractInInitSqlAndLatestMigration() throws Exception {
+        String initSql = Files.readString(INIT_SQL);
+        String migrationSql = Files.readString(EXECUTION_PLAN_MIGRATION);
+
+        assertGithubVisualExecutionPlan(initSql);
+        assertGithubVisualExecutionPlan(migrationSql);
+    }
+
+    private static void assertGithubVisualExecutionPlan(String sql) {
+        assertContains(sql, "GitHub visual project intro execution contract");
+        assertContains(sql, "禁止连续重复使用相同参数调用 github_repository_reader");
+        assertContains(sql, "成功读取仓库后必须停止使用 github_repository_reader");
+        assertContains(sql, "必须按顺序推进：web_fetch -> chart_visualization -> image_generation"
+                + " -> newsletter_generation -> ppt_generation -> frontend_design");
+        assertContains(sql, "每个硬性工具至少成功调用一次后，才能输出最终 Markdown");
+        assertContains(sql, "'github_repository_reader', 2, '{}'");
+    }
+
+    private static void assertContains(String sql, String expected) {
+        assertTrue(sql.contains(expected), () -> "Expected SQL to contain: " + expected);
+    }
+}

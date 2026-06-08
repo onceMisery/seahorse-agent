@@ -315,6 +315,7 @@ public class KernelAgentLoop {
         messages.add(ChatMessage.user(request.question()));
 
         List<AgentStep> steps = new ArrayList<>();
+        Set<String> exhaustedToolIds = new HashSet<>();
         int maxSteps = Math.min(request.maxSteps(), options.maxSteps());
         for (int step = 0; step < maxSteps; step++) {
             runControl.checkCancelled();
@@ -325,8 +326,8 @@ public class KernelAgentLoop {
             TraceNodeScope stepScope = traceRecorder.startNode(traceRunScope, agentStepCommand(stepNo));
             boolean modelTurnRecorded = false;
             try {
-                ModelTurn turn = requestModelTurn(request, messages, runControl);
-                recordModelTurn(request, messages, turn, null);
+                ModelTurn turn = requestModelTurn(request, messages, runControl, exhaustedToolIds);
+                recordModelTurn(request, messages, turn, exhaustedToolIds, null);
                 modelTurnRecorded = true;
                 if (turn.toolCalls().isEmpty()) {
                     String finalContent = applyOutputGovernance(request, turn.content());
@@ -343,11 +344,13 @@ public class KernelAgentLoop {
                 List<AgentObservation> observations = executeTools(
                         turn.toolCalls(),
                         request.allowedToolIds(),
+                        exposedToolIds(request, exhaustedToolIds),
                         request,
                         runControl,
                         traceRunScope,
                         stepScope,
                         callback);
+                markExhaustedTools(turn.toolCalls(), observations, exhaustedToolIds);
                 if (requiresApproval(observations)) {
                     emitToolThinking(callback, turn, observations);
                     AgentStep pendingStep = AgentStep.thought(turn.thought(), turn.toolCalls(), observations);
@@ -381,7 +384,7 @@ public class KernelAgentLoop {
                 traceRecorder.finishNode(stepScope);
             } catch (RuntimeException ex) {
                 if (!modelTurnRecorded) {
-                    recordModelTurn(request, messages, null, ex);
+                    recordModelTurn(request, messages, null, exhaustedToolIds, ex);
                 }
                 emitRecoverableError(callback, request, stepId, ex);
                 emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
@@ -434,7 +437,8 @@ public class KernelAgentLoop {
 
     private ModelTurn requestModelTurn(AgentLoopRequest request,
                                        List<ChatMessage> messages,
-                                       AgentRunControl control) {
+                                       AgentRunControl control,
+                                       Set<String> exhaustedToolIds) {
         TurnBuffer callback = new TurnBuffer();
         AtomicReference<List<AgentToolCall>> collectedCalls = new AtomicReference<>();
         AtomicBoolean collectorInvoked = new AtomicBoolean(false);
@@ -443,7 +447,7 @@ public class KernelAgentLoop {
                 .messages(List.copyOf(messages))
                 .modelId(request.modelId())
                 .samplingOptions(request.samplingOptions())
-                .tools(exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks()))
+                .tools(exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks(), exhaustedToolIds))
                 .toolChoice("auto")
                 .build(), callback, toolCalls -> {
                     if (callback.completed()) {
@@ -471,13 +475,17 @@ public class KernelAgentLoop {
                 Objects.requireNonNullElse(collectedCalls.get(), List.of()));
     }
 
-    private List<ToolDescriptor> exposedTools(List<String> allowedToolIds, List<SkillRuntimeBlock> skillRuntimeBlocks) {
+    private List<ToolDescriptor> exposedTools(List<String> allowedToolIds,
+                                              List<SkillRuntimeBlock> skillRuntimeBlocks,
+                                              Set<String> exhaustedToolIds) {
         List<ToolDescriptor> result = new ArrayList<>();
         List<ToolDescriptor> all = toolRegistry.listTools();
         List<String> safeAllowedToolIds = allowedToolIds == null ? List.of() : allowedToolIds;
         Set<String> allowed = new HashSet<>(safeAllowedToolIds);
+        Set<String> exhausted = exhaustedToolIds == null ? Set.of() : exhaustedToolIds;
         Map<String, ToolDescriptor> descriptorsById = all.stream()
                 .filter(tool -> allowed.contains(tool.toolId()))
+                .filter(tool -> !exhausted.contains(tool.toolId()))
                 .collect(java.util.stream.Collectors.toMap(
                         ToolDescriptor::toolId,
                         tool -> tool,
@@ -491,6 +499,23 @@ public class KernelAgentLoop {
             result.add(LOAD_SKILL_DESCRIPTOR);
         }
         return List.copyOf(result);
+    }
+
+    private void markExhaustedTools(List<AgentToolCall> toolCalls,
+                                    List<AgentObservation> observations,
+                                    Set<String> exhaustedToolIds) {
+        if (toolCalls == null || observations == null || exhaustedToolIds == null) {
+            return;
+        }
+        int count = Math.min(toolCalls.size(), observations.size());
+        for (int i = 0; i < count; i++) {
+            AgentObservation observation = observations.get(i);
+            if (observation != null
+                    && !observation.success()
+                    && ToolPolicyReasonCodes.TOOL_CALL_LIMIT_EXCEEDED.equals(observation.error())) {
+                exhaustedToolIds.add(toolCalls.get(i).toolId());
+            }
+        }
     }
 
     private void installRuntimeContext(List<ChatMessage> messages,
@@ -524,6 +549,7 @@ public class KernelAgentLoop {
 
     private List<AgentObservation> executeTools(List<AgentToolCall> toolCalls,
                                                 List<String> allowedToolIds,
+                                                Set<String> exposedToolIds,
                                                 AgentLoopRequest request,
                                                 AgentRunControl control,
                                                 TraceRunScope traceRunScope,
@@ -543,6 +569,7 @@ public class KernelAgentLoop {
             observations.addAll(executeToolBatch(
                     toolCalls.subList(start, end),
                     allowed,
+                    exposedToolIds,
                     request,
                     parallelism,
                     control,
@@ -561,6 +588,7 @@ public class KernelAgentLoop {
 
     private List<AgentObservation> executeToolBatch(List<AgentToolCall> toolCalls,
                                                     Set<String> allowedToolIds,
+                                                    Set<String> exposedToolIds,
                                                     AgentLoopRequest request,
                                                     int parallelism,
                                                     AgentRunControl control,
@@ -575,7 +603,13 @@ public class KernelAgentLoop {
             }
             List<Callable<AgentObservation>> tasks = toolCalls.stream()
                     .<Callable<AgentObservation>>map(toolCall ->
-                            () -> executeToolTraced(toolCall, allowedToolIds, request, traceRunScope, stepScope))
+                            () -> executeToolTraced(
+                                    toolCall,
+                                    allowedToolIds,
+                                    exposedToolIds,
+                                    request,
+                                    traceRunScope,
+                                    stepScope))
                     .toList();
             List<Future<AgentObservation>> futures = executor.invokeAll(
                     tasks, perToolTimeoutNanos(), TimeUnit.NANOSECONDS);
@@ -625,12 +659,18 @@ public class KernelAgentLoop {
         }
     }
 
-    private AgentObservation executeTool(AgentToolCall toolCall, Set<String> allowedToolIds, AgentLoopRequest request) {
+    private AgentObservation executeTool(AgentToolCall toolCall,
+                                         Set<String> allowedToolIds,
+                                         Set<String> exposedToolIds,
+                                         AgentLoopRequest request) {
         if (hasRawArguments(toolCall)) {
             return AgentObservation.failed(toolCall.id(), "arguments is not valid JSON");
         }
         if (LOAD_SKILL_TOOL_ID.equals(toolCall.toolId())) {
             return loadSkillObservation(toolCall, request);
+        }
+        if (exposedToolIds != null && !exposedToolIds.contains(toolCall.toolId())) {
+            return AgentObservation.failed(toolCall.id(), unavailableToolMessage(toolCall.toolId(), exposedToolIds));
         }
         try {
             ToolInvocationResult result = toolGateway.invoke(toolInvocationRequest(toolCall, allowedToolIds, request));
@@ -709,12 +749,13 @@ public class KernelAgentLoop {
 
     private AgentObservation executeToolTraced(AgentToolCall toolCall,
                                                Set<String> allowedToolIds,
+                                               Set<String> exposedToolIds,
                                                AgentLoopRequest request,
                                                TraceRunScope traceRunScope,
                                                TraceNodeScope stepScope) {
         TraceNodeScope toolScope = traceRecorder.startNode(traceRunScope, agentToolCommand(toolCall, stepScope));
         try {
-            AgentObservation observation = executeTool(toolCall, allowedToolIds, request);
+            AgentObservation observation = executeTool(toolCall, allowedToolIds, exposedToolIds, request);
             if (observation.success()) {
                 traceRecorder.finishNode(toolScope);
             } else {
@@ -748,6 +789,21 @@ public class KernelAgentLoop {
             return text;
         }
         return text.substring(0, MAX_TOOL_OBSERVATION_CHARS) + TOOL_OBSERVATION_TRUNCATED_SUFFIX;
+    }
+
+    private Set<String> exposedToolIds(AgentLoopRequest request, Set<String> exhaustedToolIds) {
+        return exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks(), exhaustedToolIds).stream()
+                .map(ToolDescriptor::toolId)
+                .collect(java.util.stream.Collectors.toCollection(HashSet::new));
+    }
+
+    private String unavailableToolMessage(String toolId, Set<String> exposedToolIds) {
+        String available = exposedToolIds == null || exposedToolIds.isEmpty()
+                ? "none"
+                : String.join(", ", exposedToolIds);
+        return "Tool " + toolId
+                + " is no longer available in this run. Do not call it again. Continue with available tools: "
+                + available + ".";
     }
 
     private String observationText(AgentObservation observation) {
@@ -873,11 +929,12 @@ public class KernelAgentLoop {
     private void recordModelTurn(AgentLoopRequest request,
                                  List<ChatMessage> messages,
                                  ModelTurn turn,
+                                 Set<String> exhaustedToolIds,
                                  Throwable error) {
         runStepRecorder.recordModelTurn(
                 request.runId(),
                 AgentRunStepRecorder.modelTurnInput(messages,
-                        exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks())),
+                        exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks(), exhaustedToolIds)),
                 turn == null ? null : modelTurnOutputJson(turn),
                 error);
     }
