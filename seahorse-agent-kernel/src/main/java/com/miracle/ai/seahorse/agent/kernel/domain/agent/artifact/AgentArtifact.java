@@ -40,7 +40,8 @@ public record AgentArtifact(String artifactId,
             "text/plain",
             "text/markdown",
             "text/csv",
-            "application/json");
+            "application/json",
+            "application/vnd.seahorse.a2ui+json");
     private static final Set<String> ACTIVE_MIME_TYPES = Set.of(
             "text/html",
             "image/svg+xml",

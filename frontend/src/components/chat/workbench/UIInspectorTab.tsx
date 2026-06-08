@@ -1,7 +1,7 @@
 import { InspectorEmptyState } from "@/components/chat/workbench/InspectorEmptyState";
 import { A2UILiteRenderer } from "@/components/a2ui-lite/A2UILiteRenderer";
 import type { A2UILiteAction, A2UILiteSurface } from "@/components/a2ui-lite/a2uiTypes";
-import type { AgentArtifact, ArtifactBlock } from "@/types";
+import { AGENT_ARTIFACT_SCAN_STATUS, type AgentArtifact, type ArtifactBlock } from "@/types";
 
 interface UIInspectorTabProps {
   artifacts: ArtifactBlock[];
@@ -23,7 +23,11 @@ export function UIInspectorTab({ artifacts, serverArtifacts }: UIInspectorTabPro
   const surfaces: A2UILiteSurface[] = [];
 
   for (const sa of serverArtifacts) {
-    if (sa.mimeType === "application/vnd.seahorse.a2ui+json") {
+    if (
+      sa.mimeType === "application/vnd.seahorse.a2ui+json"
+      && sa.canPreview === true
+      && sa.scanStatus === AGENT_ARTIFACT_SCAN_STATUS.CLEAN
+    ) {
       const surface = tryParseA2UISurface(sa.previewText);
       if (surface) surfaces.push(surface);
     }
