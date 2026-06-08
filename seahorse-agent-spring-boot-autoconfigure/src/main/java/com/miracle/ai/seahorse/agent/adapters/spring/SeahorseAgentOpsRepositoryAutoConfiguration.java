@@ -25,17 +25,14 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDashboardRepos
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcIntentTreeRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMessageFeedbackRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermExpansionAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRagTraceRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcSampleQuestionRepositoryAdapter;
-import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.dashboard.DashboardRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermExpansionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
@@ -49,11 +46,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.Environment;
 
 import javax.sql.DataSource;
-import java.time.Duration;
-import java.util.Optional;
 
 /**
  * 运营与管理类 JDBC 仓储适配器自动配置。
@@ -146,49 +140,5 @@ public class SeahorseAgentOpsRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(QueryTermMappingRepositoryPort.class)
     public JdbcQueryTermMappingRepositoryAdapter seahorseJdbcQueryTermMappingRepositoryAdapter(DataSource dataSource) {
         return new JdbcQueryTermMappingRepositoryAdapter(dataSource);
-    }
-
-    @Bean
-    @ConditionalOnBean(DataSource.class)
-    @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
-    @ConditionalOnProperty(prefix = "seahorse-agent.query-term-expansion", name = "enabled", havingValue = "true", matchIfMissing = true)
-    @ConditionalOnMissingBean(QueryTermExpansionPort.class)
-    public JdbcQueryTermExpansionAdapter seahorseJdbcQueryTermExpansionAdapter(
-            DataSource dataSource,
-            ObjectProvider<KeyValueCachePort> cachePort,
-            ObjectProvider<ObjectMapper> objectMapperProvider,
-            Environment environment) {
-        return new JdbcQueryTermExpansionAdapter(dataSource,
-                cachePort.getIfAvailable(SeahorseAgentOpsRepositoryAutoConfiguration::noopCachePort),
-                objectMapperProvider.getIfAvailable(ObjectMapper::new),
-                queryTermExpansionOptions(environment));
-    }
-
-    private static JdbcQueryTermExpansionAdapter.Options queryTermExpansionOptions(Environment environment) {
-        return new JdbcQueryTermExpansionAdapter.Options(
-                environment.getProperty("seahorse-agent.query-term-expansion.regex-enabled", Boolean.class, false),
-                environment.getProperty("seahorse-agent.query-term-expansion.max-rules", Integer.class, 500),
-                environment.getProperty("seahorse-agent.query-term-expansion.max-expanded-terms", Integer.class, 20),
-                environment.getProperty("seahorse-agent.query-term-expansion.max-source-term-length", Integer.class, 128),
-                environment.getProperty("seahorse-agent.query-term-expansion.cache-ttl", Duration.class,
-                        Duration.ofMinutes(5)));
-    }
-
-    private static KeyValueCachePort noopCachePort() {
-        return new KeyValueCachePort() {
-            @Override
-            public Optional<String> get(String key) {
-                return Optional.empty();
-            }
-
-            @Override
-            public void set(String key, String value, Duration ttl) {
-            }
-
-            @Override
-            public boolean delete(String key) {
-                return false;
-            }
-        };
     }
 }
