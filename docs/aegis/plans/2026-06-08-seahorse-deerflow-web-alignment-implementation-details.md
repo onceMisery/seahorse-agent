@@ -14,7 +14,7 @@ This document captures execution contracts that are easy to lose in a long plan:
 
 1. Stream events and snapshots must merge into message state idempotently.
 2. `frontend/src/hooks/useStreamResponse.ts` already supports `resumeRunId` and `lastEventSeq`; reuse that path before adding a second backfill owner.
-3. Content-generation tools currently return JSON observations only; artifact persistence and artifact events still need a kernel-side publisher.
+3. Content-generation tools currently return JSON observations only; a gateway-level artifact publication hook exists, but concrete generation artifact persistence and artifact events still need a kernel-side publisher implementation.
 4. Encoding checks must assert correct Chinese text, not mojibake samples.
 
 Snippets in this document are examples. Verify them against current repository types before implementation.
@@ -26,10 +26,11 @@ Snippets in this document are examples. Verify them against current repository t
 `2026-06-08-implementation-details-review.md` is technically useful. Read it as UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. The following points were rechecked against the current repository before changing this companion document:
 
 - Accurate: `StreamEventEnvelope` has `eventId`, `eventSeq`, `eventType`, `runId`, optional `stepId`, `timestamp`, and `typedPayload`; it does not carry `messageId`.
-- Accurate: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context, but `LocalToolGatewayPort` currently calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read that context unless the execution contract is extended.
+- Accurate with updated implementation state: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context. `LocalToolGatewayPort` still calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read that context directly; however, `ToolArtifactPublicationPort` is now wired at the gateway layer and receives the full `ToolInvocationRequest` plus the redacted successful `ToolInvocationResult`.
 - Accurate: there is no existing `SkillSelectionContext`; current selected-skill validation lives in `ChatSelectedSkillResolver` and produces `SkillRuntimeBlock` values.
 - Accurate with a narrower scope: `useStreamResponse.ts`, `SeahorseChatController`, and `ResearchSseBridge` already support `resumeRunId` and `lastEventSeq`; reuse that path before adding any separate event-list endpoint.
-- Needs correction in implementation work: the named chat/workbench files are currently clean for the known mojibake code points, while `frontend/src/hooks/useStreamResponse.ts` still has confirmed mojibake in watchdog comments and the stream-timeout error message.
+- Superseded by current code: the named chat/workbench files and `frontend/src/hooks/useStreamResponse.ts` are clean for the known mojibake code points in the scoped scan. Keep the guard, but do not claim a current `useStreamResponse.ts` mojibake defect unless a fresh scan finds one.
+- Partially superseded by current code: the review's "artifact persistence trigger point" concern is now resolved at the hook level by `ToolArtifactPublicationPort`; Task 5 still needs the concrete publisher that maps generation tool observations to stored `AgentArtifact` records and stream events.
 
 ---
 
@@ -95,7 +96,7 @@ npm run build
 Current baseline:
 
 - `frontend/src/components/chat/workbench/WorkspaceInspector.tsx`, `frontend/src/components/chat/workbench/ArtifactInspectorTab.tsx`, `frontend/src/stores/chatStore.ts`, and `frontend/src/services/agentArtifactService.ts` are clean for the known mojibake code points from the review scan.
-- `frontend/src/hooks/useStreamResponse.ts` still contains mojibake in watchdog comments and the user-facing stream-timeout message on the SSE retry path.
+- `frontend/src/hooks/useStreamResponse.ts` is also clean in the current scoped scan; watchdog comments and the stream-timeout message render as normal Chinese when read as UTF-8.
 
 Execution constraints:
 
@@ -161,10 +162,12 @@ Current baseline:
 - Tool registration through `BuiltInAgentToolRegistrar` already covers built-in generation tools.
 - `model="default"` resolves to the configured default model.
 - `ImageGenerationToolPortAdapter` currently drops the `style` argument despite advertising it in the schema.
+- `ToolArtifactPublicationPort` exists in the kernel outbound ports. `LocalToolGatewayPort` calls it after successful tool execution and output redaction, passes the full `ToolInvocationRequest`, and swallows publication exceptions so the tool observation remains authoritative.
+- `SeahorseAgentKernelAgentAutoConfiguration` wires an optional `ToolArtifactPublicationPort` into `LocalToolGatewayPort`; when absent, the gateway uses `ToolArtifactPublicationPort.noop()`.
 
 Implementation constraints:
 
-- Add artifact persistence through a kernel-side artifact publisher, not through web controllers or `SpringSseEventSender`.
+- Add the concrete generation artifact publisher through the existing gateway-level `ToolArtifactPublicationPort` hook, not through web controllers, `SpringSseEventSender`, or individual generation tool adapters.
 - Preserve tool ids and catalog metadata.
 - Preserve `model="default"` fallback.
 - Forward image `style` or remove it from schema and docs in the same reviewed change.
@@ -173,9 +176,10 @@ Implementation constraints:
 Context boundary:
 
 - Do not use undefined `ExecutionContext`, `ExecutionMetadata`, `AgentRunContext`, or `SkillSelectionContext` names in implementation or tests unless the same change creates and wires that contract.
-- Preferred execution shape: preserve `ToolInvocationRequest` as the gateway-level context carrier, then either pass a typed invocation metadata object into tool adapters or publish artifacts from a gateway/kernel collaborator that still has the full request.
+- Preferred execution shape for Task 5 is now explicit: preserve `ToolInvocationRequest` as the gateway-level context carrier and publish artifacts from a `ToolArtifactPublicationPort` implementation that can see the full request plus the safe result.
 - If `ToolPort.invoke(...)` is extended, update all implementations and registry tests in the same slice. Keep the new parameter explicit and typed; do not make generation tools read global state.
-- If artifact publishing is implemented above `ToolPort`, keep `ToolPort` result semantics stable and persist artifacts in a gateway/kernel collaborator that can see `runId`, `stepId`, `tenantId`, `userId`, `allowedToolIds`, and the raw `ToolInvocationResult`.
+- Keep `ToolPort` result semantics stable. The publisher should treat generation tool output as an observation to parse and persist, not as a replacement for the tool result returned to the model.
+- Persist artifacts in a gateway/kernel collaborator that can see `runId`, `stepId`, `tenantId`, `userId`, `allowedToolIds`, and the redacted `ToolInvocationResult`; do not rely on a web-layer `ApplicationEventPublisher` or SSE sender as the source of truth.
 - If a scoped context holder is introduced instead, it must be set and cleared inside `LocalToolGatewayPort` with tests proving cleanup after success, failure, denial, and nested/parallel invocations.
 - `AgentArtifact.messageId` is optional in the current domain model. Do not block artifact persistence solely because `messageId` is unavailable at tool-adapter level; use `runId` as the required recovery key and attach `messageId` only when a verified owner supplies it.
 
@@ -183,7 +187,7 @@ Verification focus:
 
 ```powershell
 .\mvnw.cmd -pl seahorse-agent-kernel -am test -Dtest=ImageGenerationToolPortAdapterTests,*ContentGeneration*Tests,LocalToolGatewayPort*Tests
-.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am test -Dtest=BuiltInAgentToolRegistrarTests
+.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am test -Dtest=BuiltInAgentToolRegistrarTests,SeahorseAgentChatRunStoreAutoConfigurationTests#shouldWireArtifactPublisherIntoToolGateway -Dsurefire.failIfNoSpecifiedTests=false
 ```
 
 ---
