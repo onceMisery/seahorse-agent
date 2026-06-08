@@ -63,6 +63,22 @@ class ContentGenerationToolPortAdapterTests {
     }
 
     @Test
+    void generationToolsShouldTreatDefaultModelAsConfiguredModel() {
+        CapturingChatModel chatModel = new CapturingChatModel("# Redis 项目简报");
+        NewsletterGenerationToolPortAdapter tool = new NewsletterGenerationToolPortAdapter(
+                chatModel, "agnes-2.0-flash", jsonSupport);
+
+        ToolInvocationResult result = tool.invoke("call-1", NewsletterGenerationToolPortAdapter.TOOL_ID,
+                Map.of(
+                        "topic", "Redis 项目介绍",
+                        "model", "default",
+                        "sourceMaterial", "README.md: Redis is a data structure server."));
+
+        assertTrue(result.success());
+        assertEquals("agnes-2.0-flash", chatModel.modelId.get());
+    }
+
+    @Test
     void pptGenerationShouldCallChatModelAndReturnDeckOutlineArtifact() throws Exception {
         CapturingChatModel chatModel = new CapturingChatModel("""
                 # Redis 技术介绍

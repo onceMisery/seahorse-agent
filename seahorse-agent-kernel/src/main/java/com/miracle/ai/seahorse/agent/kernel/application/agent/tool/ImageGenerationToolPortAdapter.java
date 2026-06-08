@@ -68,7 +68,7 @@ public class ImageGenerationToolPortAdapter implements DescribedToolPort {
                     prompt,
                     model(arguments),
                     text(arguments, "size", DEFAULT_SIZE),
-                    jsonSupport.string(arguments, "style"),
+                    null,
                     text(arguments, "responseFormat", DEFAULT_RESPONSE_FORMAT)));
             return ToolInvocationResult.ok(jsonSupport.write(observation(result)));
         } catch (Exception ex) {
@@ -79,7 +79,7 @@ public class ImageGenerationToolPortAdapter implements DescribedToolPort {
 
     private String model(Map<String, Object> arguments) {
         String requested = jsonSupport.string(arguments, "model");
-        return requested.isBlank() ? defaultModel : requested;
+        return isDefaultModelPlaceholder(requested) ? defaultModel : requested;
     }
 
     private String text(Map<String, Object> arguments, String field, String fallback) {
@@ -98,5 +98,10 @@ public class ImageGenerationToolPortAdapter implements DescribedToolPort {
         observation.put("b64Json", safeResult.b64Json());
         observation.put("mimeType", safeResult.mimeType());
         return observation;
+    }
+
+    private static boolean isDefaultModelPlaceholder(String value) {
+        String normalized = Objects.requireNonNullElse(value, "").trim();
+        return normalized.isBlank() || "default".equalsIgnoreCase(normalized);
     }
 }

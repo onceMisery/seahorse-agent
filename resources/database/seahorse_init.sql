@@ -2828,6 +2828,10 @@ VALUES (
 6. 架构图和流程图优先用 Mermaid 代码块表达；图片生成结果必须以 Markdown 图片或可点击链接引用。
 7. 关键文件证据需要列出文件路径和对应用途，说明结论来自哪些 README、docs 或源码文件。
 8. 如果仓库读取失败，说明失败原因并给出用户可重试的建议；如果任一生成工具失败，保留已完成内容并明确失败原因。
+9. 最终回答必须是可直接渲染的 Markdown；标题、段落、表格、列表、分隔线和代码块前后必须保留换行，禁止把多个 Markdown 块压缩到同一行。
+10. 每个 Mermaid 图必须独立成块：第一行只能是 ```mermaid，第二行才开始 graph、flowchart 或 sequenceDiagram，最后单独一行 ```；禁止输出 ```mermaidgraph、```mermaidflowchart、```mermaidsequenceDiagram。
+11. 同一个 Mermaid 图内节点 ID 必须唯一，禁止重复使用同一个 ID 表示不同节点；不要使用不稳定或 beta Mermaid 语法。
+12. 输出前必须自检：所有硬性工具都至少成功调用一次；所有关键结论都能在 README、docs 或源码证据中找到；如果有工具失败但已重试成功，只在末尾简要说明，不要影响主体内容可读性。
     $instructions$,
     $toolset${"tools":["github_repository_reader","web_fetch","image_generation","newsletter_generation","ppt_generation","chart_visualization","frontend_design"]}$toolset$,
     $model${"temperature":0.3,"maxTokens":4096,"thinking":true}$model$,

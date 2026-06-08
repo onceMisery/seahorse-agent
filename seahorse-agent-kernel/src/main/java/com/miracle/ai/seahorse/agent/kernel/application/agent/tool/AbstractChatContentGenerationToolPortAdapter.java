@@ -109,7 +109,7 @@ abstract class AbstractChatContentGenerationToolPortAdapter implements Described
 
     private String model(Map<String, Object> arguments) {
         String requested = jsonSupport.string(arguments, "model");
-        return requested.isBlank() ? defaultModel : requested;
+        return isDefaultModelPlaceholder(requested) ? defaultModel : requested;
     }
 
     private Map<String, Object> observation(String content) {
@@ -125,5 +125,10 @@ abstract class AbstractChatContentGenerationToolPortAdapter implements Described
             throw new IllegalArgumentException(field + " must not be blank");
         }
         return value.trim();
+    }
+
+    private static boolean isDefaultModelPlaceholder(String value) {
+        String normalized = Objects.requireNonNullElse(value, "").trim();
+        return normalized.isBlank() || "default".equalsIgnoreCase(normalized);
     }
 }

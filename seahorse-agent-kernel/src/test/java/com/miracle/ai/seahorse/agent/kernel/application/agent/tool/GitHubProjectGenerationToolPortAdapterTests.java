@@ -113,9 +113,32 @@ class GitHubProjectGenerationToolPortAdapterTests {
         assertEquals("Draw a Redis architecture explainer image", captured.get().prompt());
         assertEquals("agnes-image-2.0-flash", captured.get().model());
         assertEquals("1024x1024", captured.get().size());
+        assertEquals(null, captured.get().style());
         JsonNode root = objectMapper.readTree(result.content());
         assertEquals("GENERATED", root.path("status").asText());
         assertEquals("https://cdn.example.com/generated/redis-architecture.png", root.path("imageUrl").asText());
         assertEquals("image/png", root.path("mimeType").asText());
+    }
+
+    @Test
+    void imageGenerationShouldTreatDefaultModelAsConfiguredModel() {
+        AtomicReference<ImageGenerationRequest> captured = new AtomicReference<>();
+        ImageGenerationToolPortAdapter tool = new ImageGenerationToolPortAdapter(request -> {
+            captured.set(request);
+            return ImageGenerationResult.generated(
+                    request.prompt(),
+                    request.model(),
+                    "https://cdn.example.com/generated/redis-architecture.png",
+                    "",
+                    "image/png");
+        }, "agnes-image-2.0-flash", jsonSupport);
+
+        ToolInvocationResult result = tool.invoke("call-1", ImageGenerationToolPortAdapter.TOOL_ID,
+                Map.of(
+                        "prompt", "Draw a Redis architecture explainer image",
+                        "model", "default"));
+
+        assertTrue(result.success());
+        assertEquals("agnes-image-2.0-flash", captured.get().model());
     }
 }
