@@ -75,6 +75,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolArtifactPublicationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
@@ -348,6 +349,38 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
 
                     assertThat(result.success()).isTrue();
                     assertThat(result.content()).isEqualTo("token=[REDACTED]");
+                });
+    }
+
+    @Test
+    void shouldWireArtifactPublisherIntoToolGateway() {
+        contextRunner.withUserConfiguration(TestArtifactPublicationGatewayConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    ToolInvocationResult result = context.getBean(ToolGatewayPort.class)
+                            .invoke(new ToolInvocationRequest(
+                                    "run-1",
+                                    "step-1",
+                                    "call-1",
+                                    "agent-1",
+                                    "version-1",
+                                    "tenant-1",
+                                    "user-1",
+                                    "agent-identity-1",
+                                    "memory-write",
+                                    Map.of(),
+                                    Map.of(),
+                                    "run-1:call-1",
+                                    List.of("memory-write")));
+
+                    assertThat(result.success()).isTrue();
+                    RecordingToolArtifactPublicationPort artifacts =
+                            context.getBean(RecordingToolArtifactPublicationPort.class);
+                    assertThat(artifacts.published).singleElement().satisfies(published -> {
+                        assertThat(published.request().runId()).isEqualTo("run-1");
+                        assertThat(published.result().content()).isEqualTo("artifact-ready");
+                    });
                 });
     }
 
@@ -661,6 +694,30 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Bean
         ToolOutputRedactionPort toolOutputRedactionPort() {
             return ToolOutputRedactionPort.basicSecretPatterns();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestArtifactPublicationGatewayConfiguration {
+
+        @Bean
+        Clock clock() {
+            return FIXED_CLOCK;
+        }
+
+        @Bean
+        ToolRegistryPort toolRegistryPort() {
+            return new ArtifactToolRegistry();
+        }
+
+        @Bean
+        ToolPolicyPort toolPolicyPort() {
+            return request -> PolicyDecision.allow("allow-1");
+        }
+
+        @Bean
+        RecordingToolArtifactPublicationPort toolArtifactPublicationPort() {
+            return new RecordingToolArtifactPublicationPort();
         }
     }
 
@@ -983,6 +1040,33 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                     ? Optional.of((toolCallId, id, arguments) -> ToolInvocationResult.ok("token=sk-live-secret"))
                     : Optional.empty();
         }
+    }
+
+    private static final class ArtifactToolRegistry implements ToolRegistryPort {
+
+        @Override
+        public List<ToolDescriptor> listTools() {
+            return List.of(new ToolDescriptor("memory-write", "Memory Write", "Write memory", "{}"));
+        }
+
+        @Override
+        public Optional<ToolPort> find(String toolId) {
+            return "memory-write".equals(toolId)
+                    ? Optional.of((toolCallId, id, arguments) -> ToolInvocationResult.ok("artifact-ready"))
+                    : Optional.empty();
+        }
+    }
+
+    private static final class RecordingToolArtifactPublicationPort implements ToolArtifactPublicationPort {
+        private final List<PublishedToolArtifact> published = new ArrayList<>();
+
+        @Override
+        public void publish(ToolInvocationRequest request, ToolInvocationResult result) {
+            published.add(new PublishedToolArtifact(request, result));
+        }
+    }
+
+    private record PublishedToolArtifact(ToolInvocationRequest request, ToolInvocationResult result) {
     }
 
     static final class RecordingToolRegistry implements ToolRegistryPort {

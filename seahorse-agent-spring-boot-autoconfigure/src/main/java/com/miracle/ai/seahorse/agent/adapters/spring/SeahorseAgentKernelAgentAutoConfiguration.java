@@ -78,6 +78,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolArtifactPublicationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
@@ -270,6 +271,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                    ObjectProvider<ToolApprovalRequestRepositoryPort> toolApprovalRequestRepositoryPort,
                                                    ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
                                                    ObjectProvider<ToolOutputRedactionPort> toolOutputRedactionPort,
+                                                   ObjectProvider<ToolArtifactPublicationPort> toolArtifactPublicationPort,
                                                    ObjectProvider<Clock> clockProvider) {
         return new LocalToolGatewayPort(
                 toolRegistry,
@@ -278,6 +280,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 toolApprovalRequestRepositoryPort.getIfAvailable(ToolApprovalRequestRepositoryPort::noop),
                 approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty),
                 toolOutputRedactionPort.getIfAvailable(ToolOutputRedactionPort::noop),
+                toolArtifactPublicationPort.getIfAvailable(ToolArtifactPublicationPort::noop),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
