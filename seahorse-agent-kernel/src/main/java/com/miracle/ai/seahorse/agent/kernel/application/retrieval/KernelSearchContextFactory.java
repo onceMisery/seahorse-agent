@@ -29,7 +29,9 @@ import com.miracle.ai.seahorse.agent.kernel.feature.retrieval.MetadataFilterComp
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaRegistryPort;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -71,7 +73,25 @@ final class KernelSearchContextFactory {
                 .options(options)
                 .compiledFilter(compileFilter(filter))
                 .traceRunScope(traceRunScope)
+                .metadata(metadataFromOptions(options))
                 .build();
+    }
+
+    private Map<String, Object> metadataFromOptions(RetrievalOptions options) {
+        if (options == null || options.channelSettings().isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        copyIfPresent(metadata, options.channelSettings(), SearchContext.METADATA_QUERY_EXPANDED_TERMS);
+        copyIfPresent(metadata, options.channelSettings(), SearchContext.METADATA_QUERY_APPLIED_RULES);
+        return metadata;
+    }
+
+    private void copyIfPresent(Map<String, Object> target, Map<String, Object> source, String key) {
+        Object value = source.get(key);
+        if (value != null) {
+            target.put(key, value);
+        }
     }
 
     private CompiledMetadataFilter compileFilter(RetrievalFilter filter) {

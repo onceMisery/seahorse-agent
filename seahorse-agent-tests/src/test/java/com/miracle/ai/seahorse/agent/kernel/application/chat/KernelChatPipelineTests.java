@@ -68,6 +68,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.trace.RagTraceRunFinish;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.QueryOptimizationResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventSender;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
@@ -172,6 +173,35 @@ class KernelChatPipelineTests {
         Assertions.assertNotNull(ports.lastPromptContext);
         Assertions.assertNull(ports.lastPromptContext.getContextPack());
         Assertions.assertEquals("task-1", ports.boundTaskId);
+    }
+
+    @Test
+    void shouldPassExpandedTermsFromQueryOptimizationToRetrieval() {
+        RetrievalContext retrievalContext = RetrievalContext.builder()
+                .kbContext("知识库内容")
+                .intentChunks(Map.of())
+                .build();
+        RecordingChatPorts ports = new RecordingChatPorts(GuidanceDecision.none(), retrievalContext);
+        QueryOptimizerPort optimizerPort = (question, history, memoryContext) -> new QueryOptimizationResult(
+                question,
+                question,
+                Map.of("MQ", "term_mapping"),
+                List.of("Pulsar", "Kafka"),
+                List.of("term_expansion"));
+        ChatPreparationPorts preparationPorts = new ChatPreparationPorts(
+                ports,
+                MemoryEnginePort.noop(),
+                optimizerPort,
+                ports,
+                ports,
+                ports,
+                ports);
+        ChatResponsePorts responsePorts = new ChatResponsePorts(ports, ports, ports, ports);
+        KernelChatPipeline pipeline = new KernelChatPipeline(preparationPorts, responsePorts);
+
+        pipeline.execute(context(new RecordingCallback()));
+
+        Assertions.assertEquals(List.of("Pulsar", "Kafka"), ports.lastExpandedTerms);
     }
 
     @Test
@@ -471,6 +501,7 @@ class KernelChatPipelineTests {
         private boolean retrieved;
         private ChatRequest lastChatRequest;
         private PromptContext lastPromptContext;
+        private List<String> lastExpandedTerms = List.of();
         private String boundTaskId;
         private RuntimeException streamError;
 
@@ -512,6 +543,18 @@ class KernelChatPipelineTests {
         @Override
         public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK) {
             retrieved = true;
+            return retrievalContext;
+        }
+
+        @Override
+        public RetrievalContext retrieve(List<SubQuestionIntent> subIntents,
+                                         int topK,
+                                         com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope traceRunScope,
+                                         QueryOptimizationResult queryOptimizationResult) {
+            retrieved = true;
+            lastExpandedTerms = queryOptimizationResult == null
+                    ? List.of()
+                    : queryOptimizationResult.expandedTerms();
             return retrievalContext;
         }
 

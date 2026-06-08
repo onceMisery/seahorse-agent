@@ -36,6 +36,9 @@ import java.util.Map;
 @Builder
 public class SearchContext {
 
+    public static final String METADATA_QUERY_EXPANDED_TERMS = "queryExpandedTerms";
+    public static final String METADATA_QUERY_APPLIED_RULES = "queryAppliedRules";
+
     private String originalQuestion;
 
     private String rewrittenQuestion;

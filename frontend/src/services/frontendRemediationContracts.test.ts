@@ -43,12 +43,28 @@ describe("frontend remediation contracts", () => {
   it("guards AI Infra operations panels before disabled backend APIs can be triggered", () => {
     const source = readSource("pages/admin/ai-infra/AiInfraConsolePage.tsx");
 
-    expect(source).toContain("Pilot readiness unavailable");
-    expect(source).toContain("Eval regression unavailable");
-    expect(source).toContain("Rollout unavailable");
+    expect(source).toContain('label="试点就绪度"');
+    expect(source).toContain('label="评估回归"');
+    expect(source).toContain('label="发布管理"');
     expect(source).toContain('disabled={!readinessFeatureState.enabled || actionLoading === "readiness:generate"}');
     expect(source).toContain('disabled={!feedbackFeatureState.enabled || actionLoading === "eval:regression"}');
     expect(source).toContain('disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:create"}');
+  });
+
+  it("keeps the Agent console chrome localized for Chinese operators", () => {
+    const source = readSource("pages/admin/ai-infra/AiInfraConsolePage.tsx");
+
+    expect(source).toContain("<h1 className=\"admin-page-title\">Agent 控制台</h1>");
+    expect(source).toContain('label: "总览"');
+    expect(source).toContain('label: "审批"');
+    expect(source).toContain('label: "反馈评估"');
+    expect(source).toContain('title="审批收件箱"');
+    expect(source).toContain('title="工具目录"');
+    expect(source).toContain("<TableHead>审批 ID</TableHead>");
+    expect(source).toContain("刷新");
+    expect(source).not.toContain("AI Infra Console");
+    expect(source).not.toContain("Approval Inbox");
+    expect(source).not.toContain("Tool Catalog");
   });
 
   it("does not expose the missing single agent template endpoint", () => {

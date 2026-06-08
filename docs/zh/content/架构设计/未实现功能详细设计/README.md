@@ -5,6 +5,7 @@
 本目录包含 Seahorse Agent 项目中规划但尚未完全实现的功能的详细设计文档。这些设计基于对现有代码、设计文档和行业最佳实践的深入分析。
 
 **生成日期**: 2026-05-31
+**最近校准**: 2026-06-08
 **基于版本**: 当前 main 分支
 **分析依据**: README.md、企业级 AI Infra 分阶段开发规划、智能体记忆系统架构设计等
 
@@ -12,7 +13,7 @@
 
 ## 实现状态总览
 
-### 整体实现率：83.3% (20/24 功能已实现)
+### 整体实现率：84.0% (21/25 功能已实现)
 
 | 类别 | 已实现 | 部分实现 | 未实现 | 总计 |
 |------|--------|----------|--------|------|
@@ -20,6 +21,7 @@
 | 元数据抽取与治理 | 6 | 0 | 0 | 6 |
 | 智能体记忆系统 | 4 | 0 | 0 | 4 |
 | AI Infra 基础 | 4 | 0 | 0 | 4 |
+| 术语映射在线扩展 | 1 | 0 | 0 | 1 |
 | MCP/OpenAPI/凭据/沙箱 | 0 | 3 | 0 | 3 |
 | Agent Factory | 0 | 1 | 0 | 1 |
 | Multi-Agent/A2A | 0 | 1 | 0 | 1 |
@@ -205,11 +207,12 @@
 | MemoryVectorPort 向量检索闭环 | ⏳ 待实施 | 接入 Milvus 实现语义记忆检索 |
 | 多级摘要策略 | ⏳ 待实施 | L2 会话级、L3 跨会话主题、L4 用户画像 |
 | 关键事实提取器 | ⏳ 待实施 | 自动提取用户偏好/属性/决策等 |
-| 术语映射 JDBC 实现 | ⏳ 待实施 | `JdbcQueryTermExpansionAdapter` |
 | Token 预算管理 | ⏳ 待实施 | 智能分配和截断记忆 Token |
 | 知识图谱集成 | 🔮 远期规划 | 可选集成 Neo4j |
 | 多模态记忆 | 🔮 远期规划 | 支持图片、音频等 |
 | 记忆可解释性 | 🔮 远期规划 | 提供记忆来源和推理路径 |
+
+已从待实施清单移除：术语映射 JDBC 实现和在线 keyword 检索消费已由 `JdbcQueryTermExpansionAdapter`、JDBC 自动配置、`KernelRetrievalEngine` 透传和 `KeywordSearchChannelFeature` 消费闭合。
 
 ---
 
@@ -316,12 +319,13 @@
 ### 高优先级
 
 1. **Starter 依赖治理**
-   - 推进 `seahorse-agent-spring-boot-starter-core` 作为轻量入口
-   - Optional 化重型 SDK 依赖
+   - 已完成 bootstrap 默认依赖迁移：默认应用只依赖 `starter-core`，不再依赖 `starter-all`
+   - 已用 Maven Enforcer 禁止 bootstrap 回退到聚合 `starter-all`
+   - 后续继续翻转 `starter-core`/`starter` 坐标方向，并补齐 core-only context 验证
 
-2. **元数据治理 JDBC 拆分**
-   - `JdbcMetadataGovernanceRepositoryAdapter` 按子域拆分
-   - 明确事务边界
+2. **元数据治理 JDBC 深层拆分**
+   - 默认端口 Bean 已通过 `JdbcMetadataGovernanceRepositoryDelegate` 和 `JdbcMetadataPortAdapters` 细粒度化
+   - 后续继续把 `JdbcMetadataGovernanceRepositoryAdapter` 中的 SQL、row mapper 和事务边界迁移到子域 adapter
 
 3. **端口准入规则**
    - 建立端口新增评审机制

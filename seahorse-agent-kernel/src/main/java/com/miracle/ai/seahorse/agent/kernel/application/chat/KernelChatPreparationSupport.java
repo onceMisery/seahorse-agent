@@ -137,7 +137,8 @@ final class KernelChatPreparationSupport {
 
     RetrievalContext retrieve(StreamChatContext context) {
         return preparationPorts.retrievalContextPort()
-                .retrieve(safeSubIntents(context), DEFAULT_TOP_K, context.getTraceRunScope());
+                .retrieve(safeSubIntents(context), DEFAULT_TOP_K, context.getTraceRunScope(),
+                        context.getQueryOptimizationResult());
     }
 
     List<ChatMessage> safeHistory(StreamChatContext context) {

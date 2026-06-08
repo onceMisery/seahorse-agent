@@ -21,6 +21,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrato
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelMultiChannelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine;
 import com.miracle.ai.seahorse.agent.kernel.application.retrieval.KernelRetrievalEngine.KernelRetrievalEnginePorts;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.QueryOptimizationResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentKind;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
@@ -152,6 +153,26 @@ class KernelRetrievalEngineTests {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void shouldAttachExpandedTermsToKeywordRetrievalContext() {
+        DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
+        RecordingKeywordContextChannel keywordChannel = new RecordingKeywordContextChannel();
+        registerChannel(registry, keywordChannel, 1);
+        KernelRetrievalEngine engine = new KernelRetrievalEngine(registry, directExecutor, activationContext());
+        QueryOptimizationResult optimizationResult = new QueryOptimizationResult(
+                QUESTION,
+                QUESTION,
+                Map.of(),
+                List.of("Pulsar", "Kafka"),
+                List.of("term_expansion"));
+
+        engine.retrieve(singleQuestionIntent(), TOP_K, null, optimizationResult);
+
+        Assertions.assertTrue(keywordChannel.keywordEnabled);
+        Assertions.assertEquals(QUESTION, keywordChannel.mainQuestion);
+        Assertions.assertEquals(List.of("Pulsar", "Kafka"), keywordChannel.expandedTerms);
     }
 
     private void registerChannel(DefaultExtensionRegistry registry, SearchChannelFeature feature, int order) {
@@ -384,6 +405,48 @@ class KernelRetrievalEngineTests {
                 throw new IllegalStateException("模拟后处理器故障");
             }
             return processed;
+        }
+    }
+
+    private static class RecordingKeywordContextChannel implements SearchChannelFeature {
+
+        private boolean keywordEnabled;
+        private String mainQuestion;
+        private List<String> expandedTerms = List.of();
+
+        @Override
+        public String name() {
+            return "recording-keyword-context";
+        }
+
+        @Override
+        public SearchChannelType channelType() {
+            return SearchChannelType.KEYWORD_BM25;
+        }
+
+        @Override
+        public boolean enabled(SearchContext context) {
+            return context != null && context.effectiveOptions().enableKeyword();
+        }
+
+        @Override
+        public SearchChannelResult search(SearchContext context) {
+            keywordEnabled = context.effectiveOptions().enableKeyword();
+            mainQuestion = context.getMainQuestion();
+            Object metadataValue = context.getMetadata().get(SearchContext.METADATA_QUERY_EXPANDED_TERMS);
+            if (metadataValue instanceof List<?> values) {
+                expandedTerms = values.stream().map(Object::toString).toList();
+            }
+            return SearchChannelResult.builder()
+                    .channelType(channelType())
+                    .channelName(name())
+                    .chunks(List.of(RetrievedChunk.builder()
+                            .id("keyword-context-chunk")
+                            .text("关键词扩展结果")
+                            .score(0.8F)
+                            .build()))
+                    .latencyMs(1L)
+                    .build();
         }
     }
 

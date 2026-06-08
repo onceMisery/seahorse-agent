@@ -3,6 +3,7 @@ package com.miracle.ai.seahorse.agent.kernel.domain.retrieval;
 import lombok.Builder;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -56,6 +57,23 @@ public record RetrievalOptions(
                 .enableRrf(true)
                 .enableRerank(false)
                 .build();
+    }
+
+    public RetrievalOptions withEnableKeyword(boolean enabled) {
+        return new RetrievalOptions(finalTopK, vectorTopK, keywordTopK, fusionTopK, rerankTopK,
+                enableVector, enableIntentDirected, enabled, enableRrf, enableRerank,
+                embeddingModel, rerankModel, vectorTimeout, keywordTimeout, rerankTimeout, channelSettings);
+    }
+
+    public RetrievalOptions withAdditionalChannelSettings(Map<String, Object> additionalSettings) {
+        if (additionalSettings == null || additionalSettings.isEmpty()) {
+            return this;
+        }
+        Map<String, Object> mergedSettings = new LinkedHashMap<>(channelSettings);
+        mergedSettings.putAll(additionalSettings);
+        return new RetrievalOptions(finalTopK, vectorTopK, keywordTopK, fusionTopK, rerankTopK,
+                enableVector, enableIntentDirected, enableKeyword, enableRrf, enableRerank,
+                embeddingModel, rerankModel, vectorTimeout, keywordTimeout, rerankTimeout, mergedSettings);
     }
 
     private static int positive(int value, int fallback) {

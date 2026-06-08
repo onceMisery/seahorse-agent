@@ -40,10 +40,9 @@ import java.util.regex.Pattern;
  *   <li>专有名词保护：检测 camelCase、全大写缩写、技术术语模式</li>
  * </ul>
  *
- * <p>Phase 3A 行为边界：optimizedQuestion 与 originalQuestion 相同，不修改查询文本。
- * protectedTerms 和 expandedTerms 存入结果对象并通过 debug log 输出，但当前不被
- * rewriteQuery 消费。需要 Phase 3B（LLM 优化器）或 QueryRewritePort 实现改造
- * 才能让保护词和扩展词真正生效。
+ * <p>行为边界：optimizedQuestion 与 originalQuestion 相同，不修改用户问题。
+ * protectedTerms 保留给后续 rewrite/LLM 优化能力；expandedTerms 会透传到检索上下文，
+ * 由关键词通道用于召回扩展，避免污染用户原始问题和向量查询语义。
  */
 public class RuleBasedQueryOptimizerPort implements QueryOptimizerPort {
 

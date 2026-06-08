@@ -56,7 +56,7 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
         IngestionPipelinePayload createPayload = new IngestionPipelinePayload(
                 "Native Pipeline",
                 "Created by seahorse",
-                List.of(node("parser", "parser", "indexer", "tika")),
+                List.of(node("1", "parser", "2", "tika")),
                 "tester");
 
         IngestionPipelineRecord created = adapter.create(createPayload);
@@ -68,12 +68,12 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
         assertThat(queried.getName()).isEqualTo("Native Pipeline");
         assertThat(queried.getNodes()).hasSize(1);
         assertThat(page.records()).extracting(IngestionPipelineRecord::getId).contains(created.getId());
-        assertThat(definition.getNodes()).extracting("nodeId").containsExactly("parser");
+        assertThat(definition.getNodes()).extracting("nodeId").containsExactly("1");
 
         IngestionPipelinePayload updatePayload = new IngestionPipelinePayload(
                 "Updated Pipeline",
                 "Updated by seahorse",
-                List.of(node("fetcher", "fetcher", null, "http")),
+                List.of(node("3", "fetcher", null, "http")),
                 "tester");
         boolean updated = adapter.update(created.getId(), updatePayload);
         IngestionPipelineRecord afterUpdate = adapter.findRecordById(created.getId()).orElseThrow();
@@ -85,7 +85,7 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
         assertThat(updated).isTrue();
         assertThat(afterUpdate.getName()).isEqualTo("Updated Pipeline");
         assertThat(afterUpdate.getNodes()).extracting(IngestionPipelineNodePayload::nodeId)
-                .containsExactly("fetcher");
+                .containsExactly("3");
         assertThat(activeNodes).isEqualTo(1);
 
         boolean deleted = adapter.delete(created.getId(), "tester");
@@ -97,12 +97,22 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
 
     @Test
     void shouldKeepExistingPipelineDefinitionContract() {
-        PipelineDefinition definition = adapter.findById("pipeline-1").orElseThrow();
+        PipelineDefinition definition = adapter.findById("1").orElseThrow();
 
         assertThat(definition.getName()).isEqualTo("Default Pipeline");
         assertThat(definition.getNodes()).hasSize(2);
         assertThat(definition.getNodes().get(0).getSettings().get("parserType").asText())
                 .isEqualTo("tika");
+    }
+
+    @Test
+    void shouldCastNodeJsonFieldsForPostgresJsonbColumns() throws Exception {
+        java.lang.reflect.Field insertNodeSql =
+                JdbcPipelineDefinitionRepositoryAdapter.class.getDeclaredField("SQL_INSERT_NODE");
+        insertNodeSql.setAccessible(true);
+
+        assertThat((String) insertNodeSql.get(null))
+                .contains("CAST(? AS JSONB), CAST(? AS JSONB)");
     }
 
     private IngestionPipelineNodePayload node(String nodeId, String type, String nextNodeId, String provider) {
@@ -119,11 +129,11 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_ingestion_pipeline");
         jdbcTemplate.execute("""
                 CREATE TABLE t_ingestion_pipeline (
-                    id VARCHAR(64) PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     name VARCHAR(128),
                     description VARCHAR(256),
-                    created_by VARCHAR(64),
-                    updated_by VARCHAR(64),
+                    created_by BIGINT,
+                    updated_by BIGINT,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
@@ -131,15 +141,15 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE t_ingestion_pipeline_node (
-                    id VARCHAR(64) PRIMARY KEY,
-                    pipeline_id VARCHAR(64),
-                    node_id VARCHAR(64),
+                    id BIGINT PRIMARY KEY,
+                    pipeline_id BIGINT,
+                    node_id BIGINT,
                     node_type VARCHAR(64),
-                    next_node_id VARCHAR(64),
+                    next_node_id BIGINT,
                     settings_json VARCHAR(512),
                     condition_json VARCHAR(512),
-                    created_by VARCHAR(64),
-                    updated_by VARCHAR(64),
+                    created_by BIGINT,
+                    updated_by BIGINT,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0
@@ -153,21 +163,21 @@ class JdbcPipelineDefinitionRepositoryAdapterTests {
         jdbcTemplate.update("""
                 INSERT INTO t_ingestion_pipeline
                 (id, name, description, created_by, updated_by, create_time, update_time, deleted)
-                VALUES ('pipeline-1', 'Default Pipeline', 'Default', 'tester', 'tester', ?, ?, 0)
+                VALUES (1, 'Default Pipeline', 'Default', 0, 0, ?, ?, 0)
                 """, now, now);
         jdbcTemplate.update("""
                 INSERT INTO t_ingestion_pipeline_node
                 (id, pipeline_id, node_id, node_type, next_node_id, settings_json, condition_json,
                  created_by, updated_by, create_time, update_time, deleted)
-                VALUES ('node-1', 'pipeline-1', 'parser', 'parser', 'indexer',
-                        '{"parserType":"tika"}', null, 'tester', 'tester', ?, ?, 0)
+                VALUES (11, 1, 1, 'parser', 2,
+                        '{"parserType":"tika"}', null, 0, 0, ?, ?, 0)
                 """, now, now);
         jdbcTemplate.update("""
                 INSERT INTO t_ingestion_pipeline_node
                 (id, pipeline_id, node_id, node_type, next_node_id, settings_json, condition_json,
                  created_by, updated_by, create_time, update_time, deleted)
-                VALUES ('node-2', 'pipeline-1', 'indexer', 'indexer', null,
-                        '{}', null, 'tester', 'tester', ?, ?, 0)
+                VALUES (12, 1, 2, 'indexer', null,
+                        '{}', null, 0, 0, ?, ?, 0)
                 """, now, now);
     }
 }

@@ -33,6 +33,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdmin
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * Seahorse 原生知识库管理服务。
@@ -40,6 +41,7 @@ import java.util.Objects;
 public class KernelKnowledgeBaseService implements KnowledgeBaseInboundPort {
 
     private static final String DEFAULT_OPERATOR = "";
+    private static final Pattern VECTOR_COLLECTION_NAME_PATTERN = Pattern.compile("[A-Za-z0-9_]+");
 
     private final KnowledgeBaseRepositoryPort repositoryPort;
     private final VectorCollectionAdminPort vectorCollectionAdminPort;
@@ -58,11 +60,11 @@ public class KernelKnowledgeBaseService implements KnowledgeBaseInboundPort {
     public Long create(CreateKnowledgeBaseCommand command) {
         CreateKnowledgeBaseCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         String name = requireText(safeCommand.name(), "name");
-        String collectionName = requireText(safeCommand.collectionName(), "collectionName");
+        String collectionName = requireCollectionName(safeCommand.collectionName());
         if (repositoryPort.nameExists(normalizeName(name), null)) {
             throw new IllegalStateException("知识库名称已存在：" + name);
         }
-        objectStoragePort.ensureBucket(collectionName);
+        objectStoragePort.ensureBucket(KnowledgeStorageBucketNames.fromCollectionName(collectionName));
         vectorCollectionAdminPort.ensureCollection(collectionName);
         return repositoryPort.create(new CreateKnowledgeBaseValues(
                 name, safeCommand.embeddingModel(), collectionName, operator(safeCommand.operator())));
@@ -144,5 +146,13 @@ public class KernelKnowledgeBaseService implements KnowledgeBaseInboundPort {
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value.trim();
+    }
+
+    private String requireCollectionName(String value) {
+        String collectionName = requireText(value, "collectionName");
+        if (!VECTOR_COLLECTION_NAME_PATTERN.matcher(collectionName).matches()) {
+            throw new IllegalArgumentException("collectionName can only contain letters, numbers and underscores");
+        }
+        return collectionName;
     }
 }

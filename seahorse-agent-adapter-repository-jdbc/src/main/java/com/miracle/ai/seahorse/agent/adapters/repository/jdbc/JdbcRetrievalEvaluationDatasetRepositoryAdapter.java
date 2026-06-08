@@ -119,7 +119,7 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
                 UPDATE t_retrieval_evaluation_dataset
                 SET dataset_name = ?,
                     description = ?,
-                    cases_json = ?,
+                    cases_json = ?::jsonb,
                     enabled = ?,
                     deleted = 0,
                     update_time = CURRENT_TIMESTAMP
@@ -132,7 +132,7 @@ public class JdbcRetrievalEvaluationDatasetRepositoryAdapter
                     INSERT INTO t_retrieval_evaluation_dataset(
                         id, kb_id, dataset_name, description, cases_json, enabled,
                         create_time, update_time, deleted
-                    ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                    ) VALUES (?, ?, ?, ?, ?::jsonb, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
                     """, datasetId, safeKnowledgeBaseId, safePayload.name(), safePayload.description(),
                     casesJson, enabled);
         }

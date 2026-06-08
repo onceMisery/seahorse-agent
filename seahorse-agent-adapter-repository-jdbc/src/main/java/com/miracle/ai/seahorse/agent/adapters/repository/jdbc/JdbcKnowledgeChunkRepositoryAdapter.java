@@ -200,8 +200,8 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
                 content.length(),
                 content.length(),
                 ENABLED_VALUE,
-                safeValues.operator(),
-                safeValues.operator(),
+                operatorId(safeValues.operator()),
+                operatorId(safeValues.operator()),
                 now,
                 now,
                 JdbcTenantSupport.resolveTenantId());
@@ -230,7 +230,7 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
                 sha256(content),
                 content.length(),
                 content.length(),
-                Objects.requireNonNullElse(safeValues.operator(), ""),
+                operatorId(safeValues.operator()),
                 Timestamp.from(Instant.now()),
                 requireId(chunkId, "chunkId"),
                 requireId(docId, "docId"),
@@ -274,7 +274,7 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
         String placeholders = placeholders(chunkIds.size());
         Object[] args = new Object[chunkIds.size() + 5];
         args[0] = enabled ? ENABLED_VALUE : 0;
-        args[1] = Objects.requireNonNullElse(operator, "");
+        args[1] = operatorId(operator);
         args[2] = Timestamp.from(Instant.now());
         args[3] = docId;
         for (int index = 0; index < chunkIds.size(); index++) {
@@ -429,6 +429,17 @@ public class JdbcKnowledgeChunkRepositoryAdapter implements KnowledgeChunkReposi
 
     private String placeholders(int size) {
         return String.join(",", java.util.Collections.nCopies(size, "?"));
+    }
+
+    private long operatorId(String operator) {
+        if (operator == null || operator.isBlank()) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(operator.trim());
+        } catch (NumberFormatException ex) {
+            return 0L;
+        }
     }
 
     private boolean hasText(String value) {

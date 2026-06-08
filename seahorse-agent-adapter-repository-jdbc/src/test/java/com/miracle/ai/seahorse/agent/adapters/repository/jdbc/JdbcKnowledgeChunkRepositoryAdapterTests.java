@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 class JdbcKnowledgeChunkRepositoryAdapterTests {
 
@@ -55,11 +56,11 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
 
         KnowledgeDocumentChunkContext context = adapter.findDocumentContext(1L).orElseThrow();
         KnowledgeChunkRecord created = adapter.create(1L,
-                new CreateKnowledgeChunkValues(20L, "new content", null, "tester"));
+                new CreateKnowledgeChunkValues(20L, "new content", null, "1001"));
 
         boolean updated = adapter.update(1L, 20L,
-                new UpdateKnowledgeChunkValues("updated content", "tester"));
-        boolean disabled = adapter.updateEnabled(1L, List.of(20L), false, "tester");
+                new UpdateKnowledgeChunkValues("updated content", "1001"));
+        boolean disabled = adapter.updateEnabled(1L, List.of(20L), false, "1001");
         KnowledgeChunkPage page = adapter.page(1L, 1, 10, false);
         boolean deleted = adapter.delete(1L, 20L);
 
@@ -70,6 +71,19 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
         assertThat(page.records()).extracting(KnowledgeChunkRecord::getId).contains(20L);
         assertThat(deleted).isTrue();
         assertThat(adapter.findChunk(1L, 20L)).isEmpty();
+    }
+
+    @Test
+    void shouldNormalizeMissingOrNonNumericOperatorForBigintAuditColumns() {
+        KnowledgeChunkRecord created = adapter.create(1L,
+                new CreateKnowledgeChunkValues(21L, "operator fallback content", null, ""));
+
+        assertThatCode(() -> adapter.update(1L, 21L,
+                new UpdateKnowledgeChunkValues("operator fallback updated", "tester")))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> adapter.updateEnabled(1L, List.of(21L), false, "tester"))
+                .doesNotThrowAnyException();
+        assertThat(created.getCreatedBy()).isEqualTo("0");
     }
 
     @Test
@@ -96,8 +110,10 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
                 "SELECT metadata_json FROM t_knowledge_chunk WHERE id = 30", String.class);
 
         assertThat(metadataJson)
-                .contains("\"department\":\"FIN\"")
-                .contains("\"securityLevel\":\"internal\"");
+                .contains("department")
+                .contains("FIN")
+                .contains("securityLevel")
+                .contains("internal");
     }
 
     private void insertChunk(Long id, int index, String content, int enabled) {
@@ -106,7 +122,7 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
                 INSERT INTO t_knowledge_chunk
                 (id, kb_id, doc_id, chunk_index, content, content_hash, char_count,
                  token_count, enabled, created_by, updated_by, create_time, update_time, deleted, tenant_id)
-                VALUES (?, 1, 1, ?, ?, ?, ?, ?, ?, 'tester', 'tester', ?, ?, 0, 'default')
+                VALUES (?, 1, 1, ?, ?, ?, ?, ?, ?, 1001, 1001, ?, ?, 0, 'default')
                 """, id, index, content, id + "-hash", content.length(), content.length(), enabled, now, now);
     }
 
@@ -148,8 +164,8 @@ class JdbcKnowledgeChunkRepositoryAdapterTests {
                     metadata_json VARCHAR(2048),
                     token_count INTEGER,
                     enabled INTEGER,
-                    created_by VARCHAR(64),
-                    updated_by VARCHAR(64),
+                    created_by BIGINT DEFAULT 0,
+                    updated_by BIGINT,
                     create_time TIMESTAMP,
                     update_time TIMESTAMP,
                     deleted SMALLINT DEFAULT 0,

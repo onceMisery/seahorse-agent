@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.retrieval;
 
 import com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.QueryOptimizationResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentNode;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScore;
 import com.miracle.ai.seahorse.agent.kernel.domain.intent.IntentScoreFilters;
@@ -27,6 +28,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalFilter;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievedChunk;
+import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.SearchContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.feature.mcp.McpToolExecutionResult;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionRegistry;
@@ -38,6 +40,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -97,15 +101,32 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
 
     @Override
     public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK, TraceRunScope traceRunScope) {
+        return retrieveInternal(subIntents, topK, traceRunScope, null);
+    }
+
+    @Override
+    public RetrievalContext retrieve(List<SubQuestionIntent> subIntents,
+                                     int topK,
+                                     TraceRunScope traceRunScope,
+                                     QueryOptimizationResult queryOptimizationResult) {
+        return retrieveInternal(subIntents, topK, traceRunScope, queryOptimizationResult);
+    }
+
+    private RetrievalContext retrieveInternal(List<SubQuestionIntent> subIntents,
+                                              int topK,
+                                              TraceRunScope traceRunScope,
+                                              QueryOptimizationResult queryOptimizationResult) {
         List<SubQuestionIntent> safeIntents = Objects.requireNonNullElse(subIntents, List.of());
         if (safeIntents.isEmpty()) {
             return RetrievalContext.builder().intentChunks(Map.of()).build();
         }
 
         int finalTopK = topK > 0 ? topK : DEFAULT_TOP_K;
+        RetrievalOptions queryExpansionOptions = queryExpansionOptions(finalTopK, queryOptimizationResult);
         List<CompletableFuture<SubQuestionContext>> tasks = safeIntents.stream()
                 .map(intent -> CompletableFuture.supplyAsync(
-                        () -> buildSubQuestionContext(intent, resolveSubQuestionTopK(intent, finalTopK), traceRunScope),
+                        () -> buildSubQuestionContext(intent, resolveSubQuestionTopK(intent, finalTopK),
+                                traceRunScope, queryExpansionOptions),
                         ragContextExecutor))
                 .toList();
         List<SubQuestionContext> contexts = tasks.stream()
@@ -143,12 +164,15 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
         return multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK, filter, options);
     }
 
-    private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent, int topK, TraceRunScope traceRunScope) {
+    private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent,
+                                                       int topK,
+                                                       TraceRunScope traceRunScope,
+                                                       RetrievalOptions queryExpansionOptions) {
         SubQuestionIntent safeIntent = safeIntent(intent);
         List<IntentScore> scores = safeScores(safeIntent);
         List<IntentScore> kbIntents = IntentScoreFilters.kb(scores);
         List<IntentScore> mcpIntents = IntentScoreFilters.mcp(scores);
-        KbResult kbResult = retrieveAndRerank(safeIntent, kbIntents, topK, traceRunScope);
+        KbResult kbResult = retrieveAndRerank(safeIntent, kbIntents, topK, traceRunScope, queryExpansionOptions);
         String mcpContext = mcpIntents.isEmpty() ? "" : executeMcpAndMerge(safeIntent.subQuestion(), mcpIntents);
         return new SubQuestionContext(safeIntent.subQuestion(), kbResult.groupedContext(), mcpContext,
                 kbResult.intentChunks());
@@ -204,8 +228,12 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
     private KbResult retrieveAndRerank(SubQuestionIntent intent,
                                        List<IntentScore> kbIntents,
                                        int topK,
-                                       TraceRunScope traceRunScope) {
-        List<RetrievedChunk> chunks = retrieveKnowledgeChannels(List.of(intent), topK, traceRunScope);
+                                       TraceRunScope traceRunScope,
+                                       RetrievalOptions queryExpansionOptions) {
+        List<RetrievedChunk> chunks = queryExpansionOptions == null
+                ? retrieveKnowledgeChannels(List.of(intent), topK, traceRunScope)
+                : multiChannelRetrievalEngine.retrieveKnowledgeChannels(
+                        List.of(intent), topK, null, queryExpansionOptions, traceRunScope);
         if (chunks == null || chunks.isEmpty()) {
             return KbResult.empty();
         }
@@ -256,6 +284,34 @@ public class KernelRetrievalEngine implements RetrievalContextPort {
             return List.of();
         }
         return Objects.requireNonNullElse(intent.intentScores(), List.of());
+    }
+
+    private RetrievalOptions queryExpansionOptions(int topK, QueryOptimizationResult queryOptimizationResult) {
+        List<String> expandedTerms = normalizedDistinct(queryOptimizationResult == null
+                ? List.of()
+                : queryOptimizationResult.expandedTerms());
+        if (expandedTerms.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> channelSettings = new LinkedHashMap<>();
+        channelSettings.put(SearchContext.METADATA_QUERY_EXPANDED_TERMS, expandedTerms);
+        List<String> appliedRules = normalizedDistinct(queryOptimizationResult.appliedRules());
+        if (!appliedRules.isEmpty()) {
+            channelSettings.put(SearchContext.METADATA_QUERY_APPLIED_RULES, appliedRules);
+        }
+        return RetrievalOptions.defaults(topK)
+                .withEnableKeyword(true)
+                .withAdditionalChannelSettings(channelSettings);
+    }
+
+    private List<String> normalizedDistinct(List<String> values) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        for (String value : Objects.requireNonNullElse(values, List.<String>of())) {
+            if (value != null && !value.isBlank()) {
+                result.add(value.trim());
+            }
+        }
+        return List.copyOf(result);
     }
 
     public record KernelRetrievalEnginePorts(KernelMultiChannelRetrievalEngine multiChannelRetrievalEngine,

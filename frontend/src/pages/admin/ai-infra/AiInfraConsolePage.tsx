@@ -106,12 +106,12 @@ const DEFAULT_OPERATOR = "admin";
 const ALL_APPROVAL_STATUSES = "ALL";
 
 const tabs: Array<{ value: ConsoleTab; label: string; icon: ComponentType<{ className?: string }>; feature?: FeatureKey }> = [
-  { value: "overview", label: "Overview", icon: SquareActivity, feature: "AI_INFRA_CONSOLE" },
-  { value: "approvals", label: "Approvals", icon: ShieldCheck, feature: "AGENT_RUN_MANAGEMENT" },
-  { value: "feedback", label: "Feedback", icon: MessageSquareWarning, feature: "AGENT_EVALUATION" },
-  { value: "agents", label: "Agents", icon: Boxes, feature: "AGENT_DEFINITION_MANAGEMENT" },
-  { value: "tools", label: "Tools", icon: TerminalSquare, feature: "TOOL_CATALOG_MANAGEMENT" },
-  { value: "operations", label: "Operations", icon: GitBranch }
+  { value: "overview", label: "总览", icon: SquareActivity, feature: "AI_INFRA_CONSOLE" },
+  { value: "approvals", label: "审批", icon: ShieldCheck, feature: "AGENT_RUN_MANAGEMENT" },
+  { value: "feedback", label: "反馈评估", icon: MessageSquareWarning, feature: "AGENT_EVALUATION" },
+  { value: "agents", label: "Agent", icon: Boxes, feature: "AGENT_DEFINITION_MANAGEMENT" },
+  { value: "tools", label: "工具", icon: TerminalSquare, feature: "TOOL_CATALOG_MANAGEMENT" },
+  { value: "operations", label: "运维", icon: GitBranch }
 ];
 
 const statusToneClasses: Record<StatusTone, string> = {
@@ -131,12 +131,59 @@ const iconToneClasses: Record<StatusTone, string> = {
 };
 
 const approvalStatuses: Array<{ value: typeof ALL_APPROVAL_STATUSES | ApprovalStatus; label: string }> = [
-  { value: ALL_APPROVAL_STATUSES, label: "All statuses" },
-  { value: "PENDING", label: "Pending" },
-  { value: "APPROVED", label: "Approved" },
-  { value: "REJECTED", label: "Rejected" },
-  { value: "MODIFIED", label: "Modified" }
+  { value: ALL_APPROVAL_STATUSES, label: "全部状态" },
+  { value: "PENDING", label: "待处理" },
+  { value: "APPROVED", label: "已批准" },
+  { value: "REJECTED", label: "已拒绝" },
+  { value: "MODIFIED", label: "已修改" }
 ];
+
+const statusLabels: Record<string, string> = {
+  ACTIVE: "启用",
+  APPROVED: "已批准",
+  AUTO: "自动",
+  CANARY: "灰度中",
+  CANCELLED: "已取消",
+  CRITICAL: "严重",
+  DENIED: "已拒绝",
+  DISABLED: "已禁用",
+  DOWN: "离线",
+  DRAFT: "草稿",
+  ENABLED: "已启用",
+  FAIL: "失败",
+  FAILED: "失败",
+  GREEN: "绿色",
+  HEALTHY: "健康",
+  HIGH: "高",
+  IMPROVED: "已改善",
+  INFO: "信息",
+  LOW: "低",
+  MANUAL: "人工",
+  MEDIUM: "中",
+  MODIFIED: "已修改",
+  PASS: "通过",
+  PAUSED: "已暂停",
+  PENDING: "待处理",
+  PROMOTED: "已发布",
+  PUBLISHED: "已发布",
+  READY: "就绪",
+  RED: "红色",
+  REGRESSED: "已回退",
+  REJECTED: "已拒绝",
+  RUNNING: "运行中",
+  SUCCEEDED: "成功",
+  UNKNOWN: "未知",
+  UP: "在线",
+  WAITING_APPROVAL: "待审批",
+  WARN: "警告",
+  WARNING: "警告",
+  WATCH: "关注"
+};
+
+function displayStatusLabel(value: unknown) {
+  const label = asString(value);
+  return statusLabels[label.toUpperCase()] ?? label;
+}
 
 function asString(value: unknown, fallback = "-") {
   if (value === null || value === undefined || value === "") return fallback;
@@ -205,7 +252,7 @@ function formatPercentDelta(value: unknown) {
   const number = asOptionalNumber(value);
   if (number === null) return "-";
   const sign = number > 0 ? "+" : "";
-  return `${sign}${(number * 100).toFixed(1)} pts`;
+  return `${sign}${(number * 100).toFixed(1)} 个百分点`;
 }
 
 function pageRecords(page: PageResult<ApiRecord> | null) {
@@ -233,7 +280,7 @@ function StatusBadge({ value }: { value: unknown }) {
   const label = asString(value);
   return (
     <Badge variant="outline" className={cn("border", statusToneClasses[statusTone(label)])}>
-      {label}
+      {displayStatusLabel(label)}
     </Badge>
   );
 }
@@ -266,7 +313,7 @@ function DataPanel({
 function EmptyState({ loading, label }: { loading: boolean; label: string }) {
   return (
     <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-      {loading ? "Loading..." : label}
+      {loading ? "加载中..." : label}
     </div>
   );
 }
@@ -340,7 +387,7 @@ function SreHealthItems({ sreHealth, loading }: { sreHealth: ApiRecord | null; l
   if (!healthItems.length) {
     return (
       <div className="space-y-3">
-        <EmptyState loading={loading} label="No runtime health contributors reported" />
+        <EmptyState loading={loading} label="暂无运行健康检查项" />
         <JsonPreview value={sreHealth ?? { status: "UNKNOWN", items: [] }} />
       </div>
     );
@@ -349,7 +396,7 @@ function SreHealthItems({ sreHealth, loading }: { sreHealth: ApiRecord | null; l
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-slate-600">
-          Overall: <StatusBadge value={sreHealth?.status ?? sreHealth?.overallStatus ?? "UNKNOWN"} />
+          整体状态：<StatusBadge value={sreHealth?.status ?? sreHealth?.overallStatus ?? "UNKNOWN"} />
         </div>
         <span className="font-mono text-xs text-slate-500">
           {formatTime(sreHealth?.checkedAt)}
@@ -358,10 +405,10 @@ function SreHealthItems({ sreHealth, loading }: { sreHealth: ApiRecord | null; l
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Contributor</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Message</TableHead>
-            <TableHead>Evidence</TableHead>
+            <TableHead>检查项</TableHead>
+            <TableHead>状态</TableHead>
+            <TableHead>消息</TableHead>
+            <TableHead>证据</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -423,7 +470,7 @@ export function AiInfraConsolePage() {
   const [readinessResult, setReadinessResult] = useState<ApiRecord | null>(null);
   const [rolloutResult, setRolloutResult] = useState<ApiRecord | null>(null);
   const [evalRegressionResult, setEvalRegressionResult] = useState<ApiRecord | null>(null);
-  const [approvalComment, setApprovalComment] = useState("Reviewed in AI Infra console");
+  const [approvalComment, setApprovalComment] = useState("已在 Agent 控制台审核");
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [readinessForm, setReadinessForm] = useState<ReadinessForm>({
@@ -440,7 +487,7 @@ export function AiInfraConsolePage() {
     rolloutId: "",
     canaryPercent: "10",
     targetVersionId: "",
-    comment: "Managed from AI Infra console"
+    comment: "由 Agent 控制台管理"
   });
   const [evalRegressionForm, setEvalRegressionForm] = useState<EvalRegressionForm>({
     datasetId: "default",
@@ -498,7 +545,7 @@ export function AiInfraConsolePage() {
       setFeedbackCandidates(candidatePage);
     } catch (error) {
       if (requestSeq.current !== requestId) return;
-      toast.error(getErrorMessage(error, "Failed to load AI Infra console"));
+      toast.error(getErrorMessage(error, "加载 Agent 控制台失败"));
     } finally {
       if (requestSeq.current === requestId) {
         setLoading(false);
@@ -543,44 +590,44 @@ export function AiInfraConsolePage() {
     const healthStatus = asString(sreHealth?.status ?? sreHealth?.overallStatus, "UNKNOWN");
     return [
       {
-        title: "Agent definitions",
+        title: "Agent 定义",
         value: String(agents?.total ?? 0),
-        detail: `${pageRecords(agents).length} records on this page`,
+        detail: `本页 ${pageRecords(agents).length} 条记录`,
         icon: Boxes,
         tone: agents?.total ? "info" : "neutral"
       },
       {
-        title: "Pending approvals",
+        title: "待审批",
         value: String(pendingApprovals),
-        detail: `${approvals?.total ?? 0} approval records`,
+        detail: `共 ${approvals?.total ?? 0} 条审批记录`,
         icon: Clock3,
         tone: pendingApprovals > 0 ? "warning" : "success"
       },
       {
-        title: "Feedback candidates",
+        title: "反馈候选",
         value: String(feedbackCandidates?.total ?? 0),
-        detail: "Disliked assistant messages",
+        detail: "用户点踩的助手消息",
         icon: MessageSquareWarning,
         tone: feedbackCandidates?.total ? "warning" : "success"
       },
       {
-        title: "Tool catalog",
+        title: "工具目录",
         value: String(tools?.total ?? 0),
-        detail: "From Tool Gateway API",
+        detail: "来自工具网关 API",
         icon: TerminalSquare,
         tone: tools?.total ? "info" : "neutral"
       },
       {
-        title: "SRE Health",
-        value: healthStatus,
-        detail: "Aggregated health report",
+        title: "SRE 健康",
+        value: displayStatusLabel(healthStatus),
+        detail: "聚合健康报告",
         icon: Activity,
         tone: statusTone(healthStatus)
       },
       {
-        title: "Cost",
+        title: "成本",
         value: formatMoney(costUsage?.cost ?? costUsage?.totalCost),
-        detail: `${asString(costUsage?.calls ?? costUsage?.totalCalls, "0")} calls`,
+        detail: `${asString(costUsage?.calls ?? costUsage?.totalCalls, "0")} 次调用`,
         icon: WalletCards,
         tone: "neutral"
       }
@@ -608,14 +655,14 @@ export function AiInfraConsolePage() {
     try {
       if (action === "approve") {
         await approveAiInfraApproval(approvalId, approvalComment);
-        toast.success("Approval approved");
+        toast.success("审批已通过");
       } else {
         await rejectAiInfraApproval(approvalId, approvalComment);
-        toast.success("Approval rejected");
+        toast.success("审批已拒绝");
       }
       await loadConsole();
     } catch (error) {
-      toast.error(getErrorMessage(error, "Approval action failed"));
+      toast.error(getErrorMessage(error, "审批操作失败"));
     } finally {
       setActionLoading(null);
     }
@@ -630,14 +677,14 @@ export function AiInfraConsolePage() {
     try {
       if (action === "accept") {
         await acceptEvalCandidate(candidateId);
-        toast.success("Candidate accepted into eval dataset");
+        toast.success("候选已加入评估数据集");
       } else {
         await rejectEvalCandidate(candidateId);
-        toast.success("Candidate rejected");
+        toast.success("候选已拒绝");
       }
       await loadConsole();
     } catch (error) {
-      toast.error(getErrorMessage(error, "Eval candidate action failed"));
+      toast.error(getErrorMessage(error, "反馈候选操作失败"));
     } finally {
       setActionLoading(null);
     }
@@ -649,7 +696,7 @@ export function AiInfraConsolePage() {
       return;
     }
     if (!readinessForm.tenantId || !readinessForm.agentId || !readinessForm.versionId) {
-      toast.error("tenantId, agentId and versionId are required");
+      toast.error("tenantId、agentId 和 versionId 必填");
       return;
     }
     setActionLoading(`readiness:${action}`);
@@ -659,9 +706,9 @@ export function AiInfraConsolePage() {
           ? await generateAiInfraReadinessReport(readinessForm)
           : await getLatestAiInfraReadinessReport(readinessForm);
       setReadinessResult(result);
-      toast.success(action === "generate" ? "Readiness report generated" : "Latest readiness report loaded");
+      toast.success(action === "generate" ? "就绪度报告已生成" : "已加载最新就绪度报告");
     } catch (error) {
-      toast.error(getErrorMessage(error, "Readiness action failed"));
+      toast.error(getErrorMessage(error, "就绪度操作失败"));
     } finally {
       setActionLoading(null);
     }
@@ -674,7 +721,7 @@ export function AiInfraConsolePage() {
     }
     const datasetId = evalRegressionForm.datasetId.trim();
     if (!datasetId) {
-      toast.error("datasetId is required");
+      toast.error("datasetId 必填");
       return;
     }
     const baseline =
@@ -682,7 +729,7 @@ export function AiInfraConsolePage() {
         ? undefined
         : Number(evalRegressionForm.baselinePassRate);
     if (baseline !== undefined && (!Number.isFinite(baseline) || baseline < 0 || baseline > 1)) {
-      toast.error("baselinePassRate must be between 0 and 1");
+      toast.error("baselinePassRate 必须在 0 到 1 之间");
       return;
     }
     setActionLoading("eval:regression");
@@ -693,9 +740,9 @@ export function AiInfraConsolePage() {
         baselinePassRate: baseline
       });
       setEvalRegressionResult(result);
-      toast.success("Eval regression completed");
+      toast.success("评估回归已完成");
     } catch (error) {
-      toast.error(getErrorMessage(error, "Eval regression failed"));
+      toast.error(getErrorMessage(error, "评估回归失败"));
     } finally {
       setActionLoading(null);
     }
@@ -707,15 +754,15 @@ export function AiInfraConsolePage() {
       return;
     }
     if (!rolloutForm.tenantId || !rolloutForm.agentId) {
-      toast.error("tenantId and agentId are required");
+      toast.error("tenantId 和 agentId 必填");
       return;
     }
     if ((action === "create" || action === "latest") && !rolloutForm.versionId) {
-      toast.error("versionId is required");
+      toast.error("versionId 必填");
       return;
     }
     if (["pause", "promote", "rollback"].includes(action) && !rolloutForm.rolloutId) {
-      toast.error("rolloutId is required");
+      toast.error("rolloutId 必填");
       return;
     }
     setActionLoading(`rollout:${action}`);
@@ -740,25 +787,25 @@ export function AiInfraConsolePage() {
                 ? await promoteAiInfraRollout(actionRequest)
                 : await rollbackAiInfraRollout(actionRequest);
       setRolloutResult(result);
-      toast.success("Rollout action completed");
+      toast.success("发布操作已完成");
     } catch (error) {
-      toast.error(getErrorMessage(error, "Rollout action failed"));
+      toast.error(getErrorMessage(error, "发布操作失败"));
     } finally {
       setActionLoading(null);
     }
   };
 
   if (!pageFeatureState.enabled) {
-    return <FeatureUnavailableState featureState={pageFeatureState} featureName="AI Infra Console" />;
+    return <FeatureUnavailableState featureState={pageFeatureState} featureName="Agent 控制台" />;
   }
 
   return (
     <div className="admin-page ai-infra-page">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">AI Infra Console</h1>
+          <h1 className="admin-page-title">Agent 控制台</h1>
           <p className="admin-page-subtitle">
-            Web-facing agent operations for runs, approvals, tools, cost, and feedback evaluation candidates.
+            管理 Agent 运行、审批、工具、成本与反馈评估候选。
           </p>
         </div>
         <div className="admin-page-actions">
@@ -770,7 +817,7 @@ export function AiInfraConsolePage() {
           />
           <Button variant="outline" onClick={loadConsole} disabled={loading}>
             <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
-            Refresh
+            刷新
           </Button>
         </div>
       </div>
@@ -809,7 +856,7 @@ export function AiInfraConsolePage() {
 
       {activeTab === "overview" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
-          <DataPanel title="Latest approvals" description="Current HITL approval queue from the approval API">
+          <DataPanel title="最新审批" description="来自审批 API 的当前人工确认队列">
             {approvalFeatureState.enabled ? (
               <ApprovalTable
                 records={pageRecords(approvals).slice(0, 5)}
@@ -821,7 +868,7 @@ export function AiInfraConsolePage() {
               <InlineFeatureUnavailableState featureState={approvalFeatureState} featureName="审批中心" />
             )}
           </DataPanel>
-          <DataPanel title="Runtime health" description="Backend-reported SRE health contributors and evidence references.">
+          <DataPanel title="运行健康" description="后端上报的 SRE 健康检查项与证据引用。">
             <SreHealthItems sreHealth={sreHealth} loading={loading} />
           </DataPanel>
         </div>
@@ -830,13 +877,13 @@ export function AiInfraConsolePage() {
       {activeTab === "approvals" ? (
         approvalFeatureState.enabled ? (
           <DataPanel
-            title="Approval Inbox"
-            description="Query pending approval requests and call approve or reject APIs."
+            title="审批收件箱"
+            description="查询待处理审批请求，并调用通过或拒绝接口。"
             actions={
               <>
                 <Select value={approvalStatus} onValueChange={(value) => setApprovalStatus(value as typeof ALL_APPROVAL_STATUSES | ApprovalStatus)}>
                   <SelectTrigger className="w-[170px] bg-white">
-                    <SelectValue placeholder="Approval status" />
+                    <SelectValue placeholder="审批状态" />
                   </SelectTrigger>
                   <SelectContent>
                     {approvalStatuses.map((item) => (
@@ -848,13 +895,13 @@ export function AiInfraConsolePage() {
                 </Select>
                 <Button variant="outline" onClick={loadConsole}>
                   <Search className="mr-2 h-4 w-4" />
-                  Query
+                  查询
                 </Button>
               </>
             }
           >
             <div className="mb-4">
-              <Field label="Decision comment">
+              <Field label="审批意见">
                 <Textarea value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} />
               </Field>
             </div>
@@ -868,8 +915,8 @@ export function AiInfraConsolePage() {
       {activeTab === "feedback" ? (
         feedbackFeatureState.enabled ? (
           <DataPanel
-          title="Feedback Evaluation Candidates"
-          description="Disliked assistant messages that can be sampled for quality review."
+          title="反馈评估候选"
+          description="用户点踩的助手消息，可抽样进入质量评估。"
           actions={
             <>
               <Input
@@ -892,7 +939,7 @@ export function AiInfraConsolePage() {
               />
               <Button variant="outline" onClick={loadConsole}>
                 <Search className="mr-2 h-4 w-4" />
-                Query
+                查询
               </Button>
             </>
           }
@@ -912,34 +959,34 @@ export function AiInfraConsolePage() {
       {activeTab === "agents" ? (
         agentFeatureState.enabled ? (
           <DataPanel
-          title="Agent Catalog"
-          description="Read agent definition records and published versions."
+          title="Agent 目录"
+          description="查看 Agent 定义记录与已发布版本。"
           actions={
             <>
               <Input
                 value={agentKeyword}
                 onChange={(event) => setAgentKeyword(event.target.value)}
                 className="w-[260px] bg-white"
-                placeholder="Search agent"
+                placeholder="搜索 Agent"
               />
               <Button variant="outline" onClick={loadConsole}>
                 <Search className="mr-2 h-4 w-4" />
-                Query
+                查询
               </Button>
             </>
           }
         >
           <GenericRecordsTable
             loading={loading}
-            emptyLabel="No agents"
+            emptyLabel="暂无 Agent"
             records={pageRecords(agents)}
             columns={[
               { key: "agentId", label: "Agent ID" },
-              { key: "name", label: "Name" },
-              { key: "ownerTeam", label: "Owner" },
-              { key: "riskLevel", label: "Risk", status: true },
-              { key: "status", label: "Status", status: true },
-              { key: "createdAt", label: "Created", time: true }
+              { key: "name", label: "名称" },
+              { key: "ownerTeam", label: "负责人" },
+              { key: "riskLevel", label: "风险", status: true },
+              { key: "status", label: "状态", status: true },
+              { key: "createdAt", label: "创建时间", time: true }
             ]}
           />
           </DataPanel>
@@ -951,34 +998,34 @@ export function AiInfraConsolePage() {
       {activeTab === "tools" ? (
         toolFeatureState.enabled ? (
           <DataPanel
-          title="Tool Catalog"
-          description="Read tool catalog records and check risk/approval policy fields."
+          title="工具目录"
+          description="查看工具目录记录，并检查风险与审批策略字段。"
           actions={
             <>
               <Input
                 value={toolKeyword}
                 onChange={(event) => setToolKeyword(event.target.value)}
                 className="w-[260px] bg-white"
-                placeholder="Search tool"
+                placeholder="搜索工具"
               />
               <Button variant="outline" onClick={loadConsole}>
                 <Search className="mr-2 h-4 w-4" />
-                Query
+                查询
               </Button>
             </>
           }
         >
           <GenericRecordsTable
             loading={loading}
-            emptyLabel="No tools"
+            emptyLabel="暂无工具"
             records={pageRecords(tools)}
             columns={[
-              { key: "toolId", label: "Tool ID" },
-              { key: "name", label: "Name" },
-              { key: "resourceType", label: "Resource" },
-              { key: "riskLevel", label: "Risk", status: true },
-              { key: "requiresApproval", label: "Approval" },
-              { key: "enabled", label: "Enabled", status: true }
+              { key: "toolId", label: "工具 ID" },
+              { key: "name", label: "名称" },
+              { key: "resourceType", label: "资源" },
+              { key: "riskLevel", label: "风险", status: true },
+              { key: "requiresApproval", label: "需要审批" },
+              { key: "enabled", label: "启用状态", status: true }
             ]}
           />
           </DataPanel>
@@ -989,8 +1036,8 @@ export function AiInfraConsolePage() {
 
       {activeTab === "operations" ? (
         <div className="grid gap-4 xl:grid-cols-2">
-          <DataPanel title="Pilot readiness" description="Generate or read latest readiness report.">
-            <OperationFeatureNotice featureState={readinessFeatureState} label="Pilot readiness unavailable" />
+          <DataPanel title="试点就绪度" description="生成或读取最新就绪度报告。">
+            <OperationFeatureNotice featureState={readinessFeatureState} label="试点就绪度" />
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="tenantId">
                 <Input value={readinessForm.tenantId} onChange={(event) => updateReadinessForm("tenantId", event.target.value)} />
@@ -1008,20 +1055,20 @@ export function AiInfraConsolePage() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Button onClick={() => runReadinessAction("generate")} disabled={!readinessFeatureState.enabled || actionLoading === "readiness:generate"}>
                 <BadgeCheck className="mr-2 h-4 w-4" />
-                Generate
+                生成
               </Button>
               <Button variant="outline" onClick={() => runReadinessAction("latest")} disabled={!readinessFeatureState.enabled || actionLoading === "readiness:latest"}>
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Latest
+                最新
               </Button>
             </div>
             <div className="mt-4">
-              <JsonPreview value={readinessResult ?? { message: "No readiness result" }} />
+              <JsonPreview value={readinessResult ?? { message: "暂无就绪度结果" }} />
             </div>
           </DataPanel>
 
-          <DataPanel title="Eval regression" description="Run an eval dataset against the current model and compare it with a baseline.">
-            <OperationFeatureNotice featureState={feedbackFeatureState} label="Eval regression unavailable" />
+          <DataPanel title="评估回归" description="使用当前模型运行评估数据集，并与基线结果对比。">
+            <OperationFeatureNotice featureState={feedbackFeatureState} label="评估回归" />
             <div className="grid gap-3 md:grid-cols-3">
               <Field label="datasetId">
                 <Input
@@ -1033,7 +1080,7 @@ export function AiInfraConsolePage() {
                 <Input
                   value={evalRegressionForm.modelId}
                   onChange={(event) => updateEvalRegressionForm("modelId", event.target.value)}
-                  placeholder="optional"
+                  placeholder="可选"
                 />
               </Field>
               <Field label="baselinePassRate">
@@ -1047,7 +1094,7 @@ export function AiInfraConsolePage() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Button onClick={runEvalRegressionAction} disabled={!feedbackFeatureState.enabled || actionLoading === "eval:regression"}>
                 <Gauge className="mr-2 h-4 w-4" />
-                Run regression
+                运行回归
               </Button>
             </div>
             <div className="mt-4">
@@ -1055,8 +1102,8 @@ export function AiInfraConsolePage() {
             </div>
           </DataPanel>
 
-          <DataPanel title="Rollout" description="Use canary, latest, pause, promote and rollback APIs.">
-            <OperationFeatureNotice featureState={rolloutFeatureState} label="Rollout unavailable" />
+          <DataPanel title="发布管理" description="调用灰度、最新、暂停、发布和回滚接口。">
+            <OperationFeatureNotice featureState={rolloutFeatureState} label="发布管理" />
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="tenantId">
                 <Input value={rolloutForm.tenantId} onChange={(event) => updateRolloutForm("tenantId", event.target.value)} />
@@ -1086,34 +1133,34 @@ export function AiInfraConsolePage() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Button onClick={() => runRolloutAction("create")} disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:create"}>
                 <PlayCircle className="mr-2 h-4 w-4" />
-                Canary
+                灰度
               </Button>
               <Button variant="outline" onClick={() => runRolloutAction("latest")} disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:latest"}>
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Latest
+                最新
               </Button>
               <Button variant="outline" onClick={() => runRolloutAction("pause")} disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:pause"}>
                 <PauseCircle className="mr-2 h-4 w-4" />
-                Pause
+                暂停
               </Button>
               <Button variant="outline" onClick={() => runRolloutAction("promote")} disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:promote"}>
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                Promote
+                发布
               </Button>
               <Button variant="outline" onClick={() => runRolloutAction("rollback")} disabled={!rolloutFeatureState.enabled || actionLoading === "rollout:rollback"}>
                 <RotateCcw className="mr-2 h-4 w-4" />
-                Rollback
+                回滚
               </Button>
             </div>
             <div className="mt-4">
-              <JsonPreview value={rolloutResult ?? { message: "No rollout result" }} />
+              <JsonPreview value={rolloutResult ?? { message: "暂无发布结果" }} />
             </div>
           </DataPanel>
         </div>
       ) : null}
 
       <section className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-        Consumer Web mode keeps local agent, host shell, sandbox, enterprise connectors, credential management and remote agent mesh behind advanced feature gates.
+        Consumer Web 模式会将本地 Agent、主机 Shell、沙箱、企业连接器、凭据管理和远程 Agent Mesh 保持在高级功能开关之后。
       </section>
     </div>
   );
@@ -1131,19 +1178,19 @@ function EvalCandidateTable({
   onAction: (candidateId: string, action: "accept" | "reject") => void;
 }) {
   if (!records.length) {
-    return <EmptyState loading={loading} label="No feedback candidates" />;
+    return <EmptyState loading={loading} label="暂无反馈候选" />;
   }
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Feedback ID</TableHead>
-          <TableHead>Message / Run</TableHead>
-          <TableHead>User</TableHead>
-          <TableHead>Reason</TableHead>
-          <TableHead>Comment</TableHead>
-          <TableHead>Created</TableHead>
-          <TableHead className="text-right">Action</TableHead>
+          <TableHead>反馈 ID</TableHead>
+          <TableHead>消息 / 运行</TableHead>
+          <TableHead>用户</TableHead>
+          <TableHead>原因</TableHead>
+          <TableHead>备注</TableHead>
+          <TableHead>创建时间</TableHead>
+          <TableHead className="text-right">操作</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -1170,7 +1217,7 @@ function EvalCandidateTable({
                     onClick={() => onAction(candidateId, "accept")}
                   >
                     <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                    Accept
+                    接受
                   </Button>
                   <Button
                     size="sm"
@@ -1179,7 +1226,7 @@ function EvalCandidateTable({
                     onClick={() => onAction(candidateId, "reject")}
                   >
                     <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                    Reject
+                    拒绝
                   </Button>
                 </div>
               </TableCell>
@@ -1193,7 +1240,7 @@ function EvalCandidateTable({
 
 function EvalRegressionResult({ value }: { value: ApiRecord | null }) {
   if (!value) {
-    return <EmptyState loading={false} label="No regression result" />;
+    return <EmptyState loading={false} label="暂无回归结果" />;
   }
   const baseline = asRecord(value.baseline);
   const dimensions = asRecordArray(value.dimensions);
@@ -1201,25 +1248,25 @@ function EvalRegressionResult({ value }: { value: ApiRecord | null }) {
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-4">
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs font-medium text-slate-500">Current</p>
+          <p className="text-xs font-medium text-slate-500">当前</p>
           <p className="mt-1 text-xl font-semibold text-slate-950">
             {formatPercent(baseline.currentPassRate)}
           </p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs font-medium text-slate-500">Baseline</p>
+          <p className="text-xs font-medium text-slate-500">基线</p>
           <p className="mt-1 text-xl font-semibold text-slate-950">
             {formatPercent(baseline.baselinePassRate)}
           </p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs font-medium text-slate-500">Delta</p>
+          <p className="text-xs font-medium text-slate-500">差值</p>
           <p className="mt-1 text-xl font-semibold text-slate-950">
             {formatPercentDelta(baseline.passRateDelta)}
           </p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs font-medium text-slate-500">Cases</p>
+          <p className="text-xs font-medium text-slate-500">用例</p>
           <p className="mt-1 text-xl font-semibold text-slate-950">
             {asString(value.passed, "0")} / {asString(value.total, "0")}
           </p>
@@ -1235,10 +1282,10 @@ function EvalRegressionResult({ value }: { value: ApiRecord | null }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Dimension</TableHead>
-              <TableHead>Score</TableHead>
-              <TableHead>Mode</TableHead>
-              <TableHead>Reason</TableHead>
+              <TableHead>维度</TableHead>
+              <TableHead>分数</TableHead>
+              <TableHead>模式</TableHead>
+              <TableHead>原因</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1275,19 +1322,19 @@ function ApprovalTable({
   onAction: (approvalId: string, action: "approve" | "reject") => void;
 }) {
   if (!records.length) {
-    return <EmptyState loading={loading} label="No approvals" />;
+    return <EmptyState loading={loading} label="暂无审批" />;
   }
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Approval ID</TableHead>
-          <TableHead>Run / Tool</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Risk</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Created</TableHead>
-          <TableHead className="text-right">Action</TableHead>
+          <TableHead>审批 ID</TableHead>
+          <TableHead>运行 / 工具</TableHead>
+          <TableHead>类型</TableHead>
+          <TableHead>风险</TableHead>
+          <TableHead>状态</TableHead>
+          <TableHead>创建时间</TableHead>
+          <TableHead className="text-right">操作</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -1315,7 +1362,7 @@ function ApprovalTable({
                     onClick={() => onAction(approvalId, "approve")}
                   >
                     <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                    Approve
+                    通过
                   </Button>
                   <Button
                     size="sm"
@@ -1324,7 +1371,7 @@ function ApprovalTable({
                     onClick={() => onAction(approvalId, "reject")}
                   >
                     <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                    Reject
+                    拒绝
                   </Button>
                 </div>
               </TableCell>

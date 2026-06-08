@@ -23,11 +23,15 @@ import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeConfig;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.NodeResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.ingestion.PipelineDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.vector.VectorChunk;
+import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ChunkerNodeFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.IndexerNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.IngestionNodeFeature;
+import com.miracle.ai.seahorse.agent.kernel.feature.ingestion.ParserNodeFeature;
 import com.miracle.ai.seahorse.agent.kernel.plugin.DefaultExtensionRegistry;
 import com.miracle.ai.seahorse.agent.kernel.plugin.ExtensionDescriptor;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureActivationContext;
 import com.miracle.ai.seahorse.agent.kernel.plugin.FeatureType;
+import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UploadFileContent;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UploadKnowledgeDocumentCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.knowledge.UploadProcessOptions;
@@ -35,6 +39,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.CreateKnowledgeDoc
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeBaseRef;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeChunkSummary;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentDetail;
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentFileRef;
@@ -48,6 +53,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.MessageQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
+import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorCollectionAdminPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorIndexPort;
 import org.junit.jupiter.api.Test;
 
@@ -75,6 +81,8 @@ class KernelKnowledgeDocumentServiceTests {
 
         assertThat(document.kbId()).isEqualTo(1L);
         assertThat(document.file().fileUrl()).isEqualTo("local://policy.pdf");
+        assertThat(ports.storage.uploadedBuckets).containsExactly(
+                KnowledgeStorageBucketNames.fromCollectionName("collection-a"));
         assertThat(ports.repository.records).hasSize(1);
         assertThat(ports.messageQueue.messages).hasSize(1);
         assertThat(ports.messageQueue.messages.get(0).body()).isInstanceOf(KnowledgeDocumentChunkEvent.class);
@@ -117,6 +125,30 @@ class KernelKnowledgeDocumentServiceTests {
         handler.handle(new KnowledgeDocumentChunkEvent(document.id(), 1L, "tester", "pipeline-1"));
 
         assertThat(ports.repository.findById(document.id()).orElseThrow().process().status()).isEqualTo("success");
+    }
+
+    @Test
+    void chunkHandlerShouldUseDefaultPipelineWhenEventPipelineIdIsBlank() {
+        Ports ports = new Ports();
+        KnowledgeDocumentRecord document = ports.repository.createPendingDocument(new CreateKnowledgeDocumentCommand(
+                1L,
+                "policy.pdf",
+                new KnowledgeDocumentFileRef("local://policy.pdf", "pdf", 7L),
+                new KnowledgeDocumentProcessRef("pending", "pipeline", ""),
+                "tester"));
+        List<String> requestedPipelineIds = new ArrayList<>();
+        KernelKnowledgeDocumentChunkHandler handler = new KernelKnowledgeDocumentChunkHandler(
+                newService(ports),
+                pipelineId -> {
+                    requestedPipelineIds.add(pipelineId);
+                    return Optional.empty();
+                });
+
+        handler.handle(new KnowledgeDocumentChunkEvent(document.id(), 1L, "tester", ""));
+
+        assertThat(requestedPipelineIds).isEmpty();
+        assertThat(ports.repository.findById(document.id()).orElseThrow().process().status()).isEqualTo("success");
+        assertThat(ports.repository.successChunkCount).isEqualTo(1);
     }
 
     @Test
@@ -185,15 +217,29 @@ class KernelKnowledgeDocumentServiceTests {
 
     private KernelIngestionEngine ingestionEngine() {
         DefaultExtensionRegistry registry = new DefaultExtensionRegistry();
-        IngestionNodeFeature feature = new ChunkNodeFeature();
-        registry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
-                FeatureType.INGESTION_NODE, feature.order(), true), feature);
+        registerNodeFeature(registry, new ChunkNodeFeature());
+        registerNodeFeature(registry, new ParserNodeFeature(DocumentParserPort.plainText()));
+        registerNodeFeature(registry, new ChunkerNodeFeature((modelId, text) -> List.of(0.1F)));
+        registerNodeFeature(registry, new IndexerNodeFeature(
+                new NoopVectorCollectionAdminPort(),
+                new NoopVectorIndexPort(),
+                new RecordingKnowledgeChunkRepository(),
+                KeywordIndexPort.noop()));
         return new KernelIngestionEngine(registry, FeatureActivationContext.empty());
     }
 
+    private void registerNodeFeature(DefaultExtensionRegistry registry, IngestionNodeFeature feature) {
+        registry.register(new ExtensionDescriptor(feature.name(), IngestionNodeFeature.class,
+                FeatureType.INGESTION_NODE, feature.order(), true), feature);
+    }
+
     private PipelineDefinition pipeline() {
+        return pipeline("pipeline-1");
+    }
+
+    private PipelineDefinition pipeline(String pipelineId) {
         return PipelineDefinition.builder()
-                .id("pipeline-1")
+                .id(pipelineId)
                 .nodes(List.of(NodeConfig.builder().nodeId("chunk").nodeType("chunk").build()))
                 .build();
     }
@@ -226,7 +272,7 @@ class KernelKnowledgeDocumentServiceTests {
 
         private final KnowledgeBaseQueryPort knowledgeBaseQuery = new StaticKnowledgeBaseQueryPort();
         private final InMemoryDocumentRepository repository = new InMemoryDocumentRepository();
-        private final ObjectStoragePort storage = new InMemoryObjectStorage();
+        private final InMemoryObjectStorage storage = new InMemoryObjectStorage();
         private final RecordingMessageQueue messageQueue = new RecordingMessageQueue();
     }
 
@@ -356,6 +402,25 @@ class KernelKnowledgeDocumentServiceTests {
         }
     }
 
+    private static class NoopVectorCollectionAdminPort implements VectorCollectionAdminPort {
+
+        @Override
+        public boolean collectionExists(String collectionName) {
+            return true;
+        }
+
+        @Override
+        public void ensureCollection(String collectionName) {
+        }
+    }
+
+    private static class RecordingKnowledgeChunkRepository implements KnowledgeChunkRepositoryPort {
+
+        @Override
+        public void replaceDocumentChunks(Long kbId, Long docId, List<VectorChunk> chunks) {
+        }
+    }
+
     private static class RecordingKeywordIndexPort implements KeywordIndexPort {
 
         private final List<String> indexedDocuments = new ArrayList<>();
@@ -374,9 +439,12 @@ class KernelKnowledgeDocumentServiceTests {
 
     private static class InMemoryObjectStorage implements ObjectStoragePort {
 
+        private final List<String> uploadedBuckets = new ArrayList<>();
+
         @Override
         public StoredObject upload(String bucketName, InputStream content, long size, String originalFilename,
                                    String contentType) {
+            uploadedBuckets.add(bucketName);
             return new StoredObject("local://" + originalFilename, contentType, size, originalFilename);
         }
 

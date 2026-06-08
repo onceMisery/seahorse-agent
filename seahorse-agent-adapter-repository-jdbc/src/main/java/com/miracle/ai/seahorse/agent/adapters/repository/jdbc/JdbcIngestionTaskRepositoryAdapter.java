@@ -114,7 +114,7 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         String taskId = SnowflakeIds.nextIdString();
         String operator = Objects.requireNonNullElse(safeValues.operator(), "");
         jdbcTemplate.update(SQL_INSERT_TASK,
-                taskId,
+                toLong(taskId),
                 requireText(safeValues.pipelineId(), "pipelineId"),
                 blankToNull(safeValues.sourceType()),
                 blankToNull(safeValues.sourceLocation()),
@@ -135,13 +135,13 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
                 toJson(safeValues.logs()),
                 toJson(safeValues.metadata()),
                 Objects.requireNonNullElse(safeValues.operator(), ""),
-                requireText(taskId, "taskId"));
+                toLong(requireText(taskId, "taskId")));
     }
 
     @Override
     public void replaceNodeLogs(String taskId, List<IngestionTaskNodeValues> nodes) {
         String safeTaskId = requireText(taskId, "taskId");
-        jdbcTemplate.update(SQL_DELETE_NODES, safeTaskId);
+        jdbcTemplate.update(SQL_DELETE_NODES, toLong(safeTaskId));
         for (IngestionTaskNodeValues node : Objects.requireNonNullElse(nodes, List.<IngestionTaskNodeValues>of())) {
             insertNode(node);
         }
@@ -152,7 +152,11 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         if (taskId == null || taskId.isBlank()) {
             return Optional.empty();
         }
-        List<IngestionTaskRecord> records = jdbcTemplate.query(SQL_FIND_TASK, this::toTaskRecord, taskId);
+        Long safeTaskId = parseLong(taskId);
+        if (safeTaskId == null) {
+            return Optional.empty();
+        }
+        List<IngestionTaskRecord> records = jdbcTemplate.query(SQL_FIND_TASK, this::toTaskRecord, safeTaskId);
         return records.stream().findFirst();
     }
 
@@ -161,7 +165,11 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
         if (taskId == null || taskId.isBlank()) {
             return List.of();
         }
-        return jdbcTemplate.query(SQL_LIST_NODES, this::toNodeRecord, taskId);
+        Long safeTaskId = parseLong(taskId);
+        if (safeTaskId == null) {
+            return List.of();
+        }
+        return jdbcTemplate.query(SQL_LIST_NODES, this::toNodeRecord, safeTaskId);
     }
 
     @Override
@@ -186,8 +194,8 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
     private void insertNode(IngestionTaskNodeValues node) {
         IngestionTaskNodeValues safeNode = Objects.requireNonNull(node, "node must not be null");
         jdbcTemplate.update(SQL_INSERT_NODE,
-                SnowflakeIds.nextIdString(),
-                requireText(safeNode.getTaskId(), "taskId"),
+                toLong(SnowflakeIds.nextIdString()),
+                toLong(requireText(safeNode.getTaskId(), "taskId")),
                 requireText(safeNode.getPipelineId(), "pipelineId"),
                 blankToNull(safeNode.getNodeId()),
                 blankToNull(safeNode.getNodeType()),
@@ -197,6 +205,22 @@ public class JdbcIngestionTaskRepositoryAdapter implements IngestionTaskReposito
                 blankToNull(safeNode.getMessage()),
                 blankToNull(safeNode.getErrorMessage()),
                 toJson(safeNode.getOutput()));
+    }
+
+    private Long parseLong(String value) {
+        try {
+            return Long.parseLong(value.trim());
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private long toLong(String value) {
+        Long parsed = parseLong(value);
+        if (parsed == null) {
+            throw new IllegalArgumentException("numeric id is required");
+        }
+        return parsed;
     }
 
     private IngestionTaskRecord toTaskRecord(ResultSet resultSet, int rowNumber) throws SQLException {

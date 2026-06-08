@@ -19,19 +19,16 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.PlanCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.billing.Subscription;
+import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.billing.SubscriptionRepositoryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 
 import javax.sql.DataSource;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Collections;
@@ -74,9 +71,9 @@ public class JdbcSubscriptionRepositoryAdapter implements SubscriptionRepository
 
     private static final String SQL_INSERT = """
             INSERT INTO sa_subscription
-                (tenant_id, plan_code, status, started_at, expires_at,
+                (id, tenant_id, plan_code, status, started_at, expires_at,
                  token_limit, storage_limit_bytes, concurrency_limit)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
     private static final String SQL_UPDATE = """
@@ -108,21 +105,17 @@ public class JdbcSubscriptionRepositoryAdapter implements SubscriptionRepository
     public Subscription save(Subscription subscription) {
         try {
             if (subscription.id() == null) {
-                KeyHolder keyHolder = new GeneratedKeyHolder();
-                jdbcTemplate.update(connection -> {
-                    PreparedStatement ps = connection.prepareStatement(SQL_INSERT,
-                            Statement.RETURN_GENERATED_KEYS);
-                    ps.setString(1, subscription.tenantId());
-                    ps.setString(2, subscription.planCode().name());
-                    ps.setString(3, subscription.status());
-                    ps.setTimestamp(4, toTimestamp(subscription.startedAt()));
-                    ps.setTimestamp(5, toTimestamp(subscription.expiresAt()));
-                    ps.setLong(6, subscription.tokenLimit());
-                    ps.setLong(7, subscription.storageLimitBytes());
-                    ps.setInt(8, subscription.concurrencyLimit());
-                    return ps;
-                }, keyHolder);
-                Long generatedId = keyHolder.getKey() != null ? keyHolder.getKey().longValue() : null;
+                Long generatedId = SnowflakeIds.nextId();
+                jdbcTemplate.update(SQL_INSERT,
+                        generatedId,
+                        subscription.tenantId(),
+                        subscription.planCode().name(),
+                        subscription.status(),
+                        toTimestamp(subscription.startedAt()),
+                        toTimestamp(subscription.expiresAt()),
+                        subscription.tokenLimit(),
+                        subscription.storageLimitBytes(),
+                        subscription.concurrencyLimit());
                 return new Subscription(generatedId, subscription.tenantId(), subscription.planCode(),
                         subscription.status(), subscription.startedAt(), subscription.expiresAt(),
                         subscription.tokenLimit(), subscription.storageLimitBytes(),

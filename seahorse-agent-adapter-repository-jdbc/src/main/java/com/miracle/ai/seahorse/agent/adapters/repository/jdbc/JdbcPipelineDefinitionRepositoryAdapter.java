@@ -81,7 +81,7 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
             INSERT INTO t_ingestion_pipeline_node
             (id, pipeline_id, node_id, node_type, next_node_id, settings_json, condition_json,
              created_by, updated_by, create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+            VALUES (?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
             """;
     private static final String SQL_FIND_RECORD = """
             SELECT p.id AS pipeline_id, p.name, p.description, p.created_by, p.create_time, p.update_time,
@@ -116,7 +116,8 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
         if (pipelineId == null || pipelineId.isBlank()) {
             return Optional.empty();
         }
-        List<PipelineRow> rows = jdbcTemplate.query(SQL_FIND_PIPELINE, this::toPipelineRow, pipelineId);
+        List<PipelineRow> rows = jdbcTemplate.query(SQL_FIND_PIPELINE, this::toPipelineRow,
+                numericId(pipelineId, "pipelineId"));
         if (rows.isEmpty()) {
             return Optional.empty();
         }
@@ -126,13 +127,14 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
     @Override
     public IngestionPipelineRecord create(IngestionPipelinePayload payload) {
         IngestionPipelinePayload safePayload = Objects.requireNonNull(payload, "payload must not be null");
-        String pipelineId = SnowflakeIds.nextIdString();
+        long pipelineId = SnowflakeIds.nextId();
         String operator = Objects.requireNonNullElse(safePayload.operator(), "");
         jdbcTemplate.update(SQL_INSERT_PIPELINE, pipelineId, requireText(safePayload.name(), "name"),
-                Objects.requireNonNullElse(safePayload.description(), ""), operator, operator);
-        replaceNodes(pipelineId, safePayload.nodes(), operator);
-        return queryRecordById(pipelineId)
-                .orElseThrow(() -> new IllegalStateException("pipeline created but invisible: " + pipelineId));
+                Objects.requireNonNullElse(safePayload.description(), ""), operatorId(operator), operatorId(operator));
+        String pipelineIdText = Long.toString(pipelineId);
+        replaceNodes(pipelineIdText, safePayload.nodes(), operator);
+        return queryRecordById(pipelineIdText)
+                .orElseThrow(() -> new IllegalStateException("pipeline created but invisible: " + pipelineIdText));
     }
 
     @Override
@@ -167,8 +169,8 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
         int updated = jdbcTemplate.update(SQL_UPDATE_PIPELINE,
                 requireText(safePayload.name(), "name"),
                 Objects.requireNonNullElse(safePayload.description(), ""),
-                operator,
-                safePipelineId);
+                operatorId(operator),
+                numericId(safePipelineId, "pipelineId"));
         if (updated > 0) {
             replaceNodes(safePipelineId, safePayload.nodes(), operator);
         }
@@ -178,10 +180,11 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
     @Override
     public boolean delete(String pipelineId, String operator) {
         String safePipelineId = requireText(pipelineId, "pipelineId");
-        String safeOperator = Objects.requireNonNullElse(operator, "");
-        int updated = jdbcTemplate.update(SQL_DELETE_PIPELINE, safeOperator, safePipelineId);
+        long safeOperator = operatorId(operator);
+        long safePipelinePk = numericId(safePipelineId, "pipelineId");
+        int updated = jdbcTemplate.update(SQL_DELETE_PIPELINE, safeOperator, safePipelinePk);
         if (updated > 0) {
-            jdbcTemplate.update(SQL_DELETE_PIPELINE_NODES, safeOperator, safePipelineId);
+            jdbcTemplate.update(SQL_DELETE_PIPELINE_NODES, safeOperator, safePipelinePk);
         }
         return updated > 0;
     }
@@ -190,7 +193,8 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
         if (pipelineId == null || pipelineId.isBlank()) {
             return Optional.empty();
         }
-        List<PipelineRecordRow> rows = jdbcTemplate.query(SQL_FIND_RECORD, this::toPipelineRecordRow, pipelineId);
+        List<PipelineRecordRow> rows = jdbcTemplate.query(SQL_FIND_RECORD, this::toPipelineRecordRow,
+                numericId(pipelineId, "pipelineId"));
         if (rows.isEmpty()) {
             return Optional.empty();
         }
@@ -296,19 +300,21 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
     }
 
     private void replaceNodes(String pipelineId, List<IngestionPipelineNodePayload> nodes, String operator) {
-        jdbcTemplate.update(SQL_DELETE_PIPELINE_NODES, operator, pipelineId);
+        long safePipelineId = numericId(pipelineId, "pipelineId");
+        long safeOperator = operatorId(operator);
+        jdbcTemplate.update(SQL_DELETE_PIPELINE_NODES, safeOperator, safePipelineId);
         List<IngestionPipelineNodePayload> safeNodes = Objects.requireNonNullElse(nodes, List.of());
         for (IngestionPipelineNodePayload node : safeNodes) {
             jdbcTemplate.update(SQL_INSERT_NODE,
-                    SnowflakeIds.nextIdString(),
-                    pipelineId,
-                    requireText(node.nodeId(), "nodeId"),
+                    SnowflakeIds.nextId(),
+                    safePipelineId,
+                    numericId(node.nodeId(), "nodeId"),
                     requireText(node.nodeType(), "nodeType"),
-                    blankToNull(node.nextNodeId()),
+                    blankNumericToNull(node.nextNodeId(), "nextNodeId"),
                     toJson(node.settings()),
                     toJson(node.condition()),
-                    operator,
-                    operator);
+                    safeOperator,
+                    safeOperator);
         }
     }
 
@@ -348,11 +354,31 @@ public class JdbcPipelineDefinitionRepositoryAdapter implements PipelineDefiniti
         return value.trim();
     }
 
-    private String blankToNull(String value) {
+    private long numericId(String value, String name) {
+        String text = requireText(value, name);
+        try {
+            return Long.parseLong(text);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(name + " must be a numeric id", ex);
+        }
+    }
+
+    private Long blankNumericToNull(String value, String name) {
         if (value == null || value.isBlank()) {
             return null;
         }
-        return value.trim();
+        return numericId(value, name);
+    }
+
+    private long operatorId(String operator) {
+        if (operator == null || operator.isBlank()) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(operator.trim());
+        } catch (NumberFormatException ex) {
+            return 0L;
+        }
     }
 
     private long clampSize(long size) {

@@ -247,7 +247,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
         KnowledgeBaseRef knowledgeBase = requireKnowledgeBase(document.kbId());
         IngestionContext context = IngestionContext.builder()
                 .taskId(String.valueOf(document.id()))
-                .pipelineId(document.process().pipelineId())
+                .pipelineId(resolvePipelineId(document, pipeline))
                 .rawBytes(fileBytes)
                 .mimeType(document.file().fileType())
                 .metadata(java.util.Map.of(
@@ -257,6 +257,15 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
                         "collectionName", knowledgeBase.collectionName()))
                 .build();
         return ingestionEngine.execute(Objects.requireNonNull(pipeline, "pipeline must not be null"), context);
+    }
+
+    private String resolvePipelineId(KnowledgeDocumentRecord document, PipelineDefinition pipeline) {
+        String documentPipelineId = document.process().pipelineId();
+        if (hasText(documentPipelineId)) {
+            return documentPipelineId.trim();
+        }
+        String pipelineId = pipeline.getId();
+        return hasText(pipelineId) ? pipelineId.trim() : "";
     }
 
     private KnowledgeBaseRef requireKnowledgeBase(Long kbId) {
@@ -358,7 +367,7 @@ public class KernelKnowledgeDocumentService implements KnowledgeDocumentInboundP
 
     private StoredObject uploadToStorage(String collectionName, UploadKnowledgeDocumentCommand command) {
         return objectStoragePort.upload(
-                collectionName,
+                KnowledgeStorageBucketNames.fromCollectionName(collectionName),
                 command.file().content(),
                 command.file().size(),
                 command.file().originalFilename(),

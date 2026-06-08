@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.keyword.KeywordSearchRequest
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -63,6 +64,27 @@ class KeywordSearchChannelFeatureTests {
         assertThat(port.request.topK()).isEqualTo(7);
         assertThat(result.getChannelType()).isEqualTo(SearchChannelType.KEYWORD_BM25);
         assertThat(result.getChunks()).extracting(RetrievedChunk::getId).containsExactly("chunk-1");
+    }
+
+    @Test
+    void shouldAppendExpandedTermsToKeywordQueryWithoutChangingMainQuestion() {
+        RecordingKeywordSearchPort port = new RecordingKeywordSearchPort();
+        KeywordSearchChannelFeature feature = new KeywordSearchChannelFeature(port);
+
+        SearchChannelResult result = feature.search(SearchContext.builder()
+                .rewrittenQuestion("入职流程")
+                .topK(5)
+                .options(RetrievalOptions.builder()
+                        .enableKeyword(true)
+                        .keywordTopK(7)
+                        .build())
+                .metadata(Map.of(SearchContext.METADATA_QUERY_EXPANDED_TERMS,
+                        List.of("onboarding", "employee onboarding")))
+                .build());
+
+        assertThat(port.request).isNotNull();
+        assertThat(port.request.query()).isEqualTo("入职流程 onboarding employee onboarding");
+        assertThat(result.getMetadata()).containsEntry("expandedTermCount", 2);
     }
 
     private static class RecordingKeywordSearchPort implements KeywordSearchPort {

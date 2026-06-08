@@ -988,7 +988,8 @@ class SeahorseWebApiContractTests {
         when(usagePort.report("tenant-1", "1", 2)).thenReturn(metadataSchemaUsageReport());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseMetadataSchemaUsageController(usagePort)).build();
+                new SeahorseMetadataSchemaUsageController(
+                        provider(MetadataSchemaUsageInboundPort.class, usagePort))).build();
 
         mvc.perform(get("/knowledge-base/1/metadata-schema/usage-report")
                         .param("tenantId", "tenant-1")
@@ -1114,7 +1115,8 @@ class SeahorseWebApiContractTests {
         when(comparisonPort.compare(any())).thenReturn(versionQualityComparisonReport());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new SeahorseVersionQualityComparisonController(comparisonPort)).build();
+                new SeahorseVersionQualityComparisonController(
+                        provider(VersionQualityComparisonInboundPort.class, comparisonPort))).build();
 
         mvc.perform(post("/knowledge-base/kb-1/version-quality/compare")
                         .contentType(MediaType.APPLICATION_JSON)

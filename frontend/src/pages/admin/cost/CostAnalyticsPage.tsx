@@ -11,13 +11,15 @@ import { FeatureUnavailableState } from "@/components/common/FeatureUnavailableS
 import { aggregateCostUsage, type CostAggregate } from "@/services/auditCostService";
 import { getErrorMessage } from "@/utils/error";
 
+const DEFAULT_TENANT_ID = "tenant-default";
+
 export function CostAnalyticsPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.COST_ANALYTICS);
 
   const [aggregate, setAggregate] = useState<CostAggregate | null>(null);
   const [loading, setLoading] = useState(false);
   const [groupBy, setGroupBy] = useState("agent");
-  const [tenantId, setTenantId] = useState("");
+  const [tenantId, setTenantId] = useState(DEFAULT_TENANT_ID);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
 
