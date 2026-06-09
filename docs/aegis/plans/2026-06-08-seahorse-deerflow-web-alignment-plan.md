@@ -688,6 +688,7 @@ npm run build
 **Why:** Users should know which selected or bound skills were considered, loaded, or skipped. This is especially important once progressive loading exists.
 
 **Impact/Compatibility:** Rendering diagnostics must not expose full custom skill content unless the user has permission and explicitly opens it through Skill APIs.
+Rejected per-turn skill selections are still handled before an Agent run starts by `ChatSelectedSkillResolver`; they are covered by resolver/chat tests and do not emit runtime workbench events because no run exists yet.
 
 **Repair Track:**
 - Root cause: selected skills affect prompt/runtime but are largely invisible during the chat turn.
@@ -709,7 +710,7 @@ cd ..
 .\mvnw.cmd -pl seahorse-agent-kernel -am test -Dtest=ChatSelectedSkillResolverTests,KernelChatSkillSelectionTests
 ```
 
-- [x] Write RED tests for selected, metadata-only, loaded, skipped, and rejected skill diagnostics.
+- [x] Write RED tests for selected, metadata-only, loaded, and skipped runtime diagnostics; rejected selections remain covered at resolver/chat boundary.
 - [x] Verify RED.
 - [x] Add backend skill runtime events or snapshot fields if missing.
 - [x] Add Skill workbench tab and message summary metrics.
