@@ -4,8 +4,20 @@ import { useChatStore } from "@/stores/chatStore";
 import { getAgentRunSnapshot } from "@/services/agentRunService";
 import { type AgentRunSnapshot, type Message } from "@/types";
 
+const streamStarts: string[] = [];
+
 vi.mock("@/services/agentRunService", () => ({
   getAgentRunSnapshot: vi.fn()
+}));
+
+vi.mock("@/hooks/useStreamResponse", () => ({
+  createStreamResponse: vi.fn(({ url }) => {
+    streamStarts.push(url);
+    return {
+      cancel: vi.fn(),
+      start: vi.fn().mockResolvedValue(undefined)
+    };
+  })
 }));
 
 vi.mock("@/services/sessionService", () => ({
@@ -48,7 +60,13 @@ function setMessages(messages: Message[]) {
 describe("chatStore snapshot hydration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    streamStarts.length = 0;
     setMessages([]);
+    useChatStore.setState({
+      currentSessionId: null,
+      selectedTaskTemplateId: null,
+      isStreaming: false
+    });
   });
 
   it("hydrates an interrupted message workspace from an agent run snapshot", async () => {
@@ -191,5 +209,20 @@ describe("chatStore snapshot hydration", () => {
     expect(message.lastEventSeq).toBe(20);
     expect(message.timeline).toEqual([{ id: "step-1", title: "New live step", status: "DONE" }]);
     expect(message.sources).toEqual([{ id: "source-1", title: "New live source" }]);
+  });
+
+  it("uses agent chat mode for the GitHub visual intro task template", async () => {
+    useChatStore.setState({
+      currentSessionId: "conversation-1",
+      selectedTaskTemplateId: "github-visual-project-intro"
+    });
+
+    await useChatStore.getState().sendMessage("Create a visual intro");
+
+    expect(streamStarts).toHaveLength(1);
+    const url = new URL(streamStarts[0], "http://localhost");
+    expect(url.pathname).toBe("/api/rag/v3/chat");
+    expect(url.searchParams.get("taskTemplateId")).toBe("github-visual-project-intro");
+    expect(url.searchParams.get("chatMode")).toBe("agent");
   });
 });

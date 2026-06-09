@@ -26,7 +26,8 @@ public enum TaskTemplateId {
     QUICK_ANSWER("quick-answer"),
     DEEP_RESEARCH("deep-research"),
     WEB_SUMMARY("web-summary"),
-    COMPARE_ANALYSIS("compare-analysis");
+    COMPARE_ANALYSIS("compare-analysis"),
+    GITHUB_VISUAL_PROJECT_INTRO("github-visual-project-intro");
 
     private final String value;
 

@@ -533,10 +533,12 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     @ConditionalOnMissingBean(QuotaSummaryInboundPort.class)
     public KernelQuotaSummaryService seahorseQuotaSummaryInboundPort(
             ObjectProvider<QuotaPolicyRepositoryPort> quotaPolicyRepositoryPort,
-            ObjectProvider<CostUsageRepositoryPort> costUsageRepositoryPort) {
+            ObjectProvider<CostUsageRepositoryPort> costUsageRepositoryPort,
+            ObjectProvider<TaskTemplateQueryInboundPort> taskTemplateQueryPort) {
         return new KernelQuotaSummaryService(
                 quotaPolicyRepositoryPort.getIfAvailable(),
-                costUsageRepositoryPort.getIfAvailable());
+                costUsageRepositoryPort.getIfAvailable(),
+                taskTemplateQueryPort.getIfAvailable());
     }
 
     @Bean

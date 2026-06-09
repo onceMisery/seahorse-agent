@@ -80,6 +80,34 @@ class SeahorseChatControllerTests {
     }
 
     @Test
+    void defaultAgentTemplateShouldEnterAgentModeWithoutExplicitAgentSelection() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseChatController(
+                        provider(ChatInboundPort.class, chatPort),
+                        (emitter, conversationId, taskId) -> new NoopStreamCallback(),
+                        streamTaskPort,
+                        1_000L,
+                        provider(AgentRunSnapshotInboundPort.class, null))).build();
+
+        mvc.perform(get("/rag/v3/chat")
+                        .param("question", "Create a visual GitHub project intro")
+                        .param("conversationId", "conversation-1")
+                        .param("userId", "user-1")
+                        .param("taskTemplateId", "github-visual-project-intro"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        ArgumentCaptor<StreamChatCommand> captor = ArgumentCaptor.forClass(StreamChatCommand.class);
+        verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
+        assertThat(captor.getValue().taskTemplateId()).isEqualTo("github-visual-project-intro");
+        assertThat(captor.getValue().chatMode()).isEqualTo(ChatMode.AGENT);
+        assertThat(captor.getValue().agentId()).isNull();
+    }
+
+    @Test
     void shouldPassAttachmentIdsIntoStreamChatCommand() throws Exception {
         ChatInboundPort chatPort = mock(ChatInboundPort.class);
         StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);

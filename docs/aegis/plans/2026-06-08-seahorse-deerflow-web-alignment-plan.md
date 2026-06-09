@@ -133,6 +133,7 @@ The strategy is **three layers to align, two layers to surpass**:
 - The frontend currently tracks both `frontend/vite.config.ts` and `frontend/vite.config.js`. Dev proxy changes must keep both aligned, because Vite may load the JavaScript config first.
 - `V20__github_visual_project_intro_agent.sql` and `V21__github_visual_agent_generation_tools.sql` are baseline migrations that seed the GitHub visual intro Agent and generation-tool bindings. Do not edit already-applied migrations in place; use a forward migration and update `resources/database/seahorse_init.sql` only if runtime database evidence proves seed data is missing or stale.
 - `frontend/src/hooks/useStreamResponse.ts` is clean in the current scoped mojibake scan, but Task 2 must keep guarding it because it sits on the SSE sender/retry path.
+- Current-worktree validation on 2026-06-09 also found that a plain `quick-answer` chat with selected skills does not trigger the GitHub visual Agent or populate Chat Workbench run state. The current branch now adds a `github-visual-project-intro` task template that resolves to `github-visual-project-intro-agent` through `TaskTemplate.defaultAgentId`. This is the normal consumer-web Chat entry point for final E2E; do not use hidden admin-only Agent run creation as a substitute for Workbench evidence.
 
 ### Assumptions
 
@@ -764,6 +765,7 @@ npm run build
 - [x] Implement event sequence tracking in frontend message state.
 - [x] Reuse the existing resume stream path for chat backfill; use the existing event-list endpoint for admin replay and extend backend event list/snapshot only if fields are missing.
 - [x] Current-worktree replay gap found/fixed on 2026-06-09: admin Inspector rendered `No events` while the replay API had rows because the frontend dev proxy was using the tracked `vite.config.js` default target and Inspector filtered string `eventSeq` values. Fixes aligned both Vite configs, added backend `/agent-runs/{runId}/events`, and normalized string event sequences in Inspector.
+- [x] Current-worktree Chat Workbench entry gap found/fixed on 2026-06-09: ordinary `quick-answer` + selected skill stays on the RAG path and cannot prove Agent tool/artifact rendering. Added the `github-visual-project-intro` task template, exposed it in frontend fallback templates, mapped it to `chatMode=agent`, and resolved its `defaultAgentId` server-side so consumer web can trigger the seeded GitHub visual Agent without arbitrary `agentId` selection.
 - [x] Verify focused tests and build pass.
 - [x] Commit: `feat: add agentops replay and governance diagnostics`
 

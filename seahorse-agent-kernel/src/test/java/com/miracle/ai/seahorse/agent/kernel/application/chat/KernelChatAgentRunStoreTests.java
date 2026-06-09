@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOpt
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgentRunService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.task.KernelTaskTemplateQueryService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
@@ -419,6 +420,86 @@ class KernelChatAgentRunStoreTests {
                 .toList());
         assertTrue(model.requests.get(0).getMessages().get(0).getContent()
                 .contains("You are an ops assistant."));
+    }
+
+    @Test
+    void defaultAgentTemplateUsesBoundAgentVersionToolSet() {
+        MemoryAgentRunRepository runRepository = new MemoryAgentRunRepository();
+        MemoryAgentDefinitionRepository definitionRepository = new MemoryAgentDefinitionRepository();
+        definitionRepository.create(agentDefinition(
+                "github-visual-project-intro-agent",
+                "github-visual-project-intro-agent-v1"));
+        definitionRepository.saveVersion(agentVersion(
+                "github-visual-project-intro-agent",
+                "github-visual-project-intro-agent-v1",
+                "{\"modelId\":\"agent-chat-model\"}",
+                """
+                        {
+                          "tools": [
+                            "github_repository_reader",
+                            "web_fetch",
+                            "image_generation"
+                          ]
+                        }
+                        """,
+                AgentVersion.EMPTY_JSON_OBJECT));
+        KernelAgentRunService runService = new KernelAgentRunService(
+                definitionRepository, runRepository,
+                () -> Optional.of(new CurrentUser(1L, "alice", "user", null)), FIXED_CLOCK);
+        ScriptedModel model = new ScriptedModel(List.of(Turn.finalAnswer("visual intro")));
+        InMemoryToolRegistry toolRegistry = new InMemoryToolRegistry();
+        toolRegistry.register(new ToolDescriptor(
+                GitHubRepositoryReaderToolPortAdapter.TOOL_ID, "GitHub", "Read GitHub", "{}"),
+                (callId, toolId, arguments) -> ToolInvocationResult.ok("{}"));
+        toolRegistry.register(new ToolDescriptor(WebFetchToolPortAdapter.TOOL_ID, "Web Fetch", "Fetch", "{}"),
+                (callId, toolId, arguments) -> ToolInvocationResult.ok("{}"));
+        toolRegistry.register(new ToolDescriptor(
+                ImageGenerationToolPortAdapter.TOOL_ID, "Image", "Generate image", "{}"),
+                (callId, toolId, arguments) -> ToolInvocationResult.ok("{}"));
+        KernelAgentLoop agentLoop = new KernelAgentLoop(
+                model,
+                toolRegistry,
+                KernelAgentLoopOptions.defaults(),
+                new RepositoryAgentRunStepRecorder(runRepository, FIXED_CLOCK));
+        RecordingCallback callback = new RecordingCallback();
+        KernelChatInboundService service = new KernelChatInboundService(
+                newPipeline(),
+                StreamTaskPort.noop(),
+                Optional.of(agentLoop),
+                null,
+                null,
+                MemoryEnginePort.noop(),
+                Optional.of(runService),
+                Optional.empty(),
+                Optional.of(definitionRepository),
+                ConversationAttachmentContextAssembler.noop(),
+                Optional.empty(),
+                KernelAgentLoopOptions.defaults(),
+                Optional.of(new KernelTaskTemplateQueryService()));
+
+        service.streamChat(new StreamChatCommand(
+                "Introduce https://github.com/redis/redis",
+                "conversation-1",
+                "task-1",
+                "user-1",
+                false,
+                ChatMode.AGENT,
+                null,
+                null,
+                "github-visual-project-intro",
+                List.of()), callback);
+
+        assertTrue(callback.awaitTerminal());
+        assertEquals(null, callback.error);
+        AgentRun run = runRepository.runs.values().iterator().next();
+        assertEquals("github-visual-project-intro-agent", run.agentId());
+        assertEquals("github-visual-project-intro-agent-v1", run.versionId());
+        assertEquals(List.of(
+                GitHubRepositoryReaderToolPortAdapter.TOOL_ID,
+                WebFetchToolPortAdapter.TOOL_ID,
+                ImageGenerationToolPortAdapter.TOOL_ID), model.requests.get(0).getTools().stream()
+                .map(ToolDescriptor::toolId)
+                .toList());
     }
 
     @Test

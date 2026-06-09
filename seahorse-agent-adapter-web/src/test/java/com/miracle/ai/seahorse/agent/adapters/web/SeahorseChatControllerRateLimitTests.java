@@ -25,6 +25,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimitDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.stream.StreamTaskPort;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.test.web.servlet.MockMvc;
@@ -63,22 +65,23 @@ class SeahorseChatControllerRateLimitTests {
                 });
     }
 
-    @Test
-    void highCostTaskTemplateAcquiresTemplateDailyPermit() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"deep-research", "github-visual-project-intro"})
+    void highCostTaskTemplateAcquiresTemplateDailyPermit(String taskTemplateId) throws Exception {
         RecordingRateLimiter rateLimiter = new RecordingRateLimiter();
         MockMvc mvc = mvc(rateLimiter);
 
         mvc.perform(get("/rag/v3/chat")
                         .param("question", "research")
                         .param("userId", "user-1")
-                        .param("taskTemplateId", "deep-research"))
+                        .param("taskTemplateId", taskTemplateId))
                 .andExpect(status().isOk())
                 .andExpect(request().asyncStarted());
 
         assertThat(rateLimiter.calls)
                 .anySatisfy(call -> {
                     assertThat(call.resource()).isEqualTo("template");
-                    assertThat(call.subject()).isEqualTo("deep-research");
+                    assertThat(call.subject()).isEqualTo(taskTemplateId);
                     assertThat(call.ttl()).isEqualTo(Duration.ofDays(1));
                 });
     }

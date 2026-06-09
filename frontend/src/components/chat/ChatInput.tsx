@@ -65,6 +65,18 @@ const DEFAULT_TASK_TEMPLATES: TaskTemplate[] = [
     estimatedDuration: "MEDIUM",
     enabled: true,
     status: "AVAILABLE"
+  },
+  {
+    templateId: "github-visual-project-intro",
+    name: "GitHub visual intro",
+    description: "Read a GitHub repo and generate visual project artifacts.",
+    category: "ANALYSIS",
+    defaultAgentId: "github-visual-project-intro-agent",
+    defaultOutputType: "MARKDOWN_REPORT",
+    maxCostTier: HIGH_COST_TIER,
+    estimatedDuration: "LONG",
+    enabled: true,
+    status: "AVAILABLE"
   }
 ];
 

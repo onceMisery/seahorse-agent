@@ -60,10 +60,12 @@ public class SeahorseChatController {
     private static final EnumSet<TaskTemplateId> CONTROLLED_WEB_AGENT_TEMPLATES = EnumSet.of(
             TaskTemplateId.DEEP_RESEARCH,
             TaskTemplateId.WEB_SUMMARY,
-            TaskTemplateId.COMPARE_ANALYSIS);
+            TaskTemplateId.COMPARE_ANALYSIS,
+            TaskTemplateId.GITHUB_VISUAL_PROJECT_INTRO);
     private static final EnumSet<TaskTemplateId> HIGH_COST_TASK_TEMPLATES = EnumSet.of(
             TaskTemplateId.DEEP_RESEARCH,
-            TaskTemplateId.COMPARE_ANALYSIS);
+            TaskTemplateId.COMPARE_ANALYSIS,
+            TaskTemplateId.GITHUB_VISUAL_PROJECT_INTRO);
     private static final int TEMPLATE_PERMITS_PER_DAY = 50;
     private static final Duration TEMPLATE_WINDOW = Duration.ofDays(1);
 

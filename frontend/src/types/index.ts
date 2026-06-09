@@ -384,7 +384,12 @@ export interface StreamEventEnvelope {
   typedPayload: unknown;
 }
 
-export type TaskTemplateId = "quick-answer" | "deep-research" | "web-summary" | "compare-analysis";
+export type TaskTemplateId =
+  | "quick-answer"
+  | "deep-research"
+  | "web-summary"
+  | "compare-analysis"
+  | "github-visual-project-intro";
 
 export type TaskTemplateCategory = "RESEARCH" | "WRITING" | "LEARNING" | "ANALYSIS" | "FILE_QA";
 

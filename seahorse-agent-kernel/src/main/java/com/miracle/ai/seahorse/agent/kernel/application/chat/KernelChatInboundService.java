@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactTy
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTriggerType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.task.TaskTemplate;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.task.TaskTemplateId;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
@@ -51,6 +52,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
@@ -111,6 +113,7 @@ public class KernelChatInboundService implements ChatInboundPort {
     private final SkillRuntimeComposer skillRuntimeComposer;
     private final ChatSelectedSkillResolver chatSkillResolver;
     private final KernelAgentLoopOptions agentLoopOptions;
+    private final Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort;
 
     public KernelChatInboundService(KernelChatPipeline chatPipeline, StreamTaskPort streamTaskPort) {
         this(chatPipeline, streamTaskPort, KernelRagTraceRecorder.noop());
@@ -228,6 +231,24 @@ public class KernelChatInboundService implements ChatInboundPort {
                                     ConversationAttachmentContextAssembler attachmentContextAssembler,
                                     Optional<AgentSkillRepositoryPort> skillRepository,
                                     KernelAgentLoopOptions agentLoopOptions) {
+        this(chatPipeline, streamTaskPort, agentLoop, traceRecorder, memoryPort, memoryEnginePort,
+                agentRunPort, contextPackBuilder, agentDefinitionRepository, attachmentContextAssembler,
+                skillRepository, agentLoopOptions, Optional.empty());
+    }
+
+    public KernelChatInboundService(KernelChatPipeline chatPipeline,
+                                    StreamTaskPort streamTaskPort,
+                                    Optional<KernelAgentLoop> agentLoop,
+                                    KernelRagTraceRecorder traceRecorder,
+                                    ConversationMemoryPort memoryPort,
+                                    MemoryEnginePort memoryEnginePort,
+                                    Optional<AgentRunInboundPort> agentRunPort,
+                                    Optional<ContextPackBuilderInboundPort> contextPackBuilder,
+                                    Optional<AgentDefinitionRepositoryPort> agentDefinitionRepository,
+                                    ConversationAttachmentContextAssembler attachmentContextAssembler,
+                                    Optional<AgentSkillRepositoryPort> skillRepository,
+                                    KernelAgentLoopOptions agentLoopOptions,
+                                    Optional<TaskTemplateQueryInboundPort> taskTemplateQueryPort) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop;
@@ -245,6 +266,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 ? null
                 : new ChatSelectedSkillResolver(skillRepository.get());
         this.agentLoopOptions = Objects.requireNonNullElseGet(agentLoopOptions, KernelAgentLoopOptions::defaults);
+        this.taskTemplateQueryPort = taskTemplateQueryPort == null ? Optional.empty() : taskTemplateQueryPort;
     }
 
     @Override
@@ -542,9 +564,24 @@ public class KernelChatInboundService implements ChatInboundPort {
     }
 
     private String selectedAgentId(StreamChatCommand command) {
-        return hasText(command.agentId())
-                ? command.agentId()
-                : AgentRuntimeConstants.LEGACY_REACT_AGENT_ID;
+        if (hasText(command.agentId())) {
+            return command.agentId();
+        }
+        return defaultAgentId(command).orElse(AgentRuntimeConstants.LEGACY_REACT_AGENT_ID);
+    }
+
+    private Optional<String> defaultAgentId(StreamChatCommand command) {
+        if (command == null || !hasText(command.taskTemplateId()) || taskTemplateQueryPort.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            return taskTemplateQueryPort.get()
+                    .findById(TaskTemplateId.fromValue(command.taskTemplateId()))
+                    .map(TaskTemplate::defaultAgentId)
+                    .filter(this::hasText);
+        } catch (IllegalArgumentException ex) {
+            return Optional.empty();
+        }
     }
 
     private void validateAgentVersionSelection(StreamChatCommand command) {

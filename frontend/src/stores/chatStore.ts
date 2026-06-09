@@ -39,7 +39,8 @@ import { RenderBuffer } from "@/lib/stream/renderBuffer";
 const CONTROLLED_WEB_AGENT_CHAT_MODE = "agent";
 const CONTROLLED_WEB_AGENT_TEMPLATE_IDS = new Set<TaskTemplateId>([
   "deep-research",
-  "web-summary"
+  "web-summary",
+  "github-visual-project-intro"
 ]);
 const MAX_ATTACHMENT_COUNT = 20;
 
