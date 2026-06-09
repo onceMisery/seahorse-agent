@@ -23,14 +23,16 @@ Snippets in this document are examples. Verify them against current repository t
 
 ## Review Accuracy Notes
 
-`2026-06-08-implementation-details-review.md` is technically useful, but it should be treated as a point-in-time review, not as the current implementation contract. The file itself is UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. If display output looks corrupted, verify with a UTF-8-aware editor or `rg` before copying any text into fixtures. The following points were rechecked against the current branch on 2026-06-09 before changing this companion document. Items marked as current branch implementation still need the final real backend and frontend E2E gate before the overall plan is considered complete:
+`2026-06-08-implementation-details-review.md` is technically useful, but it is a point-in-time review of an older version of this companion document, not the current implementation contract. The review file itself is UTF-8; a legacy console or default PowerShell read may render its Chinese text as mojibake even though the file content is valid. If display output looks corrupted, verify with a UTF-8-aware editor or a code-point scan before copying any text into fixtures.
+
+Recheck result on 2026-06-09: the review's original P0/P1 findings were reasonable for the older document, but several proposed fixes are now superseded by current code. Do not execute the review literally. Use the decisions below as the contract for follow-up work. Items marked as current branch implementation still need the final real backend and frontend E2E gate before the overall plan is considered complete:
 
 - Accepted: backend and frontend `StreamEventEnvelope` has `eventId`, `eventSeq`, `eventType`, `runId`, optional `stepId`, `timestamp`, and `typedPayload`; it does not carry `messageId`. The repository has other DTOs with optional `messageId` fields, including completion, attachment, artifact, memory, and snapshot payloads. Do not infer an envelope field from those DTOs. Test fixtures and merge helpers must route live stream envelopes through the active streaming assistant message, while snapshot or artifact hydration can carry `messageId` separately when the source contract actually provides it.
-- Accepted with current implementation detail: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context. `LocalToolGatewayPort` still calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read request context directly unless the runtime deliberately passes a safe, server-owned snapshot in arguments.
-- Superseded: the review suggested adding an `ExecutionMetadata` argument to `ToolPort.invoke(...)` for Task 5/6. The current code instead preserves the existing `ToolPort` contract and uses gateway-level context owners: `ToolArtifactPublicationPort.publish(request, rawResult)` for artifact publication, plus server-injected hidden arguments for runtime-only tool context.
+- Accepted with current implementation detail: `ToolInvocationRequest` already carries run, step, tenant, user, identity, idempotency, resource-reference, and allowed-tool context. `LocalToolGatewayPort` still calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read request context directly unless the runtime deliberately passes a safe, server-owned snapshot in arguments.
+- Superseded: the review suggested adding an `ExecutionMetadata` argument to `ToolPort.invoke(...)` for Task 5/6. The current code instead preserves the existing `ToolPort` contract and uses gateway-level context owners: `ToolArtifactPublicationPort.publish(request, rawResult)` for artifact publication, plus server-injected hidden arguments for runtime-only tool context. Changing `ToolPort.invoke(...)` now would be a separate architecture change touching every tool implementation, registry test, gateway test, and artifact-publication test.
 - Accepted: there is no existing `SkillSelectionContext`; current selected-skill validation lives in `ChatSelectedSkillResolver` and produces `SkillRuntimeBlock` values.
 - Accurate with a narrower scope: `useStreamResponse.ts`, `SeahorseChatController`, and `ResearchSseBridge` already support `resumeRunId` and `lastEventSeq`; reuse that path before adding any separate event-list endpoint.
-- Superseded by current code: the named chat/workbench files and `frontend/src/hooks/useStreamResponse.ts` are clean for the known mojibake code points in the scoped scan. Keep the guard, but do not claim a current `useStreamResponse.ts` mojibake defect unless a fresh scan finds one.
+- Superseded by current code: the named chat/workbench files and `frontend/src/hooks/useStreamResponse.ts` are clean for the known mojibake code points in the scoped scan. Keep the guard, but do not claim a current `useStreamResponse.ts` mojibake defect unless a fresh scan finds one. If a normal shell read shows corrupted Chinese while the code-point scan is clean, treat it as console display encoding, not source corruption.
 - Superseded by current code: the review's "artifact persistence trigger point" concern is resolved by the gateway-level outbound hook `ToolArtifactPublicationPort`, and Task 5 has added the concrete `GenerationToolArtifactPublicationPort` publisher for newsletter, PPT, chart, frontend-design, and image-generation outputs.
 - Superseded by current branch implementation: the review predates the remote-image artifact fallback. `GenerationToolArtifactPublicationPort` persists image artifacts when the observation has either `b64Json` or `imageUrl`; `b64Json` is uploaded to object storage, while remote `imageUrl` is stored as the artifact reference.
 - Superseded by current code: the review did not account for the Task 8 slice. Current implementation adds `tool_search` as a `DescribedToolPort`, registers it through Spring auto-configuration, injects `_seahorseAllowedToolIds` from `KernelAgentLoop`, returns metadata only, and labels `tool_search` as `延迟发现` in the admin tool catalog. Further Task 8 changes should be driven by new acceptance gaps, not by the original review's missing context.
@@ -41,16 +43,18 @@ Snippets in this document are examples. Verify them against current repository t
 
 Disposition matrix:
 
-| Review item | Current decision |
-| --- | --- |
-| `StreamEventEnvelope.messageId` does not exist | Accepted; keep live message routing outside the envelope. Other DTOs may still carry optional `messageId`; do not collapse them into the envelope contract. |
-| Undefined `ExecutionContext` / `SkillSelectionContext` | Accepted as a documentation defect; fixed by using existing gateway/runtime context owners, not by inventing hidden globals. |
-| Add `ExecutionMetadata` to `ToolPort.invoke(...)` | Rejected for current slices; preserve the stable `ToolPort` contract unless a future reviewed change updates every implementation together. |
-| Artifact publication trigger was unclear | Superseded; `ToolArtifactPublicationPort.publish(request, rawResult)` is the implemented owner. |
-| Image artifact persistence only covered `b64Json` | Superseded; image observations with remote `imageUrl` persist an `AgentArtifact` reference and emit an artifact event. |
-| Task 9-11 lacked detail | Superseded at focused acceptance level; Tasks 9/10/11 now have concrete implementation and tests. |
-| SSE live stream worked but admin replay was empty | Accepted as a real implementation risk; current baseline requires lazy buffer binding plus serialized JDBC payloads and must be proven by fresh replay evidence. |
-| Event buffer auto-configuration could miss late `ObjectMapper` beans | Accepted; condition only on `DataSource`, inject `ObjectProvider<ObjectMapper>`, and keep the fallback mapper local to the adapter. |
+| Review item | Accuracy against current branch | Current decision |
+| --- | --- | --- |
+| `StreamEventEnvelope.messageId` does not exist | Accurate | Keep live message routing outside the envelope. Other DTOs may still carry optional `messageId`; do not collapse them into the envelope contract. |
+| Undefined `ExecutionContext` / `SkillSelectionContext` | Accurate for the old document | Fixed by using existing gateway/runtime context owners, not by inventing hidden globals. |
+| Add `ExecutionMetadata` to `ToolPort.invoke(...)` | Plausible alternative, not current architecture | Do not apply as a follow-up to this review. Preserve the stable `ToolPort` contract unless a future reviewed change updates every implementation together. |
+| Artifact publication trigger was unclear | Accurate for the old document, superseded by implementation | `ToolArtifactPublicationPort.publish(request, rawResult)` is the implemented owner. |
+| Image artifact persistence only covered `b64Json` | Superseded by implementation | Image observations with remote `imageUrl` persist an `AgentArtifact` reference and emit an artifact event. |
+| Task 8 missing context | Superseded by implementation | `tool_search` is registered, policy-filtered by server-injected allowed ids, and rendered as deferred discovery in admin. |
+| Task 9-11 lacked detail | Superseded at focused acceptance level | Tasks 9/10/11 now have concrete implementation and tests; final E2E remains the goal gate. |
+| SSE live stream worked but admin replay was empty | Accurate as a real implementation risk | Current baseline requires lazy buffer binding plus serialized JDBC payloads and must be proven by fresh replay evidence. |
+| Event buffer auto-configuration could miss late `ObjectMapper` beans | Accurate | Condition only on `DataSource`, inject `ObjectProvider<ObjectMapper>`, and keep the fallback mapper local to the adapter. |
+| Concurrent event sequence allocation is not atomic across all writers | Newly identified residual hardening gap | Documented as residual risk. The current callback fix covers observed sequential/single-stream interleavings; a future repository-level slice should add atomic append-next-sequence or unique-key plus retry semantics. |
 
 Current code anchors:
 
@@ -140,6 +144,7 @@ Execution constraints:
 
 - Treat this task as a guard plus targeted repair, not a broad rewrite.
 - Do not batch-rewrite unrelated Chinese copy.
+- Validate suspected mojibake from file bytes/code points, not from a terminal rendering alone. PowerShell or console output can display valid UTF-8 Chinese incorrectly.
 - If the scan finds a real hit, record the exact file and line in the commit/review note.
 
 Guard these files when they are touched:
@@ -208,6 +213,7 @@ Current baseline:
 Implementation constraints:
 
 - Treat the concrete generation artifact publisher as implemented behavior. Future changes must preserve the existing gateway-level `ToolArtifactPublicationPort` hook and must not move artifact publication into web controllers, `SpringSseEventSender`, or individual generation tool adapters.
+- The review's suggested `ExecutionMetadata` parameter is not the current contract. Treat `ToolInvocationRequest` as the only typed runtime context at the gateway boundary; only use hidden tool arguments for server-owned snapshots that the adapter must validate, such as selected skills or allowed searchable tools.
 - Preserve tool ids and catalog metadata.
 - Preserve `model="default"` fallback.
 - Keep forwarding image `style`; if the contract is intentionally retired later, remove it from schema, docs, and tests in the same reviewed change.
@@ -242,6 +248,7 @@ Current baseline:
 - Validated selections become `SkillRuntimeBlock` values and may be downgraded to `METADATA_ONLY`.
 - There is no existing `SkillSelectionContext`.
 - Current implementation has a registered, catalog-visible `load_skill_resource` tool. `KernelAgentLoop` injects a hidden runtime skill snapshot into its arguments before dispatching through `ToolGatewayPort`; the legacy inline `load_skill` alias remains only for compatibility with existing model calls.
+- `LoadSkillResourceToolPortAdapter` intentionally reads `_seahorseSkillRuntimeBlocks` from server-injected arguments because `ToolPort.invoke(...)` has no typed metadata parameter. Frontend/model-provided skill names are request intent only, not authorization evidence.
 
 Implementation constraints:
 
@@ -250,6 +257,7 @@ Implementation constraints:
 - Reuse selected `SkillRuntimeBlock` metadata or an explicit tool invocation metadata carrier; do not create a second independent skill-selection owner.
 - Because `ToolPort.invoke(...)` currently receives only `toolCallId`, `toolId`, and `arguments`, `load_skill_resource` cannot infer selected skills inside the adapter unless the runtime passes selected-skill state before gateway dispatch.
 - Implemented path: `KernelAgentLoop` injects a hidden runtime skill snapshot into `load_skill_resource` arguments from `AgentLoopRequest.skillRuntimeBlocks()`. The adapter validates `skillName` and `resourcePath` only against that injected snapshot, never against frontend/model-provided authorization claims.
+- `load_skill_resource` currently exposes `SKILL.md` only. Adding arbitrary resource-file loading requires a new reviewed contract for revision resource indexing, path normalization, and storage lookup; do not infer it from the old review.
 - Do not replace this with a typed metadata carrier unless the same slice updates every `ToolPort` implementation, `LocalToolGatewayPort`, registry tests, and artifact publication tests.
 - If the selected-skill set is carried into tool invocation, derive it from the same `ChatSelectedSkillResolver` result used to compose the prompt/runtime blocks.
 - Reject absolute paths, parent traversal, empty paths, and paths outside the selected skill revision resource set.
@@ -276,6 +284,7 @@ Execution constraints:
 - Tool search must not bypass `ToolPolicyPort`, `ToolCatalogRepositoryPort`, or `BuiltInAgentToolRegistrar` metadata.
 - Do not depend on a nonexistent `ExecutionContext`; keep policy and runtime context at the `KernelAgentLoop`/`ToolInvocationRequest` boundary unless a future reviewed slice updates every `ToolPort` implementation.
 - `tool_search` receives its allowed-tool snapshot through the hidden `_seahorseAllowedToolIds` argument injected by the server. Model-supplied values are not authorization authority.
+- `tool_search` is intentionally metadata-only. It returns `toolId`, `name`, and `description`; it does not expose `schemaJson`, policy internals, credentials, or runtime-only helper snapshots.
 - `tool_search` must fail closed when the hidden allowed-tool snapshot is missing.
 - `tool_search` may be exposed as a runtime helper when the effective business-tool allowlist is non-empty. Its injected snapshot must contain only effective business tools, not helper tools such as `tool_search` itself.
 - Runtime gateway allowlists may include `tool_search` so the helper can execute, but search results must remain filtered to the injected effective business-tool snapshot.
@@ -316,6 +325,7 @@ Current baseline:
 - `AgentRunEventBufferPort` stores stream envelopes by run, and `SeahorseAgentRunController` exposes `/api/agent-runs/{runId}/events?afterSeq=...` for admin replay/event listing.
 - `LocalChatStreamCallbackFactory` resolves `AgentRunEventBufferPort` lazily when each callback is created, so a callback created after repository auto-configuration uses the real JDBC buffer instead of permanently capturing `noop`.
 - `LocalChatStreamCallbackFactory` also flushes externally buffered events, such as `AGENT_ARTIFACT` events appended by `GenerationToolArtifactPublicationPort`, back to the live SSE stream before sending later callback-owned events or completion. The callback tracks the highest sent `eventSeq` and reads the buffer's latest sequence before assigning a new local sequence, preventing duplicate sequence numbers for the observed sequential interleaving between gateway-level artifact publication and callback-owned events.
+- `GenerationToolArtifactPublicationPort` still appends its event by reading `getLatestSeq(runId) + 1`; the callback now reconciles with the buffer before it emits later callback-owned events. This is sufficient for the observed gateway-publisher-to-callback ordering gap, but it is not a repository-wide atomic sequence allocator.
 - `JdbcAgentRunEventBufferAdapter` serializes typed payloads as JSON and keeps a narrow compatibility path for driver/H2 string-literal payloads on read.
 - `SeahorseAgentRegistryRepositoryAutoConfiguration` registers the JDBC `AgentRunEventBufferPort` when `DataSource` is present, even if the application `ObjectMapper` bean is not ready at condition-evaluation time. The adapter receives `ObjectProvider<ObjectMapper>` and falls back to a local mapper.
 - `frontend/src/services/agentRunService.ts` already wraps `listAgentRunEvents(runId, afterSeq)`, and `AgentInspectorPage` loads the event list together with snapshot and cost summary data.
