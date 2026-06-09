@@ -99,16 +99,10 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
 
     private void publishImageArtifact(ToolInvocationRequest request, ToolInvocationResult result) {
         ImageObservation observation = parseImageObservation(result.content()).orElse(null);
-        if (observation == null || !hasText(observation.b64Json())) {
+        if (observation == null) {
             return;
         }
-        byte[] bytes;
-        try {
-            bytes = Base64.getDecoder().decode(observation.b64Json());
-        } catch (IllegalArgumentException ex) {
-            return;
-        }
-        if (bytes.length == 0) {
+        if (!hasText(observation.b64Json()) && !hasText(observation.imageUrl())) {
             return;
         }
         String mimeType = imageMimeType(observation.mimeType());
@@ -118,7 +112,21 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
                 mimeType,
                 imageExtension(mimeType),
                 "generated-image");
-        saveArtifact(request, bytes, mapping, preview(observation.prompt()), provenanceJson(request, observation));
+        if (hasText(observation.b64Json())) {
+            byte[] bytes;
+            try {
+                bytes = Base64.getDecoder().decode(observation.b64Json());
+            } catch (IllegalArgumentException ex) {
+                return;
+            }
+            if (bytes.length == 0) {
+                return;
+            }
+            saveArtifact(request, bytes, mapping, preview(observation.prompt()), provenanceJson(request, observation));
+            return;
+        }
+        saveArtifactReference(request, observation.imageUrl(), mapping, preview(observation.prompt()),
+                provenanceJson(request, observation));
     }
 
     private void saveArtifact(ToolInvocationRequest request,
@@ -145,6 +153,30 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
                 mapping.title(),
                 mapping.mimeType(),
                 stored.url(),
+                previewText,
+                provenanceJson,
+                AgentArtifactScanStatus.CLEAN,
+                Instant.now(clock));
+        AgentArtifact saved = artifactRepository.save(artifact);
+        appendArtifactEvent(request, saved);
+    }
+
+    private void saveArtifactReference(ToolInvocationRequest request,
+                                       String storageRef,
+                                       ArtifactMapping mapping,
+                                       String previewText,
+                                       String provenanceJson) {
+        String artifactId = SnowflakeIds.nextIdString();
+        AgentArtifact artifact = new AgentArtifact(
+                artifactId,
+                request.runId(),
+                null,
+                defaultText(request.tenantId(), "default"),
+                defaultText(request.userId(), "system"),
+                mapping.artifactType(),
+                mapping.title(),
+                mapping.mimeType(),
+                storageRef.trim(),
                 previewText,
                 provenanceJson,
                 AgentArtifactScanStatus.CLEAN,

@@ -77,6 +77,19 @@ class SeahorseAgentRepositoryAutoConfigurationTests {
     }
 
     @Test
+    void registersJdbcAgentRunEventBufferWhenObjectMapperBeanIsNotReadyYet() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(SeahorseAgentRegistryRepositoryAutoConfiguration.class))
+                .withBean(DataSource.class, () -> mock(DataSource.class))
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(AgentRunEventBufferPort.class);
+                    assertThat(context.getBean(AgentRunEventBufferPort.class))
+                            .isInstanceOf(JdbcAgentRunEventBufferAdapter.class);
+                });
+    }
+
+    @Test
     void chatCallbackFactoryUsesTheConfiguredEventBuffer() {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(SeahorseAgentKernelChatAutoConfiguration.class))

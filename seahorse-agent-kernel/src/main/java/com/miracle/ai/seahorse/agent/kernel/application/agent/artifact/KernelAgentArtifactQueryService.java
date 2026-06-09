@@ -38,6 +38,8 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
     private static final String ADMIN_ROLE = "admin";
     private static final String ACCESS_DENIED = "权限不足";
     private static final String DOWNLOAD_BLOCKED = "Artifact is not available for download";
+    private static final String REMOTE_DOWNLOAD_BLOCKED =
+            "Remote artifact references are not available through the local download endpoint";
     private static final Map<String, String> FILE_EXTENSIONS = Map.ofEntries(
             Map.entry("text/html", ".html"),
             Map.entry("text/markdown", ".md"),
@@ -87,6 +89,9 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
         if (!artifact.downloadable()) {
             throw new IllegalStateException(DOWNLOAD_BLOCKED);
         }
+        if (isRemoteReference(artifact.storageRef())) {
+            throw new IllegalStateException(REMOTE_DOWNLOAD_BLOCKED);
+        }
         AgentArtifactDisposition disposition = artifact.disposition();
         return new AgentArtifactDownloadDecision(
                 artifact,
@@ -124,6 +129,14 @@ public class KernelAgentArtifactQueryService implements AgentArtifactQueryInboun
         int separator = mimeType.indexOf(';');
         String base = separator >= 0 ? mimeType.substring(0, separator) : mimeType;
         return base.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isRemoteReference(String storageRef) {
+        if (storageRef == null) {
+            return false;
+        }
+        String normalized = storageRef.trim().toLowerCase(Locale.ROOT);
+        return normalized.startsWith("http://") || normalized.startsWith("https://");
     }
 
     private boolean isAdmin(CurrentUser currentUser) {

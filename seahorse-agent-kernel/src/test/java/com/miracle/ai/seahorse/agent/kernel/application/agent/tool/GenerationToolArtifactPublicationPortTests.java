@@ -232,6 +232,40 @@ class GenerationToolArtifactPublicationPortTests {
     }
 
     @Test
+    void publishesRemoteImageGenerationObservationAsImageArtifactReference() {
+        MemoryArtifactRepository artifacts = new MemoryArtifactRepository();
+        MemoryObjectStorage storage = new MemoryObjectStorage();
+        MemoryEventBuffer events = new MemoryEventBuffer();
+        GenerationToolArtifactPublicationPort publisher = new GenerationToolArtifactPublicationPort(
+                artifacts,
+                storage,
+                events,
+                new ObjectMapper(),
+                CLOCK);
+
+        publisher.publish(request(ImageGenerationToolPortAdapter.TOOL_ID), ToolInvocationResult.ok("""
+                {"status":"GENERATED","prompt":"Draw a seahorse","model":"image-model","imageUrl":"https://cdn.example.com/seahorse.png","b64Json":"","mimeType":"image/png"}
+                """));
+
+        assertEquals(0, storage.uploads.size());
+        assertEquals(1, artifacts.saved.size());
+        AgentArtifact artifact = artifacts.saved.get(0);
+        assertEquals(AgentArtifactType.IMAGE, artifact.artifactType());
+        assertEquals("Generated image", artifact.title());
+        assertEquals("image/png", artifact.mimeType());
+        assertEquals("https://cdn.example.com/seahorse.png", artifact.storageRef());
+        assertEquals("Draw a seahorse", artifact.previewText());
+        assertEquals(AgentArtifactScanStatus.CLEAN, artifact.scanStatus());
+
+        assertEquals(1, events.appended.size());
+        StreamEventEnvelope event = events.appended.get(0);
+        Map<?, ?> payload = assertInstanceOf(Map.class, event.typedPayload());
+        assertEquals("IMAGE", payload.get("artifactType"));
+        assertEquals("https://cdn.example.com/seahorse.png", payload.get("storageRef"));
+        assertEquals("Draw a seahorse", payload.get("previewText"));
+    }
+
+    @Test
     void ignoresNonGenerationToolsEvenWhenResultLooksLikeArtifactObservation() {
         MemoryArtifactRepository artifacts = new MemoryArtifactRepository();
         MemoryObjectStorage storage = new MemoryObjectStorage();

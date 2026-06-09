@@ -100,6 +100,26 @@ class KernelAgentArtifactQueryServiceTests {
     }
 
     @Test
+    void shouldBlockLocalDownloadForRemoteArtifactReferences() {
+        KernelAgentArtifactQueryService service = new KernelAgentArtifactQueryService(
+                new MemoryArtifactRepository(List.of(artifact(
+                        "artifact-1",
+                        "user-1",
+                        AgentArtifactType.IMAGE,
+                        "image/png",
+                        AgentArtifactScanStatus.CLEAN,
+                        "https://cdn.example.com/seahorse.png"))),
+                new MemoryRunRepository(run("user-1")),
+                currentUser(1L, "user"));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> service.downloadDecision("artifact-1"));
+
+        assertEquals("Remote artifact references are not available through the local download endpoint",
+                error.getMessage());
+    }
+
+    @Test
     void shouldReturnEmptyWhenArtifactDoesNotExist() {
         KernelAgentArtifactQueryService service = new KernelAgentArtifactQueryService(
                 new MemoryArtifactRepository(List.of()),
@@ -135,6 +155,15 @@ class KernelAgentArtifactQueryServiceTests {
                                           AgentArtifactType type,
                                           String mimeType,
                                           AgentArtifactScanStatus scanStatus) {
+        return artifact(artifactId, userId, type, mimeType, scanStatus, "s3://agent-artifacts/" + artifactId);
+    }
+
+    private static AgentArtifact artifact(String artifactId,
+                                          String userId,
+                                          AgentArtifactType type,
+                                          String mimeType,
+                                          AgentArtifactScanStatus scanStatus,
+                                          String storageRef) {
         return new AgentArtifact(
                 artifactId,
                 "run-1",
@@ -144,7 +173,7 @@ class KernelAgentArtifactQueryServiceTests {
                 type,
                 "Research report",
                 mimeType,
-                "s3://agent-artifacts/" + artifactId,
+                storageRef,
                 "preview",
                 "{}",
                 scanStatus,
