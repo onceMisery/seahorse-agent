@@ -134,6 +134,7 @@ The strategy is **three layers to align, two layers to surpass**:
 - `V20__github_visual_project_intro_agent.sql` and `V21__github_visual_agent_generation_tools.sql` are baseline migrations that seed the GitHub visual intro Agent and generation-tool bindings. Do not edit already-applied migrations in place; use a forward migration and update `resources/database/seahorse_init.sql` only if runtime database evidence proves seed data is missing or stale.
 - `frontend/src/hooks/useStreamResponse.ts` is clean in the current scoped mojibake scan, but Task 2 must keep guarding it because it sits on the SSE sender/retry path.
 - Current-worktree validation on 2026-06-09 also found that a plain `quick-answer` chat with selected skills does not trigger the GitHub visual Agent or populate Chat Workbench run state. The current branch now adds a `github-visual-project-intro` task template that resolves to `github-visual-project-intro-agent` through `TaskTemplate.defaultAgentId`. This is the normal consumer-web Chat entry point for final E2E; do not use hidden admin-only Agent run creation as a substitute for Workbench evidence.
+- Current-worktree validation on 2026-06-09 found that historical Chat sessions loaded assistant `agentRunId` values but did not hydrate the message-scoped Workbench. The current branch now hydrates selected-session assistant messages from snapshot, replay events, and cost summary data, then merges them through the same stream handlers used by live events. Duplicate same-session loads are deduped at the store boundary.
 
 ### Assumptions
 
@@ -766,6 +767,7 @@ npm run build
 - [x] Reuse the existing resume stream path for chat backfill; use the existing event-list endpoint for admin replay and extend backend event list/snapshot only if fields are missing.
 - [x] Current-worktree replay gap found/fixed on 2026-06-09: admin Inspector rendered `No events` while the replay API had rows because the frontend dev proxy was using the tracked `vite.config.js` default target and Inspector filtered string `eventSeq` values. Fixes aligned both Vite configs, added backend `/agent-runs/{runId}/events`, and normalized string event sequences in Inspector.
 - [x] Current-worktree Chat Workbench entry gap found/fixed on 2026-06-09: ordinary `quick-answer` + selected skill stays on the RAG path and cannot prove Agent tool/artifact rendering. Added the `github-visual-project-intro` task template, exposed it in frontend fallback templates, mapped it to `chatMode=agent`, and resolved its `defaultAgentId` server-side so consumer web can trigger the seeded GitHub visual Agent without arbitrary `agentId` selection.
+- [x] Current-worktree historical Chat Workbench gap found/fixed on 2026-06-09: selecting an existing Chat session now hydrates assistant messages with `agentRunId` from `getAgentRunSnapshot`, `listAgentRunEvents`, and `getAgentRunCostSummary`. Replay events are normalized for numeric/string `eventSeq`, sorted, deduped, merged into the message, and guarded against stale session writes plus duplicate in-flight loads. Browser evidence on `/chat/58437786` showed one snapshot/events/cost request per run after reload and visible `Tool Calls`, `Skills`, `Artifacts`, and `Cost` Workbench tabs.
 - [x] Verify focused tests and build pass.
 - [x] Commit: `feat: add agentops replay and governance diagnostics`
 
@@ -822,7 +824,7 @@ rg -n "deer-flow|deerflow|skill|artifact|tool_search|present_files|Agent Workspa
 | Image generation | `image_generation` produces visible image artifacts | Images are inspectable in web UI | Cost, provenance, scan status, retry/replay |
 | PPT/chart/newsletter/frontend design | Each output creates artifact rows/events | Files can be presented and downloaded | Typed previews and enterprise audit |
 | Tool discovery | Deferred `tool_search` available after policy filtering | Searchable deferred tools | MCP allowlist and risk metadata included |
-| Run recovery | Snapshot hydrates message and workbench | Refresh keeps workspace useful | Replay, event backfill, governance timeline |
+| Run recovery | Snapshot, replay events, and cost summary hydrate message and workbench | Refresh keeps workspace useful | Replay, event backfill, governance timeline, duplicate-load dedupe |
 | Docs | README reflects implemented status | Capabilities are findable | Seahorse-native architecture is explicit |
 
 ---

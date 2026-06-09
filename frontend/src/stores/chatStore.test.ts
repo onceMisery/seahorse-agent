@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useChatStore } from "@/stores/chatStore";
-import { getAgentRunSnapshot } from "@/services/agentRunService";
-import { type AgentRunSnapshot, type Message } from "@/types";
+import { getAgentRunCostSummary, getAgentRunSnapshot, listAgentRunEvents } from "@/services/agentRunService";
+import { listMessages } from "@/services/sessionService";
+import { AGENT_STREAM_EVENTS, type AgentRunSnapshot, type Message, type StreamEventEnvelope } from "@/types";
 
 const streamStarts: string[] = [];
 
 vi.mock("@/services/agentRunService", () => ({
-  getAgentRunSnapshot: vi.fn()
+  getAgentRunCostSummary: vi.fn(),
+  getAgentRunSnapshot: vi.fn(),
+  listAgentRunEvents: vi.fn()
 }));
 
 vi.mock("@/hooks/useStreamResponse", () => ({
@@ -224,5 +227,202 @@ describe("chatStore snapshot hydration", () => {
     expect(url.pathname).toBe("/api/rag/v3/chat");
     expect(url.searchParams.get("taskTemplateId")).toBe("github-visual-project-intro");
     expect(url.searchParams.get("chatMode")).toBe("agent");
+  });
+
+  it("hydrates historical agent messages with snapshot, replay events, and cost after selecting a session", async () => {
+    const snapshot: AgentRunSnapshot = {
+      run: {
+        runId: "run-history-1",
+        status: "SUCCEEDED"
+      },
+      lastEventSeq: 42,
+      steps: [{
+        stepId: "step-1",
+        stepType: "MODEL_TURN",
+        status: "SUCCEEDED",
+        summary: "finished"
+      }],
+      artifacts: [{
+        artifactId: "artifact-1",
+        runId: "run-history-1",
+        title: "Generated image",
+        mimeType: "image/png",
+        scanStatus: "CLEAN"
+      }],
+      costSummary: {
+        tenantId: "default",
+        runId: "run-history-1",
+        totalTokens: 20,
+        totalCalls: 2,
+        totalCost: 0.01,
+        recordCount: 1
+      }
+    };
+    vi.mocked(listMessages).mockResolvedValue([{
+      id: "assistant-history-1",
+      conversationId: "conversation-history",
+      role: "assistant",
+      content: "historical answer",
+      agentRunId: "run-history-1",
+      vote: null,
+      createTime: "2026-06-09T00:00:00Z"
+    }]);
+    vi.mocked(getAgentRunSnapshot).mockResolvedValue(snapshot);
+    vi.mocked(listAgentRunEvents).mockResolvedValue([
+      {
+        eventId: "evt-1",
+        eventSeq: "2",
+        eventType: AGENT_STREAM_EVENTS.SKILL_LOADED,
+        runId: "run-history-1",
+        timestamp: "2026-06-09T00:00:01Z",
+        typedPayload: {
+          name: "image-generation",
+          status: "LOADED",
+          revisionId: "skillrev-image",
+          allowedTools: ["image_generation"]
+        }
+      },
+      {
+        eventId: "evt-2",
+        eventSeq: "3",
+        eventType: AGENT_STREAM_EVENTS.TOOL_CALL_STARTED,
+        runId: "run-history-1",
+        timestamp: "2026-06-09T00:00:02Z",
+        typedPayload: {
+          toolCallId: "call-1",
+          toolId: "image_generation",
+          riskLevel: "HIGH"
+        }
+      },
+      {
+        eventId: "evt-3",
+        eventSeq: "4",
+        eventType: AGENT_STREAM_EVENTS.TOOL_CALL_FINISHED,
+        runId: "run-history-1",
+        timestamp: "2026-06-09T00:00:03Z",
+        typedPayload: {
+          toolCallId: "call-1",
+          toolId: "image_generation",
+          message: "SUCCEEDED",
+          summary: "generated"
+        }
+      }
+    ] as unknown as StreamEventEnvelope[]);
+    vi.mocked(getAgentRunCostSummary).mockResolvedValue({
+      tenantId: "default",
+      runId: "run-history-1",
+      totalTokens: 20,
+      totalCalls: 2,
+      totalCost: 0.01,
+      recordCount: 1
+    });
+
+    await useChatStore.getState().selectSession("conversation-history");
+
+    expect(getAgentRunSnapshot).toHaveBeenCalledWith("run-history-1");
+    expect(listAgentRunEvents).toHaveBeenCalledWith("run-history-1", 0);
+    expect(getAgentRunCostSummary).toHaveBeenCalledWith("run-history-1");
+    const message = useChatStore.getState().messages[0];
+    expect(message.agentRunStatus).toBe("SUCCEEDED");
+    expect(message.timeline).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "tool-call-call-1",
+        title: "image_generation",
+        status: "SUCCEEDED",
+        detail: "generated"
+      }),
+      expect.objectContaining({
+        id: "step-1",
+        title: "MODEL_TURN",
+        status: "SUCCEEDED",
+        detail: "finished"
+      })
+    ]));
+    expect(message.serverArtifacts?.[0]).toMatchObject({
+      artifactId: "artifact-1",
+      title: "Generated image"
+    });
+    expect(message.skills?.[0]).toMatchObject({
+      name: "image-generation",
+      status: "LOADED"
+    });
+    expect(message.toolCalls?.[0]).toMatchObject({
+      id: "call-1",
+      toolId: "image_generation",
+      status: "SUCCEEDED",
+      resultSummary: "generated"
+    });
+    expect(message.costSummary).toEqual({
+      tenantId: "default",
+      runId: "run-history-1",
+      totalTokens: 20,
+      totalCalls: 2,
+      totalCost: 0.01,
+      recordCount: 1
+    });
+  });
+
+  it("does not reload the active session when messages are already loaded", async () => {
+    useChatStore.setState({
+      currentSessionId: "conversation-history",
+      messages: [assistantMessage({ id: "assistant-history-1", agentRunId: "run-history-1" })],
+      isLoading: false
+    });
+
+    await useChatStore.getState().selectSession("conversation-history");
+
+    expect(listMessages).not.toHaveBeenCalled();
+    expect(getAgentRunSnapshot).not.toHaveBeenCalled();
+    expect(listAgentRunEvents).not.toHaveBeenCalled();
+    expect(getAgentRunCostSummary).not.toHaveBeenCalled();
+  });
+
+  it("dedupes overlapping active session loads", async () => {
+    let resolveMessages: (messages: unknown[]) => void = () => undefined;
+    vi.mocked(listMessages).mockReturnValue(new Promise((resolve) => {
+      resolveMessages = resolve;
+    }) as ReturnType<typeof listMessages>);
+
+    const firstLoad = useChatStore.getState().selectSession("conversation-history");
+    const secondLoad = useChatStore.getState().selectSession("conversation-history");
+
+    resolveMessages([]);
+    await Promise.all([firstLoad, secondLoad]);
+
+    expect(listMessages).toHaveBeenCalledTimes(1);
+    expect(getAgentRunSnapshot).not.toHaveBeenCalled();
+    expect(listAgentRunEvents).not.toHaveBeenCalled();
+    expect(getAgentRunCostSummary).not.toHaveBeenCalled();
+  });
+
+  it("does not apply a stale session response after the active session changes", async () => {
+    let resolveMessages: (messages: unknown[]) => void = () => undefined;
+    vi.mocked(listMessages).mockReturnValue(new Promise((resolve) => {
+      resolveMessages = resolve;
+    }) as ReturnType<typeof listMessages>);
+
+    const load = useChatStore.getState().selectSession("conversation-history");
+    useChatStore.setState({
+      currentSessionId: "conversation-next",
+      messages: [assistantMessage({ id: "assistant-next", content: "newer session" })],
+      isLoading: false
+    });
+    resolveMessages([{
+      id: "assistant-history-1",
+      conversationId: "conversation-history",
+      role: "assistant",
+      content: "stale answer",
+      vote: null,
+      createTime: "2026-06-09T00:00:00Z"
+    }]);
+    await load;
+
+    expect(useChatStore.getState().messages[0]).toMatchObject({
+      id: "assistant-next",
+      content: "newer session"
+    });
+    expect(getAgentRunSnapshot).not.toHaveBeenCalled();
+    expect(listAgentRunEvents).not.toHaveBeenCalled();
+    expect(getAgentRunCostSummary).not.toHaveBeenCalled();
   });
 });

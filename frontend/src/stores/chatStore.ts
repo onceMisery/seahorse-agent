@@ -15,7 +15,7 @@ import {
   deleteSession as deleteSessionRequest,
   renameSession as renameSessionRequest
 } from "@/services/sessionService";
-import { getAgentRunSnapshot } from "@/services/agentRunService";
+import { getAgentRunCostSummary, getAgentRunSnapshot, listAgentRunEvents } from "@/services/agentRunService";
 import { submitFeedback } from "@/services/chatService";
 import { buildQuery } from "@/utils/helpers";
 import { createStreamResponse, type StreamHandlers } from "@/hooks/useStreamResponse";
@@ -35,6 +35,7 @@ import {
   applyAgentStreamEventToMessage
 } from "@/stores/chatStreamHandlers";
 import { RenderBuffer } from "@/lib/stream/renderBuffer";
+import type { StreamEventEnvelope } from "@/types";
 
 const CONTROLLED_WEB_AGENT_CHAT_MODE = "agent";
 const CONTROLLED_WEB_AGENT_TEMPLATE_IDS = new Set<TaskTemplateId>([
@@ -43,6 +44,7 @@ const CONTROLLED_WEB_AGENT_TEMPLATE_IDS = new Set<TaskTemplateId>([
   "github-visual-project-intro"
 ]);
 const MAX_ATTACHMENT_COUNT = 20;
+const selectedSessionLoads = new Map<string, Promise<void>>();
 
 export const useChatStore = create<ChatState>()(
   immer((set, get) => ({
@@ -152,18 +154,24 @@ export const useChatStore = create<ChatState>()(
 
     selectSession: async (sessionId) => {
       const state = get();
-      if (state.isStreaming) {
-        get().cancelGeneration();
+      if (state.currentSessionId === sessionId && (state.isLoading || state.messages.length > 0)) {
+        return;
       }
-      try {
-        set((s) => {
-          s.currentSessionId = sessionId;
-          s.isCreatingNew = false;
-          s.isLoading = true;
-        });
-        const messages = await listMessages(sessionId) as unknown as ConversationMessageVO[];
-        set((s) => {
-          s.messages = messages.map((m) => ({
+      const existingLoad = selectedSessionLoads.get(sessionId);
+      if (existingLoad) return existingLoad;
+
+      const load = (async () => {
+        if (state.isStreaming) {
+          get().cancelGeneration();
+        }
+        try {
+          set((s) => {
+            s.currentSessionId = sessionId;
+            s.isCreatingNew = false;
+            s.isLoading = true;
+          });
+          const messages = await listMessages(sessionId) as unknown as ConversationMessageVO[];
+          const nextMessages: Message[] = messages.map((m) => ({
             id: String(m.id),
             role: m.role as Role,
             content: m.content,
@@ -174,17 +182,28 @@ export const useChatStore = create<ChatState>()(
             createdAt: m.createTime || new Date().toISOString(),
             agentRunId: m.agentRunId || undefined
           }));
-          s.isLoading = false;
-        });
-      } catch (error) {
-        console.error("Failed to load session:", error);
-        toast.error("加载会话失败");
-        set((s) => {
-          s.currentSessionId = null;
-          s.messages = [];
-          s.isLoading = false;
-        });
-      }
+          if (get().currentSessionId !== sessionId) return;
+          set((s) => {
+            s.messages = nextMessages;
+            s.isLoading = false;
+          });
+          await hydrateSelectedSessionAgentRuns(sessionId, nextMessages, set);
+        } catch (error) {
+          console.error("Failed to load session:", error);
+          toast.error("加载会话失败");
+          set((s) => {
+            s.currentSessionId = null;
+            s.messages = [];
+            s.isLoading = false;
+          });
+        }
+      })().finally(() => {
+        if (selectedSessionLoads.get(sessionId) === load) {
+          selectedSessionLoads.delete(sessionId);
+        }
+      });
+      selectedSessionLoads.set(sessionId, load);
+      return load;
     },
 
     sendMessage: async (content, options) => {
@@ -436,4 +455,56 @@ function chatModeForTaskTemplate(taskTemplateId?: TaskTemplateId): string | unde
     return CONTROLLED_WEB_AGENT_CHAT_MODE;
   }
   return undefined;
+}
+
+async function hydrateSelectedSessionAgentRuns(
+  sessionId: string,
+  messages: Message[],
+  set: Parameters<typeof useChatStore.setState>[0]
+): Promise<void> {
+  const targets = messages.filter((message) =>
+    message.role === "assistant" && Boolean(message.agentRunId)
+  );
+
+  await Promise.all(targets.map(async (message) => {
+    try {
+      const [snapshot, events, costSummary] = await Promise.all([
+        getAgentRunSnapshot(message.agentRunId!),
+        listAgentRunEvents(message.agentRunId!, 0).catch(() => []),
+        getAgentRunCostSummary(message.agentRunId!).catch(() => null)
+      ]);
+      set((state) => {
+        if (state.currentSessionId !== sessionId) return;
+        const target = state.messages.find((item) =>
+          item.id === message.id && item.agentRunId === message.agentRunId
+        );
+        if (!target) return;
+        for (const event of normalizeReplayEvents(events)) {
+          applyAgentStreamEventToMessage(target, event);
+        }
+        applyAgentRunSnapshotToMessage(target, snapshot);
+        if (costSummary) {
+          target.costSummary = costSummary;
+        }
+      });
+    } catch (error) {
+      console.error("Failed to hydrate historical agent run:", error);
+    }
+  }));
+}
+
+function normalizeReplayEvents(events: StreamEventEnvelope[]): StreamEventEnvelope[] {
+  const bySeq = new Map<number, StreamEventEnvelope>();
+  for (const event of events) {
+    const eventSeq = normalizeEventSeq(event.eventSeq);
+    if (eventSeq == null || bySeq.has(eventSeq)) continue;
+    bySeq.set(eventSeq, { ...event, eventSeq });
+  }
+  return Array.from(bySeq.values()).sort((a, b) => a.eventSeq - b.eventSeq);
+}
+
+function normalizeEventSeq(eventSeq: StreamEventEnvelope["eventSeq"] | string): number | null {
+  if (typeof eventSeq === "string" && !/^\d+$/.test(eventSeq)) return null;
+  const seq = typeof eventSeq === "string" ? Number(eventSeq) : eventSeq;
+  return Number.isSafeInteger(seq) && seq >= 0 ? seq : null;
 }
