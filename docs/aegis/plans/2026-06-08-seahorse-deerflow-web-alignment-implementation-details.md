@@ -30,7 +30,7 @@ Recheck result on 2026-06-09: the review's original P0/P1 findings were reasonab
 - Still accurate contract corrections: `StreamEventEnvelope.messageId` does not exist, `SkillSelectionContext` does not exist, and normal chat/workbench recovery should reuse the existing `resumeRunId` plus `lastEventSeq` stream path.
 - Superseded implementation suggestions: adding `ExecutionMetadata` to `ToolPort.invoke(...)`, moving artifact publication into tool adapters/controllers, and reopening Task 8-11 from summary-level concerns are not current follow-up tasks.
 - Current residual risks: event sequence allocation is reconciled for the proven single-stream interleaving, but the repository has no shared atomic append-next-sequence contract across all writers.
-- Remaining completion gate: current-branch code, focused tests, and the 2026-06-09 real backend E2E run prove the backend tool/skill/artifact/SSE path, but they are still not enough to close the whole plan until a fresh frontend browser E2E proves the Chat Workbench and admin replay rendering path.
+- Remaining completion gate: current-branch code, focused tests, the 2026-06-09 real backend E2E run, Admin Inspector browser proof, and Chat control browser proof now cover the backend tool/skill/artifact/SSE/replay path plus admin replay and template/skill selection rendering. They still do not close the whole plan until a fresh Chat UI-started run proves the user-facing Chat Workbench tabs for the same run.
 
 Use the decisions below as the contract for follow-up work. The review file is evidence for why these contracts were tightened, not a task list to reapply after the current implementation slices have landed. Items marked as current branch implementation still need the final real backend and frontend E2E gate before the overall plan is considered complete:
 
@@ -409,7 +409,7 @@ Focused acceptance evidence:
 - [x] Task 10: Skills tab renders
 - [x] Task 11: Event backfill unit/controller coverage works
 - [x] Task 12: Docs updated
-- [ ] Final current-worktree E2E gate: backend and frontend both started from this branch; Chat UI selects `github-visual-project-intro`; the user selects at least one skill such as `image-generation`; at least one tool call occurs; at least one generated artifact is persisted; live SSE includes the generated artifact as `stream_event` and named `agent.artifact` when the stream remains connected; Workbench Tool Calls, Skills, Artifacts, and Cost/Quota render; `sa_agent_run_event_buffer` has rows for the fresh run; `/api/agent-runs/{runId}/events?afterSeq=0` returns ordered/dedupable events; SSE resume or admin replay proves event ordering and dedupe. Historical runs or Docker services built from older commits do not satisfy this gate.
+- [ ] Final current-worktree E2E gate: backend and frontend both started from this branch; Chat UI selects `github-visual-project-intro`; the user selects at least one skill such as `image-generation`; at least one tool call occurs; at least one generated artifact is persisted; live SSE includes the generated artifact as `stream_event` and named `agent.artifact` when the stream remains connected; Workbench Tool Calls, Skills, Artifacts, and Cost/Quota render for the Chat UI-started assistant message; `sa_agent_run_event_buffer` has rows for the fresh run; `/api/agent-runs/{runId}/events?afterSeq=0` returns ordered/dedupable events; SSE resume or admin replay proves event ordering and dedupe. Historical runs or Docker services built from older commits do not satisfy this gate.
 
   Current backend evidence on 2026-06-09:
 
@@ -419,6 +419,14 @@ Focused acceptance evidence:
   - Live SSE included `AGENT_ARTIFACT` as both `stream_event` and named `agent.artifact` before `finish` and `done`.
   - Evidence files are under `output/e2e/current-branch-20260609-1631/`, especially `chat-sse-current-branch-19094-image-only-1.txt`, `replay-events-run_322660365068206080.json`, and `artifacts-run_322660365068206080.json`.
 
-  This proves the real backend tool/skill/artifact/SSE/replay path for the current branch. It still does not close the final gate because the frontend browser evidence for Chat Workbench controls/tabs and admin replay rendering is not yet captured from the current branch.
+  Current frontend evidence on 2026-06-09:
+
+  - The current-branch frontend ran on `http://127.0.0.1:5176` with the dev proxy targeting the current backend at `http://127.0.0.1:19094`.
+  - Admin Inspector rendered run `run_322660365068206080` at `/admin/agent-inspector/run_322660365068206080`: Events showed `RUN_STARTED`, `SKILL_LOADED`, `TOOL_CALL_STARTED`, `AGENT_ARTIFACT`, `ARTIFACT_CREATED`, and `STEP_FINISHED`; Tools showed `github_repository_reader` and `image_generation`; Artifacts showed `Generated image`, `IMAGE`, and `image/png`.
+  - Chat controls exposed the normal consumer-web entry point: the task selector contained `GitHub visual intro`, selecting it changed the quota hint to `HIGH / LONG`, and the skill picker contained and selected `image-generation`.
+  - Evidence screenshots are under `output/e2e/current-branch-20260609-1631/`: `admin-inspector-artifacts-run_322660365068206080.png`, `chat-template-github-visual-high-long.png`, and `chat-skill-picker-image-generation-selected.png`.
+  - Browser auth note: setting `seahorse_agent_user` through the Playwright local-storage helper mangled JSON quoting; use normal login or page evaluation with `JSON.stringify(user)` when reproducing this E2E path.
+
+  This proves the real backend tool/skill/artifact/SSE/replay path and partial frontend rendering path for the current branch. It still does not close the final gate because the Chat UI-started assistant message must still prove its own Workbench Tool Calls, Skills, Artifacts, and Cost/Quota tabs for the same fresh run.
 
 Update this document only when implementation or tests prove a contract needs to change. Update the main plan in the same reviewed change when scope, acceptance, phase order, or compatibility boundaries change.
