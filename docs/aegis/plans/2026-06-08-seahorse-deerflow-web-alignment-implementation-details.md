@@ -33,6 +33,18 @@ Snippets in this document are examples. Verify them against current repository t
 - Superseded by current code: the named chat/workbench files and `frontend/src/hooks/useStreamResponse.ts` are clean for the known mojibake code points in the scoped scan. Keep the guard, but do not claim a current `useStreamResponse.ts` mojibake defect unless a fresh scan finds one.
 - Superseded by current code: the review's "artifact persistence trigger point" concern is resolved by the gateway-level outbound hook `ToolArtifactPublicationPort`, and Task 5 has added the concrete `GenerationToolArtifactPublicationPort` publisher for newsletter, PPT, chart, frontend-design, and image-generation outputs.
 - Superseded by current code: the review did not account for the Task 8 slice. Current implementation adds `tool_search` as a `DescribedToolPort`, registers it through Spring auto-configuration, injects `_seahorseAllowedToolIds` from `KernelAgentLoop`, returns metadata only, and labels `tool_search` as `延迟发现` in the admin tool catalog. Further Task 8 changes should be driven by new acceptance gaps, not by the original review's missing context.
+- Superseded by current code: the review's Task 9-11 "only summary-level" concern no longer applies to Tasks 9/10. Tool-call and skill workbench rendering now have concrete backend stream events, message-scoped frontend state, tabs, and tests. The remaining valid part belongs to Task 11: replay/backfill still needs executable acceptance around event ordering, dedupe, snapshot merge, and cost/quota governance.
+- Accepted with updated baseline: a dedicated event-list endpoint now exists at `/api/agent-runs/{runId}/events?afterSeq=...` through `AgentRunEventBufferPort`. Task 11 should use it for admin replay, while chat reconnect should still prefer the existing `resumeRunId` + `lastEventSeq` SSE path before adding another recovery owner.
+
+Disposition matrix:
+
+| Review item | Current decision |
+| --- | --- |
+| `StreamEventEnvelope.messageId` does not exist | Accepted; keep message routing outside the envelope. |
+| Undefined `ExecutionContext` / `SkillSelectionContext` | Accepted as a documentation defect; fixed by using existing gateway/runtime context owners, not by inventing hidden globals. |
+| Add `ExecutionMetadata` to `ToolPort.invoke(...)` | Rejected for current slices; preserve the stable `ToolPort` contract unless a future reviewed change updates every implementation together. |
+| Artifact publication trigger was unclear | Superseded; `ToolArtifactPublicationPort.publish(request, rawResult)` is the implemented owner. |
+| Task 9-11 lacked detail | Partially superseded; Tasks 9/10 are implemented, Task 11 keeps the remaining replay/backfill detail. |
 
 ---
 
@@ -275,13 +287,26 @@ Current baseline:
 
 - `SpringSseEventSender` sends named events and emits `error` followed by `done` on failure.
 - `SeahorseChatController`, `ResearchSseBridge`, and `useStreamResponse.ts` already have `resumeRunId` and `lastEventSeq` support.
+- `AgentRunEventBufferPort` stores stream envelopes by run, and `SeahorseAgentRunController` exposes `/api/agent-runs/{runId}/events?afterSeq=...` for admin replay/event listing.
+- `frontend/src/services/agentRunService.ts` already wraps `listAgentRunEvents(runId, afterSeq)`, and `AgentInspectorPage` loads the event list together with snapshot and cost summary data.
+- `CostQuotaInspectorTab` already renders run cost, quota, resume, and retry controls from message-bound workbench state.
 
 Implementation constraints:
 
 - Reuse the existing resume stream for chat backfill first.
-- Add a separate event list endpoint only if admin replay cannot be covered by the resume stream or snapshot.
+- Treat the existing event-list endpoint as the admin replay owner; do not add another event-list endpoint unless tests prove the current buffer contract cannot preserve required ordering or filtering.
+- Chat reconnect/backfill should use the existing SSE resume path and then merge through `chatStreamHandlers.ts`; admin replay can consume `listAgentRunEvents`.
 - Preserve `SpringSseEventSender` closed-emitter behavior.
-- Add frontend tests proving backfill does not duplicate live events.
+- Add frontend tests proving backfill and event-list replay do not duplicate live events and do not overwrite newer live state with older replay/snapshot data.
+- Add backend or controller tests only for gaps not already covered by `SeahorseChatControllerReplayTests`, `SpringSseEventSenderTests`, and the event-buffer contract.
+- Verify cost/quota governance remains display-only in chat workbench, while resume/retry actions continue to call the Agent Run action APIs.
+
+Required tests:
+
+- reconnect with `resumeRunId` and `lastEventSeq` appends only missing stream events to the active message.
+- replay events from `listAgentRunEvents(runId, afterSeq)` render in admin event order without duplicating earlier events.
+- snapshot hydration after replay preserves newer live timeline, source, artifact, tool-call, skill, approval, and quota fields.
+- cost/quota tab renders totals, quota pressure, resume, and retry states from message state without creating a second store owner.
 
 ---
 
