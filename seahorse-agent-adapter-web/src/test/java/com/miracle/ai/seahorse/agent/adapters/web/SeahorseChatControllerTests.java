@@ -46,7 +46,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -77,6 +76,34 @@ class SeahorseChatControllerTests {
         verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
         assertThat(captor.getValue().taskTemplateId()).isEqualTo("quick-answer");
         assertThat(captor.getValue().chatMode()).isEqualTo(ChatMode.RAG);
+    }
+
+    @Test
+    void defaultAgentTemplateShouldEnterAgentModeWithoutExplicitAgentSelection() throws Exception {
+        ChatInboundPort chatPort = mock(ChatInboundPort.class);
+        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new SeahorseChatController(
+                        provider(ChatInboundPort.class, chatPort),
+                        (emitter, conversationId, taskId) -> new NoopStreamCallback(),
+                        streamTaskPort,
+                        1_000L,
+                        provider(AgentRunSnapshotInboundPort.class, null))).build();
+
+        mvc.perform(get("/rag/v3/chat")
+                        .param("question", "Create a visual GitHub project intro")
+                        .param("conversationId", "conversation-1")
+                        .param("userId", "user-1")
+                        .param("taskTemplateId", "github-visual-project-intro"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        ArgumentCaptor<StreamChatCommand> captor = ArgumentCaptor.forClass(StreamChatCommand.class);
+        verify(chatPort).streamChat(captor.capture(), org.mockito.ArgumentMatchers.any());
+        assertThat(captor.getValue().taskTemplateId()).isEqualTo("github-visual-project-intro");
+        assertThat(captor.getValue().chatMode()).isEqualTo(ChatMode.AGENT);
+        assertThat(captor.getValue().agentId()).isNull();
     }
 
     @Test
@@ -139,63 +166,6 @@ class SeahorseChatControllerTests {
         assertThat(body).contains("\"content\":\"partial\"");
         assertThat(body).contains("event:done");
         verify(snapshotPort).getSnapshot("run-1");
-        verifyNoInteractions(chatPort, streamTaskPort);
-    }
-
-    @Test
-    void consumerWebModeShouldRejectControlledTemplateWithCustomAgentSelection() throws Exception {
-        ChatInboundPort chatPort = mock(ChatInboundPort.class);
-        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
-
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                        new SeahorseChatController(
-                                provider(ChatInboundPort.class, chatPort),
-                                (emitter, conversationId, taskId) -> new NoopStreamCallback(),
-                                streamTaskPort,
-                                1_000L,
-                                provider(AgentRunSnapshotInboundPort.class, null)))
-                .setControllerAdvice(new SeahorseWebExceptionHandler())
-                .build();
-
-        mvc.perform(get("/rag/v3/chat")
-                        .param("question", "Research this with a specific agent")
-                        .param("conversationId", "conversation-1")
-                        .param("userId", "user-1")
-                        .param("taskTemplateId", "deep-research")
-                        .param("agentId", "custom-agent"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
-                .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
-
-        verifyNoInteractions(chatPort, streamTaskPort);
-    }
-
-    @Test
-    void consumerWebModeShouldRejectAgentChatMode() throws Exception {
-        ChatInboundPort chatPort = mock(ChatInboundPort.class);
-        StreamTaskPort streamTaskPort = mock(StreamTaskPort.class);
-
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                        new SeahorseChatController(
-                                provider(ChatInboundPort.class, chatPort),
-                                (emitter, conversationId, taskId) -> new NoopStreamCallback(),
-                                streamTaskPort,
-                                1_000L,
-                                provider(AgentRunSnapshotInboundPort.class, null)))
-                .setControllerAdvice(new SeahorseWebExceptionHandler())
-                .build();
-
-        mvc.perform(get("/rag/v3/chat")
-                        .param("question", "Run the agent")
-                        .param("conversationId", "conversation-1")
-                        .param("userId", "user-1")
-                        .param("chatMode", "agent"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
-                .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
-
         verifyNoInteractions(chatPort, streamTaskPort);
     }
 

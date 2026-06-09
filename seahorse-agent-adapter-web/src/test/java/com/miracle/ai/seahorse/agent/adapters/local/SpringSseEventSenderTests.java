@@ -21,13 +21,30 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.stream.Collectors;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class SpringSseEventSenderTests {
+
+    @Test
+    void failShouldEmitErrorThenDoneBeforeCompleting() throws Exception {
+        RecordingSseEmitter emitter = new RecordingSseEmitter();
+        SpringSseEventSender sender = new SpringSseEventSender(emitter);
+
+        sender.fail(new IllegalStateException("stream failed"));
+
+        assertThat(emitter.events).hasSize(2);
+        assertThat(emitter.events.get(0)).contains("error").contains("stream failed");
+        assertThat(emitter.events.get(1)).contains("done").contains("[DONE]");
+        assertThat(emitter.completed).isTrue();
+    }
 
     @Test
     void sendEventShouldSwallowCompleteFailureAfterEmitterError() throws Exception {
@@ -48,5 +65,22 @@ class SpringSseEventSenderTests {
         SpringSseEventSender sender = new SpringSseEventSender(emitter);
 
         assertThatCode(sender::complete).doesNotThrowAnyException();
+    }
+
+    private static final class RecordingSseEmitter extends SseEmitter {
+        private final List<String> events = new java.util.ArrayList<>();
+        private boolean completed;
+
+        @Override
+        public void send(SseEventBuilder builder) throws IOException {
+            events.add(builder.build().stream()
+                    .map(item -> String.valueOf(item.getData()))
+                    .collect(Collectors.joining("\n")));
+        }
+
+        @Override
+        public void complete() {
+            completed = true;
+        }
     }
 }

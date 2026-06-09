@@ -60,10 +60,12 @@ public class SeahorseChatController {
     private static final EnumSet<TaskTemplateId> CONTROLLED_WEB_AGENT_TEMPLATES = EnumSet.of(
             TaskTemplateId.DEEP_RESEARCH,
             TaskTemplateId.WEB_SUMMARY,
-            TaskTemplateId.COMPARE_ANALYSIS);
+            TaskTemplateId.COMPARE_ANALYSIS,
+            TaskTemplateId.GITHUB_VISUAL_PROJECT_INTRO);
     private static final EnumSet<TaskTemplateId> HIGH_COST_TASK_TEMPLATES = EnumSet.of(
             TaskTemplateId.DEEP_RESEARCH,
-            TaskTemplateId.COMPARE_ANALYSIS);
+            TaskTemplateId.COMPARE_ANALYSIS,
+            TaskTemplateId.GITHUB_VISUAL_PROJECT_INTRO);
     private static final int TEMPLATE_PERMITS_PER_DAY = 50;
     private static final Duration TEMPLATE_WINDOW = Duration.ofDays(1);
 
@@ -387,6 +389,10 @@ public class SeahorseChatController {
         boolean controlledWebTask = isControlledWebAgentTemplate(taskTemplateId)
                 && !hasText(agentId)
                 && !hasText(versionId);
+        if (advancedFeatureGate.productMode() == ProductMode.CONSUMER_WEB && !controlledWebTask) {
+            throw new SecurityException(
+                    "Consumer web chat only allows controlled Agent task templates without explicit agentId/versionId");
+        }
         if (!controlledWebTask) {
             advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         }

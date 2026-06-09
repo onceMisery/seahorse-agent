@@ -32,7 +32,7 @@ public class ImageGenerationToolPortAdapter implements DescribedToolPort {
 
     public static final String TOOL_ID = "image_generation";
     private static final String DEFAULT_SIZE = "1024x1024";
-    private static final String DEFAULT_RESPONSE_FORMAT = "url";
+    private static final String DEFAULT_RESPONSE_FORMAT = "b64_json";
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(TOOL_ID, "Image Generation",
             "Generate an image using the configured image model and return a reusable image reference.",
             """
@@ -68,7 +68,7 @@ public class ImageGenerationToolPortAdapter implements DescribedToolPort {
                     prompt,
                     model(arguments),
                     text(arguments, "size", DEFAULT_SIZE),
-                    null,
+                    jsonSupport.string(arguments, "style"),
                     text(arguments, "responseFormat", DEFAULT_RESPONSE_FORMAT)));
             return ToolInvocationResult.ok(jsonSupport.write(observation(result)));
         } catch (Exception ex) {

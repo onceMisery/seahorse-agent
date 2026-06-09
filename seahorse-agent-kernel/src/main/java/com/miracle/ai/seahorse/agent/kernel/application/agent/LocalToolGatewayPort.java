@@ -33,6 +33,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequ
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolArtifactPublicationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
@@ -62,6 +63,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private final ToolApprovalRequestRepositoryPort approvalRequestRepository;
     private final ApprovalRequestQueryPort approvalQueryPort;
     private final ToolOutputRedactionPort outputRedactionPort;
+    private final ToolArtifactPublicationPort artifactPublicationPort;
     private final Clock clock;
 
     public LocalToolGatewayPort(ToolRegistryPort toolRegistry) {
@@ -96,6 +98,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                 ToolApprovalRequestRepositoryPort.noop(),
                 ApprovalRequestQueryPort.empty(),
                 outputRedactionPort,
+                ToolArtifactPublicationPort.noop(),
                 clock);
     }
 
@@ -119,6 +122,7 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                 approvalRequestRepository,
                 approvalQueryPort,
                 ToolOutputRedactionPort.noop(),
+                ToolArtifactPublicationPort.noop(),
                 clock);
     }
 
@@ -129,6 +133,24 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                                 ApprovalRequestQueryPort approvalQueryPort,
                                 ToolOutputRedactionPort outputRedactionPort,
                                 Clock clock) {
+        this(toolRegistry,
+                toolPolicy,
+                auditPort,
+                approvalRequestRepository,
+                approvalQueryPort,
+                outputRedactionPort,
+                ToolArtifactPublicationPort.noop(),
+                clock);
+    }
+
+    public LocalToolGatewayPort(ToolRegistryPort toolRegistry,
+                                ToolPolicyPort toolPolicy,
+                                ToolInvocationAuditPort auditPort,
+                                ToolApprovalRequestRepositoryPort approvalRequestRepository,
+                                ApprovalRequestQueryPort approvalQueryPort,
+                                ToolOutputRedactionPort outputRedactionPort,
+                                ToolArtifactPublicationPort artifactPublicationPort,
+                                Clock clock) {
         this.toolRegistry = Objects.requireNonNullElse(toolRegistry, ToolRegistryPort.empty());
         this.toolPolicy = Objects.requireNonNullElseGet(toolPolicy, ToolPolicyPort::defaults);
         this.auditPort = Objects.requireNonNullElseGet(auditPort, ToolInvocationAuditPort::noop);
@@ -137,6 +159,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                 ToolApprovalRequestRepositoryPort::noop);
         this.approvalQueryPort = Objects.requireNonNullElseGet(approvalQueryPort, ApprovalRequestQueryPort::empty);
         this.outputRedactionPort = Objects.requireNonNullElseGet(outputRedactionPort, ToolOutputRedactionPort::noop);
+        this.artifactPublicationPort = Objects.requireNonNullElseGet(
+                artifactPublicationPort,
+                ToolArtifactPublicationPort::noop);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
 
@@ -196,6 +221,9 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     .orElseGet(() -> ToolPort.notFound(safeRequest.toolId()));
             ToolInvocationResult rawResult = executableTool.invoke(
                     safeRequest.toolCallId(), safeRequest.toolId(), safeRequest.arguments());
+            if (rawResult.success()) {
+                publishArtifacts(safeRequest, rawResult);
+            }
             ToolInvocationResult result = outputRedactionPort.redact(safeRequest, rawResult);
             auditPort.recordCompleted(new ToolInvocationAuditCompletion(
                     invocationId,
@@ -214,6 +242,14 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     result.error(),
                     clock.instant()));
             return result;
+        }
+    }
+
+    private void publishArtifacts(ToolInvocationRequest request, ToolInvocationResult result) {
+        try {
+            artifactPublicationPort.publish(request, result);
+        } catch (RuntimeException ignored) {
+            // Artifact publication is a side effect; the tool observation remains authoritative.
         }
     }
 

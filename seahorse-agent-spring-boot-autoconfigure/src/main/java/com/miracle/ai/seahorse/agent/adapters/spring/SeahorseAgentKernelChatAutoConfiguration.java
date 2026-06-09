@@ -36,6 +36,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceReco
 import com.miracle.ai.seahorse.agent.kernel.domain.retrieval.RetrievalContext;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ContextPackBuilderInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
@@ -96,7 +97,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
             ObjectProvider<AgentRunEventBufferPort> eventBufferPort) {
         return new LocalChatStreamCallbackFactory(streamTaskPort,
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
-                eventBufferPort.getIfAvailable(AgentRunEventBufferPort::noop));
+                () -> eventBufferPort.getIfAvailable(AgentRunEventBufferPort::noop));
     }
 
     @Bean
@@ -210,7 +211,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    ObjectProvider<AgentDefinitionRepositoryPort> agentDefinitionRepository,
                                                    ObjectProvider<ConversationAttachmentContextAssembler> attachmentContextAssembler,
                                                    ObjectProvider<AgentSkillRepositoryPort> skillRepository,
-                                                   ObjectProvider<KernelAgentLoopOptions> agentLoopOptions) {
+                                                   ObjectProvider<KernelAgentLoopOptions> agentLoopOptions,
+                                                   ObjectProvider<TaskTemplateQueryInboundPort> taskTemplateQueryPort) {
         return new KernelChatInboundService(chatPipeline, streamTaskPort,
                 Optional.ofNullable(agentLoop.getIfAvailable()),
                 traceRecorder.getIfAvailable(KernelRagTraceRecorder::noop),
@@ -221,6 +223,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 Optional.ofNullable(agentDefinitionRepository.getIfAvailable()),
                 attachmentContextAssembler.getIfAvailable(ConversationAttachmentContextAssembler::noop),
                 Optional.ofNullable(skillRepository.getIfAvailable()),
-                agentLoopOptions.getIfAvailable(KernelAgentLoopOptions::defaults));
+                agentLoopOptions.getIfAvailable(KernelAgentLoopOptions::defaults),
+                Optional.ofNullable(taskTemplateQueryPort.getIfAvailable()));
     }
 }

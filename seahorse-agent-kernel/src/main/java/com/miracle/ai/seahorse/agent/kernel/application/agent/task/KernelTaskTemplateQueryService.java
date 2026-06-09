@@ -32,6 +32,7 @@ import java.util.Optional;
 public class KernelTaskTemplateQueryService implements TaskTemplateQueryInboundPort {
 
     public static final String DEFAULT_TOOL_POLICY_ID = "consumer-web-default";
+    public static final String GITHUB_VISUAL_PROJECT_INTRO_AGENT_ID = "github-visual-project-intro-agent";
 
     private final List<TaskTemplate> templates;
 
@@ -104,6 +105,17 @@ public class KernelTaskTemplateQueryService implements TaskTemplateQueryInboundP
                         TaskTemplateOutputType.COMPARISON_TABLE,
                         QuotaCostTier.MEDIUM,
                         EstimatedDurationTier.MEDIUM,
+                        true),
+                new TaskTemplate(
+                        TaskTemplateId.GITHUB_VISUAL_PROJECT_INTRO,
+                        "GitHub visual intro",
+                        "Read a GitHub repository and generate a visual project introduction with artifacts.",
+                        TaskTemplateCategory.ANALYSIS,
+                        GITHUB_VISUAL_PROJECT_INTRO_AGENT_ID,
+                        DEFAULT_TOOL_POLICY_ID,
+                        TaskTemplateOutputType.MARKDOWN_REPORT,
+                        QuotaCostTier.HIGH,
+                        EstimatedDurationTier.LONG,
                         true));
     }
 }

@@ -33,8 +33,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 /**
  * Local stream chat callback factory with event envelope support.
@@ -49,7 +51,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
 
     private final StreamTaskPort streamTaskPort;
     private final ConversationMemoryPort memoryPort;
-    private final AgentRunEventBufferPort eventBufferPort;
+    private final Supplier<AgentRunEventBufferPort> eventBufferPortSupplier;
 
     public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort) {
         this(streamTaskPort, ConversationMemoryPort.noop(), AgentRunEventBufferPort.noop());
@@ -62,9 +64,17 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
     public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort,
                                           ConversationMemoryPort memoryPort,
                                           AgentRunEventBufferPort eventBufferPort) {
+        this(streamTaskPort, memoryPort, () -> eventBufferPort);
+    }
+
+    public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort,
+                                          ConversationMemoryPort memoryPort,
+                                          Supplier<AgentRunEventBufferPort> eventBufferPortSupplier) {
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
-        this.eventBufferPort = Objects.requireNonNullElse(eventBufferPort, AgentRunEventBufferPort.noop());
+        this.eventBufferPortSupplier = eventBufferPortSupplier == null
+                ? AgentRunEventBufferPort::noop
+                : eventBufferPortSupplier;
     }
 
     @Override
@@ -75,7 +85,11 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
     @Override
     public StreamCallback create(SseEmitter emitter, String conversationId, String taskId, String userId) {
         return new LocalChatStreamCallback(emitter, conversationId, taskId, userId,
-                streamTaskPort, memoryPort, eventBufferPort);
+                streamTaskPort, memoryPort, eventBufferPort());
+    }
+
+    private AgentRunEventBufferPort eventBufferPort() {
+        return Objects.requireNonNullElseGet(eventBufferPortSupplier.get(), AgentRunEventBufferPort::noop);
     }
 
     private static final class LocalChatStreamCallback implements StreamCallback {
@@ -92,6 +106,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         private final StringBuilder answer = new StringBuilder();
         private final StringBuilder thinking = new StringBuilder();
         private final AtomicLong seqCounter = new AtomicLong(0);
+        private long sentEventSeq;
         private String currentRunId;
         private long runStartedAtMs;
 
@@ -163,6 +178,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             if (streamTaskPort.isCancelled(taskId)) {
                 return;
             }
+            flushBufferedEvents();
             sendRunCompletedEvent();
             appendAssistantMessage();
             sender.sendEvent(StreamEventType.FINISH.value(), new StreamCompletionPayload(null, null));
@@ -190,15 +206,18 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
                 sender.sendEvent(eventType.value(), payload);
                 return;
             }
-            long seq = seqCounter.incrementAndGet();
+            flushBufferedEvents();
+            long seq = nextSeq();
+            flushBufferedEventsBefore(seq);
             StreamEventEnvelope envelope = StreamEventEnvelope.of(seq, eventType, currentRunId, payload);
             try {
                 eventBufferPort.append(currentRunId, envelope);
             } catch (Exception e) {
-                log.debug("Failed to buffer event seq={} for run={}", seq, currentRunId, e);
+                log.warn("Failed to buffer event seq={} type={} for run={}", seq, eventType.value(), currentRunId, e);
             }
             sender.sendEvent(STREAM_EVENT_NAME, envelope);
             sender.sendEvent(eventType.value(), payload);
+            sentEventSeq = Math.max(sentEventSeq, seq);
         }
 
         private void appendAssistantMessage() {
@@ -242,17 +261,62 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         private void sendMessage(String type, StringBuilder buffer) {
             StreamMessageDelta delta = new StreamMessageDelta(type, buffer.toString());
             if (currentRunId != null) {
-                long seq = seqCounter.incrementAndGet();
+                flushBufferedEvents();
+                long seq = nextSeq();
+                flushBufferedEventsBefore(seq);
                 StreamEventEnvelope envelope = StreamEventEnvelope.of(seq, StreamEventType.MESSAGE, currentRunId, delta);
                 try {
                     eventBufferPort.append(currentRunId, envelope);
                 } catch (Exception e) {
-                    log.debug("Failed to buffer message event seq={}", seq, e);
+                    log.warn("Failed to buffer message event seq={} for run={}", seq, currentRunId, e);
                 }
                 sender.sendEvent(STREAM_EVENT_NAME, envelope);
+                sentEventSeq = Math.max(sentEventSeq, seq);
             }
             sender.sendEvent(StreamEventType.MESSAGE.value(), delta);
             buffer.setLength(0);
+        }
+
+        private long nextSeq() {
+            long latest;
+            try {
+                latest = eventBufferPort.getLatestSeq(currentRunId).orElse(seqCounter.get());
+            } catch (Exception e) {
+                log.warn("Failed to read latest event seq for run={}", currentRunId, e);
+                latest = seqCounter.get();
+            }
+            long base = Math.max(seqCounter.get(), latest);
+            seqCounter.set(base);
+            return seqCounter.incrementAndGet();
+        }
+
+        private void flushBufferedEvents() {
+            flushBufferedEventsBefore(Long.MAX_VALUE);
+        }
+
+        private void flushBufferedEventsBefore(long beforeSeq) {
+            if (currentRunId == null) {
+                return;
+            }
+            List<StreamEventEnvelope> events;
+            try {
+                events = eventBufferPort.getAfter(currentRunId, sentEventSeq);
+            } catch (Exception e) {
+                log.warn("Failed to flush buffered events after seq={} for run={}", sentEventSeq, currentRunId, e);
+                return;
+            }
+            for (StreamEventEnvelope event : events) {
+                if (event.eventSeq() <= sentEventSeq) {
+                    continue;
+                }
+                if (event.eventSeq() >= beforeSeq) {
+                    continue;
+                }
+                sender.sendEvent(STREAM_EVENT_NAME, event);
+                sender.sendEvent(event.eventType().value(), event.typedPayload());
+                sentEventSeq = event.eventSeq();
+                seqCounter.updateAndGet(current -> Math.max(current, event.eventSeq()));
+            }
         }
 
         private StreamEventType resolveEventType(String eventName) {

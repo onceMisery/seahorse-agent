@@ -36,8 +36,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -153,7 +156,7 @@ class AdvancedFeatureControllerGateTests {
     }
 
     @Test
-    void consumerWebModeShouldDisableIngestionPipelineApis() throws Exception {
+    void consumerWebModeShouldAllowCoreIngestionPipelineApis() throws Exception {
         IngestionPipelineInboundPort port = mock(IngestionPipelineInboundPort.class);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseIngestionPipelineController(
@@ -163,16 +166,13 @@ class AdvancedFeatureControllerGateTests {
                 .build();
 
         mvc.perform(get("/ingestion/pipelines"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
-                .andExpect(jsonPath("$.message")
-                        .value("Advanced feature INGESTION_PIPELINE_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                .andExpect(status().isOk());
 
-        verifyNoInteractions(port);
+        verify(port).page(1, 10, null);
     }
 
     @Test
-    void consumerWebModeShouldDisableToolCatalogApis() throws Exception {
+    void consumerWebModeShouldAllowCoreToolCatalogApis() throws Exception {
         ToolCatalogManagementInboundPort port = mock(ToolCatalogManagementInboundPort.class);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseToolCatalogController(
@@ -182,12 +182,9 @@ class AdvancedFeatureControllerGateTests {
                 .build();
 
         mvc.perform(get("/api/tools"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
-                .andExpect(jsonPath("$.message")
-                        .value("Advanced feature TOOL_CATALOG_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                .andExpect(status().isOk());
 
-        verifyNoInteractions(port);
+        verify(port).page(null, null, 1, 10, null);
     }
 
     @Test
@@ -211,7 +208,7 @@ class AdvancedFeatureControllerGateTests {
     }
 
     @Test
-    void consumerWebModeShouldDisableGlobalApprovalManagementApis() throws Exception {
+    void consumerWebModeShouldAllowCoreApprovalManagementApis() throws Exception {
         ApprovalManagementInboundPort port = mock(ApprovalManagementInboundPort.class);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new SeahorseApprovalController(
@@ -219,20 +216,16 @@ class AdvancedFeatureControllerGateTests {
                                 AdvancedFeatureGate.consumerWebDefaults()))
                 .setControllerAdvice(new SeahorseWebExceptionHandler())
                 .build();
+        when(port.findById(eq("approval-1"))).thenReturn(java.util.Optional.empty());
 
         mvc.perform(get("/api/approvals"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
-                .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                .andExpect(status().isOk());
 
         mvc.perform(get("/api/approvals/approval-1"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ADVANCED_FEATURE_DISABLED"))
-                .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                .andExpect(status().isNotFound());
 
-        verifyNoInteractions(port);
+        verify(port).page(null, null, 1, 10);
+        verify(port).findById("approval-1");
     }
 
     private static String json(Object value) {

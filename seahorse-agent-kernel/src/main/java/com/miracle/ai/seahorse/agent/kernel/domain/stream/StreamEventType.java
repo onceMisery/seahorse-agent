@@ -88,14 +88,34 @@ public enum StreamEventType {
     TOOL_CALL_STARTED("tool_call_started"),
 
     /**
-     * Tool call finished with its observation payload.
+     * Tool call is waiting for the current user to decide.
+     */
+    TOOL_CALL_WAITING_USER("tool_call_waiting_user"),
+
+    /**
+     * Tool call finished with a successful or failed observation.
      */
     TOOL_CALL_FINISHED("tool_call_finished"),
 
     /**
-     * Tool call is waiting for the current user to decide.
+     * Runtime selected a skill for the current run.
      */
-    TOOL_CALL_WAITING_USER("tool_call_waiting_user"),
+    SKILL_SELECTED("skill.selected"),
+
+    /**
+     * Runtime injected skill body content.
+     */
+    SKILL_LOADED("skill.loaded"),
+
+    /**
+     * Runtime skipped or rejected a skill.
+     */
+    SKILL_SKIPPED("skill.skipped"),
+
+    /**
+     * A progressive skill resource was loaded.
+     */
+    SKILL_RESOURCE_LOADED("skill.resource_loaded"),
 
     /**
      * Source or citation was found.

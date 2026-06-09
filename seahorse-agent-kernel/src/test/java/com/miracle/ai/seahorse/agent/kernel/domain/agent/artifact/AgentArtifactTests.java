@@ -38,6 +38,8 @@ class AgentArtifactTests {
                 AgentArtifactScanStatus.CLEAN);
         AgentArtifact svg = artifact("artifact-svg", AgentArtifactType.FILE, "image/svg+xml",
                 AgentArtifactScanStatus.CLEAN);
+        AgentArtifact a2ui = artifact("artifact-a2ui", AgentArtifactType.FILE,
+                "application/vnd.seahorse.a2ui+json", AgentArtifactScanStatus.CLEAN);
         AgentArtifact pending = artifact("artifact-pending", AgentArtifactType.MARKDOWN, "text/markdown",
                 AgentArtifactScanStatus.PENDING);
 
@@ -47,6 +49,8 @@ class AgentArtifactTests {
         assertEquals(AgentArtifactDisposition.ATTACHMENT_DOWNLOAD, html.disposition());
         assertFalse(svg.canPreview());
         assertEquals(AgentArtifactDisposition.ATTACHMENT_DOWNLOAD, svg.disposition());
+        assertTrue(a2ui.canPreview());
+        assertEquals(AgentArtifactDisposition.INLINE_PREVIEW, a2ui.disposition());
         assertFalse(pending.canPreview());
     }
 

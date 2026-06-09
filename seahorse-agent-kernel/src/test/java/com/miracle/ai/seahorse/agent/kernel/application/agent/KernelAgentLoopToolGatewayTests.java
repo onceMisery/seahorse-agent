@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
@@ -33,6 +35,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillCategory;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillToolPolicyMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
@@ -41,6 +44,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamSkillEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamToolCallEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
@@ -139,12 +143,14 @@ class KernelAgentLoopToolGatewayTests {
     }
 
     @Test
-    void shouldLoadSelectedSkillWithoutCallingExternalToolGateway() {
-        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill", Map.of("name", "research"));
+    void shouldDispatchSkillResourceLoadingThroughGatewayWithInjectedRuntimeSnapshot() {
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill_resource",
+                Map.of("skillName", "research", "resourcePath", "SKILL.md"));
         ScriptedModel model = new ScriptedModel(List.of(
                 Turn.toolCalls("need full skill", List.of(loadSkill)),
                 Turn.finalAnswer("used the research skill")));
-        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.failed("should-not-call"));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok(
+                "{\"name\":\"research\",\"resourcePath\":\"SKILL.md\",\"content\":\"Use sources carefully.\"}"));
         KernelAgentLoop loop = new KernelAgentLoop(
                 model,
                 new ListingOnlyToolRegistry(),
@@ -167,14 +173,24 @@ class KernelAgentLoopToolGatewayTests {
                 .build());
 
         assertEquals("used the research skill", result.finalAnswer());
-        assertTrue(gateway.requests.isEmpty());
-        assertTrue(model.requests.get(0).getTools().stream().anyMatch(tool -> "load_skill".equals(tool.toolId())));
+        assertEquals(1, gateway.requests.size());
+        ToolInvocationRequest request = gateway.requests.get(0);
+        assertEquals(LoadSkillResourceToolPortAdapter.TOOL_ID, request.toolId());
+        assertEquals("research", request.arguments().get("skillName"));
+        assertEquals("SKILL.md", request.arguments().get("resourcePath"));
+        assertTrue(request.arguments().containsKey(LoadSkillResourceToolPortAdapter.RUNTIME_SKILLS_ARGUMENT));
+        assertTrue(request.arguments().get(LoadSkillResourceToolPortAdapter.RUNTIME_SKILLS_ARGUMENT) instanceof List<?>);
+        assertTrue(model.requests.get(0).getTools().stream()
+                .anyMatch(tool -> LoadSkillResourceToolPortAdapter.TOOL_ID.equals(tool.toolId())));
+        assertTrue(result.steps().get(0).observations().get(0).success(),
+                result.steps().get(0).observations().get(0).error());
         assertTrue(result.steps().get(0).observations().get(0).content().contains("Use sources carefully."));
     }
 
     @Test
     void shouldRejectLoadingSkillOutsideCurrentVersionSnapshot() {
-        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill", Map.of("name", "missing"));
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill_resource",
+                Map.of("skillName", "missing", "resourcePath", "SKILL.md"));
         ScriptedModel model = new ScriptedModel(List.of(
                 Turn.toolCalls("try missing skill", List.of(loadSkill)),
                 Turn.finalAnswer("could not load")));
@@ -200,8 +216,188 @@ class KernelAgentLoopToolGatewayTests {
                 .build());
 
         assertEquals("could not load", result.finalAnswer());
-        assertFalse(result.steps().get(0).observations().get(0).success());
-        assertEquals("skill is not selected in this Agent version", result.steps().get(0).observations().get(0).error());
+        assertTrue(result.steps().get(0).observations().get(0).success());
+        assertEquals(1, model.requests.get(0).getTools().stream()
+                .filter(tool -> LoadSkillResourceToolPortAdapter.TOOL_ID.equals(tool.toolId()))
+                .count());
+    }
+
+    @Test
+    void shouldKeepLegacyLoadSkillAliasForExistingModelCalls() {
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill", Map.of("name", "research"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need full skill", List.of(loadSkill)),
+                Turn.finalAnswer("used legacy alias")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.failed("should-not-call"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("write research plan")
+                .allowedToolIds(List.of())
+                .skillRuntimeBlocks(List.of(new SkillRuntimeBlock(
+                        "research",
+                        "rev-1",
+                        "hash-1",
+                        "Research workflow",
+                        AgentSkillCategory.PUBLIC,
+                        SkillInjectMode.METADATA_ONLY,
+                        List.of("web_search"),
+                        "Use sources carefully.")))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .build());
+
+        assertEquals("used legacy alias", result.finalAnswer());
+        assertTrue(gateway.requests.isEmpty());
+        assertTrue(result.steps().get(0).observations().get(0).content().contains("Use sources carefully."));
+    }
+
+    @Test
+    void shouldAllowRegisteredSkillResourceToolThroughDefaultGatewayPolicy() {
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", LoadSkillResourceToolPortAdapter.TOOL_ID,
+                Map.of("skillName", "research", "resourcePath", "SKILL.md"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need full skill", List.of(loadSkill)),
+                Turn.finalAnswer("used gateway skill loader")));
+        ListingOnlyToolRegistry registry = new ListingOnlyToolRegistry();
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                registry,
+                new LocalToolGatewayPort(registry),
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("write research plan")
+                .allowedToolIds(List.of())
+                .skillRuntimeBlocks(List.of(new SkillRuntimeBlock(
+                        "research",
+                        "rev-1",
+                        "hash-1",
+                        "Research workflow",
+                        AgentSkillCategory.PUBLIC,
+                        SkillInjectMode.METADATA_ONLY,
+                        List.of("web_search"),
+                        "Use sources carefully.")))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .build());
+
+        assertEquals("used gateway skill loader", result.finalAnswer());
+        assertTrue(result.steps().get(0).observations().get(0).success(),
+                result.steps().get(0).observations().get(0).error());
+        assertTrue(result.steps().get(0).observations().get(0).content().contains("Use sources carefully."));
+    }
+
+    @Test
+    void shouldNotLetSkillAllowedToolsGrantAgentDeniedToolsInAdvisoryMode() {
+        ToolListRecordingModel model = new ToolListRecordingModel();
+        RecordingToolGateway gateway = new RecordingToolGateway();
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("answer with skill metadata")
+                .allowedToolIds(List.of("weather"))
+                .skillRuntimeBlocks(List.of(skill("research", List.of("web_search"))))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-advisory")
+                .build());
+
+        assertEquals("direct answer", result.finalAnswer());
+        assertEquals(List.of("weather", LoadSkillResourceToolPortAdapter.TOOL_ID, ToolSearchToolPortAdapter.TOOL_ID),
+                toolIds(model.tools));
+        assertEquals(0, gateway.requests.size());
+    }
+
+    @Test
+    void shouldRestrictExposedAndGatewayAllowedToolsToSelectedSkillToolsInRestrictiveMode() {
+        AgentToolCall toolCall = AgentToolCall.of("call-web", "web_search", Map.of("query", "seahorse"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need search", List.of(toolCall)),
+                Turn.finalAnswer("searched")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"sources\":[]}"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("weather", "web_search"))
+                .skillRuntimeBlocks(List.of(skill("research", List.of("web_search"))))
+                .skillToolPolicyMode(SkillToolPolicyMode.RESTRICTIVE)
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-restrictive")
+                .build());
+
+        assertEquals("searched", result.finalAnswer());
+        assertEquals(List.of("web_search", LoadSkillResourceToolPortAdapter.TOOL_ID, ToolSearchToolPortAdapter.TOOL_ID),
+                toolIds(model.requests.get(0).getTools()));
+        assertEquals(1, gateway.requests.size());
+        assertEquals(List.of("web_search"), gateway.requests.get(0).allowedToolIds());
+    }
+
+    @Test
+    void shouldExposeNoAgentToolsWhenRestrictiveSkillHasNoAllowedTools() {
+        ToolListRecordingModel model = new ToolListRecordingModel();
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                new RecordingToolGateway(),
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("answer without tools")
+                .allowedToolIds(List.of("weather", "web_search"))
+                .skillRuntimeBlocks(List.of(skill("drafting", List.of())))
+                .skillToolPolicyMode(SkillToolPolicyMode.RESTRICTIVE)
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-restrictive-empty")
+                .build());
+
+        assertEquals("direct answer", result.finalAnswer());
+        assertEquals(List.of(LoadSkillResourceToolPortAdapter.TOOL_ID), toolIds(model.tools));
+    }
+
+    @Test
+    void shouldInjectEffectiveAllowedToolsIntoToolSearchCalls() {
+        AgentToolCall toolCall = AgentToolCall.of("call-search", ToolSearchToolPortAdapter.TOOL_ID,
+                Map.of("query", "weather"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("find tools", List.of(toolCall)),
+                Turn.finalAnswer("searched tools")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"tools\":[]}"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("which tools can I use?")
+                .allowedToolIds(List.of("weather", "web_search"))
+                .skillRuntimeBlocks(List.of(skill("research", List.of("web_search"))))
+                .skillToolPolicyMode(SkillToolPolicyMode.RESTRICTIVE)
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-tool-search")
+                .build());
+
+        assertEquals("searched tools", result.finalAnswer());
+        assertTrue(toolIds(model.requests.get(0).getTools()).containsAll(List.of(
+                "web_search",
+                ToolSearchToolPortAdapter.TOOL_ID,
+                LoadSkillResourceToolPortAdapter.TOOL_ID)));
+        assertEquals(1, gateway.requests.size());
+        ToolInvocationRequest request = gateway.requests.get(0);
+        assertEquals(ToolSearchToolPortAdapter.TOOL_ID, request.toolId());
+        assertEquals(List.of("web_search"), request.arguments().get(ToolSearchToolPortAdapter.ALLOWED_TOOL_IDS_ARGUMENT));
+        assertEquals(List.of("web_search", ToolSearchToolPortAdapter.TOOL_ID), request.allowedToolIds());
     }
 
     @Test
@@ -330,6 +526,8 @@ class KernelAgentLoopToolGatewayTests {
                 .orElseThrow();
         assertEquals("approval-1", approvalEvent.approvalId());
         assertEquals("memory-forget", approvalEvent.toolId());
+        assertFalse(callback.events.stream()
+                .anyMatch(event -> StreamEventType.TOOL_CALL_FINISHED.value().equals(event.eventName())));
         assertTrue(callback.events.stream()
                 .anyMatch(event -> StreamEventType.STEP_FINISHED.value().equals(event.eventName())));
     }
@@ -366,8 +564,44 @@ class KernelAgentLoopToolGatewayTests {
                 .findFirst()
                 .orElseThrow();
         assertEquals("newsletter_generation", finishedEvent.toolId());
-        assertEquals("Tool call finished", finishedEvent.summary());
-        assertTrue(finishedEvent.message().contains("Generated article body."));
+        assertEquals("SUCCEEDED", finishedEvent.message());
+        assertTrue(finishedEvent.summary().contains("Generated article body."), finishedEvent.summary());
+    }
+
+    @Test
+    void shouldEmitFinishedToolCallEventsWithResultSummaryDuringStreamingExecution() {
+        AgentToolCall toolCall = AgentToolCall.of("call-1", "web_search", Map.of("query", "seahorse ai"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need search", List.of(toolCall)),
+                Turn.finalAnswer("done")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"sources\":[{\"title\":\"Seahorse\"}]}"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("web_search"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-tool-finished")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        StreamToolCallEvent finishedEvent = callback.events.stream()
+                .filter(event -> StreamEventType.TOOL_CALL_FINISHED.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamToolCallEvent.class::isInstance)
+                .map(StreamToolCallEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("call-1", finishedEvent.toolCallId());
+        assertEquals("web_search", finishedEvent.toolId());
+        assertEquals("SUCCEEDED", finishedEvent.message());
+        assertTrue(finishedEvent.summary().contains("Seahorse"), finishedEvent.summary());
+        assertTrue(finishedEvent.finishedAt() != null);
     }
 
     @Test
@@ -401,6 +635,89 @@ class KernelAgentLoopToolGatewayTests {
         assertEquals("Redis", request.arguments().get("topic"));
         assertEquals("architects", request.arguments().get("audience"));
         assertFalse(model.requests.get(1).getMessages().get(1).getContent().contains("<tool_call>"));
+    }
+
+    @Test
+    void shouldEmitSkillRuntimeDiagnosticsWithoutSkillContentDuringStreamingExecution() {
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", LoadSkillResourceToolPortAdapter.TOOL_ID,
+                Map.of("skillName", "research", "resourcePath", "SKILL.md"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need full skill", List.of(loadSkill)),
+                Turn.finalAnswer("used research")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok(
+                "{\"name\":\"research\",\"resourcePath\":\"SKILL.md\",\"content\":\"Use sources carefully.\"}"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("write research plan")
+                .allowedToolIds(List.of())
+                .skillRuntimeBlocks(List.of(skill("research", List.of("web_search"))))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-skill-events")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        StreamSkillEvent selected = callback.events.stream()
+                .filter(event -> StreamEventType.SKILL_SELECTED.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamSkillEvent.class::isInstance)
+                .map(StreamSkillEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("research", selected.name());
+        assertEquals("rev-research", selected.revisionId());
+        assertEquals(SkillInjectMode.METADATA_ONLY.name(), selected.injectMode());
+        assertEquals(List.of("web_search"), selected.allowedTools());
+
+        StreamSkillEvent loaded = callback.events.stream()
+                .filter(event -> StreamEventType.SKILL_RESOURCE_LOADED.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamSkillEvent.class::isInstance)
+                .map(StreamSkillEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("research", loaded.name());
+        assertEquals("SKILL.md", loaded.resourcePath());
+        assertEquals("LOADED", loaded.status());
+    }
+
+    @Test
+    void shouldEmitFailedToolCallEventsWithErrorDuringStreamingExecution() {
+        AgentToolCall toolCall = AgentToolCall.of("call-1", "web_search", Map.of("query", "seahorse ai"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need search", List.of(toolCall)),
+                Turn.finalAnswer("done")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.failed("network timeout"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("web_search"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-tool-failed")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        StreamToolCallEvent finishedEvent = callback.events.stream()
+                .filter(event -> StreamEventType.TOOL_CALL_FINISHED.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamToolCallEvent.class::isInstance)
+                .map(StreamToolCallEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("FAILED", finishedEvent.message());
+        assertEquals("network timeout", finishedEvent.errorCode());
+        assertEquals("network timeout", finishedEvent.summary());
     }
 
     @Test
@@ -456,6 +773,22 @@ class KernelAgentLoopToolGatewayTests {
                         && String.valueOf(event.payload()).contains("Final research result.")));
     }
 
+    private static SkillRuntimeBlock skill(String name, List<String> allowedTools) {
+        return new SkillRuntimeBlock(
+                name,
+                "rev-" + name,
+                "hash-" + name,
+                "Skill " + name,
+                AgentSkillCategory.PUBLIC,
+                SkillInjectMode.METADATA_ONLY,
+                allowedTools,
+                "Use " + name + " carefully.");
+    }
+
+    private static List<String> toolIds(List<ToolDescriptor> tools) {
+        return tools.stream().map(ToolDescriptor::toolId).toList();
+    }
+
     private static final class RecordingToolGateway implements ToolGatewayPort {
         private final List<ToolInvocationRequest> requests = new ArrayList<>();
         private final ToolInvocationResult result;
@@ -482,11 +815,19 @@ class KernelAgentLoopToolGatewayTests {
                     new ToolDescriptor("weather", "Weather", "Weather lookup", "{}"),
                     new ToolDescriptor("memory-forget", "Memory Forget", "Forget memory", "{}"),
                     new ToolDescriptor("web_search", "Web Search", "Search public Web sources", "{}"),
-                    new ToolDescriptor("newsletter_generation", "Newsletter", "Generate article", "{}"));
+                    new ToolDescriptor("newsletter_generation", "Newsletter", "Generate article", "{}"),
+                    new ToolSearchToolPortAdapter(ToolRegistryPort.empty(), null).descriptor(),
+                    new LoadSkillResourceToolPortAdapter(null).descriptor());
         }
 
         @Override
         public Optional<ToolPort> find(String toolId) {
+            if (LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolId)) {
+                return Optional.of(new LoadSkillResourceToolPortAdapter(null));
+            }
+            if (ToolSearchToolPortAdapter.TOOL_ID.equals(toolId)) {
+                return Optional.of(new ToolSearchToolPortAdapter(ToolRegistryPort.empty(), null));
+            }
             throw new AssertionError("KernelAgentLoop must invoke tools through ToolGatewayPort");
         }
     }

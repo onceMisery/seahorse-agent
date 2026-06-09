@@ -70,6 +70,10 @@ export const AGENT_STREAM_EVENTS = {
   APPROVAL: "agent.approval",
   QUOTA: "agent.quota",
   MEMORY: "agent.memory",
+  SKILL_SELECTED: "skill.selected",
+  SKILL_LOADED: "skill.loaded",
+  SKILL_SKIPPED: "skill.skipped",
+  SKILL_RESOURCE_LOADED: "skill.resource_loaded",
   RUN_STARTED: "run_started",
   RUN_SNAPSHOT: "run_snapshot",
   STEP_STARTED: "step_started",
@@ -77,6 +81,7 @@ export const AGENT_STREAM_EVENTS = {
   STEP_FINISHED: "step_finished",
   TOOL_CALL_STARTED: "tool_call_started",
   TOOL_CALL_WAITING_USER: "tool_call_waiting_user",
+  TOOL_CALL_FINISHED: "tool_call_finished",
   SOURCE_FOUND: "source_found",
   ARTIFACT_CREATED: "artifact_created",
   ARTIFACT_START: "artifact_start",
@@ -124,6 +129,21 @@ export interface AgentApproval {
   status: AgentApprovalStatus;
   requestedBy?: string;
   argumentsPreviewJson?: string;
+}
+
+export interface AgentToolCallView {
+  id: string;
+  toolId: string;
+  status: string;
+  toolInvocationId?: string;
+  approvalId?: string;
+  riskLevel?: string;
+  argumentsPreviewJson?: string;
+  resultSummary?: string;
+  durationMs?: number;
+  error?: string;
+  startedAt?: string;
+  finishedAt?: string;
 }
 
 export const AGENT_ARTIFACT_SCAN_STATUS = {
@@ -216,6 +236,7 @@ export interface AgentRunSnapshot {
   sources?: AgentRunSnapshotSource[];
   artifacts?: AgentArtifact[];
   pendingApprovals?: unknown[];
+  costSummary?: AgentRunCostSummary;
   lastEventSeq?: number;
   canResume?: boolean;
   canRetry?: boolean;
@@ -287,6 +308,19 @@ export interface AgentMemory {
   action?: string;
 }
 
+export interface AgentSkillRuntimeView {
+  id: string;
+  name: string;
+  status: string;
+  revisionId?: string;
+  injectMode?: string;
+  category?: string;
+  description?: string;
+  allowedTools?: string[];
+  resourcePath?: string;
+  reason?: string;
+}
+
 export type ContentBlock =
   | { type: "text"; text: string }
   | { type: "artifact"; artifact: ArtifactBlock };
@@ -317,8 +351,10 @@ export interface Message {
   artifacts?: ArtifactBlock[];
   serverArtifacts?: AgentArtifact[];
   approvals?: AgentApproval[];
+  toolCalls?: AgentToolCallView[];
   quota?: AgentQuota[];
   memories?: AgentMemory[];
+  skills?: AgentSkillRuntimeView[];
   costSummary?: AgentRunCostSummary;
 }
 
@@ -348,7 +384,12 @@ export interface StreamEventEnvelope {
   typedPayload: unknown;
 }
 
-export type TaskTemplateId = "quick-answer" | "deep-research" | "web-summary" | "compare-analysis";
+export type TaskTemplateId =
+  | "quick-answer"
+  | "deep-research"
+  | "web-summary"
+  | "compare-analysis"
+  | "github-visual-project-intro";
 
 export type TaskTemplateCategory = "RESEARCH" | "WRITING" | "LEARNING" | "ANALYSIS" | "FILE_QA";
 

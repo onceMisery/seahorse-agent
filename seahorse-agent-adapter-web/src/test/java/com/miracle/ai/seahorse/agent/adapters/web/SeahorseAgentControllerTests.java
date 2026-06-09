@@ -70,6 +70,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAudi
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolProvider;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventEnvelope;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.credential.SecretMetadata;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionCreateCommand;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundPort;
@@ -105,6 +107,7 @@ import com.miracle.ai.seahorse.agent.ports.inbound.credential.SecretCreateComman
 import com.miracle.ai.seahorse.agent.ports.inbound.credential.SecretManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AccessDecisionPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionPage;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
@@ -232,6 +235,7 @@ class SeahorseAgentControllerTests {
         AgentRunResumeInboundPort resumePort = mock(AgentRunResumeInboundPort.class);
         AgentCheckpointQueryInboundPort checkpointPort = mock(AgentCheckpointQueryInboundPort.class);
         AgentRunSnapshotInboundPort snapshotPort = mock(AgentRunSnapshotInboundPort.class);
+        AgentRunEventBufferPort eventBufferPort = mock(AgentRunEventBufferPort.class);
         AgentRun run = run(AgentRunStatus.RUNNING);
         when(port.startRun(any())).thenReturn(run);
         when(port.page(any())).thenReturn(new AgentRunPage(List.of(run), 1L, 15L, 1L, 1L));
@@ -241,6 +245,9 @@ class SeahorseAgentControllerTests {
         when(resumePort.resume("run-1")).thenReturn(run(AgentRunStatus.SUCCEEDED));
         when(checkpointPort.listByRunId("run-1")).thenReturn(List.of(checkpoint()));
         when(snapshotPort.getSnapshot("run-1")).thenReturn(snapshot());
+        when(eventBufferPort.getAfter("run-1", 10L)).thenReturn(List.of(
+                StreamEventEnvelope.of(11L, StreamEventType.AGENT_ARTIFACT, "run-1",
+                        Map.of("artifactId", "artifact-1"))));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new SeahorseAgentRunController(
@@ -250,7 +257,7 @@ class SeahorseAgentControllerTests {
                         provider(AgentRunSnapshotInboundPort.class, snapshotPort),
                         null,
                         null,
-                        null,
+                        provider(AgentRunEventBufferPort.class, eventBufferPort),
                         provider(AdvancedFeatureGate.class, AdvancedFeatureGate.allEnabledForTests()))).build();
 
         mvc.perform(post("/agents/agent-1/runs")
@@ -317,6 +324,14 @@ class SeahorseAgentControllerTests {
                 .andExpect(jsonPath("$.data.lastEventSeq").value(1))
                 .andExpect(jsonPath("$.data.pendingApprovals[0].approvalId").value("approval-1"));
         verify(snapshotPort).getSnapshot("run-1");
+
+        mvc.perform(get("/agent-runs/run-1/events")
+                        .param("afterSeq", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].eventSeq").value(11))
+                .andExpect(jsonPath("$.data[0].eventType").value("AGENT_ARTIFACT"))
+                .andExpect(jsonPath("$.data[0].typedPayload.artifactId").value("artifact-1"));
+        verify(eventBufferPort).getAfter("run-1", 10L);
     }
 
     @Test

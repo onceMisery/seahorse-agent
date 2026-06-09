@@ -89,6 +89,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -336,12 +337,12 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({DataSource.class, ObjectMapper.class})
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean(AgentRunEventBufferPort.class)
     public JdbcAgentRunEventBufferAdapter seahorseJdbcAgentRunEventBufferAdapter(DataSource dataSource,
-                                                                                 ObjectMapper objectMapper) {
-        return new JdbcAgentRunEventBufferAdapter(dataSource, objectMapper);
+                                                                                 ObjectProvider<ObjectMapper> objectMapper) {
+        return new JdbcAgentRunEventBufferAdapter(dataSource, objectMapper.getIfAvailable(ObjectMapper::new));
     }
 
     @Bean

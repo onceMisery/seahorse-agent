@@ -42,8 +42,10 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJson
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GenerationToolArtifactPublicationPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
@@ -52,6 +54,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.QueryMetadataToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.web.WebFetchSafetyPolicy;
@@ -68,6 +71,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboun
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairModelPort;
@@ -78,6 +83,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolCatalogRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationAuditPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolInvocationUsagePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolArtifactPublicationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolProviderExposurePolicyPort;
@@ -93,6 +99,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.source.GitHubRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -138,6 +145,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     private static final String PROP_PER_TOOL_TIMEOUT = "seahorse-agent.chat.agent.per-tool-timeout";
     private static final String PROP_MAX_PARALLEL_TOOLS = "seahorse-agent.chat.agent.max-parallel-tools";
     private static final String PROP_MCP_INCLUDE = "seahorse-agent.chat.agent.tools.mcp.include";
+    private static final String PROP_DEFERRED_TOOL_SEARCH_ENABLED =
+            "seahorse-agent.chat.agent.tools.deferred-search.enabled";
     private static final String PROP_SEARCH_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.search.enabled";
     private static final String PROP_MEMORY_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.memory.enabled";
     private static final String PROP_WEB_RESEARCH_TOOLS_ENABLED =
@@ -262,6 +271,24 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean({AgentArtifactRepositoryPort.class, AgentRunEventBufferPort.class})
+    @ConditionalOnMissingBean
+    public ToolArtifactPublicationPort seahorseGenerationToolArtifactPublicationPort(
+            AgentArtifactRepositoryPort artifactRepository,
+            AgentRunEventBufferPort eventBuffer,
+            ObjectProvider<ObjectStoragePort> objectStorage,
+            ObjectProvider<ObjectMapper> objectMapper,
+            ObjectProvider<Clock> clockProvider) {
+        return new GenerationToolArtifactPublicationPort(
+                artifactRepository,
+                objectStorage.getIfAvailable(),
+                eventBuffer,
+                objectMapper.getIfAvailable(ObjectMapper::new),
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnBean(ToolRegistryPort.class)
     @ConditionalOnMissingBean
     public ToolGatewayPort seahorseToolGatewayPort(ToolRegistryPort toolRegistry,
@@ -270,6 +297,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                                                    ObjectProvider<ToolApprovalRequestRepositoryPort> toolApprovalRequestRepositoryPort,
                                                    ObjectProvider<ApprovalRequestQueryPort> approvalRequestQueryPort,
                                                    ObjectProvider<ToolOutputRedactionPort> toolOutputRedactionPort,
+                                                   ObjectProvider<ToolArtifactPublicationPort> toolArtifactPublicationPort,
                                                    ObjectProvider<Clock> clockProvider) {
         return new LocalToolGatewayPort(
                 toolRegistry,
@@ -278,6 +306,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 toolApprovalRequestRepositoryPort.getIfAvailable(ToolApprovalRequestRepositoryPort::noop),
                 approvalRequestQueryPort.getIfAvailable(ApprovalRequestQueryPort::empty),
                 toolOutputRedactionPort.getIfAvailable(ToolOutputRedactionPort::noop),
+                toolArtifactPublicationPort.getIfAvailable(ToolArtifactPublicationPort::noop),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
@@ -585,6 +614,25 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @ConditionalOnMissingBean
     public LocalAgentAsToolPort seahorseLocalAgentAsToolPort(KernelAgentHandoffService handoffService) {
         return new LocalAgentAsToolPort(handoffService);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnMissingBean
+    public LoadSkillResourceToolPortAdapter seahorseLoadSkillResourceToolPortAdapter(
+            AgentToolJsonSupport jsonSupport) {
+        return new LoadSkillResourceToolPortAdapter(jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(ToolRegistryPort.class)
+    @ConditionalOnProperty(name = PROP_DEFERRED_TOOL_SEARCH_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public ToolSearchToolPortAdapter seahorseToolSearchToolPortAdapter(
+            ToolRegistryPort toolRegistry,
+            AgentToolJsonSupport jsonSupport) {
+        return new ToolSearchToolPortAdapter(toolRegistry, jsonSupport);
     }
 
     @Bean

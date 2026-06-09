@@ -23,6 +23,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.output.OutputGover
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitCommand;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
@@ -40,6 +42,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillToolPolicyMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
@@ -51,6 +54,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamAgentStepEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamSkillEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamToolCallEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
@@ -107,6 +111,12 @@ public class KernelAgentLoop {
     private static final String TOOL_CALL_FINISHED_SUMMARY = "Tool call finished";
     private static final String TOOL_CALL_FAILED_SUMMARY = "Tool call failed";
     private static final String TOOL_CALL_APPROVAL_SUMMARY = "Tool call requires approval";
+    private static final String TOOL_CALL_SUCCEEDED_STATUS = "SUCCEEDED";
+    private static final String TOOL_CALL_FAILED_STATUS = "FAILED";
+    private static final String SKILL_STATUS_SELECTED = "SELECTED";
+    private static final String SKILL_STATUS_LOADED = "LOADED";
+    private static final String SKILL_STATUS_METADATA_ONLY = "METADATA_ONLY";
+    private static final String SKILL_STATUS_SKIPPED = "SKIPPED";
     private static final String TOOL_ARGUMENT_KEYS_FIELD = "argumentKeys";
     private static final String TOOL_ARGUMENT_COUNT_FIELD = "argumentCount";
     private static final Pattern TEXT_TOOL_CALL_BLOCK_PATTERN =
@@ -127,12 +137,7 @@ public class KernelAgentLoop {
     private static final String ARTIFACT_TITLE_FIELD = "title";
     private static final String ARTIFACT_TYPE_FIELD = "artifactType";
     private static final String MARKDOWN_ARTIFACT_TYPE = "MARKDOWN";
-    private static final String LOAD_SKILL_TOOL_ID = "load_skill";
-    private static final ToolDescriptor LOAD_SKILL_DESCRIPTOR = new ToolDescriptor(
-            LOAD_SKILL_TOOL_ID,
-            "Load Skill",
-            "Load the full instructions for a skill selected in the current Agent version snapshot.",
-            "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}");
+    private static final String LEGACY_LOAD_SKILL_TOOL_ID = "load_skill";
     private static final ToolRiskLevel DEFAULT_TOOL_RISK_LEVEL = ToolRiskLevel.HIGH;
     private static final String TRACE_CLASS_NAME =
             "com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop";
@@ -324,6 +329,7 @@ public class KernelAgentLoop {
         AgentRunControl runControl = Objects.requireNonNullElseGet(control, AgentRunControl::direct);
         List<ChatMessage> messages = new ArrayList<>(request.history());
         installRuntimeContext(messages, request.contextPack(), request.memoryContext(), request.skillRuntimeContext());
+        emitSkillRuntimeEvents(callback, request);
         messages.add(ChatMessage.user(request.question()));
 
         List<AgentStep> steps = new ArrayList<>();
@@ -354,9 +360,10 @@ public class KernelAgentLoop {
                     return new AgentLoopResult(finalContent, steps, false);
                 }
 
+                List<String> effectiveAllowedToolIds = effectiveAllowedToolIds(request);
                 List<AgentObservation> observations = executeTools(
                         turn.toolCalls(),
-                        request.allowedToolIds(),
+                        effectiveAllowedToolIds,
                         exposedToolIds(request, exhaustedToolIds),
                         request,
                         runControl,
@@ -371,7 +378,7 @@ public class KernelAgentLoop {
                     steps.add(pendingStep);
                     AgentToolCall pendingToolCall = pendingToolCall(turn.toolCalls(), observations);
                     approvalWaitHandler.waitForApproval(new AgentApprovalWaitCommand(
-                            toolInvocationRequest(pendingToolCall, allowedToolIdSet(request.allowedToolIds()), request),
+                            toolInvocationRequest(pendingToolCall, allowedToolIdSet(effectiveAllowedToolIds), request),
                             waitingApprovalStateJson(turn, observations),
                             waitingApprovalMessages(messages, turn)));
                     emitContent(callback, WAITING_APPROVAL_MESSAGE);
@@ -504,7 +511,7 @@ public class KernelAgentLoop {
                 request,
                 messages,
                 control,
-                exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks(), exhaustedToolIds),
+                exposedTools(effectiveAllowedToolIds(request), request.skillRuntimeBlocks(), exhaustedToolIds),
                 "auto");
     }
 
@@ -648,7 +655,18 @@ public class KernelAgentLoop {
                 .filter(Objects::nonNull)
                 .toList());
         if (hasLoadableSkills(skillRuntimeBlocks)) {
-            result.add(LOAD_SKILL_DESCRIPTOR);
+            toolRegistry.find(LoadSkillResourceToolPortAdapter.TOOL_ID)
+                    .flatMap(ignored -> toolRegistry.listTools().stream()
+                            .filter(tool -> LoadSkillResourceToolPortAdapter.TOOL_ID.equals(tool.toolId()))
+                            .findFirst())
+                    .ifPresent(result::add);
+        }
+        if (!safeAllowedToolIds.isEmpty()) {
+            toolRegistry.find(ToolSearchToolPortAdapter.TOOL_ID)
+                    .flatMap(ignored -> toolRegistry.listTools().stream()
+                            .filter(tool -> ToolSearchToolPortAdapter.TOOL_ID.equals(tool.toolId()))
+                            .findFirst())
+                    .ifPresent(result::add);
         }
         return List.copyOf(result);
     }
@@ -668,6 +686,37 @@ public class KernelAgentLoop {
                 exhaustedToolIds.add(toolCalls.get(i).toolId());
             }
         }
+    }
+
+    private List<String> effectiveAllowedToolIds(AgentLoopRequest request) {
+        if (request == null) {
+            return List.of();
+        }
+        List<String> agentAllowedToolIds = request.allowedToolIds();
+        if (request.skillToolPolicyMode() != SkillToolPolicyMode.RESTRICTIVE) {
+            return agentAllowedToolIds;
+        }
+        List<SkillRuntimeBlock> skillRuntimeBlocks = request.skillRuntimeBlocks();
+        if (skillRuntimeBlocks.isEmpty()) {
+            return agentAllowedToolIds;
+        }
+        Set<String> skillAllowedToolIds = selectedSkillAllowedToolIds(skillRuntimeBlocks);
+        return agentAllowedToolIds.stream()
+                .filter(skillAllowedToolIds::contains)
+                .toList();
+    }
+
+    private Set<String> selectedSkillAllowedToolIds(List<SkillRuntimeBlock> skillRuntimeBlocks) {
+        if (skillRuntimeBlocks == null || skillRuntimeBlocks.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> allowedToolIds = new HashSet<>();
+        for (SkillRuntimeBlock skill : skillRuntimeBlocks) {
+            if (skill != null) {
+                allowedToolIds.addAll(skill.allowedTools());
+            }
+        }
+        return allowedToolIds;
     }
 
     private void installRuntimeContext(List<ChatMessage> messages,
@@ -770,8 +819,11 @@ public class KernelAgentLoop {
                 AgentObservation observation = toObservation(toolCalls.get(i), futures.get(i));
                 observations.add(observation);
                 runStepRecorder.recordToolCall(request.runId(), toolCalls.get(i), observation);
-                emitToolCallFinished(callback, request, toolCalls.get(i), observation);
+                if (!isApprovalRequired(observation)) {
+                    emitToolCallFinished(callback, request, toolCalls.get(i), observation);
+                }
                 emitToolCallWaitingUser(callback, request, toolCalls.get(i), observation);
+                emitSkillResourceLoaded(callback, request, toolCalls.get(i), observation);
             }
             return observations;
         } catch (InterruptedException ex) {
@@ -819,7 +871,7 @@ public class KernelAgentLoop {
         if (hasRawArguments(toolCall)) {
             return AgentObservation.failed(toolCall.id(), "arguments is not valid JSON");
         }
-        if (LOAD_SKILL_TOOL_ID.equals(toolCall.toolId())) {
+        if (LEGACY_LOAD_SKILL_TOOL_ID.equals(toolCall.toolId())) {
             return loadSkillObservation(toolCall, request);
         }
         if (exposedToolIds != null && allowedToolIds != null && allowedToolIds.contains(toolCall.toolId())
@@ -845,9 +897,13 @@ public class KernelAgentLoop {
     }
 
     private AgentObservation loadSkillObservation(AgentToolCall toolCall, AgentLoopRequest request) {
-        String requestedName = Objects.toString(toolCall.arguments().get("name"), "").trim();
+        String requestedName = loadSkillName(toolCall);
         if (requestedName.isBlank()) {
             return AgentObservation.failed(toolCall.id(), "skill name is required");
+        }
+        String resourcePath = loadSkillResourcePath(toolCall);
+        if (!"SKILL.md".equals(resourcePath)) {
+            return AgentObservation.failed(toolCall.id(), "skill resource is not available");
         }
         List<SkillRuntimeBlock> skills = request == null ? List.of() : request.skillRuntimeBlocks();
         return skills.stream()
@@ -855,6 +911,22 @@ public class KernelAgentLoop {
                 .findFirst()
                 .map(skill -> AgentObservation.ok(toolCall.id(), loadSkillPayload(skill)))
                 .orElseGet(() -> AgentObservation.failed(toolCall.id(), "skill is not selected in this Agent version"));
+    }
+
+    private String loadSkillName(AgentToolCall toolCall) {
+        Object value = toolCall.arguments().get("skillName");
+        if (value == null) {
+            value = toolCall.arguments().get("name");
+        }
+        return Objects.toString(value, "").trim();
+    }
+
+    private String loadSkillResourcePath(AgentToolCall toolCall) {
+        Object value = toolCall.arguments().get("resourcePath");
+        if (value == null) {
+            return "SKILL.md";
+        }
+        return Objects.toString(value, "").trim();
     }
 
     private String loadSkillPayload(SkillRuntimeBlock skill) {
@@ -891,7 +963,21 @@ public class KernelAgentLoop {
                 toolArguments(toolCall, request),
                 java.util.Map.of(),
                 idempotencyKey(runId, toolCall.id()),
-                allowedToolIds == null ? List.of() : List.copyOf(allowedToolIds));
+                effectiveAllowedToolIds(toolCall, allowedToolIds));
+    }
+
+    private List<String> effectiveAllowedToolIds(AgentToolCall toolCall, Set<String> allowedToolIds) {
+        LinkedHashMap<String, Boolean> effective = new LinkedHashMap<>();
+        if (allowedToolIds != null) {
+            allowedToolIds.forEach(toolId -> effective.put(toolId, true));
+        }
+        if (LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
+            effective.put(LoadSkillResourceToolPortAdapter.TOOL_ID, true);
+        }
+        if (ToolSearchToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
+            effective.put(ToolSearchToolPortAdapter.TOOL_ID, true);
+        }
+        return List.copyOf(effective.keySet());
     }
 
     private String idempotencyKey(String runId, String toolCallId) {
@@ -929,6 +1015,14 @@ public class KernelAgentLoop {
     private java.util.Map<String, Object> toolArguments(AgentToolCall toolCall, AgentLoopRequest request) {
         LinkedHashMap<String, Object> arguments = new LinkedHashMap<>(
                 Objects.requireNonNullElse(toolCall.arguments(), java.util.Map.of()));
+        if (LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
+            arguments.put(LoadSkillResourceToolPortAdapter.RUNTIME_SKILLS_ARGUMENT,
+                    request == null ? List.of() : request.skillRuntimeBlocks());
+        }
+        if (ToolSearchToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
+            arguments.put(ToolSearchToolPortAdapter.ALLOWED_TOOL_IDS_ARGUMENT,
+                    request == null ? List.of() : effectiveAllowedToolIds(request));
+        }
         if (request == null || request.memoryContext() == null) {
             return arguments;
         }
@@ -946,7 +1040,7 @@ public class KernelAgentLoop {
     }
 
     private Set<String> exposedToolIds(AgentLoopRequest request, Set<String> exhaustedToolIds) {
-        return exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks(), exhaustedToolIds).stream()
+        return exposedTools(effectiveAllowedToolIds(request), request.skillRuntimeBlocks(), exhaustedToolIds).stream()
                 .map(ToolDescriptor::toolId)
                 .collect(java.util.stream.Collectors.toCollection(HashSet::new));
     }
@@ -1049,27 +1143,6 @@ public class KernelAgentLoop {
                 null));
     }
 
-    private void emitToolCallFinished(StreamCallback callback,
-                                      AgentLoopRequest request,
-                                      AgentToolCall toolCall,
-                                      AgentObservation observation) {
-        if (observation == null) {
-            return;
-        }
-        emitEvent(callback, StreamEventType.TOOL_CALL_FINISHED, new StreamToolCallEvent(
-                request.runId(),
-                toolCall.id(),
-                toolCall.id(),
-                toolCall.id(),
-                toolCall.toolId(),
-                DEFAULT_TOOL_RISK_LEVEL,
-                observation.success() ? TOOL_CALL_FINISHED_SUMMARY : TOOL_CALL_FAILED_SUMMARY,
-                null,
-                Instant.now(),
-                observation.success() ? null : observation.error(),
-                observationText(observation)));
-    }
-
     private void emitToolCallWaitingUser(StreamCallback callback,
                                          AgentLoopRequest request,
                                          AgentToolCall toolCall,
@@ -1087,6 +1160,97 @@ public class KernelAgentLoop {
                 TOOL_CALL_APPROVAL_SUMMARY,
                 argumentsPreview(toolCall),
                 Instant.now()));
+    }
+
+    private void emitToolCallFinished(StreamCallback callback,
+                                      AgentLoopRequest request,
+                                      AgentToolCall toolCall,
+                                      AgentObservation observation) {
+        Instant finishedAt = Instant.now();
+        emitEvent(callback, StreamEventType.TOOL_CALL_FINISHED, new StreamToolCallEvent(
+                request.runId(),
+                toolCall.id(),
+                toolCall.id(),
+                toolCall.id(),
+                toolCall.toolId(),
+                DEFAULT_TOOL_RISK_LEVEL,
+                observationText(observation),
+                null,
+                finishedAt,
+                observation.success() ? null : observation.error(),
+                observation.success() ? TOOL_CALL_SUCCEEDED_STATUS : TOOL_CALL_FAILED_STATUS));
+    }
+
+    private void emitSkillRuntimeEvents(StreamCallback callback, AgentLoopRequest request) {
+        if (request.skillRuntimeBlocks().isEmpty()) {
+            return;
+        }
+        for (SkillRuntimeBlock skill : request.skillRuntimeBlocks()) {
+            if (skill == null) {
+                continue;
+            }
+            StreamEventType eventType = skill.injectMode() == SkillInjectMode.METADATA_AND_BODY && !skill.content().isBlank()
+                    ? StreamEventType.SKILL_LOADED
+                    : StreamEventType.SKILL_SELECTED;
+            String status = eventType == StreamEventType.SKILL_LOADED
+                    ? SKILL_STATUS_LOADED
+                    : skill.injectMode() == SkillInjectMode.METADATA_ONLY
+                    ? SKILL_STATUS_METADATA_ONLY
+                    : SKILL_STATUS_SELECTED;
+            emitEvent(callback, eventType, skillEvent(request, skill, null, status, null));
+        }
+    }
+
+    private void emitSkillResourceLoaded(StreamCallback callback,
+                                         AgentLoopRequest request,
+                                         AgentToolCall toolCall,
+                                         AgentObservation observation) {
+        if (!LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
+            return;
+        }
+        String skillName = loadSkillName(toolCall);
+        SkillRuntimeBlock skill = request.skillRuntimeBlocks().stream()
+                .filter(candidate -> candidate.name().equals(skillName))
+                .findFirst()
+                .orElse(null);
+        if (skill == null) {
+            emitEvent(callback, StreamEventType.SKILL_SKIPPED, new StreamSkillEvent(
+                    request.runId(),
+                    skillName,
+                    null,
+                    null,
+                    null,
+                    null,
+                    List.of(),
+                    loadSkillResourcePath(toolCall),
+                    SKILL_STATUS_SKIPPED,
+                    observation.error()));
+            return;
+        }
+        emitEvent(callback, StreamEventType.SKILL_RESOURCE_LOADED, skillEvent(
+                request,
+                skill,
+                loadSkillResourcePath(toolCall),
+                observation.success() ? SKILL_STATUS_LOADED : SKILL_STATUS_SKIPPED,
+                observation.success() ? null : observation.error()));
+    }
+
+    private StreamSkillEvent skillEvent(AgentLoopRequest request,
+                                        SkillRuntimeBlock skill,
+                                        String resourcePath,
+                                        String status,
+                                        String reason) {
+        return new StreamSkillEvent(
+                request.runId(),
+                skill.name(),
+                skill.revisionId(),
+                skill.injectMode().name(),
+                skill.category().name(),
+                skill.description(),
+                skill.allowedTools(),
+                resourcePath,
+                status,
+                reason);
     }
 
     private Map<String, Object> argumentsPreview(AgentToolCall toolCall) {
@@ -1109,7 +1273,7 @@ public class KernelAgentLoop {
         runStepRecorder.recordModelTurn(
                 request.runId(),
                 AgentRunStepRecorder.modelTurnInput(messages,
-                        exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks(), exhaustedToolIds)),
+                        exposedTools(effectiveAllowedToolIds(request), request.skillRuntimeBlocks(), exhaustedToolIds)),
                 turn == null ? null : modelTurnOutputJson(turn),
                 error);
     }

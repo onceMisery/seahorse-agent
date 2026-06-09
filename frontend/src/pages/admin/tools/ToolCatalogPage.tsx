@@ -17,6 +17,11 @@ import { ToolRiskBadge } from "./components/ToolRiskBadge";
 import { getErrorMessage } from "@/utils/error";
 
 const PAGE_SIZE = 10;
+const DEFERRED_TOOL_SEARCH_ID = "tool_search";
+
+function isDeferredDiscoveryTool(tool: ToolItem) {
+  return tool.toolId === DEFERRED_TOOL_SEARCH_ID;
+}
 
 export function ToolCatalogPage() {
   const featureState = getAdvancedFeatureState(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT);
@@ -102,6 +107,9 @@ export function ToolCatalogPage() {
         <div>
           <h1 className="admin-page-title">工具目录</h1>
           <p className="admin-page-subtitle">管理和监控 Agent 可使用的工具</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            tool_search 只暴露已授权工具的元数据；普通工具仍由 Agent 绑定与运行时策略决定。
+          </p>
         </div>
         <div className="admin-page-actions">
           <Input
@@ -167,7 +175,12 @@ export function ToolCatalogPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{tool.provider || "-"}</TableCell>
-                    <TableCell className="text-muted-foreground">{tool.resourceType || "-"}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span>{tool.resourceType || "-"}</span>
+                        {isDeferredDiscoveryTool(tool) ? <Badge variant="secondary">延迟发现</Badge> : null}
+                      </div>
+                    </TableCell>
                     <TableCell><ToolRiskBadge riskLevel={tool.riskLevel} /></TableCell>
                     <TableCell>
                       {tool.enabled ? <Badge className="bg-green-100 text-green-700">已启用</Badge> : <Badge variant="secondary">已禁用</Badge>}

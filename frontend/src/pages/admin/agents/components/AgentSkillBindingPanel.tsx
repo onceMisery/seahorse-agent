@@ -172,6 +172,19 @@ export function AgentSkillBindingPanel({ agentId, onSnapshotChange }: Props) {
                         </Badge>
                       ))}
                     </div>
+                    {skill.allowedTools && skill.allowedTools.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        <div className="text-xs font-medium text-slate-500">工具依赖</div>
+                        <div className="flex flex-wrap gap-2">
+                          {skill.allowedTools.map((toolId) => (
+                            <Badge key={toolId} variant="outline" className="font-mono text-slate-600">
+                              {toolId}
+                            </Badge>
+                          ))}
+                        </div>
+                        <p className="text-xs text-slate-500">仅限制模式会收窄可用工具；默认不会新增授权。</p>
+                      </div>
+                    ) : null}
                   </div>
                   {enabled && binding ? (
                     <div className="w-48">

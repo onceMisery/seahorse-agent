@@ -36,6 +36,28 @@ const TABS = [
 
 type InspectorTab = (typeof TABS)[number]["value"];
 
+function normalizeEventSeq(eventSeq: StreamEventEnvelope["eventSeq"]): number | null {
+  if (typeof eventSeq === "string" && !/^\d+$/.test(eventSeq)) {
+    return null;
+  }
+  const seq = typeof eventSeq === "string" ? Number(eventSeq) : eventSeq;
+  return Number.isSafeInteger(seq) && seq >= 0 ? seq : null;
+}
+
+function normalizeReplayEvents(events: StreamEventEnvelope[]): StreamEventEnvelope[] {
+  const bySeq = new Map<number, StreamEventEnvelope>();
+  for (const event of events) {
+    const eventSeq = normalizeEventSeq(event.eventSeq);
+    if (eventSeq == null) {
+      continue;
+    }
+    if (!bySeq.has(eventSeq)) {
+      bySeq.set(eventSeq, { ...event, eventSeq });
+    }
+  }
+  return Array.from(bySeq.values()).sort((a, b) => a.eventSeq - b.eventSeq);
+}
+
 export function AgentInspectorPage() {
   const { runId: routeRunId } = useParams<{ runId?: string }>();
   const [inputRunId, setInputRunId] = useState(routeRunId ?? "");
@@ -66,7 +88,7 @@ export function AgentInspectorPage() {
         if (cancelled) return;
         setSnapshot(snap ?? null);
         setCostSummary(cost ?? null);
-        setEvents(Array.isArray(evts) ? evts : []);
+        setEvents(Array.isArray(evts) ? normalizeReplayEvents(evts) : []);
       })
       .catch((error) => {
         if (cancelled) return;

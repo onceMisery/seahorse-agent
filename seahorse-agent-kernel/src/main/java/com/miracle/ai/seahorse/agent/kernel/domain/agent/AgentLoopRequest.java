@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.definition.AgentDefinit
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillToolPolicyMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 
 import java.util.List;
@@ -48,6 +49,7 @@ public final class AgentLoopRequest {
     private final MemoryContext memoryContext;
     private final String skillRuntimeContext;
     private final List<SkillRuntimeBlock> skillRuntimeBlocks;
+    private final SkillToolPolicyMode skillToolPolicyMode;
     // 以下上下文字段由 Agent Runtime 传入 Tool Gateway，用于策略、审计和资源权限判断。
     private final String runId;
     private final String agentId;
@@ -74,6 +76,7 @@ public final class AgentLoopRequest {
         this.memoryContext = b.memoryContext;
         this.skillRuntimeContext = trimToNull(b.skillRuntimeContext);
         this.skillRuntimeBlocks = b.skillRuntimeBlocks == null ? List.of() : List.copyOf(b.skillRuntimeBlocks);
+        this.skillToolPolicyMode = Objects.requireNonNullElse(b.skillToolPolicyMode, SkillToolPolicyMode.ADVISORY);
         this.runId = trimToNull(b.runId);
         this.agentId = defaultText(b.agentId, AgentRuntimeConstants.LEGACY_REACT_AGENT_ID);
         this.versionId = trimToNull(b.versionId);
@@ -124,6 +127,10 @@ public final class AgentLoopRequest {
         return skillRuntimeBlocks;
     }
 
+    public SkillToolPolicyMode skillToolPolicyMode() {
+        return skillToolPolicyMode;
+    }
+
     public String runId() {
         return runId;
     }
@@ -171,6 +178,7 @@ public final class AgentLoopRequest {
         private MemoryContext memoryContext;
         private String skillRuntimeContext;
         private List<SkillRuntimeBlock> skillRuntimeBlocks;
+        private SkillToolPolicyMode skillToolPolicyMode;
         private String runId;
         private String agentId;
         private String versionId;
@@ -227,6 +235,11 @@ public final class AgentLoopRequest {
 
         public Builder skillRuntimeBlocks(List<SkillRuntimeBlock> skillRuntimeBlocks) {
             this.skillRuntimeBlocks = skillRuntimeBlocks;
+            return this;
+        }
+
+        public Builder skillToolPolicyMode(SkillToolPolicyMode skillToolPolicyMode) {
+            this.skillToolPolicyMode = skillToolPolicyMode;
             return this;
         }
 

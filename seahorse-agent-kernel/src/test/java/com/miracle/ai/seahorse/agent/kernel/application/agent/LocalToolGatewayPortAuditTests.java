@@ -29,6 +29,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationAudi
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationStatus;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolApprovalRequestRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolArtifactPublicationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
@@ -146,6 +147,46 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldStoreOnlyPreviewLimitedArgumentMetadataForApprovalRequests() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
+        RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+                        ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
+                        "Tool requires approval")),
+                ToolInvocationAuditPort.noop(),
+                approvals,
+                FIXED_CLOCK);
+
+        gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "memory-forget",
+                Map.of(
+                        "prompt", "x".repeat(2_000),
+                        "apiKey", "plain-secret"),
+                Map.of("knowledgeBaseId", "kb-1"),
+                "run-1:call-1",
+                List.of("memory-forget")));
+
+        assertEquals(1, approvals.saved.size());
+        String preview = approvals.saved.get(0).argumentsPreviewJson();
+        assertTrue(preview.contains("argumentKeys"));
+        assertTrue(preview.contains("argumentCount"));
+        assertTrue(preview.contains("resourceRefs"));
+        assertFalse(preview.contains("plain-secret"));
+        assertFalse(preview.contains("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"));
+        assertTrue(preview.length() < 500);
+    }
+
+    @Test
     void shouldExecuteToolWhenApprovalWasAlreadyApprovedForRunStep() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
@@ -190,6 +231,26 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldRedactBase64ImagePayloadBeforeReturningAndAuditing() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
+                "{\"status\":\"GENERATED\",\"b64Json\":\"large-base64-payload\",\"mimeType\":\"image/png\"}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                ToolOutputRedactionPort.basicSecretPatterns(),
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("image_generation"));
+
+        assertTrue(result.success());
+        assertEquals("{\"status\":\"GENERATED\",\"b64Json\":\"[REDACTED]\",\"mimeType\":\"image/png\"}",
+                result.content());
+        assertEquals("length=68", audit.completed.get(0).resultSummary());
+    }
+
+    @Test
     void shouldRecordFailedCompletionWhenToolThrowsException() {
         ThrowingToolPort tool = new ThrowingToolPort();
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
@@ -208,6 +269,88 @@ class LocalToolGatewayPortAuditTests {
         assertEquals(1, audit.completed.size());
         assertEquals(ToolInvocationStatus.FAILED, audit.completed.get(0).status());
         assertEquals("tool boom", audit.completed.get(0).errorMessage());
+    }
+
+    @Test
+    void shouldPublishArtifactsFromSuccessfulToolResultWithFullRequestContext() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
+                "{\"artifactType\":\"REPORT\",\"b64Json\":\"raw-image-bytes\"}"));
+        RecordingToolArtifactPublicationPort artifacts = new RecordingToolArtifactPublicationPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                ToolInvocationAuditPort.noop(),
+                ToolApprovalRequestRepositoryPort.noop(),
+                ApprovalRequestQueryPort.empty(),
+                ToolOutputRedactionPort.basicSecretPatterns(),
+                artifacts,
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertTrue(result.success());
+        assertEquals("{\"artifactType\":\"REPORT\",\"b64Json\":\"[REDACTED]\"}", result.content());
+        assertEquals(1, artifacts.published.size());
+        assertEquals("run-1", artifacts.published.get(0).request().runId());
+        assertEquals("step-1", artifacts.published.get(0).request().stepId());
+        assertEquals("tenant-1", artifacts.published.get(0).request().tenantId());
+        assertEquals("user-1", artifacts.published.get(0).request().userId());
+        assertEquals("{\"artifactType\":\"REPORT\",\"b64Json\":\"raw-image-bytes\"}",
+                artifacts.published.get(0).result().content());
+    }
+
+    @Test
+    void shouldNotPublishArtifactsForDeniedOrFailedToolResults() {
+        RecordingToolArtifactPublicationPort deniedArtifacts = new RecordingToolArtifactPublicationPort();
+        LocalToolGatewayPort deniedGateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.ok("should-not-run"))),
+                new FixedToolPolicyPort(PolicyDecision.deny("deny-1",
+                        ToolPolicyReasonCodes.TOOL_NOT_BOUND,
+                        "Tool is not bound")),
+                ToolInvocationAuditPort.noop(),
+                ToolApprovalRequestRepositoryPort.noop(),
+                ApprovalRequestQueryPort.empty(),
+                ToolOutputRedactionPort.noop(),
+                deniedArtifacts,
+                FIXED_CLOCK);
+
+        deniedGateway.invoke(request("memory-write"));
+
+        RecordingToolArtifactPublicationPort failedArtifacts = new RecordingToolArtifactPublicationPort();
+        LocalToolGatewayPort failedGateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.failed("tool failed"))),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                ToolInvocationAuditPort.noop(),
+                ToolApprovalRequestRepositoryPort.noop(),
+                ApprovalRequestQueryPort.empty(),
+                ToolOutputRedactionPort.noop(),
+                failedArtifacts,
+                FIXED_CLOCK);
+
+        failedGateway.invoke(request("weather"));
+
+        assertEquals(0, deniedArtifacts.published.size());
+        assertEquals(0, failedArtifacts.published.size());
+    }
+
+    @Test
+    void shouldReturnToolResultWhenArtifactPublicationFails() {
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(new CountingToolPort(ToolInvocationResult.ok("{\"artifactType\":\"REPORT\"}"))),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                ToolInvocationAuditPort.noop(),
+                ToolApprovalRequestRepositoryPort.noop(),
+                ApprovalRequestQueryPort.empty(),
+                ToolOutputRedactionPort.noop(),
+                (request, result) -> {
+                    throw new IllegalStateException("artifact publication failed");
+                },
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("weather"));
+
+        assertTrue(result.success());
+        assertEquals("{\"artifactType\":\"REPORT\"}", result.content());
     }
 
     @Test
@@ -305,6 +448,18 @@ class LocalToolGatewayPortAuditTests {
         public void save(ApprovalRequest request) {
             saved.add(request);
         }
+    }
+
+    private static final class RecordingToolArtifactPublicationPort implements ToolArtifactPublicationPort {
+        private final List<PublishedToolArtifact> published = new ArrayList<>();
+
+        @Override
+        public void publish(ToolInvocationRequest request, ToolInvocationResult result) {
+            published.add(new PublishedToolArtifact(request, result));
+        }
+    }
+
+    private record PublishedToolArtifact(ToolInvocationRequest request, ToolInvocationResult result) {
     }
 
     private static final class FixedApprovalQueryPort implements ApprovalRequestQueryPort {

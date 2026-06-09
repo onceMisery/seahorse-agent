@@ -10,6 +10,8 @@ const tabByMetric: Record<string, WorkbenchTab> = {
   sources: "sources",
   artifacts: "artifacts",
   approvals: "approvals",
+  tools: "tools",
+  skills: "skills",
   cost: "cost",
   memories: "memory"
 };
@@ -44,6 +46,16 @@ export function MessageRunSummary({ message }: MessageRunSummaryProps) {
   const approvalCount = message.approvals?.length ?? 0;
   if (approvalCount > 0) {
     metrics.push({ key: "approvals", label: "审批", count: approvalCount, tab: tabByMetric.approvals });
+  }
+
+  const toolCallCount = message.toolCalls?.length ?? 0;
+  if (toolCallCount > 0) {
+    metrics.push({ key: "tools", label: "工具", count: toolCallCount, tab: tabByMetric.tools });
+  }
+
+  const skillCount = message.skills?.length ?? 0;
+  if (skillCount > 0) {
+    metrics.push({ key: "skills", label: "技能", count: skillCount, tab: tabByMetric.skills });
   }
 
   if (message.costSummary) {

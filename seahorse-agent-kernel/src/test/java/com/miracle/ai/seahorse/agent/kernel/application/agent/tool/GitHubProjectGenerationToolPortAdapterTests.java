@@ -113,7 +113,8 @@ class GitHubProjectGenerationToolPortAdapterTests {
         assertEquals("Draw a Redis architecture explainer image", captured.get().prompt());
         assertEquals("agnes-image-2.0-flash", captured.get().model());
         assertEquals("1024x1024", captured.get().size());
-        assertEquals(null, captured.get().style());
+        assertEquals("technical diagram", captured.get().style());
+        assertEquals("b64_json", captured.get().responseFormat());
         JsonNode root = objectMapper.readTree(result.content());
         assertEquals("GENERATED", root.path("status").asText());
         assertEquals("https://cdn.example.com/generated/redis-architecture.png", root.path("imageUrl").asText());

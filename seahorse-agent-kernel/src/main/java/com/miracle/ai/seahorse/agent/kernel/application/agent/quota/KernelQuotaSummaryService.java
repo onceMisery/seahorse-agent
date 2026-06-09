@@ -25,7 +25,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaPolicyLimits
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.QuotaSummaryStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.quota.UserQuotaSummary;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.task.TaskTemplate;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.task.TaskTemplateId;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.QuotaSummaryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.UserQuotaSummaryQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageQuery;
@@ -42,15 +44,23 @@ public class KernelQuotaSummaryService implements QuotaSummaryInboundPort {
 
     private final QuotaPolicyRepositoryPort quotaPolicyRepository;
     private final CostUsageRepositoryPort costUsageRepository;
+    private final TaskTemplateQueryInboundPort taskTemplateQueryPort;
 
     public KernelQuotaSummaryService() {
-        this(null, null);
+        this(null, null, null);
     }
 
     public KernelQuotaSummaryService(QuotaPolicyRepositoryPort quotaPolicyRepository,
                                      CostUsageRepositoryPort costUsageRepository) {
+        this(quotaPolicyRepository, costUsageRepository, null);
+    }
+
+    public KernelQuotaSummaryService(QuotaPolicyRepositoryPort quotaPolicyRepository,
+                                     CostUsageRepositoryPort costUsageRepository,
+                                     TaskTemplateQueryInboundPort taskTemplateQueryPort) {
         this.quotaPolicyRepository = quotaPolicyRepository;
         this.costUsageRepository = costUsageRepository;
+        this.taskTemplateQueryPort = taskTemplateQueryPort;
     }
 
     @Override
@@ -109,15 +119,37 @@ public class KernelQuotaSummaryService implements QuotaSummaryInboundPort {
     }
 
     private QuotaCostTier costTier(String taskTemplateId) {
+        return taskTemplate(taskTemplateId)
+                .map(TaskTemplate::maxCostTier)
+                .orElseGet(() -> fallbackCostTier(taskTemplateId));
+    }
+
+    private EstimatedDurationTier durationTier(String taskTemplateId) {
+        return taskTemplate(taskTemplateId)
+                .map(TaskTemplate::estimatedDuration)
+                .orElseGet(() -> fallbackDurationTier(taskTemplateId));
+    }
+
+    private Optional<TaskTemplate> taskTemplate(String taskTemplateId) {
+        if (taskTemplateQueryPort == null) {
+            return Optional.empty();
+        }
         return parseTemplateId(taskTemplateId)
-                .map(templateId -> templateId == TaskTemplateId.DEEP_RESEARCH ? QuotaCostTier.HIGH
+                .flatMap(taskTemplateQueryPort::findById);
+    }
+
+    private QuotaCostTier fallbackCostTier(String taskTemplateId) {
+        return parseTemplateId(taskTemplateId)
+                .map(templateId -> templateId == TaskTemplateId.DEEP_RESEARCH
+                        || templateId == TaskTemplateId.GITHUB_VISUAL_PROJECT_INTRO ? QuotaCostTier.HIGH
                         : templateId == TaskTemplateId.QUICK_ANSWER ? QuotaCostTier.LOW : QuotaCostTier.MEDIUM)
                 .orElse(QuotaCostTier.LOW);
     }
 
-    private EstimatedDurationTier durationTier(String taskTemplateId) {
+    private EstimatedDurationTier fallbackDurationTier(String taskTemplateId) {
         return parseTemplateId(taskTemplateId)
-                .map(templateId -> templateId == TaskTemplateId.DEEP_RESEARCH ? EstimatedDurationTier.LONG
+                .map(templateId -> templateId == TaskTemplateId.DEEP_RESEARCH
+                        || templateId == TaskTemplateId.GITHUB_VISUAL_PROJECT_INTRO ? EstimatedDurationTier.LONG
                         : templateId == TaskTemplateId.QUICK_ANSWER ? EstimatedDurationTier.SHORT
                                 : EstimatedDurationTier.MEDIUM)
                 .orElse(EstimatedDurationTier.SHORT);
