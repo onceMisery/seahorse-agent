@@ -191,6 +191,26 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldRedactBase64ImagePayloadBeforeReturningAndAuditing() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
+                "{\"status\":\"GENERATED\",\"b64Json\":\"large-base64-payload\",\"mimeType\":\"image/png\"}"));
+        RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.allow("allow-1")),
+                audit,
+                ToolOutputRedactionPort.basicSecretPatterns(),
+                FIXED_CLOCK);
+
+        ToolInvocationResult result = gateway.invoke(request("image_generation"));
+
+        assertTrue(result.success());
+        assertEquals("{\"status\":\"GENERATED\",\"b64Json\":\"[REDACTED]\",\"mimeType\":\"image/png\"}",
+                result.content());
+        assertEquals("length=68", audit.completed.get(0).resultSummary());
+    }
+
+    @Test
     void shouldRecordFailedCompletionWhenToolThrowsException() {
         ThrowingToolPort tool = new ThrowingToolPort();
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();
@@ -213,7 +233,8 @@ class LocalToolGatewayPortAuditTests {
 
     @Test
     void shouldPublishArtifactsFromSuccessfulToolResultWithFullRequestContext() {
-        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"artifactType\":\"REPORT\"}"));
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok(
+                "{\"artifactType\":\"REPORT\",\"b64Json\":\"raw-image-bytes\"}"));
         RecordingToolArtifactPublicationPort artifacts = new RecordingToolArtifactPublicationPort();
         LocalToolGatewayPort gateway = new LocalToolGatewayPort(
                 new SingleToolRegistry(tool),
@@ -221,19 +242,21 @@ class LocalToolGatewayPortAuditTests {
                 ToolInvocationAuditPort.noop(),
                 ToolApprovalRequestRepositoryPort.noop(),
                 ApprovalRequestQueryPort.empty(),
-                ToolOutputRedactionPort.noop(),
+                ToolOutputRedactionPort.basicSecretPatterns(),
                 artifacts,
                 FIXED_CLOCK);
 
         ToolInvocationResult result = gateway.invoke(request("weather"));
 
         assertTrue(result.success());
+        assertEquals("{\"artifactType\":\"REPORT\",\"b64Json\":\"[REDACTED]\"}", result.content());
         assertEquals(1, artifacts.published.size());
         assertEquals("run-1", artifacts.published.get(0).request().runId());
         assertEquals("step-1", artifacts.published.get(0).request().stepId());
         assertEquals("tenant-1", artifacts.published.get(0).request().tenantId());
         assertEquals("user-1", artifacts.published.get(0).request().userId());
-        assertEquals("{\"artifactType\":\"REPORT\"}", artifacts.published.get(0).result().content());
+        assertEquals("{\"artifactType\":\"REPORT\",\"b64Json\":\"raw-image-bytes\"}",
+                artifacts.published.get(0).result().content());
     }
 
     @Test

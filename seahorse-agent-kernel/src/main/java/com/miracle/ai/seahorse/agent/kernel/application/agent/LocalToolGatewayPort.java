@@ -221,10 +221,10 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
                     .orElseGet(() -> ToolPort.notFound(safeRequest.toolId()));
             ToolInvocationResult rawResult = executableTool.invoke(
                     safeRequest.toolCallId(), safeRequest.toolId(), safeRequest.arguments());
-            ToolInvocationResult result = outputRedactionPort.redact(safeRequest, rawResult);
-            if (result.success()) {
-                publishArtifacts(safeRequest, result);
+            if (rawResult.success()) {
+                publishArtifacts(safeRequest, rawResult);
             }
+            ToolInvocationResult result = outputRedactionPort.redact(safeRequest, rawResult);
             auditPort.recordCompleted(new ToolInvocationAuditCompletion(
                     invocationId,
                     result.success() ? ToolInvocationStatus.SUCCEEDED : ToolInvocationStatus.FAILED,

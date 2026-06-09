@@ -18,6 +18,10 @@
 package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -35,15 +39,58 @@ public interface ToolOutputRedactionPort {
     }
 
     static ToolOutputRedactionPort basicSecretPatterns() {
+        ObjectMapper objectMapper = new ObjectMapper();
         return (request, result) -> {
             if (result == null || !result.success() || result.content() == null) {
                 return result;
             }
-            String redacted = OPENAI_KEY_PATTERN.matcher(result.content()).replaceAll(REDACTED_VALUE);
+            String redacted = redactBase64JsonFields(objectMapper, result.content());
+            redacted = OPENAI_KEY_PATTERN.matcher(redacted).replaceAll(REDACTED_VALUE);
             if (Objects.equals(redacted, result.content())) {
                 return result;
             }
             return ToolInvocationResult.ok(redacted);
         };
+    }
+
+    private static String redactBase64JsonFields(ObjectMapper objectMapper, String content) {
+        try {
+            JsonNode root = objectMapper.readTree(content);
+            boolean changed = redactBase64JsonFields(root);
+            return changed ? objectMapper.writeValueAsString(root) : content;
+        } catch (JsonProcessingException ex) {
+            return content;
+        }
+    }
+
+    private static boolean redactBase64JsonFields(JsonNode node) {
+        if (node == null) {
+            return false;
+        }
+        boolean changed = false;
+        if (node instanceof ObjectNode objectNode) {
+            changed |= redactField(objectNode, "b64Json");
+            changed |= redactField(objectNode, "b64_json");
+            var fields = objectNode.fields();
+            while (fields.hasNext()) {
+                changed |= redactBase64JsonFields(fields.next().getValue());
+            }
+            return changed;
+        }
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                changed |= redactBase64JsonFields(child);
+            }
+        }
+        return changed;
+    }
+
+    private static boolean redactField(ObjectNode node, String fieldName) {
+        JsonNode value = node.get(fieldName);
+        if (value == null || value.isNull() || REDACTED_VALUE.equals(value.asText())) {
+            return false;
+        }
+        node.put(fieldName, REDACTED_VALUE);
+        return true;
     }
 }
