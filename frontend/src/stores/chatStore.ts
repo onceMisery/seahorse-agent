@@ -190,6 +190,7 @@ export const useChatStore = create<ChatState>()(
           await hydrateSelectedSessionAgentRuns(sessionId, nextMessages, set);
         } catch (error) {
           console.error("Failed to load session:", error);
+          if (get().currentSessionId !== sessionId) return;
           toast.error("加载会话失败");
           set((s) => {
             s.currentSessionId = null;

@@ -4,6 +4,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { getAgentRunCostSummary, getAgentRunSnapshot, listAgentRunEvents } from "@/services/agentRunService";
 import { listMessages } from "@/services/sessionService";
 import { AGENT_STREAM_EVENTS, type AgentRunSnapshot, type Message, type StreamEventEnvelope } from "@/types";
+import { toast } from "sonner";
 
 const streamStarts: string[] = [];
 
@@ -424,5 +425,28 @@ describe("chatStore snapshot hydration", () => {
     expect(getAgentRunSnapshot).not.toHaveBeenCalled();
     expect(listAgentRunEvents).not.toHaveBeenCalled();
     expect(getAgentRunCostSummary).not.toHaveBeenCalled();
+  });
+
+  it("does not clear the active session when a stale session load fails", async () => {
+    let rejectMessages: (error: unknown) => void = () => undefined;
+    vi.mocked(listMessages).mockReturnValue(new Promise((_, reject) => {
+      rejectMessages = reject;
+    }) as ReturnType<typeof listMessages>);
+
+    const load = useChatStore.getState().selectSession("conversation-history");
+    useChatStore.setState({
+      currentSessionId: "conversation-next",
+      messages: [assistantMessage({ id: "assistant-next", content: "newer session" })],
+      isLoading: false
+    });
+    rejectMessages(new Error("stale request failed"));
+    await load;
+
+    expect(useChatStore.getState().currentSessionId).toBe("conversation-next");
+    expect(useChatStore.getState().messages[0]).toMatchObject({
+      id: "assistant-next",
+      content: "newer session"
+    });
+    expect(toast.error).not.toHaveBeenCalledWith("加载会话失败");
   });
 });
