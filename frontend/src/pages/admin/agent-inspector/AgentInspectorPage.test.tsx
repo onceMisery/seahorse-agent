@@ -34,7 +34,7 @@ describe("AgentInspectorPage", () => {
     vi.mocked(listAgentRunEvents).mockResolvedValue([
       {
         eventId: "evt-3",
-        eventSeq: 3,
+        eventSeq: "3" as unknown as number,
         eventType: "agent.step.finished",
         runId: "run-1",
         timestamp: "2026-06-08T00:00:03Z",

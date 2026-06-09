@@ -172,7 +172,7 @@ public class SeahorseAgentRunController {
         return ApiResponses.requireService(costSummaryPortProvider, port -> port.getCostSummary(runId));
     }
 
-    @GetMapping("/api/agent-runs/{runId}/events")
+    @GetMapping({"/agent-runs/{runId}/events", "/api/agent-runs/{runId}/events"})
     public ApiResponse<Object> events(@PathVariable String runId,
                                       @RequestParam(defaultValue = "0") long afterSeq,
                                       HttpServletRequest request) {

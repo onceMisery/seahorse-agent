@@ -129,6 +129,8 @@ The strategy is **three layers to align, two layers to surpass**:
 - `BuiltInAgentToolRegistrar` already registers all Spring `DescribedToolPort` beans into `ToolRegistryPort` and `ToolCatalogRepositoryPort`; model-generation tools are cataloged as `MEDIUM` risk, `EXECUTE` action, and `MODEL` resource type.
 - `SpringSseEventSender` already sends named SSE events, emits an `error` event followed by `done` on failure, completes quietly, and has tests for closed-emitter behavior. Task 11 should preserve this sender contract and focus on frontend/admin consumption, replay, and backfill.
 - `SeahorseChatController`, `ResearchSseBridge`, and `frontend/src/hooks/useStreamResponse.ts` already expose a resume path using `resumeRunId` and `lastEventSeq`; execution should leverage this for chat reconnect/backfill. A dedicated `/api/agent-runs/{runId}/events?afterSeq=...` endpoint already exists for admin replay through `AgentRunEventBufferPort`; do not add another recovery owner unless tests prove the current contracts are insufficient.
+- Current-worktree validation on 2026-06-09 found two admin replay consumption details that this plan must preserve: the frontend dev proxy strips `/api`, so the backend event-list mapping also needs `/agent-runs/{runId}/events`; and backend JSON serializes `eventSeq` as a string for large-number safety, so Inspector replay must normalize safe integer strings before sorting/deduping.
+- The frontend currently tracks both `frontend/vite.config.ts` and `frontend/vite.config.js`. Dev proxy changes must keep both aligned, because Vite may load the JavaScript config first.
 - `V20__github_visual_project_intro_agent.sql` and `V21__github_visual_agent_generation_tools.sql` are baseline migrations that seed the GitHub visual intro Agent and generation-tool bindings. Do not edit already-applied migrations in place; use a forward migration and update `resources/database/seahorse_init.sql` only if runtime database evidence proves seed data is missing or stale.
 - `frontend/src/hooks/useStreamResponse.ts` is clean in the current scoped mojibake scan, but Task 2 must keep guarding it because it sits on the SSE sender/retry path.
 
@@ -738,7 +740,8 @@ cd ..
 **Repair Track:**
 - Root cause: Seahorse has Agent Inspector, cost APIs, SSE error/done handling, and resume plumbing, but chat workbench and admin replay are not fully connected to those contracts.
 - Canonical owner: persisted run events and snapshots.
-- Minimal change: reuse the existing `/rag/v3/chat?resumeRunId=...&lastEventSeq=...` stream path and `stream_event` envelopes for chat reconnect/backfill; use the existing `/api/agent-runs/{runId}/events?afterSeq=...` event list for admin replay. Extend the current event buffer or snapshot contracts only if tests prove fields are missing.
+- Minimal change: reuse the existing `/rag/v3/chat?resumeRunId=...&lastEventSeq=...` stream path and `stream_event` envelopes for chat reconnect/backfill; use the existing event list for admin replay. Backend mapping must support both `/api/agent-runs/{runId}/events?afterSeq=...` and `/agent-runs/{runId}/events?afterSeq=...` so the current Vite proxy remains compatible. Extend the current event buffer or snapshot contracts only if tests prove fields are missing.
+- Frontend replay parsing rule: accept numeric `eventSeq` and backend JSON string `eventSeq` values that parse to safe integers; discard invalid values; dedupe and sort on the normalized number.
 - Compatibility: if event history is empty, snapshot still renders.
 - Sender compatibility: preserve `SpringSseEventSender` behavior of named events, `error` followed by `done` on failure, and quiet completion after client disconnects.
 - Verification: tests prove replay uses event order and backfill does not duplicate live events.
@@ -760,6 +763,7 @@ npm run build
 - [x] Write RED tests for Agent Inspector replay order and cost/quota rendering.
 - [x] Implement event sequence tracking in frontend message state.
 - [x] Reuse the existing resume stream path for chat backfill; use the existing event-list endpoint for admin replay and extend backend event list/snapshot only if fields are missing.
+- [x] Current-worktree replay gap found/fixed on 2026-06-09: admin Inspector rendered `No events` while the replay API had rows because the frontend dev proxy was using the tracked `vite.config.js` default target and Inspector filtered string `eventSeq` values. Fixes aligned both Vite configs, added backend `/agent-runs/{runId}/events`, and normalized string event sequences in Inspector.
 - [x] Verify focused tests and build pass.
 - [x] Commit: `feat: add agentops replay and governance diagnostics`
 
@@ -857,7 +861,7 @@ Deliver Tasks 9, 10, and 11.
 
 **Exit evidence:**
 - Tool Calls and Skills tabs exist in the workbench.
-- Agent Inspector supports replay/backfill.
+- Agent Inspector supports replay/backfill through the current-worktree frontend dev server, including backend string `eventSeq` values and Vite's `/api` prefix rewrite.
 - Chat reconnect/backfill reuses the existing resume stream path unless tests prove it cannot satisfy the scenario.
 - Cost, quota, approvals, and policy diagnostics are visible.
 
@@ -920,7 +924,7 @@ Mitigation: add contract tests or backend DTO tests for all `agent.*` events use
 
 Risk: adding another replay/backfill endpoint before exhausting the existing `resumeRunId`/`lastEventSeq` stream path and `/api/agent-runs/{runId}/events?afterSeq=...` event-list path can split recovery behavior across multiple owners.
 
-Mitigation: Task 11 must prove whether the existing resume stream supports chat backfill first and use the existing event-list endpoint for admin replay; extend only for tested gaps that the current contracts cannot cover.
+Mitigation: Task 11 must prove whether the existing resume stream supports chat backfill first and use the existing event-list endpoint for admin replay; extend only for tested gaps that the current contracts cannot cover. Compatibility aliases such as `/agent-runs/{runId}/events` are acceptable when they serve the same event-list owner and preserve the frontend proxy path.
 
 ### Applied Migration Mutation
 

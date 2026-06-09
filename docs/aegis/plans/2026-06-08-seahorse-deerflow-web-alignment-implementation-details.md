@@ -40,6 +40,8 @@ Recheck result on 2026-06-09: the review's original P0/P1 findings were reasonab
 - Accepted with updated baseline: a dedicated event-list endpoint now exists at `/api/agent-runs/{runId}/events?afterSeq=...` through `AgentRunEventBufferPort`. Admin replay should continue using it, while chat reconnect should still prefer the existing `resumeRunId` + `lastEventSeq` SSE path before adding another recovery owner.
 - Superseded by current implementation slices: normal callback events are sent live as `stream_event` and buffered by `LocalChatStreamCallbackFactory`, while generation artifact publication appends `AGENT_ARTIFACT` directly to `AgentRunEventBufferPort` after the tool gateway succeeds. A previous realtime SSE capture did not show `AGENT_ARTIFACT`, which exposed a real delivery gap. The current branch now has `LocalChatStreamCallbackFactory` flush externally buffered events before emitting later callback events and completion, and align its local sequence counter with the replay buffer's latest sequence. Focused tests prove the buffered artifact is sent as both `stream_event` and named `agent.artifact`, and the next callback event receives the next sequence. Keep the final E2E gate explicit because this still needs fresh real backend/frontend proof from the current branch.
 - Accepted with current branch implementation: the JDBC replay buffer bean must be registered whenever a `DataSource` is available. It must not require an eager `ObjectMapper` bean in `@ConditionalOnBean`; the adapter can receive an `ObjectProvider<ObjectMapper>` and fall back to `new ObjectMapper()` if necessary.
+- Accepted with current branch implementation: admin replay must handle the real JSON shape emitted by the backend. `eventSeq` is serialized as a JSON string for large-number safety, so `AgentInspectorPage` must normalize safe integer strings before sorting/deduping; otherwise a valid replay payload renders as `No events`.
+- Accepted with current branch implementation: the frontend dev proxy configuration has two tracked files, `frontend/vite.config.ts` and `frontend/vite.config.js`. Vite may load the JavaScript config first in this repository, so proxy-target changes must keep both files aligned until the duplicate config is retired. A fix in only `vite.config.ts` does not prove the local web E2E path.
 
 Disposition matrix:
 
@@ -55,6 +57,7 @@ Disposition matrix:
 | SSE live stream worked but admin replay was empty | Accurate as a real implementation risk | Current baseline requires lazy buffer binding plus serialized JDBC payloads and must be proven by fresh replay evidence. |
 | Event buffer auto-configuration could miss late `ObjectMapper` beans | Accurate | Condition only on `DataSource`, inject `ObjectProvider<ObjectMapper>`, and keep the fallback mapper local to the adapter. |
 | Concurrent event sequence allocation is not atomic across all writers | Newly identified residual hardening gap | Documented as residual risk. The current callback fix covers observed sequential/single-stream interleavings; a future repository-level slice should add atomic append-next-sequence or unique-key plus retry semantics. |
+| Admin Inspector showed `No events` while replay API returned rows | Accurate as a current-worktree E2E finding | Fixed by supporting both `/agent-runs/{runId}/events` and `/api/agent-runs/{runId}/events`, aligning both Vite configs with `VITE_PROXY_TARGET`, and normalizing string `eventSeq` values in `AgentInspectorPage`. |
 
 Current code anchors:
 
@@ -71,6 +74,7 @@ Current code anchors:
 | SSE event buffering | `LocalChatStreamCallbackFactory` resolves `AgentRunEventBufferPort` lazily; `JdbcAgentRunEventBufferAdapter` persists typed payload JSON |
 | Replay buffer auto-configuration | `SeahorseAgentRegistryRepositoryAutoConfiguration` creates `JdbcAgentRunEventBufferAdapter` from `DataSource` plus optional `ObjectMapper` |
 | Admin replay/event list | `AgentRunEventBufferPort`, `SeahorseAgentRunController`, `AgentInspectorPage` |
+| Frontend dev proxy | Keep `frontend/vite.config.ts` and `frontend/vite.config.js` aligned until one config is retired |
 
 ---
 
@@ -323,13 +327,15 @@ Current baseline:
 - `SpringSseEventSender` sends named events and emits `error` followed by `done` on failure.
 - `SeahorseChatController`, `ResearchSseBridge`, and `useStreamResponse.ts` already have `resumeRunId` and `lastEventSeq` support.
 - `AgentRunEventBufferPort` stores stream envelopes by run, and `SeahorseAgentRunController` exposes `/api/agent-runs/{runId}/events?afterSeq=...` for admin replay/event listing.
+- The event-list endpoint also exposes `/agent-runs/{runId}/events?afterSeq=...` for the frontend dev proxy path, because the current Vite proxy strips the leading `/api` prefix before forwarding to the backend.
 - `LocalChatStreamCallbackFactory` resolves `AgentRunEventBufferPort` lazily when each callback is created, so a callback created after repository auto-configuration uses the real JDBC buffer instead of permanently capturing `noop`.
 - `LocalChatStreamCallbackFactory` also flushes externally buffered events, such as `AGENT_ARTIFACT` events appended by `GenerationToolArtifactPublicationPort`, back to the live SSE stream before sending later callback-owned events or completion. The callback tracks the highest sent `eventSeq` and reads the buffer's latest sequence before assigning a new local sequence, preventing duplicate sequence numbers for the observed sequential interleaving between gateway-level artifact publication and callback-owned events.
 - `GenerationToolArtifactPublicationPort` still appends its event by reading `getLatestSeq(runId) + 1`; the callback now reconciles with the buffer before it emits later callback-owned events. This is sufficient for the observed gateway-publisher-to-callback ordering gap, but it is not a repository-wide atomic sequence allocator.
 - `JdbcAgentRunEventBufferAdapter` serializes typed payloads as JSON and keeps a narrow compatibility path for driver/H2 string-literal payloads on read.
 - `SeahorseAgentRegistryRepositoryAutoConfiguration` registers the JDBC `AgentRunEventBufferPort` when `DataSource` is present, even if the application `ObjectMapper` bean is not ready at condition-evaluation time. The adapter receives `ObjectProvider<ObjectMapper>` and falls back to a local mapper.
 - `frontend/src/services/agentRunService.ts` already wraps `listAgentRunEvents(runId, afterSeq)`, and `AgentInspectorPage` loads the event list together with snapshot and cost summary data.
-- `AgentInspectorPage` sorts replayed events by `eventSeq` and dedupes duplicate sequence numbers before rendering.
+- `AgentInspectorPage` sorts replayed events by `eventSeq` and dedupes duplicate sequence numbers before rendering. It must accept both numeric `eventSeq` values and backend JSON string values that parse to safe integers.
+- `frontend/vite.config.ts` and `frontend/vite.config.js` both read `VITE_PROXY_TARGET`, defaulting to `http://localhost:9090`. Current-worktree E2E against a non-default backend port must restart the frontend after setting this variable; checking only `vite.config.ts` is insufficient because Vite may load `vite.config.js`.
 - `useStreamResponse.test.ts` proves reconnect URLs include `resumeRunId` and `lastEventSeq`.
 - `AgentInspectorPage.test.tsx` proves replay ordering and dedupe.
 - `CostQuotaInspectorTab` already renders run cost, quota, resume, and retry controls from message-bound workbench state.
@@ -348,6 +354,8 @@ Implementation constraints:
 - Keep repository auto-configuration conditional on `DataSource` only for the event buffer; do not reintroduce a hard `ObjectMapper` bean condition that can silently fall back to `AgentRunEventBufferPort.noop()`.
 - Persist replay payloads as JSON objects/arrays/values through `ObjectMapper`; do not hand-roll quoted payload strings.
 - Keep frontend tests proving backfill and event-list replay do not duplicate live events and do not overwrite newer live state with older replay/snapshot data.
+- Keep frontend admin replay tests using at least one string `eventSeq` fixture, matching the real backend large-number serialization contract.
+- Keep both tracked Vite config files aligned for dev proxy changes, or retire one of them in a dedicated cleanup slice with build/dev verification.
 - Add backend or controller tests only for gaps not already covered by `SeahorseChatControllerReplayTests`, `SpringSseEventSenderTests`, and the event-buffer contract.
 - Verify cost/quota governance remains display-only in chat workbench, while resume/retry actions continue to call the Agent Run action APIs.
 
@@ -355,6 +363,7 @@ Focused acceptance evidence:
 
 - reconnect with `resumeRunId` and `lastEventSeq` appends only missing stream events to the active message.
 - replay events from `listAgentRunEvents(runId, afterSeq)` render in admin event order without duplicating earlier events.
+- admin replay through the current-worktree frontend dev server renders events even when the backend serializes `eventSeq` as strings.
 - a fresh current-worktree live Agent run writes non-zero rows to `sa_agent_run_event_buffer`, and `/api/agent-runs/{runId}/events?afterSeq=0` returns ordered, parseable events for the same run.
 - a fresh generated image/document artifact is visible to the frontend through live `stream_event`/named `agent.artifact` when the stream remains connected, and is also recoverable through snapshot hydration, admin replay, or `/api/agent-runs/{runId}/artifacts` after reconnect/refresh.
 - sequence ordering is proven for interleaved events: `RUN_STARTED`, externally buffered `AGENT_ARTIFACT`, and the next callback-owned event must appear as ordered, non-duplicated `eventSeq` values in both the replay buffer and the live SSE envelope stream.
@@ -385,6 +394,6 @@ Focused acceptance evidence:
 - [x] Task 10: Skills tab renders
 - [x] Task 11: Event backfill unit/controller coverage works
 - [x] Task 12: Docs updated
-- [ ] Final current-worktree E2E gate: backend and frontend both started from this branch; selected skill; at least one tool call; at least one generated artifact; live SSE includes the generated artifact as `stream_event` and named `agent.artifact` when the stream remains connected; Workbench Tool Calls, Skills, Artifacts, and Cost/Quota render; `sa_agent_run_event_buffer` has rows for the fresh run; `/api/agent-runs/{runId}/events?afterSeq=0` returns ordered/dedupable events; SSE resume or admin replay proves event ordering and dedupe. Historical runs or Docker services built from older commits do not satisfy this gate.
+- [ ] Final current-worktree E2E gate: backend and frontend both started from this branch; selected skill; at least one tool call; at least one generated artifact; live SSE includes the generated artifact as `stream_event` and named `agent.artifact` when the stream remains connected; Workbench Tool Calls, Skills, Artifacts, and Cost/Quota render; `sa_agent_run_event_buffer` has rows for the fresh run; `/api/agent-runs/{runId}/events?afterSeq=0` returns ordered/dedupable events; SSE resume or admin replay proves event ordering and dedupe. Historical runs or Docker services built from older commits do not satisfy this gate. Current partial evidence on 2026-06-09: run `run_322616911360221184` has 536 replay events, one `AGENT_ARTIFACT`, and admin Inspector at `http://127.0.0.1:5174/admin/agent-inspector/run_322616911360221184` renders replayed events after the proxy and `eventSeq` fixes. This proves the replay/Inspector gap, but it does not by itself close the full final gate because Workbench Tool Calls, Skills, Artifacts, Cost/Quota still need fresh UI verification from a current-worktree run.
 
 Update this document only when implementation or tests prove a contract needs to change. Update the main plan in the same reviewed change when scope, acceptance, phase order, or compatibility boundaries change.

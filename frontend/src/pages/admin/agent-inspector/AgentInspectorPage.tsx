@@ -36,14 +36,20 @@ const TABS = [
 
 type InspectorTab = (typeof TABS)[number]["value"];
 
+function normalizeEventSeq(eventSeq: StreamEventEnvelope["eventSeq"]): number | null {
+  const seq = typeof eventSeq === "string" ? Number(eventSeq) : eventSeq;
+  return Number.isSafeInteger(seq) && seq >= 0 ? seq : null;
+}
+
 function normalizeReplayEvents(events: StreamEventEnvelope[]): StreamEventEnvelope[] {
   const bySeq = new Map<number, StreamEventEnvelope>();
   for (const event of events) {
-    if (typeof event.eventSeq !== "number" || !Number.isFinite(event.eventSeq)) {
+    const eventSeq = normalizeEventSeq(event.eventSeq);
+    if (eventSeq == null) {
       continue;
     }
-    if (!bySeq.has(event.eventSeq)) {
-      bySeq.set(event.eventSeq, event);
+    if (!bySeq.has(eventSeq)) {
+      bySeq.set(eventSeq, { ...event, eventSeq });
     }
   }
   return Array.from(bySeq.values()).sort((a, b) => a.eventSeq - b.eventSeq);
