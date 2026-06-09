@@ -55,6 +55,14 @@ describe("AgentInspectorPage", () => {
         runId: "run-1",
         timestamp: "2026-06-08T00:00:02Z",
         typedPayload: { stepId: "step-1" }
+      },
+      {
+        eventId: "evt-invalid",
+        eventSeq: "" as unknown as number,
+        eventType: "agent.step.started",
+        runId: "run-1",
+        timestamp: "2026-06-08T00:00:01Z",
+        typedPayload: { stepId: "step-invalid" }
       }
     ]);
 

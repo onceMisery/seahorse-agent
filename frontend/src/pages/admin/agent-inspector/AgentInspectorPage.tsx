@@ -37,6 +37,9 @@ const TABS = [
 type InspectorTab = (typeof TABS)[number]["value"];
 
 function normalizeEventSeq(eventSeq: StreamEventEnvelope["eventSeq"]): number | null {
+  if (typeof eventSeq === "string" && !/^\d+$/.test(eventSeq)) {
+    return null;
+  }
   const seq = typeof eventSeq === "string" ? Number(eventSeq) : eventSeq;
   return Number.isSafeInteger(seq) && seq >= 0 ? seq : null;
 }
