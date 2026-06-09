@@ -49,7 +49,7 @@ Disposition matrix:
 | Review item | Accuracy against current branch | Current decision |
 | --- | --- | --- |
 | `StreamEventEnvelope.messageId` does not exist | Accurate | Keep live message routing outside the envelope. Other DTOs may still carry optional `messageId`; do not collapse them into the envelope contract. |
-| Backend JSON may return `eventSeq` as a string | Accurate for current Spring serialization | Keep replay/admin normalization for safe decimal strings; the frontend in-memory type can stay numeric only after a dedicated wire-type cleanup. |
+| Backend JSON may return `eventSeq` as a string | Accurate for current Spring serialization | Keep replay/admin normalization for safe decimal strings. A future wire-type cleanup may split the backend DTO type from the normalized frontend in-memory type, but until then string replay fixtures must stay. |
 | Undefined `ExecutionContext` / `SkillSelectionContext` | Accurate for the old document | Fixed by using existing gateway/runtime context owners, not by inventing hidden globals. |
 | Add `ExecutionMetadata` to `ToolPort.invoke(...)` | Plausible alternative, not current architecture | Do not apply as a follow-up to this review. Preserve the stable `ToolPort` contract unless a future reviewed change updates every implementation together. |
 | Artifact publication trigger was unclear | Accurate for the old document, superseded by implementation | `ToolArtifactPublicationPort.publish(request, rawResult)` is the implemented owner. |
