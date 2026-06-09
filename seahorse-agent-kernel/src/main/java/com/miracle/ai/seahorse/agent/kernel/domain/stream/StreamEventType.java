@@ -93,6 +93,11 @@ public enum StreamEventType {
     TOOL_CALL_WAITING_USER("tool_call_waiting_user"),
 
     /**
+     * Tool call finished with a successful or failed observation.
+     */
+    TOOL_CALL_FINISHED("tool_call_finished"),
+
+    /**
      * Source or citation was found.
      */
     SOURCE_FOUND("source_found"),

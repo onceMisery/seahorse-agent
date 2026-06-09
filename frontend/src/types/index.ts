@@ -77,6 +77,7 @@ export const AGENT_STREAM_EVENTS = {
   STEP_FINISHED: "step_finished",
   TOOL_CALL_STARTED: "tool_call_started",
   TOOL_CALL_WAITING_USER: "tool_call_waiting_user",
+  TOOL_CALL_FINISHED: "tool_call_finished",
   SOURCE_FOUND: "source_found",
   ARTIFACT_CREATED: "artifact_created",
   ARTIFACT_START: "artifact_start",

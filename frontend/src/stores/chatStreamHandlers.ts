@@ -59,6 +59,7 @@ export function applyAgentStreamEventToMessage(
       message.approvals = mergeById(message.approvals, normalized.items);
       break;
     case AGENT_STREAM_EVENTS.TOOL_CALL_STARTED:
+    case AGENT_STREAM_EVENTS.TOOL_CALL_FINISHED:
       message.toolCalls = mergeById(message.toolCalls, normalized.items);
       message.timeline = mergeById(message.timeline, toolCallTimeline(normalized.items));
       break;

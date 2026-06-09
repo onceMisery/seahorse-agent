@@ -34,6 +34,7 @@ type AgentEventPayload =
   | { type: typeof AGENT_STREAM_EVENTS.APPROVAL; items: AgentApproval[] }
   | { type: typeof AGENT_STREAM_EVENTS.TOOL_CALL_STARTED; items: AgentToolCallView[] }
   | { type: typeof AGENT_STREAM_EVENTS.TOOL_CALL_WAITING_USER; items: AgentToolCallView[]; approvals: AgentApproval[] }
+  | { type: typeof AGENT_STREAM_EVENTS.TOOL_CALL_FINISHED; items: AgentToolCallView[] }
   | { type: typeof AGENT_STREAM_EVENTS.QUOTA; items: AgentQuota[] }
   | { type: typeof AGENT_STREAM_EVENTS.MEMORY; items: AgentMemory[] };
 
@@ -163,21 +164,24 @@ function normalizeToolWaitingApproval(payload: unknown): AgentApproval[] {
   });
 }
 
-function normalizeToolCalls(payload: unknown, statusFallback: string): AgentToolCallView[] {
+function normalizeToolCalls(payload: unknown, statusFallback: string, includeSummaryAsResult = false): AgentToolCallView[] {
   return payloadItems(payload).flatMap((item, index) => {
     if (!isRecord(item)) return [];
     const id = stringValue(item, ["toolCallId", "toolInvocationId", "id"]) ?? `tool-call-${index}`;
     const toolId = stringValue(item, ["toolId", "toolName", "name"]);
     if (!toolId) return [];
+    const resultSummary =
+      stringValue(item, ["resultSummary", "result", "outputSummary"]) ??
+      (includeSummaryAsResult ? stringValue(item, ["summary"]) : undefined);
     return [{
       id,
       toolId,
-      status: stringValue(item, ["status", "state"]) ?? statusFallback,
+      status: stringValue(item, ["status", "state", "message"]) ?? statusFallback,
       toolInvocationId: stringValue(item, ["toolInvocationId", "invocationId"]),
       approvalId: stringValue(item, ["approvalId"]),
       riskLevel: stringValue(item, ["riskLevel", "risk"]),
       argumentsPreviewJson: jsonStringValue(item, ["argumentsPreviewJson", "argumentsPreview", "arguments"]),
-      resultSummary: stringValue(item, ["resultSummary", "result", "outputSummary"]),
+      resultSummary,
       durationMs: numberValue(item, ["durationMs", "elapsedMs", "latencyMs"]),
       error: stringValue(item, ["error", "errorMessage", "errorCode"]),
       startedAt: stringValue(item, ["startedAt", "timestamp", "time", "createdAt"]),
@@ -396,6 +400,8 @@ export function normalizeAgentStreamEvent(event: string, payload: unknown): Agen
       return { type: AGENT_STREAM_EVENTS.TIMELINE, items: normalizeStepTimeline(payload) };
     case AGENT_STREAM_EVENTS.TOOL_CALL_STARTED:
       return { type: event, items: normalizeToolCalls(payload, "RUNNING") };
+    case AGENT_STREAM_EVENTS.TOOL_CALL_FINISHED:
+      return { type: event, items: normalizeToolCalls(payload, "SUCCEEDED", true) };
     case AGENT_STREAM_EVENTS.RECOVERABLE_ERROR:
       return { type: AGENT_STREAM_EVENTS.TIMELINE, items: normalizeRecoverableError(payload) };
     case AGENT_STREAM_EVENTS.SOURCE:

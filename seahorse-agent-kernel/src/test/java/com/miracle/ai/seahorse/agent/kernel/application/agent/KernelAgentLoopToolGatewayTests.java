@@ -44,6 +44,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamToolCallEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
@@ -526,6 +527,76 @@ class KernelAgentLoopToolGatewayTests {
         assertEquals("memory-forget", approvalEvent.toolId());
         assertTrue(callback.events.stream()
                 .anyMatch(event -> StreamEventType.STEP_FINISHED.value().equals(event.eventName())));
+    }
+
+    @Test
+    void shouldEmitFinishedToolCallEventsWithResultSummaryDuringStreamingExecution() {
+        AgentToolCall toolCall = AgentToolCall.of("call-1", "web_search", Map.of("query", "seahorse ai"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need search", List.of(toolCall)),
+                Turn.finalAnswer("done")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"sources\":[{\"title\":\"Seahorse\"}]}"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("web_search"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-tool-finished")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        StreamToolCallEvent finishedEvent = callback.events.stream()
+                .filter(event -> StreamEventType.TOOL_CALL_FINISHED.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamToolCallEvent.class::isInstance)
+                .map(StreamToolCallEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("call-1", finishedEvent.toolCallId());
+        assertEquals("web_search", finishedEvent.toolId());
+        assertEquals("SUCCEEDED", finishedEvent.message());
+        assertTrue(finishedEvent.summary().contains("Seahorse"), finishedEvent.summary());
+        assertTrue(finishedEvent.finishedAt() != null);
+    }
+
+    @Test
+    void shouldEmitFailedToolCallEventsWithErrorDuringStreamingExecution() {
+        AgentToolCall toolCall = AgentToolCall.of("call-1", "web_search", Map.of("query", "seahorse ai"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need search", List.of(toolCall)),
+                Turn.finalAnswer("done")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.failed("network timeout"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("web_search"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-tool-failed")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        StreamToolCallEvent finishedEvent = callback.events.stream()
+                .filter(event -> StreamEventType.TOOL_CALL_FINISHED.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamToolCallEvent.class::isInstance)
+                .map(StreamToolCallEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("FAILED", finishedEvent.message());
+        assertEquals("network timeout", finishedEvent.errorCode());
+        assertEquals("network timeout", finishedEvent.summary());
     }
 
     @Test

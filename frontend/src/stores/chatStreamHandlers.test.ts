@@ -134,6 +134,65 @@ describe("chatStreamHandlers", () => {
     });
   });
 
+  it("merges finished tool call events with result summary and errors", () => {
+    const message = assistantMessage({ lastEventSeq: 4 });
+
+    applyAgentStreamEventToMessage(
+      message,
+      envelope(5, AGENT_STREAM_EVENTS.TOOL_CALL_STARTED, {
+        toolCallId: "call-1",
+        toolId: "web_search"
+      })
+    );
+    applyAgentStreamEventToMessage(
+      message,
+      envelope(6, AGENT_STREAM_EVENTS.TOOL_CALL_FINISHED, {
+        toolCallId: "call-1",
+        toolId: "web_search",
+        message: "SUCCEEDED",
+        summary: "{\"sources\":[{\"title\":\"Seahorse\"}]}",
+        durationMs: 240
+      })
+    );
+
+    expect(message.toolCalls).toEqual([{
+      id: "call-1",
+      toolId: "web_search",
+      status: "SUCCEEDED",
+      resultSummary: "{\"sources\":[{\"title\":\"Seahorse\"}]}",
+      durationMs: 240
+    }]);
+    expect(message.timeline?.find((item) => item.id === "tool-call-call-1")).toMatchObject({
+      title: "web_search",
+      status: "SUCCEEDED",
+      detail: "{\"sources\":[{\"title\":\"Seahorse\"}]}",
+      durationMs: 240
+    });
+  });
+
+  it("keeps failed tool call errors visible in the workspace", () => {
+    const message = assistantMessage({ lastEventSeq: 4 });
+
+    applyAgentStreamEventToMessage(
+      message,
+      envelope(5, AGENT_STREAM_EVENTS.TOOL_CALL_FINISHED, {
+        toolCallId: "call-1",
+        toolId: "web_search",
+        message: "FAILED",
+        errorCode: "network timeout",
+        summary: "network timeout"
+      })
+    );
+
+    expect(message.toolCalls).toEqual([{
+      id: "call-1",
+      toolId: "web_search",
+      status: "FAILED",
+      resultSummary: "network timeout",
+      error: "network timeout"
+    }]);
+  });
+
   it("ignores stale live events and appends artifact deltas once", () => {
     const message = assistantMessage({
       lastEventSeq: 10,

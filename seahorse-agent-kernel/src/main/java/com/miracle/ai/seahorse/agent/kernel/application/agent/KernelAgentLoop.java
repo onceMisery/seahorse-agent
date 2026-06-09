@@ -105,6 +105,8 @@ public class KernelAgentLoop {
     private static final String MODEL_STEP_TITLE = "Model turn";
     private static final String TOOL_CALL_STARTED_SUMMARY = "Tool call started";
     private static final String TOOL_CALL_APPROVAL_SUMMARY = "Tool call requires approval";
+    private static final String TOOL_CALL_SUCCEEDED_STATUS = "SUCCEEDED";
+    private static final String TOOL_CALL_FAILED_STATUS = "FAILED";
     private static final String TOOL_ARGUMENT_KEYS_FIELD = "argumentKeys";
     private static final String TOOL_ARGUMENT_COUNT_FIELD = "argumentCount";
     private static final String WEB_SEARCH_TOOL_ID = "web_search";
@@ -625,6 +627,7 @@ public class KernelAgentLoop {
                 AgentObservation observation = toObservation(toolCalls.get(i), futures.get(i));
                 observations.add(observation);
                 runStepRecorder.recordToolCall(request.runId(), toolCalls.get(i), observation);
+                emitToolCallFinished(callback, request, toolCalls.get(i), observation);
                 emitToolCallWaitingUser(callback, request, toolCalls.get(i), observation);
             }
             return observations;
@@ -939,6 +942,25 @@ public class KernelAgentLoop {
                 TOOL_CALL_APPROVAL_SUMMARY,
                 argumentsPreview(toolCall),
                 Instant.now()));
+    }
+
+    private void emitToolCallFinished(StreamCallback callback,
+                                      AgentLoopRequest request,
+                                      AgentToolCall toolCall,
+                                      AgentObservation observation) {
+        Instant finishedAt = Instant.now();
+        emitEvent(callback, StreamEventType.TOOL_CALL_FINISHED, new StreamToolCallEvent(
+                request.runId(),
+                toolCall.id(),
+                toolCall.id(),
+                toolCall.id(),
+                toolCall.toolId(),
+                DEFAULT_TOOL_RISK_LEVEL,
+                observationText(observation),
+                null,
+                finishedAt,
+                observation.success() ? null : observation.error(),
+                observation.success() ? TOOL_CALL_SUCCEEDED_STATUS : TOOL_CALL_FAILED_STATUS));
     }
 
     private Map<String, Object> argumentsPreview(AgentToolCall toolCall) {
