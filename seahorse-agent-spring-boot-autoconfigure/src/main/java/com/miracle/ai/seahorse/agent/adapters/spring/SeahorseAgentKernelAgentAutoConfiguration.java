@@ -42,6 +42,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.AgentToolJson
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GenerationToolArtifactPublicationPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
@@ -68,6 +69,8 @@ import com.miracle.ai.seahorse.agent.ports.inbound.memory.MemoryManagementInboun
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OutputRepairModelPort;
@@ -94,6 +97,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort
 import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.source.GitHubRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchPort;
 import org.springframework.beans.factory.ObjectProvider;
@@ -259,6 +263,24 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 toolInvocationUsagePort.getIfAvailable(ToolInvocationUsagePort::empty),
                 ToolPolicyRequest::toolRegistered,
                 toolResourceAccessPort.getIfAvailable(ToolResourceAccessPort::allowAll));
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean({AgentArtifactRepositoryPort.class, ObjectStoragePort.class, AgentRunEventBufferPort.class})
+    @ConditionalOnMissingBean
+    public ToolArtifactPublicationPort seahorseGenerationToolArtifactPublicationPort(
+            AgentArtifactRepositoryPort artifactRepository,
+            ObjectStoragePort objectStorage,
+            AgentRunEventBufferPort eventBuffer,
+            ObjectProvider<ObjectMapper> objectMapper,
+            ObjectProvider<Clock> clockProvider) {
+        return new GenerationToolArtifactPublicationPort(
+                artifactRepository,
+                objectStorage,
+                eventBuffer,
+                objectMapper.getIfAvailable(ObjectMapper::new),
+                clockProvider.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean

@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentAppro
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.LocalAgentAsToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GenerationToolArtifactPublicationPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.web.WebFetchSafetyPolicy;
 import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeature;
@@ -70,6 +71,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionReposit
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunQueueRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentArtifactRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentToolBindingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ApprovalRequestQuery;
@@ -91,6 +94,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUser;
 import com.miracle.ai.seahorse.agent.ports.outbound.auth.CurrentUserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.ToolCallCollector;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.ObjectStoragePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.storage.StoredObject;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebFetchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.web.WebSearchResult;
@@ -100,6 +105,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.io.InputStream;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -381,6 +387,17 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                         assertThat(published.request().runId()).isEqualTo("run-1");
                         assertThat(published.result().content()).isEqualTo("artifact-ready");
                     });
+                });
+    }
+
+    @Test
+    void shouldWireGenerationArtifactPublisherWhenArtifactDependenciesExist() {
+        contextRunner.withUserConfiguration(TestGenerationArtifactPublicationConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(ToolArtifactPublicationPort.class);
+                    assertThat(context.getBean(ToolArtifactPublicationPort.class))
+                            .isInstanceOf(GenerationToolArtifactPublicationPort.class);
                 });
     }
 
@@ -718,6 +735,46 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         @Bean
         RecordingToolArtifactPublicationPort toolArtifactPublicationPort() {
             return new RecordingToolArtifactPublicationPort();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestGenerationArtifactPublicationConfiguration {
+
+        @Bean
+        Clock clock() {
+            return FIXED_CLOCK;
+        }
+
+        @Bean
+        AgentArtifactRepositoryPort agentArtifactRepositoryPort() {
+            return AgentArtifactRepositoryPort.empty();
+        }
+
+        @Bean
+        ObjectStoragePort objectStoragePort() {
+            return new ObjectStoragePort() {
+                @Override
+                public StoredObject upload(String bucketName, InputStream content, long size, String originalFilename,
+                                           String contentType) {
+                    return new StoredObject("memory://" + originalFilename, contentType, size, originalFilename);
+                }
+
+                @Override
+                public InputStream openStream(String url) {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public void deleteByUrl(String url) {
+                    throw new UnsupportedOperationException();
+                }
+            };
+        }
+
+        @Bean
+        AgentRunEventBufferPort agentRunEventBufferPort() {
+            return AgentRunEventBufferPort.noop();
         }
     }
 
