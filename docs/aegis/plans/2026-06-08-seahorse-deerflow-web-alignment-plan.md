@@ -341,7 +341,7 @@ npm run build
 **Impact/Compatibility:** Test/source-scan guard only unless the scan finds real mojibake. No API or state contract changes.
 
 **Repair Track:**
-- Root cause: previous project files have had non-UTF-8 or mojibake text, the currently named chat/workbench files are clean at review time, and the SSE hook still has confirmed mojibake in watchdog comments and timeout copy.
+- Root cause: previous project files have had non-UTF-8 or mojibake text, while the currently named chat/workbench/SSE hook files are clean in the scoped scan. Keep the guard because these files are user-visible and future label or retry-copy edits can regress.
 - Canonical owner: UTF-8 source files.
 - Minimal change: add or keep a guard over touched chat/workbench/SSE hook files; repair only actual hits reported by the guard, and record line numbers in the execution evidence.
 - Compatibility: keep keys, component structure, and behavior unchanged.
