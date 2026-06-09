@@ -147,6 +147,46 @@ class LocalToolGatewayPortAuditTests {
     }
 
     @Test
+    void shouldStoreOnlyPreviewLimitedArgumentMetadataForApprovalRequests() {
+        CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("should-not-run"));
+        RecordingToolApprovalRequestRepositoryPort approvals = new RecordingToolApprovalRequestRepositoryPort();
+        LocalToolGatewayPort gateway = new LocalToolGatewayPort(
+                new SingleToolRegistry(tool),
+                new FixedToolPolicyPort(PolicyDecision.approvalRequired("approval-1",
+                        ToolPolicyReasonCodes.TOOL_APPROVAL_REQUIRED,
+                        "Tool requires approval")),
+                ToolInvocationAuditPort.noop(),
+                approvals,
+                FIXED_CLOCK);
+
+        gateway.invoke(new ToolInvocationRequest(
+                "run-1",
+                "step-1",
+                "call-1",
+                "agent-1",
+                "version-1",
+                "tenant-1",
+                "user-1",
+                "agent-identity-1",
+                "memory-forget",
+                Map.of(
+                        "prompt", "x".repeat(2_000),
+                        "apiKey", "plain-secret"),
+                Map.of("knowledgeBaseId", "kb-1"),
+                "run-1:call-1",
+                List.of("memory-forget")));
+
+        assertEquals(1, approvals.saved.size());
+        String preview = approvals.saved.get(0).argumentsPreviewJson();
+        assertTrue(preview.contains("argumentKeys"));
+        assertTrue(preview.contains("argumentCount"));
+        assertTrue(preview.contains("resourceRefs"));
+        assertFalse(preview.contains("plain-secret"));
+        assertFalse(preview.contains("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"));
+        assertTrue(preview.length() < 500);
+    }
+
+    @Test
     void shouldExecuteToolWhenApprovalWasAlreadyApprovedForRunStep() {
         CountingToolPort tool = new CountingToolPort(ToolInvocationResult.ok("{\"ok\":true}"));
         RecordingToolInvocationAuditPort audit = new RecordingToolInvocationAuditPort();

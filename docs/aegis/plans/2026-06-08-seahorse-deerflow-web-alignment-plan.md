@@ -976,19 +976,19 @@ Mitigation: Task 1 extracts pure handlers into `chatStreamHandlers.ts`; later ta
 
 - [x] Does every stream event used by the workbench have a stable id and merge behavior?
 - [x] Do live event merge and snapshot hydration use the same idempotent helper and preserve newer live data?
-- [ ] Does plain text chat still work with no Agent run and no selected skill?
+- [x] Does plain text chat still work with no Agent run and no selected skill? Evidence: `SeahorseChatControllerTests.shouldPassTaskTemplateIdIntoStreamChatCommand` keeps `quick-answer` on `ChatMode.RAG`; `KernelChatInboundTraceTests` covers the RAG streaming path; `A2ATriggerRejectedInConsumerWebTests` keeps raw `chatMode=agent` and explicit `agentId` blocked in Consumer Web while controlled templates remain server-owned.
 - [x] Does refresh/reconnect recover the same workbench state from snapshot?
 - [x] Are generated image/PPT/chart artifacts persisted and downloadable only when clean?
 - [x] Do generation tools preserve `model="default"` fallback and image `style` contract?
-- [ ] Does Skill policy restrict but never grant tools?
-- [ ] Are new runtime tools registered through `SeahorseAgentKernelAgentAutoConfiguration` and `BuiltInAgentToolRegistrar`, with registrar tests?
-- [ ] Does SSE recovery reuse `resumeRunId`/`lastEventSeq` where possible and preserve `SpringSseEventSender` error/done behavior?
-- [ ] Does deferred `tool_search` hide denied tools?
-- [ ] Are tool arguments redacted and preview-limited?
+- [x] Does Skill policy restrict but never grant tools? Evidence: `KernelAgentLoopToolGatewayTests` covers advisory mode not granting `web_search`, restrictive mode intersecting selected skill tools with Agent allowlists, and empty restrictive skills exposing no Agent business tools.
+- [x] Are new runtime tools registered through `SeahorseAgentKernelAgentAutoConfiguration` and `BuiltInAgentToolRegistrar`, with registrar tests? Evidence: `BuiltInAgentToolRegistrarTests` covers `load_skill_resource` and `tool_search`; `ToolSearchAutoConfigurationTests` covers feature-gated `tool_search` auto-configuration.
+- [x] Does SSE recovery reuse `resumeRunId`/`lastEventSeq` where possible and preserve `SpringSseEventSender` error/done behavior? Evidence: `useStreamResponse.test.ts`, `SeahorseChatControllerReplayTests`, and `SpringSseEventSenderTests.failShouldEmitErrorThenDoneBeforeCompleting`.
+- [x] Does deferred `tool_search` hide denied tools? Evidence: `ToolSearchToolPortAdapterTests.shouldReturnOnlyInjectedAllowedToolMetadata`, missing-snapshot fail-closed coverage, and `KernelAgentLoopToolGatewayTests.shouldInjectEffectiveAllowedToolsIntoToolSearchCalls`.
+- [x] Are tool arguments redacted and preview-limited? Evidence: `AuditRedactionPolicyTests`, `LocalToolGatewayPortAuditTests.shouldStoreOnlyPreviewLimitedArgumentMetadataForApprovalRequests`, backend approval preview metadata, and frontend `chatStreamHandlers.test.ts` rendering only `argumentsPreviewJson`.
 - [x] Are all touched Chinese strings valid UTF-8?
-- [ ] Are already-applied migrations left immutable, with forward migrations used for any seed repair?
-- [ ] Do frontend contract tests include new API calls?
-- [ ] Do docs avoid claiming parity until the acceptance matrix is green?
+- [x] Are already-applied migrations left immutable, with forward migrations used for any seed repair? Evidence: Task 12 seed verification found no forward repair needed; `V20__github_visual_project_intro_agent.sql` and `V21__github_visual_agent_generation_tools.sql` remain baseline migrations and are not edited in the current branch history.
+- [x] Do frontend contract tests include new API calls? Evidence: `frontend/src/services/backendEndpointManifest.ts` includes `/api/agent-runs/{}/events`; `chatStore.test.ts` covers `getAgentRunSnapshot`, `listAgentRunEvents`, and `getAgentRunCostSummary`; `AgentInspectorPage.test.tsx` covers event-list consumption.
+- [x] Do docs avoid claiming parity until the acceptance matrix is green? Evidence: the implementation companion keeps `Final current-worktree E2E gate` unchecked and the plan still frames parity/surpass as the target, not a closed final claim.
 
 ---
 

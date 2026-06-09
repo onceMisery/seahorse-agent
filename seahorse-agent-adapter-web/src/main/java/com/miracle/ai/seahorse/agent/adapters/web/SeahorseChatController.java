@@ -389,6 +389,10 @@ public class SeahorseChatController {
         boolean controlledWebTask = isControlledWebAgentTemplate(taskTemplateId)
                 && !hasText(agentId)
                 && !hasText(versionId);
+        if (advancedFeatureGate.productMode() == ProductMode.CONSUMER_WEB && !controlledWebTask) {
+            throw new SecurityException(
+                    "Consumer web chat only allows controlled Agent task templates without explicit agentId/versionId");
+        }
         if (!controlledWebTask) {
             advancedFeatureGate.requireEnabled(AdvancedFeature.AGENT_RUN_MANAGEMENT);
         }

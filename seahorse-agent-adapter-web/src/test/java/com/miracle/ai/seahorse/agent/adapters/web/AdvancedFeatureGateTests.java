@@ -27,17 +27,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AdvancedFeatureGateTests {
 
     @Test
-    void consumerWebModeShouldDisableNonWebAdvancedFeaturesByDefault() {
+    void consumerWebModeShouldEnableCoreFeaturesByDefault() {
         AdvancedFeatureGate gate = AdvancedFeatureGate.consumerWebDefaults();
 
         assertThat(gate.productMode()).isEqualTo(ProductMode.CONSUMER_WEB);
         for (AdvancedFeature feature : AdvancedFeature.values()) {
-            assertThat(gate.isEnabled(feature)).isFalse();
+            assertThat(gate.isEnabled(feature)).as(feature.name())
+                    .isEqualTo(isConsumerWebCoreFeature(feature));
         }
     }
 
     @Test
-    void consumerWebModeShouldForceDisableAdvancedFeaturesEvenWhenFlagsAreTrue() {
+    void consumerWebModeShouldAllowExplicitFeatureFlags() {
         EnumMap<AdvancedFeature, Boolean> enabledFeatures = new EnumMap<>(AdvancedFeature.class);
         for (AdvancedFeature feature : AdvancedFeature.values()) {
             enabledFeatures.put(feature, true);
@@ -45,7 +46,7 @@ class AdvancedFeatureGateTests {
         AdvancedFeatureGate gate = AdvancedFeatureGate.configured(ProductMode.CONSUMER_WEB, enabledFeatures);
 
         for (AdvancedFeature feature : AdvancedFeature.values()) {
-            assertThat(gate.isEnabled(feature)).isFalse();
+            assertThat(gate.isEnabled(feature)).as(feature.name()).isTrue();
         }
     }
 
@@ -143,5 +144,17 @@ class AdvancedFeatureGateTests {
         for (AdvancedFeature feature : AdvancedFeature.values()) {
             assertThat(gate.isEnabled(feature)).as(feature.name()).isTrue();
         }
+    }
+
+    private static boolean isConsumerWebCoreFeature(AdvancedFeature feature) {
+        return switch (feature) {
+            case SKILL_MANAGEMENT,
+                    AGENT_RUN_MANAGEMENT,
+                    AGENT_DEFINITION_MANAGEMENT,
+                    TOOL_CATALOG_MANAGEMENT,
+                    INGESTION_PIPELINE_MANAGEMENT,
+                    INGESTION_TASK_MANAGEMENT -> true;
+            default -> false;
+        };
     }
 }

@@ -47,8 +47,9 @@ class A2ATriggerRejectedInConsumerWebTests {
                         .param("userId", "user-1")
                         .param("chatMode", "agent"))
                 .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                        .value("Consumer web chat only allows controlled Agent task templates without explicit agentId/versionId"));
 
         verifyNoInteractions(chatPort, streamTaskPort);
     }
@@ -66,8 +67,9 @@ class A2ATriggerRejectedInConsumerWebTests {
                         .param("taskTemplateId", "deep-research")
                         .param("agentId", "remote-agent-1"))
                 .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.message")
-                        .value("Advanced feature AGENT_RUN_MANAGEMENT is disabled in CONSUMER_WEB mode"));
+                        .value("Consumer web chat only allows controlled Agent task templates without explicit agentId/versionId"));
 
         verifyNoInteractions(chatPort, streamTaskPort);
     }
