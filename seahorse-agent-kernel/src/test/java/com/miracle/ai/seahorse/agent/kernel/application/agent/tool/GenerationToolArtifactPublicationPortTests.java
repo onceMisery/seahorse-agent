@@ -133,6 +133,60 @@ class GenerationToolArtifactPublicationPortTests {
     }
 
     @Test
+    void publishesPresentationObservationAsMarkdownArtifact() {
+        MemoryArtifactRepository artifacts = new MemoryArtifactRepository();
+        MemoryObjectStorage storage = new MemoryObjectStorage();
+        GenerationToolArtifactPublicationPort publisher = new GenerationToolArtifactPublicationPort(
+                artifacts,
+                storage,
+                new MemoryEventBuffer(),
+                new ObjectMapper(),
+                CLOCK);
+
+        publisher.publish(request(PptGenerationToolPortAdapter.TOOL_ID), ToolInvocationResult.ok("""
+                {"artifactType":"presentation","format":"markdown","content":"# Slide 1"}
+                """));
+
+        assertEquals(1, storage.uploads.size());
+        MemoryObjectStorage.Upload upload = storage.uploads.get(0);
+        assertTrue(upload.originalFilename().endsWith(".md"));
+        assertEquals("text/markdown", upload.contentType());
+
+        assertEquals(1, artifacts.saved.size());
+        AgentArtifact artifact = artifacts.saved.get(0);
+        assertEquals(AgentArtifactType.MARKDOWN, artifact.artifactType());
+        assertEquals("Generated presentation", artifact.title());
+        assertEquals("# Slide 1", artifact.previewText());
+    }
+
+    @Test
+    void publishesFrontendDesignObservationAsHtmlArtifact() {
+        MemoryArtifactRepository artifacts = new MemoryArtifactRepository();
+        MemoryObjectStorage storage = new MemoryObjectStorage();
+        GenerationToolArtifactPublicationPort publisher = new GenerationToolArtifactPublicationPort(
+                artifacts,
+                storage,
+                new MemoryEventBuffer(),
+                new ObjectMapper(),
+                CLOCK);
+
+        publisher.publish(request(FrontendDesignToolPortAdapter.TOOL_ID), ToolInvocationResult.ok("""
+                {"artifactType":"frontend_design","format":"html","content":"<main>Preview</main>"}
+                """));
+
+        assertEquals(1, storage.uploads.size());
+        MemoryObjectStorage.Upload upload = storage.uploads.get(0);
+        assertTrue(upload.originalFilename().endsWith(".html"));
+        assertEquals("text/html", upload.contentType());
+
+        assertEquals(1, artifacts.saved.size());
+        AgentArtifact artifact = artifacts.saved.get(0);
+        assertEquals(AgentArtifactType.HTML, artifact.artifactType());
+        assertEquals("Generated frontend design", artifact.title());
+        assertEquals("<main>Preview</main>", artifact.previewText());
+    }
+
+    @Test
     void publishesBase64ImageGenerationObservationAsImageArtifact() {
         MemoryArtifactRepository artifacts = new MemoryArtifactRepository();
         MemoryObjectStorage storage = new MemoryObjectStorage();

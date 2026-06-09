@@ -164,6 +164,7 @@ Current baseline:
 - `ImageGenerationToolPortAdapter` currently drops the `style` argument despite advertising it in the schema.
 - `ToolArtifactPublicationPort` exists in the kernel outbound ports. `LocalToolGatewayPort` calls it after successful tool execution and output redaction, passes the full `ToolInvocationRequest`, and swallows publication exceptions so the tool observation remains authoritative.
 - `SeahorseAgentKernelAgentAutoConfiguration` wires an optional `ToolArtifactPublicationPort` into `LocalToolGatewayPort`; when absent, the gateway uses `ToolArtifactPublicationPort.noop()`.
+- Implemented status: newsletter, PPT, chart, frontend-design, and image-generation outputs now have direct publisher tests proving persisted `AgentArtifact` rows and `agent.artifact` event payloads. `image_generation` defaults to `b64_json` so generated images can be stored internally; returned and audited observations redact `b64Json`.
 
 Implementation constraints:
 
@@ -278,7 +279,7 @@ Implementation constraints:
 - [ ] Task 2: Encoding guard runs clean
 - [ ] Task 3: Snapshot hydration + tests pass
 - [ ] Task 4: Artifact lifecycle + unsafe download blocked
-- [ ] Task 5: All 5 generation tools persist artifacts
+- [x] Task 5: All 5 generation tools persist artifacts
 - [ ] Task 6: `load_skill_resource` registered and tested
 - [ ] Task 7: Tool gateway policy tests pass
 - [ ] Task 8: `tool_search` registered and tested
