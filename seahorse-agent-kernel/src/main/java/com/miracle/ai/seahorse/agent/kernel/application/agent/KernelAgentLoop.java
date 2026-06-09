@@ -627,7 +627,9 @@ public class KernelAgentLoop {
                 AgentObservation observation = toObservation(toolCalls.get(i), futures.get(i));
                 observations.add(observation);
                 runStepRecorder.recordToolCall(request.runId(), toolCalls.get(i), observation);
-                emitToolCallFinished(callback, request, toolCalls.get(i), observation);
+                if (!isApprovalRequired(observation)) {
+                    emitToolCallFinished(callback, request, toolCalls.get(i), observation);
+                }
                 emitToolCallWaitingUser(callback, request, toolCalls.get(i), observation);
             }
             return observations;

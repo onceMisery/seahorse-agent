@@ -525,6 +525,8 @@ class KernelAgentLoopToolGatewayTests {
                 .orElseThrow();
         assertEquals("approval-1", approvalEvent.approvalId());
         assertEquals("memory-forget", approvalEvent.toolId());
+        assertFalse(callback.events.stream()
+                .anyMatch(event -> StreamEventType.TOOL_CALL_FINISHED.value().equals(event.eventName())));
         assertTrue(callback.events.stream()
                 .anyMatch(event -> StreamEventType.STEP_FINISHED.value().equals(event.eventName())));
     }
