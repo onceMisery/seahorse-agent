@@ -309,8 +309,8 @@ Adopt the Seahorse-native Agent Workspace Runtime approach. Escalate to ADR only
 
 **Retirement Track:**
 - Old owner/fallback: approval-only staging in `chatStore.ts`.
-- Active status: keep until approval merge is included in the shared helper.
-- Deletion trigger: after approval events are rendered in `message.approvals`, remove `stagedApprovals` if it has no remaining consumer.
+- Active status: retired. Approval events now merge into `message.approvals` through the shared handler, and `rg stagedApprovals frontend/src` has no hits.
+- Deletion trigger: satisfied; no separate approval-only staging owner remains.
 - Artifact-store status: `applyAgentStreamEventToMessage` owns artifact merge; `ArtifactInspectorTab`/`WorkspaceInspector`, `chatStore`, and `chatStreamHandlers` tests pass; `npm run build` passes; `artifactStore.ts` has no production consumers and is deleted in the current cleanup slice.
 
 **Verification:**
@@ -320,14 +320,14 @@ npm test -- chatStreamUtils chatStreamHandlers chatStore
 npm run build
 ```
 
-- [ ] Write RED tests for applying `agent.step.started`, `agent.source.found`, `agent.artifact.content`, `agent.tool.waiting_user`, `agent.quota`, and `agent.memory` to the current assistant message.
-- [ ] Write RED tests proving duplicate events are idempotent and `live event arrived during snapshot fetch should not be lost`.
-- [ ] Verify RED by running `npm test -- chatStreamUtils chatStreamHandlers chatStore`.
-- [ ] Implement `chatStreamHandlers.ts` with id-based merge, artifact append semantics, and sequence-aware monotonic updates.
-- [ ] Wire `onStreamEvent` to the helper and preserve current approval behavior.
+- [x] Current evidence covers applying live `agent.*` events to the current assistant message through `chatStreamHandlers.ts`, including timeline, sources, artifacts, approvals/tool-waiting, quota, memory, tool calls, and skills.
+- [x] Current evidence covers duplicate/stale event idempotency and newer-live-data preservation during later snapshot hydration.
+- [x] Historical RED phase is not re-created; current GREEN evidence is the focused frontend handler/store suite listed below.
+- [x] Implemented `chatStreamHandlers.ts` with id-based merge, artifact append semantics, and sequence-aware monotonic updates.
+- [x] Wired `onStreamEvent` to the helper and preserved approval behavior through `message.approvals`.
 - [x] Delete `artifactStore.ts` after confirming it has no production consumer and message-state artifact merge is complete.
-- [ ] Verify GREEN with the focused frontend commands.
-- [ ] Commit: `feat: bind agent stream events to chat messages`
+- [x] Verify GREEN with focused frontend commands. Latest evidence on 2026-06-09: `npm test -- chatStreamHandlers.test.ts chatStore.test.ts chatWorkspaceEncoding.test.ts ArtifactInspectorTab.test.tsx WorkspaceInspector.test.tsx UIInspectorTab.test.tsx` -> 6 files / 25 tests passed.
+- [x] Commit evidence: `feat: bind agent stream events to chat messages`, plus follow-up cleanup commits `docs: retire duplicate artifact store` and `docs: align artifact store retirement status`.
 
 ### Task 2: P0 Add Chat and Workbench Encoding Guard
 
@@ -366,11 +366,11 @@ $paths = @("src/hooks/useStreamResponse.ts","src/stores/chatStore.ts","src/compo
 Get-ChildItem $paths -Recurse -File | Select-String -Pattern (($badCodePoints | ForEach-Object { [char]$_ }) -join "|")
 ```
 
-- [ ] Write or update tests that assert visible labels and messages such as "运行详情", "关闭检查器", "复制内容", "下载", "文件未通过安全扫描", and the stream timeout message.
-- [ ] Run the code-point scan and record whether there are real hits. If there are no hits, do not manufacture a RED test.
-- [ ] Repair user-visible text and comments only for actual hit lines.
-- [ ] Verify focused tests, build, and mojibake scan pass.
-- [ ] Commit: `test: guard chat workspace encoding`
+- [x] Wrote/updated `chatWorkspaceEncoding.test.ts` assertions for visible labels and messages such as "运行详情", "关闭检查器", "复制内容", "下载", "文件未通过安全扫描", and the stream timeout message.
+- [x] Ran the code-point scan and recorded no real hits in the scoped chat/workbench/SSE files.
+- [x] Repaired only actual user-visible text regressions found during the current branch work; no broad unrelated Chinese rewrite was performed.
+- [x] Verified focused tests, build, and mojibake scan pass. Latest focused evidence on 2026-06-09: the chat/workbench frontend suite above passed and the scoped code-point scan returned no hits.
+- [x] Commit evidence: `test: guard chat workspace encoding`, plus follow-up encoding/status documentation commits.
 
 ### Task 3: P0 Hydrate Interrupted or Historical Runs from Snapshot
 
@@ -406,13 +406,13 @@ cd ..
 .\mvnw.cmd -pl seahorse-agent-kernel -am test -Dtest=KernelAgentRunSnapshotServiceTests
 ```
 
-- [ ] Write RED frontend test for `refreshRunSnapshot` hydrating status, timeline, sources, artifacts, approvals, and cost summary.
-- [ ] Write RED frontend test for `live event arrived during snapshot fetch should not be lost`.
-- [ ] Write RED backend test if snapshot omits any needed artifact or event field.
-- [ ] Implement frontend snapshot mapping through a typed helper.
-- [ ] Implement backend snapshot field additions only where tests prove missing data.
-- [ ] Verify focused frontend and backend tests pass.
-- [ ] Commit: `feat: hydrate chat workspace from run snapshots`
+- [x] Current frontend tests cover `refreshRunSnapshot` hydrating status, timeline, sources, artifacts, approvals, cost summary, and resume/retry flags.
+- [x] Current frontend tests cover newer live workspace data surviving an older snapshot that resolves later.
+- [x] Backend snapshot coverage exists in `KernelAgentRunSnapshotServiceTests`; no additional backend field gap is currently proven.
+- [x] Implemented frontend snapshot mapping through the typed `applyAgentRunSnapshotToMessage` helper.
+- [x] Backend snapshot fields required for the current workbench are present; no forward migration or backend DTO expansion was required for this slice.
+- [x] Verified focused frontend and backend tests pass. Latest evidence on 2026-06-09: frontend focused suite 6 files / 25 tests passed; `.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=KernelAgentRunSnapshotServiceTests,KernelAgentArtifactQueryServiceTests,KernelAgentArtifactUpdateServiceTests,AgentArtifactTests" "-Dsurefire.failIfNoSpecifiedTests=false" test` -> 12 tests passed.
+- [x] Commit evidence: `feat: hydrate chat workspace from run snapshots`, plus follow-up `fix: hydrate historical chat workbench runs` and `fix: guard stale chat session load failures`.
 
 ### Task 4: P1 Complete Artifact Workspace and present-files Equivalent
 
@@ -453,12 +453,12 @@ cd ..
 .\mvnw.cmd -pl seahorse-agent-adapter-repository-jdbc -am test -Dtest=JdbcAgentArtifactRepositoryAdapterTests
 ```
 
-- [ ] Write RED tests for live artifact append, server artifact merge, blocked unsafe download, preview rendering, and saved edit.
-- [ ] Verify RED against the current implementation.
-- [ ] Normalize artifact lifecycle payloads in `chatStreamUtils.ts` and backend event DTOs if needed.
-- [ ] Ensure controller returns `previewText`, `mimeType`, `scanStatus`, `canPreview`, `disposition`, and download metadata consistently.
-- [ ] Verify all artifact tests and frontend build pass.
-- [ ] Commit: `feat: complete artifact workspace lifecycle`
+- [x] Current tests cover live artifact append, server artifact merge, blocked unsafe download, preview/disposition behavior, and saved edit scan-status updates.
+- [x] Historical RED phase is not re-created; current GREEN evidence covers the acceptance behavior.
+- [x] Artifact lifecycle payload normalization exists in `chatStreamUtils.ts`, including server artifact metadata for `previewText`, `mimeType`, `scanStatus`, `canPreview`, and `disposition`.
+- [x] Controller/domain/repository tests cover artifact response/download/update metadata consistency.
+- [x] Verified artifact tests and frontend build pass. Latest evidence on 2026-06-09: frontend focused suite 6 files / 25 tests passed; kernel artifact/snapshot suite 12 tests passed; `SeahorseAgentArtifactControllerTests` 2 tests passed; `JdbcAgentArtifactRepositoryAdapterTests` 1 test passed.
+- [x] Commit evidence: `feat: complete artifact workspace lifecycle` and subsequent artifact publication/fallback commits.
 
 ### Task 5: P1 Close Image, PPT, Chart, and Visual Generation Output Loops
 
@@ -974,18 +974,18 @@ Mitigation: Task 1 extracts pure handlers into `chatStreamHandlers.ts`; later ta
 
 ## Review Checklist
 
-- [ ] Does every stream event used by the workbench have a stable id and merge behavior?
-- [ ] Do live event merge and snapshot hydration use the same idempotent helper and preserve newer live data?
+- [x] Does every stream event used by the workbench have a stable id and merge behavior?
+- [x] Do live event merge and snapshot hydration use the same idempotent helper and preserve newer live data?
 - [ ] Does plain text chat still work with no Agent run and no selected skill?
-- [ ] Does refresh/reconnect recover the same workbench state from snapshot?
-- [ ] Are generated image/PPT/chart artifacts persisted and downloadable only when clean?
-- [ ] Do generation tools preserve `model="default"` fallback and image `style` contract?
+- [x] Does refresh/reconnect recover the same workbench state from snapshot?
+- [x] Are generated image/PPT/chart artifacts persisted and downloadable only when clean?
+- [x] Do generation tools preserve `model="default"` fallback and image `style` contract?
 - [ ] Does Skill policy restrict but never grant tools?
 - [ ] Are new runtime tools registered through `SeahorseAgentKernelAgentAutoConfiguration` and `BuiltInAgentToolRegistrar`, with registrar tests?
 - [ ] Does SSE recovery reuse `resumeRunId`/`lastEventSeq` where possible and preserve `SpringSseEventSender` error/done behavior?
 - [ ] Does deferred `tool_search` hide denied tools?
 - [ ] Are tool arguments redacted and preview-limited?
-- [ ] Are all touched Chinese strings valid UTF-8?
+- [x] Are all touched Chinese strings valid UTF-8?
 - [ ] Are already-applied migrations left immutable, with forward migrations used for any seed repair?
 - [ ] Do frontend contract tests include new API calls?
 - [ ] Do docs avoid claiming parity until the acceptance matrix is green?
