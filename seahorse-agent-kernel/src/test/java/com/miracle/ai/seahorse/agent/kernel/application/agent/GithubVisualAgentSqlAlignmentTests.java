@@ -32,17 +32,22 @@ class GithubVisualAgentSqlAlignmentTests {
             DATABASE_DIR.resolve("migrations").resolve("V23__github_visual_agent_execution_plan.sql");
     private static final Path FINAL_OUTLINE_MIGRATION =
             DATABASE_DIR.resolve("migrations").resolve("V24__github_visual_agent_final_outline.sql");
+    private static final Path WHOLE_DOCUMENT_HTML_MIGRATION =
+            DATABASE_DIR.resolve("migrations").resolve("V25__github_visual_agent_whole_document_html_preview.sql");
 
     @Test
     void githubVisualAgentShouldHaveExecutionPlanContractInInitSqlAndLatestMigration() throws Exception {
         String initSql = Files.readString(INIT_SQL);
         String migrationSql = Files.readString(EXECUTION_PLAN_MIGRATION);
         String finalOutlineSql = Files.readString(FINAL_OUTLINE_MIGRATION);
+        String wholeDocumentHtmlSql = Files.readString(WHOLE_DOCUMENT_HTML_MIGRATION);
 
         assertGithubVisualExecutionPlan(initSql);
         assertGithubVisualExecutionPlan(migrationSql);
         assertGithubVisualFinalOutline(initSql);
         assertGithubVisualFinalOutline(finalOutlineSql);
+        assertGithubVisualWholeDocumentHtmlPreview(initSql);
+        assertGithubVisualWholeDocumentHtmlPreview(wholeDocumentHtmlSql);
     }
 
     private static void assertGithubVisualExecutionPlan(String sql) {
@@ -69,6 +74,12 @@ class GithubVisualAgentSqlAlignmentTests {
         assertContains(sql, "Web 版式预览摘要");
         assertContains(sql, "<artifact language=\"html\" title=\"项目介绍 Web 预览.html\">");
         assertContains(sql, "完整 Markdown 文档会由系统以 Markdown artifact 形式提供复制和下载");
+    }
+
+    private static void assertGithubVisualWholeDocumentHtmlPreview(String sql) {
+        assertContains(sql, "HTML 预览 artifact 必须覆盖整篇项目介绍文档");
+        assertContains(sql, "用于 Web 端完整阅读预览");
+        assertContains(sql, "所有章节、图片引用、Mermaid 图说明、关键文件证据和第九章产物摘要");
     }
 
     private static void assertContains(String sql, String expected) {

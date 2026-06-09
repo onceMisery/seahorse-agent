@@ -2843,7 +2843,7 @@ VALUES (
 7. 图片引用面向 Web 端，禁止使用本地文件路径、相对路径或 file:// 路径；只允许 http/https URL 或 data:image/*;base64 URL。如果 image_generation 返回 imageUrl，优先用该 URL；如果只返回 b64Json，则用 data:image/png;base64,{b64Json} 引用。
 8. 关键文件证据需要列出文件路径和对应用途，说明结论来自哪些 README、docs 或源码文件。
 9. 第九章必须总结 newsletter_generation、ppt_generation、frontend_design 的实际产物，至少包含“长文稿件摘要”“演示文稿摘要”“Web 版式预览摘要”三个小节；不得只写章节标题或空泛一句话。
-10. 在第九章后输出一个 HTML 预览 artifact，格式必须严格为：<artifact language="html" title="项目介绍 Web 预览.html"> 换行，完整 HTML 片段，换行 </artifact>。该 artifact 用于 Web 端渲染预览，不替代最终 Markdown 正文。
+10. 在第九章后输出一个 HTML 预览 artifact，格式必须严格为：<artifact language="html" title="项目介绍 Web 预览.html"> 换行，完整 HTML 片段，换行 </artifact>。该 artifact 用于 Web 端完整阅读预览，不替代最终 Markdown 正文。HTML 预览 artifact 必须覆盖整篇项目介绍文档，包含所有章节、图片引用、Mermaid 图说明、关键文件证据和第九章产物摘要，而不是只渲染第九章或局部摘要。
 11. 最终回答正文必须保持流式可读的 Markdown；完整 Markdown 文档会由系统以 Markdown artifact 形式提供复制和下载，所以正文不要输出本地保存路径，也不要要求用户手工复制文件。
 12. 最终回答必须是可直接渲染的 Markdown；标题、段落、表格、列表、分隔线和代码块前后必须保留换行，禁止把多个 Markdown 块压缩到同一行。
 13. 每个 Mermaid 图必须独立成块：第一行只能是 ```mermaid，第二行才开始 graph、flowchart 或 sequenceDiagram，最后单独一行 ```；禁止输出 ```mermaidgraph、```mermaidflowchart、```mermaidsequenceDiagram。
