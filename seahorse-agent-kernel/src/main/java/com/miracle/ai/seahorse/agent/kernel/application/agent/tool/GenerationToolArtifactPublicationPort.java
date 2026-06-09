@@ -205,12 +205,7 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
             String artifactType = normalize(observation.artifactType());
             String format = normalize(observation.format());
             return switch (artifactType) {
-                case "chart" -> new ArtifactMapping(
-                        AgentArtifactType.CHART,
-                        "Generated chart",
-                        "application/json".equals(format) ? "application/json" : "text/markdown",
-                        ".md",
-                        "generated-chart");
+                case "chart" -> chart(format);
                 case "frontend_design" -> new ArtifactMapping(
                         AgentArtifactType.HTML,
                         "Generated frontend design",
@@ -226,6 +221,23 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
                         ".txt",
                         "generated-artifact");
             };
+        }
+
+        private static ArtifactMapping chart(String format) {
+            if ("application/json".equals(format)) {
+                return new ArtifactMapping(
+                        AgentArtifactType.CHART,
+                        "Generated chart",
+                        "application/json",
+                        ".json",
+                        "generated-chart");
+            }
+            return new ArtifactMapping(
+                    AgentArtifactType.CHART,
+                    "Generated chart",
+                    "text/markdown",
+                    ".md",
+                    "generated-chart");
         }
 
         private static ArtifactMapping markdown(String title, String filenamePrefix) {

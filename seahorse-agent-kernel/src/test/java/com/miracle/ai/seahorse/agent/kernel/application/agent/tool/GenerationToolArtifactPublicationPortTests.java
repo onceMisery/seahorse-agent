@@ -105,6 +105,33 @@ class GenerationToolArtifactPublicationPortTests {
     }
 
     @Test
+    void usesJsonFilenameForJsonChartArtifacts() {
+        MemoryArtifactRepository artifacts = new MemoryArtifactRepository();
+        MemoryObjectStorage storage = new MemoryObjectStorage();
+        GenerationToolArtifactPublicationPort publisher = new GenerationToolArtifactPublicationPort(
+                artifacts,
+                storage,
+                new MemoryEventBuffer(),
+                new ObjectMapper(),
+                CLOCK);
+
+        publisher.publish(request(ChartVisualizationToolPortAdapter.TOOL_ID), ToolInvocationResult.ok("""
+                {"artifactType":"chart","format":"application/json","content":"{\\"type\\":\\"bar\\"}"}
+                """));
+
+        assertEquals(1, storage.uploads.size());
+        MemoryObjectStorage.Upload upload = storage.uploads.get(0);
+        assertTrue(upload.originalFilename().endsWith(".json"));
+        assertEquals("application/json", upload.contentType());
+        assertEquals("{\"type\":\"bar\"}", upload.content());
+
+        assertEquals(1, artifacts.saved.size());
+        AgentArtifact artifact = artifacts.saved.get(0);
+        assertEquals(AgentArtifactType.CHART, artifact.artifactType());
+        assertEquals("application/json", artifact.mimeType());
+    }
+
+    @Test
     void ignoresNonGenerationToolsEvenWhenResultLooksLikeArtifactObservation() {
         MemoryArtifactRepository artifacts = new MemoryArtifactRepository();
         MemoryObjectStorage storage = new MemoryObjectStorage();
