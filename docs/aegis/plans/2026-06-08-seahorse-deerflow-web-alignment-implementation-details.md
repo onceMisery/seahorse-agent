@@ -23,27 +23,27 @@ Snippets in this document are examples. Verify them against current repository t
 
 ## Review Accuracy Notes
 
-`2026-06-08-implementation-details-review.md` is technically useful, but it should be treated as a point-in-time review, not as the current implementation contract. The file itself is UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. If display output looks corrupted, verify with a UTF-8-aware editor or `rg` before copying any text into fixtures. The following points were rechecked against the current worktree on 2026-06-09 before changing this companion document. Items marked as current worktree fixes must still be backed by a code commit and the final E2E gate before the overall plan is considered complete:
+`2026-06-08-implementation-details-review.md` is technically useful, but it should be treated as a point-in-time review, not as the current implementation contract. The file itself is UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. If display output looks corrupted, verify with a UTF-8-aware editor or `rg` before copying any text into fixtures. The following points were rechecked against the current branch on 2026-06-09 before changing this companion document. Items marked as current branch implementation still need the final real backend and frontend E2E gate before the overall plan is considered complete:
 
-- Accepted: `StreamEventEnvelope` has `eventId`, `eventSeq`, `eventType`, `runId`, optional `stepId`, `timestamp`, and `typedPayload`; it does not carry `messageId`. Test fixtures and merge helpers must route live events through the active streaming assistant message, not through an envelope `messageId`.
+- Accepted: backend and frontend `StreamEventEnvelope` has `eventId`, `eventSeq`, `eventType`, `runId`, optional `stepId`, `timestamp`, and `typedPayload`; it does not carry `messageId`. The repository has other DTOs with optional `messageId` fields, including completion, attachment, artifact, memory, and snapshot payloads. Do not infer an envelope field from those DTOs. Test fixtures and merge helpers must route live stream envelopes through the active streaming assistant message, while snapshot or artifact hydration can carry `messageId` separately when the source contract actually provides it.
 - Accepted with current implementation detail: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context. `LocalToolGatewayPort` still calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read request context directly unless the runtime deliberately passes a safe, server-owned snapshot in arguments.
 - Superseded: the review suggested adding an `ExecutionMetadata` argument to `ToolPort.invoke(...)` for Task 5/6. The current code instead preserves the existing `ToolPort` contract and uses gateway-level context owners: `ToolArtifactPublicationPort.publish(request, rawResult)` for artifact publication, plus server-injected hidden arguments for runtime-only tool context.
 - Accepted: there is no existing `SkillSelectionContext`; current selected-skill validation lives in `ChatSelectedSkillResolver` and produces `SkillRuntimeBlock` values.
 - Accurate with a narrower scope: `useStreamResponse.ts`, `SeahorseChatController`, and `ResearchSseBridge` already support `resumeRunId` and `lastEventSeq`; reuse that path before adding any separate event-list endpoint.
 - Superseded by current code: the named chat/workbench files and `frontend/src/hooks/useStreamResponse.ts` are clean for the known mojibake code points in the scoped scan. Keep the guard, but do not claim a current `useStreamResponse.ts` mojibake defect unless a fresh scan finds one.
 - Superseded by current code: the review's "artifact persistence trigger point" concern is resolved by the gateway-level outbound hook `ToolArtifactPublicationPort`, and Task 5 has added the concrete `GenerationToolArtifactPublicationPort` publisher for newsletter, PPT, chart, frontend-design, and image-generation outputs.
-- Superseded by current worktree fix: the review predates the remote-image artifact fallback. `GenerationToolArtifactPublicationPort` persists image artifacts when the observation has either `b64Json` or `imageUrl`; `b64Json` is uploaded to object storage, while remote `imageUrl` is stored as the artifact reference.
+- Superseded by current branch implementation: the review predates the remote-image artifact fallback. `GenerationToolArtifactPublicationPort` persists image artifacts when the observation has either `b64Json` or `imageUrl`; `b64Json` is uploaded to object storage, while remote `imageUrl` is stored as the artifact reference.
 - Superseded by current code: the review did not account for the Task 8 slice. Current implementation adds `tool_search` as a `DescribedToolPort`, registers it through Spring auto-configuration, injects `_seahorseAllowedToolIds` from `KernelAgentLoop`, returns metadata only, and labels `tool_search` as `延迟发现` in the admin tool catalog. Further Task 8 changes should be driven by new acceptance gaps, not by the original review's missing context.
 - Superseded by current code: the review's Task 9-11 "only summary-level" concern no longer applies. Tool-call and skill workbench rendering now have concrete backend stream events, message-scoped frontend state, tabs, and tests. Task 11 now has focused acceptance coverage for SSE resume URLs, admin replay ordering/dedupe, and cost/quota resume/retry rendering. Keep real E2E as the final goal gate, but do not reopen Task 11 from this review alone.
 - Accepted with updated baseline: a dedicated event-list endpoint now exists at `/api/agent-runs/{runId}/events?afterSeq=...` through `AgentRunEventBufferPort`. Admin replay should continue using it, while chat reconnect should still prefer the existing `resumeRunId` + `lastEventSeq` SSE path before adding another recovery owner.
-- Superseded by current implementation slices: SSE replay buffering now depends on `LocalChatStreamCallbackFactory` resolving `AgentRunEventBufferPort` lazily per callback, and JDBC replay payloads are serialized through `ObjectMapper.writeValueAsString(...)` with a narrow read-side compatibility path for string-literal payloads. Do not evaluate Task 11 only from live SSE delivery; admin replay and database buffer rows are part of the current acceptance boundary.
-- Accepted with current worktree fix: the JDBC replay buffer bean must be registered whenever a `DataSource` is available. It must not require an eager `ObjectMapper` bean in `@ConditionalOnBean`; the adapter can receive an `ObjectProvider<ObjectMapper>` and fall back to `new ObjectMapper()` if necessary.
+- Superseded by current implementation slices, with one live-delivery caveat: normal callback events are sent live as `stream_event` and buffered by `LocalChatStreamCallbackFactory`, while generation artifact publication currently appends `AGENT_ARTIFACT` directly to `AgentRunEventBufferPort` after the tool gateway succeeds. Fresh replay evidence already showed the artifact event in `/api/agent-runs/{runId}/events?afterSeq=0`; a separate realtime SSE capture did not show `AGENT_ARTIFACT`. Do not evaluate Task 11 only from live SSE delivery, but keep the final E2E gate explicit: frontend must either receive the generated artifact live or recover it through the snapshot/replay/artifact API path without duplicate or stale rendering.
+- Accepted with current branch implementation: the JDBC replay buffer bean must be registered whenever a `DataSource` is available. It must not require an eager `ObjectMapper` bean in `@ConditionalOnBean`; the adapter can receive an `ObjectProvider<ObjectMapper>` and fall back to `new ObjectMapper()` if necessary.
 
 Disposition matrix:
 
 | Review item | Current decision |
 | --- | --- |
-| `StreamEventEnvelope.messageId` does not exist | Accepted; keep message routing outside the envelope. |
+| `StreamEventEnvelope.messageId` does not exist | Accepted; keep live message routing outside the envelope. Other DTOs may still carry optional `messageId`; do not collapse them into the envelope contract. |
 | Undefined `ExecutionContext` / `SkillSelectionContext` | Accepted as a documentation defect; fixed by using existing gateway/runtime context owners, not by inventing hidden globals. |
 | Add `ExecutionMetadata` to `ToolPort.invoke(...)` | Rejected for current slices; preserve the stable `ToolPort` contract unless a future reviewed change updates every implementation together. |
 | Artifact publication trigger was unclear | Superseded; `ToolArtifactPublicationPort.publish(request, rawResult)` is the implemented owner. |
@@ -56,7 +56,7 @@ Current code anchors:
 
 | Concern | Current owner |
 | --- | --- |
-| Stream envelope shape | `frontend/src/types/index.ts` (`StreamEventEnvelope`) |
+| Stream envelope shape | `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/domain/stream/StreamEventEnvelope.java`, `frontend/src/types/index.ts` (`StreamEventEnvelope`) |
 | Live stream reconnect | `frontend/src/hooks/useStreamResponse.ts`, `SeahorseChatController`, `ResearchSseBridge` |
 | Message/workbench merge owner | `frontend/src/stores/chatStreamHandlers.ts`, `frontend/src/stores/chatStore.ts` |
 | Tool invocation context | `ToolInvocationRequest` at the gateway boundary; `ToolPort.invoke(toolCallId, toolId, arguments)` remains unchanged |
@@ -78,7 +78,7 @@ Every live event or snapshot hydration path must follow the same rules:
 - Treat `eventSeq` and snapshot sequence values as monotonic recovery metadata.
 - If incoming sequence is older than the message's latest applied sequence for that event family, keep the newer live message data.
 - Missing optional payload fields leave existing message fields unchanged.
-- Do not put `messageId` in `StreamEventEnvelope` fixtures. Route live events to the active streaming assistant message through chat store state, or pass `messageId` separately to snapshot hydration helpers.
+- Do not put `messageId` in `StreamEventEnvelope` fixtures. Route live events to the active streaming assistant message through chat store state, or pass `messageId` separately to snapshot/artifact hydration helpers whose real source type carries it.
 - If a fixture needs a target message, keep that identifier in the test harness or message object. Do not add it to the event envelope just to simplify test setup.
 - Plain text SSE `message` deltas continue to work when there is no Agent run.
 
@@ -342,6 +342,7 @@ Focused acceptance evidence:
 - reconnect with `resumeRunId` and `lastEventSeq` appends only missing stream events to the active message.
 - replay events from `listAgentRunEvents(runId, afterSeq)` render in admin event order without duplicating earlier events.
 - a fresh current-worktree live Agent run writes non-zero rows to `sa_agent_run_event_buffer`, and `/api/agent-runs/{runId}/events?afterSeq=0` returns ordered, parseable events for the same run.
+- a fresh generated image/document artifact is visible to the frontend through at least one verified path: live `stream_event`, snapshot hydration, admin replay, or `/api/agent-runs/{runId}/artifacts`. If live SSE still omits `AGENT_ARTIFACT`, document that as a bounded recovery-path gap before deciding whether to bridge buffer-appended events into the realtime chat stream.
 - snapshot hydration after replay preserves newer live timeline, source, artifact, tool-call, skill, approval, and quota fields.
 - cost/quota tab renders totals, quota pressure, resume, and retry states from message state without creating a second store owner.
 
