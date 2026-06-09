@@ -14,7 +14,7 @@ This document captures execution contracts that are easy to lose in a long plan:
 
 1. Stream events and snapshots must merge into message state idempotently.
 2. `frontend/src/hooks/useStreamResponse.ts` already supports `resumeRunId` and `lastEventSeq`; reuse that path before adding a second backfill owner.
-3. Content-generation tools currently return JSON observations only; a gateway-level artifact publication hook exists, but concrete generation artifact persistence and artifact events still need a kernel-side publisher implementation.
+3. Content-generation tools still return JSON observations to the model, while Task 5 now publishes persisted generation artifacts through the gateway-level artifact publication hook.
 4. Encoding checks must assert correct Chinese text, not mojibake samples.
 
 Snippets in this document are examples. Verify them against current repository types before implementation.
@@ -26,11 +26,11 @@ Snippets in this document are examples. Verify them against current repository t
 `2026-06-08-implementation-details-review.md` is technically useful. Read it as UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. The following points were rechecked against the current repository before changing this companion document:
 
 - Accurate: `StreamEventEnvelope` has `eventId`, `eventSeq`, `eventType`, `runId`, optional `stepId`, `timestamp`, and `typedPayload`; it does not carry `messageId`.
-- Accurate with updated implementation state: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context. `LocalToolGatewayPort` still calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read that context directly; however, `ToolArtifactPublicationPort` is now wired at the gateway layer and receives the full `ToolInvocationRequest` plus the raw successful `ToolInvocationResult`. Returned/audited tool observations remain redacted.
+- Accurate with updated implementation state: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context. `LocalToolGatewayPort` still calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read that context directly; however, `ToolArtifactPublicationPort` is now wired at the gateway layer and receives the full `ToolInvocationRequest` plus the raw successful `ToolInvocationResult`. Returned and audited tool observations remain redacted.
 - Accurate: there is no existing `SkillSelectionContext`; current selected-skill validation lives in `ChatSelectedSkillResolver` and produces `SkillRuntimeBlock` values.
 - Accurate with a narrower scope: `useStreamResponse.ts`, `SeahorseChatController`, and `ResearchSseBridge` already support `resumeRunId` and `lastEventSeq`; reuse that path before adding any separate event-list endpoint.
 - Superseded by current code: the named chat/workbench files and `frontend/src/hooks/useStreamResponse.ts` are clean for the known mojibake code points in the scoped scan. Keep the guard, but do not claim a current `useStreamResponse.ts` mojibake defect unless a fresh scan finds one.
-- Partially superseded by current code: the review's "artifact persistence trigger point" concern is now resolved at the hook level by `ToolArtifactPublicationPort`; Task 5 still needs the concrete publisher that maps generation tool observations to stored `AgentArtifact` records and stream events.
+- Superseded by current code: the review's "artifact persistence trigger point" concern is resolved at the hook level by `ToolArtifactPublicationPort`, and Task 5 has added the concrete `GenerationToolArtifactPublicationPort` publisher for newsletter, PPT, chart, frontend-design, and image-generation outputs.
 
 ---
 
@@ -168,16 +168,16 @@ Current baseline:
 
 Implementation constraints:
 
-- Add the concrete generation artifact publisher through the existing gateway-level `ToolArtifactPublicationPort` hook, not through web controllers, `SpringSseEventSender`, or individual generation tool adapters.
+- Treat the concrete generation artifact publisher as implemented behavior. Future changes must preserve the existing gateway-level `ToolArtifactPublicationPort` hook and must not move artifact publication into web controllers, `SpringSseEventSender`, or individual generation tool adapters.
 - Preserve tool ids and catalog metadata.
 - Preserve `model="default"` fallback.
-- Forward image `style` or remove it from schema and docs in the same reviewed change.
-- Emit artifact events with `artifactId`, `runId`, `title`, `mimeType`, `previewText`, and safe storage reference metadata.
+- Keep forwarding image `style`; if the contract is intentionally retired later, remove it from schema, docs, and tests in the same reviewed change.
+- Keep emitting artifact events with `artifactId`, `runId`, `title`, `mimeType`, `previewText`, and safe storage reference metadata.
 
 Context boundary:
 
 - Do not use undefined `ExecutionContext`, `ExecutionMetadata`, `AgentRunContext`, or `SkillSelectionContext` names in implementation or tests unless the same change creates and wires that contract.
-- Preferred execution shape for Task 5 is now explicit: preserve `ToolInvocationRequest` as the gateway-level context carrier and publish artifacts from a `ToolArtifactPublicationPort` implementation that can see the full request plus the safe result.
+- Preferred execution shape for Task 5 is now explicit and implemented: preserve `ToolInvocationRequest` as the gateway-level context carrier and publish artifacts from a `ToolArtifactPublicationPort` implementation that can see the full request plus the raw successful result.
 - If `ToolPort.invoke(...)` is extended, update all implementations and registry tests in the same slice. Keep the new parameter explicit and typed; do not make generation tools read global state.
 - Keep `ToolPort` result semantics stable. The publisher should treat generation tool output as an observation to parse and persist, not as a replacement for the tool result returned to the model.
 - Persist artifacts in a gateway/kernel collaborator that can see `runId`, `stepId`, `tenantId`, `userId`, `allowedToolIds`, and the raw successful `ToolInvocationResult`; do not rely on a web-layer `ApplicationEventPublisher` or SSE sender as the source of truth. Redact the result before returning it to the model and before audit summaries so large image `b64Json` payloads and secrets are not surfaced.
@@ -200,15 +200,20 @@ Current baseline:
 - `ChatSelectedSkillResolver` performs server-side validation for per-turn selected skill names.
 - Validated selections become `SkillRuntimeBlock` values and may be downgraded to `METADATA_ONLY`.
 - There is no existing `SkillSelectionContext`.
+- Current implementation has a registered, catalog-visible `load_skill_resource` tool. `KernelAgentLoop` injects a hidden runtime skill snapshot into its arguments before dispatching through `ToolGatewayPort`; the legacy inline `load_skill` alias remains only for compatibility with existing model calls.
 
 Implementation constraints:
 
 - `load_skill_resource` must only load resources for skills that are already selected or version-bound in the current run context.
 - Do not trust skill names from the frontend or from model tool arguments as authorization proof.
 - Reuse selected `SkillRuntimeBlock` metadata or an explicit tool invocation metadata carrier; do not create a second independent skill-selection owner.
+- Because `ToolPort.invoke(...)` currently receives only `toolCallId`, `toolId`, and `arguments`, `load_skill_resource` cannot infer selected skills inside the adapter unless the same slice either changes the typed invocation contract everywhere or injects a server-owned selected-skill snapshot before gateway dispatch.
+- Preferred minimal path: have `KernelAgentLoop` inject a hidden runtime skill snapshot into `load_skill_resource` arguments from `AgentLoopRequest.skillRuntimeBlocks()`. The adapter must validate `skillName` and `resourcePath` only against that injected snapshot, never against frontend/model-provided authorization claims.
+- If a typed metadata carrier is introduced instead, update every `ToolPort` implementation, `LocalToolGatewayPort`, registry tests, and artifact publication tests in the same slice.
 - If the selected-skill set is carried into tool invocation, derive it from the same `ChatSelectedSkillResolver` result used to compose the prompt/runtime blocks.
 - Reject absolute paths, parent traversal, empty paths, and paths outside the selected skill revision resource set.
 - Register the tool through `SeahorseAgentKernelAgentAutoConfiguration`; `BuiltInAgentToolRegistrar` should discover it as a `DescribedToolPort`.
+- Route `load_skill_resource` through `ToolGatewayPort` after registration so policy, audit, catalog, and future tool-search behavior stay consistent. Keep the inline legacy `load_skill` path only when compatibility tests justify it.
 
 Required tests:
 
@@ -217,6 +222,7 @@ Required tests:
 - disabled, inactive, or missing-revision skill is rejected through existing resolver semantics.
 - parent traversal and absolute paths are rejected.
 - registrar/catalog visibility matches the feature flag.
+- gateway/audit path is exercised for `load_skill_resource`, while legacy `load_skill` compatibility is covered separately if retained.
 
 ---
 
@@ -280,7 +286,7 @@ Implementation constraints:
 - [ ] Task 3: Snapshot hydration + tests pass
 - [ ] Task 4: Artifact lifecycle + unsafe download blocked
 - [x] Task 5: All 5 generation tools persist artifacts
-- [ ] Task 6: `load_skill_resource` registered and tested
+- [x] Task 6: `load_skill_resource` registered and tested
 - [ ] Task 7: Tool gateway policy tests pass
 - [ ] Task 8: `tool_search` registered and tested
 - [ ] Task 9: Tool calls tab renders

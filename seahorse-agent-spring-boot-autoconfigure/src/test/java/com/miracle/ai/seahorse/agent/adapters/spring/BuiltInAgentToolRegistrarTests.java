@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualiz
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
@@ -73,6 +74,8 @@ class BuiltInAgentToolRegistrarTests {
                 () -> new ChartVisualizationToolPortAdapter(ChatModelPort.noop(), "agnes-2.0-flash", jsonSupport));
         context.registerBean(FrontendDesignToolPortAdapter.class,
                 () -> new FrontendDesignToolPortAdapter(ChatModelPort.noop(), "agnes-2.0-flash", jsonSupport));
+        context.registerBean(LoadSkillResourceToolPortAdapter.class,
+                () -> new LoadSkillResourceToolPortAdapter(jsonSupport));
         context.refresh();
 
         BuiltInAgentToolRegistrar registrar = new BuiltInAgentToolRegistrar(
@@ -88,7 +91,8 @@ class BuiltInAgentToolRegistrarTests {
         assertThat(registry.find(PptGenerationToolPortAdapter.TOOL_ID)).isPresent();
         assertThat(registry.find(ChartVisualizationToolPortAdapter.TOOL_ID)).isPresent();
         assertThat(registry.find(FrontendDesignToolPortAdapter.TOOL_ID)).isPresent();
-        assertThat(catalog.savedEntries()).hasSize(6);
+        assertThat(registry.find(LoadSkillResourceToolPortAdapter.TOOL_ID)).isPresent();
+        assertThat(catalog.savedEntries()).hasSize(7);
         assertThat(catalog.findById(GitHubRepositoryReaderToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
             assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
             assertThat(entry.actionType()).isEqualTo(ToolActionType.READ);
@@ -106,6 +110,11 @@ class BuiltInAgentToolRegistrarTests {
             assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
             assertThat(entry.actionType()).isEqualTo(ToolActionType.EXECUTE);
             assertThat(entry.resourceType()).isEqualTo("MODEL");
+        });
+        assertThat(catalog.findById(LoadSkillResourceToolPortAdapter.TOOL_ID)).hasValueSatisfying(entry -> {
+            assertThat(entry.provider()).isEqualTo(ToolProvider.BUILTIN);
+            assertThat(entry.actionType()).isEqualTo(ToolActionType.READ);
+            assertThat(entry.resourceType()).isEqualTo("SKILL");
         });
 
         context.close();

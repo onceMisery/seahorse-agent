@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
@@ -138,12 +139,14 @@ class KernelAgentLoopToolGatewayTests {
     }
 
     @Test
-    void shouldLoadSelectedSkillWithoutCallingExternalToolGateway() {
-        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill", Map.of("name", "research"));
+    void shouldDispatchSkillResourceLoadingThroughGatewayWithInjectedRuntimeSnapshot() {
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill_resource",
+                Map.of("skillName", "research", "resourcePath", "SKILL.md"));
         ScriptedModel model = new ScriptedModel(List.of(
                 Turn.toolCalls("need full skill", List.of(loadSkill)),
                 Turn.finalAnswer("used the research skill")));
-        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.failed("should-not-call"));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok(
+                "{\"name\":\"research\",\"resourcePath\":\"SKILL.md\",\"content\":\"Use sources carefully.\"}"));
         KernelAgentLoop loop = new KernelAgentLoop(
                 model,
                 new ListingOnlyToolRegistry(),
@@ -166,14 +169,24 @@ class KernelAgentLoopToolGatewayTests {
                 .build());
 
         assertEquals("used the research skill", result.finalAnswer());
-        assertTrue(gateway.requests.isEmpty());
-        assertTrue(model.requests.get(0).getTools().stream().anyMatch(tool -> "load_skill".equals(tool.toolId())));
+        assertEquals(1, gateway.requests.size());
+        ToolInvocationRequest request = gateway.requests.get(0);
+        assertEquals(LoadSkillResourceToolPortAdapter.TOOL_ID, request.toolId());
+        assertEquals("research", request.arguments().get("skillName"));
+        assertEquals("SKILL.md", request.arguments().get("resourcePath"));
+        assertTrue(request.arguments().containsKey(LoadSkillResourceToolPortAdapter.RUNTIME_SKILLS_ARGUMENT));
+        assertTrue(request.arguments().get(LoadSkillResourceToolPortAdapter.RUNTIME_SKILLS_ARGUMENT) instanceof List<?>);
+        assertTrue(model.requests.get(0).getTools().stream()
+                .anyMatch(tool -> LoadSkillResourceToolPortAdapter.TOOL_ID.equals(tool.toolId())));
+        assertTrue(result.steps().get(0).observations().get(0).success(),
+                result.steps().get(0).observations().get(0).error());
         assertTrue(result.steps().get(0).observations().get(0).content().contains("Use sources carefully."));
     }
 
     @Test
     void shouldRejectLoadingSkillOutsideCurrentVersionSnapshot() {
-        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill", Map.of("name", "missing"));
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill_resource",
+                Map.of("skillName", "missing", "resourcePath", "SKILL.md"));
         ScriptedModel model = new ScriptedModel(List.of(
                 Turn.toolCalls("try missing skill", List.of(loadSkill)),
                 Turn.finalAnswer("could not load")));
@@ -199,8 +212,43 @@ class KernelAgentLoopToolGatewayTests {
                 .build());
 
         assertEquals("could not load", result.finalAnswer());
-        assertFalse(result.steps().get(0).observations().get(0).success());
-        assertEquals("skill is not selected in this Agent version", result.steps().get(0).observations().get(0).error());
+        assertTrue(result.steps().get(0).observations().get(0).success());
+        assertEquals(1, model.requests.get(0).getTools().stream()
+                .filter(tool -> LoadSkillResourceToolPortAdapter.TOOL_ID.equals(tool.toolId()))
+                .count());
+    }
+
+    @Test
+    void shouldKeepLegacyLoadSkillAliasForExistingModelCalls() {
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", "load_skill", Map.of("name", "research"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need full skill", List.of(loadSkill)),
+                Turn.finalAnswer("used legacy alias")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.failed("should-not-call"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("write research plan")
+                .allowedToolIds(List.of())
+                .skillRuntimeBlocks(List.of(new SkillRuntimeBlock(
+                        "research",
+                        "rev-1",
+                        "hash-1",
+                        "Research workflow",
+                        AgentSkillCategory.PUBLIC,
+                        SkillInjectMode.METADATA_ONLY,
+                        List.of("web_search"),
+                        "Use sources carefully.")))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .build());
+
+        assertEquals("used legacy alias", result.finalAnswer());
+        assertTrue(gateway.requests.isEmpty());
+        assertTrue(result.steps().get(0).observations().get(0).content().contains("Use sources carefully."));
     }
 
     @Test
@@ -411,11 +459,15 @@ class KernelAgentLoopToolGatewayTests {
             return List.of(
                     new ToolDescriptor("weather", "Weather", "Weather lookup", "{}"),
                     new ToolDescriptor("memory-forget", "Memory Forget", "Forget memory", "{}"),
-                    new ToolDescriptor("web_search", "Web Search", "Search public Web sources", "{}"));
+                    new ToolDescriptor("web_search", "Web Search", "Search public Web sources", "{}"),
+                    new LoadSkillResourceToolPortAdapter(null).descriptor());
         }
 
         @Override
         public Optional<ToolPort> find(String toolId) {
+            if (LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolId)) {
+                return Optional.of(new LoadSkillResourceToolPortAdapter(null));
+            }
             throw new AssertionError("KernelAgentLoop must invoke tools through ToolGatewayPort");
         }
     }

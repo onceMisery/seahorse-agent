@@ -526,13 +526,15 @@ cd ..
 .\mvnw.cmd -pl seahorse-agent-tests -am test -Dtest=*Skill*
 ```
 
-- [ ] Write RED tests proving metadata-only skills include load instructions.
-- [ ] Write RED tests proving `load_skill_resource` returns selected skill `SKILL.md`.
-- [ ] Write RED tests proving unselected skill names, parent traversal, absolute paths, and missing resources fail.
-- [ ] Implement the read-only tool and register it through `SeahorseAgentKernelAgentAutoConfiguration` and `BuiltInAgentToolRegistrar`.
-- [ ] Extend `BuiltInAgentToolRegistrarTests` to prove `load_skill_resource` is registered and visible in ToolCatalog when enabled.
-- [ ] Verify focused backend tests pass.
-- [ ] Commit: `feat: add progressive skill resource loading`
+- [x] Write RED tests proving metadata-only skills include load instructions and model-visible `load_skill_resource` exposure.
+- [x] Write RED tests proving `load_skill_resource` returns selected skill `SKILL.md`.
+- [x] Write RED tests proving unselected skill names, parent traversal, absolute paths, missing resources, and missing injected runtime snapshots fail.
+- [x] Implement the read-only tool and register it through `SeahorseAgentKernelAgentAutoConfiguration` and `BuiltInAgentToolRegistrar`.
+- [x] Extend `BuiltInAgentToolRegistrarTests` to prove `load_skill_resource` is registered and visible in ToolCatalog.
+- [x] Verify focused backend tests pass:
+  - `.\mvnw.cmd -pl seahorse-agent-kernel -am test "-Dtest=ChatSelectedSkillResolverTests,KernelChatSkillSelectionTests,KernelAgentLoopToolGatewayTests,LoadSkillResourceToolPortAdapterTests"`
+  - `.\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am test "-Dtest=BuiltInAgentToolRegistrarTests" "-Dsurefire.failIfNoSpecifiedTests=false"`
+- [x] Commit: `feat: add progressive skill resource loading`
 
 ### Task 7: P1 Enforce Skill-Aware Tool Policy
 

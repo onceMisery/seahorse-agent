@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
@@ -128,6 +129,7 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
         return switch (toolId) {
             case WebFetchToolPortAdapter.TOOL_ID, WebSearchToolPortAdapter.TOOL_ID -> "WEB";
             case GitHubRepositoryReaderToolPortAdapter.TOOL_ID -> "GITHUB";
+            case LoadSkillResourceToolPortAdapter.TOOL_ID -> "SKILL";
             case ImageGenerationToolPortAdapter.TOOL_ID,
                     NewsletterGenerationToolPortAdapter.TOOL_ID,
                     PptGenerationToolPortAdapter.TOOL_ID,

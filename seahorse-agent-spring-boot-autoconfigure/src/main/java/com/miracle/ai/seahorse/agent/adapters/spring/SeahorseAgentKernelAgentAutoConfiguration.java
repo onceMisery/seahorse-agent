@@ -45,6 +45,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeTo
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GenerationToolArtifactPublicationPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubRepositoryReaderToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
@@ -610,6 +611,14 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @ConditionalOnMissingBean
     public LocalAgentAsToolPort seahorseLocalAgentAsToolPort(KernelAgentHandoffService handoffService) {
         return new LocalAgentAsToolPort(handoffService);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnMissingBean
+    public LoadSkillResourceToolPortAdapter seahorseLoadSkillResourceToolPortAdapter(
+            AgentToolJsonSupport jsonSupport) {
+        return new LoadSkillResourceToolPortAdapter(jsonSupport);
     }
 
     @Bean

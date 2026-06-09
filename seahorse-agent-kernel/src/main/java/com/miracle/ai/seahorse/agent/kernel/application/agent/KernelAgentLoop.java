@@ -23,6 +23,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.output.OutputGover
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitCommand;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
@@ -115,12 +116,7 @@ public class KernelAgentLoop {
     private static final String ARTIFACT_TITLE_FIELD = "title";
     private static final String ARTIFACT_TYPE_FIELD = "artifactType";
     private static final String MARKDOWN_ARTIFACT_TYPE = "MARKDOWN";
-    private static final String LOAD_SKILL_TOOL_ID = "load_skill";
-    private static final ToolDescriptor LOAD_SKILL_DESCRIPTOR = new ToolDescriptor(
-            LOAD_SKILL_TOOL_ID,
-            "Load Skill",
-            "Load the full instructions for a skill selected in the current Agent version snapshot.",
-            "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}");
+    private static final String LEGACY_LOAD_SKILL_TOOL_ID = "load_skill";
     private static final ToolRiskLevel DEFAULT_TOOL_RISK_LEVEL = ToolRiskLevel.HIGH;
     private static final String TRACE_CLASS_NAME =
             "com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop";
@@ -488,7 +484,11 @@ public class KernelAgentLoop {
                 .filter(Objects::nonNull)
                 .toList());
         if (hasLoadableSkills(skillRuntimeBlocks)) {
-            result.add(LOAD_SKILL_DESCRIPTOR);
+            toolRegistry.find(LoadSkillResourceToolPortAdapter.TOOL_ID)
+                    .flatMap(ignored -> toolRegistry.listTools().stream()
+                            .filter(tool -> LoadSkillResourceToolPortAdapter.TOOL_ID.equals(tool.toolId()))
+                            .findFirst())
+                    .ifPresent(result::add);
         }
         return List.copyOf(result);
     }
@@ -629,7 +629,7 @@ public class KernelAgentLoop {
         if (hasRawArguments(toolCall)) {
             return AgentObservation.failed(toolCall.id(), "arguments is not valid JSON");
         }
-        if (LOAD_SKILL_TOOL_ID.equals(toolCall.toolId())) {
+        if (LEGACY_LOAD_SKILL_TOOL_ID.equals(toolCall.toolId())) {
             return loadSkillObservation(toolCall, request);
         }
         try {
@@ -651,9 +651,13 @@ public class KernelAgentLoop {
     }
 
     private AgentObservation loadSkillObservation(AgentToolCall toolCall, AgentLoopRequest request) {
-        String requestedName = Objects.toString(toolCall.arguments().get("name"), "").trim();
+        String requestedName = loadSkillName(toolCall);
         if (requestedName.isBlank()) {
             return AgentObservation.failed(toolCall.id(), "skill name is required");
+        }
+        String resourcePath = loadSkillResourcePath(toolCall);
+        if (!"SKILL.md".equals(resourcePath)) {
+            return AgentObservation.failed(toolCall.id(), "skill resource is not available");
         }
         List<SkillRuntimeBlock> skills = request == null ? List.of() : request.skillRuntimeBlocks();
         return skills.stream()
@@ -661,6 +665,22 @@ public class KernelAgentLoop {
                 .findFirst()
                 .map(skill -> AgentObservation.ok(toolCall.id(), loadSkillPayload(skill)))
                 .orElseGet(() -> AgentObservation.failed(toolCall.id(), "skill is not selected in this Agent version"));
+    }
+
+    private String loadSkillName(AgentToolCall toolCall) {
+        Object value = toolCall.arguments().get("skillName");
+        if (value == null) {
+            value = toolCall.arguments().get("name");
+        }
+        return Objects.toString(value, "").trim();
+    }
+
+    private String loadSkillResourcePath(AgentToolCall toolCall) {
+        Object value = toolCall.arguments().get("resourcePath");
+        if (value == null) {
+            return "SKILL.md";
+        }
+        return Objects.toString(value, "").trim();
     }
 
     private String loadSkillPayload(SkillRuntimeBlock skill) {
@@ -734,6 +754,10 @@ public class KernelAgentLoop {
     private java.util.Map<String, Object> toolArguments(AgentToolCall toolCall, AgentLoopRequest request) {
         LinkedHashMap<String, Object> arguments = new LinkedHashMap<>(
                 Objects.requireNonNullElse(toolCall.arguments(), java.util.Map.of()));
+        if (LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
+            arguments.put(LoadSkillResourceToolPortAdapter.RUNTIME_SKILLS_ARGUMENT,
+                    request == null ? List.of() : request.skillRuntimeBlocks());
+        }
         if (request == null || request.memoryContext() == null) {
             return arguments;
         }
