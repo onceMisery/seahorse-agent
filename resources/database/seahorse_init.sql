@@ -2837,13 +2837,18 @@ VALUES (
 1. 必须基于读取到的文件证据总结，不要编造仓库不存在的模块、架构或能力。
 2. 输出必须是中文 Markdown，包含：项目概览、架构设计、架构图、流程图、核心逻辑、重点特性、关键文件证据、生成图片引用、生成稿件和版式产物摘要。
 3. 最终 Markdown 必须使用固定大纲并逐节输出，至少包含这些二级标题，且不要合并或改名：## 一、项目概览、## 二、架构设计、## 三、架构图、## 四、流程图、## 五、核心逻辑、## 六、重点特性、## 七、关键文件证据表、## 八、生成图片引用、## 九、生成稿件和版式产物摘要、## 十、总结。
-4. “流程图”必须是独立章节，不能合并到“核心逻辑”；该章节至少包含一个 Mermaid sequenceDiagram 或 flowchart，描述用户请求到仓库读取、工具生成、最终 Markdown 输出的流程，或描述该项目的核心执行流程。
-5. 架构图和流程图优先用 Mermaid 代码块表达；图片生成结果必须以 Markdown 图片或可点击链接引用。
-6. 关键文件证据需要列出文件路径和对应用途，说明结论来自哪些 README、docs 或源码文件。
-7. 最终回答必须是可直接渲染的 Markdown；标题、段落、表格、列表、分隔线和代码块前后必须保留换行，禁止把多个 Markdown 块压缩到同一行。
-8. 每个 Mermaid 图必须独立成块：第一行只能是 ```mermaid，第二行才开始 graph、flowchart 或 sequenceDiagram，最后单独一行 ```；禁止输出 ```mermaidgraph、```mermaidflowchart、```mermaidsequenceDiagram。
-9. 同一个 Mermaid 图内节点 ID 必须唯一，禁止重复使用同一个 ID 表示不同节点；不要使用不稳定或 beta Mermaid 语法。
-10. 输出前必须自检：硬性工具调用是否满足清单；所有关键结论是否能在 README、docs、源码或 web_fetch 材料中找到；是否包含图片引用和关键文件证据表。
+4. “2.1 整体架构分层”必须输出标准 Mermaid flowchart，禁止使用 ASCII 文本框图；必须包含独立的 ```mermaid 代码块，并能被 Mermaid 渲染器直接渲染。
+5. “流程图”必须是独立章节，不能合并到“核心逻辑”；该章节至少包含一个 Mermaid sequenceDiagram 或 flowchart，描述用户请求到仓库读取、工具生成、最终 Markdown 输出的流程，或描述该项目的核心执行流程。
+6. 架构图和流程图优先用 Mermaid 代码块表达；图片生成结果必须以 Markdown 图片或可点击链接引用。
+7. 图片引用面向 Web 端，禁止使用本地文件路径、相对路径或 file:// 路径；只允许 http/https URL 或 data:image/*;base64 URL。如果 image_generation 返回 imageUrl，优先用该 URL；如果只返回 b64Json，则用 data:image/png;base64,{b64Json} 引用。
+8. 关键文件证据需要列出文件路径和对应用途，说明结论来自哪些 README、docs 或源码文件。
+9. 第九章必须总结 newsletter_generation、ppt_generation、frontend_design 的实际产物，至少包含“长文稿件摘要”“演示文稿摘要”“Web 版式预览摘要”三个小节；不得只写章节标题或空泛一句话。
+10. 在第九章后输出一个 HTML 预览 artifact，格式必须严格为：<artifact language="html" title="项目介绍 Web 预览.html"> 换行，完整 HTML 片段，换行 </artifact>。该 artifact 用于 Web 端渲染预览，不替代最终 Markdown 正文。
+11. 最终回答正文必须保持流式可读的 Markdown；完整 Markdown 文档会由系统以 Markdown artifact 形式提供复制和下载，所以正文不要输出本地保存路径，也不要要求用户手工复制文件。
+12. 最终回答必须是可直接渲染的 Markdown；标题、段落、表格、列表、分隔线和代码块前后必须保留换行，禁止把多个 Markdown 块压缩到同一行。
+13. 每个 Mermaid 图必须独立成块：第一行只能是 ```mermaid，第二行才开始 graph、flowchart 或 sequenceDiagram，最后单独一行 ```；禁止输出 ```mermaidgraph、```mermaidflowchart、```mermaidsequenceDiagram。
+14. 同一个 Mermaid 图内节点 ID 必须唯一，禁止重复使用同一个 ID 表示不同节点；不要使用不稳定或 beta Mermaid 语法。
+15. 输出前必须自检：硬性工具调用是否满足清单；所有关键结论是否能在 README、docs、源码或 web_fetch 材料中找到；是否包含 Web 可访问图片引用、可渲染 Mermaid 图、关键文件证据表和第九章产物摘要。
     $instructions$,
     $toolset${"tools":["github_repository_reader","web_fetch","chart_visualization","image_generation","newsletter_generation","ppt_generation","frontend_design"]}$toolset$,
     $model${"temperature":0.3,"maxTokens":4096,"thinking":true}$model$,

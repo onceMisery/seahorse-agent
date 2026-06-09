@@ -5,6 +5,7 @@ import { ImageIcon } from "lucide-react";
 
 import { CodeBlock } from "@/components/ai-elements/renderer/CodeBlock";
 import { CitationBadge } from "@/components/chat/CitationBadge";
+import { MermaidDiagram } from "@/components/chat/MermaidDiagram";
 import { cn } from "@/lib/utils";
 import type { AgentSource } from "@/types";
 
@@ -30,6 +31,10 @@ export function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
           const value = String(children).replace(/\n$/, "");
           const hasLanguage = Boolean(match);
           const hasNewlines = value.includes('\n');
+
+          if (language === "mermaid" && hasNewlines) {
+            return <MermaidDiagram code={value} />;
+          }
 
           if (!hasLanguage && !hasNewlines) {
             return (

@@ -60,6 +60,15 @@ class GithubVisualAgentSqlAlignmentTests {
         assertContains(sql, "## 四、流程图");
         assertContains(sql, "“流程图”必须是独立章节，不能合并到“核心逻辑”");
         assertContains(sql, "至少包含一个 Mermaid sequenceDiagram 或 flowchart");
+        assertContains(sql, "“2.1 整体架构分层”必须输出标准 Mermaid flowchart");
+        assertContains(sql, "禁止使用 ASCII 文本框图");
+        assertContains(sql, "图片引用面向 Web 端，禁止使用本地文件路径、相对路径或 file:// 路径");
+        assertContains(sql, "只允许 http/https URL 或 data:image/*;base64 URL");
+        assertContains(sql, "长文稿件摘要");
+        assertContains(sql, "演示文稿摘要");
+        assertContains(sql, "Web 版式预览摘要");
+        assertContains(sql, "<artifact language=\"html\" title=\"项目介绍 Web 预览.html\">");
+        assertContains(sql, "完整 Markdown 文档会由系统以 Markdown artifact 形式提供复制和下载");
     }
 
     private static void assertContains(String sql, String expected) {

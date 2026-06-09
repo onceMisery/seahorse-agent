@@ -261,7 +261,14 @@ function normalizeArtifactEnds(payload: unknown): ArtifactBlock[] {
 function normalizeServerArtifacts(payload: unknown): AgentArtifact[] {
   return payloadItems(payload).flatMap((item, index) => {
     if (!isRecord(item)) return [];
-    const artifactId = stringValue(item, ["artifactId", "id"]);
+    const explicitArtifactId = stringValue(item, ["artifactId"]);
+    const hasPersistedArtifactMetadata = Boolean(
+      explicitArtifactId ||
+      stringValue(item, ["storageRef", "scanStatus", "disposition", "createdAt", "tenantId", "userId", "messageId"]) ||
+      typeof item.canPreview === "boolean"
+    );
+    if (!hasPersistedArtifactMetadata) return [];
+    const artifactId = explicitArtifactId ?? stringValue(item, ["id"]);
     if (!artifactId) return [];
     return [{
       artifactId,

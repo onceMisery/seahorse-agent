@@ -22,6 +22,7 @@ import { submitFeedback } from "@/services/chatService";
 import { buildQuery } from "@/utils/helpers";
 import { createStreamResponse, type StreamHandlers } from "@/hooks/useStreamResponse";
 import { storage } from "@/utils/storage";
+import { parseStreamingText } from "@/lib/parser/streamingParser";
 import type {
   ConversationMessageVO,
   ConversationVO
@@ -31,6 +32,7 @@ import { upsertSession } from "@/stores/chatSessionUtils";
 import {
   API_BASE_URL,
   computeThinkingDuration,
+  extractArtifactsFromBlocks,
   normalizeAgentStreamEvent
 } from "@/stores/chatStreamUtils";
 import { RenderBuffer } from "@/lib/stream/renderBuffer";
@@ -258,6 +260,8 @@ export const useChatStore = create<ChatState>()(
           if (!msg) return;
           msg.rawText = (msg.rawText ?? "") + flushedText;
           msg.content = msg.rawText;
+          msg.blocks = parseStreamingText(msg.rawText, msg.id);
+          msg.artifacts = mergeArtifactsById(msg.artifacts, extractArtifactsFromBlocks(msg.blocks));
         });
       });
 
@@ -311,11 +315,43 @@ export const useChatStore = create<ChatState>()(
           const normalized = normalizeAgentStreamEvent(envelope.eventType, envelope.typedPayload);
           if (!normalized) return;
           switch (normalized.type) {
+            case AGENT_STREAM_EVENTS.TIMELINE:
+              set((state) => {
+                const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+                if (msg) msg.timeline = mergeById(msg.timeline, normalized.items);
+              });
+              break;
+            case AGENT_STREAM_EVENTS.SOURCE:
+              set((state) => {
+                const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+                if (msg) msg.sources = mergeById(msg.sources, normalized.items);
+              });
+              break;
+            case AGENT_STREAM_EVENTS.ARTIFACT:
+              set((state) => {
+                const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+                if (!msg) return;
+                msg.artifacts = mergeArtifactsById(msg.artifacts, normalized.items);
+                msg.serverArtifacts = mergeServerArtifactsById(msg.serverArtifacts, normalized.serverArtifacts);
+              });
+              break;
             case AGENT_STREAM_EVENTS.APPROVAL: {
               const approval = (envelope.typedPayload as { approval?: AgentApproval })?.approval;
               if (approval) stagedApprovals.push(approval);
               break;
             }
+            case AGENT_STREAM_EVENTS.QUOTA:
+              set((state) => {
+                const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+                if (msg) msg.quota = mergeById(msg.quota, normalized.items);
+              });
+              break;
+            case AGENT_STREAM_EVENTS.MEMORY:
+              set((state) => {
+                const msg = currentAssistantMessage(state.messages, currentAssistantMessageId, assistantId);
+                if (msg) msg.memories = mergeById(msg.memories, normalized.items);
+              });
+              break;
           }
         },
         onError: (error) => { markError(error.message || "对话失败"); }
@@ -395,10 +431,12 @@ export const useChatStore = create<ChatState>()(
         const snapshot = await getAgentRunSnapshot(runId);
         set((state) => {
           const msg = state.messages.find((m) => m.id === messageId);
-          if (msg && snapshot.messageSnapshot) {
+        if (msg && snapshot.messageSnapshot) {
             if (snapshot.messageSnapshot.content) {
               msg.content = snapshot.messageSnapshot.content;
               msg.rawText = snapshot.messageSnapshot.content;
+              msg.blocks = parseStreamingText(msg.rawText, msg.id);
+              msg.artifacts = mergeArtifactsById(msg.artifacts, extractArtifactsFromBlocks(msg.blocks));
             }
             if (snapshot.messageSnapshot.thinking) {
               msg.thinking = snapshot.messageSnapshot.thinking;
@@ -419,6 +457,8 @@ export const useChatStore = create<ChatState>()(
         if (msg) {
           msg.rawText = (msg.rawText ?? "") + delta;
           msg.content = msg.rawText;
+          msg.blocks = parseStreamingText(msg.rawText, msg.id);
+          msg.artifacts = mergeArtifactsById(msg.artifacts, extractArtifactsFromBlocks(msg.blocks));
         }
       });
     },
@@ -440,6 +480,51 @@ export const useChatStore = create<ChatState>()(
 
 function currentAssistantMessage(messages: Message[], currentId: string, originalId: string): Message | undefined {
   return messages.find((m) => m.id === currentId || m.id === originalId);
+}
+
+function mergeById<T extends { id: string }>(current: T[] | undefined, incoming: T[] | undefined): T[] {
+  if (!incoming || incoming.length === 0) return current ?? [];
+  const map = new Map<string, T>();
+  for (const item of current ?? []) map.set(item.id, item);
+  for (const item of incoming) map.set(item.id, { ...map.get(item.id), ...item });
+  return Array.from(map.values());
+}
+
+function mergeArtifactsById(current: Message["artifacts"], incoming: Message["artifacts"]): NonNullable<Message["artifacts"]> {
+  if (!incoming || incoming.length === 0) return current ?? [];
+  const map = new Map<string, NonNullable<Message["artifacts"]>[number]>();
+  for (const item of current ?? []) map.set(item.id, item);
+  for (const item of incoming) {
+    const existing = map.get(item.id);
+    if (existing && item.append) {
+      map.set(item.id, {
+        ...existing,
+        ...item,
+        language: existing.language,
+        title: existing.title,
+        code: `${existing.code ?? ""}${item.code ?? ""}`,
+        isComplete: item.isComplete
+      });
+      continue;
+    }
+    map.set(item.id, {
+      ...existing,
+      ...item,
+      language: item.language === "javascript" && existing ? existing.language : item.language,
+      title: /^Artifact(?: \d+)?$/.test(item.title) && existing ? existing.title : item.title,
+      code: item.code || existing?.code || "",
+      isComplete: item.isComplete
+    });
+  }
+  return Array.from(map.values()).map(({ append, ...item }) => item);
+}
+
+function mergeServerArtifactsById(current: Message["serverArtifacts"], incoming: Message["serverArtifacts"]): NonNullable<Message["serverArtifacts"]> {
+  if (!incoming || incoming.length === 0) return current ?? [];
+  const map = new Map<string, NonNullable<Message["serverArtifacts"]>[number]>();
+  for (const item of current ?? []) map.set(item.artifactId, item);
+  for (const item of incoming) map.set(item.artifactId, { ...map.get(item.artifactId), ...item });
+  return Array.from(map.values());
 }
 
 function chatModeForTaskTemplate(taskTemplateId?: TaskTemplateId): string | undefined {

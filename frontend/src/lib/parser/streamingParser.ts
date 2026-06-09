@@ -5,7 +5,7 @@ const ARTIFACT_CLOSE_RE = /^<\/artifact>/i;
 const CODE_FENCE_OPEN_RE = /^```(\w*)/;
 const CODE_FENCE_CLOSE_RE = /^```\s*$/;
 
-const ARTIFACT_LANGUAGES = new Set(["html", "css", "javascript", "js", "tsx", "vue"]);
+const ARTIFACT_LANGUAGES = new Set(["html", "css", "javascript", "js", "tsx", "vue", "markdown"]);
 
 function normalizeLang(lang: string): ArtifactLanguage {
   if (lang === "js") return "javascript";

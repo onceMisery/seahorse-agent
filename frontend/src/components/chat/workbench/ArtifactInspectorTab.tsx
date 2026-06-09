@@ -22,6 +22,7 @@ interface MergedItem {
   server?: AgentArtifact;
   isComplete: boolean;
   language?: string;
+  mimeType?: string | null;
 }
 
 function mergeArtifacts(artifacts: ArtifactBlock[], serverArtifacts: AgentArtifact[]): MergedItem[] {
@@ -34,7 +35,8 @@ function mergeArtifacts(artifacts: ArtifactBlock[], serverArtifacts: AgentArtifa
       code: server?.previewText ?? a.code,
       server,
       isComplete: a.isComplete,
-      language: a.language
+      language: a.language,
+      mimeType: server?.mimeType
     });
   }
   for (const sa of serverArtifacts) {
@@ -44,7 +46,8 @@ function mergeArtifacts(artifacts: ArtifactBlock[], serverArtifacts: AgentArtifa
         title: sa.title ?? "Artifact",
         code: sa.previewText ?? undefined,
         server: sa,
-        isComplete: true
+        isComplete: true,
+        mimeType: sa.mimeType
       });
     }
   }
@@ -83,6 +86,7 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
   );
   const activeCode = active ? editedContentById[active.id] ?? active.code ?? "" : "";
   const isClean = !activeServerArtifact || activeServerArtifact.scanStatus === AGENT_ARTIFACT_SCAN_STATUS.CLEAN;
+  const isHtml = active?.language === "html" || active?.mimeType === "text/html";
 
   const a2uiSurface = React.useMemo<A2UILiteSurface | null>(() => {
     if (!active) return null;
@@ -334,6 +338,13 @@ export function ArtifactInspectorTab({ artifacts, serverArtifacts = [], onClose:
               <A2UILiteRenderer
                 surface={a2uiSurface}
                 onAction={(_action: A2UILiteAction) => undefined}
+              />
+            ) : isHtml ? (
+              <iframe
+                title={active.title}
+                srcDoc={activeCode}
+                sandbox=""
+                className="h-full min-h-[520px] w-full bg-white"
               />
             ) : (
               <div className="p-4">

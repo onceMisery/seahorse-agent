@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Check, Code, Copy, Maximize2, Minimize2 } from "lucide-react";
+import { Check, Code, Copy, Download, Eye, Maximize2, Minimize2 } from "lucide-react";
 import type { ArtifactBlock } from "@/types";
 
 interface ArtifactSandboxProps {
@@ -9,7 +9,9 @@ interface ArtifactSandboxProps {
 export function ArtifactSandbox({ artifact }: ArtifactSandboxProps) {
   const [copied, setCopied] = React.useState(false);
   const [expanded, setExpanded] = React.useState(false);
+  const [showSource, setShowSource] = React.useState(false);
   const copyTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const isHtml = artifact.language === "html";
 
   React.useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
@@ -21,6 +23,22 @@ export function ArtifactSandbox({ artifact }: ArtifactSandboxProps) {
     } catch {
       // Clipboard may be unavailable in restricted browser contexts.
     }
+  };
+
+  const handleDownload = () => {
+    const extension = artifact.language === "markdown" ? "md" : artifact.language === "javascript" ? "js" : artifact.language;
+    const mimeType = artifact.language === "html"
+      ? "text/html;charset=utf-8"
+      : artifact.language === "markdown"
+        ? "text/markdown;charset=utf-8"
+        : "text/plain;charset=utf-8";
+    const blob = new Blob([artifact.code], { type: mimeType });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = artifact.title || `artifact.${extension}`;
+    link.click();
+    URL.revokeObjectURL(href);
   };
 
   return (
@@ -57,6 +75,18 @@ export function ArtifactSandbox({ artifact }: ArtifactSandboxProps) {
           )}
         </div>
         <div className="flex items-center gap-1">
+          {isHtml ? (
+            <button
+              type="button"
+              onClick={() => setShowSource((value) => !value)}
+              className="flex h-7 w-7 items-center justify-center rounded transition-colors"
+              style={{ color: "var(--theme-text-muted)" }}
+              aria-label={showSource ? "预览 HTML" : "查看 HTML 源码"}
+              title={showSource ? "预览" : "源码"}
+            >
+              {showSource ? <Eye className="h-3.5 w-3.5" /> : <Code className="h-3.5 w-3.5" />}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={handleCopy}
@@ -66,6 +96,16 @@ export function ArtifactSandbox({ artifact }: ArtifactSandboxProps) {
             title="Copy"
           >
             {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="flex h-7 w-7 items-center justify-center rounded transition-colors"
+            style={{ color: "var(--theme-text-muted)" }}
+            aria-label="下载产物"
+            title="下载"
+          >
+            <Download className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
@@ -80,17 +120,30 @@ export function ArtifactSandbox({ artifact }: ArtifactSandboxProps) {
         </div>
       </div>
 
-      <pre
-        className="m-0 w-full overflow-auto px-4 py-3 text-xs leading-relaxed"
-        style={{
-          maxHeight: expanded ? "560px" : "280px",
-          color: "var(--theme-text-primary)",
-          backgroundColor: "var(--theme-bg-elevated)",
-          transition: "max-height 0.2s ease",
-        }}
-      >
-        <code>{artifact.code}</code>
-      </pre>
+      {isHtml && !showSource ? (
+        <iframe
+          title={artifact.title}
+          srcDoc={artifact.code}
+          sandbox=""
+          className="block w-full bg-white"
+          style={{
+            height: expanded ? "640px" : "360px",
+            transition: "height 0.2s ease"
+          }}
+        />
+      ) : (
+        <pre
+          className="m-0 w-full overflow-auto px-4 py-3 text-xs leading-relaxed"
+          style={{
+            maxHeight: expanded ? "560px" : "280px",
+            color: "var(--theme-text-primary)",
+            backgroundColor: "var(--theme-bg-elevated)",
+            transition: "max-height 0.2s ease",
+          }}
+        >
+          <code>{artifact.code}</code>
+        </pre>
+      )}
     </div>
   );
 }
