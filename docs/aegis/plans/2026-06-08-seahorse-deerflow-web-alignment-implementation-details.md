@@ -52,7 +52,7 @@ Use the decisions below as the contract for follow-up work. The review file is e
 - Accepted with current branch implementation: the frontend dev proxy configuration has two tracked files, `frontend/vite.config.ts` and `frontend/vite.config.js`. Vite may load the JavaScript config first in this repository, so proxy-target changes must keep both files aligned until the duplicate config is retired. A fix in only `vite.config.ts` does not prove the local web E2E path.
 - Accepted with current branch implementation: Chat Workbench E2E must be driven from a normal chat task template, not from a hidden admin-only run path. The `github-visual-project-intro` task template declares `defaultAgentId=github-visual-project-intro-agent`, and `/rag/v3/chat` resolves that template into `ChatMode.AGENT` without exposing custom `agentId` selection in consumer web. This keeps plain `quick-answer` as RAG, preserves controlled research-template behavior, and gives the final E2E gate a visible Chat UI entry point for tool calls, selected skills, generated artifacts, replay, and cost/quota rendering.
 - Resolved current-branch gap: `github-visual-project-intro` is declared as `QuotaCostTier.HIGH` and `EstimatedDurationTier.LONG` by `KernelTaskTemplateQueryService`. Current code now aligns high-cost governance with that metadata: `SeahorseChatController.HIGH_COST_TASK_TEMPLATES` includes `GITHUB_VISUAL_PROJECT_INTRO`, and `KernelQuotaSummaryService` prefers `TaskTemplateQueryInboundPort` metadata for cost/duration hints with a compatibility fallback for direct construction. Keep `SeahorseChatController.CONTROLLED_WEB_AGENT_TEMPLATES` as an explicit consumer-web allowlist rather than automatically exposing every high-cost template.
-- Current worktree note: `frontend/src/stores/artifactStore.ts` has no production references after scanning `frontend/src` for `artifactStore`, `useArtifactStore`, `useActiveArtifacts`, and the exported artifact-store mutators. It is a valid Task 1 retirement candidate, but the deletion should only be kept after focused frontend store/workbench tests and `npm run build` pass in the same cleanup slice.
+- Current worktree note: `frontend/src/stores/artifactStore.ts` had no production references after scanning `frontend/src` for `artifactStore`, `useArtifactStore`, `useActiveArtifacts`, and the exported artifact-store mutators. The current cleanup slice deletes it after the focused frontend store/workbench tests and `npm run build` passed.
 
 Disposition matrix:
 
@@ -73,7 +73,7 @@ Disposition matrix:
 | Chat Workbench could not trigger the GitHub visual Agent from normal chat | Accurate as a current-worktree E2E gap | Fixed by adding the `github-visual-project-intro` task template and resolving its `defaultAgentId` server-side. Frontend sends `chatMode=agent` for this template, while backend remains authoritative and still rejects arbitrary consumer-web `agentId` selection. |
 | GitHub visual intro governance cost tier | Accurate as a current-branch gap, now fixed | Template metadata says HIGH/LONG; controller rate limiting now includes the template, and quota summaries now prefer `TaskTemplateQueryInboundPort` metadata. |
 | Historical Chat messages did not recover Workbench state | Accurate as a final-gate gap found during current-worktree E2E | Fixed by hydrating selected-session assistant messages from `getAgentRunSnapshot`, `listAgentRunEvents`, and `getAgentRunCostSummary`; replay events are normalized, sorted, deduped, merged through `chatStreamHandlers`, and guarded against stale session writes and duplicate in-flight loads. |
-| `artifactStore.ts` was a duplicate artifact owner | Accurate for the current worktree after the production-reference scan | Retire it only with same-slice frontend tests/build proving the message-bound workspace owner still covers artifact rendering and recovery. |
+| `artifactStore.ts` was a duplicate artifact owner | Accurate for the current worktree after the production-reference scan | Retired after same-slice frontend tests/build proved the message-bound workspace owner still covers artifact rendering and recovery. |
 
 Current code anchors:
 
@@ -82,7 +82,7 @@ Current code anchors:
 | Stream envelope shape | `seahorse-agent-kernel/src/main/java/com/miracle/ai/seahorse/agent/kernel/domain/stream/StreamEventEnvelope.java`, `frontend/src/types/index.ts` (`StreamEventEnvelope`) |
 | Live stream reconnect | `frontend/src/hooks/useStreamResponse.ts`, `SeahorseChatController`, `ResearchSseBridge` |
 | Message/workbench merge owner | `frontend/src/stores/chatStreamHandlers.ts`, `frontend/src/stores/chatStore.ts` |
-| Artifact UI state owner | Message-bound workspace state in `chatStore.ts`; `artifactStore.ts` is a no-production-consumer retirement candidate in the current worktree |
+| Artifact UI state owner | Message-bound workspace state in `chatStore.ts`; `artifactStore.ts` is retired in the current cleanup slice |
 | Tool invocation context | `ToolInvocationRequest` at the gateway boundary; `ToolPort.invoke(toolCallId, toolId, arguments)` remains unchanged |
 | Artifact publication | `LocalToolGatewayPort` calls `ToolArtifactPublicationPort.publish(request, rawResult)` after successful raw execution |
 | Generation artifact persistence | `GenerationToolArtifactPublicationPort` plus its focused tests |
@@ -144,7 +144,7 @@ Artifact content events need special handling:
 - Preserve existing approval behavior while expanding to timeline, sources, artifacts, quota, memory, and tool calls.
 - Add tests for duplicate events, stale events, artifact append, and "live event arrives while snapshot fetch is in flight".
 - Retire or deprecate `frontend/src/stores/artifactStore.ts` only after production consumers are checked.
-- Current worktree check: `rg` finds no production references to `artifactStore`, `useArtifactStore`, `useActiveArtifacts`, or the exported artifact-store mutators under `frontend/src`. Keep the deletion only if `chatStore`, `chatStreamHandlers`, workbench rendering tests, and the frontend build still pass.
+- Current worktree status: `rg` finds no production references to `artifactStore`, `useArtifactStore`, `useActiveArtifacts`, or the exported artifact-store mutators under `frontend/src`. `chatStore`, `chatStreamHandlers`, workbench rendering tests, and the frontend build passed after the deletion.
 
 Focused verification:
 
@@ -402,7 +402,7 @@ Focused acceptance evidence:
 
 ## Execution Checklist
 
-- [x] Task 1: `chatStreamHandlers.ts` + tests pass; `artifactStore.ts` has no production references and is pending cleanup-slice verification before commit
+- [x] Task 1: `chatStreamHandlers.ts` + tests pass; `artifactStore.ts` had no production references and is retired after cleanup-slice verification
 - [x] Task 2: Encoding guard runs clean
 - [x] Task 3: Snapshot hydration + tests pass
 - [x] Task 4: Artifact lifecycle baseline + unsafe download blocked
