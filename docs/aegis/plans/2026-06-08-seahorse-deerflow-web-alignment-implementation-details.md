@@ -23,16 +23,16 @@ Snippets in this document are examples. Verify them against current repository t
 
 ## Review Accuracy Notes
 
-`2026-06-08-implementation-details-review.md` is technically useful. Read it as UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. The following points were rechecked against the current repository before changing this companion document:
+`2026-06-08-implementation-details-review.md` is technically useful, but it should be treated as a point-in-time review. Read it as UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. The following points were rechecked against the current repository before changing this companion document:
 
 - Accepted: `StreamEventEnvelope` has `eventId`, `eventSeq`, `eventType`, `runId`, optional `stepId`, `timestamp`, and `typedPayload`; it does not carry `messageId`. Test fixtures and merge helpers must route live events through the active streaming assistant message, not through an envelope `messageId`.
-- Accepted with current implementation detail: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context. `LocalToolGatewayPort` still calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read that context directly.
+- Accepted with current implementation detail: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context. `LocalToolGatewayPort` still calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read request context directly unless the runtime deliberately passes a safe, server-owned snapshot in arguments.
 - Superseded: the review suggested adding an `ExecutionMetadata` argument to `ToolPort.invoke(...)` for Task 5/6. The current code instead preserves the existing `ToolPort` contract and uses gateway-level context owners: `ToolArtifactPublicationPort.publish(request, rawResult)` for artifact publication, plus server-injected hidden arguments for runtime-only tool context.
 - Accepted: there is no existing `SkillSelectionContext`; current selected-skill validation lives in `ChatSelectedSkillResolver` and produces `SkillRuntimeBlock` values.
 - Accurate with a narrower scope: `useStreamResponse.ts`, `SeahorseChatController`, and `ResearchSseBridge` already support `resumeRunId` and `lastEventSeq`; reuse that path before adding any separate event-list endpoint.
 - Superseded by current code: the named chat/workbench files and `frontend/src/hooks/useStreamResponse.ts` are clean for the known mojibake code points in the scoped scan. Keep the guard, but do not claim a current `useStreamResponse.ts` mojibake defect unless a fresh scan finds one.
 - Superseded by current code: the review's "artifact persistence trigger point" concern is resolved by the gateway-level outbound hook `ToolArtifactPublicationPort`, and Task 5 has added the concrete `GenerationToolArtifactPublicationPort` publisher for newsletter, PPT, chart, frontend-design, and image-generation outputs.
-- Superseded by current code: the review did not account for the Task 8 backend slice. Current uncommitted implementation adds `tool_search` as a `DescribedToolPort`, registers it through Spring auto-configuration, injects `_seahorseAllowedToolIds` from `KernelAgentLoop`, and returns metadata only. Keep the frontend/admin diagnostic work separate until implemented.
+- Superseded by current code: the review did not account for the Task 8 slice. Current implementation adds `tool_search` as a `DescribedToolPort`, registers it through Spring auto-configuration, injects `_seahorseAllowedToolIds` from `KernelAgentLoop`, returns metadata only, and labels `tool_search` as `延迟发现` in the admin tool catalog. Further Task 8 changes should be driven by new acceptance gaps, not by the original review's missing context.
 
 ---
 
@@ -45,6 +45,7 @@ Every live event or snapshot hydration path must follow the same rules:
 - If incoming sequence is older than the message's latest applied sequence for that event family, keep the newer live message data.
 - Missing optional payload fields leave existing message fields unchanged.
 - Do not put `messageId` in `StreamEventEnvelope` fixtures. Route live events to the active streaming assistant message through chat store state, or pass `messageId` separately to snapshot hydration helpers.
+- If a fixture needs a target message, keep that identifier in the test harness or message object. Do not add it to the event envelope just to simplify test setup.
 - Plain text SSE `message` deltas continue to work when there is no Agent run.
 
 Preferred helper shape:
@@ -180,7 +181,7 @@ Context boundary:
 
 - Do not use undefined `ExecutionContext`, `ExecutionMetadata`, `AgentRunContext`, or `SkillSelectionContext` names in implementation or tests unless the same change creates and wires that contract.
 - Preferred execution shape for Task 5 is now explicit and implemented: preserve `ToolInvocationRequest` as the gateway-level context carrier and publish artifacts from a `ToolArtifactPublicationPort` implementation that can see the full request plus the raw successful result.
-- Do not extend `ToolPort.invoke(...)` just to satisfy the review's former `ExecutionMetadata` suggestion. If a future feature truly requires changing the signature, update all implementations and registry tests in the same slice. Keep the new parameter explicit and typed; do not make generation tools read global state.
+- Do not extend `ToolPort.invoke(...)` just to satisfy the review's former `ExecutionMetadata` suggestion. If a future feature truly requires changing the signature, update all implementations, `LocalToolGatewayPort`, auto-configuration, registry tests, and artifact-publication tests in the same slice. Keep the new parameter explicit and typed; do not make generation tools read global state.
 - Keep `ToolPort` result semantics stable. The publisher should treat generation tool output as an observation to parse and persist, not as a replacement for the tool result returned to the model.
 - Persist artifacts in a gateway/kernel collaborator that can see `runId`, `stepId`, `tenantId`, `userId`, `allowedToolIds`, and the raw successful `ToolInvocationResult`; do not rely on a web-layer `ApplicationEventPublisher` or SSE sender as the source of truth. Redact the result before returning it to the model and before audit summaries so large image `b64Json` payloads and secrets are not surfaced.
 - If a scoped context holder is introduced instead, it must be set and cleared inside `LocalToolGatewayPort` with tests proving cleanup after success, failure, denial, and nested/parallel invocations.
@@ -242,6 +243,7 @@ Execution constraints:
 - Runtime gateway allowlists may include `tool_search` so the helper can execute, but search results must remain filtered to the injected effective business-tool snapshot.
 - `tool_search` responses must include only `toolId`, `name`, and `description`; do not return `schemaJson` or secrets.
 - Spring registration currently treats `tool_search` as a `TOOL` catalog resource through `BuiltInAgentToolRegistrar`.
+- Admin tool catalog currently labels `tool_search` as `延迟发现` and explains that it only exposes authorized tool metadata; this satisfies the current frontend/admin Task 8 diagnostic requirement.
 
 Required tests:
 
@@ -252,7 +254,7 @@ Required tests:
 - tool search rejects missing server-injected allowed-tool snapshots.
 - `KernelAgentLoop` injects effective restrictive allowlists into tool-search calls.
 - enabling/disabling the feature flag changes registration and catalog visibility as expected.
-- frontend/admin diagnostics should distinguish eager visible tools from deferred searchable tools before Task 8 is considered complete at the web-alignment level.
+- any future frontend/admin expansion should preserve the distinction between eager visible tools and deferred searchable tools.
 
 ---
 
@@ -300,7 +302,7 @@ Implementation constraints:
 - [x] Task 5: All 5 generation tools persist artifacts
 - [x] Task 6: `load_skill_resource` registered and tested
 - [x] Task 7: Backend tool gateway policy tests pass; frontend advisory/restrictive diagnostics render
-- [ ] Task 8: Backend `tool_search` registered and tested; frontend/admin deferred-tool diagnostics still pending
+- [x] Task 8: Backend `tool_search` registered/tested; admin deferred-tool diagnostics render
 - [ ] Task 9: Tool calls tab renders
 - [ ] Task 10: Skills tab renders
 - [ ] Task 11: Event backfill works
