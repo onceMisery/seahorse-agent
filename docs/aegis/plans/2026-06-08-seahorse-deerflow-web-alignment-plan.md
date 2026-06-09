@@ -629,7 +629,7 @@ npm test -- ToolCatalogPage
 - [x] Implement deferred catalog assembly from the Agent/skill effective allowlist; MCP and tenant filtering remain inherited from the existing allowed-tool pipeline.
 - [x] Register `tool_search` as a local read-only tool through `SeahorseAgentKernelAgentAutoConfiguration` and `BuiltInAgentToolRegistrar`.
 - [x] Extend auto-configuration and registrar tests to prove the tool is registered/cataloged when enabled and not registered when `seahorse-agent.chat.agent.tools.deferred-search.enabled=false`.
-- [ ] Add admin diagnostics showing deferred vs eagerly injected tools.
+- [x] Add admin diagnostics showing deferred vs eagerly injected tools.
 - [x] Verify focused tests pass.
 - [x] Commit: `feat: add deferred tool search runtime`
 
