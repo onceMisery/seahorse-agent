@@ -756,12 +756,12 @@ npm test -- AgentInspectorPage CostQuotaInspectorTab chatStore
 npm run build
 ```
 
-- [ ] Write RED tests for event backfill after stream reconnect using existing `resumeRunId` and `lastEventSeq` semantics.
-- [ ] Write RED tests for Agent Inspector replay order and cost/quota rendering.
-- [ ] Implement event sequence tracking in frontend message state.
-- [ ] Reuse the existing resume stream path for chat backfill; use the existing event-list endpoint for admin replay and extend backend event list/snapshot only if fields are missing.
-- [ ] Verify focused tests and build pass.
-- [ ] Commit: `feat: add agentops replay and governance diagnostics`
+- [x] Write RED tests for event backfill after stream reconnect using existing `resumeRunId` and `lastEventSeq` semantics.
+- [x] Write RED tests for Agent Inspector replay order and cost/quota rendering.
+- [x] Implement event sequence tracking in frontend message state.
+- [x] Reuse the existing resume stream path for chat backfill; use the existing event-list endpoint for admin replay and extend backend event list/snapshot only if fields are missing.
+- [x] Verify focused tests and build pass.
+- [x] Commit: `feat: add agentops replay and governance diagnostics`
 
 ### Task 12: Documentation, README, and Product Comparison Update
 

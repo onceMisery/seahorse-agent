@@ -34,7 +34,7 @@ export function AgentEventStream({ events }: { events: StreamEventEnvelope[] }) 
     <div className="space-y-2">
       {events.map((event) => (
         <div
-          key={event.eventSeq}
+          key={event.eventId || event.eventSeq}
           className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm"
         >
           <div className="min-w-0 flex-1 space-y-1">

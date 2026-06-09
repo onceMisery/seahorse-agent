@@ -36,6 +36,19 @@ const TABS = [
 
 type InspectorTab = (typeof TABS)[number]["value"];
 
+function normalizeReplayEvents(events: StreamEventEnvelope[]): StreamEventEnvelope[] {
+  const bySeq = new Map<number, StreamEventEnvelope>();
+  for (const event of events) {
+    if (typeof event.eventSeq !== "number" || !Number.isFinite(event.eventSeq)) {
+      continue;
+    }
+    if (!bySeq.has(event.eventSeq)) {
+      bySeq.set(event.eventSeq, event);
+    }
+  }
+  return Array.from(bySeq.values()).sort((a, b) => a.eventSeq - b.eventSeq);
+}
+
 export function AgentInspectorPage() {
   const { runId: routeRunId } = useParams<{ runId?: string }>();
   const [inputRunId, setInputRunId] = useState(routeRunId ?? "");
@@ -66,7 +79,7 @@ export function AgentInspectorPage() {
         if (cancelled) return;
         setSnapshot(snap ?? null);
         setCostSummary(cost ?? null);
-        setEvents(Array.isArray(evts) ? evts : []);
+        setEvents(Array.isArray(evts) ? normalizeReplayEvents(evts) : []);
       })
       .catch((error) => {
         if (cancelled) return;
