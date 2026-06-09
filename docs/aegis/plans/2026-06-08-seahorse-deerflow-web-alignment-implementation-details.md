@@ -32,10 +32,12 @@ Snippets in this document are examples. Verify them against current repository t
 - Accurate with a narrower scope: `useStreamResponse.ts`, `SeahorseChatController`, and `ResearchSseBridge` already support `resumeRunId` and `lastEventSeq`; reuse that path before adding any separate event-list endpoint.
 - Superseded by current code: the named chat/workbench files and `frontend/src/hooks/useStreamResponse.ts` are clean for the known mojibake code points in the scoped scan. Keep the guard, but do not claim a current `useStreamResponse.ts` mojibake defect unless a fresh scan finds one.
 - Superseded by current code: the review's "artifact persistence trigger point" concern is resolved by the gateway-level outbound hook `ToolArtifactPublicationPort`, and Task 5 has added the concrete `GenerationToolArtifactPublicationPort` publisher for newsletter, PPT, chart, frontend-design, and image-generation outputs.
+- Superseded by current code: the review predates the remote-image artifact fallback. `GenerationToolArtifactPublicationPort` now persists image artifacts when the observation has either `b64Json` or `imageUrl`; `b64Json` is uploaded to object storage, while remote `imageUrl` is stored as the artifact reference.
 - Superseded by current code: the review did not account for the Task 8 slice. Current implementation adds `tool_search` as a `DescribedToolPort`, registers it through Spring auto-configuration, injects `_seahorseAllowedToolIds` from `KernelAgentLoop`, returns metadata only, and labels `tool_search` as `延迟发现` in the admin tool catalog. Further Task 8 changes should be driven by new acceptance gaps, not by the original review's missing context.
 - Superseded by current code: the review's Task 9-11 "only summary-level" concern no longer applies. Tool-call and skill workbench rendering now have concrete backend stream events, message-scoped frontend state, tabs, and tests. Task 11 now has focused acceptance coverage for SSE resume URLs, admin replay ordering/dedupe, and cost/quota resume/retry rendering. Keep real E2E as the final goal gate, but do not reopen Task 11 from this review alone.
 - Accepted with updated baseline: a dedicated event-list endpoint now exists at `/api/agent-runs/{runId}/events?afterSeq=...` through `AgentRunEventBufferPort`. Admin replay should continue using it, while chat reconnect should still prefer the existing `resumeRunId` + `lastEventSeq` SSE path before adding another recovery owner.
 - Superseded by current implementation slices: SSE replay buffering now depends on `LocalChatStreamCallbackFactory` resolving `AgentRunEventBufferPort` lazily per callback, and JDBC replay payloads are serialized through `ObjectMapper.writeValueAsString(...)` with a narrow read-side compatibility path for string-literal payloads. Do not evaluate Task 11 only from live SSE delivery; admin replay and database buffer rows are part of the current acceptance boundary.
+- Accepted with current fix: the JDBC replay buffer bean must be registered whenever a `DataSource` is available. It must not require an eager `ObjectMapper` bean in `@ConditionalOnBean`; the adapter can receive an `ObjectProvider<ObjectMapper>` and fall back to `new ObjectMapper()` if necessary.
 
 Disposition matrix:
 
@@ -45,8 +47,10 @@ Disposition matrix:
 | Undefined `ExecutionContext` / `SkillSelectionContext` | Accepted as a documentation defect; fixed by using existing gateway/runtime context owners, not by inventing hidden globals. |
 | Add `ExecutionMetadata` to `ToolPort.invoke(...)` | Rejected for current slices; preserve the stable `ToolPort` contract unless a future reviewed change updates every implementation together. |
 | Artifact publication trigger was unclear | Superseded; `ToolArtifactPublicationPort.publish(request, rawResult)` is the implemented owner. |
+| Image artifact persistence only covered `b64Json` | Superseded; image observations with remote `imageUrl` persist an `AgentArtifact` reference and emit an artifact event. |
 | Task 9-11 lacked detail | Superseded at focused acceptance level; Tasks 9/10/11 now have concrete implementation and tests. |
 | SSE live stream worked but admin replay was empty | Accepted as a real implementation risk; current baseline requires lazy buffer binding plus serialized JDBC payloads and must be proven by fresh replay evidence. |
+| Event buffer auto-configuration could miss late `ObjectMapper` beans | Accepted; condition only on `DataSource`, inject `ObjectProvider<ObjectMapper>`, and keep the fallback mapper local to the adapter. |
 
 Current code anchors:
 
@@ -61,6 +65,7 @@ Current code anchors:
 | Progressive skill loading | `ChatSelectedSkillResolver`, `SkillRuntimeComposer`, `KernelAgentLoop`, `LoadSkillResourceToolPortAdapter` |
 | Deferred tool search | `ToolSearchToolPortAdapter` with server-injected `_seahorseAllowedToolIds` |
 | SSE event buffering | `LocalChatStreamCallbackFactory` resolves `AgentRunEventBufferPort` lazily; `JdbcAgentRunEventBufferAdapter` persists typed payload JSON |
+| Replay buffer auto-configuration | `SeahorseAgentRegistryRepositoryAutoConfiguration` creates `JdbcAgentRunEventBufferAdapter` from `DataSource` plus optional `ObjectMapper` |
 | Admin replay/event list | `AgentRunEventBufferPort`, `SeahorseAgentRunController`, `AgentInspectorPage` |
 
 ---
@@ -198,6 +203,7 @@ Current baseline:
 - `ToolArtifactPublicationPort` exists in the kernel outbound ports. `LocalToolGatewayPort` calls it after successful tool execution and output redaction, passes the full `ToolInvocationRequest`, and swallows publication exceptions so the tool observation remains authoritative.
 - `SeahorseAgentKernelAgentAutoConfiguration` wires an optional `ToolArtifactPublicationPort` into `LocalToolGatewayPort`; when absent, the gateway uses `ToolArtifactPublicationPort.noop()`.
 - Implemented status: newsletter, PPT, chart, frontend-design, and image-generation outputs now have direct publisher tests proving persisted `AgentArtifact` rows and `agent.artifact` event payloads. `image_generation` defaults to `b64_json` so generated images can be stored internally; returned and audited observations redact `b64Json`.
+- Implemented status: image-generation observations with remote `imageUrl` and empty `b64Json` are also persisted as image artifact references without object-storage upload. This is required for providers that return hosted image URLs despite the preferred `b64_json` request format.
 
 Implementation constraints:
 
@@ -206,6 +212,7 @@ Implementation constraints:
 - Preserve `model="default"` fallback.
 - Keep forwarding image `style`; if the contract is intentionally retired later, remove it from schema, docs, and tests in the same reviewed change.
 - Keep emitting artifact events with `artifactId`, `runId`, `title`, `mimeType`, `previewText`, and safe storage reference metadata.
+- Keep both image persistence paths covered: `b64Json` uploads bytes to object storage, and remote `imageUrl` stores the URL as the artifact `storageRef`. Do not treat a hosted image URL as a failed generation solely because `b64Json` is absent.
 
 Context boundary:
 
@@ -222,6 +229,7 @@ Verification focus:
 ```powershell
 .\mvnw.cmd -pl seahorse-agent-kernel -am test -Dtest=ImageGenerationToolPortAdapterTests,*ContentGeneration*Tests,LocalToolGatewayPort*Tests
 .\mvnw.cmd -pl seahorse-agent-spring-boot-autoconfigure -am test -Dtest=BuiltInAgentToolRegistrarTests,SeahorseAgentChatRunStoreAutoConfigurationTests#shouldWireArtifactPublisherIntoToolGateway -Dsurefire.failIfNoSpecifiedTests=false
+.\mvnw.cmd -pl seahorse-agent-kernel -am "-Dtest=GenerationToolArtifactPublicationPortTests" "-Dsurefire.failIfNoSpecifiedTests=false" test
 ```
 
 ---
@@ -308,6 +316,7 @@ Current baseline:
 - `AgentRunEventBufferPort` stores stream envelopes by run, and `SeahorseAgentRunController` exposes `/api/agent-runs/{runId}/events?afterSeq=...` for admin replay/event listing.
 - `LocalChatStreamCallbackFactory` resolves `AgentRunEventBufferPort` lazily when each callback is created, so a callback created after repository auto-configuration uses the real JDBC buffer instead of permanently capturing `noop`.
 - `JdbcAgentRunEventBufferAdapter` serializes typed payloads as JSON and keeps a narrow compatibility path for driver/H2 string-literal payloads on read.
+- `SeahorseAgentRegistryRepositoryAutoConfiguration` registers the JDBC `AgentRunEventBufferPort` when `DataSource` is present, even if the application `ObjectMapper` bean is not ready at condition-evaluation time. The adapter receives `ObjectProvider<ObjectMapper>` and falls back to a local mapper.
 - `frontend/src/services/agentRunService.ts` already wraps `listAgentRunEvents(runId, afterSeq)`, and `AgentInspectorPage` loads the event list together with snapshot and cost summary data.
 - `AgentInspectorPage` sorts replayed events by `eventSeq` and dedupes duplicate sequence numbers before rendering.
 - `useStreamResponse.test.ts` proves reconnect URLs include `resumeRunId` and `lastEventSeq`.
@@ -322,6 +331,7 @@ Implementation constraints:
 - Chat reconnect/backfill should use the existing SSE resume path and then merge through `chatStreamHandlers.ts`; admin replay can consume `listAgentRunEvents`.
 - Preserve `SpringSseEventSender` closed-emitter behavior.
 - Keep stream-buffer binding lazy; eager resolution at Spring bean creation time can make live SSE appear healthy while admin replay stays empty.
+- Keep repository auto-configuration conditional on `DataSource` only for the event buffer; do not reintroduce a hard `ObjectMapper` bean condition that can silently fall back to `AgentRunEventBufferPort.noop()`.
 - Persist replay payloads as JSON objects/arrays/values through `ObjectMapper`; do not hand-roll quoted payload strings.
 - Keep frontend tests proving backfill and event-list replay do not duplicate live events and do not overwrite newer live state with older replay/snapshot data.
 - Add backend or controller tests only for gaps not already covered by `SeahorseChatControllerReplayTests`, `SpringSseEventSenderTests`, and the event-buffer contract.
