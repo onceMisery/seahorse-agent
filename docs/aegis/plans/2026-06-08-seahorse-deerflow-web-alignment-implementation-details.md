@@ -27,11 +27,12 @@ Snippets in this document are examples. Verify them against current repository t
 
 - Accepted: `StreamEventEnvelope` has `eventId`, `eventSeq`, `eventType`, `runId`, optional `stepId`, `timestamp`, and `typedPayload`; it does not carry `messageId`. Test fixtures and merge helpers must route live events through the active streaming assistant message, not through an envelope `messageId`.
 - Accepted with current implementation detail: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context. `LocalToolGatewayPort` still calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read that context directly.
-- Superseded: the review suggested adding an `ExecutionMetadata` argument to `ToolPort.invoke(...)` for Task 5/6. The current code instead preserves the existing `ToolPort` contract and uses gateway-level context owners: `ToolArtifactPublicationPort.publish(request, rawResult)` for artifact publication, plus a server-injected `_seahorseSkillRuntimeBlocks` argument for `load_skill_resource`.
+- Superseded: the review suggested adding an `ExecutionMetadata` argument to `ToolPort.invoke(...)` for Task 5/6. The current code instead preserves the existing `ToolPort` contract and uses gateway-level context owners: `ToolArtifactPublicationPort.publish(request, rawResult)` for artifact publication, plus server-injected hidden arguments for runtime-only tool context.
 - Accepted: there is no existing `SkillSelectionContext`; current selected-skill validation lives in `ChatSelectedSkillResolver` and produces `SkillRuntimeBlock` values.
 - Accurate with a narrower scope: `useStreamResponse.ts`, `SeahorseChatController`, and `ResearchSseBridge` already support `resumeRunId` and `lastEventSeq`; reuse that path before adding any separate event-list endpoint.
 - Superseded by current code: the named chat/workbench files and `frontend/src/hooks/useStreamResponse.ts` are clean for the known mojibake code points in the scoped scan. Keep the guard, but do not claim a current `useStreamResponse.ts` mojibake defect unless a fresh scan finds one.
 - Superseded by current code: the review's "artifact persistence trigger point" concern is resolved by the gateway-level outbound hook `ToolArtifactPublicationPort`, and Task 5 has added the concrete `GenerationToolArtifactPublicationPort` publisher for newsletter, PPT, chart, frontend-design, and image-generation outputs.
+- Superseded by current code: the review did not account for the Task 8 backend slice. Current uncommitted implementation adds `tool_search` as a `DescribedToolPort`, registers it through Spring auto-configuration, injects `_seahorseAllowedToolIds` from `KernelAgentLoop`, and returns metadata only. Keep the frontend/admin diagnostic work separate until implemented.
 
 ---
 
@@ -234,7 +235,13 @@ Execution constraints:
 - Skill policy can reduce the active agent tool set; it must not grant a tool the agent/version did not already allow.
 - Deferred tool search returns metadata only and must filter results by the same effective allowed-tool set used for real invocation.
 - Tool search must not bypass `ToolPolicyPort`, `ToolCatalogRepositoryPort`, or `BuiltInAgentToolRegistrar` metadata.
-- Do not depend on a nonexistent `ExecutionContext`; either pass the selected skills and allowed tools through the same metadata contract introduced for Task 5/6, or keep the service boundary above `ToolPort` where `ToolInvocationRequest` is still available.
+- Do not depend on a nonexistent `ExecutionContext`; keep policy and runtime context at the `KernelAgentLoop`/`ToolInvocationRequest` boundary unless a future reviewed slice updates every `ToolPort` implementation.
+- `tool_search` receives its allowed-tool snapshot through the hidden `_seahorseAllowedToolIds` argument injected by the server. Model-supplied values are not authorization authority.
+- `tool_search` must fail closed when the hidden allowed-tool snapshot is missing.
+- `tool_search` may be exposed as a runtime helper when the effective business-tool allowlist is non-empty. Its injected snapshot must contain only effective business tools, not helper tools such as `tool_search` itself.
+- Runtime gateway allowlists may include `tool_search` so the helper can execute, but search results must remain filtered to the injected effective business-tool snapshot.
+- `tool_search` responses must include only `toolId`, `name`, and `description`; do not return `schemaJson` or secrets.
+- Spring registration currently treats `tool_search` as a `TOOL` catalog resource through `BuiltInAgentToolRegistrar`.
 
 Required tests:
 
@@ -242,7 +249,10 @@ Required tests:
 - advisory skill policy leaves the agent allowed tool set unchanged.
 - restrictive selected skills with empty `allowedTools` expose no Agent tools, while still allowing the runtime-only `load_skill_resource` compatibility tool when loadable skills exist.
 - tool search hides denied tools and returns only catalog metadata.
+- tool search rejects missing server-injected allowed-tool snapshots.
+- `KernelAgentLoop` injects effective restrictive allowlists into tool-search calls.
 - enabling/disabling the feature flag changes registration and catalog visibility as expected.
+- frontend/admin diagnostics should distinguish eager visible tools from deferred searchable tools before Task 8 is considered complete at the web-alignment level.
 
 ---
 
@@ -290,7 +300,7 @@ Implementation constraints:
 - [x] Task 5: All 5 generation tools persist artifacts
 - [x] Task 6: `load_skill_resource` registered and tested
 - [x] Task 7: Backend tool gateway policy tests pass; frontend advisory/restrictive diagnostics render
-- [ ] Task 8: `tool_search` registered and tested
+- [ ] Task 8: Backend `tool_search` registered and tested; frontend/admin deferred-tool diagnostics still pending
 - [ ] Task 9: Tool calls tab renders
 - [ ] Task 10: Skills tab renders
 - [ ] Task 11: Event backfill works
