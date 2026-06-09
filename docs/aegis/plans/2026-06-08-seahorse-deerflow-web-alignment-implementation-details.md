@@ -23,7 +23,7 @@ Snippets in this document are examples. Verify them against current repository t
 
 ## Review Accuracy Notes
 
-`2026-06-08-implementation-details-review.md` is technically useful, but it should be treated as a point-in-time review. Read it as UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. The following points were rechecked against the current repository before changing this companion document:
+`2026-06-08-implementation-details-review.md` is technically useful, but it should be treated as a point-in-time review. Read it as UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. The following points were rechecked against the current repository on 2026-06-09 before changing this companion document:
 
 - Accepted: `StreamEventEnvelope` has `eventId`, `eventSeq`, `eventType`, `runId`, optional `stepId`, `timestamp`, and `typedPayload`; it does not carry `messageId`. Test fixtures and merge helpers must route live events through the active streaming assistant message, not through an envelope `messageId`.
 - Accepted with current implementation detail: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context. `LocalToolGatewayPort` still calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read request context directly unless the runtime deliberately passes a safe, server-owned snapshot in arguments.
@@ -33,8 +33,8 @@ Snippets in this document are examples. Verify them against current repository t
 - Superseded by current code: the named chat/workbench files and `frontend/src/hooks/useStreamResponse.ts` are clean for the known mojibake code points in the scoped scan. Keep the guard, but do not claim a current `useStreamResponse.ts` mojibake defect unless a fresh scan finds one.
 - Superseded by current code: the review's "artifact persistence trigger point" concern is resolved by the gateway-level outbound hook `ToolArtifactPublicationPort`, and Task 5 has added the concrete `GenerationToolArtifactPublicationPort` publisher for newsletter, PPT, chart, frontend-design, and image-generation outputs.
 - Superseded by current code: the review did not account for the Task 8 slice. Current implementation adds `tool_search` as a `DescribedToolPort`, registers it through Spring auto-configuration, injects `_seahorseAllowedToolIds` from `KernelAgentLoop`, returns metadata only, and labels `tool_search` as `延迟发现` in the admin tool catalog. Further Task 8 changes should be driven by new acceptance gaps, not by the original review's missing context.
-- Superseded by current code: the review's Task 9-11 "only summary-level" concern no longer applies to Tasks 9/10. Tool-call and skill workbench rendering now have concrete backend stream events, message-scoped frontend state, tabs, and tests. The remaining valid part belongs to Task 11: replay/backfill still needs executable acceptance around event ordering, dedupe, snapshot merge, and cost/quota governance.
-- Accepted with updated baseline: a dedicated event-list endpoint now exists at `/api/agent-runs/{runId}/events?afterSeq=...` through `AgentRunEventBufferPort`. Task 11 should use it for admin replay, while chat reconnect should still prefer the existing `resumeRunId` + `lastEventSeq` SSE path before adding another recovery owner.
+- Superseded by current code: the review's Task 9-11 "only summary-level" concern no longer applies. Tool-call and skill workbench rendering now have concrete backend stream events, message-scoped frontend state, tabs, and tests. Task 11 now has focused acceptance coverage for SSE resume URLs, admin replay ordering/dedupe, and cost/quota resume/retry rendering. Keep real E2E as the final goal gate, but do not reopen Task 11 from this review alone.
+- Accepted with updated baseline: a dedicated event-list endpoint now exists at `/api/agent-runs/{runId}/events?afterSeq=...` through `AgentRunEventBufferPort`. Admin replay should continue using it, while chat reconnect should still prefer the existing `resumeRunId` + `lastEventSeq` SSE path before adding another recovery owner.
 
 Disposition matrix:
 
@@ -44,7 +44,7 @@ Disposition matrix:
 | Undefined `ExecutionContext` / `SkillSelectionContext` | Accepted as a documentation defect; fixed by using existing gateway/runtime context owners, not by inventing hidden globals. |
 | Add `ExecutionMetadata` to `ToolPort.invoke(...)` | Rejected for current slices; preserve the stable `ToolPort` contract unless a future reviewed change updates every implementation together. |
 | Artifact publication trigger was unclear | Superseded; `ToolArtifactPublicationPort.publish(request, rawResult)` is the implemented owner. |
-| Task 9-11 lacked detail | Partially superseded; Tasks 9/10 are implemented, Task 11 keeps the remaining replay/backfill detail. |
+| Task 9-11 lacked detail | Superseded at focused acceptance level; Tasks 9/10/11 now have concrete implementation and tests. |
 
 ---
 
@@ -289,7 +289,11 @@ Current baseline:
 - `SeahorseChatController`, `ResearchSseBridge`, and `useStreamResponse.ts` already have `resumeRunId` and `lastEventSeq` support.
 - `AgentRunEventBufferPort` stores stream envelopes by run, and `SeahorseAgentRunController` exposes `/api/agent-runs/{runId}/events?afterSeq=...` for admin replay/event listing.
 - `frontend/src/services/agentRunService.ts` already wraps `listAgentRunEvents(runId, afterSeq)`, and `AgentInspectorPage` loads the event list together with snapshot and cost summary data.
+- `AgentInspectorPage` sorts replayed events by `eventSeq` and dedupes duplicate sequence numbers before rendering.
+- `useStreamResponse.test.ts` proves reconnect URLs include `resumeRunId` and `lastEventSeq`.
+- `AgentInspectorPage.test.tsx` proves replay ordering and dedupe.
 - `CostQuotaInspectorTab` already renders run cost, quota, resume, and retry controls from message-bound workbench state.
+- `CostQuotaInspectorTab.test.tsx` proves readable Chinese labels plus resume/retry actions.
 
 Implementation constraints:
 
@@ -297,11 +301,11 @@ Implementation constraints:
 - Treat the existing event-list endpoint as the admin replay owner; do not add another event-list endpoint unless tests prove the current buffer contract cannot preserve required ordering or filtering.
 - Chat reconnect/backfill should use the existing SSE resume path and then merge through `chatStreamHandlers.ts`; admin replay can consume `listAgentRunEvents`.
 - Preserve `SpringSseEventSender` closed-emitter behavior.
-- Add frontend tests proving backfill and event-list replay do not duplicate live events and do not overwrite newer live state with older replay/snapshot data.
+- Keep frontend tests proving backfill and event-list replay do not duplicate live events and do not overwrite newer live state with older replay/snapshot data.
 - Add backend or controller tests only for gaps not already covered by `SeahorseChatControllerReplayTests`, `SpringSseEventSenderTests`, and the event-buffer contract.
 - Verify cost/quota governance remains display-only in chat workbench, while resume/retry actions continue to call the Agent Run action APIs.
 
-Required tests:
+Focused acceptance evidence:
 
 - reconnect with `resumeRunId` and `lastEventSeq` appends only missing stream events to the active message.
 - replay events from `listAgentRunEvents(runId, afterSeq)` render in admin event order without duplicating earlier events.
@@ -320,10 +324,10 @@ Required tests:
 
 ## Execution Checklist
 
-- [ ] Task 1: `chatStreamHandlers.ts` + tests pass
-- [ ] Task 2: Encoding guard runs clean
-- [ ] Task 3: Snapshot hydration + tests pass
-- [ ] Task 4: Artifact lifecycle + unsafe download blocked
+- [x] Task 1: `chatStreamHandlers.ts` + tests pass
+- [x] Task 2: Encoding guard runs clean
+- [x] Task 3: Snapshot hydration + tests pass
+- [x] Task 4: Artifact lifecycle baseline + unsafe download blocked
 - [x] Task 5: All 5 generation tools persist artifacts
 - [x] Task 6: `load_skill_resource` registered and tested
 - [x] Task 7: Backend tool gateway policy tests pass; frontend advisory/restrictive diagnostics render
