@@ -1,0 +1,60 @@
+﻿{
+    "runDir":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-205935",
+    "rawFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-205935\\raw.sse.txt",
+    "markdownFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-205935\\final-document.md",
+    "htmlFile":  null,
+    "newsletterFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-205935\\newsletter.md",
+    "presentationFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-205935\\presentation.md",
+    "frontendDesignFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-205935\\frontend-design-tool-output.html",
+    "manifestFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-205935\\artifact-manifest.json",
+    "reportFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-205935\\e2e-check-report.md",
+    "checks":  {
+                   "rawSseExists":  true,
+                   "finalMarkdownExists":  true,
+                   "htmlArtifactExists":  false,
+                   "htmlArtifactCoversWholeDocument":  false,
+                   "htmlArtifactPreservesCssHashes":  true,
+                   "newsletterArtifactExists":  true,
+                   "newsletterArtifactHasRealContent":  true,
+                   "presentationArtifactExists":  true,
+                   "presentationArtifactHasRealContent":  true,
+                   "frontendDesignArtifactExists":  true,
+                   "frontendDesignArtifactHasRealContent":  true,
+                   "artifactManifestExists":  true,
+                   "section21HasMermaidFlowchart":  false,
+                   "section21HasNoAsciiBoxDiagram":  true,
+                   "imageReferencesAreWebSafe":  false,
+                   "chapter9HasNewsletterSummary":  false,
+                   "chapter9HasPresentationSummary":  false,
+                   "chapter9HasWebLayoutSummary":  false,
+                   "requiredToolsWereCalled":  true,
+                   "requiredToolsFinished":  true
+               },
+    "calledTools":  [
+                        "chart_visualization",
+                        "frontend_design",
+                        "github_repository_reader",
+                        "image_generation",
+                        "newsletter_generation",
+                        "ppt_generation",
+                        "web_fetch"
+                    ],
+    "finishedTools":  [
+                          "chart_visualization",
+                          "frontend_design",
+                          "github_repository_reader",
+                          "image_generation",
+                          "newsletter_generation",
+                          "ppt_generation",
+                          "web_fetch"
+                      ],
+    "missingTools":  [
+
+                     ],
+    "missingFinishedTools":  [
+
+                             ],
+    "imageRefs":  [
+
+                  ]
+}

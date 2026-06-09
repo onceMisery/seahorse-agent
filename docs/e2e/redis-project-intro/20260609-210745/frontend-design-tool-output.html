@@ -1,0 +1,253 @@
+﻿Here is a compact, production-ready HTML/CSS draft for the Redis project introduction. It uses a modern, clean design with a responsive grid layout, suitable for technical documentation.
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis Project Introduction</title>
+    <style>
+        :root {
+            --redis-red: #DC382D;
+            --redis-dark: #2c3e50;
+            --bg-light: #f8f9fa;
+            --text-main: #333;
+            --text-secondary: #666;
+            --card-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            --border-radius: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-main);
+            background-color: #fff;
+        }
+
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(135deg, #fff5f5 0%, #fff 100%);
+            padding: 80px 0;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+        }
+
+        .hero-logo {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            /* Placeholder for Redis Logo */
+            background-color: var(--redis-red);
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 24px;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            color: var(--redis-red);
+            margin-bottom: 15px;
+            letter-spacing: -1px;
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 60px 0;
+            background-color: #fff;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 40px;
+            color: var(--redis-dark);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #eee;
+            border-radius: var(--border-radius);
+            padding: 25px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--card-shadow);
+            border-color: var(--redis-red);
+        }
+
+        .card-icon {
+            font-size: 24px;
+            margin-bottom: 15px;
+            display: inline-block;
+            padding: 8px;
+            background: #fff5f5;
+            color: var(--redis-red);
+            border-radius: 6px;
+        }
+
+        .card h3 {
+            margin-bottom: 10px;
+            font-size: 1.25rem;
+        }
+
+        .card p {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+        }
+
+        /* Architecture Section */
+        .architecture {
+            padding: 60px 0;
+            background-color: var(--bg-light);
+            text-align: center;
+        }
+
+        .arch-diagram {
+            background: #fff;
+            border: 2px dashed #ddd;
+            border-radius: var(--border-radius);
+            padding: 40px;
+            margin-top: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 200px;
+            color: #999;
+            font-style: italic;
+        }
+
+        /* Use Cases Section */
+        .use-cases {
+            padding: 60px 0;
+        }
+
+        .case-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .case-tag {
+            background: var(--redis-dark);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            border-top: 1px solid #eee;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.2rem; }
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Hero Section -->
+    <header class="hero">
+        <div class="container">
+            <div class="hero-logo">R</div>
+            <h1>Redis</h1>
+            <p>Redis 是用于构建实时数据驱动应用的缓存、数据结构服务器、文档和向量查询引擎。</p>
+        </div>
+    </header>
+
+    <!-- Core Features -->
+    <section class="features">
+        <div class="container">
+            <h2 class="section-title">核心特性</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-icon">⚡</div>
+                    <h3>高性能</h3>
+                    <p>基于内存的数据存储，提供微秒级的读写延迟，支撑每秒百万级请求。</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🧊</div>
+                    <h3>丰富数据结构</h3>
+                    <p>支持字符串、哈希、列表、集合、有序集合等复杂数据结构，满足多样化业务需求。</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">💾</div>
+                    <h3>持久化</h3>
+                    <p>提供 RDB 和 AOF 两种持久化机制，确保数据在重启后不丢失。</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🛡️</div>
+                    <h3>高可用</h3>
+                    <p>通过 Sentinel 机制实现自动故障转移，保障服务的高可用性。</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🔗</div>
+                    <h3>集群</h3>
+                    <p>原生支持 Cluster 模式，实现数据分片存储，轻松应对海量数据场景。</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">📈</div>
+                    <h3>扩展性</h3>
+                    <p>支持 Lua 脚本、Pub/Sub 消息队列、Stream 数据流等高级功能，扩展业务边界。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Diagram -->
+    <section class="architecture">
+        <div class="container">
+            <h2 class="section-title">架构概览</h2>
+            <div class="arch-diagram">
+                [ 架构图展示区：Client -> Redis Cluster -> Master/Slave Nodes ]
+            </div>
+        </div>
+    </section>
+
+    <!-- Use Cases -->
+    <section class="use-cases">
+        <div class="container">
+            <h2 class="section-title">使用场景</h2>
+

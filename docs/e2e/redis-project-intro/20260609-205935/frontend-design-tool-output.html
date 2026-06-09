@@ -1,0 +1,277 @@
+﻿Here is a complete, single-file HTML/CSS solution designed to be production-ready. It uses modern CSS (Flexbox, Grid, CSS Variables) and adheres to the Redis brand identity.
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis Project Introduction</title>
+    <style>
+        /* --- CSS Variables & Reset --- */
+        :root {
+            --redis-red: #DC382D;
+            --redis-red-dark: #b02a21;
+            --dark-bg: #1a1a1a;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-light: #666666;
+            --text-white: #ffffff;
+            --border-color: #e0e0e0;
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.05);
+            --shadow-md: 0 8px 24px rgba(0,0,0,0.08);
+            --radius: 8px;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: #f9f9f9;
+            color: var(--text-main);
+            line-height: 1.6;
+        }
+
+        /* --- Layout Utilities --- */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        section {
+            padding: 80px 0;
+        }
+
+        /* --- Hero Section --- */
+        .hero {
+            background-color: var(--dark-bg);
+            color: var(--text-white);
+            padding: 120px 0 100px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--redis-red);
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            letter-spacing: -1px;
+        }
+
+        .hero h1 span {
+            color: var(--redis-red);
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            color: #cccccc;
+            max-width: 700px;
+            margin: 0 auto 40px;
+        }
+
+        .hero-btn {
+            display: inline-block;
+            background-color: var(--redis-red);
+            color: white;
+            padding: 12px 32px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.3s ease;
+        }
+
+        .hero-btn:hover {
+            background-color: var(--redis-red-dark);
+        }
+
+        /* --- Features Grid --- */
+        .features-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .features-header h2 {
+            font-size: 2.25rem;
+            margin-bottom: 10px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .feature-card {
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--redis-red);
+        }
+
+        .icon-box {
+            width: 50px;
+            height: 50px;
+            background-color: rgba(220, 56, 45, 0.1);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            color: var(--redis-red);
+        }
+
+        .feature-card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 15px;
+        }
+
+        .feature-card p {
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+
+        /* --- Architecture Section --- */
+        .architecture {
+            background-color: #fff;
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .arch-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+        }
+
+        @media (min-width: 768px) {
+            .arch-layout {
+                flex-direction: row;
+                align-items: center;
+            }
+        }
+
+        .arch-visual {
+            flex: 1;
+            background: #f4f4f4;
+            border-radius: var(--radius);
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed #ccc;
+            color: #888;
+            font-weight: 500;
+        }
+
+        .arch-content {
+            flex: 1;
+        }
+
+        .arch-content h2 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+
+        .arch-content p {
+            color: var(--text-light);
+            margin-bottom: 20px;
+        }
+
+        .tech-list {
+            list-style: none;
+        }
+
+        .tech-list li {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        .tech-list li::before {
+            content: '✓';
+            color: var(--redis-red);
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        /* --- Tech Stack Tags --- */
+        .tech-stack {
+            background-color: var(--dark-bg);
+            color: white;
+            text-align: center;
+        }
+
+        .tech-stack h2 {
+            margin-bottom: 40px;
+        }
+
+        .tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .tag {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 0.9rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.2s;
+        }
+
+        .tag:hover {
+            background: var(--redis-red);
+            border-color: var(--redis-red);
+        }
+
+        /* --- Footer --- */
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            color: var(--text-light);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* --- Responsive Tweaks --- */
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.5rem; }
+            section { padding: 50px 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Hero Section -->
+    <header class="hero">
+        <div class="container">
+            <h1>Redis <span>Project</span></h1>
+            <p>高性能的内存数据结构存储，用作数据库、缓存和消息中间件。构建下一代极速应用的核心引擎。</p>
+            <a

@@ -1,0 +1,60 @@
+﻿{
+    "runDir":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-210745",
+    "rawFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-210745\\raw.sse.txt",
+    "markdownFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-210745\\final-document.md",
+    "htmlFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-210745\\project-intro-web-preview.html",
+    "newsletterFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-210745\\newsletter.md",
+    "presentationFile":  null,
+    "frontendDesignFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-210745\\frontend-design-tool-output.html",
+    "manifestFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-210745\\artifact-manifest.json",
+    "reportFile":  "D:\\code\\seahorse-agent\\docs\\e2e\\redis-project-intro\\20260609-210745\\e2e-check-report.md",
+    "checks":  {
+                   "rawSseExists":  true,
+                   "finalMarkdownExists":  true,
+                   "htmlArtifactExists":  true,
+                   "htmlArtifactCoversWholeDocument":  true,
+                   "htmlArtifactPreservesCssHashes":  true,
+                   "newsletterArtifactExists":  true,
+                   "newsletterArtifactHasRealContent":  true,
+                   "presentationArtifactExists":  false,
+                   "presentationArtifactHasRealContent":  false,
+                   "frontendDesignArtifactExists":  true,
+                   "frontendDesignArtifactHasRealContent":  true,
+                   "artifactManifestExists":  true,
+                   "section21HasMermaidFlowchart":  true,
+                   "section21HasNoAsciiBoxDiagram":  true,
+                   "imageReferencesAreWebSafe":  true,
+                   "chapter9HasNewsletterSummary":  true,
+                   "chapter9HasPresentationSummary":  true,
+                   "chapter9HasWebLayoutSummary":  true,
+                   "requiredToolsWereCalled":  true,
+                   "requiredToolsFinished":  true
+               },
+    "calledTools":  [
+                        "chart_visualization",
+                        "frontend_design",
+                        "github_repository_reader",
+                        "image_generation",
+                        "newsletter_generation",
+                        "ppt_generation",
+                        "web_fetch"
+                    ],
+    "finishedTools":  [
+                          "chart_visualization",
+                          "frontend_design",
+                          "github_repository_reader",
+                          "image_generation",
+                          "newsletter_generation",
+                          "ppt_generation",
+                          "web_fetch"
+                      ],
+    "missingTools":  [
+
+                     ],
+    "missingFinishedTools":  [
+
+                             ],
+    "imageRefs":  [
+                      "https://platform-outputs.agnes-ai.space/images/text-to-image/2026/06/b3459ecc537f40bcbfe89c4b7ee95c41.png"
+                  ]
+}

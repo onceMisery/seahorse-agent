@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Redeploy frontend/backend, run E2E coverage for core project functions, especially knowledge document import/chunking and skill invocation, then fix discovered issues.",
+  "goal": "Redeploy frontend/backend, run E2E coverage for core project functions, especially knowledge document import/chunking and skill invocation, then fix discovered issues.",
+  "successEvidence": [],
+  "stopCondition": "Stop when success evidence is satisfied or a blocker/risk requires pause.",
+  "nonGoals": [],
+  "scope": "Docker deployment, API smoke, knowledge ingestion/chunking, skill/agent/tool paths, frontend core admin/chat flows.",
+  "changeKinds": [
+    "verification"
+  ],
+  "riskHints": []
+}

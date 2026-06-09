@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-06-07-e2e-core-flow-verification",
+  "currentTodo": "Define first execution slice.",
+  "completedTodos": [],
+  "activeSlice": "initial",
+  "evidenceRefs": [],
+  "blockedOn": null,
+  "nextStep": "Read baseline refs and start the next safe slice.",
+  "updatedAt": "2026-06-07"
+}
