@@ -500,6 +500,8 @@ class KernelChatAgentRunStoreTests {
                 ImageGenerationToolPortAdapter.TOOL_ID), model.requests.get(0).getTools().stream()
                 .map(ToolDescriptor::toolId)
                 .toList());
+        assertTrue(callback.events.stream()
+                .anyMatch(event -> "artifact_created".equals(event.eventName())));
     }
 
     @Test
@@ -667,6 +669,7 @@ class KernelChatAgentRunStoreTests {
     private static final class RecordingCallback implements StreamCallback {
         private final CountDownLatch terminal = new CountDownLatch(1);
         private final List<String> contents = new ArrayList<>();
+        private final List<RecordedEvent> events = new ArrayList<>();
         private String runId;
         private Throwable error;
 
@@ -682,6 +685,11 @@ class KernelChatAgentRunStoreTests {
         @Override
         public void onRunStarted(String runId) {
             this.runId = runId;
+        }
+
+        @Override
+        public void onEvent(String eventName, Object payload) {
+            events.add(new RecordedEvent(eventName, payload));
         }
 
         @Override
@@ -703,6 +711,9 @@ class KernelChatAgentRunStoreTests {
                 return false;
             }
         }
+    }
+
+    private record RecordedEvent(String eventName, Object payload) {
     }
 
     private static class EmptyAgentDefinitionRepository implements AgentDefinitionRepositoryPort {

@@ -38,6 +38,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunTrigger
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRuntimeConstants;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.task.TaskTemplate;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.task.TaskTemplateId;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.task.TaskTemplateOutputType;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
@@ -445,7 +446,20 @@ public class KernelChatInboundService implements ChatInboundPort {
     }
 
     private OutputArtifactType expectedOutputArtifactType(StreamChatCommand command) {
+        Optional<OutputArtifactType> templateType = taskTemplate(command)
+                .map(TaskTemplate::defaultOutputType)
+                .map(this::outputArtifactType);
+        if (templateType.isPresent()) {
+            return templateType.get();
+        }
         return isControlledWebAgentTemplate(command) ? OutputArtifactType.MARKDOWN : null;
+    }
+
+    private OutputArtifactType outputArtifactType(TaskTemplateOutputType outputType) {
+        if (outputType == null || outputType == TaskTemplateOutputType.PLAIN_TEXT) {
+            return null;
+        }
+        return OutputArtifactType.MARKDOWN;
     }
 
     private boolean isControlledWebAgentTemplate(StreamChatCommand command) {
@@ -571,14 +585,18 @@ public class KernelChatInboundService implements ChatInboundPort {
     }
 
     private Optional<String> defaultAgentId(StreamChatCommand command) {
+        return taskTemplate(command)
+                .map(TaskTemplate::defaultAgentId)
+                .filter(this::hasText);
+    }
+
+    private Optional<TaskTemplate> taskTemplate(StreamChatCommand command) {
         if (command == null || !hasText(command.taskTemplateId()) || taskTemplateQueryPort.isEmpty()) {
             return Optional.empty();
         }
         try {
             return taskTemplateQueryPort.get()
-                    .findById(TaskTemplateId.fromValue(command.taskTemplateId()))
-                    .map(TaskTemplate::defaultAgentId)
-                    .filter(this::hasText);
+                    .findById(TaskTemplateId.fromValue(command.taskTemplateId()));
         } catch (IllegalArgumentException ex) {
             return Optional.empty();
         }

@@ -80,7 +80,7 @@ Current code anchors:
 | SSE event buffering | `LocalChatStreamCallbackFactory` resolves `AgentRunEventBufferPort` lazily; `JdbcAgentRunEventBufferAdapter` persists typed payload JSON |
 | Replay buffer auto-configuration | `SeahorseAgentRegistryRepositoryAutoConfiguration` creates `JdbcAgentRunEventBufferAdapter` from `DataSource` plus optional `ObjectMapper` |
 | Admin replay/event list | `AgentRunEventBufferPort`, `SeahorseAgentRunController`, `AgentInspectorPage` |
-| Chat task template to Agent binding | `KernelTaskTemplateQueryService` exposes `github-visual-project-intro`; `SeahorseChatController` maps it to Agent mode; `KernelChatInboundService` resolves its `defaultAgentId` through `TaskTemplateQueryInboundPort` |
+| Chat task template to Agent binding | `KernelTaskTemplateQueryService` exposes `github-visual-project-intro`; `SeahorseChatController` maps it to Agent mode; `KernelChatInboundService` resolves its `defaultAgentId` and final output artifact type through `TaskTemplateQueryInboundPort` |
 | Task template governance classification | `KernelTaskTemplateQueryService` owns declared cost/duration metadata; `KernelQuotaSummaryService` reads it through `TaskTemplateQueryInboundPort`; `SeahorseChatController.HIGH_COST_TASK_TEMPLATES` mirrors high-cost consumer-web templates while `CONTROLLED_WEB_AGENT_TEMPLATES` remains the explicit exposure allowlist |
 | Frontend dev proxy | Keep `frontend/vite.config.ts` and `frontend/vite.config.js` aligned until one config is retired |
 
