@@ -23,7 +23,7 @@ Snippets in this document are examples. Verify them against current repository t
 
 ## Review Accuracy Notes
 
-`2026-06-08-implementation-details-review.md` is technically useful, but it should be treated as a point-in-time review. Read it as UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. The following points were rechecked against the current repository on 2026-06-09 before changing this companion document:
+`2026-06-08-implementation-details-review.md` is technically useful, but it should be treated as a point-in-time review, not as the current implementation contract. The file itself is UTF-8; a legacy console or default PowerShell read may render the Chinese text as mojibake even though the file content is valid. If display output looks corrupted, verify with a UTF-8-aware editor or `rg` before copying any text into fixtures. The following points were rechecked against the current repository on 2026-06-09 before changing this companion document:
 
 - Accepted: `StreamEventEnvelope` has `eventId`, `eventSeq`, `eventType`, `runId`, optional `stepId`, `timestamp`, and `typedPayload`; it does not carry `messageId`. Test fixtures and merge helpers must route live events through the active streaming assistant message, not through an envelope `messageId`.
 - Accepted with current implementation detail: `ToolInvocationRequest` already carries run, step, tenant, user, and allowed-tool context. `LocalToolGatewayPort` still calls `ToolPort.invoke(toolCallId, toolId, arguments)`, so individual tool adapters cannot read request context directly unless the runtime deliberately passes a safe, server-owned snapshot in arguments.
@@ -45,6 +45,20 @@ Disposition matrix:
 | Add `ExecutionMetadata` to `ToolPort.invoke(...)` | Rejected for current slices; preserve the stable `ToolPort` contract unless a future reviewed change updates every implementation together. |
 | Artifact publication trigger was unclear | Superseded; `ToolArtifactPublicationPort.publish(request, rawResult)` is the implemented owner. |
 | Task 9-11 lacked detail | Superseded at focused acceptance level; Tasks 9/10/11 now have concrete implementation and tests. |
+
+Current code anchors:
+
+| Concern | Current owner |
+| --- | --- |
+| Stream envelope shape | `frontend/src/types/index.ts` (`StreamEventEnvelope`) |
+| Live stream reconnect | `frontend/src/hooks/useStreamResponse.ts`, `SeahorseChatController`, `ResearchSseBridge` |
+| Message/workbench merge owner | `frontend/src/stores/chatStreamHandlers.ts`, `frontend/src/stores/chatStore.ts` |
+| Tool invocation context | `ToolInvocationRequest` at the gateway boundary; `ToolPort.invoke(toolCallId, toolId, arguments)` remains unchanged |
+| Artifact publication | `LocalToolGatewayPort` calls `ToolArtifactPublicationPort.publish(request, rawResult)` after successful raw execution |
+| Generation artifact persistence | `GenerationToolArtifactPublicationPort` plus its focused tests |
+| Progressive skill loading | `ChatSelectedSkillResolver`, `SkillRuntimeComposer`, `KernelAgentLoop`, `LoadSkillResourceToolPortAdapter` |
+| Deferred tool search | `ToolSearchToolPortAdapter` with server-injected `_seahorseAllowedToolIds` |
+| Admin replay/event list | `AgentRunEventBufferPort`, `SeahorseAgentRunController`, `AgentInspectorPage` |
 
 ---
 
@@ -112,6 +126,7 @@ Current baseline:
 
 - `frontend/src/components/chat/workbench/WorkspaceInspector.tsx`, `frontend/src/components/chat/workbench/ArtifactInspectorTab.tsx`, `frontend/src/stores/chatStore.ts`, and `frontend/src/services/agentArtifactService.ts` are clean for the known mojibake code points from the review scan.
 - `frontend/src/hooks/useStreamResponse.ts` is also clean in the current scoped scan; watchdog comments and the stream-timeout message render as normal Chinese when read as UTF-8.
+- `frontend/src/stores/chatWorkspaceEncoding.test.ts` asserts the user-visible Chinese labels from the workbench and artifact inspector. Keep those assertions on readable Chinese strings, never on mojibake output captured from a misconfigured console.
 
 Execution constraints:
 
@@ -336,5 +351,6 @@ Focused acceptance evidence:
 - [x] Task 10: Skills tab renders
 - [x] Task 11: Event backfill works
 - [x] Task 12: Docs updated
+- [ ] Final current-worktree E2E gate: backend and frontend both started from this branch; selected skill; at least one tool call; at least one generated artifact; Workbench Tool Calls, Skills, Artifacts, and Cost/Quota render; SSE resume or admin replay proves event ordering and dedupe. Historical runs or Docker services built from older commits do not satisfy this gate.
 
 Update this document only when implementation or tests prove a contract needs to change. Update the main plan in the same reviewed change when scope, acceptance, phase order, or compatibility boundaries change.
