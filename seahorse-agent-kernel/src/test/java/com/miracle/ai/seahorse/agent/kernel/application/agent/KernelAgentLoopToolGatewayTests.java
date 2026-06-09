@@ -44,6 +44,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamSkillEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamToolCallEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
@@ -565,6 +566,55 @@ class KernelAgentLoopToolGatewayTests {
         assertEquals("SUCCEEDED", finishedEvent.message());
         assertTrue(finishedEvent.summary().contains("Seahorse"), finishedEvent.summary());
         assertTrue(finishedEvent.finishedAt() != null);
+    }
+
+    @Test
+    void shouldEmitSkillRuntimeDiagnosticsWithoutSkillContentDuringStreamingExecution() {
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", LoadSkillResourceToolPortAdapter.TOOL_ID,
+                Map.of("skillName", "research", "resourcePath", "SKILL.md"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need full skill", List.of(loadSkill)),
+                Turn.finalAnswer("used research")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok(
+                "{\"name\":\"research\",\"resourcePath\":\"SKILL.md\",\"content\":\"Use sources carefully.\"}"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("write research plan")
+                .allowedToolIds(List.of())
+                .skillRuntimeBlocks(List.of(skill("research", List.of("web_search"))))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-skill-events")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        StreamSkillEvent selected = callback.events.stream()
+                .filter(event -> StreamEventType.SKILL_SELECTED.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamSkillEvent.class::isInstance)
+                .map(StreamSkillEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("research", selected.name());
+        assertEquals("rev-research", selected.revisionId());
+        assertEquals(SkillInjectMode.METADATA_ONLY.name(), selected.injectMode());
+        assertEquals(List.of("web_search"), selected.allowedTools());
+
+        StreamSkillEvent loaded = callback.events.stream()
+                .filter(event -> StreamEventType.SKILL_RESOURCE_LOADED.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamSkillEvent.class::isInstance)
+                .map(StreamSkillEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("research", loaded.name());
+        assertEquals("SKILL.md", loaded.resourcePath());
+        assertEquals("LOADED", loaded.status());
     }
 
     @Test

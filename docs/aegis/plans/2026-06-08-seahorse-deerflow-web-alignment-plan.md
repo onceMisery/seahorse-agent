@@ -709,12 +709,12 @@ cd ..
 .\mvnw.cmd -pl seahorse-agent-kernel -am test -Dtest=ChatSelectedSkillResolverTests,KernelChatSkillSelectionTests
 ```
 
-- [ ] Write RED tests for selected, metadata-only, loaded, skipped, and rejected skill diagnostics.
-- [ ] Verify RED.
-- [ ] Add backend skill runtime events or snapshot fields if missing.
-- [ ] Add Skill workbench tab and message summary metrics.
-- [ ] Verify focused tests pass.
-- [ ] Commit: `feat: show skill invocation diagnostics`
+- [x] Write RED tests for selected, metadata-only, loaded, skipped, and rejected skill diagnostics.
+- [x] Verify RED.
+- [x] Add backend skill runtime events or snapshot fields if missing.
+- [x] Add Skill workbench tab and message summary metrics.
+- [x] Verify focused tests pass.
+- [x] Commit: `feat: show skill invocation diagnostics`
 
 ### Task 11: P2 Add AgentOps Replay, Event Backfill, and Cost Governance
 

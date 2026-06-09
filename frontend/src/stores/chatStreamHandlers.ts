@@ -8,6 +8,7 @@ import {
   type AgentRunSnapshotSource,
   type AgentRunSnapshotStep,
   type AgentSource,
+  type AgentSkillRuntimeView,
   type AgentTimelineItem,
   type AgentToolCallView,
   type ArtifactBlock,
@@ -73,6 +74,12 @@ export function applyAgentStreamEventToMessage(
       break;
     case AGENT_STREAM_EVENTS.MEMORY:
       message.memories = mergeById(message.memories, normalized.items);
+      break;
+    case AGENT_STREAM_EVENTS.SKILL_SELECTED:
+    case AGENT_STREAM_EVENTS.SKILL_LOADED:
+    case AGENT_STREAM_EVENTS.SKILL_SKIPPED:
+    case AGENT_STREAM_EVENTS.SKILL_RESOURCE_LOADED:
+      message.skills = mergeById(message.skills, normalized.items, mergeSkillRuntime);
       break;
   }
 
@@ -196,6 +203,16 @@ function toolCallTimeline(toolCalls: AgentToolCallView[]): AgentTimelineItem[] {
     timestamp: toolCall.finishedAt ?? toolCall.startedAt,
     durationMs: toolCall.durationMs
   }));
+}
+
+function mergeSkillRuntime(existing: AgentSkillRuntimeView, next: AgentSkillRuntimeView): AgentSkillRuntimeView {
+  const merged: AgentSkillRuntimeView = { ...existing };
+  for (const [key, value] of Object.entries(next) as [keyof AgentSkillRuntimeView, unknown][]) {
+    if (value !== undefined) {
+      (merged as Record<string, unknown>)[key] = value;
+    }
+  }
+  return merged;
 }
 
 function isStale(message: Message, incomingSeq?: number): boolean {

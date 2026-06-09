@@ -6,6 +6,7 @@ import {
   type AgentMemory,
   type AgentQuota,
   type AgentSource,
+  type AgentSkillRuntimeView,
   type AgentStreamEvent,
   type AgentTimelineItem,
   type AgentToolCallView,
@@ -36,7 +37,11 @@ type AgentEventPayload =
   | { type: typeof AGENT_STREAM_EVENTS.TOOL_CALL_WAITING_USER; items: AgentToolCallView[]; approvals: AgentApproval[] }
   | { type: typeof AGENT_STREAM_EVENTS.TOOL_CALL_FINISHED; items: AgentToolCallView[] }
   | { type: typeof AGENT_STREAM_EVENTS.QUOTA; items: AgentQuota[] }
-  | { type: typeof AGENT_STREAM_EVENTS.MEMORY; items: AgentMemory[] };
+  | { type: typeof AGENT_STREAM_EVENTS.MEMORY; items: AgentMemory[] }
+  | { type: typeof AGENT_STREAM_EVENTS.SKILL_SELECTED; items: AgentSkillRuntimeView[] }
+  | { type: typeof AGENT_STREAM_EVENTS.SKILL_LOADED; items: AgentSkillRuntimeView[] }
+  | { type: typeof AGENT_STREAM_EVENTS.SKILL_SKIPPED; items: AgentSkillRuntimeView[] }
+  | { type: typeof AGENT_STREAM_EVENTS.SKILL_RESOURCE_LOADED; items: AgentSkillRuntimeView[] };
 
 const ARTIFACT_LANGUAGES: ArtifactLanguage[] = ["html", "css", "javascript", "js", "tsx", "vue", "markdown"];
 
@@ -162,6 +167,23 @@ function normalizeToolWaitingApproval(payload: unknown): AgentApproval[] {
       argumentsPreviewJson: jsonStringValue(item, ["argumentsPreviewJson", "argumentsPreview"])
     }];
   });
+}
+
+function stringArrayValue(record: Record<string, unknown>, keys: string[]): string[] | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      const values = value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean);
+      if (values.length > 0) return values;
+    }
+    if (typeof value === "string" && value.trim()) {
+      const values = value.split(",").map((item) => item.trim()).filter(Boolean);
+      if (values.length > 0) return values;
+    }
+  }
+  return undefined;
 }
 
 function normalizeToolCalls(payload: unknown, statusFallback: string, includeSummaryAsResult = false): AgentToolCallView[] {
@@ -382,6 +404,26 @@ function normalizeMemories(payload: unknown): AgentMemory[] {
   });
 }
 
+function normalizeSkills(payload: unknown, statusFallback: string): AgentSkillRuntimeView[] {
+  return payloadItems(payload).flatMap((item, index) => {
+    if (!isRecord(item)) return [];
+    const name = stringValue(item, ["name", "skillName", "id"]);
+    if (!name) return [];
+    return [{
+      id: name,
+      name,
+      status: stringValue(item, ["status", "state"]) ?? statusFallback,
+      revisionId: stringValue(item, ["revisionId", "revision"]),
+      injectMode: stringValue(item, ["injectMode", "mode"]),
+      category: stringValue(item, ["category"]),
+      description: stringValue(item, ["description", "summary"]),
+      allowedTools: stringArrayValue(item, ["allowedTools", "tools"]),
+      resourcePath: stringValue(item, ["resourcePath", "path"]),
+      reason: stringValue(item, ["reason", "error", "message"])
+    }];
+  });
+}
+
 export function isAgentStreamEvent(event: string): event is AgentStreamEvent {
   return Object.values(AGENT_STREAM_EVENTS).includes(event as AgentStreamEvent);
 }
@@ -451,6 +493,14 @@ export function normalizeAgentStreamEvent(event: string, payload: unknown): Agen
       return { type: event, items: normalizeQuota(payload) };
     case AGENT_STREAM_EVENTS.MEMORY:
       return { type: event, items: normalizeMemories(payload) };
+    case AGENT_STREAM_EVENTS.SKILL_SELECTED:
+      return { type: event, items: normalizeSkills(payload, "SELECTED") };
+    case AGENT_STREAM_EVENTS.SKILL_LOADED:
+      return { type: event, items: normalizeSkills(payload, "LOADED") };
+    case AGENT_STREAM_EVENTS.SKILL_SKIPPED:
+      return { type: event, items: normalizeSkills(payload, "SKIPPED") };
+    case AGENT_STREAM_EVENTS.SKILL_RESOURCE_LOADED:
+      return { type: event, items: normalizeSkills(payload, "LOADED") };
     default:
       return null;
   }

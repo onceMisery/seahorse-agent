@@ -11,6 +11,7 @@ const tabByMetric: Record<string, WorkbenchTab> = {
   artifacts: "artifacts",
   approvals: "approvals",
   tools: "tools",
+  skills: "skills",
   cost: "cost",
   memories: "memory"
 };
@@ -50,6 +51,11 @@ export function MessageRunSummary({ message }: MessageRunSummaryProps) {
   const toolCallCount = message.toolCalls?.length ?? 0;
   if (toolCallCount > 0) {
     metrics.push({ key: "tools", label: "工具", count: toolCallCount, tab: tabByMetric.tools });
+  }
+
+  const skillCount = message.skills?.length ?? 0;
+  if (skillCount > 0) {
+    metrics.push({ key: "skills", label: "技能", count: skillCount, tab: tabByMetric.skills });
   }
 
   if (message.costSummary) {

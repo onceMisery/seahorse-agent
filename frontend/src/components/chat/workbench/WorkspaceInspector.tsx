@@ -7,6 +7,7 @@ import {
   CheckSquare,
   Coins,
   Globe,
+  Library,
   LayoutGrid,
   Wrench,
   X
@@ -18,6 +19,7 @@ import { CostQuotaInspectorTab } from "@/components/chat/workbench/CostQuotaInsp
 import { InspectorEmptyState } from "@/components/chat/workbench/InspectorEmptyState";
 import { InspectorTabButton } from "@/components/chat/workbench/InspectorTabButton";
 import { MemoryInspectorTab } from "@/components/chat/workbench/MemoryInspectorTab";
+import { SkillInspectorTab } from "@/components/chat/workbench/SkillInspectorTab";
 import { SourcesInspectorTab } from "@/components/chat/workbench/SourcesInspectorTab";
 import { TimelineInspectorTab } from "@/components/chat/workbench/TimelineInspectorTab";
 import { ToolCallsInspectorTab } from "@/components/chat/workbench/ToolCallsInspectorTab";
@@ -41,6 +43,7 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
   const sourceCount = message?.sources?.length ?? 0;
   const approvalCount = message?.approvals?.length ?? 0;
   const toolCallCount = message?.toolCalls?.length ?? 0;
+  const skillCount = message?.skills?.length ?? 0;
   const memoryCount = message?.memories?.length ?? 0;
   const hasCost = Boolean(message?.costSummary);
 
@@ -119,6 +122,9 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
           <InspectorTabButton value="tools" label="Tool Calls" count={toolCallCount}>
             <Wrench className="h-3.5 w-3.5" />
           </InspectorTabButton>
+          <InspectorTabButton value="skills" label="Skills" count={skillCount}>
+            <Library className="h-3.5 w-3.5" />
+          </InspectorTabButton>
           <InspectorTabButton value="cost" label="Cost" count={hasCost ? 1 : 0}>
             <Coins className="h-3.5 w-3.5" />
           </InspectorTabButton>
@@ -155,6 +161,9 @@ export function WorkspaceInspector({ message, open, onClose }: WorkspaceInspecto
               </Tabs.Content>
               <Tabs.Content value="tools" className="h-full">
                 <ToolCallsInspectorTab toolCalls={message.toolCalls ?? []} />
+              </Tabs.Content>
+              <Tabs.Content value="skills" className="h-full">
+                <SkillInspectorTab skills={message.skills ?? []} />
               </Tabs.Content>
               <Tabs.Content value="cost" className="h-full">
                 <CostQuotaInspectorTab

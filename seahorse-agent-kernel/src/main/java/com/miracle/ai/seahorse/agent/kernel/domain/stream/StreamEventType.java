@@ -98,6 +98,26 @@ public enum StreamEventType {
     TOOL_CALL_FINISHED("tool_call_finished"),
 
     /**
+     * Runtime selected a skill for the current run.
+     */
+    SKILL_SELECTED("skill.selected"),
+
+    /**
+     * Runtime injected skill body content.
+     */
+    SKILL_LOADED("skill.loaded"),
+
+    /**
+     * Runtime skipped or rejected a skill.
+     */
+    SKILL_SKIPPED("skill.skipped"),
+
+    /**
+     * A progressive skill resource was loaded.
+     */
+    SKILL_RESOURCE_LOADED("skill.resource_loaded"),
+
+    /**
      * Source or citation was found.
      */
     SOURCE_FOUND("source_found"),

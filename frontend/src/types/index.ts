@@ -70,6 +70,10 @@ export const AGENT_STREAM_EVENTS = {
   APPROVAL: "agent.approval",
   QUOTA: "agent.quota",
   MEMORY: "agent.memory",
+  SKILL_SELECTED: "skill.selected",
+  SKILL_LOADED: "skill.loaded",
+  SKILL_SKIPPED: "skill.skipped",
+  SKILL_RESOURCE_LOADED: "skill.resource_loaded",
   RUN_STARTED: "run_started",
   RUN_SNAPSHOT: "run_snapshot",
   STEP_STARTED: "step_started",
@@ -304,6 +308,19 @@ export interface AgentMemory {
   action?: string;
 }
 
+export interface AgentSkillRuntimeView {
+  id: string;
+  name: string;
+  status: string;
+  revisionId?: string;
+  injectMode?: string;
+  category?: string;
+  description?: string;
+  allowedTools?: string[];
+  resourcePath?: string;
+  reason?: string;
+}
+
 export type ContentBlock =
   | { type: "text"; text: string }
   | { type: "artifact"; artifact: ArtifactBlock };
@@ -337,6 +354,7 @@ export interface Message {
   toolCalls?: AgentToolCallView[];
   quota?: AgentQuota[];
   memories?: AgentMemory[];
+  skills?: AgentSkillRuntimeView[];
   costSummary?: AgentRunCostSummary;
 }
 

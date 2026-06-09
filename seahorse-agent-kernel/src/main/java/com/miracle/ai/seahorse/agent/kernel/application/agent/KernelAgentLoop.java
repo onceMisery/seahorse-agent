@@ -54,6 +54,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamAgentStepEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamSkillEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamToolCallEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeScope;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
@@ -107,6 +108,10 @@ public class KernelAgentLoop {
     private static final String TOOL_CALL_APPROVAL_SUMMARY = "Tool call requires approval";
     private static final String TOOL_CALL_SUCCEEDED_STATUS = "SUCCEEDED";
     private static final String TOOL_CALL_FAILED_STATUS = "FAILED";
+    private static final String SKILL_STATUS_SELECTED = "SELECTED";
+    private static final String SKILL_STATUS_LOADED = "LOADED";
+    private static final String SKILL_STATUS_METADATA_ONLY = "METADATA_ONLY";
+    private static final String SKILL_STATUS_SKIPPED = "SKIPPED";
     private static final String TOOL_ARGUMENT_KEYS_FIELD = "argumentKeys";
     private static final String TOOL_ARGUMENT_COUNT_FIELD = "argumentCount";
     private static final String WEB_SEARCH_TOOL_ID = "web_search";
@@ -312,6 +317,7 @@ public class KernelAgentLoop {
         AgentRunControl runControl = Objects.requireNonNullElseGet(control, AgentRunControl::direct);
         List<ChatMessage> messages = new ArrayList<>(request.history());
         installRuntimeContext(messages, request.contextPack(), request.memoryContext(), request.skillRuntimeContext());
+        emitSkillRuntimeEvents(callback, request);
         messages.add(ChatMessage.user(request.question()));
 
         List<AgentStep> steps = new ArrayList<>();
@@ -631,6 +637,7 @@ public class KernelAgentLoop {
                     emitToolCallFinished(callback, request, toolCalls.get(i), observation);
                 }
                 emitToolCallWaitingUser(callback, request, toolCalls.get(i), observation);
+                emitSkillResourceLoaded(callback, request, toolCalls.get(i), observation);
             }
             return observations;
         } catch (InterruptedException ex) {
@@ -963,6 +970,78 @@ public class KernelAgentLoop {
                 finishedAt,
                 observation.success() ? null : observation.error(),
                 observation.success() ? TOOL_CALL_SUCCEEDED_STATUS : TOOL_CALL_FAILED_STATUS));
+    }
+
+    private void emitSkillRuntimeEvents(StreamCallback callback, AgentLoopRequest request) {
+        if (request.skillRuntimeBlocks().isEmpty()) {
+            return;
+        }
+        for (SkillRuntimeBlock skill : request.skillRuntimeBlocks()) {
+            if (skill == null) {
+                continue;
+            }
+            StreamEventType eventType = skill.injectMode() == SkillInjectMode.METADATA_AND_BODY && !skill.content().isBlank()
+                    ? StreamEventType.SKILL_LOADED
+                    : StreamEventType.SKILL_SELECTED;
+            String status = eventType == StreamEventType.SKILL_LOADED
+                    ? SKILL_STATUS_LOADED
+                    : skill.injectMode() == SkillInjectMode.METADATA_ONLY
+                    ? SKILL_STATUS_METADATA_ONLY
+                    : SKILL_STATUS_SELECTED;
+            emitEvent(callback, eventType, skillEvent(request, skill, null, status, null));
+        }
+    }
+
+    private void emitSkillResourceLoaded(StreamCallback callback,
+                                         AgentLoopRequest request,
+                                         AgentToolCall toolCall,
+                                         AgentObservation observation) {
+        if (!LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
+            return;
+        }
+        String skillName = loadSkillName(toolCall);
+        SkillRuntimeBlock skill = request.skillRuntimeBlocks().stream()
+                .filter(candidate -> candidate.name().equals(skillName))
+                .findFirst()
+                .orElse(null);
+        if (skill == null) {
+            emitEvent(callback, StreamEventType.SKILL_SKIPPED, new StreamSkillEvent(
+                    request.runId(),
+                    skillName,
+                    null,
+                    null,
+                    null,
+                    null,
+                    List.of(),
+                    loadSkillResourcePath(toolCall),
+                    SKILL_STATUS_SKIPPED,
+                    observation.error()));
+            return;
+        }
+        emitEvent(callback, StreamEventType.SKILL_RESOURCE_LOADED, skillEvent(
+                request,
+                skill,
+                loadSkillResourcePath(toolCall),
+                observation.success() ? SKILL_STATUS_LOADED : SKILL_STATUS_SKIPPED,
+                observation.success() ? null : observation.error()));
+    }
+
+    private StreamSkillEvent skillEvent(AgentLoopRequest request,
+                                        SkillRuntimeBlock skill,
+                                        String resourcePath,
+                                        String status,
+                                        String reason) {
+        return new StreamSkillEvent(
+                request.runId(),
+                skill.name(),
+                skill.revisionId(),
+                skill.injectMode().name(),
+                skill.category().name(),
+                skill.description(),
+                skill.allowedTools(),
+                resourcePath,
+                status,
+                reason);
     }
 
     private Map<String, Object> argumentsPreview(AgentToolCall toolCall) {

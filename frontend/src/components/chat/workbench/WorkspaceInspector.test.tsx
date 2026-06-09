@@ -18,6 +18,16 @@ const message: Message = {
     argumentsPreviewJson: "{\"query\":\"seahorse\"}",
     resultSummary: "2 sources",
     durationMs: 1200
+  }],
+  skills: [{
+    id: "deep-research",
+    name: "deep-research",
+    status: "LOADED",
+    injectMode: "METADATA_ONLY",
+    category: "PUBLIC",
+    allowedTools: ["web_search"],
+    description: "Research workflow",
+    resourcePath: "SKILL.md"
   }]
 };
 
@@ -36,5 +46,17 @@ describe("WorkspaceInspector", () => {
     expect(screen.getByText("web_search")).toBeInTheDocument();
     expect(screen.getByText(/"query": "seahorse"/)).toBeInTheDocument();
     expect(screen.getByText("2 sources")).toBeInTheDocument();
+  });
+
+  it("renders skill diagnostics without exposing skill body content", async () => {
+    const user = userEvent.setup();
+    render(<WorkspaceInspector message={message} open onClose={() => undefined} />);
+    expect(screen.getByText("Skills")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Skills/ }));
+    expect(screen.getByText("deep-research")).toBeInTheDocument();
+    expect(screen.getByText("METADATA_ONLY")).toBeInTheDocument();
+    expect(screen.getByText("SKILL.md")).toBeInTheDocument();
+    expect(screen.getByText("web_search")).toBeInTheDocument();
+    expect(screen.queryByText("Instructions:")).not.toBeInTheDocument();
   });
 });

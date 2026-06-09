@@ -193,6 +193,42 @@ describe("chatStreamHandlers", () => {
     }]);
   });
 
+  it("merges skill runtime diagnostics into message workspace fields by skill name", () => {
+    const message = assistantMessage({ lastEventSeq: 4 });
+
+    applyAgentStreamEventToMessage(
+      message,
+      envelope(5, "skill.selected", {
+        name: "deep-research",
+        revisionId: "rev-1",
+        injectMode: "METADATA_ONLY",
+        category: "PUBLIC",
+        allowedTools: ["web_search"],
+        description: "Research workflow"
+      })
+    );
+    applyAgentStreamEventToMessage(
+      message,
+      envelope(6, "skill.resource_loaded", {
+        name: "deep-research",
+        resourcePath: "SKILL.md",
+        status: "LOADED"
+      })
+    );
+
+    expect(message.skills).toEqual([{
+      id: "deep-research",
+      name: "deep-research",
+      revisionId: "rev-1",
+      status: "LOADED",
+      injectMode: "METADATA_ONLY",
+      category: "PUBLIC",
+      allowedTools: ["web_search"],
+      description: "Research workflow",
+      resourcePath: "SKILL.md"
+    }]);
+  });
+
   it("ignores stale live events and appends artifact deltas once", () => {
     const message = assistantMessage({
       lastEventSeq: 10,
