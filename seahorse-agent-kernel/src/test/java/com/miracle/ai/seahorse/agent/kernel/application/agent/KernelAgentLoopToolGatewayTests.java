@@ -252,6 +252,41 @@ class KernelAgentLoopToolGatewayTests {
     }
 
     @Test
+    void shouldAllowRegisteredSkillResourceToolThroughDefaultGatewayPolicy() {
+        AgentToolCall loadSkill = AgentToolCall.of("call-skill", LoadSkillResourceToolPortAdapter.TOOL_ID,
+                Map.of("skillName", "research", "resourcePath", "SKILL.md"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need full skill", List.of(loadSkill)),
+                Turn.finalAnswer("used gateway skill loader")));
+        ListingOnlyToolRegistry registry = new ListingOnlyToolRegistry();
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                registry,
+                new LocalToolGatewayPort(registry),
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("write research plan")
+                .allowedToolIds(List.of())
+                .skillRuntimeBlocks(List.of(new SkillRuntimeBlock(
+                        "research",
+                        "rev-1",
+                        "hash-1",
+                        "Research workflow",
+                        AgentSkillCategory.PUBLIC,
+                        SkillInjectMode.METADATA_ONLY,
+                        List.of("web_search"),
+                        "Use sources carefully.")))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .build());
+
+        assertEquals("used gateway skill loader", result.finalAnswer());
+        assertTrue(result.steps().get(0).observations().get(0).success(),
+                result.steps().get(0).observations().get(0).error());
+        assertTrue(result.steps().get(0).observations().get(0).content().contains("Use sources carefully."));
+    }
+
+    @Test
     void shouldNotExposeAnyToolsWhenAllowlistIsEmpty() {
         ToolListRecordingModel model = new ToolListRecordingModel();
         RecordingToolGateway gateway = new RecordingToolGateway();

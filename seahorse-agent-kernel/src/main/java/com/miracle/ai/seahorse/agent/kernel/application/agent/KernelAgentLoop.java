@@ -717,7 +717,18 @@ public class KernelAgentLoop {
                 toolArguments(toolCall, request),
                 java.util.Map.of(),
                 idempotencyKey(runId, toolCall.id()),
-                allowedToolIds == null ? List.of() : List.copyOf(allowedToolIds));
+                effectiveAllowedToolIds(toolCall, allowedToolIds));
+    }
+
+    private List<String> effectiveAllowedToolIds(AgentToolCall toolCall, Set<String> allowedToolIds) {
+        LinkedHashMap<String, Boolean> effective = new LinkedHashMap<>();
+        if (allowedToolIds != null) {
+            allowedToolIds.forEach(toolId -> effective.put(toolId, true));
+        }
+        if (LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
+            effective.put(LoadSkillResourceToolPortAdapter.TOOL_ID, true);
+        }
+        return List.copyOf(effective.keySet());
     }
 
     private String idempotencyKey(String runId, String toolCallId) {
