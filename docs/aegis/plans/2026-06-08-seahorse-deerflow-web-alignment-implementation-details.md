@@ -35,6 +35,7 @@ Snippets in this document are examples. Verify them against current repository t
 - Superseded by current code: the review did not account for the Task 8 slice. Current implementation adds `tool_search` as a `DescribedToolPort`, registers it through Spring auto-configuration, injects `_seahorseAllowedToolIds` from `KernelAgentLoop`, returns metadata only, and labels `tool_search` as `延迟发现` in the admin tool catalog. Further Task 8 changes should be driven by new acceptance gaps, not by the original review's missing context.
 - Superseded by current code: the review's Task 9-11 "only summary-level" concern no longer applies. Tool-call and skill workbench rendering now have concrete backend stream events, message-scoped frontend state, tabs, and tests. Task 11 now has focused acceptance coverage for SSE resume URLs, admin replay ordering/dedupe, and cost/quota resume/retry rendering. Keep real E2E as the final goal gate, but do not reopen Task 11 from this review alone.
 - Accepted with updated baseline: a dedicated event-list endpoint now exists at `/api/agent-runs/{runId}/events?afterSeq=...` through `AgentRunEventBufferPort`. Admin replay should continue using it, while chat reconnect should still prefer the existing `resumeRunId` + `lastEventSeq` SSE path before adding another recovery owner.
+- Superseded by current implementation slices: SSE replay buffering now depends on `LocalChatStreamCallbackFactory` resolving `AgentRunEventBufferPort` lazily per callback, and JDBC replay payloads are serialized through `ObjectMapper.writeValueAsString(...)` with a narrow read-side compatibility path for string-literal payloads. Do not evaluate Task 11 only from live SSE delivery; admin replay and database buffer rows are part of the current acceptance boundary.
 
 Disposition matrix:
 
@@ -45,6 +46,7 @@ Disposition matrix:
 | Add `ExecutionMetadata` to `ToolPort.invoke(...)` | Rejected for current slices; preserve the stable `ToolPort` contract unless a future reviewed change updates every implementation together. |
 | Artifact publication trigger was unclear | Superseded; `ToolArtifactPublicationPort.publish(request, rawResult)` is the implemented owner. |
 | Task 9-11 lacked detail | Superseded at focused acceptance level; Tasks 9/10/11 now have concrete implementation and tests. |
+| SSE live stream worked but admin replay was empty | Accepted as a real implementation risk; current baseline requires lazy buffer binding plus serialized JDBC payloads and must be proven by fresh replay evidence. |
 
 Current code anchors:
 
@@ -58,6 +60,7 @@ Current code anchors:
 | Generation artifact persistence | `GenerationToolArtifactPublicationPort` plus its focused tests |
 | Progressive skill loading | `ChatSelectedSkillResolver`, `SkillRuntimeComposer`, `KernelAgentLoop`, `LoadSkillResourceToolPortAdapter` |
 | Deferred tool search | `ToolSearchToolPortAdapter` with server-injected `_seahorseAllowedToolIds` |
+| SSE event buffering | `LocalChatStreamCallbackFactory` resolves `AgentRunEventBufferPort` lazily; `JdbcAgentRunEventBufferAdapter` persists typed payload JSON |
 | Admin replay/event list | `AgentRunEventBufferPort`, `SeahorseAgentRunController`, `AgentInspectorPage` |
 
 ---
@@ -303,6 +306,8 @@ Current baseline:
 - `SpringSseEventSender` sends named events and emits `error` followed by `done` on failure.
 - `SeahorseChatController`, `ResearchSseBridge`, and `useStreamResponse.ts` already have `resumeRunId` and `lastEventSeq` support.
 - `AgentRunEventBufferPort` stores stream envelopes by run, and `SeahorseAgentRunController` exposes `/api/agent-runs/{runId}/events?afterSeq=...` for admin replay/event listing.
+- `LocalChatStreamCallbackFactory` resolves `AgentRunEventBufferPort` lazily when each callback is created, so a callback created after repository auto-configuration uses the real JDBC buffer instead of permanently capturing `noop`.
+- `JdbcAgentRunEventBufferAdapter` serializes typed payloads as JSON and keeps a narrow compatibility path for driver/H2 string-literal payloads on read.
 - `frontend/src/services/agentRunService.ts` already wraps `listAgentRunEvents(runId, afterSeq)`, and `AgentInspectorPage` loads the event list together with snapshot and cost summary data.
 - `AgentInspectorPage` sorts replayed events by `eventSeq` and dedupes duplicate sequence numbers before rendering.
 - `useStreamResponse.test.ts` proves reconnect URLs include `resumeRunId` and `lastEventSeq`.
@@ -316,6 +321,8 @@ Implementation constraints:
 - Treat the existing event-list endpoint as the admin replay owner; do not add another event-list endpoint unless tests prove the current buffer contract cannot preserve required ordering or filtering.
 - Chat reconnect/backfill should use the existing SSE resume path and then merge through `chatStreamHandlers.ts`; admin replay can consume `listAgentRunEvents`.
 - Preserve `SpringSseEventSender` closed-emitter behavior.
+- Keep stream-buffer binding lazy; eager resolution at Spring bean creation time can make live SSE appear healthy while admin replay stays empty.
+- Persist replay payloads as JSON objects/arrays/values through `ObjectMapper`; do not hand-roll quoted payload strings.
 - Keep frontend tests proving backfill and event-list replay do not duplicate live events and do not overwrite newer live state with older replay/snapshot data.
 - Add backend or controller tests only for gaps not already covered by `SeahorseChatControllerReplayTests`, `SpringSseEventSenderTests`, and the event-buffer contract.
 - Verify cost/quota governance remains display-only in chat workbench, while resume/retry actions continue to call the Agent Run action APIs.
@@ -324,6 +331,7 @@ Focused acceptance evidence:
 
 - reconnect with `resumeRunId` and `lastEventSeq` appends only missing stream events to the active message.
 - replay events from `listAgentRunEvents(runId, afterSeq)` render in admin event order without duplicating earlier events.
+- a fresh current-worktree live Agent run writes non-zero rows to `sa_agent_run_event_buffer`, and `/api/agent-runs/{runId}/events?afterSeq=0` returns ordered, parseable events for the same run.
 - snapshot hydration after replay preserves newer live timeline, source, artifact, tool-call, skill, approval, and quota fields.
 - cost/quota tab renders totals, quota pressure, resume, and retry states from message state without creating a second store owner.
 
@@ -349,8 +357,8 @@ Focused acceptance evidence:
 - [x] Task 8: Backend `tool_search` registered/tested; admin deferred-tool diagnostics render
 - [x] Task 9: Tool calls tab renders
 - [x] Task 10: Skills tab renders
-- [x] Task 11: Event backfill works
+- [x] Task 11: Event backfill unit/controller coverage works
 - [x] Task 12: Docs updated
-- [ ] Final current-worktree E2E gate: backend and frontend both started from this branch; selected skill; at least one tool call; at least one generated artifact; Workbench Tool Calls, Skills, Artifacts, and Cost/Quota render; SSE resume or admin replay proves event ordering and dedupe. Historical runs or Docker services built from older commits do not satisfy this gate.
+- [ ] Final current-worktree E2E gate: backend and frontend both started from this branch; selected skill; at least one tool call; at least one generated artifact; Workbench Tool Calls, Skills, Artifacts, and Cost/Quota render; `sa_agent_run_event_buffer` has rows for the fresh run; `/api/agent-runs/{runId}/events?afterSeq=0` returns ordered/dedupable events; SSE resume or admin replay proves event ordering and dedupe. Historical runs or Docker services built from older commits do not satisfy this gate.
 
 Update this document only when implementation or tests prove a contract needs to change. Update the main plan in the same reviewed change when scope, acceptance, phase order, or compatibility boundaries change.
