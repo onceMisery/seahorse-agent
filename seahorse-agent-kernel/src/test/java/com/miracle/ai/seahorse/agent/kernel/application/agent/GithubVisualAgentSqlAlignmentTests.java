@@ -34,6 +34,10 @@ class GithubVisualAgentSqlAlignmentTests {
             DATABASE_DIR.resolve("migrations").resolve("V24__github_visual_agent_final_outline.sql");
     private static final Path WHOLE_DOCUMENT_HTML_MIGRATION =
             DATABASE_DIR.resolve("migrations").resolve("V25__github_visual_agent_whole_document_html_preview.sql");
+    private static final Path OUTPUT_BUDGET_MIGRATION =
+            DATABASE_DIR.resolve("migrations").resolve("V26__github_visual_agent_output_budget.sql");
+    private static final Path STRICT_ARTIFACT_E2E_MIGRATION =
+            DATABASE_DIR.resolve("migrations").resolve("V27__github_visual_agent_strict_artifact_e2e.sql");
 
     @Test
     void githubVisualAgentShouldHaveExecutionPlanContractInInitSqlAndLatestMigration() throws Exception {
@@ -41,6 +45,8 @@ class GithubVisualAgentSqlAlignmentTests {
         String migrationSql = Files.readString(EXECUTION_PLAN_MIGRATION);
         String finalOutlineSql = Files.readString(FINAL_OUTLINE_MIGRATION);
         String wholeDocumentHtmlSql = Files.readString(WHOLE_DOCUMENT_HTML_MIGRATION);
+        String outputBudgetSql = Files.readString(OUTPUT_BUDGET_MIGRATION);
+        String strictArtifactE2eSql = Files.readString(STRICT_ARTIFACT_E2E_MIGRATION);
 
         assertGithubVisualExecutionPlan(initSql);
         assertGithubVisualExecutionPlan(migrationSql);
@@ -48,6 +54,10 @@ class GithubVisualAgentSqlAlignmentTests {
         assertGithubVisualFinalOutline(finalOutlineSql);
         assertGithubVisualWholeDocumentHtmlPreview(initSql);
         assertGithubVisualWholeDocumentHtmlPreview(wholeDocumentHtmlSql);
+        assertGithubVisualInitialOutputBudget(initSql);
+        assertGithubVisualOutputBudgetMigration(outputBudgetSql);
+        assertGithubVisualStrictArtifactE2e(initSql);
+        assertGithubVisualStrictArtifactE2e(strictArtifactE2eSql);
     }
 
     private static void assertGithubVisualExecutionPlan(String sql) {
@@ -80,6 +90,27 @@ class GithubVisualAgentSqlAlignmentTests {
         assertContains(sql, "HTML 预览 artifact 必须覆盖整篇项目介绍文档");
         assertContains(sql, "用于 Web 端完整阅读预览");
         assertContains(sql, "所有章节、图片引用、Mermaid 图说明、关键文件证据和第九章产物摘要");
+    }
+
+    private static void assertGithubVisualInitialOutputBudget(String sql) {
+        assertContains(sql, "github-visual-project-intro-agent");
+        assertContains(sql, "\"maxTokens\":12000");
+    }
+
+    private static void assertGithubVisualOutputBudgetMigration(String sql) {
+        assertContains(sql, "github-visual-project-intro-agent");
+        assertContains(sql, "jsonb_set");
+        assertContains(sql, "'{maxTokens}'");
+        assertContains(sql, "'12000'::jsonb");
+    }
+
+    private static void assertGithubVisualStrictArtifactE2e(String sql) {
+        assertContains(sql, "严格产物要求（用于真实 E2E 验证）");
+        assertContains(sql, "newsletter.md");
+        assertContains(sql, "presentation.md");
+        assertContains(sql, "frontend-design-tool-output.html");
+        assertContains(sql, "project-intro-web-preview.html");
+        assertContains(sql, "工具 observation 是真实产物来源");
     }
 
     private static void assertContains(String sql, String expected) {

@@ -29,6 +29,7 @@ class StreamEventTypeTests {
         assertEquals("step_progress", StreamEventType.STEP_PROGRESS.value());
         assertEquals("step_finished", StreamEventType.STEP_FINISHED.value());
         assertEquals("tool_call_started", StreamEventType.TOOL_CALL_STARTED.value());
+        assertEquals("tool_call_finished", StreamEventType.TOOL_CALL_FINISHED.value());
         assertEquals("tool_call_waiting_user", StreamEventType.TOOL_CALL_WAITING_USER.value());
         assertEquals("source_found", StreamEventType.SOURCE_FOUND.value());
         assertEquals("artifact_created", StreamEventType.ARTIFACT_CREATED.value());

@@ -88,6 +88,11 @@ public enum StreamEventType {
     TOOL_CALL_STARTED("tool_call_started"),
 
     /**
+     * Tool call finished with its observation payload.
+     */
+    TOOL_CALL_FINISHED("tool_call_finished"),
+
+    /**
      * Tool call is waiting for the current user to decide.
      */
     TOOL_CALL_WAITING_USER("tool_call_waiting_user"),

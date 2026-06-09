@@ -41,6 +41,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamApprovalRequiredEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.memory.MemoryContext;
 import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamToolCallEvent;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolDescriptor;
@@ -334,6 +335,75 @@ class KernelAgentLoopToolGatewayTests {
     }
 
     @Test
+    void shouldEmitToolFinishedEventWithObservationDuringStreamingExecution() {
+        AgentToolCall toolCall = AgentToolCall.of("call-1", "newsletter_generation", Map.of("topic", "Redis"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("generate article", List.of(toolCall)),
+                Turn.finalAnswer("done")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("""
+                {"artifactType":"newsletter","format":"markdown","content":"# Redis article\\n\\nGenerated article body."}
+                """));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+        RecordingStreamCallback callback = new RecordingStreamCallback();
+
+        loop.streamExecute(AgentLoopRequest.builder()
+                .question("write article")
+                .allowedToolIds(List.of("newsletter_generation"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-newsletter")
+                .build(), callback);
+
+        assertTrue(callback.awaitTerminal());
+        StreamToolCallEvent finishedEvent = callback.events.stream()
+                .filter(event -> StreamEventType.TOOL_CALL_FINISHED.value().equals(event.eventName()))
+                .map(StreamEvent::payload)
+                .filter(StreamToolCallEvent.class::isInstance)
+                .map(StreamToolCallEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("newsletter_generation", finishedEvent.toolId());
+        assertEquals("Tool call finished", finishedEvent.summary());
+        assertTrue(finishedEvent.message().contains("Generated article body."));
+    }
+
+    @Test
+    void shouldExecuteTextEncodedToolCallWhenModelStreamsItAsContent() {
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.finalAnswer("""
+                        准备生成稿件。
+                        <tool_call><function=newsletter_generation><parameter=topic>Redis</parameter><parameter=audience>architects</parameter></function></tool_call>
+                        """),
+                Turn.finalAnswer("稿件已基于工具 observation 生成。")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("""
+                {"artifactType":"newsletter","format":"markdown","content":"# Redis article\\n\\nGenerated article body."}
+                """));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("write article")
+                .allowedToolIds(List.of("newsletter_generation"))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-text-tool-call")
+                .build());
+
+        assertEquals("稿件已基于工具 observation 生成。", result.finalAnswer());
+        assertEquals(1, gateway.requests.size());
+        ToolInvocationRequest request = gateway.requests.get(0);
+        assertEquals("newsletter_generation", request.toolId());
+        assertEquals("Redis", request.arguments().get("topic"));
+        assertEquals("architects", request.arguments().get("audience"));
+        assertFalse(model.requests.get(1).getMessages().get(1).getContent().contains("<tool_call>"));
+    }
+
+    @Test
     void shouldEmitSourcesFromWebSearchObservationDuringStreamingExecution() {
         AgentToolCall toolCall = AgentToolCall.of("call-1", "web_search", Map.of("query", "seahorse ai"));
         ScriptedModel model = new ScriptedModel(List.of(
@@ -411,7 +481,8 @@ class KernelAgentLoopToolGatewayTests {
             return List.of(
                     new ToolDescriptor("weather", "Weather", "Weather lookup", "{}"),
                     new ToolDescriptor("memory-forget", "Memory Forget", "Forget memory", "{}"),
-                    new ToolDescriptor("web_search", "Web Search", "Search public Web sources", "{}"));
+                    new ToolDescriptor("web_search", "Web Search", "Search public Web sources", "{}"),
+                    new ToolDescriptor("newsletter_generation", "Newsletter", "Generate article", "{}"));
         }
 
         @Override

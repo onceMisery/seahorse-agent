@@ -305,6 +305,48 @@ class KernelAgentLoopMarkdownOutputTests {
         assertFalse(answer.contains("sequenceDiagram Client"));
     }
 
+    @Test
+    void finalMarkdownDoesNotRewriteHtmlArtifacts() {
+        String compressedMarkdown = """
+                ##一、项目概览Redis is fast.
+                <artifact language="html" title="project-intro-web-preview.html">
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <style>
+                :root {
+                  --redis-red: #DC382D;
+                  --bg-dark: #0f1115;
+                }
+                h1 { color: #ffffff; }
+                </style>
+                </head>
+                <body><h1>Redis</h1></body>
+                </html>
+                </artifact>
+                """;
+        KernelAgentLoop loop = new KernelAgentLoop(
+                new FinalAnswerModel(compressedMarkdown),
+                ToolRegistryPort.empty(),
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("render markdown")
+                .allowedToolIds(List.of())
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .maxSteps(1)
+                .build());
+
+        String answer = result.finalAnswer();
+        assertTrue(answer.contains("## 一、项目概览\n\nRedis is fast."), answer);
+        assertTrue(answer.contains("--redis-red: #DC382D;"), answer);
+        assertTrue(answer.contains("--bg-dark: #0f1115;"), answer);
+        assertTrue(answer.contains("h1 { color: #ffffff; }"), answer);
+        assertFalse(answer.contains("# DC382D"));
+        assertFalse(answer.contains("# 0f1115"));
+        assertFalse(answer.contains("# ffffff"));
+    }
+
     private static final class FinalAnswerModel implements StreamingChatModelPort {
         private final String answer;
 

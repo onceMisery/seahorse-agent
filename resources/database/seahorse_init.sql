@@ -2849,9 +2849,15 @@ VALUES (
 13. 每个 Mermaid 图必须独立成块：第一行只能是 ```mermaid，第二行才开始 graph、flowchart 或 sequenceDiagram，最后单独一行 ```；禁止输出 ```mermaidgraph、```mermaidflowchart、```mermaidsequenceDiagram。
 14. 同一个 Mermaid 图内节点 ID 必须唯一，禁止重复使用同一个 ID 表示不同节点；不要使用不稳定或 beta Mermaid 语法。
 15. 输出前必须自检：硬性工具调用是否满足清单；所有关键结论是否能在 README、docs、源码或 web_fetch 材料中找到；是否包含 Web 可访问图片引用、可渲染 Mermaid 图、关键文件证据表和第九章产物摘要。
+
+严格产物要求（用于真实 E2E 验证）：
+1. newsletter_generation、ppt_generation、frontend_design 的工具 observation 是真实产物来源；最终第九章必须基于这些实际 observation 写摘要，不得只声称“已生成”。
+2. newsletter_generation 的真实输出会由系统保存为 newsletter.md；ppt_generation 的真实输出会由系统保存为 presentation.md；frontend_design 的真实输出会由系统保存为 frontend-design-tool-output.html。
+3. 你仍然必须在最终回答末尾输出整篇项目介绍的 HTML 预览 artifact：<artifact language="html" title="project-intro-web-preview.html"> ... </artifact>。这个 HTML 预览用于整篇文档的 Web 端复制、预览和下载。
+4. 如果任一生成工具没有成功返回内容，最终回答必须明确标注该产物缺失；不得把摘要、计划或占位文本当成已生成产物。
     $instructions$,
     $toolset${"tools":["github_repository_reader","web_fetch","chart_visualization","image_generation","newsletter_generation","ppt_generation","frontend_design"]}$toolset$,
-    $model${"temperature":0.3,"maxTokens":4096,"thinking":true}$model$,
+    $model${"temperature":0.3,"maxTokens":12000,"thinking":true}$model$,
     '{}',
     '{}',
     '{}',

@@ -82,7 +82,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Kernel layer LLM-driven ReAct loop.
@@ -101,9 +104,18 @@ public class KernelAgentLoop {
     private static final String MODEL_STEP_ID_PREFIX = "model-turn-";
     private static final String MODEL_STEP_TITLE = "Model turn";
     private static final String TOOL_CALL_STARTED_SUMMARY = "Tool call started";
+    private static final String TOOL_CALL_FINISHED_SUMMARY = "Tool call finished";
+    private static final String TOOL_CALL_FAILED_SUMMARY = "Tool call failed";
     private static final String TOOL_CALL_APPROVAL_SUMMARY = "Tool call requires approval";
     private static final String TOOL_ARGUMENT_KEYS_FIELD = "argumentKeys";
     private static final String TOOL_ARGUMENT_COUNT_FIELD = "argumentCount";
+    private static final Pattern TEXT_TOOL_CALL_BLOCK_PATTERN =
+            Pattern.compile("(?is)<tool_call\\b[^>]*>(.*?)</tool_call>");
+    private static final Pattern TEXT_TOOL_CALL_FUNCTION_PATTERN =
+            Pattern.compile("(?is)<function\\s*=\\s*([A-Za-z0-9_-]+)\\s*>(.*?)</function>");
+    private static final Pattern TEXT_TOOL_CALL_PARAMETER_PATTERN =
+            Pattern.compile("(?is)<parameter\\s*=\\s*([A-Za-z0-9_.-]+)\\s*>(.*?)</parameter>");
+    private static final AtomicLong TEXT_TOOL_CALL_SEQUENCE = new AtomicLong();
     private static final String WEB_SEARCH_TOOL_ID = "web_search";
     private static final String WEB_SEARCH_SOURCES_FIELD = "sources";
     private static final String ARTIFACT_ID_PREFIX = "artifact-";
@@ -539,8 +551,80 @@ public class KernelAgentLoop {
         if (!collectorInvoked.get()) {
             throw new AgentLoopException("Model adapter protocol error: collector was not called");
         }
-        return new ModelTurn(callback.content(), callback.thinking(),
+        ModelTurn turn = new ModelTurn(callback.content(), callback.thinking(),
                 Objects.requireNonNullElse(collectedCalls.get(), List.of()));
+        return normalizeTextEncodedToolCalls(turn, tools);
+    }
+
+    private ModelTurn normalizeTextEncodedToolCalls(ModelTurn turn, List<ToolDescriptor> tools) {
+        if (turn == null || !turn.toolCalls().isEmpty() || tools == null || tools.isEmpty()
+                || turn.content().isBlank()) {
+            return turn;
+        }
+        Set<String> exposedToolIds = tools.stream()
+                .filter(Objects::nonNull)
+                .map(ToolDescriptor::toolId)
+                .collect(java.util.stream.Collectors.toSet());
+        TextEncodedToolCalls parsed = parseTextEncodedToolCalls(turn.content(), exposedToolIds);
+        if (parsed.toolCalls().isEmpty()) {
+            return turn;
+        }
+        return new ModelTurn(parsed.content(), turn.thinking(), parsed.toolCalls());
+    }
+
+    private TextEncodedToolCalls parseTextEncodedToolCalls(String content, Set<String> exposedToolIds) {
+        if (content == null || content.isBlank() || exposedToolIds == null || exposedToolIds.isEmpty()) {
+            return new TextEncodedToolCalls(Objects.requireNonNullElse(content, ""), List.of());
+        }
+        Matcher blockMatcher = TEXT_TOOL_CALL_BLOCK_PATTERN.matcher(content);
+        List<AgentToolCall> toolCalls = new ArrayList<>();
+        while (blockMatcher.find()) {
+            AgentToolCall toolCall = parseTextEncodedToolCall(blockMatcher.group(1), exposedToolIds);
+            if (toolCall != null) {
+                toolCalls.add(toolCall);
+            }
+        }
+        if (toolCalls.isEmpty()) {
+            return new TextEncodedToolCalls(content, List.of());
+        }
+        String strippedContent = TEXT_TOOL_CALL_BLOCK_PATTERN.matcher(content).replaceAll("").trim();
+        return new TextEncodedToolCalls(strippedContent, toolCalls);
+    }
+
+    private AgentToolCall parseTextEncodedToolCall(String block, Set<String> exposedToolIds) {
+        if (block == null || block.isBlank()) {
+            return null;
+        }
+        Matcher functionMatcher = TEXT_TOOL_CALL_FUNCTION_PATTERN.matcher(block);
+        if (!functionMatcher.find()) {
+            return null;
+        }
+        String toolId = functionMatcher.group(1).trim();
+        if (!exposedToolIds.contains(toolId)) {
+            return null;
+        }
+        LinkedHashMap<String, Object> arguments = new LinkedHashMap<>();
+        Matcher parameterMatcher = TEXT_TOOL_CALL_PARAMETER_PATTERN.matcher(functionMatcher.group(2));
+        while (parameterMatcher.find()) {
+            String key = parameterMatcher.group(1).trim();
+            if (!key.isBlank()) {
+                arguments.put(key, decodeTextToolCallValue(parameterMatcher.group(2).trim()));
+            }
+        }
+        return AgentToolCall.of(nextTextToolCallId(), toolId, arguments);
+    }
+
+    private String nextTextToolCallId() {
+        return "text-tool-call-" + TEXT_TOOL_CALL_SEQUENCE.incrementAndGet();
+    }
+
+    private String decodeTextToolCallValue(String value) {
+        return Objects.requireNonNullElse(value, "")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'")
+                .replace("&amp;", "&");
     }
 
     private List<ToolDescriptor> exposedTools(List<String> allowedToolIds,
@@ -686,6 +770,7 @@ public class KernelAgentLoop {
                 AgentObservation observation = toObservation(toolCalls.get(i), futures.get(i));
                 observations.add(observation);
                 runStepRecorder.recordToolCall(request.runId(), toolCalls.get(i), observation);
+                emitToolCallFinished(callback, request, toolCalls.get(i), observation);
                 emitToolCallWaitingUser(callback, request, toolCalls.get(i), observation);
             }
             return observations;
@@ -737,7 +822,8 @@ public class KernelAgentLoop {
         if (LOAD_SKILL_TOOL_ID.equals(toolCall.toolId())) {
             return loadSkillObservation(toolCall, request);
         }
-        if (exposedToolIds != null && !exposedToolIds.contains(toolCall.toolId())) {
+        if (exposedToolIds != null && allowedToolIds != null && allowedToolIds.contains(toolCall.toolId())
+                && !exposedToolIds.contains(toolCall.toolId())) {
             return AgentObservation.failed(toolCall.id(), unavailableToolMessage(toolCall.toolId(), exposedToolIds));
         }
         try {
@@ -963,6 +1049,27 @@ public class KernelAgentLoop {
                 null));
     }
 
+    private void emitToolCallFinished(StreamCallback callback,
+                                      AgentLoopRequest request,
+                                      AgentToolCall toolCall,
+                                      AgentObservation observation) {
+        if (observation == null) {
+            return;
+        }
+        emitEvent(callback, StreamEventType.TOOL_CALL_FINISHED, new StreamToolCallEvent(
+                request.runId(),
+                toolCall.id(),
+                toolCall.id(),
+                toolCall.id(),
+                toolCall.toolId(),
+                DEFAULT_TOOL_RISK_LEVEL,
+                observation.success() ? TOOL_CALL_FINISHED_SUMMARY : TOOL_CALL_FAILED_SUMMARY,
+                null,
+                Instant.now(),
+                observation.success() ? null : observation.error(),
+                observationText(observation)));
+    }
+
     private void emitToolCallWaitingUser(StreamCallback callback,
                                          AgentLoopRequest request,
                                          AgentToolCall toolCall,
@@ -1111,7 +1218,45 @@ public class KernelAgentLoop {
         if (content == null || content.isBlank()) {
             return content;
         }
-        String normalized = normalizeMermaidFenceOpenings(content.replace("\r\n", "\n").replace('\r', '\n'));
+        String normalizedLineEndings = content.replace("\r\n", "\n").replace('\r', '\n');
+        StringBuilder result = new StringBuilder(normalizedLineEndings.length() + 64);
+        int offset = 0;
+        while (offset < normalizedLineEndings.length()) {
+            int artifactStart = indexOfArtifactStart(normalizedLineEndings, offset);
+            if (artifactStart < 0) {
+                result.append(normalizeMarkdownWithoutArtifacts(normalizedLineEndings.substring(offset)));
+                break;
+            }
+
+            result.append(normalizeMarkdownWithoutArtifacts(normalizedLineEndings.substring(offset, artifactStart)));
+            int artifactEnd = indexOfArtifactEnd(normalizedLineEndings, artifactStart);
+            if (artifactEnd < 0) {
+                result.append(normalizedLineEndings.substring(artifactStart));
+                break;
+            }
+            result.append(normalizedLineEndings, artifactStart, artifactEnd);
+            offset = artifactEnd;
+        }
+        return result.toString().trim();
+    }
+
+    private int indexOfArtifactStart(String content, int fromIndex) {
+        return content.toLowerCase(java.util.Locale.ROOT).indexOf("<artifact", fromIndex);
+    }
+
+    private int indexOfArtifactEnd(String content, int artifactStart) {
+        int closeTag = content.toLowerCase(java.util.Locale.ROOT).indexOf("</artifact>", artifactStart);
+        if (closeTag < 0) {
+            return -1;
+        }
+        return closeTag + "</artifact>".length();
+    }
+
+    private String normalizeMarkdownWithoutArtifacts(String content) {
+        if (content == null || content.isBlank()) {
+            return "";
+        }
+        String normalized = normalizeMermaidFenceOpenings(content);
         StringBuilder builder = new StringBuilder(normalized.length() + 64);
         int offset = 0;
         int openingFence = normalized.indexOf("```", offset);
@@ -1615,6 +1760,14 @@ public class KernelAgentLoop {
                 return thinking;
             }
             return thinking + System.lineSeparator() + content;
+        }
+    }
+
+    private record TextEncodedToolCalls(String content, List<AgentToolCall> toolCalls) {
+
+        private TextEncodedToolCalls {
+            content = Objects.requireNonNullElse(content, "");
+            toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
         }
     }
 
