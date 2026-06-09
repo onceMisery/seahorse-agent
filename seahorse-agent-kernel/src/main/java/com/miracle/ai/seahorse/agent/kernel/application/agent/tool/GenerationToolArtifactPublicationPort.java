@@ -38,6 +38,7 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -79,6 +80,10 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
         if (request == null || result == null || !result.success() || !hasText(request.runId())) {
             return;
         }
+        if (ImageGenerationToolPortAdapter.TOOL_ID.equals(request.toolId())) {
+            publishImageArtifact(request, result);
+            return;
+        }
         if (!TEXT_GENERATION_TOOL_IDS.contains(request.toolId())) {
             return;
         }
@@ -89,6 +94,38 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
 
         byte[] bytes = observation.content().getBytes(StandardCharsets.UTF_8);
         ArtifactMapping mapping = ArtifactMapping.from(observation);
+        saveArtifact(request, bytes, mapping, preview(observation.content()), provenanceJson(request, observation));
+    }
+
+    private void publishImageArtifact(ToolInvocationRequest request, ToolInvocationResult result) {
+        ImageObservation observation = parseImageObservation(result.content()).orElse(null);
+        if (observation == null || !hasText(observation.b64Json())) {
+            return;
+        }
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(observation.b64Json());
+        } catch (IllegalArgumentException ex) {
+            return;
+        }
+        if (bytes.length == 0) {
+            return;
+        }
+        String mimeType = imageMimeType(observation.mimeType());
+        ArtifactMapping mapping = new ArtifactMapping(
+                AgentArtifactType.IMAGE,
+                "Generated image",
+                mimeType,
+                imageExtension(mimeType),
+                "generated-image");
+        saveArtifact(request, bytes, mapping, preview(observation.prompt()), provenanceJson(request, observation));
+    }
+
+    private void saveArtifact(ToolInvocationRequest request,
+                              byte[] bytes,
+                              ArtifactMapping mapping,
+                              String previewText,
+                              String provenanceJson) {
         String artifactId = SnowflakeIds.nextIdString();
         String filename = mapping.filenamePrefix() + "-" + artifactId + mapping.extension();
         StoredObject stored = objectStorage.upload(
@@ -108,8 +145,8 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
                 mapping.title(),
                 mapping.mimeType(),
                 stored.url(),
-                preview(observation.content()),
-                provenanceJson(request, observation),
+                previewText,
+                provenanceJson,
                 AgentArtifactScanStatus.CLEAN,
                 Instant.now(clock));
         AgentArtifact saved = artifactRepository.save(artifact);
@@ -129,6 +166,24 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
                 return Optional.empty();
             }
             return Optional.of(new Observation(artifactType, format, artifactContent));
+        } catch (JsonProcessingException ex) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<ImageObservation> parseImageObservation(String content) {
+        if (!hasText(content)) {
+            return Optional.empty();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(content);
+            return Optional.of(new ImageObservation(
+                    text(root, "status"),
+                    text(root, "prompt"),
+                    text(root, "model"),
+                    text(root, "imageUrl"),
+                    text(root, "b64Json"),
+                    text(root, "mimeType")));
         } catch (JsonProcessingException ex) {
             return Optional.empty();
         }
@@ -166,6 +221,18 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
         return writeJson(provenance);
     }
 
+    private String provenanceJson(ToolInvocationRequest request, ImageObservation observation) {
+        Map<String, Object> provenance = new LinkedHashMap<>();
+        provenance.put("toolId", request.toolId());
+        provenance.put("toolCallId", request.toolCallId());
+        provenance.put("stepId", request.stepId());
+        provenance.put("status", observation.status());
+        provenance.put("model", observation.model());
+        provenance.put("imageUrl", observation.imageUrl());
+        provenance.put("mimeType", observation.mimeType());
+        return writeJson(provenance);
+    }
+
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -192,7 +259,29 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
         return hasText(value) ? value.trim() : fallback;
     }
 
+    private static String imageMimeType(String value) {
+        String normalized = Objects.requireNonNullElse(value, "").trim().toLowerCase(Locale.ROOT);
+        return normalized.startsWith("image/") ? normalized : "image/png";
+    }
+
+    private static String imageExtension(String mimeType) {
+        return switch (imageMimeType(mimeType)) {
+            case "image/jpeg", "image/jpg" -> ".jpg";
+            case "image/webp" -> ".webp";
+            case "image/gif" -> ".gif";
+            default -> ".png";
+        };
+    }
+
     private record Observation(String artifactType, String format, String content) {
+    }
+
+    private record ImageObservation(String status,
+                                    String prompt,
+                                    String model,
+                                    String imageUrl,
+                                    String b64Json,
+                                    String mimeType) {
     }
 
     private record ArtifactMapping(AgentArtifactType artifactType,

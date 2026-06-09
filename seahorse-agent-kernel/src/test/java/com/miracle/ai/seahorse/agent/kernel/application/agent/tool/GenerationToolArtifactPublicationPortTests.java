@@ -39,6 +39,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -129,6 +130,51 @@ class GenerationToolArtifactPublicationPortTests {
         AgentArtifact artifact = artifacts.saved.get(0);
         assertEquals(AgentArtifactType.CHART, artifact.artifactType());
         assertEquals("application/json", artifact.mimeType());
+    }
+
+    @Test
+    void publishesBase64ImageGenerationObservationAsImageArtifact() {
+        MemoryArtifactRepository artifacts = new MemoryArtifactRepository();
+        MemoryObjectStorage storage = new MemoryObjectStorage();
+        MemoryEventBuffer events = new MemoryEventBuffer();
+        GenerationToolArtifactPublicationPort publisher = new GenerationToolArtifactPublicationPort(
+                artifacts,
+                storage,
+                events,
+                new ObjectMapper(),
+                CLOCK);
+        byte[] pngBytes = new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47};
+        String b64 = Base64.getEncoder().encodeToString(pngBytes);
+
+        publisher.publish(request(ImageGenerationToolPortAdapter.TOOL_ID), ToolInvocationResult.ok("""
+                {"status":"GENERATED","prompt":"Draw a seahorse","model":"image-model","imageUrl":"","b64Json":"%s","mimeType":"image/png"}
+                """.formatted(b64)));
+
+        assertEquals(1, storage.uploads.size());
+        MemoryObjectStorage.Upload upload = storage.uploads.get(0);
+        assertEquals("agent-artifacts", upload.bucketName());
+        assertEquals(pngBytes.length, upload.size());
+        assertTrue(upload.originalFilename().endsWith(".png"));
+        assertEquals("image/png", upload.contentType());
+        assertEquals(List.of((byte) 0x89, (byte) 0x50, (byte) 0x4e, (byte) 0x47), upload.bytes());
+
+        assertEquals(1, artifacts.saved.size());
+        AgentArtifact artifact = artifacts.saved.get(0);
+        assertEquals(AgentArtifactType.IMAGE, artifact.artifactType());
+        assertEquals("Generated image", artifact.title());
+        assertEquals("image/png", artifact.mimeType());
+        assertEquals("Draw a seahorse", artifact.previewText());
+        assertEquals(AgentArtifactScanStatus.CLEAN, artifact.scanStatus());
+
+        assertEquals(1, events.appended.size());
+        StreamEventEnvelope event = events.appended.get(0);
+        Map<?, ?> payload = assertInstanceOf(Map.class, event.typedPayload());
+        assertEquals("IMAGE", payload.get("artifactType"));
+        assertEquals("Generated image", payload.get("title"));
+        assertEquals("image/png", payload.get("mimeType"));
+        assertEquals("Draw a seahorse", payload.get("previewText"));
+        assertEquals(false, payload.get("canPreview"));
+        assertEquals("attachment", payload.get("disposition"));
     }
 
     @Test
@@ -223,8 +269,8 @@ class GenerationToolArtifactPublicationPortTests {
         @Override
         public StoredObject upload(String bucketName, InputStream content, long size, String originalFilename,
                                    String contentType) {
-            String body = readUtf8(content);
-            uploads.add(new Upload(bucketName, body, size, originalFilename, contentType));
+            byte[] bytes = readBytes(content);
+            uploads.add(new Upload(bucketName, bytes, size, originalFilename, contentType));
             return new StoredObject("memory://" + originalFilename, contentType, size, originalFilename);
         }
 
@@ -238,18 +284,30 @@ class GenerationToolArtifactPublicationPortTests {
             throw new UnsupportedOperationException();
         }
 
-        private static String readUtf8(InputStream input) {
+        private static byte[] readBytes(InputStream input) {
             try {
                 ByteArrayOutputStream output = new ByteArrayOutputStream();
                 input.transferTo(output);
-                return output.toString(StandardCharsets.UTF_8);
+                return output.toByteArray();
             } catch (IOException ex) {
                 throw new IllegalStateException(ex);
             }
         }
 
-        private record Upload(String bucketName, String content, long size, String originalFilename,
+        private record Upload(String bucketName, byte[] rawContent, long size, String originalFilename,
                               String contentType) {
+
+            String content() {
+                return new String(rawContent, StandardCharsets.UTF_8);
+            }
+
+            List<Byte> bytes() {
+                List<Byte> result = new ArrayList<>();
+                for (byte b : rawContent) {
+                    result.add(b);
+                }
+                return result;
+            }
         }
     }
 

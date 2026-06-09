@@ -68,7 +68,7 @@ public class ImageGenerationToolPortAdapter implements DescribedToolPort {
                     prompt,
                     model(arguments),
                     text(arguments, "size", DEFAULT_SIZE),
-                    null,
+                    jsonSupport.string(arguments, "style"),
                     text(arguments, "responseFormat", DEFAULT_RESPONSE_FORMAT)));
             return ToolInvocationResult.ok(jsonSupport.write(observation(result)));
         } catch (Exception ex) {
