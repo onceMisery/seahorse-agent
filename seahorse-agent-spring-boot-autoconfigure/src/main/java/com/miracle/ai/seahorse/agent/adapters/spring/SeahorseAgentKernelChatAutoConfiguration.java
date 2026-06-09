@@ -96,7 +96,7 @@ public class SeahorseAgentKernelChatAutoConfiguration {
             ObjectProvider<AgentRunEventBufferPort> eventBufferPort) {
         return new LocalChatStreamCallbackFactory(streamTaskPort,
                 memoryPort.getIfAvailable(ConversationMemoryPort::noop),
-                eventBufferPort.getIfAvailable(AgentRunEventBufferPort::noop));
+                () -> eventBufferPort.getIfAvailable(AgentRunEventBufferPort::noop));
     }
 
     @Bean

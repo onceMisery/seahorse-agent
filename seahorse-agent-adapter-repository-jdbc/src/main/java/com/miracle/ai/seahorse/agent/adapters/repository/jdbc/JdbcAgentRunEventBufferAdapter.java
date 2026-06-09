@@ -141,9 +141,6 @@ public class JdbcAgentRunEventBufferAdapter implements AgentRunEventBufferPort {
         if (payload == null) {
             return "{}";
         }
-        if (payload instanceof String s) {
-            return s;
-        }
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException e) {
@@ -156,9 +153,17 @@ public class JdbcAgentRunEventBufferAdapter implements AgentRunEventBufferPort {
             return null;
         }
         try {
-            return objectMapper.readValue(json, Object.class);
+            Object value = objectMapper.readValue(json, Object.class);
+            if (value instanceof String text && isJsonStringLiteral(text)) {
+                return objectMapper.readValue(text, String.class);
+            }
+            return value;
         } catch (JsonProcessingException e) {
             return json;
         }
+    }
+
+    private boolean isJsonStringLiteral(String value) {
+        return value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"");
     }
 }

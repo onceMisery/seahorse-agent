@@ -35,6 +35,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 /**
  * Local stream chat callback factory with event envelope support.
@@ -49,7 +50,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
 
     private final StreamTaskPort streamTaskPort;
     private final ConversationMemoryPort memoryPort;
-    private final AgentRunEventBufferPort eventBufferPort;
+    private final Supplier<AgentRunEventBufferPort> eventBufferPortSupplier;
 
     public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort) {
         this(streamTaskPort, ConversationMemoryPort.noop(), AgentRunEventBufferPort.noop());
@@ -62,9 +63,17 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
     public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort,
                                           ConversationMemoryPort memoryPort,
                                           AgentRunEventBufferPort eventBufferPort) {
+        this(streamTaskPort, memoryPort, () -> eventBufferPort);
+    }
+
+    public LocalChatStreamCallbackFactory(StreamTaskPort streamTaskPort,
+                                          ConversationMemoryPort memoryPort,
+                                          Supplier<AgentRunEventBufferPort> eventBufferPortSupplier) {
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.memoryPort = Objects.requireNonNullElse(memoryPort, ConversationMemoryPort.noop());
-        this.eventBufferPort = Objects.requireNonNullElse(eventBufferPort, AgentRunEventBufferPort.noop());
+        this.eventBufferPortSupplier = eventBufferPortSupplier == null
+                ? AgentRunEventBufferPort::noop
+                : eventBufferPortSupplier;
     }
 
     @Override
@@ -75,7 +84,11 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
     @Override
     public StreamCallback create(SseEmitter emitter, String conversationId, String taskId, String userId) {
         return new LocalChatStreamCallback(emitter, conversationId, taskId, userId,
-                streamTaskPort, memoryPort, eventBufferPort);
+                streamTaskPort, memoryPort, eventBufferPort());
+    }
+
+    private AgentRunEventBufferPort eventBufferPort() {
+        return Objects.requireNonNullElseGet(eventBufferPortSupplier.get(), AgentRunEventBufferPort::noop);
     }
 
     private static final class LocalChatStreamCallback implements StreamCallback {
@@ -195,7 +208,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
             try {
                 eventBufferPort.append(currentRunId, envelope);
             } catch (Exception e) {
-                log.debug("Failed to buffer event seq={} for run={}", seq, currentRunId, e);
+                log.warn("Failed to buffer event seq={} type={} for run={}", seq, eventType.value(), currentRunId, e);
             }
             sender.sendEvent(STREAM_EVENT_NAME, envelope);
             sender.sendEvent(eventType.value(), payload);
@@ -247,7 +260,7 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
                 try {
                     eventBufferPort.append(currentRunId, envelope);
                 } catch (Exception e) {
-                    log.debug("Failed to buffer message event seq={}", seq, e);
+                    log.warn("Failed to buffer message event seq={} for run={}", seq, currentRunId, e);
                 }
                 sender.sendEvent(STREAM_EVENT_NAME, envelope);
             }

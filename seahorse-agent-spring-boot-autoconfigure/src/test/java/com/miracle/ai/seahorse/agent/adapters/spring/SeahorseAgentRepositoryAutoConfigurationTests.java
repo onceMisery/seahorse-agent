@@ -17,6 +17,12 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunEventBufferAdapter;
+import com.miracle.ai.seahorse.agent.adapters.web.ChatStreamCallbackFactoryPort;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventEnvelope;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRunEventBufferPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionPipelineRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.IngestionTaskRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.PipelineDefinitionRepositoryPort;
@@ -25,8 +31,12 @@ import com.miracle.ai.seahorse.agent.ports.outbound.retrieval.RetrievalEvaluatio
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.sql.DataSource;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -50,5 +60,70 @@ class SeahorseAgentRepositoryAutoConfigurationTests {
             assertThat(context).hasSingleBean(IngestionTaskRepositoryPort.class);
             assertThat(context).hasSingleBean(RetrievalEvaluationDatasetRepositoryPort.class);
         });
+    }
+
+    @Test
+    void registersJdbcAgentRunEventBufferWhenObjectMapperIsReady() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(SeahorseAgentRegistryRepositoryAutoConfiguration.class))
+                .withBean(DataSource.class, () -> mock(DataSource.class))
+                .withBean(ObjectMapper.class, ObjectMapper::new)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(AgentRunEventBufferPort.class);
+                    assertThat(context.getBean(AgentRunEventBufferPort.class))
+                            .isInstanceOf(JdbcAgentRunEventBufferAdapter.class);
+                });
+    }
+
+    @Test
+    void chatCallbackFactoryUsesTheConfiguredEventBuffer() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(SeahorseAgentKernelChatAutoConfiguration.class))
+                .withBean(AgentRunEventBufferPort.class, RecordingEventBuffer::new)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    ChatStreamCallbackFactoryPort factory = context.getBean(ChatStreamCallbackFactoryPort.class);
+                    RecordingEventBuffer eventBuffer = context.getBean(RecordingEventBuffer.class);
+
+                    StreamCallback callback = factory.create(new SseEmitter(), "conversation-1", "task-1", "user-1");
+                    callback.onRunStarted("run-1");
+                    callback.onComplete();
+
+                    assertThat(eventBuffer.events)
+                            .extracting(StreamEventEnvelope::runId)
+                            .containsExactly("run-1");
+                });
+    }
+
+    private static final class RecordingEventBuffer implements AgentRunEventBufferPort {
+
+        private final List<StreamEventEnvelope> events = new ArrayList<>();
+
+        @Override
+        public void append(String runId, StreamEventEnvelope event) {
+            events.add(event);
+        }
+
+        @Override
+        public List<StreamEventEnvelope> getAfter(String runId, long afterSeq) {
+            return events.stream()
+                    .filter(event -> event.runId().equals(runId))
+                    .filter(event -> event.eventSeq() > afterSeq)
+                    .toList();
+        }
+
+        @Override
+        public Optional<Long> getLatestSeq(String runId) {
+            return events.stream()
+                    .filter(event -> event.runId().equals(runId))
+                    .map(StreamEventEnvelope::eventSeq)
+                    .max(Long::compareTo);
+        }
+
+        @Override
+        public void expire(String runId) {
+            events.removeIf(event -> event.runId().equals(runId));
+        }
     }
 }
