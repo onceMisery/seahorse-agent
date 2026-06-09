@@ -271,17 +271,17 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnAgentRuntimeEnabled
-    @ConditionalOnBean({AgentArtifactRepositoryPort.class, ObjectStoragePort.class, AgentRunEventBufferPort.class})
+    @ConditionalOnBean({AgentArtifactRepositoryPort.class, AgentRunEventBufferPort.class})
     @ConditionalOnMissingBean
     public ToolArtifactPublicationPort seahorseGenerationToolArtifactPublicationPort(
             AgentArtifactRepositoryPort artifactRepository,
-            ObjectStoragePort objectStorage,
             AgentRunEventBufferPort eventBuffer,
+            ObjectProvider<ObjectStoragePort> objectStorage,
             ObjectProvider<ObjectMapper> objectMapper,
             ObjectProvider<Clock> clockProvider) {
         return new GenerationToolArtifactPublicationPort(
                 artifactRepository,
-                objectStorage,
+                objectStorage.getIfAvailable(),
                 eventBuffer,
                 objectMapper.getIfAvailable(ObjectMapper::new),
                 clockProvider.getIfAvailable(Clock::systemUTC));

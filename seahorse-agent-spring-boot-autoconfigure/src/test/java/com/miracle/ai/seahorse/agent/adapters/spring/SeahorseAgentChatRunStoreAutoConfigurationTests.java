@@ -32,6 +32,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.artifact.AgentArtifact;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalRequestStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.approval.ApprovalType;
@@ -57,6 +58,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventEnvelope;
+import com.miracle.ai.seahorse.agent.kernel.domain.stream.StreamEventType;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentCheckpointQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseCommand;
@@ -391,6 +394,59 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     }
 
     @Test
+    void shouldPublishArtifactsThroughAgentChatExecutionPath() {
+        contextRunner.withUserConfiguration(TestArtifactPublicationChatConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    RecordingCallback callback = new RecordingCallback();
+                    context.getBean(ChatInboundPort.class).streamChat(new StreamChatCommand(
+                            "Generate an artifact", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT),
+                            callback);
+
+                    assertThat(callback.awaitTerminal()).isTrue();
+                    assertThat(callback.errors).isEmpty();
+                    RecordingToolArtifactPublicationPort artifacts =
+                            context.getBean(RecordingToolArtifactPublicationPort.class);
+                    assertThat(artifacts.published).singleElement().satisfies(published -> {
+                        assertThat(published.request().toolId()).isEqualTo("memory-write");
+                        assertThat(published.request().runId()).startsWith("run_");
+                        assertThat(published.result().content()).isEqualTo("artifact-ready");
+                    });
+                });
+    }
+
+    @Test
+    void shouldWireGenerationArtifactPublisherIntoAgentChatExecutionPath() {
+        contextRunner.withUserConfiguration(TestGenerationArtifactPublicationChatConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(ToolArtifactPublicationPort.class);
+                    assertThat(context.getBean(ToolArtifactPublicationPort.class))
+                            .isInstanceOf(GenerationToolArtifactPublicationPort.class);
+
+                    RecordingCallback callback = new RecordingCallback();
+                    context.getBean(ChatInboundPort.class).streamChat(new StreamChatCommand(
+                            "Generate an image", "conversation-1", "task-1", "user-1", false, ChatMode.AGENT),
+                            callback);
+
+                    assertThat(callback.awaitTerminal()).isTrue();
+                    assertThat(callback.errors).isEmpty();
+                    InMemoryAgentArtifactRepository artifactRepository =
+                            context.getBean(InMemoryAgentArtifactRepository.class);
+                    assertThat(artifactRepository.artifacts).singleElement().satisfies(artifact -> {
+                        assertThat(artifact.runId()).startsWith("run_");
+                        assertThat(artifact.storageRef()).isEqualTo("https://cdn.example.com/seahorse.png");
+                        assertThat(artifact.mimeType()).isEqualTo("image/png");
+                    });
+                    InMemoryAgentRunEventBuffer eventBuffer = context.getBean(InMemoryAgentRunEventBuffer.class);
+                    assertThat(eventBuffer.events.values().stream().flatMap(List::stream).toList())
+                            .singleElement()
+                            .satisfies(event -> assertThat(event.eventType()).isEqualTo(StreamEventType.AGENT_ARTIFACT));
+                });
+    }
+
+    @Test
     void shouldWireGenerationArtifactPublisherWhenArtifactDependenciesExist() {
         contextRunner.withUserConfiguration(TestGenerationArtifactPublicationConfiguration.class)
                 .run(context -> {
@@ -398,6 +454,38 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
                     assertThat(context).hasSingleBean(ToolArtifactPublicationPort.class);
                     assertThat(context.getBean(ToolArtifactPublicationPort.class))
                             .isInstanceOf(GenerationToolArtifactPublicationPort.class);
+                });
+    }
+
+    @Test
+    void shouldWireGenerationArtifactPublisherForRemoteImagesWithoutObjectStorage() {
+        contextRunner.withUserConfiguration(TestRemoteImageArtifactPublicationConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(ToolArtifactPublicationPort.class);
+                    ToolInvocationRequest request = new ToolInvocationRequest(
+                            "run-1",
+                            "step-1",
+                            "call-1",
+                            "agent-1",
+                            "version-1",
+                            "tenant-1",
+                            "user-1",
+                            "agent-identity-1",
+                            "image_generation",
+                            Map.of(),
+                            Map.of(),
+                            "run-1:call-1",
+                            List.of("image_generation"));
+
+                    context.getBean(ToolArtifactPublicationPort.class).publish(request, ToolInvocationResult.ok("""
+                            {"status":"GENERATED","prompt":"Draw a seahorse","model":"image-model","imageUrl":"https://cdn.example.com/seahorse.png","b64Json":"","mimeType":"image/png"}"""));
+
+                    InMemoryAgentArtifactRepository artifactRepository =
+                            context.getBean(InMemoryAgentArtifactRepository.class);
+                    assertThat(artifactRepository.artifacts).singleElement()
+                            .satisfies(artifact -> assertThat(artifact.storageRef())
+                                    .isEqualTo("https://cdn.example.com/seahorse.png"));
                 });
     }
 
@@ -739,6 +827,119 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
     }
 
     @Configuration(proxyBeanMethods = false)
+    static class TestArtifactPublicationChatConfiguration extends TestArtifactPublicationGatewayConfiguration {
+
+        @Bean
+        CurrentUserPort currentUserPort() {
+            return () -> Optional.of(new CurrentUser(1L, "alice", "user", null));
+        }
+
+        @Bean
+        AgentDefinitionRepositoryPort agentDefinitionRepositoryPort() {
+            return new EmptyAgentDefinitionRepository();
+        }
+
+        @Bean
+        InMemoryAgentRunRepository agentRunRepositoryPort() {
+            return new InMemoryAgentRunRepository();
+        }
+
+        @Bean
+        StreamingChatModelPort streamingChatModelPort() {
+            return new ToolThenFinalStreamingChatModel();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestGenerationArtifactPublicationChatConfiguration {
+
+        @Bean
+        Clock clock() {
+            return FIXED_CLOCK;
+        }
+
+        @Bean
+        CurrentUserPort currentUserPort() {
+            return () -> Optional.of(new CurrentUser(1L, "alice", "user", null));
+        }
+
+        @Bean
+        AgentDefinitionRepositoryPort agentDefinitionRepositoryPort() {
+            return new EmptyAgentDefinitionRepository();
+        }
+
+        @Bean
+        InMemoryAgentRunRepository agentRunRepositoryPort() {
+            return new InMemoryAgentRunRepository();
+        }
+
+        @Bean
+        InMemoryAgentArtifactRepository agentArtifactRepositoryPort() {
+            return new InMemoryAgentArtifactRepository();
+        }
+
+        @Bean
+        ObjectStoragePort objectStoragePort() {
+            return new ObjectStoragePort() {
+                @Override
+                public StoredObject upload(String bucketName, InputStream content, long size, String originalFilename,
+                                           String contentType) {
+                    return new StoredObject("memory://" + originalFilename, contentType, size, originalFilename);
+                }
+
+                @Override
+                public InputStream openStream(String url) {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public void deleteByUrl(String url) {
+                    throw new UnsupportedOperationException();
+                }
+            };
+        }
+
+        @Bean
+        InMemoryAgentRunEventBuffer agentRunEventBufferPort() {
+            return new InMemoryAgentRunEventBuffer();
+        }
+
+        @Bean
+        ToolRegistryPort toolRegistryPort() {
+            return new ImageArtifactToolRegistry();
+        }
+
+        @Bean
+        ToolPolicyPort toolPolicyPort() {
+            return request -> PolicyDecision.allow("allow-1");
+        }
+
+        @Bean
+        StreamingChatModelPort streamingChatModelPort() {
+            return new ImageToolThenFinalStreamingChatModel();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TestRemoteImageArtifactPublicationConfiguration {
+
+        @Bean
+        Clock clock() {
+            return FIXED_CLOCK;
+        }
+
+        @Bean
+        InMemoryAgentArtifactRepository agentArtifactRepositoryPort() {
+            return new InMemoryAgentArtifactRepository();
+        }
+
+        @Bean
+        InMemoryAgentRunEventBuffer agentRunEventBufferPort() {
+            return new InMemoryAgentRunEventBuffer();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
     static class TestGenerationArtifactPublicationConfiguration {
 
         @Bean
@@ -878,6 +1079,35 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         }
     }
 
+    private static final class ImageToolThenFinalStreamingChatModel implements StreamingChatModelPort {
+        private int turns;
+
+        @Override
+        public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public StreamCancellationHandle streamChatWithTools(
+                ChatRequest request,
+                StreamCallback callback,
+                ToolCallCollector toolCallCollector) {
+            if (turns++ == 0) {
+                callback.onContent("Need image");
+                toolCallCollector.onToolCalls(List.of(AgentToolCall.of(
+                        "call-1",
+                        "image_generation",
+                        Map.of("prompt", "Draw a seahorse"))));
+            } else {
+                callback.onContent("Image ready");
+                toolCallCollector.onToolCalls(List.of());
+            }
+            callback.onComplete();
+            return () -> {
+            };
+        }
+    }
+
     private static final class RecordingCallback implements StreamCallback {
         private final CountDownLatch terminal = new CountDownLatch(1);
         private final List<String> contents = new ArrayList<>();
@@ -978,6 +1208,58 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
             return steps.stream()
                     .filter(step -> runId.equals(step.runId()))
                     .toList();
+        }
+    }
+
+    static final class InMemoryAgentArtifactRepository implements AgentArtifactRepositoryPort {
+        private final List<AgentArtifact> artifacts = new ArrayList<>();
+
+        @Override
+        public AgentArtifact save(AgentArtifact artifact) {
+            artifacts.add(artifact);
+            return artifact;
+        }
+
+        @Override
+        public Optional<AgentArtifact> findById(String artifactId) {
+            return artifacts.stream()
+                    .filter(artifact -> artifact.artifactId().equals(artifactId))
+                    .findFirst();
+        }
+
+        @Override
+        public List<AgentArtifact> listByRunId(String runId) {
+            return artifacts.stream()
+                    .filter(artifact -> artifact.runId().equals(runId))
+                    .toList();
+        }
+    }
+
+    static final class InMemoryAgentRunEventBuffer implements AgentRunEventBufferPort {
+        private final Map<String, List<StreamEventEnvelope>> events = new LinkedHashMap<>();
+
+        @Override
+        public void append(String runId, StreamEventEnvelope event) {
+            events.computeIfAbsent(runId, ignored -> new ArrayList<>()).add(event);
+        }
+
+        @Override
+        public List<StreamEventEnvelope> getAfter(String runId, long afterSeq) {
+            return events.getOrDefault(runId, List.of()).stream()
+                    .filter(event -> event.eventSeq() > afterSeq)
+                    .toList();
+        }
+
+        @Override
+        public Optional<Long> getLatestSeq(String runId) {
+            return events.getOrDefault(runId, List.of()).stream()
+                    .map(StreamEventEnvelope::eventSeq)
+                    .max(Long::compareTo);
+        }
+
+        @Override
+        public void expire(String runId) {
+            events.remove(runId);
         }
     }
 
@@ -1110,6 +1392,22 @@ class SeahorseAgentChatRunStoreAutoConfigurationTests {
         public Optional<ToolPort> find(String toolId) {
             return "memory-write".equals(toolId)
                     ? Optional.of((toolCallId, id, arguments) -> ToolInvocationResult.ok("artifact-ready"))
+                    : Optional.empty();
+        }
+    }
+
+    private static final class ImageArtifactToolRegistry implements ToolRegistryPort {
+
+        @Override
+        public List<ToolDescriptor> listTools() {
+            return List.of(new ToolDescriptor("image_generation", "Image Generation", "Generate image", "{}"));
+        }
+
+        @Override
+        public Optional<ToolPort> find(String toolId) {
+            return "image_generation".equals(toolId)
+                    ? Optional.of((toolCallId, id, arguments) -> ToolInvocationResult.ok("""
+                            {"status":"GENERATED","prompt":"Draw a seahorse","model":"image-model","imageUrl":"https://cdn.example.com/seahorse.png","b64Json":"","mimeType":"image/png"}"""))
                     : Optional.empty();
         }
     }

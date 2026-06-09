@@ -69,7 +69,7 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
                                                  ObjectMapper objectMapper,
                                                  Clock clock) {
         this.artifactRepository = Objects.requireNonNull(artifactRepository, "artifactRepository must not be null");
-        this.objectStorage = Objects.requireNonNull(objectStorage, "objectStorage must not be null");
+        this.objectStorage = objectStorage;
         this.eventBuffer = Objects.requireNonNullElseGet(eventBuffer, AgentRunEventBufferPort::noop);
         this.objectMapper = Objects.requireNonNullElseGet(objectMapper, ObjectMapper::new);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
@@ -113,6 +113,9 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
                 imageExtension(mimeType),
                 "generated-image");
         if (hasText(observation.b64Json())) {
+            if (objectStorage == null) {
+                return;
+            }
             byte[] bytes;
             try {
                 bytes = Base64.getDecoder().decode(observation.b64Json());
