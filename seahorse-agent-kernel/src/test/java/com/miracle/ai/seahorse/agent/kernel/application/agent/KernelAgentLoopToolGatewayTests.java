@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.RepositoryAgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopResult;
@@ -306,7 +307,8 @@ class KernelAgentLoopToolGatewayTests {
                 .build());
 
         assertEquals("direct answer", result.finalAnswer());
-        assertEquals(List.of("weather", LoadSkillResourceToolPortAdapter.TOOL_ID), toolIds(model.tools));
+        assertEquals(List.of("weather", LoadSkillResourceToolPortAdapter.TOOL_ID, ToolSearchToolPortAdapter.TOOL_ID),
+                toolIds(model.tools));
         assertEquals(0, gateway.requests.size());
     }
 
@@ -333,7 +335,7 @@ class KernelAgentLoopToolGatewayTests {
                 .build());
 
         assertEquals("searched", result.finalAnswer());
-        assertEquals(List.of("web_search", LoadSkillResourceToolPortAdapter.TOOL_ID),
+        assertEquals(List.of("web_search", LoadSkillResourceToolPortAdapter.TOOL_ID, ToolSearchToolPortAdapter.TOOL_ID),
                 toolIds(model.requests.get(0).getTools()));
         assertEquals(1, gateway.requests.size());
         assertEquals(List.of("web_search"), gateway.requests.get(0).allowedToolIds());
@@ -359,6 +361,41 @@ class KernelAgentLoopToolGatewayTests {
 
         assertEquals("direct answer", result.finalAnswer());
         assertEquals(List.of(LoadSkillResourceToolPortAdapter.TOOL_ID), toolIds(model.tools));
+    }
+
+    @Test
+    void shouldInjectEffectiveAllowedToolsIntoToolSearchCalls() {
+        AgentToolCall toolCall = AgentToolCall.of("call-search", ToolSearchToolPortAdapter.TOOL_ID,
+                Map.of("query", "weather"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("find tools", List.of(toolCall)),
+                Turn.finalAnswer("searched tools")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"tools\":[]}"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("which tools can I use?")
+                .allowedToolIds(List.of("weather", "web_search"))
+                .skillRuntimeBlocks(List.of(skill("research", List.of("web_search"))))
+                .skillToolPolicyMode(SkillToolPolicyMode.RESTRICTIVE)
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-tool-search")
+                .build());
+
+        assertEquals("searched tools", result.finalAnswer());
+        assertTrue(toolIds(model.requests.get(0).getTools()).containsAll(List.of(
+                "web_search",
+                ToolSearchToolPortAdapter.TOOL_ID,
+                LoadSkillResourceToolPortAdapter.TOOL_ID)));
+        assertEquals(1, gateway.requests.size());
+        ToolInvocationRequest request = gateway.requests.get(0);
+        assertEquals(ToolSearchToolPortAdapter.TOOL_ID, request.toolId());
+        assertEquals(List.of("web_search"), request.arguments().get(ToolSearchToolPortAdapter.ALLOWED_TOOL_IDS_ARGUMENT));
+        assertEquals(List.of("web_search", ToolSearchToolPortAdapter.TOOL_ID), request.allowedToolIds());
     }
 
     @Test
@@ -586,6 +623,7 @@ class KernelAgentLoopToolGatewayTests {
                     new ToolDescriptor("weather", "Weather", "Weather lookup", "{}"),
                     new ToolDescriptor("memory-forget", "Memory Forget", "Forget memory", "{}"),
                     new ToolDescriptor("web_search", "Web Search", "Search public Web sources", "{}"),
+                    new ToolSearchToolPortAdapter(ToolRegistryPort.empty(), null).descriptor(),
                     new LoadSkillResourceToolPortAdapter(null).descriptor());
         }
 
@@ -593,6 +631,9 @@ class KernelAgentLoopToolGatewayTests {
         public Optional<ToolPort> find(String toolId) {
             if (LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolId)) {
                 return Optional.of(new LoadSkillResourceToolPortAdapter(null));
+            }
+            if (ToolSearchToolPortAdapter.TOOL_ID.equals(toolId)) {
+                return Optional.of(new ToolSearchToolPortAdapter(ToolRegistryPort.empty(), null));
             }
             throw new AssertionError("KernelAgentLoop must invoke tools through ToolGatewayPort");
         }

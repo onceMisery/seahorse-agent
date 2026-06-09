@@ -583,7 +583,7 @@ npm test -- SkillManagementPage AgentSkillBindingPanel
 - [x] Verify focused frontend tests pass after label/diagnostic work:
   - `npm test -- SkillManagementPage AgentSkillBindingPanel`
 - [x] Commit backend slice: `feat: enforce skill aware tool policy`
-- [ ] Commit frontend label/diagnostic slice.
+- [x] Commit frontend label/diagnostic slice.
 
 ### Task 8: P1 Add Deferred Tool Search for Runtime Tool Discovery
 
@@ -601,13 +601,13 @@ npm test -- SkillManagementPage AgentSkillBindingPanel
 
 **Why:** deer-flow exposes deferred tools through `tool_search`, reducing prompt bloat while preserving discoverability. Seahorse can surpass this by combining search with governance metadata and MCP allowlist state.
 
-**Impact/Compatibility:** Existing tool catalog remains. Deferred search is additive and can be feature/config gated.
+**Impact/Compatibility:** Existing tool catalog remains. Deferred search is additive and feature/config gated.
 
 **Repair Track:**
 - Root cause: large tool catalogs either bloat prompts or hide available tools.
 - Canonical owner: ToolCatalog plus policy-filtered deferred catalog.
-- Minimal change: add a read-only `tool_search` tool that returns matching tool metadata and schema only after policy filtering.
-- Compatibility: disabled by default if the current agent policy expects all schemas to be injected.
+- Minimal change: add a read-only `tool_search` tool that returns matching tool metadata only after policy filtering; keep schema access on the existing catalog/admin surfaces.
+- Compatibility: enabled by default under agent runtime, but can be disabled through `seahorse-agent.chat.agent.tools.deferred-search.enabled=false` while agents still rely on eager schema injection.
 - Verification: tests prove denied tools never appear in search results.
 
 **Retirement Track:**
@@ -624,14 +624,14 @@ cd frontend
 npm test -- ToolCatalogPage
 ```
 
-- [ ] Write RED tests for search result ranking, schema loading, and policy-filtered denial.
-- [ ] Verify RED against current catalog behavior.
-- [ ] Implement deferred catalog assembly after Agent, skill, MCP, and tenant policy filters.
-- [ ] Register `tool_search` as a local read-only tool through `SeahorseAgentKernelAgentAutoConfiguration` and `BuiltInAgentToolRegistrar`.
-- [ ] Extend `BuiltInAgentToolRegistrarTests` to prove the tool is registered and cataloged only when the feature/config flag enables deferred tool search.
+- [x] Write RED tests for search result filtering, metadata-only output, missing snapshot denial, and policy-filtered denial.
+- [x] Verify RED against current catalog behavior.
+- [x] Implement deferred catalog assembly from the Agent/skill effective allowlist; MCP and tenant filtering remain inherited from the existing allowed-tool pipeline.
+- [x] Register `tool_search` as a local read-only tool through `SeahorseAgentKernelAgentAutoConfiguration` and `BuiltInAgentToolRegistrar`.
+- [x] Extend auto-configuration and registrar tests to prove the tool is registered/cataloged when enabled and not registered when `seahorse-agent.chat.agent.tools.deferred-search.enabled=false`.
 - [ ] Add admin diagnostics showing deferred vs eagerly injected tools.
-- [ ] Verify focused tests pass.
-- [ ] Commit: `feat: add deferred tool search runtime`
+- [x] Verify focused tests pass.
+- [x] Commit: `feat: add deferred tool search runtime`
 
 ### Task 9: P2 Add Tool Call Rendering and Action Details to Workbench
 

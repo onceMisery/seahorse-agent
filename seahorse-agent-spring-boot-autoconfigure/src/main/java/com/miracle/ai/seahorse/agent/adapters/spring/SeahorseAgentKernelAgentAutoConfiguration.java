@@ -54,6 +54,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.QueryMetadataToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.SearchKnowledgeBaseToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.web.WebFetchSafetyPolicy;
@@ -144,6 +145,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     private static final String PROP_PER_TOOL_TIMEOUT = "seahorse-agent.chat.agent.per-tool-timeout";
     private static final String PROP_MAX_PARALLEL_TOOLS = "seahorse-agent.chat.agent.max-parallel-tools";
     private static final String PROP_MCP_INCLUDE = "seahorse-agent.chat.agent.tools.mcp.include";
+    private static final String PROP_DEFERRED_TOOL_SEARCH_ENABLED =
+            "seahorse-agent.chat.agent.tools.deferred-search.enabled";
     private static final String PROP_SEARCH_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.search.enabled";
     private static final String PROP_MEMORY_TOOLS_ENABLED = "seahorse-agent.chat.agent.tools.memory.enabled";
     private static final String PROP_WEB_RESEARCH_TOOLS_ENABLED =
@@ -619,6 +622,17 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     public LoadSkillResourceToolPortAdapter seahorseLoadSkillResourceToolPortAdapter(
             AgentToolJsonSupport jsonSupport) {
         return new LoadSkillResourceToolPortAdapter(jsonSupport);
+    }
+
+    @Bean
+    @ConditionalOnAgentRuntimeEnabled
+    @ConditionalOnBean(ToolRegistryPort.class)
+    @ConditionalOnProperty(name = PROP_DEFERRED_TOOL_SEARCH_ENABLED, havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public ToolSearchToolPortAdapter seahorseToolSearchToolPortAdapter(
+            ToolRegistryPort toolRegistry,
+            AgentToolJsonSupport jsonSupport) {
+        return new ToolSearchToolPortAdapter(toolRegistry, jsonSupport);
     }
 
     @Bean

@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualiz
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.NewsletterGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.PptGenerationToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebFetchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.WebSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolActionType;
@@ -130,6 +131,7 @@ public class BuiltInAgentToolRegistrar implements ApplicationRunner {
             case WebFetchToolPortAdapter.TOOL_ID, WebSearchToolPortAdapter.TOOL_ID -> "WEB";
             case GitHubRepositoryReaderToolPortAdapter.TOOL_ID -> "GITHUB";
             case LoadSkillResourceToolPortAdapter.TOOL_ID -> "SKILL";
+            case ToolSearchToolPortAdapter.TOOL_ID -> "TOOL";
             case ImageGenerationToolPortAdapter.TOOL_ID,
                     NewsletterGenerationToolPortAdapter.TOOL_ID,
                     PptGenerationToolPortAdapter.TOOL_ID,

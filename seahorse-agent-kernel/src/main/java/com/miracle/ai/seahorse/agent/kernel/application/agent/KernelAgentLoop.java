@@ -24,6 +24,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentAppro
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentApprovalWaitHandler;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ToolSearchToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
@@ -492,6 +493,13 @@ public class KernelAgentLoop {
                             .findFirst())
                     .ifPresent(result::add);
         }
+        if (!safeAllowedToolIds.isEmpty()) {
+            toolRegistry.find(ToolSearchToolPortAdapter.TOOL_ID)
+                    .flatMap(ignored -> toolRegistry.listTools().stream()
+                            .filter(tool -> ToolSearchToolPortAdapter.TOOL_ID.equals(tool.toolId()))
+                            .findFirst())
+                    .ifPresent(result::add);
+        }
         return List.copyOf(result);
     }
 
@@ -761,6 +769,9 @@ public class KernelAgentLoop {
         if (LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
             effective.put(LoadSkillResourceToolPortAdapter.TOOL_ID, true);
         }
+        if (ToolSearchToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
+            effective.put(ToolSearchToolPortAdapter.TOOL_ID, true);
+        }
         return List.copyOf(effective.keySet());
     }
 
@@ -801,6 +812,10 @@ public class KernelAgentLoop {
         if (LoadSkillResourceToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
             arguments.put(LoadSkillResourceToolPortAdapter.RUNTIME_SKILLS_ARGUMENT,
                     request == null ? List.of() : request.skillRuntimeBlocks());
+        }
+        if (ToolSearchToolPortAdapter.TOOL_ID.equals(toolCall.toolId())) {
+            arguments.put(ToolSearchToolPortAdapter.ALLOWED_TOOL_IDS_ARGUMENT,
+                    request == null ? List.of() : effectiveAllowedToolIds(request));
         }
         if (request == null || request.memoryContext() == null) {
             return arguments;
