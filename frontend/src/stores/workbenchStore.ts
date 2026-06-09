@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type WorkbenchTab = "artifacts" | "timeline" | "sources" | "approvals" | "cost" | "memory" | "ui";
+export type WorkbenchTab = "artifacts" | "timeline" | "sources" | "approvals" | "tools" | "cost" | "memory" | "ui";
 
 interface WorkbenchState {
   activeMessageId: string | null;

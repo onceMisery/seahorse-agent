@@ -67,6 +67,73 @@ describe("chatStreamHandlers", () => {
     ]);
   });
 
+  it("merges tool call events into message workspace fields by call id", () => {
+    const message = assistantMessage({
+      lastEventSeq: 4
+    });
+
+    applyAgentStreamEventToMessage(
+      message,
+      envelope(5, AGENT_STREAM_EVENTS.TOOL_CALL_STARTED, {
+        toolCallId: "call-1",
+        toolId: "web_search",
+        status: "RUNNING",
+        argumentsPreviewJson: "{\"query\":\"seahorse\"}"
+      })
+    );
+    applyAgentStreamEventToMessage(
+      message,
+      envelope(6, AGENT_STREAM_EVENTS.TOOL_CALL_WAITING_USER, {
+        toolCallId: "call-1",
+        toolId: "web_search",
+        approvalId: "approval-1",
+        argumentsPreviewJson: "{\"query\":\"seahorse\"}"
+      })
+    );
+
+    expect(message.toolCalls).toEqual([{
+      id: "call-1",
+      toolId: "web_search",
+      status: "WAITING_USER",
+      argumentsPreviewJson: "{\"query\":\"seahorse\"}",
+      approvalId: "approval-1"
+    }]);
+  });
+
+  it("normalizes backend tool approval payloads with invocation id and argument preview objects", () => {
+    const message = assistantMessage({ lastEventSeq: 4 });
+
+    applyAgentStreamEventToMessage(
+      message,
+      envelope(5, AGENT_STREAM_EVENTS.TOOL_CALL_WAITING_USER, {
+        approvalId: "approval-1",
+        toolInvocationId: "call-1",
+        toolId: "web_search",
+        riskLevel: "LOW",
+        summary: "Tool call requires approval",
+        argumentsPreview: {
+          argumentKeys: ["query"],
+          argumentCount: 1
+        }
+      })
+    );
+
+    expect(message.toolCalls).toEqual([{
+      id: "call-1",
+      toolId: "web_search",
+      status: "WAITING_USER",
+      toolInvocationId: "call-1",
+      approvalId: "approval-1",
+      riskLevel: "LOW",
+      argumentsPreviewJson: JSON.stringify({ argumentKeys: ["query"], argumentCount: 1 }, null, 2)
+    }]);
+    expect(message.approvals?.[0]).toMatchObject({
+      id: "approval-1",
+      title: "Tool call requires approval",
+      argumentsPreviewJson: JSON.stringify({ argumentKeys: ["query"], argumentCount: 1 }, null, 2)
+    });
+  });
+
   it("ignores stale live events and appends artifact deltas once", () => {
     const message = assistantMessage({
       lastEventSeq: 10,

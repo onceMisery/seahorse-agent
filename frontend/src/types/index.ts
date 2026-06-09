@@ -126,6 +126,21 @@ export interface AgentApproval {
   argumentsPreviewJson?: string;
 }
 
+export interface AgentToolCallView {
+  id: string;
+  toolId: string;
+  status: string;
+  toolInvocationId?: string;
+  approvalId?: string;
+  riskLevel?: string;
+  argumentsPreviewJson?: string;
+  resultSummary?: string;
+  durationMs?: number;
+  error?: string;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
 export const AGENT_ARTIFACT_SCAN_STATUS = {
   PENDING: "PENDING",
   CLEAN: "CLEAN",
@@ -318,6 +333,7 @@ export interface Message {
   artifacts?: ArtifactBlock[];
   serverArtifacts?: AgentArtifact[];
   approvals?: AgentApproval[];
+  toolCalls?: AgentToolCallView[];
   quota?: AgentQuota[];
   memories?: AgentMemory[];
   costSummary?: AgentRunCostSummary;

@@ -663,16 +663,16 @@ npm test -- ToolCatalogPage
 **Verification:**
 ```powershell
 cd frontend
-npm test -- chatStreamUtils WorkspaceInspector
+npm test -- chatStreamHandlers WorkspaceInspector
 npm run build
 ```
 
-- [ ] Write RED tests for tool-call tab count and detail rendering.
-- [ ] Verify RED.
-- [ ] Add `toolCalls` to message state and stream normalization.
-- [ ] Render the new Tool Calls tab with redacted argument preview and result summary.
-- [ ] Verify focused frontend tests and build pass.
-- [ ] Commit: `feat: render tool calls in chat workbench`
+- [x] Write RED tests for tool-call tab count and detail rendering.
+- [x] Verify RED.
+- [x] Add `toolCalls` to message state and stream normalization.
+- [x] Render the new Tool Calls tab with redacted argument preview and result summary.
+- [x] Verify focused frontend tests and build pass.
+- [x] Commit: `feat: render tool calls in chat workbench`
 
 ### Task 10: P2 Add Skill Invocation Rendering and Runtime Diagnostics
 

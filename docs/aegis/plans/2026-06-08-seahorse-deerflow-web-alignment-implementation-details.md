@@ -303,7 +303,7 @@ Implementation constraints:
 - [x] Task 6: `load_skill_resource` registered and tested
 - [x] Task 7: Backend tool gateway policy tests pass; frontend advisory/restrictive diagnostics render
 - [x] Task 8: Backend `tool_search` registered/tested; admin deferred-tool diagnostics render
-- [ ] Task 9: Tool calls tab renders
+- [x] Task 9: Tool calls tab renders
 - [ ] Task 10: Skills tab renders
 - [ ] Task 11: Event backfill works
 - [ ] Task 12: Docs updated

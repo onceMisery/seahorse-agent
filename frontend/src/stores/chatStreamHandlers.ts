@@ -9,6 +9,7 @@ import {
   type AgentRunSnapshotStep,
   type AgentSource,
   type AgentTimelineItem,
+  type AgentToolCallView,
   type ArtifactBlock,
   type Message,
   type StreamEventEnvelope
@@ -56,6 +57,15 @@ export function applyAgentStreamEventToMessage(
       break;
     case AGENT_STREAM_EVENTS.APPROVAL:
       message.approvals = mergeById(message.approvals, normalized.items);
+      break;
+    case AGENT_STREAM_EVENTS.TOOL_CALL_STARTED:
+      message.toolCalls = mergeById(message.toolCalls, normalized.items);
+      message.timeline = mergeById(message.timeline, toolCallTimeline(normalized.items));
+      break;
+    case AGENT_STREAM_EVENTS.TOOL_CALL_WAITING_USER:
+      message.toolCalls = mergeById(message.toolCalls, normalized.items);
+      message.approvals = mergeById(message.approvals, normalized.approvals);
+      message.timeline = mergeById(message.timeline, toolCallTimeline(normalized.items));
       break;
     case AGENT_STREAM_EVENTS.QUOTA:
       message.quota = mergeById(message.quota, normalized.items);
@@ -174,6 +184,17 @@ function snapshotApprovals(approvals?: unknown[]): AgentApproval[] {
       argumentsPreviewJson: stringValue(record.argumentsPreviewJson)
     }];
   });
+}
+
+function toolCallTimeline(toolCalls: AgentToolCallView[]): AgentTimelineItem[] {
+  return toolCalls.map((toolCall) => ({
+    id: `tool-call-${toolCall.id}`,
+    title: toolCall.toolId,
+    status: toolCall.status,
+    detail: toolCall.resultSummary ?? toolCall.error,
+    timestamp: toolCall.finishedAt ?? toolCall.startedAt,
+    durationMs: toolCall.durationMs
+  }));
 }
 
 function isStale(message: Message, incomingSeq?: number): boolean {
