@@ -118,7 +118,7 @@ The strategy is **three layers to align, two layers to surpass**:
 - Seahorse frontend workbench already has places to render artifacts, sources, timeline, approvals, cost, memory, and A2UI Lite.
 - Seahorse backend already has persisted artifacts and run snapshot APIs.
 - Review verification on 2026-06-08 found `chatStore.ts`, `WorkspaceInspector.tsx`, `ArtifactInspectorTab.tsx`, and `agentArtifactService.ts` clean for the mojibake code points listed in Task 2. Keep an encoding guard because prior project work has had visible mojibake and new Chinese labels can regress.
-- `frontend/src/stores/artifactStore.ts` currently has message-scoped artifact merge helpers but no production consumers outside itself/tests; it is a duplicate-owner risk once message state owns live artifact merging.
+- `frontend/src/stores/artifactStore.ts` had message-scoped artifact merge helpers but no production consumers outside itself/tests. Current-worktree verification on 2026-06-09 confirmed no `frontend/src` references to `artifactStore`, `useArtifactStore`, `useActiveArtifacts`, or the exported artifact-store mutators, and the focused store/workbench tests plus frontend build pass after deleting it. Message-bound chat/workbench state is now the only frontend artifact UI state owner.
 - Backend run snapshot and event APIs already expose sequence-like data (`eventSeq`/checkpoint sequence). Frontend hydration must treat sequence as monotonic recovery metadata, not as permission to overwrite newer live state.
 
 ### Current Baseline Review Impact
@@ -173,7 +173,7 @@ The strategy is **three layers to align, two layers to surpass**:
 - New canonical owner: `Agent Workspace Runtime`, implemented as message-bound frontend state plus persisted backend `AgentRunSnapshot` and `AgentArtifact`.
 - Old owner: ad hoc stream handlers that parse events but drop most normalized payloads.
 - Compat-only carrier: existing plain text SSE `message` deltas and existing snapshot refresh method.
-- Retirement trigger: after live event binding and snapshot replay pass, remove unused staging-only approval logic and any duplicate artifact-only stores that no longer receive events.
+- Retirement status: live event binding and snapshot replay now use message-bound merge helpers. The duplicate artifact-only store has no production consumers and is retired in the current cleanup slice after focused tests/build. Approval-specific cleanup remains governed by its own consumer check.
 
 ### Falsification matrix
 
@@ -197,7 +197,7 @@ Adopt the Seahorse-native Agent Workspace Runtime approach. Escalate to ADR only
 - Create `frontend/src/stores/chatStreamHandlers.ts`
 - Modify `frontend/src/hooks/useStreamResponse.ts` only if event envelope sequencing or reconnect metadata is missing
 - Modify `frontend/src/types/index.ts`
-- Review and delete or retire `frontend/src/stores/artifactStore.ts` and its tests after message-state artifact merging is proven
+- Delete retired `frontend/src/stores/artifactStore.ts` after message-state artifact merging is proven
 - Test `frontend/src/stores/chatStreamUtils.test.ts`
 - Test `frontend/src/stores/chatStreamHandlers.test.ts`
 - Test or create `frontend/src/stores/chatStore.test.ts`
@@ -311,7 +311,7 @@ Adopt the Seahorse-native Agent Workspace Runtime approach. Escalate to ADR only
 - Old owner/fallback: approval-only staging in `chatStore.ts`.
 - Active status: keep until approval merge is included in the shared helper.
 - Deletion trigger: after approval events are rendered in `message.approvals`, remove `stagedApprovals` if it has no remaining consumer.
-- Artifact-store trigger: after `applyAgentStreamEventToMessage` owns artifact merge and `ArtifactInspectorTab`/`WorkspaceInspector` tests pass, delete or formally deprecate `frontend/src/stores/artifactStore.ts` and its test file. If retained, document whether it is a consumer cache or mirror, not a second owner.
+- Artifact-store status: `applyAgentStreamEventToMessage` owns artifact merge; `ArtifactInspectorTab`/`WorkspaceInspector`, `chatStore`, and `chatStreamHandlers` tests pass; `npm run build` passes; `artifactStore.ts` has no production consumers and is deleted in the current cleanup slice.
 
 **Verification:**
 ```powershell
@@ -325,7 +325,7 @@ npm run build
 - [ ] Verify RED by running `npm test -- chatStreamUtils chatStreamHandlers chatStore`.
 - [ ] Implement `chatStreamHandlers.ts` with id-based merge, artifact append semantics, and sequence-aware monotonic updates.
 - [ ] Wire `onStreamEvent` to the helper and preserve current approval behavior.
-- [ ] Delete or deprecate `artifactStore.ts` if it has no production consumer after message-state artifact merge is complete.
+- [x] Delete `artifactStore.ts` after confirming it has no production consumer and message-state artifact merge is complete.
 - [ ] Verify GREEN with the focused frontend commands.
 - [ ] Commit: `feat: bind agent stream events to chat messages`
 
@@ -884,9 +884,9 @@ Deliver Task 12 after implementation verification.
 
 ### Duplicate Runtime Owners
 
-Risk: frontend `artifactStore`, chat message state, backend artifacts, and snapshots can become competing owners.
+Risk: frontend artifact state, chat message state, backend artifacts, and snapshots can become competing owners.
 
-Mitigation: message state owns live rendering; backend snapshot/artifact owns persistence; any separate store must either feed message state or be retired.
+Mitigation: message state owns live rendering; backend snapshot/artifact owns persistence; any separate store must either feed message state or be retired. Current cleanup retires the unused `artifactStore.ts` duplicate owner after reference scan, focused tests, and frontend build.
 
 ### Prompt and Tool Surface Bloat
 
@@ -964,7 +964,7 @@ Mitigation: Task 1 extracts pure handlers into `chatStreamHandlers.ts`; later ta
 ## Retirement Plan
 
 - Retire approval-only stream handling once the generic event merge helper covers approvals.
-- Retire or formally deprecate `frontend/src/stores/artifactStore.ts` once message-state artifact merging is verified. If retained, document it as a cache/mirror with no authority over persisted artifacts.
+- Retired `frontend/src/stores/artifactStore.ts` after message-state artifact merging was verified and no production consumers remained.
 - Retire local-only artifact storage as a durable source once all generation tools persist artifacts.
 - Retire misleading "allowed tools" UI copy if it implies permission grants.
 - Retire full tool schema prompt injection for large catalogs after deferred `tool_search` is verified.
