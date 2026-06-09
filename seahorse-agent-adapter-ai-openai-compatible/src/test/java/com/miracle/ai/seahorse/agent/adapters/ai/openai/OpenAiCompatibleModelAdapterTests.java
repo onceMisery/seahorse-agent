@@ -35,6 +35,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -160,6 +161,55 @@ class OpenAiCompatibleModelAdapterTests {
                 "Draw Redis architecture", null, "1024x1024", null, "b64_json"));
 
         assertThat(capturedBody.get()).contains("\"response_format\":\"b64_json\"");
+    }
+
+    @Test
+    void shouldRetryImageGenerationWithoutResponseFormatWhenProviderRejectsIt() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        List<String> bodies = new ArrayList<>();
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .addInterceptor(chain -> {
+                    Buffer buffer = new Buffer();
+                    chain.request().body().writeTo(buffer);
+                    bodies.add(buffer.readUtf8());
+                    int call = calls.incrementAndGet();
+                    if (call == 1) {
+                        return new Response.Builder()
+                                .request(chain.request())
+                                .protocol(Protocol.HTTP_1_1)
+                                .code(400)
+                                .message("Bad Request")
+                                .body(ResponseBody.create("""
+                                        {"error":{"message":"UnsupportedParamsError: Setting `response_format` is not supported"}}
+                                        """, null))
+                                .build();
+                    }
+                    return new Response.Builder()
+                            .request(chain.request())
+                            .protocol(Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("OK")
+                            .body(ResponseBody.create("""
+                                    {"data":[{"url":"https://cdn.example.com/fallback.png"}]}
+                                    """, null))
+                            .build();
+                })
+                .build();
+        OpenAiCompatibleModelAdapter adapter = new OpenAiCompatibleModelAdapter(
+                httpClient,
+                new ObjectMapper(),
+                new OpenAiCompatibleModelProperties("https://apihub.agnes-ai.com", "",
+                        "gpt-test", "", "", "agnes-image-2.0-flash", List.of()),
+                Runnable::run);
+
+        ImageGenerationResult result = adapter.generate(new ImageGenerationRequest(
+                "Draw Seahorse Agent", null, "1024x1024", null, "b64_json"));
+
+        assertThat(calls.get()).isEqualTo(2);
+        assertThat(bodies.get(0)).contains("\"response_format\":\"b64_json\"");
+        assertThat(bodies.get(1)).doesNotContain("response_format");
+        assertThat(result.imageUrl()).isEqualTo("https://cdn.example.com/fallback.png");
+        assertThat(result.b64Json()).isBlank();
     }
 
     @Test

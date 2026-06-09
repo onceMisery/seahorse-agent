@@ -162,19 +162,36 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
     public ImageGenerationResult generate(ImageGenerationRequest request) {
         ImageGenerationRequest safeRequest = Objects.requireNonNull(request, "request must not be null");
         String model = resolveImageModel(safeRequest.model());
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("model", model);
-        payload.put("prompt", safeRequest.prompt());
-        payload.put("size", safeRequest.size());
-        putImageResponseFormat(payload, safeRequest.responseFormat());
-        if (safeRequest.style() != null && !safeRequest.style().isBlank()) {
-            payload.put("style", safeRequest.style());
-        }
-        JsonNode response = executeJson("/images/generations", payload);
+        JsonNode response = executeImageGeneration(safeRequest, model);
         JsonNode first = response.path("data").path(0);
         String imageUrl = first.path("url").asText("");
         String b64Json = first.path("b64_json").asText("");
         return ImageGenerationResult.generated(safeRequest.prompt(), model, imageUrl, b64Json, "image/png");
+    }
+
+    private JsonNode executeImageGeneration(ImageGenerationRequest request, String model) {
+        Map<String, Object> payload = imageGenerationPayload(request, model, request.responseFormat());
+        try {
+            return executeJson("/images/generations", payload);
+        } catch (IllegalStateException ex) {
+            if (!shouldRetryWithoutImageResponseFormat(request.responseFormat(), ex)) {
+                throw ex;
+            }
+            return executeJson("/images/generations", imageGenerationPayload(request, model, "url"));
+        }
+    }
+
+    private Map<String, Object> imageGenerationPayload(ImageGenerationRequest request, String model,
+                                                       String responseFormat) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", model);
+        payload.put("prompt", request.prompt());
+        payload.put("size", request.size());
+        putImageResponseFormat(payload, responseFormat);
+        if (request.style() != null && !request.style().isBlank()) {
+            payload.put("style", request.style());
+        }
+        return payload;
     }
 
     private void putImageResponseFormat(Map<String, Object> payload, String responseFormat) {
@@ -182,6 +199,14 @@ public class OpenAiCompatibleModelAdapter implements ChatModelPort, StreamingCha
         if ("b64_json".equals(normalized)) {
             payload.put("response_format", normalized);
         }
+    }
+
+    private boolean shouldRetryWithoutImageResponseFormat(String responseFormat, RuntimeException error) {
+        if (!"b64_json".equals(Objects.requireNonNullElse(responseFormat, "").trim())) {
+            return false;
+        }
+        String message = Objects.requireNonNullElse(error.getMessage(), "").toLowerCase(Locale.ROOT);
+        return message.contains("response_format") && message.contains("unsupported");
     }
 
     @Override
