@@ -118,8 +118,8 @@ The strategy is **three layers to align, two layers to surpass**:
 ### Current Baseline Review Impact
 
 - 2026-06-08 baseline review found the current content-generation code correctly treats `model="default"` as the configured default model in both chat-based generation tools and `image_generation`; preserve this behavior.
-- The same review found current generation adapters still return JSON observations only. `AbstractChatContentGenerationToolPortAdapter` returns `artifactType`, `format`, and `content`; `ImageGenerationToolPortAdapter` returns `status`, `prompt`, `model`, `imageUrl`, `b64Json`, and `mimeType`. They do not persist `AgentArtifact` rows or emit `agent.artifact.*` events, so Task 5 remains required.
-- The current `ImageGenerationToolPortAdapter` drops the `style` argument by passing `null` even though the tool schema and OpenAI-compatible image adapter support `style`. Treat this as a compatibility regression to fix or explicitly retire before claiming image-generation parity.
+- Task 5 execution has now added gateway-level generation artifact publication. Newsletter, PPT, chart, frontend-design, and image-generation outputs have direct tests proving persisted `AgentArtifact` rows and `agent.artifact` event payloads.
+- `ImageGenerationToolPortAdapter` now forwards `style` and defaults to `b64_json` so default image generations can be stored internally. Returned and audited tool observations redact `b64Json` while the artifact publisher receives the raw successful result.
 - `BuiltInAgentToolRegistrar` already registers all Spring `DescribedToolPort` beans into `ToolRegistryPort` and `ToolCatalogRepositoryPort`; model-generation tools are cataloged as `MEDIUM` risk, `EXECUTE` action, and `MODEL` resource type.
 - `SpringSseEventSender` already sends named SSE events, emits an `error` event followed by `done` on failure, completes quietly, and has tests for closed-emitter behavior. Task 11 should preserve this sender contract and focus on frontend/admin consumption, replay, and backfill.
 - `SeahorseChatController`, `ResearchSseBridge`, and `frontend/src/hooks/useStreamResponse.ts` already expose a resume path using `resumeRunId` and `lastEventSeq`; execution should leverage this before introducing a parallel event-backfill endpoint.
@@ -484,12 +484,12 @@ cd ..
 .\mvnw.cmd -pl seahorse-agent-tests -am test -Dtest=*Artifact*,*AgentRun*
 ```
 
-- [ ] Write RED tests for image, PPT, chart, frontend design, and newsletter tools creating clean `AgentArtifact` metadata while preserving `model="default"` fallback and image `style` forwarding.
-- [ ] Verify RED against current tool behavior: JSON observations are returned, but no persisted `AgentArtifact` or artifact stream event exists yet.
-- [ ] Implement or extend shared artifact publication through a kernel artifact publisher; avoid direct dependencies from tool adapters to web controllers or `SpringSseEventSender`.
-- [ ] Emit artifact stream events with `artifactId`, `runId`, `title`, `mimeType`, `previewText`, and `storageRef` where allowed.
-- [ ] Verify focused backend tests pass.
-- [ ] Commit: `feat: publish generation outputs as artifacts`
+- [x] Write RED tests for image, PPT, chart, frontend design, and newsletter tools creating clean `AgentArtifact` metadata while preserving `model="default"` fallback and image `style` forwarding.
+- [x] Verify RED against current tool behavior: JSON observations are returned, but no persisted `AgentArtifact` or artifact stream event exists yet.
+- [x] Implement or extend shared artifact publication through a kernel artifact publisher; avoid direct dependencies from tool adapters to web controllers or `SpringSseEventSender`.
+- [x] Emit artifact stream events with `artifactId`, `runId`, `title`, `mimeType`, `previewText`, and `storageRef` where allowed.
+- [x] Verify focused backend tests pass.
+- [x] Commit: `feat: publish generation tool artifacts`, `feat: publish image generation artifacts`, `fix: persist default image generations safely`, `test: cover all generation artifact publishing`
 
 ### Task 6: P1 Add Skill Progressive Loading Resource Tool
 

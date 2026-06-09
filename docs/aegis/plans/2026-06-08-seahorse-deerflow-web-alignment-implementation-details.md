@@ -161,7 +161,7 @@ Current baseline:
 - `ImageGenerationToolPortAdapter` returns JSON fields `status`, `prompt`, `model`, `imageUrl`, `b64Json`, and `mimeType`.
 - Tool registration through `BuiltInAgentToolRegistrar` already covers built-in generation tools.
 - `model="default"` resolves to the configured default model.
-- `ImageGenerationToolPortAdapter` currently drops the `style` argument despite advertising it in the schema.
+- `ImageGenerationToolPortAdapter` forwards the advertised `style` argument and defaults to `b64_json` so default image generations can be persisted as internal artifacts.
 - `ToolArtifactPublicationPort` exists in the kernel outbound ports. `LocalToolGatewayPort` calls it after successful tool execution and output redaction, passes the full `ToolInvocationRequest`, and swallows publication exceptions so the tool observation remains authoritative.
 - `SeahorseAgentKernelAgentAutoConfiguration` wires an optional `ToolArtifactPublicationPort` into `LocalToolGatewayPort`; when absent, the gateway uses `ToolArtifactPublicationPort.noop()`.
 - Implemented status: newsletter, PPT, chart, frontend-design, and image-generation outputs now have direct publisher tests proving persisted `AgentArtifact` rows and `agent.artifact` event payloads. `image_generation` defaults to `b64_json` so generated images can be stored internally; returned and audited observations redact `b64Json`.
