@@ -373,6 +373,19 @@ export function SkillManagementPage() {
                         </Badge>
                       ))}
                     </div>
+                    {skill.allowedTools && skill.allowedTools.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        <div className="text-xs font-medium text-slate-500">建议工具</div>
+                        <div className="flex flex-wrap gap-2">
+                          {skill.allowedTools.map((toolId) => (
+                            <Badge key={toolId} variant="outline" className="font-mono text-slate-600">
+                              {toolId}
+                            </Badge>
+                          ))}
+                        </div>
+                        <p className="text-xs text-slate-500">默认仅作为提示元数据，不会扩大 Agent 工具授权。</p>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button variant="outline" size="sm" onClick={() => toggleEnabled(skill)}>

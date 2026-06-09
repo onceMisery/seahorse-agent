@@ -289,7 +289,7 @@ Implementation constraints:
 - [ ] Task 4: Artifact lifecycle + unsafe download blocked
 - [x] Task 5: All 5 generation tools persist artifacts
 - [x] Task 6: `load_skill_resource` registered and tested
-- [ ] Task 7: Backend tool gateway policy tests pass; frontend advisory/restrictive diagnostics still pending
+- [x] Task 7: Backend tool gateway policy tests pass; frontend advisory/restrictive diagnostics render
 - [ ] Task 8: `tool_search` registered and tested
 - [ ] Task 9: Tool calls tab renders
 - [ ] Task 10: Skills tab renders

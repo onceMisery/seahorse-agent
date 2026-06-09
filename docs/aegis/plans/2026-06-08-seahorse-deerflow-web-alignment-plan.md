@@ -577,11 +577,12 @@ npm test -- SkillManagementPage AgentSkillBindingPanel
 - [x] Write RED tests proving skill `allowedTools` never grants a denied Agent tool.
 - [x] Write RED tests proving restrictive selected skill mode reduces available tools.
 - [x] Implement effective policy calculation in the backend owner closest to tool execution.
-- [ ] Update frontend labels and diagnostics for advisory vs restrictive mode.
+- [x] Update frontend labels and diagnostics for advisory vs restrictive mode.
 - [x] Verify focused backend policy tests pass:
   - `.\mvnw.cmd -pl seahorse-agent-kernel -am test "-Dtest=KernelAgentLoopToolGatewayTests"`
-- [ ] Verify focused frontend tests pass after label/diagnostic work.
-- [ ] Commit backend slice: `feat: enforce skill aware tool policy`
+- [x] Verify focused frontend tests pass after label/diagnostic work:
+  - `npm test -- SkillManagementPage AgentSkillBindingPanel`
+- [x] Commit backend slice: `feat: enforce skill aware tool policy`
 - [ ] Commit frontend label/diagnostic slice.
 
 ### Task 8: P1 Add Deferred Tool Search for Runtime Tool Discovery
