@@ -34,6 +34,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillCategory;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillToolPolicyMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
@@ -287,6 +288,80 @@ class KernelAgentLoopToolGatewayTests {
     }
 
     @Test
+    void shouldNotLetSkillAllowedToolsGrantAgentDeniedToolsInAdvisoryMode() {
+        ToolListRecordingModel model = new ToolListRecordingModel();
+        RecordingToolGateway gateway = new RecordingToolGateway();
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("answer with skill metadata")
+                .allowedToolIds(List.of("weather"))
+                .skillRuntimeBlocks(List.of(skill("research", List.of("web_search"))))
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-advisory")
+                .build());
+
+        assertEquals("direct answer", result.finalAnswer());
+        assertEquals(List.of("weather", LoadSkillResourceToolPortAdapter.TOOL_ID), toolIds(model.tools));
+        assertEquals(0, gateway.requests.size());
+    }
+
+    @Test
+    void shouldRestrictExposedAndGatewayAllowedToolsToSelectedSkillToolsInRestrictiveMode() {
+        AgentToolCall toolCall = AgentToolCall.of("call-web", "web_search", Map.of("query", "seahorse"));
+        ScriptedModel model = new ScriptedModel(List.of(
+                Turn.toolCalls("need search", List.of(toolCall)),
+                Turn.finalAnswer("searched")));
+        RecordingToolGateway gateway = new RecordingToolGateway(ToolInvocationResult.ok("{\"sources\":[]}"));
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                gateway,
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("research")
+                .allowedToolIds(List.of("weather", "web_search"))
+                .skillRuntimeBlocks(List.of(skill("research", List.of("web_search"))))
+                .skillToolPolicyMode(SkillToolPolicyMode.RESTRICTIVE)
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-restrictive")
+                .build());
+
+        assertEquals("searched", result.finalAnswer());
+        assertEquals(List.of("web_search", LoadSkillResourceToolPortAdapter.TOOL_ID),
+                toolIds(model.requests.get(0).getTools()));
+        assertEquals(1, gateway.requests.size());
+        assertEquals(List.of("web_search"), gateway.requests.get(0).allowedToolIds());
+    }
+
+    @Test
+    void shouldExposeNoAgentToolsWhenRestrictiveSkillHasNoAllowedTools() {
+        ToolListRecordingModel model = new ToolListRecordingModel();
+        KernelAgentLoop loop = new KernelAgentLoop(
+                model,
+                new ListingOnlyToolRegistry(),
+                new RecordingToolGateway(),
+                KernelAgentLoopOptions.defaults());
+
+        AgentLoopResult result = loop.execute(AgentLoopRequest.builder()
+                .question("answer without tools")
+                .allowedToolIds(List.of("weather", "web_search"))
+                .skillRuntimeBlocks(List.of(skill("drafting", List.of())))
+                .skillToolPolicyMode(SkillToolPolicyMode.RESTRICTIVE)
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .runId("run-restrictive-empty")
+                .build());
+
+        assertEquals("direct answer", result.finalAnswer());
+        assertEquals(List.of(LoadSkillResourceToolPortAdapter.TOOL_ID), toolIds(model.tools));
+    }
+
+    @Test
     void shouldNotExposeAnyToolsWhenAllowlistIsEmpty() {
         ToolListRecordingModel model = new ToolListRecordingModel();
         RecordingToolGateway gateway = new RecordingToolGateway();
@@ -467,6 +542,22 @@ class KernelAgentLoopToolGatewayTests {
         assertTrue(callback.events.stream()
                 .anyMatch(event -> StreamEventType.ARTIFACT_CREATED.value().equals(event.eventName())
                         && String.valueOf(event.payload()).contains("Final research result.")));
+    }
+
+    private static SkillRuntimeBlock skill(String name, List<String> allowedTools) {
+        return new SkillRuntimeBlock(
+                name,
+                "rev-" + name,
+                "hash-" + name,
+                "Skill " + name,
+                AgentSkillCategory.PUBLIC,
+                SkillInjectMode.METADATA_ONLY,
+                allowedTools,
+                "Use " + name + " carefully.");
+    }
+
+    private static List<String> toolIds(List<ToolDescriptor> tools) {
+        return tools.stream().map(ToolDescriptor::toolId).toList();
     }
 
     private static final class RecordingToolGateway implements ToolGatewayPort {

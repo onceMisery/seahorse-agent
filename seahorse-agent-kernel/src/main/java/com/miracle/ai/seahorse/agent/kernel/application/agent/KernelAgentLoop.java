@@ -41,6 +41,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillInjectMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeBlock;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillToolPolicyMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolInvocationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.tool.ToolRiskLevel;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
@@ -336,9 +337,10 @@ public class KernelAgentLoop {
                     return new AgentLoopResult(finalContent, steps, false);
                 }
 
+                List<String> effectiveAllowedToolIds = effectiveAllowedToolIds(request);
                 List<AgentObservation> observations = executeTools(
                         turn.toolCalls(),
-                        request.allowedToolIds(),
+                        effectiveAllowedToolIds,
                         request,
                         runControl,
                         traceRunScope,
@@ -350,7 +352,7 @@ public class KernelAgentLoop {
                     steps.add(pendingStep);
                     AgentToolCall pendingToolCall = pendingToolCall(turn.toolCalls(), observations);
                     approvalWaitHandler.waitForApproval(new AgentApprovalWaitCommand(
-                            toolInvocationRequest(pendingToolCall, allowedToolIdSet(request.allowedToolIds()), request),
+                            toolInvocationRequest(pendingToolCall, allowedToolIdSet(effectiveAllowedToolIds), request),
                             waitingApprovalStateJson(turn, observations),
                             waitingApprovalMessages(messages, turn)));
                     emitContent(callback, WAITING_APPROVAL_MESSAGE);
@@ -439,7 +441,7 @@ public class KernelAgentLoop {
                 .messages(List.copyOf(messages))
                 .modelId(request.modelId())
                 .samplingOptions(request.samplingOptions())
-                .tools(exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks()))
+                .tools(exposedTools(effectiveAllowedToolIds(request), request.skillRuntimeBlocks()))
                 .toolChoice("auto")
                 .build(), callback, toolCalls -> {
                     if (callback.completed()) {
@@ -491,6 +493,37 @@ public class KernelAgentLoop {
                     .ifPresent(result::add);
         }
         return List.copyOf(result);
+    }
+
+    private List<String> effectiveAllowedToolIds(AgentLoopRequest request) {
+        if (request == null) {
+            return List.of();
+        }
+        List<String> agentAllowedToolIds = request.allowedToolIds();
+        if (request.skillToolPolicyMode() != SkillToolPolicyMode.RESTRICTIVE) {
+            return agentAllowedToolIds;
+        }
+        List<SkillRuntimeBlock> skillRuntimeBlocks = request.skillRuntimeBlocks();
+        if (skillRuntimeBlocks.isEmpty()) {
+            return agentAllowedToolIds;
+        }
+        Set<String> skillAllowedToolIds = selectedSkillAllowedToolIds(skillRuntimeBlocks);
+        return agentAllowedToolIds.stream()
+                .filter(skillAllowedToolIds::contains)
+                .toList();
+    }
+
+    private Set<String> selectedSkillAllowedToolIds(List<SkillRuntimeBlock> skillRuntimeBlocks) {
+        if (skillRuntimeBlocks == null || skillRuntimeBlocks.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> allowedToolIds = new HashSet<>();
+        for (SkillRuntimeBlock skill : skillRuntimeBlocks) {
+            if (skill != null) {
+                allowedToolIds.addAll(skill.allowedTools());
+            }
+        }
+        return allowedToolIds;
     }
 
     private void installRuntimeContext(List<ChatMessage> messages,
@@ -912,7 +945,7 @@ public class KernelAgentLoop {
         runStepRecorder.recordModelTurn(
                 request.runId(),
                 AgentRunStepRecorder.modelTurnInput(messages,
-                        exposedTools(request.allowedToolIds(), request.skillRuntimeBlocks())),
+                        exposedTools(effectiveAllowedToolIds(request), request.skillRuntimeBlocks())),
                 turn == null ? null : modelTurnOutputJson(turn),
                 error);
     }

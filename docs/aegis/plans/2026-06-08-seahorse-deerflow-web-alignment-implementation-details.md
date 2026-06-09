@@ -240,6 +240,7 @@ Required tests:
 
 - restrictive skill policy intersects with agent allowed tools.
 - advisory skill policy leaves the agent allowed tool set unchanged.
+- restrictive selected skills with empty `allowedTools` expose no Agent tools, while still allowing the runtime-only `load_skill_resource` compatibility tool when loadable skills exist.
 - tool search hides denied tools and returns only catalog metadata.
 - enabling/disabling the feature flag changes registration and catalog visibility as expected.
 
@@ -288,7 +289,7 @@ Implementation constraints:
 - [ ] Task 4: Artifact lifecycle + unsafe download blocked
 - [x] Task 5: All 5 generation tools persist artifacts
 - [x] Task 6: `load_skill_resource` registered and tested
-- [ ] Task 7: Tool gateway policy tests pass
+- [ ] Task 7: Backend tool gateway policy tests pass; frontend advisory/restrictive diagnostics still pending
 - [ ] Task 8: `tool_search` registered and tested
 - [ ] Task 9: Tool calls tab renders
 - [ ] Task 10: Skills tab renders

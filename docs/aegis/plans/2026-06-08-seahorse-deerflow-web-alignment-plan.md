@@ -70,6 +70,12 @@ The `D:/code/deer-flow/...` paths are local investigation references, not perman
   ```powershell
   .\mvnw.cmd -pl seahorse-agent-tests -am test -Dtest=*Skill*,*Artifact*,*AgentRun*
   ```
+- Real E2E before final completion:
+  ```powershell
+  cd frontend
+  npm run test:e2e
+  ```
+  If the repository E2E command changes, use the current Playwright/browser E2E entry point and record the exact command, app URL, backend profile, and covered user flow in the final evidence.
 
 ---
 
@@ -568,12 +574,15 @@ cd frontend
 npm test -- SkillManagementPage AgentSkillBindingPanel
 ```
 
-- [ ] Write RED tests proving skill `allowedTools` never grants a denied Agent tool.
-- [ ] Write RED tests proving restrictive selected skill mode reduces available tools.
-- [ ] Implement effective policy calculation in the backend owner closest to tool execution.
+- [x] Write RED tests proving skill `allowedTools` never grants a denied Agent tool.
+- [x] Write RED tests proving restrictive selected skill mode reduces available tools.
+- [x] Implement effective policy calculation in the backend owner closest to tool execution.
 - [ ] Update frontend labels and diagnostics for advisory vs restrictive mode.
-- [ ] Verify focused backend and frontend tests pass.
-- [ ] Commit: `feat: enforce skill aware tool policy`
+- [x] Verify focused backend policy tests pass:
+  - `.\mvnw.cmd -pl seahorse-agent-kernel -am test "-Dtest=KernelAgentLoopToolGatewayTests"`
+- [ ] Verify focused frontend tests pass after label/diagnostic work.
+- [ ] Commit backend slice: `feat: enforce skill aware tool policy`
+- [ ] Commit frontend label/diagnostic slice.
 
 ### Task 8: P1 Add Deferred Tool Search for Runtime Tool Discovery
 
