@@ -335,6 +335,6 @@ Focused acceptance evidence:
 - [x] Task 9: Tool calls tab renders
 - [x] Task 10: Skills tab renders
 - [x] Task 11: Event backfill works
-- [ ] Task 12: Docs updated
+- [x] Task 12: Docs updated
 
 Update this document only when implementation or tests prove a contract needs to change. Update the main plan in the same reviewed change when scope, acceptance, phase order, or compatibility boundaries change.

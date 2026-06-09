@@ -294,17 +294,20 @@ Entries are workspace records, not authoritative runtime decisions.
 | 2026-06-08 | artifact | docs/aegis/work/2026-06-08-docs-implementation-audit/evidence-bundle-draft-final-diff-hygiene.json | 2026-06-08-docs-implementation-audit evidence final-diff-hygiene |
 | 2026-06-08 | plan | docs/aegis/plans/2026-06-08-seahorse-deerflow-web-alignment-plan.md | Seahorse deer-flow web alignment and surpass plan |
 | 2026-06-08 | plan | docs/aegis/plans/2026-06-08-seahorse-deerflow-web-alignment-implementation-details.md | Seahorse deer-flow web alignment implementation details |
+| 2026-06-09 | docs | docs/agent-workspace-runtime.md | Agent Workspace Runtime current state |
+| 2026-06-09 | docs | docs/deerflow-web-alignment.md | Seahorse deer-flow Web alignment current state |
 
 ## 2026-06-08: Seahorse DeerFlow Web Alignment
 
 - **Plan**: [2026-06-08-seahorse-deerflow-web-alignment-plan.md](plans/2026-06-08-seahorse-deerflow-web-alignment-plan.md)
 - **Review**: [2026-06-08-seahorse-deerflow-web-alignment-plan-review.md](reviews/2026-06-08-seahorse-deerflow-web-alignment-plan-review.md)
 - **Implementation Details**: [2026-06-08-seahorse-deerflow-web-alignment-implementation-details.md](plans/2026-06-08-seahorse-deerflow-web-alignment-implementation-details.md)
-- **Status**: Implementation details ready; awaiting execution start
+- **Status**: Tasks 1-12 focused implementation and documentation complete; final real E2E still required before goal completion
 - **Key Artifacts**:
   - 12 phased tasks (P0: bind events + encoding + snapshot hydration; P1: artifact lifecycle + generation tools + progressive skills; P2: tool calls + skills rendering + AgentOps replay)
   - Cross-cutting event sequence protocol with idempotent merge helpers
   - 21 built-in skills with progressive loading via `load_skill_resource` tool
   - Deferred tool search via `tool_search` tool
-  - Full test fixtures and RED→GREEN assertions for all tasks
-
+  - Agent Workspace Runtime doc: [agent-workspace-runtime.md](../agent-workspace-runtime.md)
+  - deer-flow comparison doc: [deerflow-web-alignment.md](../deerflow-web-alignment.md)
+  - Focused tests and RED-to-GREEN assertions for implementation tasks; real E2E remains the completion gate

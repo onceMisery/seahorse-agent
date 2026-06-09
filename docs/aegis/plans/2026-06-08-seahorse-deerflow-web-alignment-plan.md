@@ -795,13 +795,13 @@ npm run build
 rg -n "deer-flow|deerflow|skill|artifact|tool_search|present_files|Agent Workspace Runtime" docs/README.md docs/agent-workspace-runtime.md docs/deerflow-web-alignment.md
 ```
 
-- [ ] Write docs update after code slices pass verification.
-- [ ] Verify README links to the new docs.
-- [ ] Verify the docs name the 21 built-in skills location and generated-media skills.
-- [ ] Promote local deer-flow references into `docs/deerflow-web-alignment.md` with upstream remote URL, commit hash, compared file paths, and short excerpts or summaries for progressive skill loading, tool policy, deferred `tool_search`, `present_files`, and frontend artifact rendering.
-- [ ] Verify `resources/database/seahorse_init.sql` and applied migrations agree for the GitHub visual intro Agent; if not, add a forward migration and do not edit `V20` or `V21` in place.
-- [ ] Verify the docs distinguish aligned features from surpass features.
-- [ ] Commit: `docs: document deerflow web alignment`
+- [x] Write docs update after code slices pass verification.
+- [x] Verify README links to the new docs.
+- [x] Verify the docs name the 21 built-in skills location and generated-media skills.
+- [x] Promote local deer-flow references into `docs/deerflow-web-alignment.md` with upstream remote URL, commit hash, compared file paths, and short excerpts or summaries for progressive skill loading, tool policy, deferred `tool_search`, `present_files`, and frontend artifact rendering.
+- [x] Verify `resources/database/seahorse_init.sql` and applied migrations agree for the GitHub visual intro Agent; no forward migration needed and already-applied `V20`/`V21` remain untouched.
+- [x] Verify the docs distinguish aligned features from surpass features.
+- [x] Commit: `docs: document deerflow web alignment`
 
 ---
 
