@@ -1,0 +1,1059 @@
+event:meta
+data:{"conversationId":"codex-redis-latest-e2e-20260610170903","taskId":"mMJbjF_iX8p15Na0YKGr","runId":null}
+
+event:meta
+data:{"conversationId":"codex-redis-latest-e2e-20260610170903","taskId":"mMJbjF_iX8p15Na0YKGr","runId":"run_323025763787354112"}
+
+event:stream_event
+data:{"eventId":"323025763808325632","eventSeq":"1","eventType":"RUN_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:03.620064999Z","typedPayload":{"runId":"run_323025763787354112","conversationId":"codex-redis-latest-e2e-20260610170903","taskId":"mMJbjF_iX8p15Na0YKGr","title":"Run started","status":"RUNNING","startedAt":"2026-06-10T09:09:03.618004795Z"}}
+
+event:run_started
+data:{"runId":"run_323025763787354112","conversationId":"codex-redis-latest-e2e-20260610170903","taskId":"mMJbjF_iX8p15Na0YKGr","title":"Run started","status":"RUNNING","startedAt":"2026-06-10T09:09:03.618004795Z"}
+
+event:agent.timeline
+data:{"items":[{"id":"run-started-run_323025763787354112","title":"Run started","status":"RUNNING","detail":"Agent run run_323025763787354112 started","timestamp":"2026-06-10T09:09:03.622091487Z","durationMs":null}]}
+
+event:stream_event
+data:{"eventId":"323025764382945280","eventSeq":"2","eventType":"SKILL_LOADED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:03.757290857Z","typedPayload":{"runId":"run_323025763787354112","name":"newsletter-generation","revisionId":"skillrev_newsletter_generation_1","injectMode":"METADATA_AND_BODY","category":"PUBLIC","description":"Generate polished illustrated long-form Markdown content.","allowedTools":[],"resourcePath":null,"status":"LOADED","reason":null}}
+
+event:skill.loaded
+data:{"runId":"run_323025763787354112","name":"newsletter-generation","revisionId":"skillrev_newsletter_generation_1","injectMode":"METADATA_AND_BODY","category":"PUBLIC","description":"Generate polished illustrated long-form Markdown content.","allowedTools":[],"resourcePath":null,"status":"LOADED","reason":null}
+
+event:stream_event
+data:{"eventId":"323025764429082624","eventSeq":"3","eventType":"SKILL_LOADED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:03.768089545Z","typedPayload":{"runId":"run_323025763787354112","name":"image-generation","revisionId":"skillrev_image_generation_1","injectMode":"METADATA_AND_BODY","category":"PUBLIC","description":"Generate visual prompts and images for project explainer content.","allowedTools":["image_generation"],"resourcePath":null,"status":"LOADED","reason":null}}
+
+event:skill.loaded
+data:{"runId":"run_323025763787354112","name":"image-generation","revisionId":"skillrev_image_generation_1","injectMode":"METADATA_AND_BODY","category":"PUBLIC","description":"Generate visual prompts and images for project explainer content.","allowedTools":["image_generation"],"resourcePath":null,"status":"LOADED","reason":null}
+
+event:stream_event
+data:{"eventId":"323025764466831360","eventSeq":"4","eventType":"SKILL_LOADED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:03.777046196Z","typedPayload":{"runId":"run_323025763787354112","name":"chart-visualization","revisionId":"skillrev_chart_visualization_1","injectMode":"METADATA_AND_BODY","category":"PUBLIC","description":"Create visual chart and diagram guidance for architecture and flow explanations.","allowedTools":["image_generation"],"resourcePath":null,"status":"LOADED","reason":null}}
+
+event:skill.loaded
+data:{"runId":"run_323025763787354112","name":"chart-visualization","revisionId":"skillrev_chart_visualization_1","injectMode":"METADATA_AND_BODY","category":"PUBLIC","description":"Create visual chart and diagram guidance for architecture and flow explanations.","allowedTools":["image_generation"],"resourcePath":null,"status":"LOADED","reason":null}
+
+event:stream_event
+data:{"eventId":"323025764517163008","eventSeq":"5","eventType":"STEP_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:03.789312306Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-1","stepNo":1,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:09:03.786988373Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_323025763787354112","stepId":"model-turn-1","stepNo":1,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:09:03.786988373Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323025838785703936","eventSeq":"6","eventType":"TOOL_CALL_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:21.496632464Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_34b930beb8444f248ed86d8c","toolInvocationId":"call_34b930beb8444f248ed86d8c","toolCallId":"call_34b930beb8444f248ed86d8c","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:09:21.494792784Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_323025763787354112","stepId":"call_34b930beb8444f248ed86d8c","toolInvocationId":"call_34b930beb8444f248ed86d8c","toolCallId":"call_34b930beb8444f248ed86d8c","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:09:21.494792784Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"323025854405292032","eventSeq":"7","eventType":"TOOL_CALL_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.220056476Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_34b930beb8444f248ed86d8c","toolInvocationId":"call_34b930beb8444f248ed86d8c","toolCallId":"call_34b930beb8444f248ed86d8c","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"{\"owner\":\"redis\",\"repository\":\"redis\",\"defaultBranch\":\"unstable\",\"htmlUrl\":\"https://github.com/redis/redis\",\"description\":\"For developers, who are building real-time data-driven applications, Redis is the preferred, fastest, and most feature-rich cache, data structure server, and document and vector query engine.\",\"truncated\":true,\"fetchedAt\":\"2026-06-10T09:09:25.203184949Z\",\"files\":[{\"path\":\"README.md\",\"contentText\":\"[![codecov](https://codecov.io/github/redis/redis/graph/badge.svg?token=6bVHb5fRuz)](https://codecov.io/github/redis/redis)\\n\\nThis document serves as both a quick start guide to Redis and a detailed resource for building it from source.\\n\\n- New to Redis? Start with [What is Redis](#what-is-redis) and [Getting Started](#getting-started)\\n- Ready to build from source? Jump to [Build Redis from Source](#build-redis-from-source)\\n- Want to contribute? See the [Code contributions](#code-contributions) section\\n  and [CONTRIBUTING.md](./CONTRIBUTING.md)\\n- Looking for detailed documentation? Navigate to [redis.io/docs](https://redis.io/docs/)\\n\\n## Table of contents\\n\\n- [What is Redis?](#what-is-redis)\\n  - [Key use cases](#key-use-cases)\\n- [Why choose Redis?](#why-choose-redis)\\n- [What is Redis Open Source?](#what-is-redis-open-source)\\n- [Getting started](#getting-started)\\n  - [Redis starter projects](#redis-starter-projects)\\n  - [Using Redis with client libraries](#using-redis-with-client-libraries)\\n  - [Using Redis with redis-cli](#using-redis-with-redis-cli)\\n  - [Using Redis with Redis Insight](#using-redis-with-redis-insight)\\n- [Redis data types, processing engines, and capabilities](#redis-data-types-processing-engines-and-capabilities)\\n- [Cloud hosted Redis](#cloud-hosted-redis)\\n- [Community](#community)\\n- [Build Redis from source](#build-redis-from-source)\\n  - [Build and run Redis with all data structures - Ubuntu 22.04 (Jammy)](#build-and-run-redis-with-all-data-structures---ubuntu-2204-jammy)\\n  - [Build and run Redis with all data structures - Ubuntu 24.04 (Noble)](#build-and-run-redis-with-all-data-structures---ubuntu-2404-noble)\\n  - [Build and run Redis with all data structures - Ubuntu 26.04 (Resolute)](#build-and-run-redis-with-all-data-structures---ubuntu-2604-resolute)\\n  - [Build and run Redis with all data structures - Debian 12 (Bookworm) / 13 (Trixie)](#build-and-run-redis-with-all-data-structures---debian-12-bookworm--13-trixie)\\n  - [Build and run Redis with all data structures - AlmaLinux 8.10 / Rocky Linux 8.10](#build-and-run-redis-with-all-data-structures---almalinux-810--rocky-linux-810)\\n  - [Build and run Redis with all data structures - AlmaLinux 9.7+ / Rocky Linux 9.7+](#build-and-run-redis-with-all-data-structures---almalinux-97--rocky-linux-97)\\n  - [Build and run Redis with all data structures - AlmaLinux 10.1+ / Rocky Linux 10.1+](#build-and-run-redis-with-all-data-structures---almalinux-101--rocky-linux-101)\\n  - [Build and run Redis with all data structures - Alpine 3.23+](#build-and-run-redis-with-all-data-structures---alpine-323)\\n  - [Build and run Redis with all data structures - macOS 14 (Sonoma), 15 (Sequoia), 26 (Tahoe)](#build-and-run-redis-with-all-data-structures---macos-14-sonoma-15-sequoia-26-tahoe)\\n  - [Building Redis - flags and general notes](#building-redis---flags-and-general-notes)\\n  - [Fixing build problems with dependencies or cached build options](#fixing-build-problems-with-dependencies-or-cached-build-options)\\n  - [Fixing problems building 32 bit binaries](#fixing-problems-building-32-bit-binaries)\\n  - [Allocator](#allocator)\\n  - [Monotonic clock](#monotonic-clock)\\n  - [Verbose build](#verbose-build)\\n  - [Running Redis with TLS](#running-redis-with-tls)\\n- [Code contributions](#code-contributions)\\n- [Redis Trademarks](#redis-trademarks)\\n\\n## What is Redis?\\n\\nFor developers, who are building real-time data-driven applications, Redis is the preferred, fastest, and most feature-rich cache, data structure server, and document and vector query engine.\\n\\n### Key use cases\\n\\nRedis excels in various applications, including:\\n\\n- **Caching:** Supports multiple eviction policies, key expiration, and hash-field expiration.\\n- **Distributed Session Store:** Offers flexible session data modeling (string, JSON, hash).\\n- **Data Structure Server:** Provides low-level data structures (strings, lists, sets, hashes, sorted sets, JSON, etc.) with high-level semantics (counters, queues, leaderboards, rate limiters) and supports transactions & scripting.\\n- **NoSQL Data Store:** Key-value, document, and time series data storage.\\n- **Search and Query Engine:** Indexing for hash/JSON documents, supporting vector search, full-text search, geospatial queries, ranking, and aggregations via Redis Search.\\n- **Event Store & Message Broker:** Implements queues (lists), priority queues (sorted sets), event deduplication (sets), streams, and pub/sub with probabilistic stream processing capabilities.\\n- **Vector Store for GenAI:** Integrates with AI applications (e.g. LangGraph, mem0) for short-term memory, long-term memory, LLM response caching (semantic caching), and retrieval augmented generation (RAG).\\n- **Real-Time Analytics:** Powers personalization, recommendations, fraud detection, and risk assessment.\\n\\n## Why choose Redis?\\n\\nRedis is a popular choice for developers worldwide due to its combination of speed, flexibility, and rich feature set. Here's why people choose Redis for:\\n\\n- **Performance:** Because Redis keeps data primarily in memory and uses efficient data structures, it achieves extremely low latency (often sub-millisecond) for both read and write operations. This makes it ideal for applications demanding real-time responsiveness.\\n- **Flexibility:** Redis isn't just a key-value store, it provides native support for a wide range of data structures and capabilities listed in [What is Redis?](#what-is-redis)\\n- **Extensibility:** Redis is not limited to the built-in data structures, it has a [modules API](https://redis.io/docs/latest/develop/reference/modules/) that makes it possible to extend Redis functionality and rapidly implement new Redis commands\\n- **Simplicity:** Redis has a simple, text-based protocol and [well-documented command set](https://redis.io/docs/latest/commands/)\\n- **Ubiquity:** Redis is battle tested in production workloads at a massive scale. There is a good chance you indirectly interact with Redis several times daily\\n- **Versatility**: Redis is the de facto standard for use cases such as:\\n  - **Caching:** quickly access frequently used data without needing to query your primary database\\n  - **Session management:** read and write user session data without hurting user experience or slowing down every API call\\n  - **Querying, sorting, and analytics:** perform deduplication, full text search, and secondary indexing on in-memory data as fast as possible\\n  - **Messaging and interservice communication:** job queues, message brokering, pub/sub, and streams for communicating between services\\n  - **Vector operations:** Long-term and short-term LLM memory, RAG content retrieval, semantic caching, semantic routing, and vector similarity search\\n\\nIn summary, Redis provides a powerful, fast, and flexible toolkit for solving a wide variety of data management challenges. If you want to know more, here is a list of starting points:\\n\\n- [**Introduction to Redis data types**](https://redis.io/docs/latest/develop/data-types/)\\n- [**The full list of Redis commands**](https://redis.io/commands/)\\n- [**Redis for AI**](https://redis.io/docs/latest/develop/ai/)\\n- [**Redis documentation**](https://redis.io/documentation/)\\n\\n## What is Redis Open Source?\\n\\nRedis Community Edition (Redis CE) was renamed Redis Open Source with the v8.0 release.\\n\\nRedis Ltd. also offers [Redis Software](https://redis.io/enterprise/), a self-managed software with additional compliance, reliability, and resiliency for enterprise scaling,\\nand [Redis Cloud](https://redis.io/cloud/), a fully managed service integrated with Google Cloud, Azure, and AWS for production-ready apps.\\n\\nRead more about the differences between Redis Open Source and Redis [here](https:/...[truncated]","startedAt":null,"finishedAt":"2026-06-10T09:09:25.218259973Z","errorCode":null,"message":"SUCCEEDED"}}
+
+event:tool_call_finished
+data:{"runId":"run_323025763787354112","stepId":"call_34b930beb8444f248ed86d8c","toolInvocationId":"call_34b930beb8444f248ed86d8c","toolCallId":"call_34b930beb8444f248ed86d8c","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"{\"owner\":\"redis\",\"repository\":\"redis\",\"defaultBranch\":\"unstable\",\"htmlUrl\":\"https://github.com/redis/redis\",\"description\":\"For developers, who are building real-time data-driven applications, Redis is the preferred, fastest, and most feature-rich cache, data structure server, and document and vector query engine.\",\"truncated\":true,\"fetchedAt\":\"2026-06-10T09:09:25.203184949Z\",\"files\":[{\"path\":\"README.md\",\"contentText\":\"[![codecov](https://codecov.io/github/redis/redis/graph/badge.svg?token=6bVHb5fRuz)](https://codecov.io/github/redis/redis)\\n\\nThis document serves as both a quick start guide to Redis and a detailed resource for building it from source.\\n\\n- New to Redis? Start with [What is Redis](#what-is-redis) and [Getting Started](#getting-started)\\n- Ready to build from source? Jump to [Build Redis from Source](#build-redis-from-source)\\n- Want to contribute? See the [Code contributions](#code-contributions) section\\n  and [CONTRIBUTING.md](./CONTRIBUTING.md)\\n- Looking for detailed documentation? Navigate to [redis.io/docs](https://redis.io/docs/)\\n\\n## Table of contents\\n\\n- [What is Redis?](#what-is-redis)\\n  - [Key use cases](#key-use-cases)\\n- [Why choose Redis?](#why-choose-redis)\\n- [What is Redis Open Source?](#what-is-redis-open-source)\\n- [Getting started](#getting-started)\\n  - [Redis starter projects](#redis-starter-projects)\\n  - [Using Redis with client libraries](#using-redis-with-client-libraries)\\n  - [Using Redis with redis-cli](#using-redis-with-redis-cli)\\n  - [Using Redis with Redis Insight](#using-redis-with-redis-insight)\\n- [Redis data types, processing engines, and capabilities](#redis-data-types-processing-engines-and-capabilities)\\n- [Cloud hosted Redis](#cloud-hosted-redis)\\n- [Community](#community)\\n- [Build Redis from source](#build-redis-from-source)\\n  - [Build and run Redis with all data structures - Ubuntu 22.04 (Jammy)](#build-and-run-redis-with-all-data-structures---ubuntu-2204-jammy)\\n  - [Build and run Redis with all data structures - Ubuntu 24.04 (Noble)](#build-and-run-redis-with-all-data-structures---ubuntu-2404-noble)\\n  - [Build and run Redis with all data structures - Ubuntu 26.04 (Resolute)](#build-and-run-redis-with-all-data-structures---ubuntu-2604-resolute)\\n  - [Build and run Redis with all data structures - Debian 12 (Bookworm) / 13 (Trixie)](#build-and-run-redis-with-all-data-structures---debian-12-bookworm--13-trixie)\\n  - [Build and run Redis with all data structures - AlmaLinux 8.10 / Rocky Linux 8.10](#build-and-run-redis-with-all-data-structures---almalinux-810--rocky-linux-810)\\n  - [Build and run Redis with all data structures - AlmaLinux 9.7+ / Rocky Linux 9.7+](#build-and-run-redis-with-all-data-structures---almalinux-97--rocky-linux-97)\\n  - [Build and run Redis with all data structures - AlmaLinux 10.1+ / Rocky Linux 10.1+](#build-and-run-redis-with-all-data-structures---almalinux-101--rocky-linux-101)\\n  - [Build and run Redis with all data structures - Alpine 3.23+](#build-and-run-redis-with-all-data-structures---alpine-323)\\n  - [Build and run Redis with all data structures - macOS 14 (Sonoma), 15 (Sequoia), 26 (Tahoe)](#build-and-run-redis-with-all-data-structures---macos-14-sonoma-15-sequoia-26-tahoe)\\n  - [Building Redis - flags and general notes](#building-redis---flags-and-general-notes)\\n  - [Fixing build problems with dependencies or cached build options](#fixing-build-problems-with-dependencies-or-cached-build-options)\\n  - [Fixing problems building 32 bit binaries](#fixing-problems-building-32-bit-binaries)\\n  - [Allocator](#allocator)\\n  - [Monotonic clock](#monotonic-clock)\\n  - [Verbose build](#verbose-build)\\n  - [Running Redis with TLS](#running-redis-with-tls)\\n- [Code contributions](#code-contributions)\\n- [Redis Trademarks](#redis-trademarks)\\n\\n## What is Redis?\\n\\nFor developers, who are building real-time data-driven applications, Redis is the preferred, fastest, and most feature-rich cache, data structure server, and document and vector query engine.\\n\\n### Key use cases\\n\\nRedis excels in various applications, including:\\n\\n- **Caching:** Supports multiple eviction policies, key expiration, and hash-field expiration.\\n- **Distributed Session Store:** Offers flexible session data modeling (string, JSON, hash).\\n- **Data Structure Server:** Provides low-level data structures (strings, lists, sets, hashes, sorted sets, JSON, etc.) with high-level semantics (counters, queues, leaderboards, rate limiters) and supports transactions & scripting.\\n- **NoSQL Data Store:** Key-value, document, and time series data storage.\\n- **Search and Query Engine:** Indexing for hash/JSON documents, supporting vector search, full-text search, geospatial queries, ranking, and aggregations via Redis Search.\\n- **Event Store & Message Broker:** Implements queues (lists), priority queues (sorted sets), event deduplication (sets), streams, and pub/sub with probabilistic stream processing capabilities.\\n- **Vector Store for GenAI:** Integrates with AI applications (e.g. LangGraph, mem0) for short-term memory, long-term memory, LLM response caching (semantic caching), and retrieval augmented generation (RAG).\\n- **Real-Time Analytics:** Powers personalization, recommendations, fraud detection, and risk assessment.\\n\\n## Why choose Redis?\\n\\nRedis is a popular choice for developers worldwide due to its combination of speed, flexibility, and rich feature set. Here's why people choose Redis for:\\n\\n- **Performance:** Because Redis keeps data primarily in memory and uses efficient data structures, it achieves extremely low latency (often sub-millisecond) for both read and write operations. This makes it ideal for applications demanding real-time responsiveness.\\n- **Flexibility:** Redis isn't just a key-value store, it provides native support for a wide range of data structures and capabilities listed in [What is Redis?](#what-is-redis)\\n- **Extensibility:** Redis is not limited to the built-in data structures, it has a [modules API](https://redis.io/docs/latest/develop/reference/modules/) that makes it possible to extend Redis functionality and rapidly implement new Redis commands\\n- **Simplicity:** Redis has a simple, text-based protocol and [well-documented command set](https://redis.io/docs/latest/commands/)\\n- **Ubiquity:** Redis is battle tested in production workloads at a massive scale. There is a good chance you indirectly interact with Redis several times daily\\n- **Versatility**: Redis is the de facto standard for use cases such as:\\n  - **Caching:** quickly access frequently used data without needing to query your primary database\\n  - **Session management:** read and write user session data without hurting user experience or slowing down every API call\\n  - **Querying, sorting, and analytics:** perform deduplication, full text search, and secondary indexing on in-memory data as fast as possible\\n  - **Messaging and interservice communication:** job queues, message brokering, pub/sub, and streams for communicating between services\\n  - **Vector operations:** Long-term and short-term LLM memory, RAG content retrieval, semantic caching, semantic routing, and vector similarity search\\n\\nIn summary, Redis provides a powerful, fast, and flexible toolkit for solving a wide variety of data management challenges. If you want to know more, here is a list of starting points:\\n\\n- [**Introduction to Redis data types**](https://redis.io/docs/latest/develop/data-types/)\\n- [**The full list of Redis commands**](https://redis.io/commands/)\\n- [**Redis for AI**](https://redis.io/docs/latest/develop/ai/)\\n- [**Redis documentation**](https://redis.io/documentation/)\\n\\n## What is Redis Open Source?\\n\\nRedis Community Edition (Redis CE) was renamed Redis Open Source with the v8.0 release.\\n\\nRedis Ltd. also offers [Redis Software](https://redis.io/enterprise/), a self-managed software with additional compliance, reliability, and resiliency for enterprise scaling,\\nand [Redis Cloud](https://redis.io/cloud/), a fully managed service integrated with Google Cloud, Azure, and AWS for production-ready apps.\\n\\nRead more about the differences between Redis Open Source and Redis [here](https:/...[truncated]","startedAt":null,"finishedAt":"2026-06-10T09:09:25.218259973Z","errorCode":null,"message":"SUCCEEDED"}
+
+event:stream_event
+data:{"eventId":"323025854438846464","eventSeq":"8","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.228373893Z","typedPayload":{"type":"think","delta":"我将开始为"}}
+
+event:message
+data:{"type":"think","delta":"我将开始为"}
+
+event:stream_event
+data:{"eventId":"323025854464012288","eventSeq":"9","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.234010232Z","typedPayload":{"type":"think","delta":" Redi"}}
+
+event:message
+data:{"type":"think","delta":" Redi"}
+
+event:stream_event
+data:{"eventId":"323025854493372416","eventSeq":"10","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.241244399Z","typedPayload":{"type":"think","delta":"s项目生成"}}
+
+event:message
+data:{"type":"think","delta":"s项目生成"}
+
+event:stream_event
+data:{"eventId":"323025854522732544","eventSeq":"11","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.248505162Z","typedPayload":{"type":"think","delta":"完整的图文"}}
+
+event:message
+data:{"type":"think","delta":"完整的图文"}
+
+event:stream_event
+data:{"eventId":"323025854552092672","eventSeq":"12","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.255073356Z","typedPayload":{"type":"think","delta":"介绍。首先"}}
+
+event:message
+data:{"type":"think","delta":"介绍。首先"}
+
+event:stream_event
+data:{"eventId":"323025854577258496","eventSeq":"13","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.261707885Z","typedPayload":{"type":"think","delta":"读取仓库的"}}
+
+event:message
+data:{"type":"think","delta":"读取仓库的"}
+
+event:stream_event
+data:{"eventId":"323025854598230016","eventSeq":"14","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.266978108Z","typedPayload":{"type":"think","delta":"核心文档和"}}
+
+event:message
+data:{"type":"think","delta":"核心文档和"}
+
+event:stream_event
+data:{"eventId":"323025854623395840","eventSeq":"15","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.272691991Z","typedPayload":{"type":"think","delta":"源码。"}}
+
+event:message
+data:{"type":"think","delta":"源码。"}
+
+event:stream_event
+data:{"eventId":"323025854644367360","eventSeq":"16","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.277684052Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"323025854665338880","eventSeq":"17","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.282968141Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"323025854694699008","eventSeq":"18","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.289051732Z","typedPayload":{"type":"think","delta":"] git"}}
+
+event:message
+data:{"type":"think","delta":"] git"}
+
+event:stream_event
+data:{"eventId":"323025854719864832","eventSeq":"19","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.295550110Z","typedPayload":{"type":"think","delta":"hub_r"}}
+
+event:message
+data:{"type":"think","delta":"hub_r"}
+
+event:stream_event
+data:{"eventId":"323025854745030656","eventSeq":"20","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.301831770Z","typedPayload":{"type":"think","delta":"eposi"}}
+
+event:message
+data:{"type":"think","delta":"eposi"}
+
+event:stream_event
+data:{"eventId":"323025854778585088","eventSeq":"21","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.309771333Z","typedPayload":{"type":"think","delta":"tory_"}}
+
+event:message
+data:{"type":"think","delta":"tory_"}
+
+event:stream_event
+data:{"eventId":"323025854812139520","eventSeq":"22","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.317885467Z","typedPayload":{"type":"think","delta":"reade"}}
+
+event:message
+data:{"type":"think","delta":"reade"}
+
+event:stream_event
+data:{"eventId":"323025854854082560","eventSeq":"23","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.327517391Z","typedPayload":{"type":"think","delta":"r -> "}}
+
+event:message
+data:{"type":"think","delta":"r -> "}
+
+event:stream_event
+data:{"eventId":"323025854891831296","eventSeq":"24","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.336510657Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"323025854929580032","eventSeq":"25","eventType":"STEP_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.345352449Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-1","stepNo":1,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:09:03.786988373Z","finishedAt":"2026-06-10T09:09:25.341684347Z","durationMs":"21554","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_323025763787354112","stepId":"model-turn-1","stepNo":1,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:09:03.786988373Z","finishedAt":"2026-06-10T09:09:25.341684347Z","durationMs":"21554","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323025854984105984","eventSeq":"26","eventType":"STEP_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:25.358988910Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-2","stepNo":2,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:09:25.355635288Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_323025763787354112","stepId":"model-turn-2","stepNo":2,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:09:25.355635288Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323025998936813568","eventSeq":"27","eventType":"TOOL_CALL_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:09:59.679224538Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_a6d1fa78b90648e9b53a4b96","toolInvocationId":"call_a6d1fa78b90648e9b53a4b96","toolCallId":"call_a6d1fa78b90648e9b53a4b96","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:09:59.678394758Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_323025763787354112","stepId":"call_a6d1fa78b90648e9b53a4b96","toolInvocationId":"call_a6d1fa78b90648e9b53a4b96","toolCallId":"call_a6d1fa78b90648e9b53a4b96","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:09:59.678394758Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"323026004167110656","eventSeq":"28","eventType":"TOOL_CALL_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.926618572Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_a6d1fa78b90648e9b53a4b96","toolInvocationId":"call_a6d1fa78b90648e9b53a4b96","toolCallId":"call_a6d1fa78b90648e9b53a4b96","toolId":"web_fetch","riskLevel":"HIGH","summary":"{\"url\":\"https://redis.io/docs/latest/develop/\",\"status\":\"FETCHED\",\"title\":\"Develop with Redis | Docs {\\\"categories\\\":null,\\\"description\\\":\\\"Learn how to develop with Redis\\\",\\\"duplicateOf\\\":\\\"head:data-ai\",\"mimeType\":\"text/html\",\"reasonCode\":null,\"truncated\":false,\"contentWarning\":\"UNTRUSTED_EXTERNAL_CONTENT\",\"contentText\":\"Develop with Redis | Docs {\\\"categories\\\":null,\\\"description\\\":\\\"Learn how to develop with Redis\\\",\\\"duplicateOf\\\":\\\"head:data-ai-metadata\\\",\\\"location\\\":\\\"body\\\",\\\"title\\\":\\\"Develop with Redis\\\",\\\"tableOfContents\\\":{\\\"sections\\\":[]},\\\"codeExamples\\\":[]} AI agent builder Redis install Data types Tools Community Docs Search Login Sign up Open search Open main menu AI agent builder Redis install Data types Tools Community Docs Sign up Login Develop with Redis What&#39;s new? Quick starts Client tools Client APIs Using commands Data types Redis for AI and search Programmability Use cases Pub/sub Reference Libraries and tools Redis products Commands Docs Docs → Develop with Redis Develop with Redis Learn how to develop with Redis Try these Redis commands Redis CLI PING HSET user:1 name antirez vocation artist HGETALL user:1 SET e 2.71 INCRBYFLOAT e 0.43 RENAME e pi GET pi # See all commands PING Get a Redis server running in minutes with a free trial of Redis Cloud , or install Redis Open Source locally on your machine. Check out the Redis Docker Hub for the latest release. Then, explore Redis with your favorite programming language or analyze and manage your database with our UI tools : Get started Document search Vector search Python See Python examples See Python examples See Python examples C#/.NET See C# examples See C# examples See C# examples Node.js See JS examples See JS examples See JS examples Java (Jedis) See Java examples See Java examples See Java examples Java (Lettuce) See Java examples See Java examples See Java examples Go See Go examples See Go examples See Go examples PHP See PHP examples See PHP examples See PHP examples JavaScript (ioredis) See JS examples - - Rust - - - C - - - Ruby - - - Redis Insight Visual client tool for creating, managing, and analyzing Redis databases. Download Redis Insight . Redis for VS Code VS Code extension for creating, managing, and analyzing Redis databases. Install Redis for VS Code . Quick start Data types Redis Search Vector database Document store Data structure store RAG with Redis GenAI String JSON Hash Vector set Probabilistic types Get started Schema field types Indexing Querying RATE THIS PAGE &#9733; &#9733; &#9733; &#9733; &#9733; Back to top ↑ Submit Edit this page Create an issue Download Markdown Trust Privacy Terms of use Legal notices Compare Redis vs Elasticache Redis vs Memcached Redis vs Memory Store Redis vs. Open Source Company Mission &amp; values Leadership Careers Partners Amazon Web Services Google Cloud Microsoft Azure All partners Support Professional services Support Trust Privacy Terms of use Legal notices All products Redis Software Redis Cloud Redis Open Source Redis Insight Redis Enterprise for K8s Redis Data Integration Client Libraries ESC\"}","startedAt":null,"finishedAt":"2026-06-10T09:10:00.926078393Z","errorCode":null,"message":"SUCCEEDED"}}
+
+event:tool_call_finished
+data:{"runId":"run_323025763787354112","stepId":"call_a6d1fa78b90648e9b53a4b96","toolInvocationId":"call_a6d1fa78b90648e9b53a4b96","toolCallId":"call_a6d1fa78b90648e9b53a4b96","toolId":"web_fetch","riskLevel":"HIGH","summary":"{\"url\":\"https://redis.io/docs/latest/develop/\",\"status\":\"FETCHED\",\"title\":\"Develop with Redis | Docs {\\\"categories\\\":null,\\\"description\\\":\\\"Learn how to develop with Redis\\\",\\\"duplicateOf\\\":\\\"head:data-ai\",\"mimeType\":\"text/html\",\"reasonCode\":null,\"truncated\":false,\"contentWarning\":\"UNTRUSTED_EXTERNAL_CONTENT\",\"contentText\":\"Develop with Redis | Docs {\\\"categories\\\":null,\\\"description\\\":\\\"Learn how to develop with Redis\\\",\\\"duplicateOf\\\":\\\"head:data-ai-metadata\\\",\\\"location\\\":\\\"body\\\",\\\"title\\\":\\\"Develop with Redis\\\",\\\"tableOfContents\\\":{\\\"sections\\\":[]},\\\"codeExamples\\\":[]} AI agent builder Redis install Data types Tools Community Docs Search Login Sign up Open search Open main menu AI agent builder Redis install Data types Tools Community Docs Sign up Login Develop with Redis What&#39;s new? Quick starts Client tools Client APIs Using commands Data types Redis for AI and search Programmability Use cases Pub/sub Reference Libraries and tools Redis products Commands Docs Docs → Develop with Redis Develop with Redis Learn how to develop with Redis Try these Redis commands Redis CLI PING HSET user:1 name antirez vocation artist HGETALL user:1 SET e 2.71 INCRBYFLOAT e 0.43 RENAME e pi GET pi # See all commands PING Get a Redis server running in minutes with a free trial of Redis Cloud , or install Redis Open Source locally on your machine. Check out the Redis Docker Hub for the latest release. Then, explore Redis with your favorite programming language or analyze and manage your database with our UI tools : Get started Document search Vector search Python See Python examples See Python examples See Python examples C#/.NET See C# examples See C# examples See C# examples Node.js See JS examples See JS examples See JS examples Java (Jedis) See Java examples See Java examples See Java examples Java (Lettuce) See Java examples See Java examples See Java examples Go See Go examples See Go examples See Go examples PHP See PHP examples See PHP examples See PHP examples JavaScript (ioredis) See JS examples - - Rust - - - C - - - Ruby - - - Redis Insight Visual client tool for creating, managing, and analyzing Redis databases. Download Redis Insight . Redis for VS Code VS Code extension for creating, managing, and analyzing Redis databases. Install Redis for VS Code . Quick start Data types Redis Search Vector database Document store Data structure store RAG with Redis GenAI String JSON Hash Vector set Probabilistic types Get started Schema field types Indexing Querying RATE THIS PAGE &#9733; &#9733; &#9733; &#9733; &#9733; Back to top ↑ Submit Edit this page Create an issue Download Markdown Trust Privacy Terms of use Legal notices Compare Redis vs Elasticache Redis vs Memcached Redis vs Memory Store Redis vs. Open Source Company Mission &amp; values Leadership Careers Partners Amazon Web Services Google Cloud Microsoft Azure All partners Support Professional services Support Trust Privacy Terms of use Legal notices All products Redis Software Redis Cloud Redis Open Source Redis Insight Redis Enterprise for K8s Redis Data Integration Client Libraries ESC\"}","startedAt":null,"finishedAt":"2026-06-10T09:10:00.926078393Z","errorCode":null,"message":"SUCCEEDED"}
+
+event:stream_event
+data:{"eventId":"323026004175499264","eventSeq":"29","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.928717730Z","typedPayload":{"type":"think","delta":"已成功读取"}}
+
+event:message
+data:{"type":"think","delta":"已成功读取"}
+
+event:stream_event
+data:{"eventId":"323026004183887872","eventSeq":"30","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.930410049Z","typedPayload":{"type":"think","delta":"仓库核心文"}}
+
+event:message
+data:{"type":"think","delta":"仓库核心文"}
+
+event:stream_event
+data:{"eventId":"323026004188082176","eventSeq":"31","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.931943849Z","typedPayload":{"type":"think","delta":"件。现在继"}}
+
+event:message
+data:{"type":"think","delta":"件。现在继"}
+
+event:stream_event
+data:{"eventId":"323026004196470784","eventSeq":"32","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.933572227Z","typedPayload":{"type":"think","delta":"续读取更多"}}
+
+event:message
+data:{"type":"think","delta":"续读取更多"}
+
+event:stream_event
+data:{"eventId":"323026004204859392","eventSeq":"33","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.935017701Z","typedPayload":{"type":"think","delta":"关键文件以"}}
+
+event:message
+data:{"type":"think","delta":"关键文件以"}
+
+event:stream_event
+data:{"eventId":"323026004209053696","eventSeq":"34","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.936515033Z","typedPayload":{"type":"think","delta":"获取完整信"}}
+
+event:message
+data:{"type":"think","delta":"获取完整信"}
+
+event:stream_event
+data:{"eventId":"323026004213248000","eventSeq":"35","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.937998974Z","typedPayload":{"type":"think","delta":"息。"}}
+
+event:message
+data:{"type":"think","delta":"息。"}
+
+event:stream_event
+data:{"eventId":"323026004221636608","eventSeq":"36","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.939567204Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"323026004230025216","eventSeq":"37","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.941032980Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"323026004234219520","eventSeq":"38","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.942486935Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"323026004238413824","eventSeq":"39","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.943971923Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"323026004246802432","eventSeq":"40","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.945385732Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"323026004250996736","eventSeq":"41","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.946853703Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"323026004259385344","eventSeq":"42","eventType":"STEP_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.948165712Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-2","stepNo":2,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:09:25.355635288Z","finishedAt":"2026-06-10T09:10:00.947774553Z","durationMs":"35592","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_323025763787354112","stepId":"model-turn-2","stepNo":2,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:09:25.355635288Z","finishedAt":"2026-06-10T09:10:00.947774553Z","durationMs":"35592","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026004267773952","eventSeq":"43","eventType":"STEP_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:00.950676117Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-3","stepNo":3,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:00.950227486Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_323025763787354112","stepId":"model-turn-3","stepNo":3,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:00.950227486Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026013100978176","eventSeq":"44","eventType":"TOOL_CALL_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:03.056072676Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_8e25ffedf0d549fe9687acbf","toolInvocationId":"call_8e25ffedf0d549fe9687acbf","toolCallId":"call_8e25ffedf0d549fe9687acbf","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:10:03.053498508Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_323025763787354112","stepId":"call_8e25ffedf0d549fe9687acbf","toolInvocationId":"call_8e25ffedf0d549fe9687acbf","toolCallId":"call_8e25ffedf0d549fe9687acbf","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:10:03.053498508Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"323026035045576704","eventSeq":"45","eventType":"TOOL_CALL_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.288179360Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_8e25ffedf0d549fe9687acbf","toolInvocationId":"call_8e25ffedf0d549fe9687acbf","toolCallId":"call_8e25ffedf0d549fe9687acbf","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"{\"owner\":\"redis\",\"repository\":\"redis\",\"defaultBranch\":\"unstable\",\"htmlUrl\":\"https://github.com/redis/redis\",\"description\":\"For developers, who are building real-time data-driven applications, Redis is the preferred, fastest, and most feature-rich cache, data structure server, and document and vector query engine.\",\"truncated\":true,\"fetchedAt\":\"2026-06-10T09:10:08.271842983Z\",\"files\":[{\"path\":\"README.md\",\"contentText\":\"[![codecov](https://codecov.io/github/redis/redis/graph/badge.svg?token=6bVHb5fRuz)](https://codecov.io/github/redis/redis)\\n\\nThis document serves as both a quick start guide to Redis and a detailed resource for building it from source.\\n\\n- New to Redis? Start with [What is Redis](#what-is-redis) and [Getting Started](#getting-started)\\n- Ready to build from source? Jump to [Build Redis from Source](#build-redis-from-source)\\n- Want to contribute? See the [Code contributions](#code-contributions) section\\n  and [CONTRIBUTING.md](./CONTRIBUTING.md)\\n- Looking for detailed documentation? Navigate to [redis.io/docs](https://redis.io/docs/)\\n\\n## Table of contents\\n\\n- [What is Redis?](#what-is-redis)\\n  - [Key use cases](#key-use-cases)\\n- [Why choose Redis?](#why-choose-redis)\\n- [What is Redis Open Source?](#what-is-redis-open-source)\\n- [Getting started](#getting-started)\\n  - [Redis starter projects](#redis-starter-projects)\\n  - [Using Redis with client libraries](#using-redis-with-client-libraries)\\n  - [Using Redis with redis-cli](#using-redis-with-redis-cli)\\n  - [Using Redis with Redis Insight](#using-redis-with-redis-insight)\\n- [Redis data types, processing engines, and capabilities](#redis-data-types-processing-engines-and-capabilities)\\n- [Cloud hosted Redis](#cloud-hosted-redis)\\n- [Community](#community)\\n- [Build Redis from source](#build-redis-from-source)\\n  - [Build and run Redis with all data structures - Ubuntu 22.04 (Jammy)](#build-and-run-redis-with-all-data-structures---ubuntu-2204-jammy)\\n  - [Build and run Redis with all data structures - Ubuntu 24.04 (Noble)](#build-and-run-redis-with-all-data-structures---ubuntu-2404-noble)\\n  - [Build and run Redis with all data structures - Ubuntu 26.04 (Resolute)](#build-and-run-redis-with-all-data-structures---ubuntu-2604-resolute)\\n  - [Build and run Redis with all data structures - Debian 12 (Bookworm) / 13 (Trixie)](#build-and-run-redis-with-all-data-structures---debian-12-bookworm--13-trixie)\\n  - [Build and run Redis with all data structures - AlmaLinux 8.10 / Rocky Linux 8.10](#build-and-run-redis-with-all-data-structures---almalinux-810--rocky-linux-810)\\n  - [Build and run Redis with all data structures - AlmaLinux 9.7+ / Rocky Linux 9.7+](#build-and-run-redis-with-all-data-structures---almalinux-97--rocky-linux-97)\\n  - [Build and run Redis with all data structures - AlmaLinux 10.1+ / Rocky Linux 10.1+](#build-and-run-redis-with-all-data-structures---almalinux-101--rocky-linux-101)\\n  - [Build and run Redis with all data structures - Alpine 3.23+](#build-and-run-redis-with-all-data-structures---alpine-323)\\n  - [Build and run Redis with all data structures - macOS 14 (Sonoma), 15 (Sequoia), 26 (Tahoe)](#build-and-run-redis-with-all-data-structures---macos-14-sonoma-15-sequoia-26-tahoe)\\n  - [Building Redis - flags and general notes](#building-redis---flags-and-general-notes)\\n  - [Fixing build problems with dependencies or cached build options](#fixing-build-problems-with-dependencies-or-cached-build-options)\\n  - [Fixing problems building 32 bit binaries](#fixing-problems-building-32-bit-binaries)\\n  - [Allocator](#allocator)\\n  - [Monotonic clock](#monotonic-clock)\\n  - [Verbose build](#verbose-build)\\n  - [Running Redis with TLS](#running-redis-with-tls)\\n- [Code contributions](#code-contributions)\\n- [Redis Trademarks](#redis-trademarks)\\n\\n## What is Redis?\\n\\nFor developers, who are building real-time data-driven applications, Redis is the preferred, fastest, and most feature-rich cache, data structure server, and document and vector query engine.\\n\\n### Key use cases\\n\\nRedis excels in various applications, including:\\n\\n- **Caching:** Supports multiple eviction policies, key expiration, and hash-field expiration.\\n- **Distributed Session Store:** Offers flexible session data modeling (string, JSON, hash).\\n- **Data Structure Server:** Provides low-level data structures (strings, lists, sets, hashes, sorted sets, JSON, etc.) with high-level semantics (counters, queues, leaderboards, rate limiters) and supports transactions & scripting.\\n- **NoSQL Data Store:** Key-value, document, and time series data storage.\\n- **Search and Query Engine:** Indexing for hash/JSON documents, supporting vector search, full-text search, geospatial queries, ranking, and aggregations via Redis Search.\\n- **Event Store & Message Broker:** Implements queues (lists), priority queues (sorted sets), event deduplication (sets), streams, and pub/sub with probabilistic stream processing capabilities.\\n- **Vector Store for GenAI:** Integrates with AI applications (e.g. LangGraph, mem0) for short-term memory, long-term memory, LLM response caching (semantic caching), and retrieval augmented generation (RAG).\\n- **Real-Time Analytics:** Powers personalization, recommendations, fraud detection, and risk assessment.\\n\\n## Why choose Redis?\\n\\nRedis is a popular choice for developers worldwide due to its combination of speed, flexibility, and rich feature set. Here's why people choose Redis for:\\n\\n- **Performance:** Because Redis keeps data primarily in memory and uses efficient data structures, it achieves extremely low latency (often sub-millisecond) for both read and write operations. This makes it ideal for applications demanding real-time responsiveness.\\n- **Flexibility:** Redis isn't just a key-value store, it provides native support for a wide range of data structures and capabilities listed in [What is Redis?](#what-is-redis)\\n- **Extensibility:** Redis is not limited to the built-in data structures, it has a [modules API](https://redis.io/docs/latest/develop/reference/modules/) that makes it possible to extend Redis functionality and rapidly implement new Redis commands\\n- **Simplicity:** Redis has a simple, text-based protocol and [well-documented command set](https://redis.io/docs/latest/commands/)\\n- **Ubiquity:** Redis is battle tested in production workloads at a massive scale. There is a good chance you indirectly interact with Redis several times daily\\n- **Versatility**: Redis is the de facto standard for use cases such as:\\n  - **Caching:** quickly access frequently used data without needing to query your primary database\\n  - **Session management:** read and write user session data without hurting user experience or slowing down every API call\\n  - **Querying, sorting, and analytics:** perform deduplication, full text search, and secondary indexing on in-memory data as fast as possible\\n  - **Messaging and interservice communication:** job queues, message brokering, pub/sub, and streams for communicating between services\\n  - **Vector operations:** Long-term and short-term LLM memory, RAG content retrieval, semantic caching, semantic routing, and vector similarity search\\n\\nIn summary, Redis provides a powerful, fast, and flexible toolkit for solving a wide variety of data management challenges. If you want to know more, here is a list of starting points:\\n\\n- [**Introduction to Redis data types**](https://redis.io/docs/latest/develop/data-types/)\\n- [**The full list of Redis commands**](https://redis.io/commands/)\\n- [**Redis for AI**](https://redis.io/docs/latest/develop/ai/)\\n- [**Redis documentation**](https://redis.io/documentation/)\\n\\n## What is Redis Open Source?\\n\\nRedis Community Edition (Redis CE) was renamed Redis Open Source with the v8.0 release.\\n\\nRedis Ltd. also offers [Redis Software](https://redis.io/enterprise/), a self-managed software with additional compliance, reliability, and resiliency for enterprise scaling,\\nand [Redis Cloud](https://redis.io/cloud/), a fully managed service integrated with Google Cloud, Azure, and AWS for production-ready apps.\\n\\nRead more about the differences between Redis Open Source and Redis [here](https:/...[truncated]","startedAt":null,"finishedAt":"2026-06-10T09:10:08.285859126Z","errorCode":null,"message":"SUCCEEDED"}}
+
+event:tool_call_finished
+data:{"runId":"run_323025763787354112","stepId":"call_8e25ffedf0d549fe9687acbf","toolInvocationId":"call_8e25ffedf0d549fe9687acbf","toolCallId":"call_8e25ffedf0d549fe9687acbf","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"{\"owner\":\"redis\",\"repository\":\"redis\",\"defaultBranch\":\"unstable\",\"htmlUrl\":\"https://github.com/redis/redis\",\"description\":\"For developers, who are building real-time data-driven applications, Redis is the preferred, fastest, and most feature-rich cache, data structure server, and document and vector query engine.\",\"truncated\":true,\"fetchedAt\":\"2026-06-10T09:10:08.271842983Z\",\"files\":[{\"path\":\"README.md\",\"contentText\":\"[![codecov](https://codecov.io/github/redis/redis/graph/badge.svg?token=6bVHb5fRuz)](https://codecov.io/github/redis/redis)\\n\\nThis document serves as both a quick start guide to Redis and a detailed resource for building it from source.\\n\\n- New to Redis? Start with [What is Redis](#what-is-redis) and [Getting Started](#getting-started)\\n- Ready to build from source? Jump to [Build Redis from Source](#build-redis-from-source)\\n- Want to contribute? See the [Code contributions](#code-contributions) section\\n  and [CONTRIBUTING.md](./CONTRIBUTING.md)\\n- Looking for detailed documentation? Navigate to [redis.io/docs](https://redis.io/docs/)\\n\\n## Table of contents\\n\\n- [What is Redis?](#what-is-redis)\\n  - [Key use cases](#key-use-cases)\\n- [Why choose Redis?](#why-choose-redis)\\n- [What is Redis Open Source?](#what-is-redis-open-source)\\n- [Getting started](#getting-started)\\n  - [Redis starter projects](#redis-starter-projects)\\n  - [Using Redis with client libraries](#using-redis-with-client-libraries)\\n  - [Using Redis with redis-cli](#using-redis-with-redis-cli)\\n  - [Using Redis with Redis Insight](#using-redis-with-redis-insight)\\n- [Redis data types, processing engines, and capabilities](#redis-data-types-processing-engines-and-capabilities)\\n- [Cloud hosted Redis](#cloud-hosted-redis)\\n- [Community](#community)\\n- [Build Redis from source](#build-redis-from-source)\\n  - [Build and run Redis with all data structures - Ubuntu 22.04 (Jammy)](#build-and-run-redis-with-all-data-structures---ubuntu-2204-jammy)\\n  - [Build and run Redis with all data structures - Ubuntu 24.04 (Noble)](#build-and-run-redis-with-all-data-structures---ubuntu-2404-noble)\\n  - [Build and run Redis with all data structures - Ubuntu 26.04 (Resolute)](#build-and-run-redis-with-all-data-structures---ubuntu-2604-resolute)\\n  - [Build and run Redis with all data structures - Debian 12 (Bookworm) / 13 (Trixie)](#build-and-run-redis-with-all-data-structures---debian-12-bookworm--13-trixie)\\n  - [Build and run Redis with all data structures - AlmaLinux 8.10 / Rocky Linux 8.10](#build-and-run-redis-with-all-data-structures---almalinux-810--rocky-linux-810)\\n  - [Build and run Redis with all data structures - AlmaLinux 9.7+ / Rocky Linux 9.7+](#build-and-run-redis-with-all-data-structures---almalinux-97--rocky-linux-97)\\n  - [Build and run Redis with all data structures - AlmaLinux 10.1+ / Rocky Linux 10.1+](#build-and-run-redis-with-all-data-structures---almalinux-101--rocky-linux-101)\\n  - [Build and run Redis with all data structures - Alpine 3.23+](#build-and-run-redis-with-all-data-structures---alpine-323)\\n  - [Build and run Redis with all data structures - macOS 14 (Sonoma), 15 (Sequoia), 26 (Tahoe)](#build-and-run-redis-with-all-data-structures---macos-14-sonoma-15-sequoia-26-tahoe)\\n  - [Building Redis - flags and general notes](#building-redis---flags-and-general-notes)\\n  - [Fixing build problems with dependencies or cached build options](#fixing-build-problems-with-dependencies-or-cached-build-options)\\n  - [Fixing problems building 32 bit binaries](#fixing-problems-building-32-bit-binaries)\\n  - [Allocator](#allocator)\\n  - [Monotonic clock](#monotonic-clock)\\n  - [Verbose build](#verbose-build)\\n  - [Running Redis with TLS](#running-redis-with-tls)\\n- [Code contributions](#code-contributions)\\n- [Redis Trademarks](#redis-trademarks)\\n\\n## What is Redis?\\n\\nFor developers, who are building real-time data-driven applications, Redis is the preferred, fastest, and most feature-rich cache, data structure server, and document and vector query engine.\\n\\n### Key use cases\\n\\nRedis excels in various applications, including:\\n\\n- **Caching:** Supports multiple eviction policies, key expiration, and hash-field expiration.\\n- **Distributed Session Store:** Offers flexible session data modeling (string, JSON, hash).\\n- **Data Structure Server:** Provides low-level data structures (strings, lists, sets, hashes, sorted sets, JSON, etc.) with high-level semantics (counters, queues, leaderboards, rate limiters) and supports transactions & scripting.\\n- **NoSQL Data Store:** Key-value, document, and time series data storage.\\n- **Search and Query Engine:** Indexing for hash/JSON documents, supporting vector search, full-text search, geospatial queries, ranking, and aggregations via Redis Search.\\n- **Event Store & Message Broker:** Implements queues (lists), priority queues (sorted sets), event deduplication (sets), streams, and pub/sub with probabilistic stream processing capabilities.\\n- **Vector Store for GenAI:** Integrates with AI applications (e.g. LangGraph, mem0) for short-term memory, long-term memory, LLM response caching (semantic caching), and retrieval augmented generation (RAG).\\n- **Real-Time Analytics:** Powers personalization, recommendations, fraud detection, and risk assessment.\\n\\n## Why choose Redis?\\n\\nRedis is a popular choice for developers worldwide due to its combination of speed, flexibility, and rich feature set. Here's why people choose Redis for:\\n\\n- **Performance:** Because Redis keeps data primarily in memory and uses efficient data structures, it achieves extremely low latency (often sub-millisecond) for both read and write operations. This makes it ideal for applications demanding real-time responsiveness.\\n- **Flexibility:** Redis isn't just a key-value store, it provides native support for a wide range of data structures and capabilities listed in [What is Redis?](#what-is-redis)\\n- **Extensibility:** Redis is not limited to the built-in data structures, it has a [modules API](https://redis.io/docs/latest/develop/reference/modules/) that makes it possible to extend Redis functionality and rapidly implement new Redis commands\\n- **Simplicity:** Redis has a simple, text-based protocol and [well-documented command set](https://redis.io/docs/latest/commands/)\\n- **Ubiquity:** Redis is battle tested in production workloads at a massive scale. There is a good chance you indirectly interact with Redis several times daily\\n- **Versatility**: Redis is the de facto standard for use cases such as:\\n  - **Caching:** quickly access frequently used data without needing to query your primary database\\n  - **Session management:** read and write user session data without hurting user experience or slowing down every API call\\n  - **Querying, sorting, and analytics:** perform deduplication, full text search, and secondary indexing on in-memory data as fast as possible\\n  - **Messaging and interservice communication:** job queues, message brokering, pub/sub, and streams for communicating between services\\n  - **Vector operations:** Long-term and short-term LLM memory, RAG content retrieval, semantic caching, semantic routing, and vector similarity search\\n\\nIn summary, Redis provides a powerful, fast, and flexible toolkit for solving a wide variety of data management challenges. If you want to know more, here is a list of starting points:\\n\\n- [**Introduction to Redis data types**](https://redis.io/docs/latest/develop/data-types/)\\n- [**The full list of Redis commands**](https://redis.io/commands/)\\n- [**Redis for AI**](https://redis.io/docs/latest/develop/ai/)\\n- [**Redis documentation**](https://redis.io/documentation/)\\n\\n## What is Redis Open Source?\\n\\nRedis Community Edition (Redis CE) was renamed Redis Open Source with the v8.0 release.\\n\\nRedis Ltd. also offers [Redis Software](https://redis.io/enterprise/), a self-managed software with additional compliance, reliability, and resiliency for enterprise scaling,\\nand [Redis Cloud](https://redis.io/cloud/), a fully managed service integrated with Google Cloud, Azure, and AWS for production-ready apps.\\n\\nRead more about the differences between Redis Open Source and Redis [here](https:/...[truncated]","startedAt":null,"finishedAt":"2026-06-10T09:10:08.285859126Z","errorCode":null,"message":"SUCCEEDED"}
+
+event:stream_event
+data:{"eventId":"323026035079131136","eventSeq":"46","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.297001872Z","typedPayload":{"type":"think","delta":"现在让我读"}}
+
+event:message
+data:{"type":"think","delta":"现在让我读"}
+
+event:stream_event
+data:{"eventId":"323026035108491264","eventSeq":"47","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.303487037Z","typedPayload":{"type":"think","delta":"取更多源码"}}
+
+event:message
+data:{"type":"think","delta":"取更多源码"}
+
+event:stream_event
+data:{"eventId":"323026035137851392","eventSeq":"48","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.310056180Z","typedPayload":{"type":"think","delta":"文件以获取"}}
+
+event:message
+data:{"type":"think","delta":"文件以获取"}
+
+event:stream_event
+data:{"eventId":"323026035163017216","eventSeq":"49","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.316170607Z","typedPayload":{"type":"think","delta":"架构信息。"}}
+
+event:message
+data:{"type":"think","delta":"架构信息。"}
+
+event:stream_event
+data:{"eventId":"323026035188183040","eventSeq":"50","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.322441058Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"323026035213348864","eventSeq":"51","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.328114405Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"323026035234320384","eventSeq":"52","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.333913397Z","typedPayload":{"type":"think","delta":"] git"}}
+
+event:message
+data:{"type":"think","delta":"] git"}
+
+event:stream_event
+data:{"eventId":"323026035259486208","eventSeq":"53","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.339517142Z","typedPayload":{"type":"think","delta":"hub_r"}}
+
+event:message
+data:{"type":"think","delta":"hub_r"}
+
+event:stream_event
+data:{"eventId":"323026035280457728","eventSeq":"54","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.344728827Z","typedPayload":{"type":"think","delta":"eposi"}}
+
+event:message
+data:{"type":"think","delta":"eposi"}
+
+event:stream_event
+data:{"eventId":"323026035301429248","eventSeq":"55","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.349590899Z","typedPayload":{"type":"think","delta":"tory_"}}
+
+event:message
+data:{"type":"think","delta":"tory_"}
+
+event:stream_event
+data:{"eventId":"323026035322400768","eventSeq":"56","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.354527127Z","typedPayload":{"type":"think","delta":"reade"}}
+
+event:message
+data:{"type":"think","delta":"reade"}
+
+event:stream_event
+data:{"eventId":"323026035343372288","eventSeq":"57","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.359494732Z","typedPayload":{"type":"think","delta":"r -> "}}
+
+event:message
+data:{"type":"think","delta":"r -> "}
+
+event:stream_event
+data:{"eventId":"323026035360149504","eventSeq":"58","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.363788525Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"323026035381121024","eventSeq":"59","eventType":"STEP_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.368513741Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-3","stepNo":3,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:00.950227486Z","finishedAt":"2026-06-10T09:10:08.366197815Z","durationMs":"7415","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_323025763787354112","stepId":"model-turn-3","stepNo":3,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:00.950227486Z","finishedAt":"2026-06-10T09:10:08.366197815Z","durationMs":"7415","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026035414675456","eventSeq":"60","eventType":"STEP_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:08.376237776Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-4","stepNo":4,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:08.374112874Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_323025763787354112","stepId":"model-turn-4","stepNo":4,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:08.374112874Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026069082353664","eventSeq":"61","eventType":"TOOL_CALL_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.403150524Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_ab1cd23804e74c418a8c9cd8","toolInvocationId":"call_ab1cd23804e74c418a8c9cd8","toolCallId":"call_ab1cd23804e74c418a8c9cd8","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:10:16.402512807Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_323025763787354112","stepId":"call_ab1cd23804e74c418a8c9cd8","toolInvocationId":"call_ab1cd23804e74c418a8c9cd8","toolCallId":"call_ab1cd23804e74c418a8c9cd8","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:10:16.402512807Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"323026070495834112","eventSeq":"62","eventType":"TOOL_CALL_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.740440706Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_ab1cd23804e74c418a8c9cd8","toolInvocationId":"call_ab1cd23804e74c418a8c9cd8","toolCallId":"call_ab1cd23804e74c418a8c9cd8","toolId":"web_fetch","riskLevel":"HIGH","summary":"{\"url\":\"https://redis.io/docs/latest/develop/data-types/\",\"status\":\"FETCHED\",\"title\":\"Redis data types | Docs {\\\"categories\\\":[\\\"docs\\\",\\\"develop\\\",\\\"stack\\\",\\\"oss\\\",\\\"rs\\\",\\\"rc\\\",\\\"oss\\\",\\\"kubernetes\\\",\\\"clients\\\"],\\\"descripti\",\"mimeType\":\"text/html\",\"reasonCode\":null,\"truncated\":false,\"contentWarning\":\"UNTRUSTED_EXTERNAL_CONTENT\",\"contentText\":\"Redis data types | Docs {\\\"categories\\\":[\\\"docs\\\",\\\"develop\\\",\\\"stack\\\",\\\"oss\\\",\\\"rs\\\",\\\"rc\\\",\\\"oss\\\",\\\"kubernetes\\\",\\\"clients\\\"],\\\"description\\\":\\\"Overview of data types supported by Redis\\\",\\\"duplicateOf\\\":\\\"head:data-ai-metadata\\\",\\\"location\\\":\\\"body\\\",\\\"title\\\":\\\"Redis data types\\\",\\\"tableOfContents\\\":{\\\"sections\\\":[]},\\\"codeExamples\\\":[]} AI agent builder Redis install Data types Tools Community Docs Search Login Sign up Open search Open main menu AI agent builder Redis install Data types Tools Community Docs Sign up Login Develop with Redis What&#39;s new? Quick starts Client tools Client APIs Using commands Data types Compare data types Strings Arrays Geospatial Hashes JSON Lists Probabilistic Sets Sorted sets Streams Time series Vector sets Redis for AI and search Programmability Use cases Pub/sub Reference Libraries and tools Redis products Commands Docs Docs → Develop with Redis → Redis data types Redis data types Overview of data types supported by Redis Redis is a data structure server. At its core, Redis provides a collection of native data types that help you solve a wide variety of problems, from caching to queuing to event processing . Below is a short description of each data type, with links to broader overviews and command references. Each overview includes a comprehensive tutorial with code samples. Data types Redis Open Source implements the following data types: Strings Bitmaps Bitfields Arrays Geospatial indexes Hashes JSON Lists Probabilistic data types Sets Sorted sets Streams Time series Vector sets See Compare data types for advice on which of the general-purpose data types is best for common tasks. Strings Redis strings are the most basic Redis data type, representing a sequence of bytes. For more information, see: Overview of Redis strings Redis string command reference Bitfields Redis bitfields efficiently encode multiple counters in a string value. Bitfields provide atomic get, set, and increment operations and support different overflow policies. For more information, see: Overview of Redis bitfields The BITFIELD command. Bitmaps Redis bitmaps let you perform bitwise operations on strings. For more information, see: Overview of Redis bitmaps Redis bitmap command reference Arrays Redis arrays are sparse, index-addressable sequences of strings. For more information, see: Overview of Redis arrays Redis array command reference Geospatial indexes Redis geospatial indexes are useful for finding locations within a given geographic radius or bounding box. For more information, see: Overview of Redis geospatial indexes Redis geospatial indexes command reference Hashes Redis hashes are record types modeled as collections of field-value pairs. As such, Redis hashes resemble Python dictionaries , Java HashMaps , and Ruby hashes . For more information, see: Overview of Redis hashes Redis hashes command reference JSON Redis JSON provides structured, hierarchical arrays and key-value objects that match the popular JSON text file format. You can import JSON text into Redis objects and access, modify, and query individual data elements. For more information, see: Overview of Redis JSON JSON command reference Lists Redis lists are lists of strings sorted by insertion order. For more information, see: Overview of Redis lists Redis list command reference Probabilistic data types These data types let you gather and calculate statistics in a way that is approximate but highly efficient. The following types are available: Bloom filter Count-min sketch Cuckoo filter HyperLogLog t-digest Top-K Bloom filter Redis Bloom filters let you check for the presence or absence of an element in a set. For more information, see: Overview of Redis Bloom filters Bloom filter command reference Count-min sketch Redis Count-min sketch estimate the frequency of a data point within a stream of values. For more information, see: Redis Count-min sketch overview Count-min sketch command reference Cuckoo filter Redis Cuckoo filters let you check for the presence or absence of an element in a set. They are similar to Bloom filters but with slightly different trade-offs between features and performance. For more information, see: Overview of Redis Cuckoo filters Cuckoo filter command reference HyperLogLog The Redis HyperLogLog data structures provide probabilistic estimates of the cardinality (i.e., number of elements) of large sets. For more information, see: Overview of Redis HyperLogLog Redis HyperLogLog command reference t-digest Redis t-digest structures estimate percentiles from a stream of data values. For more information, see: Redis t-digest overview t-digest command reference Top-K Redis Top-K structures estimate the ranking of a data point within a stream of values. For more information, see: Redis Top-K overview Top-K command reference Sets Redis sets are unordered collections of unique strings that act like the sets from your favorite programming language (for example, Java HashSets , Python sets , and so on). With a Redis set, you can add, remove, and test for existence in O(1) time (in other words, regardless of the number of set elements). For more information, see: Overview of Redis sets Redis set command reference Sorted sets Redis sorted sets are collections of unique strings that maintain order by each string's associated score. For more information, see: Overview of Redis sorted sets Redis sorted set command reference Streams A Redis stream is a data structure that acts like an append-only log. Streams help record events in the order they occur and then syndicate them for processing. For more information, see: Overview of Redis Streams Redis Streams command reference Time series Redis time series structures let you store and query timestamped data points. For more information, see: Redis time series overview Time series command reference Vector sets Redis vector sets are a specialized data type designed for managing high-dimensional vector data, enabling fast and efficient vector similarity search within Redis. Vector sets are optimized for use cases involving machine learning, recommendation systems, and semantic search, where each vector represents a data point in multi-dimensional space. Vector sets supports the HNSW (hierarchical navigable small world) algorithm, allowing you to store, index, and query vectors based on the cosine similarity metric. With vector sets, Redis provides native support for hybrid search, combining vector similarity with structured filters . For more information, see: Overview of Redis vector sets Redis vector set command reference Adding extensions To extend the features provided by the included data types, use one of these options: Write your own custom server-side functions in Lua . Write your own Redis module using the modules API or check out the community-supported modules . RATE THIS PAGE &#9733; &#9733; &#9733; &#9733; &#9733; Back to top ↑ Submit Edit this page Create an issue Download Markdown On this page Data types Strings Bitfields Bitmaps Arrays Geospatial indexes Hashes JSON Lists Probabilistic data types Bloom filter Count-min sketch Cuckoo filter HyperLogLog t-digest Top-K Sets Sorted sets Streams Time series Vector sets Adding extensions Trust Privacy Terms of use Legal notices Compare Redis vs Elasticache Redis vs Memcached Redis vs Memory Store Redis vs. Open Source Company Mission &amp; values Leadership Careers Partners Amazon Web Services Google Cloud Microsoft Azure All partners Support Professional services Support Trust Privacy Terms of use Legal notices All products Redis Software Redis Cloud Redis Open Source Redis Insight Redis Enterprise for K8s Redis Data Integration Client Libraries ESC\"}","startedAt":null,"finishedAt":"2026-06-10T09:10:16.739911249Z","errorCode":null,"message":"SUCCEEDED"}}
+
+event:tool_call_finished
+data:{"runId":"run_323025763787354112","stepId":"call_ab1cd23804e74c418a8c9cd8","toolInvocationId":"call_ab1cd23804e74c418a8c9cd8","toolCallId":"call_ab1cd23804e74c418a8c9cd8","toolId":"web_fetch","riskLevel":"HIGH","summary":"{\"url\":\"https://redis.io/docs/latest/develop/data-types/\",\"status\":\"FETCHED\",\"title\":\"Redis data types | Docs {\\\"categories\\\":[\\\"docs\\\",\\\"develop\\\",\\\"stack\\\",\\\"oss\\\",\\\"rs\\\",\\\"rc\\\",\\\"oss\\\",\\\"kubernetes\\\",\\\"clients\\\"],\\\"descripti\",\"mimeType\":\"text/html\",\"reasonCode\":null,\"truncated\":false,\"contentWarning\":\"UNTRUSTED_EXTERNAL_CONTENT\",\"contentText\":\"Redis data types | Docs {\\\"categories\\\":[\\\"docs\\\",\\\"develop\\\",\\\"stack\\\",\\\"oss\\\",\\\"rs\\\",\\\"rc\\\",\\\"oss\\\",\\\"kubernetes\\\",\\\"clients\\\"],\\\"description\\\":\\\"Overview of data types supported by Redis\\\",\\\"duplicateOf\\\":\\\"head:data-ai-metadata\\\",\\\"location\\\":\\\"body\\\",\\\"title\\\":\\\"Redis data types\\\",\\\"tableOfContents\\\":{\\\"sections\\\":[]},\\\"codeExamples\\\":[]} AI agent builder Redis install Data types Tools Community Docs Search Login Sign up Open search Open main menu AI agent builder Redis install Data types Tools Community Docs Sign up Login Develop with Redis What&#39;s new? Quick starts Client tools Client APIs Using commands Data types Compare data types Strings Arrays Geospatial Hashes JSON Lists Probabilistic Sets Sorted sets Streams Time series Vector sets Redis for AI and search Programmability Use cases Pub/sub Reference Libraries and tools Redis products Commands Docs Docs → Develop with Redis → Redis data types Redis data types Overview of data types supported by Redis Redis is a data structure server. At its core, Redis provides a collection of native data types that help you solve a wide variety of problems, from caching to queuing to event processing . Below is a short description of each data type, with links to broader overviews and command references. Each overview includes a comprehensive tutorial with code samples. Data types Redis Open Source implements the following data types: Strings Bitmaps Bitfields Arrays Geospatial indexes Hashes JSON Lists Probabilistic data types Sets Sorted sets Streams Time series Vector sets See Compare data types for advice on which of the general-purpose data types is best for common tasks. Strings Redis strings are the most basic Redis data type, representing a sequence of bytes. For more information, see: Overview of Redis strings Redis string command reference Bitfields Redis bitfields efficiently encode multiple counters in a string value. Bitfields provide atomic get, set, and increment operations and support different overflow policies. For more information, see: Overview of Redis bitfields The BITFIELD command. Bitmaps Redis bitmaps let you perform bitwise operations on strings. For more information, see: Overview of Redis bitmaps Redis bitmap command reference Arrays Redis arrays are sparse, index-addressable sequences of strings. For more information, see: Overview of Redis arrays Redis array command reference Geospatial indexes Redis geospatial indexes are useful for finding locations within a given geographic radius or bounding box. For more information, see: Overview of Redis geospatial indexes Redis geospatial indexes command reference Hashes Redis hashes are record types modeled as collections of field-value pairs. As such, Redis hashes resemble Python dictionaries , Java HashMaps , and Ruby hashes . For more information, see: Overview of Redis hashes Redis hashes command reference JSON Redis JSON provides structured, hierarchical arrays and key-value objects that match the popular JSON text file format. You can import JSON text into Redis objects and access, modify, and query individual data elements. For more information, see: Overview of Redis JSON JSON command reference Lists Redis lists are lists of strings sorted by insertion order. For more information, see: Overview of Redis lists Redis list command reference Probabilistic data types These data types let you gather and calculate statistics in a way that is approximate but highly efficient. The following types are available: Bloom filter Count-min sketch Cuckoo filter HyperLogLog t-digest Top-K Bloom filter Redis Bloom filters let you check for the presence or absence of an element in a set. For more information, see: Overview of Redis Bloom filters Bloom filter command reference Count-min sketch Redis Count-min sketch estimate the frequency of a data point within a stream of values. For more information, see: Redis Count-min sketch overview Count-min sketch command reference Cuckoo filter Redis Cuckoo filters let you check for the presence or absence of an element in a set. They are similar to Bloom filters but with slightly different trade-offs between features and performance. For more information, see: Overview of Redis Cuckoo filters Cuckoo filter command reference HyperLogLog The Redis HyperLogLog data structures provide probabilistic estimates of the cardinality (i.e., number of elements) of large sets. For more information, see: Overview of Redis HyperLogLog Redis HyperLogLog command reference t-digest Redis t-digest structures estimate percentiles from a stream of data values. For more information, see: Redis t-digest overview t-digest command reference Top-K Redis Top-K structures estimate the ranking of a data point within a stream of values. For more information, see: Redis Top-K overview Top-K command reference Sets Redis sets are unordered collections of unique strings that act like the sets from your favorite programming language (for example, Java HashSets , Python sets , and so on). With a Redis set, you can add, remove, and test for existence in O(1) time (in other words, regardless of the number of set elements). For more information, see: Overview of Redis sets Redis set command reference Sorted sets Redis sorted sets are collections of unique strings that maintain order by each string's associated score. For more information, see: Overview of Redis sorted sets Redis sorted set command reference Streams A Redis stream is a data structure that acts like an append-only log. Streams help record events in the order they occur and then syndicate them for processing. For more information, see: Overview of Redis Streams Redis Streams command reference Time series Redis time series structures let you store and query timestamped data points. For more information, see: Redis time series overview Time series command reference Vector sets Redis vector sets are a specialized data type designed for managing high-dimensional vector data, enabling fast and efficient vector similarity search within Redis. Vector sets are optimized for use cases involving machine learning, recommendation systems, and semantic search, where each vector represents a data point in multi-dimensional space. Vector sets supports the HNSW (hierarchical navigable small world) algorithm, allowing you to store, index, and query vectors based on the cosine similarity metric. With vector sets, Redis provides native support for hybrid search, combining vector similarity with structured filters . For more information, see: Overview of Redis vector sets Redis vector set command reference Adding extensions To extend the features provided by the included data types, use one of these options: Write your own custom server-side functions in Lua . Write your own Redis module using the modules API or check out the community-supported modules . RATE THIS PAGE &#9733; &#9733; &#9733; &#9733; &#9733; Back to top ↑ Submit Edit this page Create an issue Download Markdown On this page Data types Strings Bitfields Bitmaps Arrays Geospatial indexes Hashes JSON Lists Probabilistic data types Bloom filter Count-min sketch Cuckoo filter HyperLogLog t-digest Top-K Sets Sorted sets Streams Time series Vector sets Adding extensions Trust Privacy Terms of use Legal notices Compare Redis vs Elasticache Redis vs Memcached Redis vs Memory Store Redis vs. Open Source Company Mission &amp; values Leadership Careers Partners Amazon Web Services Google Cloud Microsoft Azure All partners Support Professional services Support Trust Privacy Terms of use Legal notices All products Redis Software Redis Cloud Redis Open Source Redis Insight Redis Enterprise for K8s Redis Data Integration Client Libraries ESC\"}","startedAt":null,"finishedAt":"2026-06-10T09:10:16.739911249Z","errorCode":null,"message":"SUCCEEDED"}
+
+event:stream_event
+data:{"eventId":"323026070504222720","eventSeq":"63","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.742406765Z","typedPayload":{"type":"think","delta":"仓库读取完"}}
+
+event:message
+data:{"type":"think","delta":"仓库读取完"}
+
+event:stream_event
+data:{"eventId":"323026070508417024","eventSeq":"64","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.743792852Z","typedPayload":{"type":"think","delta":"成。现在继"}}
+
+event:message
+data:{"type":"think","delta":"成。现在继"}
+
+event:stream_event
+data:{"eventId":"323026070516805632","eventSeq":"65","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.745154974Z","typedPayload":{"type":"think","delta":"续推进 w"}}
+
+event:message
+data:{"type":"think","delta":"续推进 w"}
+
+event:stream_event
+data:{"eventId":"323026070520999936","eventSeq":"66","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.746513876Z","typedPayload":{"type":"think","delta":"eb_fe"}}
+
+event:message
+data:{"type":"think","delta":"eb_fe"}
+
+event:stream_event
+data:{"eventId":"323026070529388544","eventSeq":"67","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.748014102Z","typedPayload":{"type":"think","delta":"tch获取"}}
+
+event:message
+data:{"type":"think","delta":"tch获取"}
+
+event:stream_event
+data:{"eventId":"323026070533582848","eventSeq":"68","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.749561403Z","typedPayload":{"type":"think","delta":"补充信息。"}}
+
+event:message
+data:{"type":"think","delta":"补充信息。"}
+
+event:stream_event
+data:{"eventId":"323026070541971456","eventSeq":"69","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.751138804Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"323026070546165760","eventSeq":"70","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.752604199Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"323026070554554368","eventSeq":"71","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.754119624Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"323026070558748672","eventSeq":"72","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.755736211Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"323026070567137280","eventSeq":"73","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.757441895Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"323026070575525888","eventSeq":"74","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.759152028Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"323026070579720192","eventSeq":"75","eventType":"STEP_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.760713203Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-4","stepNo":4,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:08.374112874Z","finishedAt":"2026-06-10T09:10:16.760158549Z","durationMs":"8386","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_323025763787354112","stepId":"model-turn-4","stepNo":4,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:08.374112874Z","finishedAt":"2026-06-10T09:10:16.760158549Z","durationMs":"8386","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026070592303104","eventSeq":"76","eventType":"STEP_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:16.763131022Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-5","stepNo":5,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:16.762661239Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_323025763787354112","stepId":"model-turn-5","stepNo":5,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:16.762661239Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026086513881088","eventSeq":"77","eventType":"TOOL_CALL_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:20.559847140Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_97600bc904f246d5a8abcd33","toolInvocationId":"call_97600bc904f246d5a8abcd33","toolCallId":"call_97600bc904f246d5a8abcd33","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:10:20.558702030Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_323025763787354112","stepId":"call_97600bc904f246d5a8abcd33","toolInvocationId":"call_97600bc904f246d5a8abcd33","toolCallId":"call_97600bc904f246d5a8abcd33","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:10:20.558702030Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"323026100803874816","eventSeq":"78","eventType":"TOOL_CALL_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:23.966386396Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_97600bc904f246d5a8abcd33","toolInvocationId":"call_97600bc904f246d5a8abcd33","toolCallId":"call_97600bc904f246d5a8abcd33","toolId":"chart_visualization","riskLevel":"HIGH","summary":"{\"artifactType\":\"chart\",\"format\":\"mermaid/json\",\"content\":\"```mermaid\\nflowchart TD\\n    title[\\\"Redis 整体架构分层\\\"]\\n    \\n    subgraph ClientLayer [客户端层]\\n        client[\\\"客户端 (Client)\\\"]\\n    end\\n\\n    subgraph ProtocolLayer [协议层]\\n        protocol[\\\"RESP 协议层\\\"]\\n    end\\n\\n    subgraph CommandLayer [命令层]\\n        commands[\\\"命令执行层\\\"]\\n    end\\n\\n    subgraph CoreLayer [核心引擎层]\\n        datastructures[\\\"数据结构引擎\\\"]\\n        memory[\\\"内存管理\\\"]\\n    end\\n\\n    subgraph FeatureLayer [特性层]\\n        persistence[\\\"持久化 (RDB/AOF)\\\"]\\n        replication[\\\"复制/集群\\\"]\\n        modules[\\\"Modules API\\\"]\\n    end\\n\\n    client --> protocol\\n    protocol --> commands\\n    commands --> datastructures\\n    datastructures --> memory\\n    memory --> persistence\\n    memory --> replication\\n    commands --> modules\\n\\n    style title fill:none,stroke:none\\n    style ClientLayer fill:#f9f9f9,stroke:#333,stroke-dasharray: 5 5\\n    style ProtocolLayer fill:#f9f9f9,stroke:#333,stroke-dasharray: 5 5\\n    style CommandLayer fill:#f9f9f9,stroke:#333,stroke-dasharray: 5 5\\n    style CoreLayer fill:#e1f5fe,stroke:#0277bd\\n    style FeatureLayer fill:#f3e5f5,stroke:#7b1fa2\\n```\"}","startedAt":null,"finishedAt":"2026-06-10T09:10:23.964708919Z","errorCode":null,"message":"SUCCEEDED"}}
+
+event:tool_call_finished
+data:{"runId":"run_323025763787354112","stepId":"call_97600bc904f246d5a8abcd33","toolInvocationId":"call_97600bc904f246d5a8abcd33","toolCallId":"call_97600bc904f246d5a8abcd33","toolId":"chart_visualization","riskLevel":"HIGH","summary":"{\"artifactType\":\"chart\",\"format\":\"mermaid/json\",\"content\":\"```mermaid\\nflowchart TD\\n    title[\\\"Redis 整体架构分层\\\"]\\n    \\n    subgraph ClientLayer [客户端层]\\n        client[\\\"客户端 (Client)\\\"]\\n    end\\n\\n    subgraph ProtocolLayer [协议层]\\n        protocol[\\\"RESP 协议层\\\"]\\n    end\\n\\n    subgraph CommandLayer [命令层]\\n        commands[\\\"命令执行层\\\"]\\n    end\\n\\n    subgraph CoreLayer [核心引擎层]\\n        datastructures[\\\"数据结构引擎\\\"]\\n        memory[\\\"内存管理\\\"]\\n    end\\n\\n    subgraph FeatureLayer [特性层]\\n        persistence[\\\"持久化 (RDB/AOF)\\\"]\\n        replication[\\\"复制/集群\\\"]\\n        modules[\\\"Modules API\\\"]\\n    end\\n\\n    client --> protocol\\n    protocol --> commands\\n    commands --> datastructures\\n    datastructures --> memory\\n    memory --> persistence\\n    memory --> replication\\n    commands --> modules\\n\\n    style title fill:none,stroke:none\\n    style ClientLayer fill:#f9f9f9,stroke:#333,stroke-dasharray: 5 5\\n    style ProtocolLayer fill:#f9f9f9,stroke:#333,stroke-dasharray: 5 5\\n    style CommandLayer fill:#f9f9f9,stroke:#333,stroke-dasharray: 5 5\\n    style CoreLayer fill:#e1f5fe,stroke:#0277bd\\n    style FeatureLayer fill:#f3e5f5,stroke:#7b1fa2\\n```\"}","startedAt":null,"finishedAt":"2026-06-10T09:10:23.964708919Z","errorCode":null,"message":"SUCCEEDED"}
+
+event:stream_event
+data:{"eventId":"323026100820652032","eventSeq":"79","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:23.970552067Z","typedPayload":{"type":"think","delta":"现在生成架"}}
+
+event:message
+data:{"type":"think","delta":"现在生成架"}
+
+event:stream_event
+data:{"eventId":"323026100837429248","eventSeq":"80","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:23.974494763Z","typedPayload":{"type":"think","delta":"构图。"}}
+
+event:message
+data:{"type":"think","delta":"构图。"}
+
+event:stream_event
+data:{"eventId":"323026100858400768","eventSeq":"81","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:23.979432236Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"323026100875177984","eventSeq":"82","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:23.983581683Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"323026100896149504","eventSeq":"83","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:23.988029732Z","typedPayload":{"type":"think","delta":"] cha"}}
+
+event:message
+data:{"type":"think","delta":"] cha"}
+
+event:stream_event
+data:{"eventId":"323026100912926720","eventSeq":"84","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:23.992864459Z","typedPayload":{"type":"think","delta":"rt_vi"}}
+
+event:message
+data:{"type":"think","delta":"rt_vi"}
+
+event:stream_event
+data:{"eventId":"323026100929703936","eventSeq":"85","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:23.996952731Z","typedPayload":{"type":"think","delta":"suali"}}
+
+event:message
+data:{"type":"think","delta":"suali"}
+
+event:stream_event
+data:{"eventId":"323026100946481152","eventSeq":"86","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:24.000394029Z","typedPayload":{"type":"think","delta":"zatio"}}
+
+event:message
+data:{"type":"think","delta":"zatio"}
+
+event:stream_event
+data:{"eventId":"323026100959064064","eventSeq":"87","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:24.003848623Z","typedPayload":{"type":"think","delta":"n -> "}}
+
+event:message
+data:{"type":"think","delta":"n -> "}
+
+event:stream_event
+data:{"eventId":"323026100975841280","eventSeq":"88","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:24.007522578Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"323026100996812800","eventSeq":"89","eventType":"STEP_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:24.012017791Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-5","stepNo":5,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:16.762661239Z","finishedAt":"2026-06-10T09:10:24.010005726Z","durationMs":"7247","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_323025763787354112","stepId":"model-turn-5","stepNo":5,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:16.762661239Z","finishedAt":"2026-06-10T09:10:24.010005726Z","durationMs":"7247","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026101017784320","eventSeq":"90","eventType":"STEP_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:24.017690322Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-6","stepNo":6,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:24.016113283Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_323025763787354112","stepId":"model-turn-6","stepNo":6,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:24.016113283Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026109196677120","eventSeq":"91","eventType":"TOOL_CALL_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:25.967799866Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_f2b4daa06bfb4ce682703915","toolInvocationId":"call_f2b4daa06bfb4ce682703915","toolCallId":"call_f2b4daa06bfb4ce682703915","toolId":"image_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:10:25.966943470Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_323025763787354112","stepId":"call_f2b4daa06bfb4ce682703915","toolInvocationId":"call_f2b4daa06bfb4ce682703915","toolCallId":"call_f2b4daa06bfb4ce682703915","toolId":"image_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:10:25.966943470Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"323026187105873920","eventSeq":"92","eventType":"AGENT_ARTIFACT","runId":"run_323025763787354112","stepId":"call_f2b4daa06bfb4ce682703915","timestamp":"2026-06-10T09:10:44.542452Z","typedPayload":{"runId":"run_323025763787354112","title":"Generated image","mimeType":"image/png","artifactId":"323026187089096704","canPreview":false,"scanStatus":"CLEAN","storageRef":"https://platform-outputs.agnes-ai.space/images/text-to-image/2026/06/24f94e86d81d4166a10fec14f028f6d2.png","disposition":"attachment","previewText":"A modern, sleek illustration of Redis in-memory data structure server architecture. Show a central glowing memory core with colorful data structure icons (strings, hashes, lists, sets, sorted sets, JS...","artifactType":"IMAGE"}}
+
+event:agent.artifact
+data:{"runId":"run_323025763787354112","title":"Generated image","mimeType":"image/png","artifactId":"323026187089096704","canPreview":false,"scanStatus":"CLEAN","storageRef":"https://platform-outputs.agnes-ai.space/images/text-to-image/2026/06/24f94e86d81d4166a10fec14f028f6d2.png","disposition":"attachment","previewText":"A modern, sleek illustration of Redis in-memory data structure server architecture. Show a central glowing memory core with colorful data structure icons (strings, hashes, lists, sets, sorted sets, JS...","artifactType":"IMAGE"}
+
+event:stream_event
+data:{"eventId":"323026187156205568","eventSeq":"93","eventType":"TOOL_CALL_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.554667260Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_f2b4daa06bfb4ce682703915","toolInvocationId":"call_f2b4daa06bfb4ce682703915","toolCallId":"call_f2b4daa06bfb4ce682703915","toolId":"image_generation","riskLevel":"HIGH","summary":"{\"status\":\"GENERATED\",\"prompt\":\"A modern, sleek illustration of Redis in-memory data structure server architecture. Show a central glowing memory core with colorful data structure icons (strings, hashes, lists, sets, sorted sets, JSON) orbiting around it. Include visual elements representing persistence (disk storage), replication (multiple nodes connected), and high performance (lightning bolt or speed lines). Use a clean, professional tech style with blue and red color scheme matching Redis branding. Background should be dark with subtle circuit board patterns. Include a small Redis logo or text.\",\"model\":\"agnes-image-2.0-flash\",\"imageUrl\":\"https://platform-outputs.agnes-ai.space/images/text-to-image/2026/06/24f94e86d81d4166a10fec14f028f6d2.png\",\"b64Json\":\"\",\"mimeType\":\"image/png\"}","startedAt":null,"finishedAt":"2026-06-10T09:10:44.551831224Z","errorCode":null,"message":"SUCCEEDED"}}
+
+event:tool_call_finished
+data:{"runId":"run_323025763787354112","stepId":"call_f2b4daa06bfb4ce682703915","toolInvocationId":"call_f2b4daa06bfb4ce682703915","toolCallId":"call_f2b4daa06bfb4ce682703915","toolId":"image_generation","riskLevel":"HIGH","summary":"{\"status\":\"GENERATED\",\"prompt\":\"A modern, sleek illustration of Redis in-memory data structure server architecture. Show a central glowing memory core with colorful data structure icons (strings, hashes, lists, sets, sorted sets, JSON) orbiting around it. Include visual elements representing persistence (disk storage), replication (multiple nodes connected), and high performance (lightning bolt or speed lines). Use a clean, professional tech style with blue and red color scheme matching Redis branding. Background should be dark with subtle circuit board patterns. Include a small Redis logo or text.\",\"model\":\"agnes-image-2.0-flash\",\"imageUrl\":\"https://platform-outputs.agnes-ai.space/images/text-to-image/2026/06/24f94e86d81d4166a10fec14f028f6d2.png\",\"b64Json\":\"\",\"mimeType\":\"image/png\"}","startedAt":null,"finishedAt":"2026-06-10T09:10:44.551831224Z","errorCode":null,"message":"SUCCEEDED"}
+
+event:stream_event
+data:{"eventId":"323026187172982784","eventSeq":"94","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.558925022Z","typedPayload":{"type":"think","delta":"现在生成项"}}
+
+event:message
+data:{"type":"think","delta":"现在生成项"}
+
+event:stream_event
+data:{"eventId":"323026187189760000","eventSeq":"95","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.562775259Z","typedPayload":{"type":"think","delta":"目介绍视觉"}}
+
+event:message
+data:{"type":"think","delta":"目介绍视觉"}
+
+event:stream_event
+data:{"eventId":"323026187210731520","eventSeq":"96","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.567196876Z","typedPayload":{"type":"think","delta":"图。"}}
+
+event:message
+data:{"type":"think","delta":"图。"}
+
+event:stream_event
+data:{"eventId":"323026187227508736","eventSeq":"97","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.571088499Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"323026187240091648","eventSeq":"98","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.574876082Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"323026187256868864","eventSeq":"99","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.578855973Z","typedPayload":{"type":"think","delta":"] ima"}}
+
+event:message
+data:{"type":"think","delta":"] ima"}
+
+event:stream_event
+data:{"eventId":"323026187273646080","eventSeq":"100","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.582711623Z","typedPayload":{"type":"think","delta":"ge_ge"}}
+
+event:message
+data:{"type":"think","delta":"ge_ge"}
+
+event:stream_event
+data:{"eventId":"323026187290423296","eventSeq":"101","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.586915727Z","typedPayload":{"type":"think","delta":"nerat"}}
+
+event:message
+data:{"type":"think","delta":"nerat"}
+
+event:stream_event
+data:{"eventId":"323026187307200512","eventSeq":"102","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.590441500Z","typedPayload":{"type":"think","delta":"ion -"}}
+
+event:message
+data:{"type":"think","delta":"ion -"}
+
+event:stream_event
+data:{"eventId":"323026187328172032","eventSeq":"103","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.595067680Z","typedPayload":{"type":"think","delta":"> ok"}}
+
+event:message
+data:{"type":"think","delta":"> ok"}
+
+event:stream_event
+data:{"eventId":"323026187344949248","eventSeq":"104","eventType":"STEP_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.599431054Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-6","stepNo":6,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:24.016113283Z","finishedAt":"2026-06-10T09:10:44.597534669Z","durationMs":"20581","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_323025763787354112","stepId":"model-turn-6","stepNo":6,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:24.016113283Z","finishedAt":"2026-06-10T09:10:44.597534669Z","durationMs":"20581","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026187374309376","eventSeq":"105","eventType":"STEP_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:10:44.606062209Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-7","stepNo":7,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:44.604190876Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_323025763787354112","stepId":"model-turn-7","stepNo":7,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:44.604190876Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026269813354496","eventSeq":"106","eventType":"TOOL_CALL_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:04.261050100Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_97927e06ceb140229f8318f5","toolInvocationId":"call_97927e06ceb140229f8318f5","toolCallId":"call_97927e06ceb140229f8318f5","toolId":"newsletter_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:11:04.258558270Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_323025763787354112","stepId":"call_97927e06ceb140229f8318f5","toolInvocationId":"call_97927e06ceb140229f8318f5","toolCallId":"call_97927e06ceb140229f8318f5","toolId":"newsletter_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:11:04.258558270Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"323026340466405376","eventSeq":"107","eventType":"AGENT_ARTIFACT","runId":"run_323025763787354112","stepId":"call_97927e06ceb140229f8318f5","timestamp":"2026-06-10T09:11:21.106754Z","typedPayload":{"runId":"run_323025763787354112","title":"Generated newsletter","mimeType":"text/markdown","artifactId":"323026340407685120","canPreview":true,"scanStatus":"CLEAN","storageRef":"s3://agent-artifacts/7cedf20667744491a2a033b7abc2bad4.md","disposition":"inline","previewText":"# Redis 开源项目深度介绍\n\n## 核心定位\nRedis 是一个高性能的**内存数据结构服务器**。它不仅仅是一个简单的键值对存储，而是提供了丰富的数据结构支持，使其成为构建现代应用架构的核心组件。\n\n## 关键特性\n\n### 1. 丰富的数据结构支持\nRedis 超越了传统缓存的范畴，原生支持多种复杂数据结构，满足多样化业务需求：\n*   **基础结构**：字符串 (String)、哈希 ...","artifactType":"MARKDOWN"}}
+
+event:agent.artifact
+data:{"runId":"run_323025763787354112","title":"Generated newsletter","mimeType":"text/markdown","artifactId":"323026340407685120","canPreview":true,"scanStatus":"CLEAN","storageRef":"s3://agent-artifacts/7cedf20667744491a2a033b7abc2bad4.md","disposition":"inline","previewText":"# Redis 开源项目深度介绍\n\n## 核心定位\nRedis 是一个高性能的**内存数据结构服务器**。它不仅仅是一个简单的键值对存储，而是提供了丰富的数据结构支持，使其成为构建现代应用架构的核心组件。\n\n## 关键特性\n\n### 1. 丰富的数据结构支持\nRedis 超越了传统缓存的范畴，原生支持多种复杂数据结构，满足多样化业务需求：\n*   **基础结构**：字符串 (String)、哈希 ...","artifactType":"MARKDOWN"}
+
+event:stream_event
+data:{"eventId":"323026340487376896","eventSeq":"108","eventType":"TOOL_CALL_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.111248094Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_97927e06ceb140229f8318f5","toolInvocationId":"call_97927e06ceb140229f8318f5","toolCallId":"call_97927e06ceb140229f8318f5","toolId":"newsletter_generation","riskLevel":"HIGH","summary":"{\"artifactType\":\"newsletter\",\"format\":\"markdown\",\"content\":\"# Redis 开源项目深度介绍\\n\\n## 核心定位\\nRedis 是一个高性能的**内存数据结构服务器**。它不仅仅是一个简单的键值对存储，而是提供了丰富的数据结构支持，使其成为构建现代应用架构的核心组件。\\n\\n## 关键特性\\n\\n### 1. 丰富的数据结构支持\\nRedis 超越了传统缓存的范畴，原生支持多种复杂数据结构，满足多样化业务需求：\\n*   **基础结构**：字符串 (String)、哈希 (Hash)、列表 (List)、集合 (Set)、有序集合 (Sorted Set)。\\n*   **高级结构**：JSON、流 (Stream)、时间序列 (Time Series)、向量集 (Vector Set)。\\n\\n### 2. 数据持久化与高可用\\n为确保数据安全与服务连续性，Redis 提供了完善的数据保障机制：\\n*   **持久化方案**：支持 RDB（快照）和 AOF（追加日志）两种持久化模式，平衡性能与数据安全性。\\n*   **高可用架构**：\\n    *   **主从复制**：实现数据冗余和读写分离。\\n    *   **集群分片**：通过 Redis Cluster 实现水平扩展，支持大规模数据存储和高并发访问。\\n\\n### 3. 扩展性与编程能力\\n*   **Lua 脚本**：支持原子性执行 Lua 脚本，确保复杂逻辑的数据一致性。\\n*   **模块扩展 API**：提供强大的模块接口，允许开发者用 C 语言等扩展 Redis 功能，适应特定场景需求。\\n\\n## 典型应用场景\\n\\n基于其高性能和多功能特性，Redis 广泛应用于以下领域：\\n\\n*   **缓存与会话存储**：作为高速缓存层，加速应用响应；存储用户会话状态。\\n*   **消息队列**：利用列表和流结构实现轻量级消息传递。\\n*   **实时分析**：处理高频数据流，支持实时统计与监控。\\n*   **向量搜索与 GenAI**：结合向量集支持，成为生成式 AI 应用中的关键组件，用于语义搜索和向量相似度计算。\\n\\n## 总结\\n\\nRedis 凭借其**内存级性能**、**多样的数据结构**以及**灵活的扩展能力**，已成为开发者和技术决策者在构建高性能、实时性要求高的系统时的首选方案。无论是传统的缓存场景，还是前沿的 AI 应用，Redis 都能提供坚实的技术支撑。\"}","startedAt":null,"finishedAt":"2026-06-10T09:11:21.110495838Z","errorCode":null,"message":"SUCCEEDED"}}
+
+event:tool_call_finished
+data:{"runId":"run_323025763787354112","stepId":"call_97927e06ceb140229f8318f5","toolInvocationId":"call_97927e06ceb140229f8318f5","toolCallId":"call_97927e06ceb140229f8318f5","toolId":"newsletter_generation","riskLevel":"HIGH","summary":"{\"artifactType\":\"newsletter\",\"format\":\"markdown\",\"content\":\"# Redis 开源项目深度介绍\\n\\n## 核心定位\\nRedis 是一个高性能的**内存数据结构服务器**。它不仅仅是一个简单的键值对存储，而是提供了丰富的数据结构支持，使其成为构建现代应用架构的核心组件。\\n\\n## 关键特性\\n\\n### 1. 丰富的数据结构支持\\nRedis 超越了传统缓存的范畴，原生支持多种复杂数据结构，满足多样化业务需求：\\n*   **基础结构**：字符串 (String)、哈希 (Hash)、列表 (List)、集合 (Set)、有序集合 (Sorted Set)。\\n*   **高级结构**：JSON、流 (Stream)、时间序列 (Time Series)、向量集 (Vector Set)。\\n\\n### 2. 数据持久化与高可用\\n为确保数据安全与服务连续性，Redis 提供了完善的数据保障机制：\\n*   **持久化方案**：支持 RDB（快照）和 AOF（追加日志）两种持久化模式，平衡性能与数据安全性。\\n*   **高可用架构**：\\n    *   **主从复制**：实现数据冗余和读写分离。\\n    *   **集群分片**：通过 Redis Cluster 实现水平扩展，支持大规模数据存储和高并发访问。\\n\\n### 3. 扩展性与编程能力\\n*   **Lua 脚本**：支持原子性执行 Lua 脚本，确保复杂逻辑的数据一致性。\\n*   **模块扩展 API**：提供强大的模块接口，允许开发者用 C 语言等扩展 Redis 功能，适应特定场景需求。\\n\\n## 典型应用场景\\n\\n基于其高性能和多功能特性，Redis 广泛应用于以下领域：\\n\\n*   **缓存与会话存储**：作为高速缓存层，加速应用响应；存储用户会话状态。\\n*   **消息队列**：利用列表和流结构实现轻量级消息传递。\\n*   **实时分析**：处理高频数据流，支持实时统计与监控。\\n*   **向量搜索与 GenAI**：结合向量集支持，成为生成式 AI 应用中的关键组件，用于语义搜索和向量相似度计算。\\n\\n## 总结\\n\\nRedis 凭借其**内存级性能**、**多样的数据结构**以及**灵活的扩展能力**，已成为开发者和技术决策者在构建高性能、实时性要求高的系统时的首选方案。无论是传统的缓存场景，还是前沿的 AI 应用，Redis 都能提供坚实的技术支撑。\"}","startedAt":null,"finishedAt":"2026-06-10T09:11:21.110495838Z","errorCode":null,"message":"SUCCEEDED"}
+
+event:stream_event
+data:{"eventId":"323026340491571200","eventSeq":"109","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.112799590Z","typedPayload":{"type":"think","delta":"现在生成中"}}
+
+event:message
+data:{"type":"think","delta":"现在生成中"}
+
+event:stream_event
+data:{"eventId":"323026340499959808","eventSeq":"110","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.114060778Z","typedPayload":{"type":"think","delta":"文长文 M"}}
+
+event:message
+data:{"type":"think","delta":"文长文 M"}
+
+event:stream_event
+data:{"eventId":"323026340504154112","eventSeq":"111","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.115269910Z","typedPayload":{"type":"think","delta":"arkdo"}}
+
+event:message
+data:{"type":"think","delta":"arkdo"}
+
+event:stream_event
+data:{"eventId":"323026340508348416","eventSeq":"112","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.116308362Z","typedPayload":{"type":"think","delta":"wn草稿。"}}
+
+event:message
+data:{"type":"think","delta":"wn草稿。"}
+
+event:stream_event
+data:{"eventId":"323026340512542720","eventSeq":"113","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.117644859Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"323026340516737024","eventSeq":"114","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.118903635Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"323026340525125632","eventSeq":"115","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.120040011Z","typedPayload":{"type":"think","delta":"] new"}}
+
+event:message
+data:{"type":"think","delta":"] new"}
+
+event:stream_event
+data:{"eventId":"323026340529319936","eventSeq":"116","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.121364728Z","typedPayload":{"type":"think","delta":"slett"}}
+
+event:message
+data:{"type":"think","delta":"slett"}
+
+event:stream_event
+data:{"eventId":"323026340533514240","eventSeq":"117","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.122631742Z","typedPayload":{"type":"think","delta":"er_ge"}}
+
+event:message
+data:{"type":"think","delta":"er_ge"}
+
+event:stream_event
+data:{"eventId":"323026340537708544","eventSeq":"118","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.123801782Z","typedPayload":{"type":"think","delta":"nerat"}}
+
+event:message
+data:{"type":"think","delta":"nerat"}
+
+event:stream_event
+data:{"eventId":"323026340546097152","eventSeq":"119","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.125029810Z","typedPayload":{"type":"think","delta":"ion -"}}
+
+event:message
+data:{"type":"think","delta":"ion -"}
+
+event:stream_event
+data:{"eventId":"323026340550291456","eventSeq":"120","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.126542257Z","typedPayload":{"type":"think","delta":"> ok"}}
+
+event:message
+data:{"type":"think","delta":"> ok"}
+
+event:stream_event
+data:{"eventId":"323026340554485760","eventSeq":"121","eventType":"STEP_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.127809382Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-7","stepNo":7,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:44.604190876Z","finishedAt":"2026-06-10T09:11:21.127373545Z","durationMs":"36523","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_323025763787354112","stepId":"model-turn-7","stepNo":7,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:10:44.604190876Z","finishedAt":"2026-06-10T09:11:21.127373545Z","durationMs":"36523","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026340567068672","eventSeq":"122","eventType":"STEP_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:21.130009945Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-8","stepNo":8,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:11:21.129467464Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_323025763787354112","stepId":"model-turn-8","stepNo":8,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:11:21.129467464Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026389363601408","eventSeq":"123","eventType":"TOOL_CALL_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:32.764956464Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_1d043c5dfcc74750b9aa826f","toolInvocationId":"call_1d043c5dfcc74750b9aa826f","toolCallId":"call_1d043c5dfcc74750b9aa826f","toolId":"ppt_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:11:32.764347774Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_323025763787354112","stepId":"call_1d043c5dfcc74750b9aa826f","toolInvocationId":"call_1d043c5dfcc74750b9aa826f","toolCallId":"call_1d043c5dfcc74750b9aa826f","toolId":"ppt_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:11:32.764347774Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"323026441393942528","eventSeq":"124","eventType":"AGENT_ARTIFACT","runId":"run_323025763787354112","stepId":"call_1d043c5dfcc74750b9aa826f","timestamp":"2026-06-10T09:11:45.169859Z","typedPayload":{"runId":"run_323025763787354112","title":"Generated presentation","mimeType":"text/markdown","artifactId":"323026441314250752","canPreview":true,"scanStatus":"CLEAN","storageRef":"s3://agent-artifacts/994b86356bff4226a1cd7c1a20d9a7f4.md","disposition":"inline","previewText":"# Slide 1: 标题页\n\n**Title:** Redis 开源项目深度解析：高性能内存数据结构服务器\n\n**Key Bullets:**\n- 面向开发者与技术决策者的技术概览\n- 核心定位：高性能、低延迟的内存数据存储\n- 广泛支持的数据结构与持久化方案\n- 在缓存、实时分析及 GenAI 领域的广泛应用\n\n**Speaker Notes:**\n大家好，今天我们将深入探讨 Redis 这一...","artifactType":"MARKDOWN"}}
+
+event:agent.artifact
+data:{"runId":"run_323025763787354112","title":"Generated presentation","mimeType":"text/markdown","artifactId":"323026441314250752","canPreview":true,"scanStatus":"CLEAN","storageRef":"s3://agent-artifacts/994b86356bff4226a1cd7c1a20d9a7f4.md","disposition":"inline","previewText":"# Slide 1: 标题页\n\n**Title:** Redis 开源项目深度解析：高性能内存数据结构服务器\n\n**Key Bullets:**\n- 面向开发者与技术决策者的技术概览\n- 核心定位：高性能、低延迟的内存数据存储\n- 广泛支持的数据结构与持久化方案\n- 在缓存、实时分析及 GenAI 领域的广泛应用\n\n**Speaker Notes:**\n大家好，今天我们将深入探讨 Redis 这一...","artifactType":"MARKDOWN"}
+
+event:stream_event
+data:{"eventId":"323026441448468480","eventSeq":"125","eventType":"TOOL_CALL_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.182332689Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_1d043c5dfcc74750b9aa826f","toolInvocationId":"call_1d043c5dfcc74750b9aa826f","toolCallId":"call_1d043c5dfcc74750b9aa826f","toolId":"ppt_generation","riskLevel":"HIGH","summary":"{\"artifactType\":\"presentation\",\"format\":\"markdown\",\"content\":\"# Slide 1: 标题页\\n\\n**Title:** Redis 开源项目深度解析：高性能内存数据结构服务器\\n\\n**Key Bullets:**\\n- 面向开发者与技术决策者的技术概览\\n- 核心定位：高性能、低延迟的内存数据存储\\n- 广泛支持的数据结构与持久化方案\\n- 在缓存、实时分析及 GenAI 领域的广泛应用\\n\\n**Speaker Notes:**\\n大家好，今天我们将深入探讨 Redis 这一开源项目。作为全球最流行的内存数据结构服务器，Redis 不仅是一个简单的键值存储，更是一个功能丰富的数据平台。我们将从其核心架构、支持的数据类型、持久化机制以及在实际业务场景中的应用进行全方位介绍，帮助技术团队评估其在现代软件架构中的价值。\\n\\n**Image Prompt:**\\nA modern, clean tech presentation slide background with a subtle network node visualization, featuring the Redis logo prominently in the center, blue and red color scheme, professional corporate style.\\n\\n---\\n\\n# Slide 2: Redis 核心定位与架构\\n\\n**Title:** 什么是 Redis？核心架构概览\\n\\n**Key Bullets:**\\n- **定义**：开源的、基于内存的数据结构服务器（In-Memory Data Structure Store）\\n- **核心优势**：\\n  - 极高的读写性能（微秒级延迟）\\n  - 单线程事件循环模型（简化并发处理）\\n  - 丰富的数据结构支持\\n- **适用角色**：作为数据库、缓存、消息代理使用\\n\\n**Speaker Notes:**\\nRedis 的核心在于“内存”与“数据结构”。与传统磁盘数据库不同，Redis 将所有数据存储在内存中，从而实现了极低的延迟。它采用单线程事件循环模型来处理请求，避免了上下文切换和锁竞争，这在大多数场景下提供了极高的吞吐量。对于开发者而言，这意味着简单且高性能的 API；对于决策者而言，这意味着可预测的高性能表现。\\n\\n**Image Prompt:**\\nDiagram showing a central memory block connected to various client applications, illustrating the speed difference between memory access and disk access, minimalist technical illustration.\\n\\n---\\n\\n# Slide 3: 丰富的数据结构支持\\n\\n**Title:** 超越键值对：多维数据结构\\n\\n**Key Bullets:**\\n- **基础类型**：String（字符串）、Hash（哈希）、List（列表）、Set（集合）、ZSet（有序集合）\\n- **高级类型**：\\n  - **JSON**：原生支持 JSON 文档存储与查询\\n  - **Stream**：高性能消息流\\n  - **TimeSeries**：时间序列数据优化\\n  - **Vector Set**：向量集合，支持相似度搜索\\n\\n**Speaker Notes:**\\nRedis 的强大之处在于其多样化的数据结构。除了基础的 String 和 Hash，Redis 5.0+ 引入了 JSON 支持，使其能胜任文档数据库的部分角色。Stream 类型专为日志和消息队列设计，而 Vector Set 则是为 AI 时代准备的，支持高效的向量相似度计算。这种多样性使得 Redis 能够以统一接口处理多种业务场景，减少系统组件的复杂性。\\n\\n**Image Prompt:**\\nInfographic displaying icons for String, Hash, List, Set, ZSet, JSON, Stream, TimeSeries, and Vector, arranged in a circular layout around the Redis logo, clean vector art style.\\n\\n---\\n\\n# Slide 4: 数据持久化机制\\n\\n**Title:** 内存数据的可靠性保障：RDB 与 AOF\\n\\n**Key Bullets:**\\n- **RDB (Redis Database)**：\\n  - 定期生成数据快照（Snapshot）\\n  - 适合大规模数据恢复，文件紧凑\\n- **AOF (Append Only File)**：\\n  - 记录每条写命令\\n  - 数据安全性更高，支持多种同步策略\\n- **混合持久化**：结合 RDB 的快速加载与 AOF 的高安全性\\n\\n**Speaker Notes:**\\n内存数据面临断电丢失的风险，因此持久化至关重要。Redis 提供了两种主要机制：RDB 通过 fork 子进程生成快照，适合备份和灾难恢复；AOF 通过追加写命令日志来记录数据状态，数据丢失风险更小。现代 Redis 版本支持混合持久化，既保留了 RDB 加载快的优点，又具备 AOF 的高可靠性，满足不同业务对数据一致性的要求。\\n\\n**Image Prompt:**\\nComparison chart showing RDB snapshot process vs AOF log appending process, side-by-side technical diagram, neutral blue and grey tones.\\n\\n---\\n\\n# Slide 5: 高可用与扩展性\\n\\n**Title:** 构建高可用集群：复制、哨兵与集群\\n\\n**Key Bullets:**\\n- **主从复制 (Master-Replica)**：\\n  - 实现数据冗余和读写分离\\n  - 提升系统可用性\\n- **Redis Sentinel (哨兵)**：\\n  - 自动故障检测与主从切换\\n  - 无中心架构，高可用保障\\n- **Redis Cluster (集群)**：\\n  - 数据分片 (Sharding)\\n  - 水平扩展，支持海量数据存储\\n\\n**Speaker Notes:**\\n在生产环境中，高可用和扩展性是硬性指标。Redis 通过主从复制实现数据备份，结合 Sentinel 实现自动故障转移，确保服务不中断。对于需要处理海量数据或高并发读写的场景，Redis Cluster 提供了原生分片支持，将数据分散到多个节点，实现线性扩展能力。这套组合拳为大型分布式系统提供了坚实的数据层基础。\\n\\n**Image Prompt:**\\nNetwork topology diagram showing a Redis Cluster with multiple master nodes and replica nodes, connected in a mesh pattern, illustrating sharding and high availability, technical schematic.\\n\\n---\\n\\n# Slide 6: 高级功能：脚本与扩展\\n\\n**Title:** 原子性与扩展性：Lua 脚本与模块 API\\n\\n**Key Bullets:**\\n- **Lua 脚本支持**：\\n  - 原子性执行：确保复杂逻辑的原子操作\\n  - 减少网络往返：将逻辑推送到服务端执行\\n- **模块扩展 API (Redis Modules)**：\\n  - 允许开发者用 C/C++ 编写自定义模块\\n  - 支持 JSON、Search、TimeSeries 等高级功能\\n  - 增强 Redis 的功能边界\\n\\n**Speaker Notes:**\\nRedis 不仅提供基础数据操作，还支持复杂的业务逻辑。通过 Lua 脚本，开发者可以将多个命令打包成一个原子操作，避免竞态条件，同时减少网络开销。此外，Redis Modules API 允许社区和企业开发自定义模块，如 RedisJSON 或 RedisSearch，这使得 Redis 能够灵活适应不断变化的业务需求，而无需修改核心代码。\\n\\n**Image Prompt:**\\nCode snippet of a Lua script executing on a Redis server, with arrows pointing to a modular plugin architecture, dark mode coding aesthetic.\\n\\n---\\n\\n# Slide 7: 典型应用场景：缓存与会话\\n\\n**Title:** 经典场景：高性能缓存与会话存储\\n\\n**Key Bullets:**\\n- **应用缓存**：\\n  - 减轻后端数据库压力\\n  - 加速热点数据访问\\n- **会话存储 (Session Store)**：\\n  - 分布式会话共享\\n  - 支持过期自动清理\\n- **性能提升**：显著降低 API 响应时间\\n\\n**Speaker Notes:**\\nRedis 最经典的应用是作为应用层的缓存。通过缓存热点数据，可以大幅降低对关系型数据库的查询压力，提升系统整体吞吐量。在微服务架构中，Redis 常被用作分布式会话存储，确保用户状态在不同服务实例间共享。其内置的过期策略使得会话管理变得简单且高效。\\n\\n**Image Prompt:**\\nArchitecture diagram showing a web application layer, a Redis cache layer, and a backend database layer, with arrows indicating data flow and caching hits, clean business illustration.\\n\\n---\\n\\n# Slide 8: 实时数据处理与消息队列\\n\\n**Title:** 实时分析：消息队列与流处理\\n\\n**Key Bullets:**\\n- **消息队列 (Pub/Sub & Streams)**：\\n  - 解耦生产者与消费者\\n  - 支持消息持久化与回溯\\n- **实时分析**：\\n  - 计数器与排行榜 (ZSet)\\n  - 实时统计与监控数据聚合\\n- **低延迟**：适合高频交易或实时仪表盘\\n\\n**Speaker Notes:**\\n除了缓存，Redis 在实时数据处理方面表现卓越。Redis Streams 提供了类似 Kafka 的消息队列功能，但具有更低的延迟和更简单的运维复杂度。利用 ZSet 数据结构，可以轻松实现实时排行榜、计数器等功能。这些特性使其成为构建实时仪表盘、监控系统和即时通讯应用的理想选择。\\n\\n**Image Prompt:**\\nReal-time dashboard interface displaying live data updates, with a background visualization of data streams flowing into a Redis node, dynamic and energetic tech style.\\n\\n---\\n\\n# Slide 9: AI 与 GenAI 应用支持\\n\\n**Title:** 拥抱 AI：向量搜索与 GenAI 集成\\n\\n**Key Bullets:**\\n- **向量集 (Vector Set)**：\\n  - 原生支持向量相似度搜索\\n  - 支持 HNSW 等高效索引算法\\n- **GenAI 应用**：\\n  - 作为向量数据库存储 Embedding\\n  - 结合 RAG (检索增强生成) 架构\\n  - 快速上下文检索，提升大模型回答准确性\\n\\n**Speaker Notes:**\\n随着生成式 AI 的兴起，Redis 也在积极布局。通过 Redis Stack 中的向量集功能，Redis 可以存储和检索高维向量数据，支持语义搜索。在 RAG 架构中，Redis 可以作为向量数据库，快速检索与大模型问题相关的上下文信息，从而显著提升 AI 应用的答案准确性和响应速度。这是 Redis 在 AI 时代的重要增长点。\\n\\n**Image Prompt:**\\nFuturistic AI concept art showing neural network nodes connecting to a database structure, with visual representations of vectors and embeddings, blue\"}","startedAt":null,"finishedAt":"2026-06-10T09:11:45.179389574Z","errorCode":null,"message":"SUCCEEDED"}}
+
+event:tool_call_finished
+data:{"runId":"run_323025763787354112","stepId":"call_1d043c5dfcc74750b9aa826f","toolInvocationId":"call_1d043c5dfcc74750b9aa826f","toolCallId":"call_1d043c5dfcc74750b9aa826f","toolId":"ppt_generation","riskLevel":"HIGH","summary":"{\"artifactType\":\"presentation\",\"format\":\"markdown\",\"content\":\"# Slide 1: 标题页\\n\\n**Title:** Redis 开源项目深度解析：高性能内存数据结构服务器\\n\\n**Key Bullets:**\\n- 面向开发者与技术决策者的技术概览\\n- 核心定位：高性能、低延迟的内存数据存储\\n- 广泛支持的数据结构与持久化方案\\n- 在缓存、实时分析及 GenAI 领域的广泛应用\\n\\n**Speaker Notes:**\\n大家好，今天我们将深入探讨 Redis 这一开源项目。作为全球最流行的内存数据结构服务器，Redis 不仅是一个简单的键值存储，更是一个功能丰富的数据平台。我们将从其核心架构、支持的数据类型、持久化机制以及在实际业务场景中的应用进行全方位介绍，帮助技术团队评估其在现代软件架构中的价值。\\n\\n**Image Prompt:**\\nA modern, clean tech presentation slide background with a subtle network node visualization, featuring the Redis logo prominently in the center, blue and red color scheme, professional corporate style.\\n\\n---\\n\\n# Slide 2: Redis 核心定位与架构\\n\\n**Title:** 什么是 Redis？核心架构概览\\n\\n**Key Bullets:**\\n- **定义**：开源的、基于内存的数据结构服务器（In-Memory Data Structure Store）\\n- **核心优势**：\\n  - 极高的读写性能（微秒级延迟）\\n  - 单线程事件循环模型（简化并发处理）\\n  - 丰富的数据结构支持\\n- **适用角色**：作为数据库、缓存、消息代理使用\\n\\n**Speaker Notes:**\\nRedis 的核心在于“内存”与“数据结构”。与传统磁盘数据库不同，Redis 将所有数据存储在内存中，从而实现了极低的延迟。它采用单线程事件循环模型来处理请求，避免了上下文切换和锁竞争，这在大多数场景下提供了极高的吞吐量。对于开发者而言，这意味着简单且高性能的 API；对于决策者而言，这意味着可预测的高性能表现。\\n\\n**Image Prompt:**\\nDiagram showing a central memory block connected to various client applications, illustrating the speed difference between memory access and disk access, minimalist technical illustration.\\n\\n---\\n\\n# Slide 3: 丰富的数据结构支持\\n\\n**Title:** 超越键值对：多维数据结构\\n\\n**Key Bullets:**\\n- **基础类型**：String（字符串）、Hash（哈希）、List（列表）、Set（集合）、ZSet（有序集合）\\n- **高级类型**：\\n  - **JSON**：原生支持 JSON 文档存储与查询\\n  - **Stream**：高性能消息流\\n  - **TimeSeries**：时间序列数据优化\\n  - **Vector Set**：向量集合，支持相似度搜索\\n\\n**Speaker Notes:**\\nRedis 的强大之处在于其多样化的数据结构。除了基础的 String 和 Hash，Redis 5.0+ 引入了 JSON 支持，使其能胜任文档数据库的部分角色。Stream 类型专为日志和消息队列设计，而 Vector Set 则是为 AI 时代准备的，支持高效的向量相似度计算。这种多样性使得 Redis 能够以统一接口处理多种业务场景，减少系统组件的复杂性。\\n\\n**Image Prompt:**\\nInfographic displaying icons for String, Hash, List, Set, ZSet, JSON, Stream, TimeSeries, and Vector, arranged in a circular layout around the Redis logo, clean vector art style.\\n\\n---\\n\\n# Slide 4: 数据持久化机制\\n\\n**Title:** 内存数据的可靠性保障：RDB 与 AOF\\n\\n**Key Bullets:**\\n- **RDB (Redis Database)**：\\n  - 定期生成数据快照（Snapshot）\\n  - 适合大规模数据恢复，文件紧凑\\n- **AOF (Append Only File)**：\\n  - 记录每条写命令\\n  - 数据安全性更高，支持多种同步策略\\n- **混合持久化**：结合 RDB 的快速加载与 AOF 的高安全性\\n\\n**Speaker Notes:**\\n内存数据面临断电丢失的风险，因此持久化至关重要。Redis 提供了两种主要机制：RDB 通过 fork 子进程生成快照，适合备份和灾难恢复；AOF 通过追加写命令日志来记录数据状态，数据丢失风险更小。现代 Redis 版本支持混合持久化，既保留了 RDB 加载快的优点，又具备 AOF 的高可靠性，满足不同业务对数据一致性的要求。\\n\\n**Image Prompt:**\\nComparison chart showing RDB snapshot process vs AOF log appending process, side-by-side technical diagram, neutral blue and grey tones.\\n\\n---\\n\\n# Slide 5: 高可用与扩展性\\n\\n**Title:** 构建高可用集群：复制、哨兵与集群\\n\\n**Key Bullets:**\\n- **主从复制 (Master-Replica)**：\\n  - 实现数据冗余和读写分离\\n  - 提升系统可用性\\n- **Redis Sentinel (哨兵)**：\\n  - 自动故障检测与主从切换\\n  - 无中心架构，高可用保障\\n- **Redis Cluster (集群)**：\\n  - 数据分片 (Sharding)\\n  - 水平扩展，支持海量数据存储\\n\\n**Speaker Notes:**\\n在生产环境中，高可用和扩展性是硬性指标。Redis 通过主从复制实现数据备份，结合 Sentinel 实现自动故障转移，确保服务不中断。对于需要处理海量数据或高并发读写的场景，Redis Cluster 提供了原生分片支持，将数据分散到多个节点，实现线性扩展能力。这套组合拳为大型分布式系统提供了坚实的数据层基础。\\n\\n**Image Prompt:**\\nNetwork topology diagram showing a Redis Cluster with multiple master nodes and replica nodes, connected in a mesh pattern, illustrating sharding and high availability, technical schematic.\\n\\n---\\n\\n# Slide 6: 高级功能：脚本与扩展\\n\\n**Title:** 原子性与扩展性：Lua 脚本与模块 API\\n\\n**Key Bullets:**\\n- **Lua 脚本支持**：\\n  - 原子性执行：确保复杂逻辑的原子操作\\n  - 减少网络往返：将逻辑推送到服务端执行\\n- **模块扩展 API (Redis Modules)**：\\n  - 允许开发者用 C/C++ 编写自定义模块\\n  - 支持 JSON、Search、TimeSeries 等高级功能\\n  - 增强 Redis 的功能边界\\n\\n**Speaker Notes:**\\nRedis 不仅提供基础数据操作，还支持复杂的业务逻辑。通过 Lua 脚本，开发者可以将多个命令打包成一个原子操作，避免竞态条件，同时减少网络开销。此外，Redis Modules API 允许社区和企业开发自定义模块，如 RedisJSON 或 RedisSearch，这使得 Redis 能够灵活适应不断变化的业务需求，而无需修改核心代码。\\n\\n**Image Prompt:**\\nCode snippet of a Lua script executing on a Redis server, with arrows pointing to a modular plugin architecture, dark mode coding aesthetic.\\n\\n---\\n\\n# Slide 7: 典型应用场景：缓存与会话\\n\\n**Title:** 经典场景：高性能缓存与会话存储\\n\\n**Key Bullets:**\\n- **应用缓存**：\\n  - 减轻后端数据库压力\\n  - 加速热点数据访问\\n- **会话存储 (Session Store)**：\\n  - 分布式会话共享\\n  - 支持过期自动清理\\n- **性能提升**：显著降低 API 响应时间\\n\\n**Speaker Notes:**\\nRedis 最经典的应用是作为应用层的缓存。通过缓存热点数据，可以大幅降低对关系型数据库的查询压力，提升系统整体吞吐量。在微服务架构中，Redis 常被用作分布式会话存储，确保用户状态在不同服务实例间共享。其内置的过期策略使得会话管理变得简单且高效。\\n\\n**Image Prompt:**\\nArchitecture diagram showing a web application layer, a Redis cache layer, and a backend database layer, with arrows indicating data flow and caching hits, clean business illustration.\\n\\n---\\n\\n# Slide 8: 实时数据处理与消息队列\\n\\n**Title:** 实时分析：消息队列与流处理\\n\\n**Key Bullets:**\\n- **消息队列 (Pub/Sub & Streams)**：\\n  - 解耦生产者与消费者\\n  - 支持消息持久化与回溯\\n- **实时分析**：\\n  - 计数器与排行榜 (ZSet)\\n  - 实时统计与监控数据聚合\\n- **低延迟**：适合高频交易或实时仪表盘\\n\\n**Speaker Notes:**\\n除了缓存，Redis 在实时数据处理方面表现卓越。Redis Streams 提供了类似 Kafka 的消息队列功能，但具有更低的延迟和更简单的运维复杂度。利用 ZSet 数据结构，可以轻松实现实时排行榜、计数器等功能。这些特性使其成为构建实时仪表盘、监控系统和即时通讯应用的理想选择。\\n\\n**Image Prompt:**\\nReal-time dashboard interface displaying live data updates, with a background visualization of data streams flowing into a Redis node, dynamic and energetic tech style.\\n\\n---\\n\\n# Slide 9: AI 与 GenAI 应用支持\\n\\n**Title:** 拥抱 AI：向量搜索与 GenAI 集成\\n\\n**Key Bullets:**\\n- **向量集 (Vector Set)**：\\n  - 原生支持向量相似度搜索\\n  - 支持 HNSW 等高效索引算法\\n- **GenAI 应用**：\\n  - 作为向量数据库存储 Embedding\\n  - 结合 RAG (检索增强生成) 架构\\n  - 快速上下文检索，提升大模型回答准确性\\n\\n**Speaker Notes:**\\n随着生成式 AI 的兴起，Redis 也在积极布局。通过 Redis Stack 中的向量集功能，Redis 可以存储和检索高维向量数据，支持语义搜索。在 RAG 架构中，Redis 可以作为向量数据库，快速检索与大模型问题相关的上下文信息，从而显著提升 AI 应用的答案准确性和响应速度。这是 Redis 在 AI 时代的重要增长点。\\n\\n**Image Prompt:**\\nFuturistic AI concept art showing neural network nodes connecting to a database structure, with visual representations of vectors and embeddings, blue\"}","startedAt":null,"finishedAt":"2026-06-10T09:11:45.179389574Z","errorCode":null,"message":"SUCCEEDED"}
+
+event:stream_event
+data:{"eventId":"323026441469440000","eventSeq":"126","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.187876423Z","typedPayload":{"type":"think","delta":"现在生成演"}}
+
+event:message
+data:{"type":"think","delta":"现在生成演"}
+
+event:stream_event
+data:{"eventId":"323026441486217216","eventSeq":"127","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.191641993Z","typedPayload":{"type":"think","delta":"示文稿结构"}}
+
+event:message
+data:{"type":"think","delta":"示文稿结构"}
+
+event:stream_event
+data:{"eventId":"323026441502994432","eventSeq":"128","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.195730509Z","typedPayload":{"type":"think","delta":"。"}}
+
+event:message
+data:{"type":"think","delta":"。"}
+
+event:stream_event
+data:{"eventId":"323026441523965952","eventSeq":"129","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.200329276Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"323026441540743168","eventSeq":"130","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.204029010Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"323026441553326080","eventSeq":"131","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.207664491Z","typedPayload":{"type":"think","delta":"] ppt"}}
+
+event:message
+data:{"type":"think","delta":"] ppt"}
+
+event:stream_event
+data:{"eventId":"323026441570103296","eventSeq":"132","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.211217684Z","typedPayload":{"type":"think","delta":"_gene"}}
+
+event:message
+data:{"type":"think","delta":"_gene"}
+
+event:stream_event
+data:{"eventId":"323026441586880512","eventSeq":"133","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.215125881Z","typedPayload":{"type":"think","delta":"ratio"}}
+
+event:message
+data:{"type":"think","delta":"ratio"}
+
+event:stream_event
+data:{"eventId":"323026441599463424","eventSeq":"134","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.218437270Z","typedPayload":{"type":"think","delta":"n -> "}}
+
+event:message
+data:{"type":"think","delta":"n -> "}
+
+event:stream_event
+data:{"eventId":"323026441612046336","eventSeq":"135","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.221980086Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"323026441628823552","eventSeq":"136","eventType":"STEP_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.225236869Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-8","stepNo":8,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:11:21.129467464Z","finishedAt":"2026-06-10T09:11:45.223757793Z","durationMs":"24094","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_323025763787354112","stepId":"model-turn-8","stepNo":8,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:11:21.129467464Z","finishedAt":"2026-06-10T09:11:45.223757793Z","durationMs":"24094","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026441649795072","eventSeq":"137","eventType":"STEP_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:45.230162613Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-9","stepNo":9,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:11:45.229038560Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_323025763787354112","stepId":"model-turn-9","stepNo":9,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:11:45.229038560Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026451971977216","eventSeq":"138","eventType":"TOOL_CALL_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:11:47.691341060Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_441b501ab8f2497ca75d9f13","toolInvocationId":"call_441b501ab8f2497ca75d9f13","toolCallId":"call_441b501ab8f2497ca75d9f13","toolId":"frontend_design","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:11:47.688989605Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_323025763787354112","stepId":"call_441b501ab8f2497ca75d9f13","toolInvocationId":"call_441b501ab8f2497ca75d9f13","toolCallId":"call_441b501ab8f2497ca75d9f13","toolId":"frontend_design","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:11:47.688989605Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"323026542396977152","eventSeq":"139","eventType":"AGENT_ARTIFACT","runId":"run_323025763787354112","stepId":"call_441b501ab8f2497ca75d9f13","timestamp":"2026-06-10T09:12:09.250342Z","typedPayload":{"runId":"run_323025763787354112","title":"Generated frontend design","mimeType":"text/html","artifactId":"323026542308896768","canPreview":false,"scanStatus":"CLEAN","storageRef":"s3://agent-artifacts/3a69676a3ea34f7c9967bb3a00447e51.html","disposition":"attachment","previewText":"Here is a complete, single-file HTML/CSS solution. It uses a modern \"Bento Grid\" layout style, which is popular for technical project introductions. It relies on CSS Grid and Flexbox for responsivenes...","artifactType":"HTML"}}
+
+event:agent.artifact
+data:{"runId":"run_323025763787354112","title":"Generated frontend design","mimeType":"text/html","artifactId":"323026542308896768","canPreview":false,"scanStatus":"CLEAN","storageRef":"s3://agent-artifacts/3a69676a3ea34f7c9967bb3a00447e51.html","disposition":"attachment","previewText":"Here is a complete, single-file HTML/CSS solution. It uses a modern \"Bento Grid\" layout style, which is popular for technical project introductions. It relies on CSS Grid and Flexbox for responsivenes...","artifactType":"HTML"}
+
+event:stream_event
+data:{"eventId":"323026542468280320","eventSeq":"140","eventType":"TOOL_CALL_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.267140864Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_441b501ab8f2497ca75d9f13","toolInvocationId":"call_441b501ab8f2497ca75d9f13","toolCallId":"call_441b501ab8f2497ca75d9f13","toolId":"frontend_design","riskLevel":"HIGH","summary":"{\"artifactType\":\"frontend_design\",\"format\":\"html\",\"content\":\"Here is a complete, single-file HTML/CSS solution. It uses a modern \\\"Bento Grid\\\" layout style, which is popular for technical project introductions. It relies on CSS Grid and Flexbox for responsiveness and uses the official Redis color palette (Red `#DC382D` and Blue `#0075FF`).\\n\\n```html\\n<!DOCTYPE html>\\n<html lang=\\\"zh-CN\\\">\\n<head>\\n    <meta charset=\\\"UTF-8\\\">\\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1.0\\\">\\n    <title>Redis Project Introduction</title>\\n    <style>\\n        :root {\\n            --redis-red: #DC382D;\\n            --redis-blue: #0075FF;\\n            --bg-dark: #0f172a;\\n            --bg-card: #1e293b;\\n            --text-main: #f8fafc;\\n            --text-muted: #94a3b8;\\n            --border-color: #334155;\\n            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, \\\"Segoe UI\\\", Roboto, sans-serif;\\n        }\\n\\n        * {\\n            box-sizing: border-box;\\n            margin: 0;\\n            padding: 0;\\n        }\\n\\n        body {\\n            font-family: var(--font-family);\\n            background-color: var(--bg-dark);\\n            color: var(--text-main);\\n            line-height: 1.6;\\n            -webkit-font-smoothing: antialiased;\\n        }\\n\\n        /* Layout Utilities */\\n        .container {\\n            max-width: 1200px;\\n            margin: 0 auto;\\n            padding: 0 20px;\\n        }\\n\\n        .section-title {\\n            font-size: 2rem;\\n            font-weight: 700;\\n            margin-bottom: 1rem;\\n            background: linear-gradient(90deg, var(--redis-red), var(--redis-blue));\\n            -webkit-background-clip: text;\\n            -webkit-text-fill-color: transparent;\\n            display: inline-block;\\n        }\\n\\n        /* Hero Section */\\n        header {\\n            padding: 80px 0 60px;\\n            text-align: center;\\n            border-bottom: 1px solid var(--border-color);\\n        }\\n\\n        .logo-mark {\\n            font-size: 4rem;\\n            font-weight: 900;\\n            color: var(--redis-red);\\n            letter-spacing: -2px;\\n            margin-bottom: 10px;\\n        }\\n\\n        .logo-mark span {\\n            color: var(--redis-blue);\\n        }\\n\\n        h1 {\\n            font-size: 3rem;\\n            margin-bottom: 1rem;\\n            letter-spacing: -1px;\\n        }\\n\\n        .subtitle {\\n            color: var(--text-muted);\\n            font-size: 1.25rem;\\n            max-width: 600px;\\n            margin: 0 auto;\\n        }\\n\\n        /* Features Grid (Bento Style) */\\n        .features-section {\\n            padding: 80px 0;\\n        }\\n\\n        .grid-container {\\n            display: grid;\\n            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));\\n            gap: 24px;\\n            margin-top: 40px;\\n        }\\n\\n        .card {\\n            background: var(--bg-card);\\n            border: 1px solid var(--border-color);\\n            border-radius: 16px;\\n            padding: 32px;\\n            transition: transform 0.2s ease, border-color 0.2s ease;\\n            position: relative;\\n            overflow: hidden;\\n        }\\n\\n        .card:hover {\\n            transform: translateY(-5px);\\n            border-color: var(--redis-blue);\\n        }\\n\\n        .card-icon {\\n            width: 48px;\\n            height: 48px;\\n            background: rgba(0, 117, 255, 0.1);\\n            border-radius: 12px;\\n            display: flex;\\n            align-items: center;\\n            justify-content: center;\\n            margin-bottom: 20px;\\n            color: var(--redis-blue);\\n        }\\n\\n        .card h3 {\\n            font-size: 1.25rem;\\n            margin-bottom: 12px;\\n            color: var(--text-main);\\n        }\\n\\n        .card p {\\n            color: var(--text-muted);\\n            font-size: 0.95rem;\\n        }\\n\\n        /* Architecture Section */\\n        .architecture-section {\\n            padding: 60px 0;\\n            background: rgba(255, 255, 255, 0.02);\\n            border-top: 1px solid var(--border-color);\\n            border-bottom: 1px solid var(--border-color);\\n        }\\n\\n        .arch-diagram {\\n            display: flex;\\n            flex-direction: column;\\n            gap: 20px;\\n            margin-top: 40px;\\n            align-items: center;\\n        }\\n\\n        .arch-layer {\\n            display: flex;\\n            gap: 20px;\\n            width: 100%;\\n            justify-content: center;\\n            flex-wrap: wrap;\\n        }\\n\\n        .arch-node {\\n            background: var(--bg-card);\\n            border: 1px solid var(--border-color);\\n            padding: 15px 30px;\\n            border-radius: 8px;\\n            font-weight: 600;\\n            font-size: 0.9rem;\\n            display: flex;\\n            align-items: center;\\n            gap: 10px;\\n        }\\n\\n        .arch-node.primary {\\n            border-color: var(--redis-red);\\n            color: var(--redis-red);\\n        }\\n\\n        .arch-node.replica {\\n            border-color: var(--redis-blue);\\n            color: var(--redis-blue);\\n        }\\n\\n        .arch-connector {\\n            height: 40px;\\n            width: 2px;\\n            background: var(--border-color);\\n            position: relative;\\n        }\\n        \\n        .arch-connector::after {\\n            content: '↓';\\n            position: absolute;\\n            top: -10px;\\n            left: -6px;\\n            color: var(--text-muted);\\n        }\\n\\n        /* Use Cases */\\n        .use-cases {\\n            padding: 80px 0;\\n        }\\n\\n        .case-list {\\n            display: grid;\\n            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));\\n            gap: 20px;\\n            margin-top: 30px;\\n        }\\n\\n        .case-item {\\n            display: flex;\\n            align-items: flex-start;\\n            gap: 15px;\\n        }\\n\\n        .check-icon {\\n            color: var(--redis-red);\\n            flex-shrink: 0;\\n            margin-top: 4px;\\n        }\\n\\n        /* Footer */\\n        footer {\\n            text-align: center;\\n            padding: 40px 0;\\n            color: var(--text-muted);\\n            font-size: 0.875rem;\\n            border-top: 1px solid var(--border-color);\\n        }\\n\\n        /* Responsive */\\n        @media (max-width: 768px) {\\n            h1 { font-size: 2rem; }\\n            .arch-layer { flex-direction: column; align-items: center; }\\n            .arch-connector { width: 2px; height: 20px; }\\n        }\\n    </style>\\n</head>\\n<body>\\n\\n    <!-- Hero Section -->\\n    <header>\\n        <div class=\\\"container\\\">\\n            <div class=\\\"logo-mark\\\">Redis<span>.</span></div>\\n            <h1>Redis 项目介绍</h1>\\n            <p class=\\\"subtitle\\\">高性能开源键值数据库，用于构建可扩展、高性能的实时应用程序。</p>\\n        </div>\\n    </header>\\n\\n    <!-- Core Features -->\\n    <section class=\\\"features-section\\\">\\n        <div class=\\\"container\\\">\\n            <h2 class=\\\"section-title\\\">核心特性</h2>\\n            <div class=\\\"grid-container\\\">\\n                <!-- Card 1: Data Structures -->\\n                <div class=\\\"card\\\">\\n                    <div class=\\\"card-icon\\\">\\n                        <svg width=\\\"24\\\" height=\\\"24\\\" viewBox=\\\"0 0 24 24\\\" fill=\\\"none\\\" stroke=\\\"currentColor\\\" stroke-width=\\\"2\\\" stroke-linecap=\\\"round\\\" stroke-linejoin=\\\"round\\\"><path d=\\\"M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2\"}","startedAt":null,"finishedAt":"2026-06-10T09:12:09.263756660Z","errorCode":null,"message":"SUCCEEDED"}}
+
+event:tool_call_finished
+data:{"runId":"run_323025763787354112","stepId":"call_441b501ab8f2497ca75d9f13","toolInvocationId":"call_441b501ab8f2497ca75d9f13","toolCallId":"call_441b501ab8f2497ca75d9f13","toolId":"frontend_design","riskLevel":"HIGH","summary":"{\"artifactType\":\"frontend_design\",\"format\":\"html\",\"content\":\"Here is a complete, single-file HTML/CSS solution. It uses a modern \\\"Bento Grid\\\" layout style, which is popular for technical project introductions. It relies on CSS Grid and Flexbox for responsiveness and uses the official Redis color palette (Red `#DC382D` and Blue `#0075FF`).\\n\\n```html\\n<!DOCTYPE html>\\n<html lang=\\\"zh-CN\\\">\\n<head>\\n    <meta charset=\\\"UTF-8\\\">\\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1.0\\\">\\n    <title>Redis Project Introduction</title>\\n    <style>\\n        :root {\\n            --redis-red: #DC382D;\\n            --redis-blue: #0075FF;\\n            --bg-dark: #0f172a;\\n            --bg-card: #1e293b;\\n            --text-main: #f8fafc;\\n            --text-muted: #94a3b8;\\n            --border-color: #334155;\\n            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, \\\"Segoe UI\\\", Roboto, sans-serif;\\n        }\\n\\n        * {\\n            box-sizing: border-box;\\n            margin: 0;\\n            padding: 0;\\n        }\\n\\n        body {\\n            font-family: var(--font-family);\\n            background-color: var(--bg-dark);\\n            color: var(--text-main);\\n            line-height: 1.6;\\n            -webkit-font-smoothing: antialiased;\\n        }\\n\\n        /* Layout Utilities */\\n        .container {\\n            max-width: 1200px;\\n            margin: 0 auto;\\n            padding: 0 20px;\\n        }\\n\\n        .section-title {\\n            font-size: 2rem;\\n            font-weight: 700;\\n            margin-bottom: 1rem;\\n            background: linear-gradient(90deg, var(--redis-red), var(--redis-blue));\\n            -webkit-background-clip: text;\\n            -webkit-text-fill-color: transparent;\\n            display: inline-block;\\n        }\\n\\n        /* Hero Section */\\n        header {\\n            padding: 80px 0 60px;\\n            text-align: center;\\n            border-bottom: 1px solid var(--border-color);\\n        }\\n\\n        .logo-mark {\\n            font-size: 4rem;\\n            font-weight: 900;\\n            color: var(--redis-red);\\n            letter-spacing: -2px;\\n            margin-bottom: 10px;\\n        }\\n\\n        .logo-mark span {\\n            color: var(--redis-blue);\\n        }\\n\\n        h1 {\\n            font-size: 3rem;\\n            margin-bottom: 1rem;\\n            letter-spacing: -1px;\\n        }\\n\\n        .subtitle {\\n            color: var(--text-muted);\\n            font-size: 1.25rem;\\n            max-width: 600px;\\n            margin: 0 auto;\\n        }\\n\\n        /* Features Grid (Bento Style) */\\n        .features-section {\\n            padding: 80px 0;\\n        }\\n\\n        .grid-container {\\n            display: grid;\\n            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));\\n            gap: 24px;\\n            margin-top: 40px;\\n        }\\n\\n        .card {\\n            background: var(--bg-card);\\n            border: 1px solid var(--border-color);\\n            border-radius: 16px;\\n            padding: 32px;\\n            transition: transform 0.2s ease, border-color 0.2s ease;\\n            position: relative;\\n            overflow: hidden;\\n        }\\n\\n        .card:hover {\\n            transform: translateY(-5px);\\n            border-color: var(--redis-blue);\\n        }\\n\\n        .card-icon {\\n            width: 48px;\\n            height: 48px;\\n            background: rgba(0, 117, 255, 0.1);\\n            border-radius: 12px;\\n            display: flex;\\n            align-items: center;\\n            justify-content: center;\\n            margin-bottom: 20px;\\n            color: var(--redis-blue);\\n        }\\n\\n        .card h3 {\\n            font-size: 1.25rem;\\n            margin-bottom: 12px;\\n            color: var(--text-main);\\n        }\\n\\n        .card p {\\n            color: var(--text-muted);\\n            font-size: 0.95rem;\\n        }\\n\\n        /* Architecture Section */\\n        .architecture-section {\\n            padding: 60px 0;\\n            background: rgba(255, 255, 255, 0.02);\\n            border-top: 1px solid var(--border-color);\\n            border-bottom: 1px solid var(--border-color);\\n        }\\n\\n        .arch-diagram {\\n            display: flex;\\n            flex-direction: column;\\n            gap: 20px;\\n            margin-top: 40px;\\n            align-items: center;\\n        }\\n\\n        .arch-layer {\\n            display: flex;\\n            gap: 20px;\\n            width: 100%;\\n            justify-content: center;\\n            flex-wrap: wrap;\\n        }\\n\\n        .arch-node {\\n            background: var(--bg-card);\\n            border: 1px solid var(--border-color);\\n            padding: 15px 30px;\\n            border-radius: 8px;\\n            font-weight: 600;\\n            font-size: 0.9rem;\\n            display: flex;\\n            align-items: center;\\n            gap: 10px;\\n        }\\n\\n        .arch-node.primary {\\n            border-color: var(--redis-red);\\n            color: var(--redis-red);\\n        }\\n\\n        .arch-node.replica {\\n            border-color: var(--redis-blue);\\n            color: var(--redis-blue);\\n        }\\n\\n        .arch-connector {\\n            height: 40px;\\n            width: 2px;\\n            background: var(--border-color);\\n            position: relative;\\n        }\\n        \\n        .arch-connector::after {\\n            content: '↓';\\n            position: absolute;\\n            top: -10px;\\n            left: -6px;\\n            color: var(--text-muted);\\n        }\\n\\n        /* Use Cases */\\n        .use-cases {\\n            padding: 80px 0;\\n        }\\n\\n        .case-list {\\n            display: grid;\\n            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));\\n            gap: 20px;\\n            margin-top: 30px;\\n        }\\n\\n        .case-item {\\n            display: flex;\\n            align-items: flex-start;\\n            gap: 15px;\\n        }\\n\\n        .check-icon {\\n            color: var(--redis-red);\\n            flex-shrink: 0;\\n            margin-top: 4px;\\n        }\\n\\n        /* Footer */\\n        footer {\\n            text-align: center;\\n            padding: 40px 0;\\n            color: var(--text-muted);\\n            font-size: 0.875rem;\\n            border-top: 1px solid var(--border-color);\\n        }\\n\\n        /* Responsive */\\n        @media (max-width: 768px) {\\n            h1 { font-size: 2rem; }\\n            .arch-layer { flex-direction: column; align-items: center; }\\n            .arch-connector { width: 2px; height: 20px; }\\n        }\\n    </style>\\n</head>\\n<body>\\n\\n    <!-- Hero Section -->\\n    <header>\\n        <div class=\\\"container\\\">\\n            <div class=\\\"logo-mark\\\">Redis<span>.</span></div>\\n            <h1>Redis 项目介绍</h1>\\n            <p class=\\\"subtitle\\\">高性能开源键值数据库，用于构建可扩展、高性能的实时应用程序。</p>\\n        </div>\\n    </header>\\n\\n    <!-- Core Features -->\\n    <section class=\\\"features-section\\\">\\n        <div class=\\\"container\\\">\\n            <h2 class=\\\"section-title\\\">核心特性</h2>\\n            <div class=\\\"grid-container\\\">\\n                <!-- Card 1: Data Structures -->\\n                <div class=\\\"card\\\">\\n                    <div class=\\\"card-icon\\\">\\n                        <svg width=\\\"24\\\" height=\\\"24\\\" viewBox=\\\"0 0 24 24\\\" fill=\\\"none\\\" stroke=\\\"currentColor\\\" stroke-width=\\\"2\\\" stroke-linecap=\\\"round\\\" stroke-linejoin=\\\"round\\\"><path d=\\\"M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2\"}","startedAt":null,"finishedAt":"2026-06-10T09:12:09.263756660Z","errorCode":null,"message":"SUCCEEDED"}
+
+event:stream_event
+data:{"eventId":"323026542518611968","eventSeq":"141","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.279705219Z","typedPayload":{"type":"think","delta":"现在生成前"}}
+
+event:message
+data:{"type":"think","delta":"现在生成前"}
+
+event:stream_event
+data:{"eventId":"323026542547972096","eventSeq":"142","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.286545961Z","typedPayload":{"type":"think","delta":"端版式草案"}}
+
+event:message
+data:{"type":"think","delta":"端版式草案"}
+
+event:stream_event
+data:{"eventId":"323026542573137920","eventSeq":"143","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.292466611Z","typedPayload":{"type":"think","delta":"。"}}
+
+event:message
+data:{"type":"think","delta":"。"}
+
+event:stream_event
+data:{"eventId":"323026542598303744","eventSeq":"144","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.298339696Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"323026542623469568","eventSeq":"145","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.304182436Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"323026542644441088","eventSeq":"146","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.309903035Z","typedPayload":{"type":"think","delta":"] fro"}}
+
+event:message
+data:{"type":"think","delta":"] fro"}
+
+event:stream_event
+data:{"eventId":"323026542669606912","eventSeq":"147","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.315868193Z","typedPayload":{"type":"think","delta":"ntend"}}
+
+event:message
+data:{"type":"think","delta":"ntend"}
+
+event:stream_event
+data:{"eventId":"323026542698967040","eventSeq":"148","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.322014410Z","typedPayload":{"type":"think","delta":"_desi"}}
+
+event:message
+data:{"type":"think","delta":"_desi"}
+
+event:stream_event
+data:{"eventId":"323026542728327168","eventSeq":"149","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.329237443Z","typedPayload":{"type":"think","delta":"gn ->"}}
+
+event:message
+data:{"type":"think","delta":"gn ->"}
+
+event:stream_event
+data:{"eventId":"323026542782853120","eventSeq":"150","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.342412639Z","typedPayload":{"type":"think","delta":" ok"}}
+
+event:message
+data:{"type":"think","delta":" ok"}
+
+event:stream_event
+data:{"eventId":"323026542824796160","eventSeq":"151","eventType":"STEP_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.352368114Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-9","stepNo":9,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:11:45.229038560Z","finishedAt":"2026-06-10T09:12:09.346834221Z","durationMs":"24117","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_323025763787354112","stepId":"model-turn-9","stepNo":9,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:11:45.229038560Z","finishedAt":"2026-06-10T09:12:09.346834221Z","durationMs":"24117","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026542887710720","eventSeq":"152","eventType":"STEP_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:09.367076322Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-10","stepNo":10,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:12:09.360493324Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_323025763787354112","stepId":"model-turn-10","stepNo":10,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:12:09.360493324Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026563850842112","eventSeq":"153","eventType":"TOOL_CALL_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:14.365364938Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_4c0a34043eab4021888a39bd","toolInvocationId":"call_4c0a34043eab4021888a39bd","toolCallId":"call_4c0a34043eab4021888a39bd","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:12:14.364695992Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_323025763787354112","stepId":"call_4c0a34043eab4021888a39bd","toolInvocationId":"call_4c0a34043eab4021888a39bd","toolCallId":"call_4c0a34043eab4021888a39bd","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-10T09:12:14.364695992Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"323026569144053760","eventSeq":"154","eventType":"AGENT_ARTIFACT","runId":"run_323025763787354112","stepId":"call_4c0a34043eab4021888a39bd","timestamp":"2026-06-10T09:12:15.627011Z","typedPayload":{"runId":"run_323025763787354112","title":"Generated chart","mimeType":"text/markdown","artifactId":"323026569097916416","canPreview":true,"scanStatus":"CLEAN","storageRef":"s3://agent-artifacts/71b2988633934108aabadabdb08dc3ac.md","disposition":"inline","previewText":"```mermaid\nsequenceDiagram\n    participant Client\n    participant RESP_Parser as RESP Parser\n    participant Cmd_Executor as Command Executor\n    participant Data_Structs as Data Structures\n    partic...","artifactType":"CHART"}}
+
+event:agent.artifact
+data:{"runId":"run_323025763787354112","title":"Generated chart","mimeType":"text/markdown","artifactId":"323026569097916416","canPreview":true,"scanStatus":"CLEAN","storageRef":"s3://agent-artifacts/71b2988633934108aabadabdb08dc3ac.md","disposition":"inline","previewText":"```mermaid\nsequenceDiagram\n    participant Client\n    participant RESP_Parser as RESP Parser\n    participant Cmd_Executor as Command Executor\n    participant Data_Structs as Data Structures\n    partic...","artifactType":"CHART"}
+
+event:stream_event
+data:{"eventId":"323026569169219584","eventSeq":"155","eventType":"TOOL_CALL_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.633882350Z","typedPayload":{"runId":"run_323025763787354112","stepId":"call_4c0a34043eab4021888a39bd","toolInvocationId":"call_4c0a34043eab4021888a39bd","toolCallId":"call_4c0a34043eab4021888a39bd","toolId":"chart_visualization","riskLevel":"HIGH","summary":"{\"artifactType\":\"chart\",\"format\":\"mermaid/json\",\"content\":\"```mermaid\\nsequenceDiagram\\n    participant Client\\n    participant RESP_Parser as RESP Parser\\n    participant Cmd_Executor as Command Executor\\n    participant Data_Structs as Data Structures\\n    participant Memory\\n    participant Persistence\\n    participant Replication\\n\\n    Client->>RESP_Parser: 发送命令 (SET/GET)\\n    RESP_Parser->>Cmd_Executor: 解析并路由命令\\n    Cmd_Executor->>Data_Structs: 执行数据结构操作\\n    Data_Structs->>Memory: 读写内存数据\\n    Memory->>Persistence: 触发 RDB/AOF 持久化\\n    Memory->>Replication: 同步到从节点\\n```\"}","startedAt":null,"finishedAt":"2026-06-10T09:12:15.632794764Z","errorCode":null,"message":"SUCCEEDED"}}
+
+event:tool_call_finished
+data:{"runId":"run_323025763787354112","stepId":"call_4c0a34043eab4021888a39bd","toolInvocationId":"call_4c0a34043eab4021888a39bd","toolCallId":"call_4c0a34043eab4021888a39bd","toolId":"chart_visualization","riskLevel":"HIGH","summary":"{\"artifactType\":\"chart\",\"format\":\"mermaid/json\",\"content\":\"```mermaid\\nsequenceDiagram\\n    participant Client\\n    participant RESP_Parser as RESP Parser\\n    participant Cmd_Executor as Command Executor\\n    participant Data_Structs as Data Structures\\n    participant Memory\\n    participant Persistence\\n    participant Replication\\n\\n    Client->>RESP_Parser: 发送命令 (SET/GET)\\n    RESP_Parser->>Cmd_Executor: 解析并路由命令\\n    Cmd_Executor->>Data_Structs: 执行数据结构操作\\n    Data_Structs->>Memory: 读写内存数据\\n    Memory->>Persistence: 触发 RDB/AOF 持久化\\n    Memory->>Replication: 同步到从节点\\n```\"}","startedAt":null,"finishedAt":"2026-06-10T09:12:15.632794764Z","errorCode":null,"message":"SUCCEEDED"}
+
+event:stream_event
+data:{"eventId":"323026569177608192","eventSeq":"156","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.635893057Z","typedPayload":{"type":"think","delta":"所有硬性工"}}
+
+event:message
+data:{"type":"think","delta":"所有硬性工"}
+
+event:stream_event
+data:{"eventId":"323026569185996800","eventSeq":"157","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.637848835Z","typedPayload":{"type":"think","delta":"具已成功调"}}
+
+event:message
+data:{"type":"think","delta":"具已成功调"}
+
+event:stream_event
+data:{"eventId":"323026569194385408","eventSeq":"158","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.639862506Z","typedPayload":{"type":"think","delta":"用。现在生"}}
+
+event:message
+data:{"type":"think","delta":"用。现在生"}
+
+event:stream_event
+data:{"eventId":"323026569202774016","eventSeq":"159","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.641698620Z","typedPayload":{"type":"think","delta":"成流程图并"}}
+
+event:message
+data:{"type":"think","delta":"成流程图并"}
+
+event:stream_event
+data:{"eventId":"323026569211162624","eventSeq":"160","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.643701578Z","typedPayload":{"type":"think","delta":"输出最终 "}}
+
+event:message
+data:{"type":"think","delta":"输出最终 "}
+
+event:stream_event
+data:{"eventId":"323026569219551232","eventSeq":"161","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.645631575Z","typedPayload":{"type":"think","delta":"Markd"}}
+
+event:message
+data:{"type":"think","delta":"Markd"}
+
+event:stream_event
+data:{"eventId":"323026569227939840","eventSeq":"162","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.647644047Z","typedPayload":{"type":"think","delta":"own。"}}
+
+event:message
+data:{"type":"think","delta":"own。"}
+
+event:stream_event
+data:{"eventId":"323026569236328448","eventSeq":"163","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.649553830Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"323026569244717056","eventSeq":"164","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.651430907Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"323026569253105664","eventSeq":"165","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.653133863Z","typedPayload":{"type":"think","delta":"] cha"}}
+
+event:message
+data:{"type":"think","delta":"] cha"}
+
+event:stream_event
+data:{"eventId":"323026569257299968","eventSeq":"166","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.654915357Z","typedPayload":{"type":"think","delta":"rt_vi"}}
+
+event:message
+data:{"type":"think","delta":"rt_vi"}
+
+event:stream_event
+data:{"eventId":"323026569269882880","eventSeq":"167","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.657119071Z","typedPayload":{"type":"think","delta":"suali"}}
+
+event:message
+data:{"type":"think","delta":"suali"}
+
+event:stream_event
+data:{"eventId":"323026569278271488","eventSeq":"168","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.659312142Z","typedPayload":{"type":"think","delta":"zatio"}}
+
+event:message
+data:{"type":"think","delta":"zatio"}
+
+event:stream_event
+data:{"eventId":"323026569286660096","eventSeq":"169","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.661359518Z","typedPayload":{"type":"think","delta":"n -> "}}
+
+event:message
+data:{"type":"think","delta":"n -> "}
+
+event:stream_event
+data:{"eventId":"323026569295048704","eventSeq":"170","eventType":"MESSAGE","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.663340034Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"323026569303437312","eventSeq":"171","eventType":"STEP_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.665238699Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-10","stepNo":10,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:12:09.360493324Z","finishedAt":"2026-06-10T09:12:15.664416137Z","durationMs":"6303","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_323025763787354112","stepId":"model-turn-10","stepNo":10,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:12:09.360493324Z","finishedAt":"2026-06-10T09:12:15.664416137Z","durationMs":"6303","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026569316020224","eventSeq":"172","eventType":"STEP_STARTED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.668502754Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-11","stepNo":11,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:12:15.667729713Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_323025763787354112","stepId":"model-turn-11","stepNo":11,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:12:15.667729713Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"323026570364596224","eventSeq":"173","eventType":"RECOVERABLE_ERROR","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.918511211Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-11","stepNo":0,"stepType":"MODEL_TURN","status":"FAILED","title":"Model turn","summary":null,"startedAt":null,"finishedAt":"2026-06-10T09:12:15.917623658Z","durationMs":null,"errorCode":"AgentLoopException","message":"Model streaming call failed","retryable":true}}
+
+event:recoverable_error
+data:{"runId":"run_323025763787354112","stepId":"model-turn-11","stepNo":0,"stepType":"MODEL_TURN","status":"FAILED","title":"Model turn","summary":null,"startedAt":null,"finishedAt":"2026-06-10T09:12:15.917623658Z","durationMs":null,"errorCode":"AgentLoopException","message":"Model streaming call failed","retryable":true}
+
+event:stream_event
+data:{"eventId":"323026570372984832","eventSeq":"174","eventType":"STEP_FINISHED","runId":"run_323025763787354112","stepId":null,"timestamp":"2026-06-10T09:12:15.920796015Z","typedPayload":{"runId":"run_323025763787354112","stepId":"model-turn-11","stepNo":11,"stepType":"MODEL_TURN","status":"FAILED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:12:15.667729713Z","finishedAt":"2026-06-10T09:12:15.920161237Z","durationMs":"252","errorCode":"AgentLoopException","message":"Model streaming call failed","retryable":false}}
+
+event:step_finished
+data:{"runId":"run_323025763787354112","stepId":"model-turn-11","stepNo":11,"stepType":"MODEL_TURN","status":"FAILED","title":"Model turn","summary":null,"startedAt":"2026-06-10T09:12:15.667729713Z","finishedAt":"2026-06-10T09:12:15.920161237Z","durationMs":"252","errorCode":"AgentLoopException","message":"Model streaming call failed","retryable":false}
+
+event:error
+data:{"error":"Model streaming call failed"}
+
+event:done
+data:[DONE]
+

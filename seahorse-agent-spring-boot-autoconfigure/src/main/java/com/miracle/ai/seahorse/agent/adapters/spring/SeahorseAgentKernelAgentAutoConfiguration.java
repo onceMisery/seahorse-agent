@@ -131,6 +131,7 @@ import java.util.List;
  */
 @AutoConfiguration
 @AutoConfigureAfter({
+        SeahorseAgentStorageAdapterAutoConfiguration.class,
         SeahorseAgentKernelMemoryAutoConfiguration.class,
         SeahorseAgentKernelRegistryAutoConfiguration.class,
         SeahorseAgentKernelRetrievalAutoConfiguration.class

@@ -248,8 +248,12 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
     private void publishArtifacts(ToolInvocationRequest request, ToolInvocationResult result) {
         try {
             artifactPublicationPort.publish(request, result);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException ex) {
             // Artifact publication is a side effect; the tool observation remains authoritative.
+            System.err.println("=== Artifact Publication Failed ===");
+            System.err.println("Tool: " + request.toolId());
+            System.err.println("Error: " + ex.getClass().getName() + ": " + ex.getMessage());
+            ex.printStackTrace(System.err);
         }
     }
 

@@ -1,0 +1,33 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - img "Seahorse" [ref=e10]
+      - heading "SEAHORSE" [level=1] [ref=e11]
+      - paragraph [ref=e14]: RAG 智能系统
+    - generic [ref=e16]:
+      - generic [ref=e18]:
+        - paragraph [ref=e20]: 身份验证
+        - generic [ref=e23]: 在线
+      - generic [ref=e24]:
+        - generic [ref=e25]:
+          - text: 用户名
+          - generic [ref=e26]:
+            - img [ref=e28]
+            - textbox "输入用户名" [ref=e31]: admin
+        - generic [ref=e32]:
+          - text: 密码
+          - generic [ref=e33]:
+            - img [ref=e35]
+            - textbox "输入密码" [ref=e38]: admin123
+            - button "显示或隐藏密码" [ref=e39] [cursor=pointer]:
+              - img [ref=e40]
+        - generic [ref=e43]:
+          - generic [ref=e44] [cursor=pointer]:
+            - checkbox "记住会话" [checked] [ref=e45]:
+              - generic:
+                - img
+            - checkbox [checked]
+            - generic [ref=e46]: 记住会话
+          - generic [ref=e47]: v1.0 · admin init
+        - button "进入系统" [ref=e49] [cursor=pointer]: 进入系统
+  - region "Notifications alt+T"

@@ -70,6 +70,8 @@ public class GenerationToolArtifactPublicationPort implements ToolArtifactPublic
                                                  Clock clock) {
         this.artifactRepository = Objects.requireNonNull(artifactRepository, "artifactRepository must not be null");
         this.objectStorage = objectStorage;
+        System.out.println("=== GenerationToolArtifactPublicationPort Constructor ===");
+        System.out.println("ObjectStoragePort: " + (objectStorage == null ? "NULL" : objectStorage.getClass().getName()));
         this.eventBuffer = Objects.requireNonNullElseGet(eventBuffer, AgentRunEventBufferPort::noop);
         this.objectMapper = Objects.requireNonNullElseGet(objectMapper, ObjectMapper::new);
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);

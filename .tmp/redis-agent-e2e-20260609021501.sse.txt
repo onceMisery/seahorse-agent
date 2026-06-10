@@ -1,0 +1,2424 @@
+event:meta
+data:{"conversationId":"codex-redis-e2e-20260609021501","taskId":"0fkDz9hzfPPN3VQau0OX","runId":null}
+
+event:meta
+data:{"conversationId":"codex-redis-e2e-20260609021501","taskId":"0fkDz9hzfPPN3VQau0OX","runId":"run_322438384636649472"}
+
+event:stream_event
+data:{"eventId":"322438384678592512","eventSeq":"1","eventType":"RUN_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:01.522716738Z","typedPayload":{"runId":"run_322438384636649472","conversationId":"codex-redis-e2e-20260609021501","taskId":"0fkDz9hzfPPN3VQau0OX","title":"Run started","status":"RUNNING","startedAt":"2026-06-08T18:15:01.522404345Z"}}
+
+event:run_started
+data:{"runId":"run_322438384636649472","conversationId":"codex-redis-e2e-20260609021501","taskId":"0fkDz9hzfPPN3VQau0OX","title":"Run started","status":"RUNNING","startedAt":"2026-06-08T18:15:01.522404345Z"}
+
+event:agent.timeline
+data:{"items":[{"id":"run-started-run_322438384636649472","title":"Run started","status":"RUNNING","detail":"Agent run run_322438384636649472 started","timestamp":"2026-06-08T18:15:01.523929739Z","durationMs":null}]}
+
+event:stream_event
+data:{"eventId":"322438387174203392","eventSeq":"2","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:02.117089015Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-1","stepNo":1,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:02.115148182Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-1","stepNo":1,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:02.115148182Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438398356217856","eventSeq":"3","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:04.783474975Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_86ef369da5d94408acc0b5f1","toolInvocationId":"call_86ef369da5d94408acc0b5f1","toolCallId":"call_86ef369da5d94408acc0b5f1","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:04.783434580Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_86ef369da5d94408acc0b5f1","toolInvocationId":"call_86ef369da5d94408acc0b5f1","toolCallId":"call_86ef369da5d94408acc0b5f1","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:04.783434580Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438464609443840","eventSeq":"4","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.579973499Z","typedPayload":{"type":"think","delta":"我将基于 "}}
+
+event:message
+data:{"type":"think","delta":"我将基于 "}
+
+event:stream_event
+data:{"eventId":"322438464647192576","eventSeq":"5","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.588984822Z","typedPayload":{"type":"think","delta":"Redis"}}
+
+event:message
+data:{"type":"think","delta":"Redis"}
+
+event:stream_event
+data:{"eventId":"322438464907239424","eventSeq":"6","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.650640907Z","typedPayload":{"type":"think","delta":"官方 Gi"}}
+
+event:message
+data:{"type":"think","delta":"官方 Gi"}
+
+event:stream_event
+data:{"eventId":"322438464919822336","eventSeq":"7","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.654005532Z","typedPayload":{"type":"think","delta":"tHub仓"}}
+
+event:message
+data:{"type":"think","delta":"tHub仓"}
+
+event:stream_event
+data:{"eventId":"322438464974348288","eventSeq":"8","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.666448454Z","typedPayload":{"type":"think","delta":"库生成一份"}}
+
+event:message
+data:{"type":"think","delta":"库生成一份"}
+
+event:stream_event
+data:{"eventId":"322438464991125504","eventSeq":"9","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.670177846Z","typedPayload":{"type":"think","delta":"完整的图文"}}
+
+event:message
+data:{"type":"think","delta":"完整的图文"}
+
+event:stream_event
+data:{"eventId":"322438465054040064","eventSeq":"10","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.685276562Z","typedPayload":{"type":"think","delta":"项目详细介"}}
+
+event:message
+data:{"type":"think","delta":"项目详细介"}
+
+event:stream_event
+data:{"eventId":"322438465070817280","eventSeq":"11","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.689028262Z","typedPayload":{"type":"think","delta":"绍。让我先"}}
+
+event:message
+data:{"type":"think","delta":"绍。让我先"}
+
+event:stream_event
+data:{"eventId":"322438465142120448","eventSeq":"12","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.706117064Z","typedPayload":{"type":"think","delta":"读取仓库的"}}
+
+event:message
+data:{"type":"think","delta":"读取仓库的"}
+
+event:stream_event
+data:{"eventId":"322438465150509056","eventSeq":"13","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.708409638Z","typedPayload":{"type":"think","delta":"核心文档和"}}
+
+event:message
+data:{"type":"think","delta":"核心文档和"}
+
+event:stream_event
+data:{"eventId":"322438465158897664","eventSeq":"14","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.710544885Z","typedPayload":{"type":"think","delta":"源码。"}}
+
+event:message
+data:{"type":"think","delta":"源码。"}
+
+event:stream_event
+data:{"eventId":"322438465217617920","eventSeq":"15","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.724015342Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438465230200832","eventSeq":"16","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.727057076Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438465309892608","eventSeq":"17","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.746826073Z","typedPayload":{"type":"think","delta":"] git"}}
+
+event:message
+data:{"type":"think","delta":"] git"}
+
+event:stream_event
+data:{"eventId":"322438465368612864","eventSeq":"18","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.760469984Z","typedPayload":{"type":"think","delta":"hub_r"}}
+
+event:message
+data:{"type":"think","delta":"hub_r"}
+
+event:stream_event
+data:{"eventId":"322438465381195776","eventSeq":"19","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.763165047Z","typedPayload":{"type":"think","delta":"eposi"}}
+
+event:message
+data:{"type":"think","delta":"eposi"}
+
+event:stream_event
+data:{"eventId":"322438465389584384","eventSeq":"20","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.765584437Z","typedPayload":{"type":"think","delta":"tory_"}}
+
+event:message
+data:{"type":"think","delta":"tory_"}
+
+event:stream_event
+data:{"eventId":"322438465452498944","eventSeq":"21","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.780099005Z","typedPayload":{"type":"think","delta":"reade"}}
+
+event:message
+data:{"type":"think","delta":"reade"}
+
+event:stream_event
+data:{"eventId":"322438465460887552","eventSeq":"22","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.782093853Z","typedPayload":{"type":"think","delta":"r -> "}}
+
+event:message
+data:{"type":"think","delta":"r -> "}
+
+event:stream_event
+data:{"eventId":"322438465465081856","eventSeq":"23","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.783612653Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438465540579328","eventSeq":"24","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.801012057Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-1","stepNo":1,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:02.115148182Z","finishedAt":"2026-06-08T18:15:20.800879847Z","durationMs":"18685","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-1","stepNo":1,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:02.115148182Z","finishedAt":"2026-06-08T18:15:20.800879847Z","durationMs":"18685","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438465666408448","eventSeq":"25","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:20.831558723Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-2","stepNo":2,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:20.831499341Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-2","stepNo":2,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:20.831499341Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438471077060608","eventSeq":"26","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:22.121369198Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_0b47ae1198f14bf7ab46e17e","toolInvocationId":"call_0b47ae1198f14bf7ab46e17e","toolCallId":"call_0b47ae1198f14bf7ab46e17e","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:22.121322728Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_0b47ae1198f14bf7ab46e17e","toolInvocationId":"call_0b47ae1198f14bf7ab46e17e","toolCallId":"call_0b47ae1198f14bf7ab46e17e","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:22.121322728Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438505445187584","eventSeq":"27","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.315535202Z","typedPayload":{"type":"think","delta":"已成功读取"}}
+
+event:message
+data:{"type":"think","delta":"已成功读取"}
+
+event:stream_event
+data:{"eventId":"322438505457770496","eventSeq":"28","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.318992513Z","typedPayload":{"type":"think","delta":"仓库 RE"}}
+
+event:message
+data:{"type":"think","delta":"仓库 RE"}
+
+event:stream_event
+data:{"eventId":"322438505470353408","eventSeq":"29","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.321374441Z","typedPayload":{"type":"think","delta":"ADME，"}}
+
+event:message
+data:{"type":"think","delta":"ADME，"}
+
+event:stream_event
+data:{"eventId":"322438505478742016","eventSeq":"30","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.323599940Z","typedPayload":{"type":"think","delta":"现在继续读"}}
+
+event:message
+data:{"type":"think","delta":"现在继续读"}
+
+event:stream_event
+data:{"eventId":"322438505487130624","eventSeq":"31","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.325402406Z","typedPayload":{"type":"think","delta":"取 doc"}}
+
+event:message
+data:{"type":"think","delta":"取 doc"}
+
+event:stream_event
+data:{"eventId":"322438505491324928","eventSeq":"32","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.326866112Z","typedPayload":{"type":"think","delta":"s和核心源"}}
+
+event:message
+data:{"type":"think","delta":"s和核心源"}
+
+event:stream_event
+data:{"eventId":"322438505512296448","eventSeq":"33","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.331177297Z","typedPayload":{"type":"think","delta":"码文件。"}}
+
+event:message
+data:{"type":"think","delta":"码文件。"}
+
+event:stream_event
+data:{"eventId":"322438505516490752","eventSeq":"34","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.332894449Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438505529073664","eventSeq":"35","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.335595043Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438505537462272","eventSeq":"36","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.337885808Z","typedPayload":{"type":"think","delta":"] git"}}
+
+event:message
+data:{"type":"think","delta":"] git"}
+
+event:stream_event
+data:{"eventId":"322438505550045184","eventSeq":"37","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.340186311Z","typedPayload":{"type":"think","delta":"hub_r"}}
+
+event:message
+data:{"type":"think","delta":"hub_r"}
+
+event:stream_event
+data:{"eventId":"322438505558433792","eventSeq":"38","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.342021598Z","typedPayload":{"type":"think","delta":"eposi"}}
+
+event:message
+data:{"type":"think","delta":"eposi"}
+
+event:stream_event
+data:{"eventId":"322438505566822400","eventSeq":"39","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.344958053Z","typedPayload":{"type":"think","delta":"tory_"}}
+
+event:message
+data:{"type":"think","delta":"tory_"}
+
+event:stream_event
+data:{"eventId":"322438505587793920","eventSeq":"40","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.349019339Z","typedPayload":{"type":"think","delta":"reade"}}
+
+event:message
+data:{"type":"think","delta":"reade"}
+
+event:stream_event
+data:{"eventId":"322438505638125568","eventSeq":"41","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.361278683Z","typedPayload":{"type":"think","delta":"r -> "}}
+
+event:message
+data:{"type":"think","delta":"r -> "}
+
+event:stream_event
+data:{"eventId":"322438505646514176","eventSeq":"42","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.363878312Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438505688457216","eventSeq":"43","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.373621563Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-2","stepNo":2,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:20.831499341Z","finishedAt":"2026-06-08T18:15:30.373525663Z","durationMs":"9542","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-2","stepNo":2,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:20.831499341Z","finishedAt":"2026-06-08T18:15:30.373525663Z","durationMs":"9542","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438505738788864","eventSeq":"44","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:30.385443727Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-3","stepNo":3,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:30.385185647Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-3","stepNo":3,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:30.385185647Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438512235765760","eventSeq":"45","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:31.934934486Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_6e5dd477ac074fd6a984815c","toolInvocationId":"call_6e5dd477ac074fd6a984815c","toolCallId":"call_6e5dd477ac074fd6a984815c","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:31.934881158Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_6e5dd477ac074fd6a984815c","toolInvocationId":"call_6e5dd477ac074fd6a984815c","toolCallId":"call_6e5dd477ac074fd6a984815c","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:31.934881158Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438512864911360","eventSeq":"46","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.084490696Z","typedPayload":{"type":"think","delta":"我已成功读"}}
+
+event:message
+data:{"type":"think","delta":"我已成功读"}
+
+event:stream_event
+data:{"eventId":"322438512894271488","eventSeq":"47","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.091118322Z","typedPayload":{"type":"think","delta":"取了仓库的"}}
+
+event:message
+data:{"type":"think","delta":"取了仓库的"}
+
+event:stream_event
+data:{"eventId":"322438512898465792","eventSeq":"48","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.092234851Z","typedPayload":{"type":"think","delta":" READ"}}
+
+event:message
+data:{"type":"think","delta":" READ"}
+
+event:stream_event
+data:{"eventId":"322438512952991744","eventSeq":"49","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.105697689Z","typedPayload":{"type":"think","delta":"ME文件。"}}
+
+event:message
+data:{"type":"think","delta":"ME文件。"}
+
+event:stream_event
+data:{"eventId":"322438513292730368","eventSeq":"50","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.186257946Z","typedPayload":{"type":"think","delta":"现在让我读"}}
+
+event:message
+data:{"type":"think","delta":"现在让我读"}
+
+event:stream_event
+data:{"eventId":"322438513309507584","eventSeq":"51","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.190251906Z","typedPayload":{"type":"think","delta":"取更多核心"}}
+
+event:message
+data:{"type":"think","delta":"取更多核心"}
+
+event:stream_event
+data:{"eventId":"322438513317896192","eventSeq":"52","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.192029402Z","typedPayload":{"type":"think","delta":"文件，包括"}}
+
+event:message
+data:{"type":"think","delta":"文件，包括"}
+
+event:stream_event
+data:{"eventId":"322438513322090496","eventSeq":"53","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.193818885Z","typedPayload":{"type":"think","delta":" docs"}}
+
+event:message
+data:{"type":"think","delta":" docs"}
+
+event:stream_event
+data:{"eventId":"322438513330479104","eventSeq":"54","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.195425962Z","typedPayload":{"type":"think","delta":"目录和关键"}}
+
+event:message
+data:{"type":"think","delta":"目录和关键"}
+
+event:stream_event
+data:{"eventId":"322438513385005056","eventSeq":"55","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.208544071Z","typedPayload":{"type":"think","delta":"源码文件。"}}
+
+event:message
+data:{"type":"think","delta":"源码文件。"}
+
+event:stream_event
+data:{"eventId":"322438513393393664","eventSeq":"56","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.210311272Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438513397587968","eventSeq":"57","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.211310647Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438513401782272","eventSeq":"58","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.212382431Z","typedPayload":{"type":"think","delta":"] git"}}
+
+event:message
+data:{"type":"think","delta":"] git"}
+
+event:stream_event
+data:{"eventId":"322438513405976576","eventSeq":"59","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.213274063Z","typedPayload":{"type":"think","delta":"hub_r"}}
+
+event:message
+data:{"type":"think","delta":"hub_r"}
+
+event:stream_event
+data:{"eventId":"322438513410170880","eventSeq":"60","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.214290757Z","typedPayload":{"type":"think","delta":"eposi"}}
+
+event:message
+data:{"type":"think","delta":"eposi"}
+
+event:stream_event
+data:{"eventId":"322438513414365184","eventSeq":"61","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.215410844Z","typedPayload":{"type":"think","delta":"tory_"}}
+
+event:message
+data:{"type":"think","delta":"tory_"}
+
+event:stream_event
+data:{"eventId":"322438513468891136","eventSeq":"62","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.228912854Z","typedPayload":{"type":"think","delta":"reade"}}
+
+event:message
+data:{"type":"think","delta":"reade"}
+
+event:stream_event
+data:{"eventId":"322438513477279744","eventSeq":"63","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.230845834Z","typedPayload":{"type":"think","delta":"r -> "}}
+
+event:message
+data:{"type":"think","delta":"r -> "}
+
+event:stream_event
+data:{"eventId":"322438513536000000","eventSeq":"64","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.244676499Z","typedPayload":{"type":"think","delta":"faile"}}
+
+event:message
+data:{"type":"think","delta":"faile"}
+
+event:stream_event
+data:{"eventId":"322438513540194304","eventSeq":"65","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.246002408Z","typedPayload":{"type":"think","delta":"d"}}
+
+event:message
+data:{"type":"think","delta":"d"}
+
+event:stream_event
+data:{"eventId":"322438513548582912","eventSeq":"66","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.247346950Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-3","stepNo":3,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:30.385185647Z","finishedAt":"2026-06-08T18:15:32.247286758Z","durationMs":"1862","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-3","stepNo":3,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:30.385185647Z","finishedAt":"2026-06-08T18:15:32.247286758Z","durationMs":"1862","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438513573748736","eventSeq":"67","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:32.253840907Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-4","stepNo":4,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:32.253768692Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-4","stepNo":4,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:32.253768692Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438522549559296","eventSeq":"68","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.393724436Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_348d396045fe459eae21d44e","toolInvocationId":"call_348d396045fe459eae21d44e","toolCallId":"call_348d396045fe459eae21d44e","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:34.393674288Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_348d396045fe459eae21d44e","toolInvocationId":"call_348d396045fe459eae21d44e","toolCallId":"call_348d396045fe459eae21d44e","toolId":"github_repository_reader","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:34.393674288Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438522809606144","eventSeq":"69","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.455929871Z","typedPayload":{"type":"think","delta":"让我继续读"}}
+
+event:message
+data:{"type":"think","delta":"让我继续读"}
+
+event:stream_event
+data:{"eventId":"322438522859937792","eventSeq":"70","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.467276894Z","typedPayload":{"type":"think","delta":"取核心源码"}}
+
+event:message
+data:{"type":"think","delta":"取核心源码"}
+
+event:stream_event
+data:{"eventId":"322438522868326400","eventSeq":"71","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.469025757Z","typedPayload":{"type":"think","delta":"文件，特别"}}
+
+event:message
+data:{"type":"think","delta":"文件，特别"}
+
+event:stream_event
+data:{"eventId":"322438522872520704","eventSeq":"72","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.470430949Z","typedPayload":{"type":"think","delta":"是 ser"}}
+
+event:message
+data:{"type":"think","delta":"是 ser"}
+
+event:stream_event
+data:{"eventId":"322438522935435264","eventSeq":"73","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.485819677Z","typedPayload":{"type":"think","delta":"ver.c"}}
+
+event:message
+data:{"type":"think","delta":"ver.c"}
+
+event:stream_event
+data:{"eventId":"322438522943823872","eventSeq":"74","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.487489101Z","typedPayload":{"type":"think","delta":"和关键数据"}}
+
+event:message
+data:{"type":"think","delta":"和关键数据"}
+
+event:stream_event
+data:{"eventId":"322438522948018176","eventSeq":"75","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.488897839Z","typedPayload":{"type":"think","delta":"结构文件。"}}
+
+event:message
+data:{"type":"think","delta":"结构文件。"}
+
+event:stream_event
+data:{"eventId":"322438523002544128","eventSeq":"76","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.501643845Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438523010932736","eventSeq":"77","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.503573789Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438523015127040","eventSeq":"78","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.504866171Z","typedPayload":{"type":"think","delta":"] git"}}
+
+event:message
+data:{"type":"think","delta":"] git"}
+
+event:stream_event
+data:{"eventId":"322438523019321344","eventSeq":"79","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.505900716Z","typedPayload":{"type":"think","delta":"hub_r"}}
+
+event:message
+data:{"type":"think","delta":"hub_r"}
+
+event:stream_event
+data:{"eventId":"322438523023515648","eventSeq":"80","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.506983749Z","typedPayload":{"type":"think","delta":"eposi"}}
+
+event:message
+data:{"type":"think","delta":"eposi"}
+
+event:stream_event
+data:{"eventId":"322438523027709952","eventSeq":"81","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.507892889Z","typedPayload":{"type":"think","delta":"tory_"}}
+
+event:message
+data:{"type":"think","delta":"tory_"}
+
+event:stream_event
+data:{"eventId":"322438523036098560","eventSeq":"82","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.509248598Z","typedPayload":{"type":"think","delta":"reade"}}
+
+event:message
+data:{"type":"think","delta":"reade"}
+
+event:stream_event
+data:{"eventId":"322438523069652992","eventSeq":"83","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.517879944Z","typedPayload":{"type":"think","delta":"r -> "}}
+
+event:message
+data:{"type":"think","delta":"r -> "}
+
+event:stream_event
+data:{"eventId":"322438523086430208","eventSeq":"84","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.521951861Z","typedPayload":{"type":"think","delta":"faile"}}
+
+event:message
+data:{"type":"think","delta":"faile"}
+
+event:stream_event
+data:{"eventId":"322438523090624512","eventSeq":"85","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.523002411Z","typedPayload":{"type":"think","delta":"d"}}
+
+event:message
+data:{"type":"think","delta":"d"}
+
+event:stream_event
+data:{"eventId":"322438523099013120","eventSeq":"86","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.524273535Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-4","stepNo":4,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:32.253768692Z","finishedAt":"2026-06-08T18:15:34.524192231Z","durationMs":"2270","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-4","stepNo":4,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:32.253768692Z","finishedAt":"2026-06-08T18:15:34.524192231Z","durationMs":"2270","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438523216453632","eventSeq":"87","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:34.552389966Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-5","stepNo":5,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:34.552322756Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-5","stepNo":5,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:34.552322756Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438528937484288","eventSeq":"88","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:35.916242543Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_1f2b869c09a14e6bb04e9efa","toolInvocationId":"call_1f2b869c09a14e6bb04e9efa","toolCallId":"call_1f2b869c09a14e6bb04e9efa","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:35.916181700Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_1f2b869c09a14e6bb04e9efa","toolInvocationId":"call_1f2b869c09a14e6bb04e9efa","toolCallId":"call_1f2b869c09a14e6bb04e9efa","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:35.916181700Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438534767566848","eventSeq":"89","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.306453965Z","typedPayload":{"type":"think","delta":"我已获取了"}}
+
+event:message
+data:{"type":"think","delta":"我已获取了"}
+
+event:stream_event
+data:{"eventId":"322438534780149760","eventSeq":"90","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.309860695Z","typedPayload":{"type":"think","delta":"足够的仓库"}}
+
+event:message
+data:{"type":"think","delta":"足够的仓库"}
+
+event:stream_event
+data:{"eventId":"322438534838870016","eventSeq":"91","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.323848131Z","typedPayload":{"type":"think","delta":"信息，现在"}}
+
+event:message
+data:{"type":"think","delta":"信息，现在"}
+
+event:stream_event
+data:{"eventId":"322438534847258624","eventSeq":"92","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.325286827Z","typedPayload":{"type":"think","delta":"继续读取更"}}
+
+event:message
+data:{"type":"think","delta":"继续读取更"}
+
+event:stream_event
+data:{"eventId":"322438534872424448","eventSeq":"93","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.331650067Z","typedPayload":{"type":"think","delta":"多核心文件"}}
+
+event:message
+data:{"type":"think","delta":"多核心文件"}
+
+event:stream_event
+data:{"eventId":"322438534876618752","eventSeq":"94","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.332395969Z","typedPayload":{"type":"think","delta":"。"}}
+
+event:message
+data:{"type":"think","delta":"。"}
+
+event:stream_event
+data:{"eventId":"322438534901784576","eventSeq":"95","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.338749234Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438534952116224","eventSeq":"96","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.351008190Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438534960504832","eventSeq":"97","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.352940753Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438534964699136","eventSeq":"98","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.353865271Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438534968893440","eventSeq":"99","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.354907827Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438534994059264","eventSeq":"100","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.360267500Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438535002447872","eventSeq":"101","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.362953313Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-5","stepNo":5,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:34.552322756Z","finishedAt":"2026-06-08T18:15:37.362898252Z","durationMs":"2810","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-5","stepNo":5,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:34.552322756Z","finishedAt":"2026-06-08T18:15:37.362898252Z","durationMs":"2810","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438535157637120","eventSeq":"102","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:37.399464457Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-6","stepNo":6,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:37.399375013Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-6","stepNo":6,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:37.399375013Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438540744450048","eventSeq":"103","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:38.731893775Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_c0b6689f442f45dfb7970397","toolInvocationId":"call_c0b6689f442f45dfb7970397","toolCallId":"call_c0b6689f442f45dfb7970397","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:38.731776245Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_c0b6689f442f45dfb7970397","toolInvocationId":"call_c0b6689f442f45dfb7970397","toolCallId":"call_c0b6689f442f45dfb7970397","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:38.731776245Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438543831457792","eventSeq":"104","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.467171514Z","typedPayload":{"type":"think","delta":"让我继续读"}}
+
+event:message
+data:{"type":"think","delta":"让我继续读"}
+
+event:stream_event
+data:{"eventId":"322438543869206528","eventSeq":"105","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.476838940Z","typedPayload":{"type":"think","delta":"取更多核心"}}
+
+event:message
+data:{"type":"think","delta":"取更多核心"}
+
+event:stream_event
+data:{"eventId":"322438543932121088","eventSeq":"106","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.491085914Z","typedPayload":{"type":"think","delta":"文件，包括"}}
+
+event:message
+data:{"type":"think","delta":"文件，包括"}
+
+event:stream_event
+data:{"eventId":"322438544041172992","eventSeq":"107","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.517781597Z","typedPayload":{"type":"think","delta":"网络处理、"}}
+
+event:message
+data:{"type":"think","delta":"网络处理、"}
+
+event:stream_event
+data:{"eventId":"322438544045367296","eventSeq":"108","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.518713724Z","typedPayload":{"type":"think","delta":"持久化和集"}}
+
+event:message
+data:{"type":"think","delta":"持久化和集"}
+
+event:stream_event
+data:{"eventId":"322438544049561600","eventSeq":"109","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.519456806Z","typedPayload":{"type":"think","delta":"群相关源码"}}
+
+event:message
+data:{"type":"think","delta":"群相关源码"}
+
+event:stream_event
+data:{"eventId":"322438544053755904","eventSeq":"110","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.520175107Z","typedPayload":{"type":"think","delta":"。"}}
+
+event:message
+data:{"type":"think","delta":"。"}
+
+event:stream_event
+data:{"eventId":"322438544053755905","eventSeq":"111","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.520919261Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438544057950208","eventSeq":"112","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.521776665Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438544062144512","eventSeq":"113","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.522464191Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438544066338816","eventSeq":"114","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.523233595Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438544070533120","eventSeq":"115","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.524029425Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438544070533121","eventSeq":"116","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.524540304Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438544074727424","eventSeq":"117","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.525391570Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-6","stepNo":6,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:37.399375013Z","finishedAt":"2026-06-08T18:15:39.525331200Z","durationMs":"2125","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-6","stepNo":6,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:37.399375013Z","finishedAt":"2026-06-08T18:15:39.525331200Z","durationMs":"2125","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438544158613504","eventSeq":"118","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:39.545327559Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-7","stepNo":7,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:39.545265386Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-7","stepNo":7,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:39.545265386Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438551670611968","eventSeq":"119","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:41.336046462Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_f20d7a2c41464f19b28cc1c4","toolInvocationId":"call_f20d7a2c41464f19b28cc1c4","toolCallId":"call_f20d7a2c41464f19b28cc1c4","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:41.335994178Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_f20d7a2c41464f19b28cc1c4","toolInvocationId":"call_f20d7a2c41464f19b28cc1c4","toolCallId":"call_f20d7a2c41464f19b28cc1c4","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:41.335994178Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438554417881088","eventSeq":"120","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:41.991539708Z","typedPayload":{"type":"think","delta":"让我继续读"}}
+
+event:message
+data:{"type":"think","delta":"让我继续读"}
+
+event:stream_event
+data:{"eventId":"322438554434658304","eventSeq":"121","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:41.995026710Z","typedPayload":{"type":"think","delta":"取更多核心"}}
+
+event:message
+data:{"type":"think","delta":"取更多核心"}
+
+event:stream_event
+data:{"eventId":"322438554438852608","eventSeq":"122","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:41.996514179Z","typedPayload":{"type":"think","delta":"文件，包括"}}
+
+event:message
+data:{"type":"think","delta":"文件，包括"}
+
+event:stream_event
+data:{"eventId":"322438554443046912","eventSeq":"123","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:41.997691246Z","typedPayload":{"type":"think","delta":"持久化、集"}}
+
+event:message
+data:{"type":"think","delta":"持久化、集"}
+
+event:stream_event
+data:{"eventId":"322438554451435520","eventSeq":"124","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:41.999944803Z","typedPayload":{"type":"think","delta":"群和数据结"}}
+
+event:message
+data:{"type":"think","delta":"群和数据结"}
+
+event:stream_event
+data:{"eventId":"322438554480795648","eventSeq":"125","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:42.006502620Z","typedPayload":{"type":"think","delta":"构相关源码"}}
+
+event:message
+data:{"type":"think","delta":"构相关源码"}
+
+event:stream_event
+data:{"eventId":"322438554497572864","eventSeq":"126","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:42.010932282Z","typedPayload":{"type":"think","delta":"。"}}
+
+event:message
+data:{"type":"think","delta":"。"}
+
+event:stream_event
+data:{"eventId":"322438554505961472","eventSeq":"127","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:42.012584126Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438554510155776","eventSeq":"128","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:42.013627366Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438554514350080","eventSeq":"129","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:42.014708144Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438554518544384","eventSeq":"130","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:42.015233962Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438554518544385","eventSeq":"131","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:42.015925882Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438554522738688","eventSeq":"132","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:42.016331471Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438554522738689","eventSeq":"133","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:42.016803031Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-7","stepNo":7,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:39.545265386Z","finishedAt":"2026-06-08T18:15:42.016744364Z","durationMs":"2471","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-7","stepNo":7,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:39.545265386Z","finishedAt":"2026-06-08T18:15:42.016744364Z","durationMs":"2471","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438554543710208","eventSeq":"134","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:42.021680347Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-8","stepNo":8,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:42.021515646Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-8","stepNo":8,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:42.021515646Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438615612776448","eventSeq":"135","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:56.581636812Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_1ac0bcef17384ed799a89a84","toolInvocationId":"call_1ac0bcef17384ed799a89a84","toolCallId":"call_1ac0bcef17384ed799a89a84","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:56.581587149Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_1ac0bcef17384ed799a89a84","toolInvocationId":"call_1ac0bcef17384ed799a89a84","toolCallId":"call_1ac0bcef17384ed799a89a84","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:15:56.581587149Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438617823174656","eventSeq":"136","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.108252755Z","typedPayload":{"type":"think","delta":"让我继续读"}}
+
+event:message
+data:{"type":"think","delta":"让我继续读"}
+
+event:stream_event
+data:{"eventId":"322438617831563264","eventSeq":"137","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.110239713Z","typedPayload":{"type":"think","delta":"取更多核心"}}
+
+event:message
+data:{"type":"think","delta":"取更多核心"}
+
+event:stream_event
+data:{"eventId":"322438617835757568","eventSeq":"138","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.111145946Z","typedPayload":{"type":"think","delta":"文件，包括"}}
+
+event:message
+data:{"type":"think","delta":"文件，包括"}
+
+event:stream_event
+data:{"eventId":"322438617839951872","eventSeq":"139","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.112898609Z","typedPayload":{"type":"think","delta":"集群、复制"}}
+
+event:message
+data:{"type":"think","delta":"集群、复制"}
+
+event:stream_event
+data:{"eventId":"322438617856729088","eventSeq":"140","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.116047929Z","typedPayload":{"type":"think","delta":"和数据结构"}}
+
+event:message
+data:{"type":"think","delta":"和数据结构"}
+
+event:stream_event
+data:{"eventId":"322438617865117696","eventSeq":"141","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.118289163Z","typedPayload":{"type":"think","delta":"相关源码。"}}
+
+event:message
+data:{"type":"think","delta":"相关源码。"}
+
+event:stream_event
+data:{"eventId":"322438617869312000","eventSeq":"142","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.119244537Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438617873506304","eventSeq":"143","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.120328857Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438617877700608","eventSeq":"144","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.121026889Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438617881894912","eventSeq":"145","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.122118748Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438617881894913","eventSeq":"146","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.122771942Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438617886089216","eventSeq":"147","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.123733650Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438617894477824","eventSeq":"148","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.125854128Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-8","stepNo":8,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:42.021515646Z","finishedAt":"2026-06-08T18:15:57.125789308Z","durationMs":"15104","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-8","stepNo":8,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:42.021515646Z","finishedAt":"2026-06-08T18:15:57.125789308Z","durationMs":"15104","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438617932226560","eventSeq":"149","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:15:57.134936496Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-9","stepNo":9,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:57.134869268Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-9","stepNo":9,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:57.134869268Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438660730904576","eventSeq":"150","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.338851936Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_12a0e190d0884131835e696f","toolInvocationId":"call_12a0e190d0884131835e696f","toolCallId":"call_12a0e190d0884131835e696f","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:07.338829515Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_12a0e190d0884131835e696f","toolInvocationId":"call_12a0e190d0884131835e696f","toolCallId":"call_12a0e190d0884131835e696f","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:07.338829515Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438661842395136","eventSeq":"151","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.603854439Z","typedPayload":{"type":"think","delta":"让我继续读"}}
+
+event:message
+data:{"type":"think","delta":"让我继续读"}
+
+event:stream_event
+data:{"eventId":"322438661846589440","eventSeq":"152","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.604964310Z","typedPayload":{"type":"think","delta":"取更多核心"}}
+
+event:message
+data:{"type":"think","delta":"取更多核心"}
+
+event:stream_event
+data:{"eventId":"322438661850783744","eventSeq":"153","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.605600163Z","typedPayload":{"type":"think","delta":"文件，包括"}}
+
+event:message
+data:{"type":"think","delta":"文件，包括"}
+
+event:stream_event
+data:{"eventId":"322438661854978048","eventSeq":"154","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.606279726Z","typedPayload":{"type":"think","delta":"复制、事件"}}
+
+event:message
+data:{"type":"think","delta":"复制、事件"}
+
+event:stream_event
+data:{"eventId":"322438661859172352","eventSeq":"155","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.607283544Z","typedPayload":{"type":"think","delta":"循环和数据"}}
+
+event:message
+data:{"type":"think","delta":"循环和数据"}
+
+event:stream_event
+data:{"eventId":"322438661863366656","eventSeq":"156","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.608328632Z","typedPayload":{"type":"think","delta":"结构相关源"}}
+
+event:message
+data:{"type":"think","delta":"结构相关源"}
+
+event:stream_event
+data:{"eventId":"322438661863366657","eventSeq":"157","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.608941902Z","typedPayload":{"type":"think","delta":"码。"}}
+
+event:message
+data:{"type":"think","delta":"码。"}
+
+event:stream_event
+data:{"eventId":"322438661867560960","eventSeq":"158","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.609695937Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438661871755264","eventSeq":"159","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.610289908Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438661875949568","eventSeq":"160","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.611050834Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438661875949569","eventSeq":"161","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.611425647Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438661875949570","eventSeq":"162","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.611738231Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438661880143872","eventSeq":"163","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.612096401Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438661888532480","eventSeq":"164","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.614631819Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-9","stepNo":9,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:57.134869268Z","finishedAt":"2026-06-08T18:16:07.614578397Z","durationMs":"10479","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-9","stepNo":9,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:15:57.134869268Z","finishedAt":"2026-06-08T18:16:07.614578397Z","durationMs":"10479","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438661905309696","eventSeq":"165","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:07.618059342Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-10","stepNo":10,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:07.618003380Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-10","stepNo":10,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:07.618003380Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438669178232832","eventSeq":"166","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.352214064Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_3972923f126e4306a26aac7e","toolInvocationId":"call_3972923f126e4306a26aac7e","toolCallId":"call_3972923f126e4306a26aac7e","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:09.352165064Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_3972923f126e4306a26aac7e","toolInvocationId":"call_3972923f126e4306a26aac7e","toolCallId":"call_3972923f126e4306a26aac7e","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:09.352165064Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438669761241088","eventSeq":"167","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.491086607Z","typedPayload":{"type":"think","delta":"让我继续读"}}
+
+event:message
+data:{"type":"think","delta":"让我继续读"}
+
+event:stream_event
+data:{"eventId":"322438669765435392","eventSeq":"168","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.492896818Z","typedPayload":{"type":"think","delta":"取更多核心"}}
+
+event:message
+data:{"type":"think","delta":"取更多核心"}
+
+event:stream_event
+data:{"eventId":"322438669773824000","eventSeq":"169","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.494129716Z","typedPayload":{"type":"think","delta":"文件，包括"}}
+
+event:message
+data:{"type":"think","delta":"文件，包括"}
+
+event:stream_event
+data:{"eventId":"322438669778018304","eventSeq":"170","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.495015536Z","typedPayload":{"type":"think","delta":"事件循环、"}}
+
+event:message
+data:{"type":"think","delta":"事件循环、"}
+
+event:stream_event
+data:{"eventId":"322438669778018305","eventSeq":"171","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.495853237Z","typedPayload":{"type":"think","delta":"数据结构和"}}
+
+event:message
+data:{"type":"think","delta":"数据结构和"}
+
+event:stream_event
+data:{"eventId":"322438669782212608","eventSeq":"172","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.496529022Z","typedPayload":{"type":"think","delta":"配置文件相"}}
+
+event:message
+data:{"type":"think","delta":"配置文件相"}
+
+event:stream_event
+data:{"eventId":"322438669786406912","eventSeq":"173","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.497218571Z","typedPayload":{"type":"think","delta":"关源码。"}}
+
+event:message
+data:{"type":"think","delta":"关源码。"}
+
+event:stream_event
+data:{"eventId":"322438669794795520","eventSeq":"174","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.499248745Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438669798989824","eventSeq":"175","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.500129656Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438669803184128","eventSeq":"176","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.501802963Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438669807378432","eventSeq":"177","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.502966899Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438669811572736","eventSeq":"178","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.503984784Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438669819961344","eventSeq":"179","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.505076745Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438669824155648","eventSeq":"180","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.506300419Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-10","stepNo":10,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:07.618003380Z","finishedAt":"2026-06-08T18:16:09.506240618Z","durationMs":"1888","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-10","stepNo":10,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:07.618003380Z","finishedAt":"2026-06-08T18:16:09.506240618Z","durationMs":"1888","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438669840932864","eventSeq":"181","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:09.510841837Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-11","stepNo":11,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:09.510789240Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-11","stepNo":11,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:09.510789240Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438678204375040","eventSeq":"182","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:11.504398340Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_95fca482386143d9bdde5478","toolInvocationId":"call_95fca482386143d9bdde5478","toolCallId":"call_95fca482386143d9bdde5478","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:11.504360053Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_95fca482386143d9bdde5478","toolInvocationId":"call_95fca482386143d9bdde5478","toolCallId":"call_95fca482386143d9bdde5478","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:11.504360053Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438681014558720","eventSeq":"183","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.174720419Z","typedPayload":{"type":"think","delta":"让我继续读"}}
+
+event:message
+data:{"type":"think","delta":"让我继续读"}
+
+event:stream_event
+data:{"eventId":"322438681022947328","eventSeq":"184","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.176262048Z","typedPayload":{"type":"think","delta":"取更多核心"}}
+
+event:message
+data:{"type":"think","delta":"取更多核心"}
+
+event:stream_event
+data:{"eventId":"322438681027141632","eventSeq":"185","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.177336147Z","typedPayload":{"type":"think","delta":"文件，包括"}}
+
+event:message
+data:{"type":"think","delta":"文件，包括"}
+
+event:stream_event
+data:{"eventId":"322438681031335936","eventSeq":"186","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.178243499Z","typedPayload":{"type":"think","delta":"数据结构、"}}
+
+event:message
+data:{"type":"think","delta":"数据结构、"}
+
+event:stream_event
+data:{"eventId":"322438681031335937","eventSeq":"187","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.178894518Z","typedPayload":{"type":"think","delta":"配置和模块"}}
+
+event:message
+data:{"type":"think","delta":"配置和模块"}
+
+event:stream_event
+data:{"eventId":"322438681039724544","eventSeq":"188","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.180612068Z","typedPayload":{"type":"think","delta":"相关源码。"}}
+
+event:message
+data:{"type":"think","delta":"相关源码。"}
+
+event:stream_event
+data:{"eventId":"322438681069084672","eventSeq":"189","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.187350980Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438681073278976","eventSeq":"190","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.188257568Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438681073278977","eventSeq":"191","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.188905363Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438681077473280","eventSeq":"192","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.189689322Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438681081667584","eventSeq":"193","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.190253943Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438681081667585","eventSeq":"194","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.190701492Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438681085861888","eventSeq":"195","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.191413090Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-11","stepNo":11,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:09.510789240Z","finishedAt":"2026-06-08T18:16:12.191352718Z","durationMs":"2680","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-11","stepNo":11,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:09.510789240Z","finishedAt":"2026-06-08T18:16:12.191352718Z","durationMs":"2680","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438681148776448","eventSeq":"196","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:12.206573401Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-12","stepNo":12,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:12.206510393Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-12","stepNo":12,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:12.206510393Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438690011340800","eventSeq":"197","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:14.319667607Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_e7703aea886f4a1da906b60b","toolInvocationId":"call_e7703aea886f4a1da906b60b","toolCallId":"call_e7703aea886f4a1da906b60b","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:14.319633578Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_e7703aea886f4a1da906b60b","toolInvocationId":"call_e7703aea886f4a1da906b60b","toolCallId":"call_e7703aea886f4a1da906b60b","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:14.319633578Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438693752659968","eventSeq":"198","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.211247351Z","typedPayload":{"type":"think","delta":"让我继续读"}}
+
+event:message
+data:{"type":"think","delta":"让我继续读"}
+
+event:stream_event
+data:{"eventId":"322438693756854272","eventSeq":"199","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.212050841Z","typedPayload":{"type":"think","delta":"取更多核心"}}
+
+event:message
+data:{"type":"think","delta":"取更多核心"}
+
+event:stream_event
+data:{"eventId":"322438693756854273","eventSeq":"200","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.212259174Z","typedPayload":{"type":"think","delta":"文件，包括"}}
+
+event:message
+data:{"type":"think","delta":"文件，包括"}
+
+event:stream_event
+data:{"eventId":"322438693756854274","eventSeq":"201","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.212838086Z","typedPayload":{"type":"think","delta":"配置、模块"}}
+
+event:message
+data:{"type":"think","delta":"配置、模块"}
+
+event:stream_event
+data:{"eventId":"322438693761048576","eventSeq":"202","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.213213339Z","typedPayload":{"type":"think","delta":"和数据结构"}}
+
+event:message
+data:{"type":"think","delta":"和数据结构"}
+
+event:stream_event
+data:{"eventId":"322438693761048577","eventSeq":"203","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.213595106Z","typedPayload":{"type":"think","delta":"相关源码。"}}
+
+event:message
+data:{"type":"think","delta":"相关源码。"}
+
+event:stream_event
+data:{"eventId":"322438693761048578","eventSeq":"204","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.213999046Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438693765242880","eventSeq":"205","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.214284740Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438693769437184","eventSeq":"206","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.215561675Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438693773631488","eventSeq":"207","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.216166680Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438693773631489","eventSeq":"208","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.216963390Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438693777825792","eventSeq":"209","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.217774239Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438693782020096","eventSeq":"210","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.218051938Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-12","stepNo":12,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:12.206510393Z","finishedAt":"2026-06-08T18:16:15.218006741Z","durationMs":"3011","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-12","stepNo":12,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:12.206510393Z","finishedAt":"2026-06-08T18:16:15.218006741Z","durationMs":"3011","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438693794603008","eventSeq":"211","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:15.221593164Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-13","stepNo":13,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:15.221547303Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-13","stepNo":13,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:15.221547303Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438702577475584","eventSeq":"212","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:17.315526179Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_c17ee33a7c0642ac86b9b29b","toolInvocationId":"call_c17ee33a7c0642ac86b9b29b","toolCallId":"call_c17ee33a7c0642ac86b9b29b","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:17.315504184Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_c17ee33a7c0642ac86b9b29b","toolInvocationId":"call_c17ee33a7c0642ac86b9b29b","toolCallId":"call_c17ee33a7c0642ac86b9b29b","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:17.315504184Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438705731592192","eventSeq":"213","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.067878238Z","typedPayload":{"type":"think","delta":"让我继续读"}}
+
+event:message
+data:{"type":"think","delta":"让我继续读"}
+
+event:stream_event
+data:{"eventId":"322438705735786496","eventSeq":"214","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.068846588Z","typedPayload":{"type":"think","delta":"取更多核心"}}
+
+event:message
+data:{"type":"think","delta":"取更多核心"}
+
+event:stream_event
+data:{"eventId":"322438705739980800","eventSeq":"215","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.069708655Z","typedPayload":{"type":"think","delta":"文件，包括"}}
+
+event:message
+data:{"type":"think","delta":"文件，包括"}
+
+event:stream_event
+data:{"eventId":"322438705744175104","eventSeq":"216","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.070232213Z","typedPayload":{"type":"think","delta":"模块API"}}
+
+event:message
+data:{"type":"think","delta":"模块API"}
+
+event:stream_event
+data:{"eventId":"322438705744175105","eventSeq":"217","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.070545231Z","typedPayload":{"type":"think","delta":"、RDB持"}}
+
+event:message
+data:{"type":"think","delta":"、RDB持"}
+
+event:stream_event
+data:{"eventId":"322438705744175106","eventSeq":"218","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.070711097Z","typedPayload":{"type":"think","delta":"久化和Lu"}}
+
+event:message
+data:{"type":"think","delta":"久化和Lu"}
+
+event:stream_event
+data:{"eventId":"322438705744175107","eventSeq":"219","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.070912210Z","typedPayload":{"type":"think","delta":"a脚本相关"}}
+
+event:message
+data:{"type":"think","delta":"a脚本相关"}
+
+event:stream_event
+data:{"eventId":"322438705748369408","eventSeq":"220","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.071372498Z","typedPayload":{"type":"think","delta":"源码。"}}
+
+event:message
+data:{"type":"think","delta":"源码。"}
+
+event:stream_event
+data:{"eventId":"322438705748369409","eventSeq":"221","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.071668235Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438705748369410","eventSeq":"222","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.071794229Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438705748369411","eventSeq":"223","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.071943138Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438705752563712","eventSeq":"224","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.072461639Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438705752563713","eventSeq":"225","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.072687711Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438705756758016","eventSeq":"226","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.073030726Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438705756758017","eventSeq":"227","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.073815055Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-13","stepNo":13,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:15.221547303Z","finishedAt":"2026-06-08T18:16:18.073764192Z","durationMs":"2852","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-13","stepNo":13,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:15.221547303Z","finishedAt":"2026-06-08T18:16:18.073764192Z","durationMs":"2852","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438705777729536","eventSeq":"228","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:18.078625368Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-14","stepNo":14,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:18.078584195Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-14","stepNo":14,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:18.078584195Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438718083817472","eventSeq":"229","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.012420932Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_095a1427121e4d60a937cd9f","toolInvocationId":"call_095a1427121e4d60a937cd9f","toolCallId":"call_095a1427121e4d60a937cd9f","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:21.012381660Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_095a1427121e4d60a937cd9f","toolInvocationId":"call_095a1427121e4d60a937cd9f","toolCallId":"call_095a1427121e4d60a937cd9f","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:21.012381660Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438719971254272","eventSeq":"230","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.462447794Z","typedPayload":{"type":"think","delta":"让我尝试读"}}
+
+event:message
+data:{"type":"think","delta":"让我尝试读"}
+
+event:stream_event
+data:{"eventId":"322438719975448576","eventSeq":"231","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.463133705Z","typedPayload":{"type":"think","delta":"取模块AP"}}
+
+event:message
+data:{"type":"think","delta":"取模块AP"}
+
+event:stream_event
+data:{"eventId":"322438719975448577","eventSeq":"232","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.463480620Z","typedPayload":{"type":"think","delta":"I头文件和"}}
+
+event:message
+data:{"type":"think","delta":"I头文件和"}
+
+event:stream_event
+data:{"eventId":"322438719979642880","eventSeq":"233","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.464202696Z","typedPayload":{"type":"think","delta":"其他核心文"}}
+
+event:message
+data:{"type":"think","delta":"其他核心文"}
+
+event:stream_event
+data:{"eventId":"322438719979642881","eventSeq":"234","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.464409402Z","typedPayload":{"type":"think","delta":"件。"}}
+
+event:message
+data:{"type":"think","delta":"件。"}
+
+event:stream_event
+data:{"eventId":"322438719979642882","eventSeq":"235","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.464596212Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438719979642883","eventSeq":"236","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.464765Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438719979642884","eventSeq":"237","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.464992307Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438719983837184","eventSeq":"238","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.465156125Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438719983837185","eventSeq":"239","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.465556185Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438719983837186","eventSeq":"240","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.465713080Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438719983837187","eventSeq":"241","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.465965678Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-14","stepNo":14,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:18.078584195Z","finishedAt":"2026-06-08T18:16:21.465924634Z","durationMs":"3387","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-14","stepNo":14,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:18.078584195Z","finishedAt":"2026-06-08T18:16:21.465924634Z","durationMs":"3387","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438720000614400","eventSeq":"242","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:21.469905635Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-15","stepNo":15,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:21.469857087Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-15","stepNo":15,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:21.469857087Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438729307774976","eventSeq":"243","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.688124901Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_7697c9dd54cf46b683bfd160","toolInvocationId":"call_7697c9dd54cf46b683bfd160","toolCallId":"call_7697c9dd54cf46b683bfd160","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:23.688075468Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_7697c9dd54cf46b683bfd160","toolInvocationId":"call_7697c9dd54cf46b683bfd160","toolCallId":"call_7697c9dd54cf46b683bfd160","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:23.688075468Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438729450381312","eventSeq":"244","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.722242142Z","typedPayload":{"type":"think","delta":"让我读取更"}}
+
+event:message
+data:{"type":"think","delta":"让我读取更"}
+
+event:stream_event
+data:{"eventId":"322438729454575616","eventSeq":"245","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.723152070Z","typedPayload":{"type":"think","delta":"多核心文件"}}
+
+event:message
+data:{"type":"think","delta":"多核心文件"}
+
+event:stream_event
+data:{"eventId":"322438729454575617","eventSeq":"246","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.723830213Z","typedPayload":{"type":"think","delta":"，包括RD"}}
+
+event:message
+data:{"type":"think","delta":"，包括RD"}
+
+event:stream_event
+data:{"eventId":"322438729458769920","eventSeq":"247","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.724123842Z","typedPayload":{"type":"think","delta":"B持久化、"}}
+
+event:message
+data:{"type":"think","delta":"B持久化、"}
+
+event:stream_event
+data:{"eventId":"322438729458769921","eventSeq":"248","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.724724155Z","typedPayload":{"type":"think","delta":"Lua脚本"}}
+
+event:message
+data:{"type":"think","delta":"Lua脚本"}
+
+event:stream_event
+data:{"eventId":"322438729462964224","eventSeq":"249","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.725921154Z","typedPayload":{"type":"think","delta":"和字典相关"}}
+
+event:message
+data:{"type":"think","delta":"和字典相关"}
+
+event:stream_event
+data:{"eventId":"322438729488130048","eventSeq":"250","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.731220272Z","typedPayload":{"type":"think","delta":"源码。"}}
+
+event:message
+data:{"type":"think","delta":"源码。"}
+
+event:stream_event
+data:{"eventId":"322438729488130049","eventSeq":"251","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.731887150Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438729492324352","eventSeq":"252","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.732919438Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438729496518656","eventSeq":"253","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.733212425Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438729496518657","eventSeq":"254","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.733666231Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438729500712960","eventSeq":"255","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.734243944Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438729500712961","eventSeq":"256","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.734648338Z","typedPayload":{"type":"think","delta":"faile"}}
+
+event:message
+data:{"type":"think","delta":"faile"}
+
+event:stream_event
+data:{"eventId":"322438729500712962","eventSeq":"257","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.734967887Z","typedPayload":{"type":"think","delta":"d"}}
+
+event:message
+data:{"type":"think","delta":"d"}
+
+event:stream_event
+data:{"eventId":"322438729504907264","eventSeq":"258","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.735326457Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-15","stepNo":15,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:21.469857087Z","finishedAt":"2026-06-08T18:16:23.735274959Z","durationMs":"2265","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-15","stepNo":15,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:21.469857087Z","finishedAt":"2026-06-08T18:16:23.735274959Z","durationMs":"2265","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438729521684480","eventSeq":"259","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:23.739633950Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-16","stepNo":16,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:23.739560446Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-16","stepNo":16,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:23.739560446Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438739327967232","eventSeq":"260","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.077035254Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_8b1533fd3d3d4b31a4391079","toolInvocationId":"call_8b1533fd3d3d4b31a4391079","toolCallId":"call_8b1533fd3d3d4b31a4391079","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:26.076992256Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_8b1533fd3d3d4b31a4391079","toolInvocationId":"call_8b1533fd3d3d4b31a4391079","toolCallId":"call_8b1533fd3d3d4b31a4391079","toolId":"web_fetch","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:26.076992256Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438739449602048","eventSeq":"261","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.106351660Z","typedPayload":{"type":"think","delta":"我已获取了"}}
+
+event:message
+data:{"type":"think","delta":"我已获取了"}
+
+event:stream_event
+data:{"eventId":"322438739453796352","eventSeq":"262","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.107502553Z","typedPayload":{"type":"think","delta":"足够的仓库"}}
+
+event:message
+data:{"type":"think","delta":"足够的仓库"}
+
+event:stream_event
+data:{"eventId":"322438739453796353","eventSeq":"263","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.107894454Z","typedPayload":{"type":"think","delta":"信息，现在"}}
+
+event:message
+data:{"type":"think","delta":"信息，现在"}
+
+event:stream_event
+data:{"eventId":"322438739457990656","eventSeq":"264","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.108212197Z","typedPayload":{"type":"think","delta":"让我读取官"}}
+
+event:message
+data:{"type":"think","delta":"让我读取官"}
+
+event:stream_event
+data:{"eventId":"322438739457990657","eventSeq":"265","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.108641622Z","typedPayload":{"type":"think","delta":"网文档和生"}}
+
+event:message
+data:{"type":"think","delta":"网文档和生"}
+
+event:stream_event
+data:{"eventId":"322438739462184960","eventSeq":"266","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.109143123Z","typedPayload":{"type":"think","delta":"成架构图。"}}
+
+event:message
+data:{"type":"think","delta":"成架构图。"}
+
+event:stream_event
+data:{"eventId":"322438739474767872","eventSeq":"267","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.112475257Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438739478962176","eventSeq":"268","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.113775265Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438739487350784","eventSeq":"269","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.115007752Z","typedPayload":{"type":"think","delta":"] web"}}
+
+event:message
+data:{"type":"think","delta":"] web"}
+
+event:stream_event
+data:{"eventId":"322438739495739392","eventSeq":"270","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.117556335Z","typedPayload":{"type":"think","delta":"_fetc"}}
+
+event:message
+data:{"type":"think","delta":"_fetc"}
+
+event:stream_event
+data:{"eventId":"322438739499933696","eventSeq":"271","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.118349777Z","typedPayload":{"type":"think","delta":"h -> "}}
+
+event:message
+data:{"type":"think","delta":"h -> "}
+
+event:stream_event
+data:{"eventId":"322438739499933697","eventSeq":"272","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.118688168Z","typedPayload":{"type":"think","delta":"faile"}}
+
+event:message
+data:{"type":"think","delta":"faile"}
+
+event:stream_event
+data:{"eventId":"322438739504128000","eventSeq":"273","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.119370294Z","typedPayload":{"type":"think","delta":"d"}}
+
+event:message
+data:{"type":"think","delta":"d"}
+
+event:stream_event
+data:{"eventId":"322438739504128001","eventSeq":"274","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.119927727Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-16","stepNo":16,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:23.739560446Z","finishedAt":"2026-06-08T18:16:26.119862638Z","durationMs":"2380","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-16","stepNo":16,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:23.739560446Z","finishedAt":"2026-06-08T18:16:26.119862638Z","durationMs":"2380","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438739525099520","eventSeq":"275","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:26.124138551Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-17","stepNo":17,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:26.124085191Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-17","stepNo":17,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:26.124085191Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438764699312128","eventSeq":"276","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:32.126523456Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_04031ec36b214d9f939f7680","toolInvocationId":"call_04031ec36b214d9f939f7680","toolCallId":"call_04031ec36b214d9f939f7680","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:32.126484189Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_04031ec36b214d9f939f7680","toolInvocationId":"call_04031ec36b214d9f939f7680","toolCallId":"call_04031ec36b214d9f939f7680","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:32.126484189Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438782042759168","eventSeq":"277","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.261459007Z","typedPayload":{"type":"think","delta":"让我生成架"}}
+
+event:message
+data:{"type":"think","delta":"让我生成架"}
+
+event:stream_event
+data:{"eventId":"322438782046953472","eventSeq":"278","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.262146019Z","typedPayload":{"type":"think","delta":"构图。"}}
+
+event:message
+data:{"type":"think","delta":"构图。"}
+
+event:stream_event
+data:{"eventId":"322438782046953473","eventSeq":"279","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.262406566Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438782046953474","eventSeq":"280","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.262591461Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438782046953475","eventSeq":"281","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.262728126Z","typedPayload":{"type":"think","delta":"] cha"}}
+
+event:message
+data:{"type":"think","delta":"] cha"}
+
+event:stream_event
+data:{"eventId":"322438782046953476","eventSeq":"282","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.262999957Z","typedPayload":{"type":"think","delta":"rt_vi"}}
+
+event:message
+data:{"type":"think","delta":"rt_vi"}
+
+event:stream_event
+data:{"eventId":"322438782051147776","eventSeq":"283","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.263151161Z","typedPayload":{"type":"think","delta":"suali"}}
+
+event:message
+data:{"type":"think","delta":"suali"}
+
+event:stream_event
+data:{"eventId":"322438782051147777","eventSeq":"284","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.263591863Z","typedPayload":{"type":"think","delta":"zatio"}}
+
+event:message
+data:{"type":"think","delta":"zatio"}
+
+event:stream_event
+data:{"eventId":"322438782051147778","eventSeq":"285","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.263848292Z","typedPayload":{"type":"think","delta":"n -> "}}
+
+event:message
+data:{"type":"think","delta":"n -> "}
+
+event:stream_event
+data:{"eventId":"322438782055342080","eventSeq":"286","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.264074826Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438782055342081","eventSeq":"287","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.264428711Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-17","stepNo":17,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:26.124085191Z","finishedAt":"2026-06-08T18:16:36.264382596Z","durationMs":"10140","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-17","stepNo":17,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:26.124085191Z","finishedAt":"2026-06-08T18:16:36.264382596Z","durationMs":"10140","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438782067924992","eventSeq":"288","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:36.267568831Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-18","stepNo":18,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:36.267522996Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-18","stepNo":18,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:36.267522996Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438796865429504","eventSeq":"289","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:39.795805125Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_d0302064f8d34ef694c31c58","toolInvocationId":"call_d0302064f8d34ef694c31c58","toolCallId":"call_d0302064f8d34ef694c31c58","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:39.795768126Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_d0302064f8d34ef694c31c58","toolInvocationId":"call_d0302064f8d34ef694c31c58","toolCallId":"call_d0302064f8d34ef694c31c58","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:39.795768126Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438800455753728","eventSeq":"290","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.651429280Z","typedPayload":{"type":"think","delta":"让我生成流"}}
+
+event:message
+data:{"type":"think","delta":"让我生成流"}
+
+event:stream_event
+data:{"eventId":"322438800455753729","eventSeq":"291","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.651743687Z","typedPayload":{"type":"think","delta":"程图。\n\n"}}
+
+event:message
+data:{"type":"think","delta":"程图。\n\n"}
+
+event:stream_event
+data:{"eventId":"322438800455753730","eventSeq":"292","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.651837448Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438800459948032","eventSeq":"293","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.652010682Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438800459948033","eventSeq":"294","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.652060253Z","typedPayload":{"type":"think","delta":"] cha"}}
+
+event:message
+data:{"type":"think","delta":"] cha"}
+
+event:stream_event
+data:{"eventId":"322438800459948034","eventSeq":"295","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.652175916Z","typedPayload":{"type":"think","delta":"rt_vi"}}
+
+event:message
+data:{"type":"think","delta":"rt_vi"}
+
+event:stream_event
+data:{"eventId":"322438800459948035","eventSeq":"296","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.652225282Z","typedPayload":{"type":"think","delta":"suali"}}
+
+event:message
+data:{"type":"think","delta":"suali"}
+
+event:stream_event
+data:{"eventId":"322438800459948036","eventSeq":"297","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.652274946Z","typedPayload":{"type":"think","delta":"zatio"}}
+
+event:message
+data:{"type":"think","delta":"zatio"}
+
+event:stream_event
+data:{"eventId":"322438800459948037","eventSeq":"298","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.652317909Z","typedPayload":{"type":"think","delta":"n -> "}}
+
+event:message
+data:{"type":"think","delta":"n -> "}
+
+event:stream_event
+data:{"eventId":"322438800459948038","eventSeq":"299","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.652364801Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438800459948039","eventSeq":"300","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.652443808Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-18","stepNo":18,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:36.267522996Z","finishedAt":"2026-06-08T18:16:40.652424164Z","durationMs":"4384","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-18","stepNo":18,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:36.267522996Z","finishedAt":"2026-06-08T18:16:40.652424164Z","durationMs":"4384","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438800464142336","eventSeq":"301","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:40.653623655Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-19","stepNo":19,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:40.653609255Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-19","stepNo":19,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:40.653609255Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438813495844864","eventSeq":"302","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:43.760529488Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_64c5516369104d2b9413e656","toolInvocationId":"call_64c5516369104d2b9413e656","toolCallId":"call_64c5516369104d2b9413e656","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:43.760493360Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_64c5516369104d2b9413e656","toolInvocationId":"call_64c5516369104d2b9413e656","toolCallId":"call_64c5516369104d2b9413e656","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:43.760493360Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438819753746432","eventSeq":"303","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.252577533Z","typedPayload":{"type":"think","delta":"让我生成数"}}
+
+event:message
+data:{"type":"think","delta":"让我生成数"}
+
+event:stream_event
+data:{"eventId":"322438819766329344","eventSeq":"304","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.255160803Z","typedPayload":{"type":"think","delta":"据结构的柱"}}
+
+event:message
+data:{"type":"think","delta":"据结构的柱"}
+
+event:stream_event
+data:{"eventId":"322438819778912256","eventSeq":"305","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.258700948Z","typedPayload":{"type":"think","delta":"状图。\n\n"}}
+
+event:message
+data:{"type":"think","delta":"状图。\n\n"}
+
+event:stream_event
+data:{"eventId":"322438819787300864","eventSeq":"306","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.260211756Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438819787300865","eventSeq":"307","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.260920316Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438819791495168","eventSeq":"308","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.261567400Z","typedPayload":{"type":"think","delta":"] cha"}}
+
+event:message
+data:{"type":"think","delta":"] cha"}
+
+event:stream_event
+data:{"eventId":"322438819791495169","eventSeq":"309","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.261920667Z","typedPayload":{"type":"think","delta":"rt_vi"}}
+
+event:message
+data:{"type":"think","delta":"rt_vi"}
+
+event:stream_event
+data:{"eventId":"322438819795689472","eventSeq":"310","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.262612619Z","typedPayload":{"type":"think","delta":"suali"}}
+
+event:message
+data:{"type":"think","delta":"suali"}
+
+event:stream_event
+data:{"eventId":"322438819799883776","eventSeq":"311","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.263164767Z","typedPayload":{"type":"think","delta":"zatio"}}
+
+event:message
+data:{"type":"think","delta":"zatio"}
+
+event:stream_event
+data:{"eventId":"322438819799883777","eventSeq":"312","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.263797681Z","typedPayload":{"type":"think","delta":"n -> "}}
+
+event:message
+data:{"type":"think","delta":"n -> "}
+
+event:stream_event
+data:{"eventId":"322438819804078080","eventSeq":"313","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.264266375Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438819804078081","eventSeq":"314","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.264959898Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-19","stepNo":19,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:40.653609255Z","finishedAt":"2026-06-08T18:16:45.264815821Z","durationMs":"4611","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-19","stepNo":19,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:40.653609255Z","finishedAt":"2026-06-08T18:16:45.264815821Z","durationMs":"4611","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438819825049600","eventSeq":"315","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:45.269882262Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-20","stepNo":20,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:45.269832849Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-20","stepNo":20,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:45.269832849Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438836023451648","eventSeq":"316","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:49.131732919Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_3ad66f42fa994ad78058b66d","toolInvocationId":"call_3ad66f42fa994ad78058b66d","toolCallId":"call_3ad66f42fa994ad78058b66d","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:49.131676308Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_3ad66f42fa994ad78058b66d","toolInvocationId":"call_3ad66f42fa994ad78058b66d","toolCallId":"call_3ad66f42fa994ad78058b66d","toolId":"chart_visualization","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:49.131676308Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438840783986688","eventSeq":"317","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.266321193Z","typedPayload":{"type":"think","delta":"让我生成更"}}
+
+event:message
+data:{"type":"think","delta":"让我生成更"}
+
+event:stream_event
+data:{"eventId":"322438840788180992","eventSeq":"318","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.267671987Z","typedPayload":{"type":"think","delta":"清晰的 M"}}
+
+event:message
+data:{"type":"think","delta":"清晰的 M"}
+
+event:stream_event
+data:{"eventId":"322438840792375296","eventSeq":"319","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.268068636Z","typedPayload":{"type":"think","delta":"ermai"}}
+
+event:message
+data:{"type":"think","delta":"ermai"}
+
+event:stream_event
+data:{"eventId":"322438840792375297","eventSeq":"320","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.268515872Z","typedPayload":{"type":"think","delta":"d 架构图"}}
+
+event:message
+data:{"type":"think","delta":"d 架构图"}
+
+event:stream_event
+data:{"eventId":"322438840792375298","eventSeq":"321","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.268788014Z","typedPayload":{"type":"think","delta":"。\n\n"}}
+
+event:message
+data:{"type":"think","delta":"。\n\n"}
+
+event:stream_event
+data:{"eventId":"322438840796569600","eventSeq":"322","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.269145808Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438840796569601","eventSeq":"323","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.269288955Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438840796569602","eventSeq":"324","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.269418351Z","typedPayload":{"type":"think","delta":"] cha"}}
+
+event:message
+data:{"type":"think","delta":"] cha"}
+
+event:stream_event
+data:{"eventId":"322438840796569603","eventSeq":"325","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.269554017Z","typedPayload":{"type":"think","delta":"rt_vi"}}
+
+event:message
+data:{"type":"think","delta":"rt_vi"}
+
+event:stream_event
+data:{"eventId":"322438840796569604","eventSeq":"326","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.269679658Z","typedPayload":{"type":"think","delta":"suali"}}
+
+event:message
+data:{"type":"think","delta":"suali"}
+
+event:stream_event
+data:{"eventId":"322438840796569605","eventSeq":"327","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.269787778Z","typedPayload":{"type":"think","delta":"zatio"}}
+
+event:message
+data:{"type":"think","delta":"zatio"}
+
+event:stream_event
+data:{"eventId":"322438840796569606","eventSeq":"328","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.269920187Z","typedPayload":{"type":"think","delta":"n -> "}}
+
+event:message
+data:{"type":"think","delta":"n -> "}
+
+event:stream_event
+data:{"eventId":"322438840800763904","eventSeq":"329","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.270031869Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322438840800763905","eventSeq":"330","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.270247815Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-20","stepNo":20,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:45.269832849Z","finishedAt":"2026-06-08T18:16:50.270193515Z","durationMs":"5000","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-20","stepNo":20,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:45.269832849Z","finishedAt":"2026-06-08T18:16:50.270193515Z","durationMs":"5000","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438840825929728","eventSeq":"331","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:50.276063380Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-21","stepNo":21,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:50.275996679Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-21","stepNo":21,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:50.275996679Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438853136211968","eventSeq":"332","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:16:53.211611352Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_5e9564cf34fe439896f9d51f","toolInvocationId":"call_5e9564cf34fe439896f9d51f","toolCallId":"call_5e9564cf34fe439896f9d51f","toolId":"image_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:53.211572132Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_5e9564cf34fe439896f9d51f","toolInvocationId":"call_5e9564cf34fe439896f9d51f","toolCallId":"call_5e9564cf34fe439896f9d51f","toolId":"image_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:16:53.211572132Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322438886506094592","eventSeq":"333","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.167433108Z","typedPayload":{"type":"think","delta":"现在让我生"}}
+
+event:message
+data:{"type":"think","delta":"现在让我生"}
+
+event:stream_event
+data:{"eventId":"322438886506094593","eventSeq":"334","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.167940765Z","typedPayload":{"type":"think","delta":"成项目介绍"}}
+
+event:message
+data:{"type":"think","delta":"成项目介绍"}
+
+event:stream_event
+data:{"eventId":"322438886510288896","eventSeq":"335","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.168085471Z","typedPayload":{"type":"think","delta":"视觉图。\n"}}
+
+event:message
+data:{"type":"think","delta":"视觉图。\n"}
+
+event:stream_event
+data:{"eventId":"322438886510288897","eventSeq":"336","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.168148329Z","typedPayload":{"type":"think","delta":"\n"}}
+
+event:message
+data:{"type":"think","delta":"\n"}
+
+event:stream_event
+data:{"eventId":"322438886510288898","eventSeq":"337","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.168344624Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322438886510288899","eventSeq":"338","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.168551517Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322438886510288900","eventSeq":"339","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.168649240Z","typedPayload":{"type":"think","delta":"] ima"}}
+
+event:message
+data:{"type":"think","delta":"] ima"}
+
+event:stream_event
+data:{"eventId":"322438886510288901","eventSeq":"340","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.168706251Z","typedPayload":{"type":"think","delta":"ge_ge"}}
+
+event:message
+data:{"type":"think","delta":"ge_ge"}
+
+event:stream_event
+data:{"eventId":"322438886510288902","eventSeq":"341","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.168881236Z","typedPayload":{"type":"think","delta":"nerat"}}
+
+event:message
+data:{"type":"think","delta":"nerat"}
+
+event:stream_event
+data:{"eventId":"322438886510288903","eventSeq":"342","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.168978495Z","typedPayload":{"type":"think","delta":"ion -"}}
+
+event:message
+data:{"type":"think","delta":"ion -"}
+
+event:stream_event
+data:{"eventId":"322438886514483200","eventSeq":"343","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.169125255Z","typedPayload":{"type":"think","delta":"> ok"}}
+
+event:message
+data:{"type":"think","delta":"> ok"}
+
+event:stream_event
+data:{"eventId":"322438886514483201","eventSeq":"344","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.169343759Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-21","stepNo":21,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:50.275996679Z","finishedAt":"2026-06-08T18:17:01.169315015Z","durationMs":"10893","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-21","stepNo":21,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:16:50.275996679Z","finishedAt":"2026-06-08T18:17:01.169315015Z","durationMs":"10893","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438886522871808","eventSeq":"345","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:01.171160082Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-22","stepNo":22,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:01.171138858Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-22","stepNo":22,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:01.171138858Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322438924783312896","eventSeq":"346","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:10.293901522Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_256f6f69dc0f4085ad1160aa","toolInvocationId":"call_256f6f69dc0f4085ad1160aa","toolCallId":"call_256f6f69dc0f4085ad1160aa","toolId":"newsletter_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:17:10.293859781Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_256f6f69dc0f4085ad1160aa","toolInvocationId":"call_256f6f69dc0f4085ad1160aa","toolCallId":"call_256f6f69dc0f4085ad1160aa","toolId":"newsletter_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:17:10.293859781Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322439005301366784","eventSeq":"347","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.490208124Z","typedPayload":{"type":"think","delta":"现在让我生"}}
+
+event:message
+data:{"type":"think","delta":"现在让我生"}
+
+event:stream_event
+data:{"eventId":"322439005301366785","eventSeq":"348","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.490635612Z","typedPayload":{"type":"think","delta":"成中文长文"}}
+
+event:message
+data:{"type":"think","delta":"成中文长文"}
+
+event:stream_event
+data:{"eventId":"322439005301366786","eventSeq":"349","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.490699079Z","typedPayload":{"type":"think","delta":" Mark"}}
+
+event:message
+data:{"type":"think","delta":" Mark"}
+
+event:stream_event
+data:{"eventId":"322439005301366787","eventSeq":"350","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.490753408Z","typedPayload":{"type":"think","delta":"down "}}
+
+event:message
+data:{"type":"think","delta":"down "}
+
+event:stream_event
+data:{"eventId":"322439005301366788","eventSeq":"351","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.490806713Z","typedPayload":{"type":"think","delta":"草稿。\n\n"}}
+
+event:message
+data:{"type":"think","delta":"草稿。\n\n"}
+
+event:stream_event
+data:{"eventId":"322439005301366789","eventSeq":"352","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.490914978Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322439005305561088","eventSeq":"353","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.491010994Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322439005305561089","eventSeq":"354","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.491067925Z","typedPayload":{"type":"think","delta":"] new"}}
+
+event:message
+data:{"type":"think","delta":"] new"}
+
+event:stream_event
+data:{"eventId":"322439005305561090","eventSeq":"355","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.491115521Z","typedPayload":{"type":"think","delta":"slett"}}
+
+event:message
+data:{"type":"think","delta":"slett"}
+
+event:stream_event
+data:{"eventId":"322439005305561091","eventSeq":"356","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.491262226Z","typedPayload":{"type":"think","delta":"er_ge"}}
+
+event:message
+data:{"type":"think","delta":"er_ge"}
+
+event:stream_event
+data:{"eventId":"322439005305561092","eventSeq":"357","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.491513941Z","typedPayload":{"type":"think","delta":"nerat"}}
+
+event:message
+data:{"type":"think","delta":"nerat"}
+
+event:stream_event
+data:{"eventId":"322439005305561093","eventSeq":"358","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.491605302Z","typedPayload":{"type":"think","delta":"ion -"}}
+
+event:message
+data:{"type":"think","delta":"ion -"}
+
+event:stream_event
+data:{"eventId":"322439005305561094","eventSeq":"359","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.491723552Z","typedPayload":{"type":"think","delta":"> ok"}}
+
+event:message
+data:{"type":"think","delta":"> ok"}
+
+event:stream_event
+data:{"eventId":"322439005305561095","eventSeq":"360","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.491996563Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-22","stepNo":22,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:01.171138858Z","finishedAt":"2026-06-08T18:17:29.491969968Z","durationMs":"28320","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-22","stepNo":22,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:01.171138858Z","finishedAt":"2026-06-08T18:17:29.491969968Z","durationMs":"28320","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322439005313949696","eventSeq":"361","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:29.493834973Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-23","stepNo":23,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:29.493813533Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-23","stepNo":23,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:29.493813533Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322439015954898944","eventSeq":"362","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:32.030351778Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_784934fe33da4aaba4c7e50e","toolInvocationId":"call_784934fe33da4aaba4c7e50e","toolCallId":"call_784934fe33da4aaba4c7e50e","toolId":"ppt_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:17:32.030294124Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_784934fe33da4aaba4c7e50e","toolInvocationId":"call_784934fe33da4aaba4c7e50e","toolCallId":"call_784934fe33da4aaba4c7e50e","toolId":"ppt_generation","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:17:32.030294124Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322439069046398976","eventSeq":"363","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.688358832Z","typedPayload":{"type":"think","delta":"现在让我生"}}
+
+event:message
+data:{"type":"think","delta":"现在让我生"}
+
+event:stream_event
+data:{"eventId":"322439069050593280","eventSeq":"364","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.689251773Z","typedPayload":{"type":"think","delta":"成演示文稿"}}
+
+event:message
+data:{"type":"think","delta":"成演示文稿"}
+
+event:stream_event
+data:{"eventId":"322439069050593281","eventSeq":"365","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.689983612Z","typedPayload":{"type":"think","delta":"结构。"}}
+
+event:message
+data:{"type":"think","delta":"结构。"}
+
+event:stream_event
+data:{"eventId":"322439069054787584","eventSeq":"366","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.690735315Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322439069058981888","eventSeq":"367","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.691005259Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322439069058981889","eventSeq":"368","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.691151154Z","typedPayload":{"type":"think","delta":"] ppt"}}
+
+event:message
+data:{"type":"think","delta":"] ppt"}
+
+event:stream_event
+data:{"eventId":"322439069058981890","eventSeq":"369","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.691405399Z","typedPayload":{"type":"think","delta":"_gene"}}
+
+event:message
+data:{"type":"think","delta":"_gene"}
+
+event:stream_event
+data:{"eventId":"322439069058981891","eventSeq":"370","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.691585935Z","typedPayload":{"type":"think","delta":"ratio"}}
+
+event:message
+data:{"type":"think","delta":"ratio"}
+
+event:stream_event
+data:{"eventId":"322439069058981892","eventSeq":"371","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.691804487Z","typedPayload":{"type":"think","delta":"n -> "}}
+
+event:message
+data:{"type":"think","delta":"n -> "}
+
+event:stream_event
+data:{"eventId":"322439069058981893","eventSeq":"372","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.691961760Z","typedPayload":{"type":"think","delta":"ok"}}
+
+event:message
+data:{"type":"think","delta":"ok"}
+
+event:stream_event
+data:{"eventId":"322439069063176192","eventSeq":"373","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.692208263Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-23","stepNo":23,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:29.493813533Z","finishedAt":"2026-06-08T18:17:44.692163650Z","durationMs":"15198","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-23","stepNo":23,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:29.493813533Z","finishedAt":"2026-06-08T18:17:44.692163650Z","durationMs":"15198","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322439069079953408","eventSeq":"374","eventType":"STEP_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:44.696294658Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-24","stepNo":24,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:44.696226534Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}}
+
+event:step_started
+data:{"runId":"run_322438384636649472","stepId":"model-turn-24","stepNo":24,"stepType":"MODEL_TURN","status":"RUNNING","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:44.696226534Z","finishedAt":null,"durationMs":null,"errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322439081788694528","eventSeq":"375","eventType":"TOOL_CALL_STARTED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:17:47.726115758Z","typedPayload":{"runId":"run_322438384636649472","stepId":"call_4844d3351d74493f9660aaaf","toolInvocationId":"call_4844d3351d74493f9660aaaf","toolCallId":"call_4844d3351d74493f9660aaaf","toolId":"frontend_design","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:17:47.726094692Z","finishedAt":null,"errorCode":null,"message":null}}
+
+event:tool_call_started
+data:{"runId":"run_322438384636649472","stepId":"call_4844d3351d74493f9660aaaf","toolInvocationId":"call_4844d3351d74493f9660aaaf","toolCallId":"call_4844d3351d74493f9660aaaf","toolId":"frontend_design","riskLevel":"HIGH","summary":"Tool call started","startedAt":"2026-06-08T18:17:47.726094692Z","finishedAt":null,"errorCode":null,"message":null}
+
+event:stream_event
+data:{"eventId":"322439136851517440","eventSeq":"376","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.854222534Z","typedPayload":{"type":"think","delta":"现在让我生"}}
+
+event:message
+data:{"type":"think","delta":"现在让我生"}
+
+event:stream_event
+data:{"eventId":"322439136855711744","eventSeq":"377","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.855293684Z","typedPayload":{"type":"think","delta":"成前端设计"}}
+
+event:message
+data:{"type":"think","delta":"成前端设计"}
+
+event:stream_event
+data:{"eventId":"322439136855711745","eventSeq":"378","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.855814718Z","typedPayload":{"type":"think","delta":"版式草案。"}}
+
+event:message
+data:{"type":"think","delta":"版式草案。"}
+
+event:stream_event
+data:{"eventId":"322439136876683264","eventSeq":"379","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.860637827Z","typedPayload":{"type":"think","delta":"[tool"}}
+
+event:message
+data:{"type":"think","delta":"[tool"}
+
+event:stream_event
+data:{"eventId":"322439136880877568","eventSeq":"380","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.861015601Z","typedPayload":{"type":"think","delta":" call"}}
+
+event:message
+data:{"type":"think","delta":" call"}
+
+event:stream_event
+data:{"eventId":"322439136880877569","eventSeq":"381","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.861224466Z","typedPayload":{"type":"think","delta":"] fro"}}
+
+event:message
+data:{"type":"think","delta":"] fro"}
+
+event:stream_event
+data:{"eventId":"322439136880877570","eventSeq":"382","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.861394309Z","typedPayload":{"type":"think","delta":"ntend"}}
+
+event:message
+data:{"type":"think","delta":"ntend"}
+
+event:stream_event
+data:{"eventId":"322439136880877571","eventSeq":"383","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.861694364Z","typedPayload":{"type":"think","delta":"_desi"}}
+
+event:message
+data:{"type":"think","delta":"_desi"}
+
+event:stream_event
+data:{"eventId":"322439136885071872","eventSeq":"384","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.862292365Z","typedPayload":{"type":"think","delta":"gn ->"}}
+
+event:message
+data:{"type":"think","delta":"gn ->"}
+
+event:stream_event
+data:{"eventId":"322439136885071873","eventSeq":"385","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.862540784Z","typedPayload":{"type":"think","delta":" ok"}}
+
+event:message
+data:{"type":"think","delta":" ok"}
+
+event:stream_event
+data:{"eventId":"322439136885071874","eventSeq":"386","eventType":"STEP_FINISHED","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.862832561Z","typedPayload":{"runId":"run_322438384636649472","stepId":"model-turn-24","stepNo":24,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:44.696226534Z","finishedAt":"2026-06-08T18:18:00.862772257Z","durationMs":"16166","errorCode":null,"message":null,"retryable":false}}
+
+event:step_finished
+data:{"runId":"run_322438384636649472","stepId":"model-turn-24","stepNo":24,"stepType":"MODEL_TURN","status":"SUCCEEDED","title":"Model turn","summary":null,"startedAt":"2026-06-08T18:17:44.696226534Z","finishedAt":"2026-06-08T18:18:00.862772257Z","durationMs":"16166","errorCode":null,"message":null,"retryable":false}
+
+event:stream_event
+data:{"eventId":"322439136960569344","eventSeq":"387","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.880904569Z","typedPayload":{"type":"response","delta":"Task "}}
+
+event:message
+data:{"type":"response","delta":"Task "}
+
+event:stream_event
+data:{"eventId":"322439136964763648","eventSeq":"388","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.881888794Z","typedPayload":{"type":"response","delta":"step "}}
+
+event:message
+data:{"type":"response","delta":"step "}
+
+event:stream_event
+data:{"eventId":"322439136968957952","eventSeq":"389","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.882177770Z","typedPayload":{"type":"response","delta":"limit"}}
+
+event:message
+data:{"type":"response","delta":"limit"}
+
+event:stream_event
+data:{"eventId":"322439136968957953","eventSeq":"390","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.882505317Z","typedPayload":{"type":"response","delta":" reac"}}
+
+event:message
+data:{"type":"response","delta":" reac"}
+
+event:stream_event
+data:{"eventId":"322439136968957954","eventSeq":"391","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.882730727Z","typedPayload":{"type":"response","delta":"hed. "}}
+
+event:message
+data:{"type":"response","delta":"hed. "}
+
+event:stream_event
+data:{"eventId":"322439136968957955","eventSeq":"392","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.882981255Z","typedPayload":{"type":"response","delta":"Narro"}}
+
+event:message
+data:{"type":"response","delta":"Narro"}
+
+event:stream_event
+data:{"eventId":"322439137002512384","eventSeq":"393","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.890486728Z","typedPayload":{"type":"response","delta":"w the"}}
+
+event:message
+data:{"type":"response","delta":"w the"}
+
+event:stream_event
+data:{"eventId":"322439137090592768","eventSeq":"394","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.911544975Z","typedPayload":{"type":"response","delta":" ques"}}
+
+event:message
+data:{"type":"response","delta":" ques"}
+
+event:stream_event
+data:{"eventId":"322439137090592769","eventSeq":"395","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.911811826Z","typedPayload":{"type":"response","delta":"tion "}}
+
+event:message
+data:{"type":"response","delta":"tion "}
+
+event:stream_event
+data:{"eventId":"322439137094787072","eventSeq":"396","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.912146028Z","typedPayload":{"type":"response","delta":"or ch"}}
+
+event:message
+data:{"type":"response","delta":"or ch"}
+
+event:stream_event
+data:{"eventId":"322439137094787073","eventSeq":"397","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.912320851Z","typedPayload":{"type":"response","delta":"eck t"}}
+
+event:message
+data:{"type":"response","delta":"eck t"}
+
+event:stream_event
+data:{"eventId":"322439137094787074","eventSeq":"398","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.912461028Z","typedPayload":{"type":"response","delta":"ool c"}}
+
+event:message
+data:{"type":"response","delta":"ool c"}
+
+event:stream_event
+data:{"eventId":"322439137094787075","eventSeq":"399","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.912562214Z","typedPayload":{"type":"response","delta":"onfig"}}
+
+event:message
+data:{"type":"response","delta":"onfig"}
+
+event:stream_event
+data:{"eventId":"322439137094787076","eventSeq":"400","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.912711241Z","typedPayload":{"type":"response","delta":"urati"}}
+
+event:message
+data:{"type":"response","delta":"urati"}
+
+event:stream_event
+data:{"eventId":"322439137094787077","eventSeq":"401","eventType":"MESSAGE","runId":"run_322438384636649472","stepId":null,"timestamp":"2026-06-08T18:18:00.912875431Z","typedPayload":{"type":"response","delta":"on."}}
+
+event:message
+data:{"type":"response","delta":"on."}
+
+event:agent.timeline
+data:{"items":[{"id":"run-succeeded-run_322438384636649472","title":"Run completed","status":"SUCCEEDED","detail":"Agent run run_322438384636649472 completed","timestamp":"2026-06-08T18:18:00.936160939Z","durationMs":"179416"}]}
+
+event:finish
+data:{"messageId":null,"title":null}
+
+event:done
+data:[DONE]
+
