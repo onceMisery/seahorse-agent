@@ -42,6 +42,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolOutputRedactionPor
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -51,6 +53,7 @@ import java.util.Optional;
 
 public class LocalToolGatewayPort implements ToolGatewayPort {
 
+    private static final Logger log = LoggerFactory.getLogger(LocalToolGatewayPort.class);
     private static final int SUMMARY_MAX_LENGTH = 1000;
     private static final String APPROVAL_ID_PREFIX = "approval:";
     private static final String LEGACY_RUN_ID_PREFIX = "legacy-run:";
@@ -250,10 +253,8 @@ public class LocalToolGatewayPort implements ToolGatewayPort {
             artifactPublicationPort.publish(request, result);
         } catch (RuntimeException ex) {
             // Artifact publication is a side effect; the tool observation remains authoritative.
-            System.err.println("=== Artifact Publication Failed ===");
-            System.err.println("Tool: " + request.toolId());
-            System.err.println("Error: " + ex.getClass().getName() + ": " + ex.getMessage());
-            ex.printStackTrace(System.err);
+            log.warn("Artifact publication failed for tool={}, error={}",
+                     request.toolId(), ex.getMessage(), ex);
         }
     }
 
