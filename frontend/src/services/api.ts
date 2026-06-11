@@ -29,7 +29,7 @@ export const api = axios.create({
 
 export function setAuthToken(token: string | null) {
   if (token) {
-    api.defaults.headers.common.Authorization = token;
+    api.defaults.headers.common.Authorization = `Bearer ${token}`;
   } else {
     delete api.defaults.headers.common.Authorization;
   }
@@ -39,7 +39,7 @@ api.interceptors.request.use((config) => {
   config.url = normalizeApiPath(config.url, config.baseURL);
   const token = storage.getToken();
   if (token) {
-    config.headers.Authorization = token;
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
