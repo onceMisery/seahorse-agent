@@ -108,5 +108,12 @@ public class SeahorseAgentMqAdapterAutoConfiguration {
                     pulsarAdapter, pulsarAdapter, outboxSupplier,
                     objectMapperProvider::getIfAvailable);
         }
+
+        @Bean
+        @ConditionalOnBean(ReliableMessageQueueAdapter.class)
+        @ConditionalOnMissingBean(MessageSubscriptionPort.class)
+        public MessageSubscriptionPort seahorseMessageSubscriptionPort(ReliableMessageQueueAdapter adapter) {
+            return adapter;
+        }
     }
 }
